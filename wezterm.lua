@@ -164,9 +164,9 @@ config.ssh_domains = ssh_domains
 -- ---------------------------------------------------------------------------
 -- Host quick-picker — fuzzy-find a VM and open a tab into it
 -- ---------------------------------------------------------------------------
--- Bound to CTRL|SHIFT+H below. Choices are derived from ssh_domains, so
--- every host added via manage-hosts.{sh,ps1} --add becomes pickable after
--- the next sync + config reload.
+-- Bound to CTRL|SHIFT+J below (J = jump). Choices are derived from
+-- ssh_domains, so every host added via manage-hosts.{sh,ps1} --add becomes
+-- pickable after the next sync + config reload.
 local function host_picker_choices()
   local choices = {}
   for _, domain in ipairs(ssh_domains) do
@@ -230,6 +230,104 @@ local pick_tab = wezterm.action_callback(function(window, pane)
 end)
 
 -- ---------------------------------------------------------------------------
+-- Help / cheatsheet — fuzzy-searchable list of keybinds + aliases + hosts
+-- ---------------------------------------------------------------------------
+-- Bound to CTRL|SHIFT+H. Keybind / alias / function rows are informational
+-- (no-op on selection); host rows actually launch the host in a new tab so
+-- the help doubles as a launcher. Esc dismisses.
+--
+-- Bash aliases and functions are only active inside SSH'd VM tabs (defined
+-- in chezmoi/home/dot_bashrc.tmpl). Keep this in sync with that file when
+-- adding/renaming aliases — there's no runtime introspection across SSH.
+local function help_choices()
+  local rows = {
+    -- Wezterm: tabs
+    { label = 'key   CTRL+SHIFT+T     New local tab',                       id = '' },
+    { label = 'key   CTRL+SHIFT+W     Close current tab (with confirm)',    id = '' },
+    { label = 'key   CTRL+SHIFT+E     Rename current tab',                  id = '' },
+    { label = 'key   CTRL+TAB         Next tab',                            id = '' },
+    { label = 'key   CTRL+SHIFT+TAB   Previous tab',                        id = '' },
+    { label = 'key   ALT+1..4         Jump directly to tab 1-4',            id = '' },
+    { label = 'key   CTRL+SHIFT+S     Tab switcher (fuzzy list)',           id = '' },
+    -- Wezterm: window
+    { label = 'key   CTRL+SHIFT+N     New window',                          id = '' },
+    -- Wezterm: hosts
+    { label = 'key   CTRL+SHIFT+J     Open SSH host picker',                id = '' },
+    { label = 'key   CTRL+SHIFT+H     Show this help',                      id = '' },
+    -- Wezterm: editing
+    { label = 'key   CTRL+SHIFT+C     Copy selection',                      id = '' },
+    { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
+    -- Wezterm: font
+    { label = 'key   CTRL+=           Increase font size',                  id = '' },
+    { label = 'key   CTRL+-           Decrease font size',                  id = '' },
+    { label = 'key   CTRL+0           Reset font size',                     id = '' },
+    -- Wezterm: config
+    { label = 'key   CTRL+SHIFT+R     Reload wezterm config',               id = '' },
+
+    -- Bash aliases (VM tabs only) — git
+    { label = 'alias gs               git status',                          id = '' },
+    { label = 'alias ga               git add',                             id = '' },
+    { label = 'alias gc               git commit',                          id = '' },
+    { label = 'alias gp               git push',                            id = '' },
+    { label = 'alias gl               git log --oneline --graph --decorate', id = '' },
+    { label = 'alias gd               git diff',                            id = '' },
+    { label = 'alias gco              git checkout',                        id = '' },
+    { label = 'alias gbr              git branch',                          id = '' },
+    -- Bash aliases — chezmoi
+    { label = 'alias cz               chezmoi',                             id = '' },
+    { label = 'alias cza              chezmoi apply',                       id = '' },
+    { label = 'alias cze              chezmoi edit',                        id = '' },
+    { label = 'alias czd              chezmoi diff',                        id = '' },
+    { label = 'alias czu              chezmoi update',                      id = '' },
+    { label = 'alias czs              chezmoi status',                      id = '' },
+    -- Bash aliases — navigation
+    { label = "alias ..               cd ..",                               id = '' },
+    { label = "alias ...              cd ../..",                            id = '' },
+    { label = 'alias ll               ls -lah --color=auto',                id = '' },
+    { label = 'alias la               ls -A --color=auto',                  id = '' },
+    { label = 'alias l                ls --color=auto',                     id = '' },
+    -- Bash aliases — tools
+    { label = 'alias notes            nb',                                  id = '' },
+    { label = 'alias preview          glow',                                id = '' },
+    { label = 'alias zj               zellij',                              id = '' },
+    { label = 'alias zjl              zellij list-sessions',                id = '' },
+    { label = 'alias zja              zellij attach',                       id = '' },
+
+    -- Bash functions (VM tabs only)
+    { label = 'fn    fh               fzf history search (Ctrl+R enhanced)', id = '' },
+    { label = 'fn    fcd [dir]        fzf cd into any subdirectory',        id = '' },
+    { label = 'fn    fssh             fzf ssh — pick from ~/.ssh/config',   id = '' },
+    { label = 'fn    zs [name]        zellij attach --create (default: main)', id = '' },
+    { label = 'fn    n [text]         nb add (or list when no args)',       id = '' },
+    { label = 'fn    nf               fzf-pick a note in $NB_DIR + glow it', id = '' },
+
+    -- zoxide built-ins
+    { label = 'cmd   z <pat>          zoxide jump to a known dir',          id = '' },
+    { label = 'cmd   zi               zoxide interactive fuzzy jump',       id = '' },
+  }
+  for _, d in ipairs(ssh_domains) do
+    table.insert(rows, {
+      label = string.format('host  %-20s %s@%s', d.name, d.username, d.remote_address),
+      id    = 'host:' .. d.name,
+    })
+  end
+  return rows
+end
+
+local show_help = act.InputSelector {
+  title    = 'Wezterm shortcuts (Esc to dismiss; pick a host to launch it)',
+  fuzzy    = true,
+  choices  = help_choices(),
+  action   = wezterm.action_callback(function(window, pane, id, _label)
+    if not id or id == '' then return end
+    local host = id:match('^host:(.+)$')
+    if host then
+      window:perform_action(act.SpawnTab { DomainName = host }, pane)
+    end
+  end),
+}
+
+-- ---------------------------------------------------------------------------
 -- Right status line — domain · zellij session · battery · time
 -- ---------------------------------------------------------------------------
 -- Fires ~1×/second. Domain + session are only shown when the active pane is
@@ -291,8 +389,11 @@ config.keys = {
   -- New local tab
   { key = 't', mods = 'CTRL|SHIFT', action = act.SpawnTab 'CurrentPaneDomain' },
 
-  -- Fuzzy-pick a VM and open it in a new tab
-  { key = 'h', mods = 'CTRL|SHIFT', action = pick_host },
+  -- Fuzzy-pick a VM and open it in a new tab (J = jump)
+  { key = 'j', mods = 'CTRL|SHIFT', action = pick_host },
+
+  -- Show keybind + host cheatsheet
+  { key = 'h', mods = 'CTRL|SHIFT', action = show_help },
 
   -- Close tab
   { key = 'w', mods = 'CTRL|SHIFT', action = act.CloseCurrentTab { confirm = true } },
