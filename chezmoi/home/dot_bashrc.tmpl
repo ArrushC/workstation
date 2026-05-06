@@ -1,0 +1,145 @@
+# =============================================================================
+# ~/.bashrc — managed by chezmoi
+# Machine: {{ .chezmoi.hostname }} | User: {{ .chezmoi.username }}
+# =============================================================================
+
+# Not running interactively? Stop here.
+[[ $- != *i* ]] && return
+
+# --- PATH --------------------------------------------------------------------
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- Core env ----------------------------------------------------------------
+export EDITOR="hx"
+export VISUAL="hx"
+export PAGER="glow"
+export HISTSIZE=10000
+export HISTFILESIZE=20000
+export HISTCONTROL=ignoredups:erasedups
+shopt -s histappend
+shopt -s checkwinsize
+shopt -s globstar
+
+# --- fzf ---------------------------------------------------------------------
+export FZF_DEFAULT_OPTS="
+  --height 40%
+  --layout=reverse
+  --border
+  --info=inline
+  --bind='ctrl-/:toggle-preview'
+"
+
+# fzf shell integration
+if command -v fzf &>/dev/null; then
+  eval "$(fzf --bash)"
+fi
+
+# fzf + ripgrep for file content search (falls back to find)
+if command -v rg &>/dev/null; then
+  export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
+else
+  export FZF_DEFAULT_COMMAND='find . -type f -not -path "*/.git/*"'
+fi
+
+# --- zoxide (smarter cd) -----------------------------------------------------
+if command -v zoxide &>/dev/null; then
+  eval "$(zoxide init bash)"
+  # z = jump, zi = interactive fuzzy jump
+fi
+
+# --- starship prompt ---------------------------------------------------------
+if command -v starship &>/dev/null; then
+  eval "$(starship init bash)"
+fi
+
+# --- nb (notes) --------------------------------------------------------------
+export NBRC_PATH="$HOME/.nbrc"
+export NB_DIR="$HOME/notes"
+
+# --- Aliases — navigation ----------------------------------------------------
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ll='ls -lah --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls --color=auto'
+alias grep='grep --color=auto'
+
+# --- Aliases — git -----------------------------------------------------------
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline --graph --decorate'
+alias gd='git diff'
+alias gco='git checkout'
+alias gbr='git branch'
+
+# --- Aliases — tools ---------------------------------------------------------
+alias notes='nb'
+alias preview='glow'
+alias zj='zellij'
+alias zjl='zellij list-sessions'
+alias zja='zellij attach'
+
+# --- Aliases — chezmoi -------------------------------------------------------
+alias cz='chezmoi'
+alias cza='chezmoi apply'
+alias cze='chezmoi edit'
+alias czd='chezmoi diff'
+alias czu='chezmoi update'
+alias czs='chezmoi status'
+
+# --- Functions ---------------------------------------------------------------
+
+# fzf-powered history search (Ctrl+R enhanced)
+fh() {
+  local cmd
+  cmd=$(history | awk '{$1=""; print substr($0,2)}' | sort -u | fzf --tac)
+  [[ -n "$cmd" ]] && eval "$cmd"
+}
+
+# fzf cd into any subdirectory
+fcd() {
+  local dir
+  dir=$(find "${1:-.}" -type d 2>/dev/null | fzf +m)
+  [[ -n "$dir" ]] && cd "$dir"
+}
+
+# fzf ssh — pick from ~/.ssh/config hosts
+fssh() {
+  local host
+  host=$(grep -E "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}' | fzf)
+  [[ -n "$host" ]] && ssh "$host"
+}
+
+# Start or attach to a named zellij session
+zs() {
+  local session="${1:-main}"
+  zellij attach --create "$session"
+}
+
+# Quick note with nb
+n() {
+  if [[ $# -eq 0 ]]; then
+    nb list
+  else
+    nb add "$*"
+  fi
+}
+
+# glow with fzf — browse and preview notes
+nf() {
+  local file
+  file=$(find "$NB_DIR" -name "*.md" 2>/dev/null | fzf --preview 'glow {}')
+  [[ -n "$file" ]] && glow "$file"
+}
+
+# --- Machine-specific overrides ----------------------------------------------
+# Sourced last so they can override anything above
+{{ if eq .chezmoi.hostname "rhel-dev-01" }}
+export PROJECT_ROOT="/opt/projects"
+{{ else }}
+export PROJECT_ROOT="$HOME/projects"
+{{ end }}
+
+[[ -f "$HOME/.bashrc.local" ]] && source "$HOME/.bashrc.local"

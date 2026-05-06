@@ -1,0 +1,15 @@
+# .chezmoiignore — files chezmoi skips when applying to the remote VM
+
+# Windows-only
+wezterm.lua
+
+# Ansible — not a dotfile
+ansible/
+
+# Bootstrap script and repo meta
+bootstrap.sh
+README.md
+.gitignore
+
+# Local machine overrides — never tracked
+home/dot_bashrc.local

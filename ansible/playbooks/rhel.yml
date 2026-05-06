@@ -1,0 +1,26 @@
+# =============================================================================
+# ansible/playbooks/rhel.yml — main playbook
+# Provisions RHEL VMs and applies dotfiles
+#
+# Usage:
+#   Full run (with sudo):
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --ask-become-pass
+#
+#   Dotfiles only (no sudo needed):
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml \
+#       -e "install_system_packages=false has_sudo=false"
+#
+#   Single VM:
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml \
+#       --limit rhel-dev-01 --ask-become-pass
+#
+#   Dry run (see what would change):
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --check
+# =============================================================================
+
+- name: "Provision RHEL dev VMs"
+  hosts: rhel_vms
+  gather_facts: true
+
+  roles:
+    - rhel-base

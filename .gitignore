@@ -1,0 +1,19 @@
+# Sensitive — never commit these
+*.key
+*.pem
+id_rsa
+id_ed25519
+.env
+.env.*
+secrets/
+
+# Local machine overrides
+dot_bashrc.local
+.bashrc.local
+
+# chezmoi cache
+.chezmoicache/
+
+# OS
+.DS_Store
+Thumbs.db

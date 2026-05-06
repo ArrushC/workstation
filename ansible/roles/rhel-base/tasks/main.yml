@@ -1,0 +1,20 @@
+# =============================================================================
+# roles/rhel-base/tasks/main.yml
+# Orchestrates all task files in order
+# =============================================================================
+
+- name: "System packages"
+  import_tasks: packages.yml
+  when: install_system_packages and has_sudo
+  become: true
+
+- name: "User-space tools"
+  import_tasks: tools.yml
+  when: install_user_tools
+
+- name: "Shell configuration"
+  import_tasks: shell.yml
+
+- name: "Dotfiles via chezmoi"
+  import_tasks: dotfiles.yml
+  when: apply_dotfiles

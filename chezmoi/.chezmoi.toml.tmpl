@@ -1,0 +1,15 @@
+# chezmoi.toml.tmpl — runs on `chezmoi init` to generate ~/.config/chezmoi/chezmoi.toml
+# Prompts are only asked once; answers stored in chezmoi's config.
+
+[data]
+    name     = "{{ promptStringOnce . \"name\" \"Full name\" }}"
+    email    = "{{ promptStringOnce . \"email\" \"Email address\" }}"
+    hostname = "{{ .chezmoi.hostname }}"
+    os       = "{{ .chezmoi.os }}"
+
+[edit]
+    command = "hx"
+
+[git]
+    autoCommit = false
+    autoPush   = false

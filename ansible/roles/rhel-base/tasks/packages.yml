@@ -1,0 +1,23 @@
+# =============================================================================
+# roles/rhel-base/tasks/packages.yml
+# System-level packages via dnf — requires sudo
+# =============================================================================
+
+- name: "Ensure core packages are installed"
+  ansible.builtin.dnf:
+    name: "{{ rhel_packages }}"
+    state: present
+
+- name: "Attempt optional packages (non-fatal if unavailable)"
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ rhel_optional_packages }}"
+  ignore_errors: true
+
+- name: "Ensure ~/.local/bin exists"
+  ansible.builtin.file:
+    path: "{{ dev_bin }}"
+    state: directory
+    owner: "{{ dev_user }}"
+    mode: "0755"

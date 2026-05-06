@@ -1,0 +1,40 @@
+# ~/.config/helix/config.toml — managed by chezmoi
+
+theme = "tokyo_night"
+
+[editor]
+line-number        = "relative"
+mouse              = true
+cursorline         = true
+color-modes        = true
+rulers             = [80, 120]
+bufferline         = "always"
+auto-save          = true
+
+[editor.cursor-shape]
+insert = "bar"
+normal = "block"
+select = "underline"
+
+[editor.file-picker]
+hidden = false
+
+[editor.statusline]
+left   = ["mode", "spinner", "file-name", "file-modification-indicator"]
+center = []
+right  = ["diagnostics", "selections", "position", "file-encoding", "file-line-ending", "file-type"]
+
+[editor.indent-guides]
+render    = true
+character = "╎"
+
+[keys.normal]
+# Quick file picker
+space.f = "file_picker"
+# Buffer picker
+space.b = "buffer_picker"
+# Quick save
+C-s = ":w"
+
+[keys.insert]
+C-s = ["normal_mode", ":w"]

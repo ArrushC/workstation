@@ -1,0 +1,29 @@
+# ~/.config/zellij/config.kdl — managed by chezmoi
+
+// Start with the default layout
+default_layout "dev"
+
+// Don't show tip of the day
+show_startup_tips false
+
+// Use compact mode — cleaner look
+simplified_ui true
+
+// Mouse support
+mouse_mode true
+
+// Copy to system clipboard
+copy_command "xclip -selection clipboard"
+copy_on_select false
+
+// Theme
+theme "tokyo-night-dark"
+
+// Keybind prefix: Ctrl+a (avoids Ctrl+b tmux clash, Ctrl+p zellij default)
+// Override if you prefer the default
+keybinds {
+    normal {
+        // Quick session switching
+        bind "Ctrl-s" { SwitchToMode "Session"; }
+    }
+}

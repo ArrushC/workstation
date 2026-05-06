@@ -1,0 +1,29 @@
+// ~/.config/zellij/layouts/dev.kdl — managed by chezmoi
+// Default dev layout: editor left, terminal right, status bars
+
+layout {
+    // Top tab bar
+    pane size=1 borderless=true {
+        plugin location="zellij:tab-bar"
+    }
+
+    // Main working area
+    pane split_direction="vertical" {
+        // Primary editor pane (60% width)
+        pane size="60%" name="editor" {
+            // Opens helix — remove if you prefer a blank terminal
+            // command "hx"
+        }
+
+        // Right side: stacked terminal + optional monitor
+        pane split_direction="horizontal" {
+            pane name="terminal" size="70%"
+            pane name="run" size="30%"
+        }
+    }
+
+    // Bottom status bar
+    pane size=2 borderless=true {
+        plugin location="zellij:status-bar"
+    }
+}
