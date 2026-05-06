@@ -3,7 +3,7 @@
 # =============================================================================
 
 # --- User config -------------------------------------------------------------
-dev_user: arrush
+dev_user: arrush.chaturvedi
 dev_home: "/home/{{ dev_user }}"
 dev_bin: "{{ dev_home }}/.local/bin"
 

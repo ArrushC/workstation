@@ -70,8 +70,8 @@ config.font         = wezterm.font('JetBrains Mono', { weight = 'Regular' })
 config.font_size    = 12.0
 
 -- Window chrome
-config.window_decorations          = 'RESIZE'
-config.window_background_opacity   = 0.95
+config.window_decorations          = 'TITLE' -- RESIZE
+config.window_background_opacity   = 1.0 -- 0.95
 config.enable_tab_bar              = true
 config.use_fancy_tab_bar           = false
 config.tab_bar_at_bottom           = true
