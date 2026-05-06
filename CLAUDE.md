@@ -226,6 +226,11 @@ Adding a VM:
 - `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding until next save.
 - `bootstrap.sh` and `ansible/group_vars/all.yml` — tool-version drift is silent and breaks reproducibility.
 - `chezmoi/.chezmoiignore` — wrong entries here cause `chezmoi apply` to drop infrastructure files into `$HOME`.
+- `wezterm.lua` is hard-linked from the repo to `%USERPROFILE%\.config\wezterm\wezterm.lua` on Windows. Editing tools that atomic-save (write-temp-then-rename) silently break the hardlink — the home file is left pointing at the original inode, and WezTerm keeps loading the stale version regardless of `CTRL|SHIFT+R` or `automatically_reload_config`. **After any edit to `wezterm.lua`, verify the link.** `Get-Item ...` reporting `LinkType=HardLink` is not sufficient (it shows what the file *was* created as, not whether it currently shares an inode); compare `LastWriteTime` and `Length` on both paths instead. If they diverge, recreate the link:
+  ```powershell
+  Remove-Item "$env:USERPROFILE\.config\wezterm\wezterm.lua" -Force
+  New-Item -ItemType HardLink -Path "$env:USERPROFILE\.config\wezterm\wezterm.lua" -Target 'C:\Git\workstation\wezterm.lua'
+  ```
 
 ## Quick verification
 
