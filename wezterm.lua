@@ -226,8 +226,26 @@ local function format_battery()
   if not batteries or #batteries == 0 then return nil end
   local b = batteries[1]
   local pct = math.floor((b.state_of_charge or 0) * 100 + 0.5)
-  local prefix = (b.state == 'Charging') and 'chg' or 'bat'
-  return string.format('%s %d%%', prefix, pct)
+  local icon
+  if b.state == 'Charging' then
+    icon = '⚡'
+  elseif pct <= 20 then
+    icon = '🪫'
+  else
+    icon = '🔋'
+  end
+  return string.format('%s %d%%', icon, pct)
+end
+
+local function time_icon()
+  local h = tonumber(wezterm.strftime('%H'))
+  if     h >= 0  and h < 5  then return '🌌'  -- pre-dawn / early morning
+  elseif h >= 5  and h < 7  then return '🌅'  -- dawn
+  elseif h >= 7  and h < 12 then return '☀️'  -- morning
+  elseif h >= 12 and h < 17 then return '🌞'  -- afternoon
+  elseif h >= 17 and h < 20 then return '🌇'  -- dusk
+  else                           return '🌙'  -- night (20-23)
+  end
 end
 
 wezterm.on('update-right-status', function(window, pane)
@@ -242,7 +260,7 @@ wezterm.on('update-right-status', function(window, pane)
   local bat = format_battery()
   if bat then table.insert(parts, bat) end
 
-  table.insert(parts, wezterm.strftime('%H:%M'))
+  table.insert(parts, time_icon() .. ' ' .. wezterm.strftime('%H:%M'))
 
   window:set_right_status(' ' .. table.concat(parts, '  │  ') .. ' ')
 end)
