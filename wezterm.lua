@@ -48,21 +48,21 @@ end
 -- ---------------------------------------------------------------------------
 -- Startup workspace — open a tab per VM on launch
 -- ---------------------------------------------------------------------------
-wezterm.on('gui-startup', function(cmd)
-  local _, _, window = wezterm.mux.spawn_window(cmd or {})
+-- wezterm.on('gui-startup', function(cmd)
+--   local _, _, window = wezterm.mux.spawn_window(cmd or {})
 
-  for i, domain in ipairs(ssh_domains) do
-    if i == 1 then
-      -- First tab uses the initial window
-      window:active_tab():set_title(domain.name)
-    else
-      -- Subsequent VMs get their own tab
-      window:spawn_tab({
-        domain = { DomainName = domain.name },
-      })
-    end
-  end
-end)
+--   for i, domain in ipairs(ssh_domains) do
+--     if i == 1 then
+--       -- First tab uses the initial window
+--       window:active_tab():set_title(domain.name)
+--     else
+--       -- Subsequent VMs get their own tab
+--       window:spawn_tab({
+--         domain = { DomainName = domain.name },
+--       })
+--     end
+--   end
+-- end)
 
 -- ---------------------------------------------------------------------------
 -- Appearance
