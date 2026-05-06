@@ -163,39 +163,67 @@ sync_all() {
 # =============================================================================
 
 add_host() {
-  header "Add a new host"
+  # Supports two calling modes:
+  #
+  #   Interactive (menu or --add with no args):
+  #     add_host
+  #
+  #   Non-interactive (from bootstrap.sh or other scripts):
+  #     add_host --name rhel-dev-03 --ip 10.0.0.12 --user arrush --group rhel_vms --skip-confirm
+  #
+  local name="" ip="" user="" group="" skip_confirm=false
 
-  # Collect inputs
-  local name ip user group
+  # Parse named flags if any were passed
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)         name="$2";         shift 2 ;;
+      --ip)           ip="$2";           shift 2 ;;
+      --user)         user="$2";         shift 2 ;;
+      --group)        group="$2";        shift 2 ;;
+      --skip-confirm) skip_confirm=true; shift   ;;
+      *) warn "Unknown flag: $1"; shift ;;
+    esac
+  done
 
-  read -rp "  Host name (e.g. rhel-dev-03):  " name
-  [[ -z "$name" ]] && fail "Name cannot be empty"
-
-  if host_exists "$name"; then
-    fail "Host '$name' already exists. Use 'Edit' to modify it."
+  # If any required field is missing, fall into interactive prompts
+  if [[ -z "$name" ]]; then
+    header "Add a new host"
+    read -rp "  Host name (e.g. rhel-dev-03):  " name
+    [[ -z "$name" ]] && fail "Name cannot be empty"
   fi
 
-  read -rp "  IP / hostname:                  " ip
-  [[ -z "$ip" ]] && fail "IP cannot be empty"
+  if host_exists "$name"; then
+    warn "Host '$name' already exists in hosts.conf — skipping."
+    return 0
+  fi
 
-  read -rp "  SSH user [arrush]:              " user
-  user="${user:-arrush}"
+  if [[ -z "$ip" ]]; then
+    read -rp "  IP / hostname:                  " ip
+    [[ -z "$ip" ]] && fail "IP cannot be empty"
+  fi
 
-  read -rp "  Ansible group [rhel_vms]:       " group
-  group="${group:-rhel_vms}"
+  if [[ -z "$user" ]]; then
+    read -rp "  SSH user [arrush]:              " user
+    user="${user:-arrush}"
+  fi
+
+  if [[ -z "$group" ]]; then
+    read -rp "  Ansible group [rhel_vms]:       " group
+    group="${group:-rhel_vms}"
+  fi
 
   echo ""
   printf "  Adding: ${BOLD}%-20s %-18s %-14s %-14s${RESET}\n" "$name" "$ip" "$user" "$group"
-  read -rp "  Confirm? [Y/n]: " confirm
-  confirm="${confirm:-Y}"
 
-  if [[ "$confirm" =~ ^[Yy]$ ]]; then
-    printf "%-20s %-18s %-14s %-14s\n" "$name" "$ip" "$user" "$group" >> "$HOSTS_CONF"
-    ok "Host '$name' added to hosts.conf"
-    sync_all
-  else
-    warn "Aborted."
+  if [[ "$skip_confirm" == false ]]; then
+    read -rp "  Confirm? [Y/n]: " confirm
+    confirm="${confirm:-Y}"
+    [[ ! "$confirm" =~ ^[Yy]$ ]] && { warn "Aborted."; return 0; }
   fi
+
+  printf "%-20s %-18s %-14s %-14s\n" "$name" "$ip" "$user" "$group" >> "$HOSTS_CONF"
+  ok "Host '$name' added to hosts.conf"
+  sync_all
 }
 
 remove_host() {
@@ -363,9 +391,9 @@ show_menu() {
 [[ -f "$HOSTS_CONF" ]] || fail "hosts.conf not found at $HOSTS_CONF"
 
 case "${1:-}" in
-  --sync)  sync_all; exit 0 ;;
-  --list)  print_hosts; exit 0 ;;
-  --add)   add_host; exit 0 ;;
+  --sync)   sync_all; exit 0 ;;
+  --list)   print_hosts; exit 0 ;;
+  --add)    shift; add_host "$@"; exit 0 ;;
   --remove) remove_host; exit 0 ;;
   "")
     while true; do
@@ -373,7 +401,7 @@ case "${1:-}" in
     done
     ;;
   *)
-    echo "Usage: $0 [--sync | --list | --add | --remove]"
+    echo "Usage: $0 [--sync | --list | --add [--name N --ip I --user U --group G --skip-confirm] | --remove]"
     exit 1
     ;;
 esac

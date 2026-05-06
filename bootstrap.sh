@@ -121,6 +121,44 @@ else
   ok "Dotfiles applied"
 fi
 
+# =============================================================================
+# SELF-REGISTER — add this VM to hosts.conf if not already present
+# =============================================================================
+register_host() {
+  local manage_script="$CHEZMOI_SOURCE/scripts/manage-hosts.sh"
+
+  if [[ ! -x "$manage_script" ]]; then
+    warn "manage-hosts.sh not found at $manage_script — skipping self-registration."
+    return
+  fi
+
+  # Detect this VM's hostname and IP
+  local vm_name vm_ip vm_user
+
+  vm_name=$(hostname -s 2>/dev/null || hostname)
+  vm_user=$(whoami)
+
+  # Try to find the primary non-loopback IP
+  vm_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+
+  # Fallback: first non-loopback IP from ip addr
+  if [[ -z "$vm_ip" ]]; then
+    vm_ip=$(ip addr show 2>/dev/null       | awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}'       | head -1)
+  fi
+
+  if [[ -z "$vm_ip" ]]; then
+    warn "Could not detect IP address — skipping self-registration."
+    return
+  fi
+
+  log "Self-registration: ${vm_name} (${vm_user}@${vm_ip})"
+
+  # Call manage-hosts.sh --add with all fields — skips silently if already exists
+  bash "$manage_script" --add     --name  "$vm_name"     --ip    "$vm_ip"       --user  "$vm_user"     --group "rhel_vms"     --skip-confirm
+}
+
+register_host
+
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
 echo -e "Re-source your shell: ${YELLOW}source ~/.bashrc${RESET}"
