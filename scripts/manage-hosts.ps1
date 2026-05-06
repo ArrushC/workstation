@@ -122,7 +122,7 @@ function Invoke-GenerateInventory {
     $lines.Add("ansible_ssh_private_key_file=~/.ssh/id_ed25519")
     $lines.Add("ansible_python_interpreter=/usr/bin/python3")
 
-    $lines | Set-Content -Path $Inventory -Encoding UTF8
+    [System.IO.File]::WriteAllLines($Inventory, $lines, [System.Text.UTF8Encoding]::new($false))
     $count = ($hosts | Measure-Object).Count
     Write-Ok "ansible/inventory/hosts.ini updated ($count hosts)"
 }
@@ -206,7 +206,7 @@ function Save-Hosts {
         $output.Add(("{0,-$wName}  {1,-$wIp}  {2,-$wUser}  {3}" -f $h.Name, $h.Ip, $h.User, $h.Group))
     }
 
-    $output | Set-Content -Path $HostsConf -Encoding UTF8
+    [System.IO.File]::WriteAllLines($HostsConf, $output, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Add-Host {
