@@ -119,7 +119,7 @@ local function host_colors(name, is_active)
   return tostring(bg), tostring(fg)
 end
 
-wezterm.on('format-tab-title', function(tab, _tabs, _panes, _config, _hover, _max_width)
+wezterm.on('format-tab-title', function(tab, all_tabs, _panes, _config, _hover, _max_width)
   local pane   = tab.active_pane
   local domain = pane.domain_name or ''
 
@@ -132,7 +132,18 @@ wezterm.on('format-tab-title', function(tab, _tabs, _panes, _config, _hover, _ma
   if title == nil or #title == 0 then
     title = host or pane.title or ''
   end
-  local label = string.format(' %d: %s ', tab.tab_index + 1, title)
+
+  -- Re-derive position from the live tabs array — tab.tab_index reflects the
+  -- pre-close ordering after CloseCurrentTab and only refreshes on the next
+  -- tab-switch. Walking all_tabs gives the true current position so the
+  -- numbers in the bar reshuffle immediately on close.
+  local idx = tab.tab_index + 1
+  if all_tabs then
+    for i, t in ipairs(all_tabs) do
+      if t.tab_id == tab.tab_id then idx = i; break end
+    end
+  end
+  local label = string.format(' %d: %s ', idx, title)
 
   if host then
     local bg, fg = host_colors(host, tab.is_active)
@@ -266,124 +277,6 @@ wezterm.on('update-right-status', function(window, pane)
   table.insert(parts, time_icon() .. ' ' .. wezterm.strftime('%H:%M'))
 
   window:set_right_status(' ' .. table.concat(parts, '  │  ') .. ' ')
-
-  -- Throttled session snapshot (≤ once per 2s) — fires from this tick because
-  -- update-right-status is already running ~1×/sec and gives us a window obj.
-  maybe_save_session(window)
-end)
-
--- ---------------------------------------------------------------------------
--- Session persistence — save tabs/order/host/cwd, restore on next launch
--- ---------------------------------------------------------------------------
--- Saves the current window's tabs to session.json beside this config file,
--- then rebuilds them on the next gui-startup. SSH tabs reconnect to the same
--- domain (zellij re-attaches to 'main' via default_prog). Local tabs restore
--- their cwd if the shell emits OSC 7 (bash on RHEL does so via /etc/profile.d
--- defaults; PowerShell needs PSReadLine + a custom prompt).
---
--- Limitations: only the active window is tracked. Per-pane splits inside a
--- tab are not preserved — zellij owns those for SSH tabs anyway, and local
--- tabs typically have one pane.
-local session_file = wezterm.config_dir .. '/session.json'
-local last_save = 0
-
-local function ssh_domain_exists(name)
-  for _, d in ipairs(ssh_domains) do
-    if d.name == name then return true end
-  end
-  return false
-end
-
-local function save_session(window)
-  if not window then return end
-  local ok, mux_window = pcall(function() return window:mux_window() end)
-  if not ok or not mux_window then return end
-
-  local active_id
-  pcall(function() active_id = window:active_tab():tab_id() end)
-
-  local tabs = {}
-  local active_index = 1
-  for i, tab in ipairs(mux_window:tabs()) do
-    local pane = tab:active_pane()
-    local cwd
-    local cwd_url = pane:get_current_working_dir()
-    if cwd_url then
-      cwd = cwd_url.file_path
-    end
-    table.insert(tabs, {
-      title  = tab:get_title() or '',
-      domain = pane:get_domain_name() or 'local',
-      cwd    = cwd,
-    })
-    if active_id and tab:tab_id() == active_id then
-      active_index = i
-    end
-  end
-
-  local f = io.open(session_file, 'w')
-  if not f then return end
-  f:write(wezterm.json_encode({ tabs = tabs, active = active_index }))
-  f:close()
-end
-
-local function maybe_save_session(window)
-  local now = os.time()
-  if now - last_save < 2 then return end
-  last_save = now
-  save_session(window)
-end
-
-local function tab_spawn_args(t)
-  local args = {}
-  if t.domain and t.domain ~= 'local' and ssh_domain_exists(t.domain) then
-    args.domain = { DomainName = t.domain }
-  elseif t.cwd then
-    args.cwd = t.cwd
-  end
-  return args
-end
-
-wezterm.on('gui-startup', function(cmd)
-  -- Honour explicit CLI args (e.g. `wezterm connect <host>`) over restore.
-  if cmd and cmd.args and #cmd.args > 0 then
-    wezterm.mux.spawn_window(cmd)
-    return
-  end
-
-  local f = io.open(session_file, 'r')
-  if not f then
-    wezterm.mux.spawn_window(cmd or {})
-    return
-  end
-  local content = f:read('*a')
-  f:close()
-
-  local ok, session = pcall(wezterm.json_parse, content)
-  if not ok or type(session) ~= 'table' or type(session.tabs) ~= 'table' or #session.tabs == 0 then
-    wezterm.mux.spawn_window(cmd or {})
-    return
-  end
-
-  local first = session.tabs[1]
-  local first_tab, _, mux_window = wezterm.mux.spawn_window(tab_spawn_args(first))
-  if first.title and #first.title > 0 then
-    first_tab:set_title(first.title)
-  end
-
-  for i = 2, #session.tabs do
-    local t = session.tabs[i]
-    local new_tab, _, _ = mux_window:spawn_tab(tab_spawn_args(t))
-    if new_tab and t.title and #t.title > 0 then
-      new_tab:set_title(t.title)
-    end
-  end
-
-  local all_tabs = mux_window:tabs()
-  local idx = session.active or 1
-  if idx >= 1 and idx <= #all_tabs then
-    all_tabs[idx]:activate()
-  end
 end)
 
 -- ---------------------------------------------------------------------------
@@ -418,8 +311,7 @@ config.keys = {
   { key = 's', mods = 'CTRL|SHIFT', action = pick_tab },
 
   -- Rename current tab — prompts for a new title; submit empty to clear
-  -- and revert to the auto-generated name. Force-saves immediately so the
-  -- new title survives a quick close before the next throttled snapshot.
+  -- and revert to the auto-generated name.
   {
     key = 'e', mods = 'CTRL|SHIFT',
     action = act.PromptInputLine {
@@ -427,7 +319,6 @@ config.keys = {
       action = wezterm.action_callback(function(window, _pane, line)
         if line == nil then return end  -- Esc cancels
         window:active_tab():set_title(line)
-        save_session(window)
       end),
     },
   },
@@ -443,15 +334,6 @@ config.keys = {
 
   -- Reload config
   { key = 'r', mods = 'CTRL|SHIFT', action = act.ReloadConfiguration },
-
-  -- Force-save session snapshot now (also auto-saved every ~2s)
-  {
-    key = 'p', mods = 'CTRL|SHIFT',
-    action = wezterm.action_callback(function(window, _pane)
-      save_session(window)
-      window:toast_notification('wezterm', 'Session saved', nil, 2000)
-    end),
-  },
 }
 
 -- Pass through Ctrl+p to Zellij unmodified
