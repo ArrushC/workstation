@@ -151,13 +151,13 @@ function Invoke-GenerateWezterm {
     $newBlock = $block -join "`n"
     $content  = [System.IO.File]::ReadAllText($WeztermLua)
     $pattern  = "(?s)-- HOSTS:START.*?-- HOSTS:END"
-    $replaced = [regex]::Replace($content, $pattern, $newBlock)
 
-    if ($replaced -eq $content) {
+    if (-not [regex]::IsMatch($content, $pattern)) {
         Write-Warn "HOSTS:START / HOSTS:END sentinels not found in wezterm.lua -- skipping."
         return
     }
 
+    $replaced = [regex]::Replace($content, $pattern, $newBlock)
     $replaced = $replaced -replace "`r`n", "`n"
     [System.IO.File]::WriteAllText($WeztermLua, $replaced)
 
