@@ -159,6 +159,57 @@ sync_all() {
 }
 
 # =============================================================================
+# SAVE & FORMAT
+# =============================================================================
+
+# Rewrites the data rows in hosts.conf with dynamically padded columns.
+# Preserves header comments. Called by add, remove, edit, and format.
+save_hosts() {
+  # Build arrays from current hosts
+  local names=() ips=() users=() groups=()
+  while IFS= read -r line; do
+    read -r n i u g <<< "$line"
+    names+=("$n"); ips+=("$i"); users+=("$u"); groups+=("$g")
+  done <<< "$(read_hosts)"
+
+  # Calculate column widths (minimum widths enforced)
+  local w_name=16 w_ip=14 w_user=10
+  for n in "${names[@]}";  do (( ${#n} > w_name  )) && w_name=${#n};  done
+  for i in "${ips[@]}";    do (( ${#i} > w_ip    )) && w_ip=${#i};    done
+  for u in "${users[@]}";  do (( ${#u} > w_user  )) && w_user=${#u};  done
+
+  local tmp
+  tmp=$(mktemp)
+
+  # Preserve header comment lines from the top of the file
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^\s*# ]] || [[ -z "$line" ]]; then
+      echo "$line" >> "$tmp"
+    else
+      break
+    fi
+  done < "$HOSTS_CONF"
+
+  echo "" >> "$tmp"
+
+  # Write data rows with recalculated padding
+  for idx in "${!names[@]}"; do
+    printf "%-${w_name}s  %-${w_ip}s  %-${w_user}s  %s
+"       "${names[$idx]}" "${ips[$idx]}" "${users[$idx]}" "${groups[$idx]}" >> "$tmp"
+  done
+
+  mv "$tmp" "$HOSTS_CONF"
+}
+
+format_hosts() {
+  local count
+  count=$(read_hosts | wc -l | tr -d ' ')
+  [[ "$count" -eq 0 ]] && { warn "No hosts to format."; return; }
+  save_hosts
+  ok "hosts.conf reformatted ($count hosts)"
+}
+
+# =============================================================================
 # CRUD OPERATIONS
 # =============================================================================
 
@@ -221,7 +272,9 @@ add_host() {
     [[ ! "$confirm" =~ ^[Yy]$ ]] && { warn "Aborted."; return 0; }
   fi
 
-  printf "%-20s %-18s %-14s %-14s\n" "$name" "$ip" "$user" "$group" >> "$HOSTS_CONF"
+  # Append raw entry then reformat the whole file for consistent alignment
+  printf "%s  %s  %s  %s\n" "$name" "$ip" "$user" "$group" >> "$HOSTS_CONF"
+  save_hosts
   ok "Host '$name' added to hosts.conf"
   sync_all
 }
@@ -246,11 +299,12 @@ remove_host() {
   confirm="${confirm:-N}"
 
   if [[ "$confirm" =~ ^[Yy]$ ]]; then
-    # Remove the line from hosts.conf (preserve comments)
+    # Remove matching data line then reformat
     local tmp
     tmp=$(mktemp)
     grep -v "^${name}[[:space:]]" "$HOSTS_CONF" > "$tmp"
     mv "$tmp" "$HOSTS_CONF"
+    save_hosts
     ok "Host '$name' removed from hosts.conf"
     sync_all
   else
@@ -298,17 +352,18 @@ edit_host() {
   confirm="${confirm:-Y}"
 
   if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    # Replace the matching line then reformat
     local tmp
     tmp=$(mktemp)
-    # Replace the matching line, preserve everything else
     while IFS= read -r line; do
       if echo "$line" | grep -q "^${name}[[:space:]]"; then
-        printf "%-20s %-18s %-14s %-14s\n" "$name" "$new_ip" "$new_user" "$new_group"
+        printf "%s  %s  %s  %s\n" "$name" "$new_ip" "$new_user" "$new_group"
       else
         echo "$line"
       fi
     done < "$HOSTS_CONF" > "$tmp"
     mv "$tmp" "$HOSTS_CONF"
+    save_hosts
     ok "Host '$name' updated"
     sync_all
   else
@@ -366,6 +421,7 @@ show_menu() {
   echo -e "  ${BOLD}4)${RESET} Test SSH connection"
   echo -e "  ${BOLD}5)${RESET} Sync configs (regenerate inventory + wezterm.lua)"
   echo -e "  ${BOLD}6)${RESET} View hosts.conf"
+  echo -e "  ${BOLD}7)${RESET} Reformat hosts.conf"
   echo -e "  ${BOLD}q)${RESET} Quit"
   echo ""
   read -rp "  Choice: " choice
@@ -378,6 +434,7 @@ show_menu() {
     4) test_host ;;
     5) sync_all ;;
     6) cat "$HOSTS_CONF" ;;
+    7) format_hosts ;;
     q|Q) echo "Bye."; exit 0 ;;
     *) warn "Unknown option: $choice" ;;
   esac
@@ -393,6 +450,7 @@ show_menu() {
 case "${1:-}" in
   --sync)   sync_all; exit 0 ;;
   --list)   print_hosts; exit 0 ;;
+  --format) format_hosts; exit 0 ;;
   --add)    shift; add_host "$@"; exit 0 ;;
   --remove) remove_host; exit 0 ;;
   "")
@@ -401,7 +459,7 @@ case "${1:-}" in
     done
     ;;
   *)
-    echo "Usage: $0 [--sync | --list | --add [--name N --ip I --user U --group G --skip-confirm] | --remove]"
+    echo "Usage: $0 [--sync | --list | --format | --add [--name N --ip I --user U --group G --skip-confirm] | --remove]"
     exit 1
     ;;
 esac

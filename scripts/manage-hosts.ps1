@@ -1,15 +1,15 @@
 # =============================================================================
 # scripts/manage-hosts.ps1
 #
-# Windows PowerShell equivalent of manage-hosts.sh
-# Reads hosts.conf as the single source of truth and regenerates:
+# Windows PowerShell host manager. Reads hosts.conf as the single source of
+# truth and regenerates:
 #   - ansible/inventory/hosts.ini
 #   - wezterm.lua SSH domains block
 #
 # Usage:
-#   .\scripts\manage-hosts.ps1              # interactive menu
-#   .\scripts\manage-hosts.ps1 -Sync        # sync only
-#   .\scripts\manage-hosts.ps1 -List        # print current hosts
+#   .\scripts\manage-hosts.ps1
+#   .\scripts\manage-hosts.ps1 -Sync
+#   .\scripts\manage-hosts.ps1 -List
 #   .\scripts\manage-hosts.ps1 -Add -Name rhel-dev-03 -Ip 10.0.0.12 -User arrush -Group rhel_vms -SkipConfirm
 # =============================================================================
 
@@ -23,7 +23,8 @@ param(
     [string]$Ip,
     [string]$User      = "arrush",
     [string]$Group     = "rhel_vms",
-    [switch]$SkipConfirm
+    [switch]$SkipConfirm,
+    [switch]$Format
 )
 
 Set-StrictMode -Version Latest
@@ -175,6 +176,39 @@ function Invoke-SyncAll {
 # CRUD OPERATIONS
 # =============================================================================
 
+function Save-Hosts {
+    # Rewrites hosts.conf with dynamically padded columns.
+    # Preserves comment/blank lines that appear before the first data line.
+    param([System.Collections.Generic.List[PSCustomObject]]$HostList)
+
+    # Calculate column widths from actual data (minimum widths enforced)
+    $wName = 16; $wIp = 14; $wUser = 10
+    foreach ($h in $HostList) {
+        if ($h.Name.Length  -gt $wName) { $wName = $h.Name.Length  }
+        if ($h.Ip.Length    -gt $wIp)   { $wIp   = $h.Ip.Length    }
+        if ($h.User.Length  -gt $wUser) { $wUser = $h.User.Length  }
+    }
+
+    # Collect only the header lines (comments/blanks before the first data row)
+    $header = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in (Get-Content $HostsConf)) {
+        if ($line -match '^\s*#' -or $line -match '^\s*$') {
+            $header.Add($line)
+        } else {
+            break
+        }
+    }
+
+    $output = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in $header) { $output.Add($line) }
+    $output.Add("")
+    foreach ($h in $HostList) {
+        $output.Add(("{0,-$wName}  {1,-$wIp}  {2,-$wUser}  {3}" -f $h.Name, $h.Ip, $h.User, $h.Group))
+    }
+
+    $output | Set-Content -Path $HostsConf -Encoding UTF8
+}
+
 function Add-Host {
     param(
         [string]$HostName  = "",
@@ -218,8 +252,10 @@ function Add-Host {
         if ($confirm -and $confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
     }
 
-    $line = "{0,-20} {1,-18} {2,-14} {3}" -f $HostName, $HostIp, $HostUser, $HostGroup
-    Add-Content -Path $HostsConf -Value $line -Encoding UTF8
+    $all = [System.Collections.Generic.List[PSCustomObject]](Read-Hosts)
+    if (-not $all) { $all = [System.Collections.Generic.List[PSCustomObject]]::new() }
+    $all.Add([PSCustomObject]@{ Name = $HostName; Ip = $HostIp; User = $HostUser; Group = $HostGroup })
+    Save-Hosts $all
     Write-Ok "Host '$HostName' added to hosts.conf"
     Invoke-SyncAll
 }
@@ -242,8 +278,8 @@ function Remove-HostEntry {
     $confirm = Read-Host "  Remove '$HostName'? This cannot be undone. [y/N]"
     if ($confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
 
-    $newLines = Get-Content $HostsConf | Where-Object { $_ -notmatch "^$HostName\s" }
-    $newLines | Set-Content -Path $HostsConf -Encoding UTF8
+    $remaining = [System.Collections.Generic.List[PSCustomObject]](Read-Hosts | Where-Object { $_.Name -ne $HostName })
+    Save-Hosts $remaining
     Write-Ok "Host '$HostName' removed from hosts.conf"
     Invoke-SyncAll
 }
@@ -282,12 +318,12 @@ function Edit-HostEntry {
     $confirm = Read-Host "  Confirm? [Y/n]"
     if ($confirm -and $confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
 
-    $newLines = Get-Content $HostsConf | ForEach-Object {
-        if ($_ -match "^$HostName\s") {
-            "{0,-20} {1,-18} {2,-14} {3}" -f $HostName, $newIp, $newUser, $newGroup
+    $updated = [System.Collections.Generic.List[PSCustomObject]](Read-Hosts | ForEach-Object {
+        if ($_.Name -eq $HostName) {
+            [PSCustomObject]@{ Name = $HostName; Ip = $newIp; User = $newUser; Group = $newGroup }
         } else { $_ }
-    }
-    $newLines | Set-Content -Path $HostsConf -Encoding UTF8
+    })
+    Save-Hosts $updated
     Write-Ok "Host '$HostName' updated"
     Invoke-SyncAll
 }
@@ -320,6 +356,14 @@ function Test-SshConnection {
     }
 }
 
+function Invoke-FormatHosts {
+    $hosts = Read-Hosts
+    if (-not $hosts) { Write-Warn "No hosts to format."; return }
+    $list = [System.Collections.Generic.List[PSCustomObject]]$hosts
+    Save-Hosts $list
+    Write-Ok "hosts.conf reformatted ($($list.Count) hosts)"
+}
+
 # =============================================================================
 # MENU
 # =============================================================================
@@ -333,6 +377,7 @@ function Show-Menu {
     Write-Host "  4) Test SSH connection"
     Write-Host "  5) Sync configs"
     Write-Host "  6) View hosts.conf"
+    Write-Host "  7) Reformat hosts.conf"
     Write-Host "  q) Quit"
     Write-Host ""
     $choice = Read-Host "  Choice"
@@ -344,6 +389,7 @@ function Show-Menu {
         "4" { Test-SshConnection }
         "5" { Invoke-SyncAll }
         "6" { Get-Content $HostsConf }
+        "7" { Invoke-FormatHosts }
         "q" { Write-Host "Bye."; exit 0 }
         default { Write-Warn "Unknown option: $choice" }
     }
@@ -356,6 +402,7 @@ function Show-Menu {
 if (-not (Test-Path $HostsConf)) { Write-Fail "hosts.conf not found at $HostsConf" }
 
 if ($Sync)   { Invoke-SyncAll; exit 0 }
+if ($Format) { Invoke-FormatHosts; exit 0 }
 if ($List)   { Show-Hosts; exit 0 }
 if ($Remove) { Remove-HostEntry; exit 0 }
 
