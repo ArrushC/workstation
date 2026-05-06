@@ -92,6 +92,9 @@ config.window_padding = {
 -- GPU rendering
 config.front_end = 'WebGpu'
 
+-- Cursor — vertical bar (I-beam) instead of block
+config.default_cursor_style = 'SteadyBar'
+
 -- ---------------------------------------------------------------------------
 -- Per-host tab color
 -- ---------------------------------------------------------------------------
