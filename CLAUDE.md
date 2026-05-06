@@ -103,9 +103,9 @@ Windows (feature-equivalent):
 
 The two scripts produce **the same output** for the same `hosts.conf`. The banner in `ansible/inventory/hosts.ini` records which one regenerated it last (handy when debugging line-ending or formatting drift).
 
-### Wezterm sentinel gotcha
+### Wezterm sentinel mechanism
 
-The wezterm sync only does anything if `wezterm.lua` contains the sentinel block:
+The wezterm sync replaces only the block between two sentinel comments in `wezterm.lua`:
 
 ```lua
 -- HOSTS:START
@@ -113,7 +113,7 @@ local ssh_domains = { ... }
 -- HOSTS:END
 ```
 
-If those comments are missing, the bash script silently produces unchanged output and the PowerShell script prints a warning and skips. **The committed `wezterm.lua` currently has the `local ssh_domains = { ... }` table without the sentinel comments around it** — so wezterm sync is currently a silent no-op until those sentinels are added. The Ansible inventory regen works regardless.
+Both sentinels must be present at column 0. The bash script uses `awk` to print everything outside the sentinels unchanged and substitute a freshly generated `local ssh_domains = { ... }` block between them; the PowerShell script does the equivalent with a `(?s)-- HOSTS:START.*?-- HOSTS:END` regex. If the sentinels are removed, bash silently no-ops and PowerShell prints a warning and skips — the rest of the file (keybinds, appearance, etc.) is never touched by sync, so it's safe to edit anywhere outside the sentinel block.
 
 ## bootstrap.sh
 

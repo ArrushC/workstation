@@ -8,25 +8,29 @@ local wezterm = require 'wezterm'
 local act     = wezterm.action
 
 -- ---------------------------------------------------------------------------
--- SSH Domains — add your RHEL VMs here
+-- SSH Domains — auto-managed by scripts/manage-hosts.{sh,ps1}
 -- ---------------------------------------------------------------------------
--- Each entry is one VM. `multiplexing = 'None'` lets Zellij handle sessions.
--- Wezterm still handles fonts, colours, keybinds on the Windows side.
+-- Edit hosts.conf at the repo root, then run:
+--   ./scripts/manage-hosts.sh --sync       (Linux)
+--   .\scripts\manage-hosts.ps1 -Sync       (Windows)
+-- The block between HOSTS:START / HOSTS:END is replaced on every sync —
+-- do not edit it by hand. `multiplexing = 'None'` lets Zellij own sessions.
+-- HOSTS:START
 local ssh_domains = {
   {
-    name           = 'rhel-dev-01',
-    remote_address = '***REMOVED-IP***',   -- replace with your VM IP or hostname
-    username       = 'arrush',       -- replace with your username
-    multiplexing   = 'None',         -- Zellij handles mux on the remote side
+    name           = 'atc-cache-dev10',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
   },
-  -- Add more VMs:
-  -- {
-  --   name           = 'rhel-dev-02',
-  --   remote_address = '***REMOVED-IP***',
-  --   username       = 'arrush',
-  --   multiplexing   = 'None',
-  -- },
+  {
+    name           = 'atc-cache-dev09',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
 }
+-- HOSTS:END
 
 -- ---------------------------------------------------------------------------
 -- Auto-launch Zellij on connect
