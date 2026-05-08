@@ -29,6 +29,36 @@ local ssh_domains = {
     username       = 'arrush.chaturvedi',
     multiplexing   = 'None',
   },
+  {
+    name           = 'cache-apl',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
+    name           = 'dev-cache-qa1',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
+    name           = 'dev-cache-qa2',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
+    name           = 'dev-cache-qa3',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
+    name           = 'dev-cache-qa4',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
 }
 -- HOSTS:END
 
