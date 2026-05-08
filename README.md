@@ -65,28 +65,28 @@ workstation/
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/workstation.git
+git clone https://github.com/ArrushC/workstation.git
 cd workstation
 ```
 
 Update before pushing:
-- `ansible/inventory/hosts.ini` — add your RHEL VM IPs and username
-- `ansible/group_vars/all.yml` — set `dev_user` and `dotfiles_repo`
-- `bootstrap.sh` — replace `YOUR_USERNAME`
-- `wezterm.lua` — replace `remote_address` and `username`
+- [ ] `ansible/inventory/hosts.ini` — add your RHEL VM IPs and username
+- [ ] `ansible/group_vars/all.yml` — set `dev_user` and `dotfiles_repo`
+- [x] `bootstrap.sh` — replace `YOUR_USERNAME`
+- [x] `wezterm.lua` — replace `remote_address` and `username`
 
 ### 2. On each RHEL VM
 
 **If you have sudo** (full provisioning via Ansible):
 ```bash
 pip3 install --user ansible
-git clone https://github.com/YOUR_USERNAME/workstation.git
+git clone https://github.com/ArrushC/workstation.git
 cd workstation && ./bootstrap.sh --full
 ```
 
 **No sudo** (user-space only, works everywhere):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/workstation/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 source ~/.bashrc
 ```
 
