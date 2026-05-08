@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # scripts/manage-hosts.ps1
 #
 # Windows PowerShell host manager. Reads hosts.conf as the single source of
@@ -6,11 +6,21 @@
 #   - ansible/inventory/hosts.ini
 #   - wezterm.lua SSH domains block
 #
-# Usage:
+# Usage (no args opens the interactive menu):
 #   .\scripts\manage-hosts.ps1
 #   .\scripts\manage-hosts.ps1 -Sync
 #   .\scripts\manage-hosts.ps1 -List
-#   .\scripts\manage-hosts.ps1 -Add -Name rhel-dev-03 -Ip 10.0.0.12 -User arrush -Group rhel_vms -SkipConfirm
+#   .\scripts\manage-hosts.ps1 -Format
+#   .\scripts\manage-hosts.ps1 -Remove
+#   .\scripts\manage-hosts.ps1 -Add  -Name N -Ip I -User U -Group G [-SkipConfirm]
+#   .\scripts\manage-hosts.ps1 -CopyId [-Name N]
+#
+# This script is feature-paired with scripts/manage-hosts.sh — every
+# capability (flags, prompts, post-add flow) MUST be kept in lockstep.
+#
+# IMPORTANT: This file is UTF-8 with BOM. PowerShell 5.1 reads scripts as
+# Windows-1252 unless a BOM is present, and the file uses Unicode glyphs
+# (✓, ✗, ─). Do not save without BOM.
 # =============================================================================
 
 [CmdletBinding()]
@@ -19,10 +29,11 @@ param(
     [switch]$List,
     [switch]$Add,
     [switch]$Remove,
+    [switch]$CopyId,
     [string]$Name,
     [string]$Ip,
-    [string]$User      = "arrush",
-    [string]$Group     = "rhel_vms",
+    [string]$User      = "",
+    [string]$Group     = "",
     [switch]$SkipConfirm,
     [switch]$Format
 )
@@ -37,16 +48,28 @@ $HostsConf  = Join-Path $RepoRoot "hosts.conf"
 $Inventory  = Join-Path $RepoRoot "ansible\inventory\hosts.ini"
 $WeztermLua = Join-Path $RepoRoot "wezterm.lua"
 
+# --- ANSI escape codes (matches manage-hosts.sh; rendered by WezTerm,
+#     Windows Terminal, and modern conhost. Old conhost shows raw codes.) -----
+$Esc    = [char]27
+$Bold   = "$Esc" + "[1m"
+$Reset  = "$Esc" + "[0m"
+$Red    = "$Esc" + "[0;31m"
+$Green  = "$Esc" + "[0;32m"
+$Yellow = "$Esc" + "[1;33m"
+$Blue   = "$Esc" + "[0;34m"
+$Cyan   = "$Esc" + "[0;36m"
+
 # --- Output helpers ----------------------------------------------------------
-function Write-Log    { param($msg) Write-Host "==> " -ForegroundColor Blue   -NoNewline; Write-Host $msg -ForegroundColor White }
-function Write-Ok     { param($msg) Write-Host " v  " -ForegroundColor Green  -NoNewline; Write-Host $msg }
-function Write-Warn   { param($msg) Write-Host " !  " -ForegroundColor Yellow -NoNewline; Write-Host $msg }
-function Write-Fail   { param($msg) Write-Host " x  " -ForegroundColor Red    -NoNewline; Write-Host $msg; exit 1 }
+function Write-Log    { param($msg) Write-Host "${Blue}==>${Reset} ${Bold}$msg${Reset}" }
+function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
+function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
+function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
 function Write-Header {
     param($msg)
     Write-Host ""
-    Write-Host $msg -ForegroundColor Cyan
-    Write-Host ("-" * 50) -ForegroundColor Cyan
+    Write-Host "${Bold}${Cyan}$msg${Reset}"
+    $rule = "─" * 50
+    Write-Host "${Cyan}$rule${Reset}"
 }
 
 # =============================================================================
@@ -80,11 +103,26 @@ function Test-HostExists {
 function Show-Hosts {
     $hosts = Read-Hosts
     if (-not $hosts) { Write-Warn "No hosts configured yet."; return }
-    Write-Host ""
-    Write-Host ("{0,-20} {1,-18} {2,-14} {3}" -f "NAME", "IP", "USER", "GROUP") -ForegroundColor White
-    Write-Host ("{0,-20} {1,-18} {2,-14} {3}" -f "--------------------", "------------------", "--------------", "--------------")
+
+    # Dynamic column widths; minimum = header label length.
+    $wName  = "NAME".Length
+    $wIp    = "IP".Length
+    $wUser  = "USER".Length
+    $wGroup = "GROUP".Length
     foreach ($h in $hosts) {
-        Write-Host ("{0,-20} {1,-18} {2,-14} {3}" -f $h.Name, $h.Ip, $h.User, $h.Group)
+        if ($h.Name.Length  -gt $wName)  { $wName  = $h.Name.Length  }
+        if ($h.Ip.Length    -gt $wIp)    { $wIp    = $h.Ip.Length    }
+        if ($h.User.Length  -gt $wUser)  { $wUser  = $h.User.Length  }
+        if ($h.Group.Length -gt $wGroup) { $wGroup = $h.Group.Length }
+    }
+
+    $fmt = "{0,-$wName}  {1,-$wIp}  {2,-$wUser}  {3,-$wGroup}"
+
+    Write-Host ""
+    Write-Host "${Bold}$($fmt -f 'NAME', 'IP', 'USER', 'GROUP')${Reset}"
+    Write-Host ($fmt -f ("-" * $wName), ("-" * $wIp), ("-" * $wUser), ("-" * $wGroup))
+    foreach ($h in $hosts) {
+        Write-Host ($fmt -f $h.Name, $h.Ip, $h.User, $h.Group)
     }
     Write-Host ""
 }
@@ -122,7 +160,11 @@ function Invoke-GenerateInventory {
     $lines.Add("ansible_ssh_private_key_file=~/.ssh/id_ed25519")
     $lines.Add("ansible_python_interpreter=/usr/bin/python3")
 
-    [System.IO.File]::WriteAllLines($Inventory, $lines, [System.Text.UTF8Encoding]::new($false))
+    # Write LF-only (Environment.NewLine on Windows is CRLF, which propagates
+    # stray \r into fields when the file is read on a Linux VM).
+    $content = ($lines -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($Inventory, $content, [System.Text.UTF8Encoding]::new($false))
+
     $count = ($hosts | Measure-Object).Count
     Write-Ok "ansible/inventory/hosts.ini updated ($count hosts)"
 }
@@ -179,21 +221,30 @@ function Invoke-SyncAll {
 function Save-Hosts {
     # Rewrites hosts.conf with dynamically padded columns.
     # Preserves comment/blank lines that appear before the first data line.
+    # Sorts rows by group then name so hosts.conf is always in deterministic
+    # order after a save (matches `sort -k4,4 -k1,1` on the sh side).
     param([System.Collections.Generic.List[PSCustomObject]]$HostList)
+
+    $sorted = @($HostList | Sort-Object -Property Group, Name)
 
     # Calculate column widths from actual data (minimum widths enforced)
     $wName = 16; $wIp = 14; $wUser = 10
-    foreach ($h in $HostList) {
+    foreach ($h in $sorted) {
         if ($h.Name.Length  -gt $wName) { $wName = $h.Name.Length  }
         if ($h.Ip.Length    -gt $wIp)   { $wIp   = $h.Ip.Length    }
         if ($h.User.Length  -gt $wUser) { $wUser = $h.User.Length  }
     }
 
-    # Collect only the header lines (comments/blanks before the first data row)
-    $header = [System.Collections.Generic.List[string]]::new()
+    # Preserve only comment lines from the top. Blank lines are dropped —
+    # preserving them caused one more blank to accumulate on every save.
+    $header      = [System.Collections.Generic.List[string]]::new()
+    $hadComments = $false
     foreach ($line in (Get-Content $HostsConf)) {
-        if ($line -match '^\s*#' -or $line -match '^\s*$') {
+        if ($line -match '^\s*#') {
             $header.Add($line)
+            $hadComments = $true
+        } elseif ($line -match '^\s*$') {
+            continue
         } else {
             break
         }
@@ -201,20 +252,23 @@ function Save-Hosts {
 
     $output = [System.Collections.Generic.List[string]]::new()
     foreach ($line in $header) { $output.Add($line) }
-    $output.Add("")
-    foreach ($h in $HostList) {
+    if ($hadComments) { $output.Add("") }
+    foreach ($h in $sorted) {
         $output.Add(("{0,-$wName}  {1,-$wIp}  {2,-$wUser}  {3}" -f $h.Name, $h.Ip, $h.User, $h.Group))
     }
 
-    [System.IO.File]::WriteAllLines($HostsConf, $output, [System.Text.UTF8Encoding]::new($false))
+    # Write LF-only (Environment.NewLine on Windows is CRLF, which propagates
+    # stray \r into fields when the file is read on a Linux VM).
+    $content = ($output -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($HostsConf, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Add-Host {
     param(
         [string]$HostName  = "",
         [string]$HostIp    = "",
-        [string]$HostUser  = "arrush",
-        [string]$HostGroup = "rhel_vms",
+        [string]$HostUser  = "",
+        [string]$HostGroup = "",
         [bool]$NoConfirm   = $false
     )
 
@@ -235,8 +289,32 @@ function Add-Host {
     }
 
     if (-not $HostUser) {
-        $typed = Read-Host "  SSH user [arrush]"
-        $HostUser = if ($typed) { $typed } else { "arrush" }
+        $currentUser = $env:USERNAME
+        $lowerUser   = $currentUser.ToLower()
+        $upperUser   = $currentUser.ToUpper()
+
+        Write-Host ""
+        Write-Host "  SSH user options:"
+        Write-Host "    1) $currentUser  (as-is)"
+        Write-Host "    2) $lowerUser  (lowercase)"
+        Write-Host "    3) $upperUser  (uppercase)"
+        Write-Host "    4) custom"
+        $choice = Read-Host "  Choice [1]"
+        if (-not $choice) { $choice = "1" }
+
+        switch ($choice) {
+            "1" { $HostUser = $currentUser }
+            "2" { $HostUser = $lowerUser }
+            "3" { $HostUser = $upperUser }
+            "4" {
+                $custom = Read-Host "  Custom username"
+                $HostUser = if ($custom) { $custom } else { $currentUser }
+            }
+            default {
+                Write-Warn "Unknown choice -- using as-is"
+                $HostUser = $currentUser
+            }
+        }
     }
 
     if (-not $HostGroup) {
@@ -245,7 +323,7 @@ function Add-Host {
     }
 
     Write-Host ""
-    Write-Host ("  Adding: {0,-20} {1,-18} {2,-14} {3}" -f $HostName, $HostIp, $HostUser, $HostGroup) -ForegroundColor White
+    Write-Host ("  Adding: ${Bold}{0,-20} {1,-18} {2,-14} {3,-14}${Reset}" -f $HostName, $HostIp, $HostUser, $HostGroup)
 
     if (-not $NoConfirm) {
         $confirm = Read-Host "  Confirm? [Y/n]"
@@ -257,7 +335,25 @@ function Add-Host {
     $all.Add([PSCustomObject]@{ Name = $HostName; Ip = $HostIp; User = $HostUser; Group = $HostGroup })
     Save-Hosts $all
     Write-Ok "Host '$HostName' added to hosts.conf"
-    Invoke-SyncAll
+
+    if ($NoConfirm) {
+        # Non-interactive default: don't copy keys, do sync configs.
+        Invoke-SyncAll
+        return
+    }
+
+    Write-Host ""
+    $copyAns = Read-Host "  Copy SSH key now? [y/N]"
+    if ($copyAns -match '^[Yy]$') {
+        Invoke-CopyId -TargetName $HostName
+    }
+
+    Write-Host ""
+    $syncAns = Read-Host "  Sync configs now? [Y/n]"
+    if (-not $syncAns) { $syncAns = "Y" }
+    if ($syncAns -match '^[Yy]$') {
+        Invoke-SyncAll
+    }
 }
 
 function Remove-HostEntry {
@@ -314,7 +410,7 @@ function Edit-HostEntry {
     $newGroup = if ($newGroup) { $newGroup } else { $current.Group }
 
     Write-Host ""
-    Write-Host ("  Updated: {0,-20} {1,-18} {2,-14} {3}" -f $HostName, $newIp, $newUser, $newGroup) -ForegroundColor White
+    Write-Host ("  Updated: ${Bold}{0,-20} {1,-18} {2,-14} {3,-14}${Reset}" -f $HostName, $newIp, $newUser, $newGroup)
     $confirm = Read-Host "  Confirm? [Y/n]"
     if ($confirm -and $confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
 
@@ -328,6 +424,59 @@ function Edit-HostEntry {
     Invoke-SyncAll
 }
 
+function Invoke-CopyId {
+    param([string]$TargetName)
+
+    $hosts = Read-Hosts
+    if (-not $hosts) { Write-Fail "No hosts in hosts.conf" }
+
+    if (-not $TargetName) {
+        Write-Header "Copy SSH key to a host"
+        Show-Hosts
+        $TargetName = Read-Host "  Host name"
+        if (-not $TargetName) { Write-Warn "Cancelled."; return }
+    }
+
+    if (-not (Test-HostExists $TargetName)) {
+        Write-Fail "Host '$TargetName' not found in hosts.conf"
+    }
+
+    $target = $hosts | Where-Object { $_.Name -eq $TargetName } | Select-Object -First 1
+
+    $privKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
+    $pubKey  = "$privKey.pub"
+
+    if (-not (Test-Path $pubKey)) {
+        Write-Warn "No SSH key at $privKey"
+        $ans = Read-Host "  Generate one now? [y/N]"
+        if ($ans -match '^[Yy]') {
+            $sshDir = Split-Path $privKey -Parent
+            if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+            ssh-keygen -t ed25519 -f $privKey -N '""' -C "$env:USERNAME@$env:COMPUTERNAME"
+            if ($LASTEXITCODE -ne 0) { Write-Fail "ssh-keygen failed" }
+            Write-Ok "Generated $privKey"
+        } else {
+            Write-Fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
+        }
+    }
+
+    $keyContent = (Get-Content $pubKey -Raw).Trim()
+    Write-Log "Copying $pubKey to $($target.User)@$($target.Ip)..."
+
+    # Windows OpenSSH ships no ssh-copy-id — emulate it manually.
+    $remoteCmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && " +
+                 "echo '$keyContent' >> ~/.ssh/authorized_keys && " +
+                 "sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && " +
+                 "chmod 600 ~/.ssh/authorized_keys"
+
+    ssh "$($target.User)@$($target.Ip)" $remoteCmd
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "Key copied to $($target.User)@$($target.Ip)"
+    } else {
+        Write-Fail "ssh failed (exit $LASTEXITCODE) -- check connectivity, password, sshd"
+    }
+}
+
 function Test-SshConnection {
     Write-Header "Test SSH connection"
     Show-Hosts
@@ -337,7 +486,8 @@ function Test-SshConnection {
 
     $target = Read-Host "  Host name to test (or 'all')"
 
-    $toTest = if ($target -eq "all") {
+    $isAll  = ($target -eq "all")
+    $toTest = if ($isAll) {
         $hosts
     } else {
         $h = $hosts | Where-Object { $_.Name -eq $target }
@@ -346,12 +496,14 @@ function Test-SshConnection {
     }
 
     foreach ($h in $toTest) {
-        Write-Host "  Testing $($h.Name) ($($h.User)@$($h.Ip))... " -NoNewline
+        Write-Host "  Testing ${Bold}$($h.Name)${Reset} ($($h.User)@$($h.Ip))... " -NoNewline
         ssh -o ConnectTimeout=5 -o BatchMode=yes "$($h.User)@$($h.Ip)" exit 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "OK" -ForegroundColor Green
+            $msg = if ($isAll) { "✓ OK" } else { "✓ Connected successfully" }
+            Write-Host "${Green}${msg}${Reset}"
         } else {
-            Write-Host "Failed" -ForegroundColor Red
+            $msg = if ($isAll) { "✗ Failed" } else { "✗ Connection failed -- check IP, user, and SSH key" }
+            Write-Host "${Red}${msg}${Reset}"
         }
     }
 }
@@ -371,25 +523,28 @@ function Invoke-FormatHosts {
 function Show-Menu {
     Write-Header "Workstation host manager"
     Show-Hosts
-    Write-Host "  1) Add host"
-    Write-Host "  2) Remove host"
-    Write-Host "  3) Edit host"
-    Write-Host "  4) Test SSH connection"
-    Write-Host "  5) Sync configs"
-    Write-Host "  6) View hosts.conf"
-    Write-Host "  7) Reformat hosts.conf"
-    Write-Host "  q) Quit"
+    Write-Host "${Bold}Pick an option:${Reset}"
+    Write-Host "  ${Bold}1)${Reset} Add host"
+    Write-Host "  ${Bold}2)${Reset} Remove host"
+    Write-Host "  ${Bold}3)${Reset} Edit host"
+    Write-Host "  ${Bold}4)${Reset} Test SSH connection"
+    Write-Host "  ${Bold}5)${Reset} Copy SSH key"
+    Write-Host "  ${Bold}6)${Reset} Sync configs"
+    Write-Host "  ${Bold}7)${Reset} View hosts.conf"
+    Write-Host "  ${Bold}8)${Reset} Reformat hosts.conf"
+    Write-Host "  ${Bold}q)${Reset} Quit"
     Write-Host ""
-    $choice = Read-Host "  Choice"
+    $choice = Read-Host "Choice"
 
     switch ($choice) {
         "1" { Add-Host }
         "2" { Remove-HostEntry }
         "3" { Edit-HostEntry }
         "4" { Test-SshConnection }
-        "5" { Invoke-SyncAll }
-        "6" { Get-Content $HostsConf }
-        "7" { Invoke-FormatHosts }
+        "5" { Invoke-CopyId }
+        "6" { Invoke-SyncAll }
+        "7" { Get-Content $HostsConf }
+        "8" { Invoke-FormatHosts }
         "q" { Write-Host "Bye."; exit 0 }
         default { Write-Warn "Unknown option: $choice" }
     }
@@ -405,6 +560,7 @@ if ($Sync)   { Invoke-SyncAll; exit 0 }
 if ($Format) { Invoke-FormatHosts; exit 0 }
 if ($List)   { Show-Hosts; exit 0 }
 if ($Remove) { Remove-HostEntry; exit 0 }
+if ($CopyId) { Invoke-CopyId -TargetName $Name; exit 0 }
 
 if ($Add) {
     Add-Host `

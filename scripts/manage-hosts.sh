@@ -7,10 +7,17 @@
 #   - ansible/inventory/hosts.ini
 #   - wezterm.lua SSH domains block
 #
-# Usage:
-#   ./scripts/manage-hosts.sh            # interactive menu
-#   ./scripts/manage-hosts.sh --sync     # sync only (no menu, use in CI)
-#   ./scripts/manage-hosts.sh --list     # print current hosts and exit
+# Usage (no args opens the interactive menu):
+#   ./scripts/manage-hosts.sh
+#   ./scripts/manage-hosts.sh --sync
+#   ./scripts/manage-hosts.sh --list
+#   ./scripts/manage-hosts.sh --format
+#   ./scripts/manage-hosts.sh --remove
+#   ./scripts/manage-hosts.sh --add  --name N --ip I --user U --group G [--skip-confirm]
+#   ./scripts/manage-hosts.sh --copy-id [--name N]
+#
+# This script is feature-paired with scripts/manage-hosts.ps1 — every
+# capability (flags, prompts, post-add flow) MUST be kept in lockstep.
 # =============================================================================
 
 set -euo pipefail
@@ -52,11 +59,32 @@ print_hosts() {
     return
   fi
 
-  printf "\n${BOLD}%-20s %-18s %-14s %-14s${RESET}\n" "NAME" "IP" "USER" "GROUP"
-  printf "%-20s %-18s %-14s %-14s\n" "────────────────────" "──────────────────" "──────────────" "──────────────"
+  # Calculate column widths from data; minimum = header label length.
+  local w_name=4 w_ip=2 w_user=4 w_group=5
+  local name ip user group
   while IFS= read -r line; do
     read -r name ip user group <<< "$line"
-    printf "%-20s %-18s %-14s %-14s\n" "$name" "$ip" "$user" "$group"
+    (( ${#name}  > w_name  )) && w_name=${#name}
+    (( ${#ip}    > w_ip    )) && w_ip=${#ip}
+    (( ${#user}  > w_user  )) && w_user=${#user}
+    (( ${#group} > w_group )) && w_group=${#group}
+  done <<< "$hosts"
+
+  printf "\n${BOLD}%-${w_name}s  %-${w_ip}s  %-${w_user}s  %-${w_group}s${RESET}\n" \
+    "NAME" "IP" "USER" "GROUP"
+
+  # ASCII separator with byte-exact widths (Unicode dashes break printf width math).
+  local sep_name sep_ip sep_user sep_group
+  sep_name=$(printf  '%*s' "$w_name"  '' | tr ' ' '-')
+  sep_ip=$(printf    '%*s' "$w_ip"    '' | tr ' ' '-')
+  sep_user=$(printf  '%*s' "$w_user"  '' | tr ' ' '-')
+  sep_group=$(printf '%*s' "$w_group" '' | tr ' ' '-')
+  printf "%s  %s  %s  %s\n" "$sep_name" "$sep_ip" "$sep_user" "$sep_group"
+
+  while IFS= read -r line; do
+    read -r name ip user group <<< "$line"
+    printf "%-${w_name}s  %-${w_ip}s  %-${w_user}s  %-${w_group}s\n" \
+      "$name" "$ip" "$user" "$group"
   done <<< "$hosts"
   echo ""
 }
@@ -164,13 +192,19 @@ sync_all() {
 
 # Rewrites the data rows in hosts.conf with dynamically padded columns.
 # Preserves header comments. Called by add, remove, edit, and format.
+# Sorts rows by group (column 4) then name (column 1) so hosts.conf is
+# always in deterministic order after a save.
 save_hosts() {
-  # Build arrays from current hosts
+  local sorted_lines
+  sorted_lines=$(read_hosts | sort -k4,4 -k1,1)
+
+  # Build arrays from sorted hosts
   local names=() ips=() users=() groups=()
   while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
     read -r n i u g <<< "$line"
     names+=("$n"); ips+=("$i"); users+=("$u"); groups+=("$g")
-  done <<< "$(read_hosts)"
+  done <<< "$sorted_lines"
 
   # Calculate column widths (minimum widths enforced)
   local w_name=16 w_ip=14 w_user=10
@@ -181,16 +215,22 @@ save_hosts() {
   local tmp
   tmp=$(mktemp)
 
-  # Preserve header comment lines from the top of the file
+  # Preserve only comment lines from the top of the file. Blank lines are
+  # dropped — preserving them caused one more blank to accumulate on every save.
+  local had_comments=false
   while IFS= read -r line; do
-    if [[ "$line" =~ ^\s*# ]] || [[ -z "$line" ]]; then
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
       echo "$line" >> "$tmp"
+      had_comments=true
+    elif [[ -z "$line" ]]; then
+      continue
     else
       break
     fi
   done < "$HOSTS_CONF"
 
-  echo "" >> "$tmp"
+  # One blank separator between comment header and data, only if comments exist.
+  [[ "$had_comments" == true ]] && echo "" >> "$tmp"
 
   # Write data rows with recalculated padding
   for idx in "${!names[@]}"; do
@@ -254,8 +294,29 @@ add_host() {
   fi
 
   if [[ -z "$user" ]]; then
-    read -rp "  SSH user [arrush]:              " user
-    user="${user:-arrush}"
+    local current_user lower_user upper_user choice custom_user
+    current_user=$(whoami)
+    lower_user="${current_user,,}"
+    upper_user="${current_user^^}"
+
+    echo ""
+    echo "  SSH user options:"
+    echo "    1) ${current_user}  (as-is)"
+    echo "    2) ${lower_user}  (lowercase)"
+    echo "    3) ${upper_user}  (uppercase)"
+    echo "    4) custom"
+    read -rp "  Choice [1]: " choice
+    choice="${choice:-1}"
+
+    case "$choice" in
+      1) user="$current_user" ;;
+      2) user="$lower_user" ;;
+      3) user="$upper_user" ;;
+      4) read -rp "  Custom username: " custom_user
+         user="${custom_user:-$current_user}" ;;
+      *) warn "Unknown choice — using as-is"
+         user="$current_user" ;;
+    esac
   fi
 
   if [[ -z "$group" ]]; then
@@ -276,7 +337,25 @@ add_host() {
   printf "%s  %s  %s  %s\n" "$name" "$ip" "$user" "$group" >> "$HOSTS_CONF"
   save_hosts
   ok "Host '$name' added to hosts.conf"
-  sync_all
+
+  if [[ "$skip_confirm" == true ]]; then
+    # Non-interactive default: don't copy keys, do sync configs.
+    sync_all
+    return
+  fi
+
+  echo ""
+  read -rp "  Copy SSH key now? [y/N]: " copy_ans
+  if [[ "$copy_ans" =~ ^[Yy]$ ]]; then
+    copy_ssh_id "$name"
+  fi
+
+  echo ""
+  read -rp "  Sync configs now? [Y/n]: " sync_ans
+  sync_ans="${sync_ans:-Y}"
+  if [[ "$sync_ans" =~ ^[Yy]$ ]]; then
+    sync_all
+  fi
 }
 
 remove_host() {
@@ -371,6 +450,58 @@ edit_host() {
   fi
 }
 
+copy_ssh_id() {
+  local target="${1:-}"
+
+  # Interactive picker if no name supplied
+  if [[ -z "$target" ]]; then
+    header "Copy SSH key to a host"
+    print_hosts
+    read -rp "  Host name: " target
+    [[ -z "$target" ]] && { warn "Cancelled."; return; }
+  fi
+
+  if ! host_exists "$target"; then
+    fail "Host '$target' not found in hosts.conf"
+  fi
+
+  local line user ip
+  line=$(read_hosts | awk -v n="$target" '$1==n {print; exit}')
+  read -r _ ip user _ <<< "$line"
+
+  local privkey="$HOME/.ssh/id_ed25519"
+  local pubkey="$HOME/.ssh/id_ed25519.pub"
+
+  if [[ ! -f "$pubkey" ]]; then
+    warn "No SSH key at $privkey"
+    read -rp "  Generate one now? [y/N]: " ans
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+      mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+      ssh-keygen -t ed25519 -f "$privkey" -N "" -C "$(whoami)@$(hostname -s)" \
+        || fail "ssh-keygen failed"
+      ok "Generated $privkey"
+    else
+      fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
+    fi
+  fi
+
+  log "Copying $pubkey to ${user}@${ip}..."
+  if command -v ssh-copy-id &>/dev/null; then
+    ssh-copy-id -i "$pubkey" "${user}@${ip}" \
+      || fail "ssh-copy-id failed (check connectivity, password, sshd config)"
+  else
+    # Manual fallback for distros without ssh-copy-id
+    local key_content
+    key_content=$(cat "$pubkey")
+    ssh "${user}@${ip}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+echo '$key_content' >> ~/.ssh/authorized_keys && \
+sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && \
+chmod 600 ~/.ssh/authorized_keys" \
+      || fail "Remote key install failed"
+  fi
+  ok "Key copied to ${user}@${ip}"
+}
+
 test_host() {
   header "Test SSH connection"
   print_hosts
@@ -415,16 +546,18 @@ test_host() {
 show_menu() {
   header "Workstation host manager"
   print_hosts
+  echo -e "${BOLD}Pick an option:${RESET}"
   echo -e "  ${BOLD}1)${RESET} Add host"
   echo -e "  ${BOLD}2)${RESET} Remove host"
   echo -e "  ${BOLD}3)${RESET} Edit host"
   echo -e "  ${BOLD}4)${RESET} Test SSH connection"
-  echo -e "  ${BOLD}5)${RESET} Sync configs (regenerate inventory + wezterm.lua)"
-  echo -e "  ${BOLD}6)${RESET} View hosts.conf"
-  echo -e "  ${BOLD}7)${RESET} Reformat hosts.conf"
+  echo -e "  ${BOLD}5)${RESET} Copy SSH key"
+  echo -e "  ${BOLD}6)${RESET} Sync configs (regenerate inventory + wezterm.lua)"
+  echo -e "  ${BOLD}7)${RESET} View hosts.conf"
+  echo -e "  ${BOLD}8)${RESET} Reformat hosts.conf"
   echo -e "  ${BOLD}q)${RESET} Quit"
   echo ""
-  read -rp "  Choice: " choice
+  read -rp "Choice: " choice
   echo ""
 
   case "$choice" in
@@ -432,9 +565,10 @@ show_menu() {
     2) remove_host ;;
     3) edit_host ;;
     4) test_host ;;
-    5) sync_all ;;
-    6) cat "$HOSTS_CONF" ;;
-    7) format_hosts ;;
+    5) copy_ssh_id ;;
+    6) sync_all ;;
+    7) cat "$HOSTS_CONF" ;;
+    8) format_hosts ;;
     q|Q) echo "Bye."; exit 0 ;;
     *) warn "Unknown option: $choice" ;;
   esac
@@ -448,18 +582,32 @@ show_menu() {
 [[ -f "$HOSTS_CONF" ]] || fail "hosts.conf not found at $HOSTS_CONF"
 
 case "${1:-}" in
-  --sync)   sync_all; exit 0 ;;
-  --list)   print_hosts; exit 0 ;;
-  --format) format_hosts; exit 0 ;;
-  --add)    shift; add_host "$@"; exit 0 ;;
-  --remove) remove_host; exit 0 ;;
+  --sync)    sync_all; exit 0 ;;
+  --list)    print_hosts; exit 0 ;;
+  --format)  format_hosts; exit 0 ;;
+  --add)     shift; add_host "$@"; exit 0 ;;
+  --remove)  remove_host; exit 0 ;;
+  --copy-id)
+    shift
+    cid_name=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --name) cid_name="$2"; shift 2 ;;
+        *)      shift ;;
+      esac
+    done
+    copy_ssh_id "$cid_name"
+    exit 0
+    ;;
   "")
     while true; do
       show_menu
     done
     ;;
   *)
-    echo "Usage: $0 [--sync | --list | --format | --add [--name N --ip I --user U --group G --skip-confirm] | --remove]"
+    echo "Usage: $0 [--sync | --list | --format | --remove"
+    echo "          | --add [--name N --ip I --user U --group G --skip-confirm]"
+    echo "          | --copy-id [--name N]]"
     exit 1
     ;;
 esac
