@@ -18,19 +18,25 @@ local act     = wezterm.action
 -- HOSTS:START
 local ssh_domains = {
   {
-    name           = 'atc-cache-dev10',
-    remote_address = '***REMOVED-IP***',
-    username       = 'arrush.chaturvedi',
-    multiplexing   = 'None',
-  },
-  {
     name           = 'atc-cache-dev09',
     remote_address = '***REMOVED-IP***',
     username       = 'arrush.chaturvedi',
     multiplexing   = 'None',
   },
   {
+    name           = 'atc-cache-dev10',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
     name           = 'cache-apl',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
+    name           = 'cache-bur1',
     remote_address = '***REMOVED-IP***',
     username       = 'arrush.chaturvedi',
     multiplexing   = 'None',
