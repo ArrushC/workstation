@@ -73,13 +73,18 @@ config.color_scheme = 'Tokyo Night'
 config.font         = wezterm.font('JetBrains Mono', { weight = 'Regular' })
 config.font_size    = 12.0
 
--- Window chrome
-config.window_decorations          = 'TITLE' -- RESIZE
+-- Window chrome — TITLE alone hides resize handles, which also blocks
+-- Windows snap (Win+Arrow). Adding RESIZE keeps the title bar AND lets
+-- the OS resize/snap the window.
+config.window_decorations          = 'TITLE | RESIZE'
 config.window_background_opacity   = 1.0 -- 0.95
 config.enable_tab_bar              = true
 config.use_fancy_tab_bar           = false
 config.tab_bar_at_bottom           = true
 config.hide_tab_bar_if_only_one_tab = false
+-- Raise the per-tab cap so format-tab-title can pad labels to fill the bar
+-- evenly. Without this the cap (default 16) would clip the padded labels.
+config.tab_max_width               = 100
 
 -- Slightly padded inner margins
 config.window_padding = {
@@ -119,7 +124,12 @@ local function host_colors(name, is_active)
   return tostring(bg), tostring(fg)
 end
 
-wezterm.on('format-tab-title', function(tab, all_tabs, _panes, _config, _hover, _max_width)
+-- Forward-declared upvalue: cell width of the right-status line. Assigned
+-- by update-right-status (defined further down). Keeps the tab-bar layout
+-- in sync with whatever the status line is actually rendering this tick.
+local right_status_cells = 30
+
+wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, _hover, max_width)
   local pane   = tab.active_pane
   local domain = pane.domain_name or ''
 
@@ -144,6 +154,28 @@ wezterm.on('format-tab-title', function(tab, all_tabs, _panes, _config, _hover, 
     end
   end
   local label = string.format(' %d: %s ', idx, title)
+
+  -- Stretch tabs to fill the bar evenly. Use the widest pane's cell width as
+  -- a proxy for window content width (single-pane tabs are the common case;
+  -- with splits we still get a sensible upper bound). Reserve exactly the
+  -- live right-status width (+ a small margin), then split the remainder
+  -- across all tabs and pad the label centered to that width. Capped at
+  -- max_width (= tab_max_width).
+  local total_cols = 0
+  for _, p in ipairs(panes) do
+    if p.width and p.width > total_cols then total_cols = p.width end
+  end
+  if total_cols > 0 and #all_tabs > 0 then
+    local reserved = right_status_cells + 4
+    local available = math.max(8, total_cols - reserved)
+    local target = math.floor(available / #all_tabs)
+    target = math.min(target, max_width)
+    local pad = target - #label
+    if pad > 0 then
+      local left = math.floor(pad / 2)
+      label = string.rep(' ', left) .. label .. string.rep(' ', pad - left)
+    end
+  end
 
   if host then
     local bg, fg = host_colors(host, tab.is_active)
@@ -330,9 +362,22 @@ local show_help = act.InputSelector {
 -- ---------------------------------------------------------------------------
 -- Right status line — domain · zellij session · battery · time
 -- ---------------------------------------------------------------------------
--- Fires ~1×/second. Domain + session are only shown when the active pane is
--- on a remote SSH domain. The zellij session name mirrors the hardcoded
--- 'main' from zellij_attach_cmd above — keep both in sync if you change it.
+-- Fires ~1×/second. Adapts to window width: drops the zellij blob, then the
+-- battery, then the time icon as columns shrink. The rendered length is
+-- cached in right_status_cells so format-tab-title can reserve exactly that
+-- much space at the right end of the bar instead of guessing.
+--
+-- The zellij session name mirrors the hardcoded 'main' from zellij_attach_cmd
+-- above — keep both in sync if you change it. (right_status_cells is
+-- forward-declared up by format-tab-title; we just assign to it here.)
+
+local function display_width(s)
+  if wezterm.column_width then return wezterm.column_width(s) end
+  -- Fallback: byte length over-estimates because of multi-byte emoji/dividers,
+  -- which means tabs reserve a bit too much space. Acceptable degradation.
+  return #s
+end
+
 local function format_battery()
   local batteries = wezterm.battery_info()
   if not batteries or #batteries == 0 then return nil end
@@ -361,20 +406,33 @@ local function time_icon()
 end
 
 wezterm.on('update-right-status', function(window, pane)
+  local dim = pane:get_dimensions()
+  local cols = (dim and dim.cols) or 80
+
   local parts = {}
 
   local domain = pane:get_domain_name()
   if domain and domain ~= 'local' then
     table.insert(parts, domain)
-    table.insert(parts, 'zellij:main')
+    if cols >= 130 then
+      table.insert(parts, 'zellij:main')
+    end
   end
 
-  local bat = format_battery()
-  if bat then table.insert(parts, bat) end
+  if cols >= 80 then
+    local bat = format_battery()
+    if bat then table.insert(parts, bat) end
+  end
 
-  table.insert(parts, time_icon() .. ' ' .. wezterm.strftime('%H:%M'))
+  if cols >= 60 then
+    table.insert(parts, time_icon() .. ' ' .. wezterm.strftime('%H:%M'))
+  else
+    table.insert(parts, wezterm.strftime('%H:%M'))
+  end
 
-  window:set_right_status(' ' .. table.concat(parts, '  │  ') .. ' ')
+  local status = ' ' .. table.concat(parts, '  │  ') .. ' '
+  window:set_right_status(status)
+  right_status_cells = display_width(status)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -435,6 +493,14 @@ config.keys = {
 
   -- Reload config
   { key = 'r', mods = 'CTRL|SHIFT', action = act.ReloadConfiguration },
+
+  -- Release Win+Arrow back to the OS for window snap (wezterm's defaults
+  -- bind these to pane navigation, but zellij owns panes inside SSH tabs
+  -- and CTRL+TAB handles tab switching here).
+  { key = 'LeftArrow',  mods = 'SUPER', action = act.DisableDefaultAssignment },
+  { key = 'RightArrow', mods = 'SUPER', action = act.DisableDefaultAssignment },
+  { key = 'UpArrow',    mods = 'SUPER', action = act.DisableDefaultAssignment },
+  { key = 'DownArrow',  mods = 'SUPER', action = act.DisableDefaultAssignment },
 }
 
 -- Pass through Ctrl+p to Zellij unmodified
