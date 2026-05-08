@@ -91,7 +91,7 @@ You should not need to edit `ansible/inventory/hosts.ini` — it is regenerated 
 
 ### 2. On each RHEL VM
 
-`bootstrap.sh` requires only `curl`, `git`, and `python3`. It installs `ansible-core` itself (via `pip3 install --user`) on first run, then hands off to Ansible.
+`bootstrap.sh` needs only `curl`, `git`, `python3` (≥ 3.9), `python3 -m pip`, and `iproute` (`ip` command). It does a single preflight check that reports **all** missing prereqs at once — no more discovering them one by one. It installs `ansible-core` itself (via `pip3 install --user`) on first run and smoke-tests it before handing off to Ansible.
 
 **With sudo** (system-wide install to `/usr/local/bin`, plus `dnf` packages):
 ```bash
@@ -107,10 +107,17 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 source ~/.bashrc
 ```
 
-Both modes:
-- Self-register the VM in `hosts.conf` (using `hostname -s`, detected primary IP, `whoami`, group `rhel_vms`).
-- Are idempotent — re-run any time to pick up updates.
-- Can be re-run to switch scopes; binaries left from the previous scope can be cleaned up manually if you want a tidy state.
+What `bootstrap.sh` does, in order:
+1. Preflight check (curl/git/python3/pip/iproute, python ≥ 3.9).
+2. Clone the repo into `~/.local/share/chezmoi` (or `git pull --ff-only` if present).
+3. **Self-register** the VM in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, group `rhel_vms`) and run `manage-hosts.sh --sync` so inventory + wezterm block are regenerated locally.
+4. Install `ansible-core` via `pip3 --user` if missing, smoke-test `ansible-playbook --version`.
+5. Run `playbooks/local.yml` against the VM.
+6. **Auto-commit and push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `wezterm.lua`) with the message `chore(hosts): register <hostname>`. If the push fails (auth, conflict, no upstream), the script warns with a recovery `git push` command — it does **not** abort. Provisioning has already succeeded by this point.
+
+After bootstrap finishes, copy your SSH key from your client (Windows host or another VM) — see [Host management → Copy SSH key](#copy-ssh-key) below.
+
+Both modes are idempotent — re-run any time to pick up updates. Re-running can also switch scopes; binaries left from the previous scope can be cleaned up manually if you want a tidy state.
 
 ### 3. On Windows
 
@@ -179,6 +186,31 @@ Use the manage-hosts scripts; they re-pad column widths automatically and keep b
 The two scripts produce **identical output** for the same `hosts.conf`. After any change to `hosts.conf`, run `--sync` (or `-Sync`) before committing so the inventory and wezterm block stay in lockstep.
 
 > **Don't hand-pad `hosts.conf`** — the save routine recalculates column widths from data, so any manual fixed-width padding gets normalised away on next save.
+
+> **`hosts.conf` is auto-sorted** by group, then by name, on every save (add / edit / remove / format / `bootstrap.sh` self-registration). Manual reordering won't survive the next save. If you want explicit grouping, use the group column.
+
+### Copy SSH key
+
+After a VM is registered, you still need your public key in its `~/.ssh/authorized_keys` before WezTerm or Ansible can connect without a password. Both scripts have a `--copy-id` / `-CopyId` command for this.
+
+Linux / RHEL:
+```bash
+./scripts/manage-hosts.sh --copy-id --name rhel-dev-03   # explicit
+./scripts/manage-hosts.sh --copy-id                      # interactive picker
+```
+
+Windows:
+```powershell
+.\scripts\manage-hosts.ps1 -CopyId -Name rhel-dev-03     # explicit
+.\scripts\manage-hosts.ps1 -CopyId                       # interactive picker
+```
+
+Behaviour:
+- Looks the host up in `hosts.conf` and uses its `User`/`Ip` columns.
+- If `~/.ssh/id_ed25519` (Linux) or `%USERPROFILE%\.ssh\id_ed25519` (Windows) is missing, prompts to generate one with `ssh-keygen -t ed25519 -N ""` (no passphrase). Decline and the command exits without copying.
+- Linux: uses the native `ssh-copy-id` if available; otherwise falls back to a manual `ssh user@host "mkdir -p ~/.ssh && cat >> authorized_keys && ..."` that also de-duplicates the file.
+- Windows: always uses the manual SSH method — Windows OpenSSH ships no `ssh-copy-id`.
+- After a successful `--add`, both scripts print a tip line that pre-fills the host name for you.
 
 ---
 
@@ -294,8 +326,13 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 
 ## Troubleshooting
 
-- **`bootstrap.sh` says `python3 is required`.** Install python3 via your distro's installer first (RHEL: `sudo dnf install python3 python3-pip`). The script needs it to install `ansible-core`.
-- **`ansible-playbook: command not found` after a fresh `bootstrap.sh` run.** `pip install --user` puts it in `~/.local/bin`; either `source ~/.bashrc` or run `export PATH="$HOME/.local/bin:$PATH"` and retry.
+- **Bootstrap reports "Missing required prerequisites: …".** Install all listed tools at once. RHEL: `sudo dnf install curl git python3 python3-pip iproute`. Bootstrap deliberately collects every gap up front so you only have to install once.
+- **Bootstrap fails with "python3 ≥ 3.9 required for ansible-core".** Your distro's `python3` is too old. On RHEL 8: enable a newer module stream (`sudo dnf module install python39`) or install `python3.11` and ensure `python3` resolves to it.
+- **Bootstrap fails with "ansible-playbook not on PATH after pip install".** `pip install --user` dropped the binary in `~/.local/bin` but your shell hasn't picked that up yet. Run `export PATH="$HOME/.local/bin:$PATH"` and re-run `./bootstrap.sh`. After this run completes, [shell.yml](ansible/roles/rhel-base/tasks/shell.yml) wires the PATH permanently.
+- **Bootstrap finishes with "Push failed (auth, conflict, or no upstream)".** Provisioning succeeded — only the host-list push didn't. Recover with `cd ~/.local/share/chezmoi && git push`. Common causes: no SSH key for the git remote, a divergent upstream (`git pull --rebase` first), or you've forked and never set the remote.
+- **`./scripts/manage-hosts.sh --copy-id` keeps prompting for a password every connection.** The key landed but `sshd` isn't using it. Check the target's `/etc/ssh/sshd_config` (`PubkeyAuthentication yes`, `AuthorizedKeysFile .ssh/authorized_keys`) and the perms (`~/.ssh` = 700, `~/.ssh/authorized_keys` = 600). On SELinux RHEL: `restorecon -R -v ~/.ssh`.
+- **`ssh-keygen` on Windows opens a passphrase prompt despite `-N '""'`.** Some PowerShell quoting variants strip the empty-passphrase argument. Re-run interactively and just press Enter twice; the rest of the flow is unchanged.
+- **`ansible-playbook: command not found` after a fresh `bootstrap.sh` run.** Same root cause as above — PATH didn't include `~/.local/bin`. Either `source ~/.bashrc` or run `export PATH="$HOME/.local/bin:$PATH"` and retry.
 - **WezTerm shows old config after an edit.** The hardlink broke (atomic-save). Compare `LastWriteTime`/`Length` between the repo path and `%USERPROFILE%\.config\wezterm\wezterm.lua` and recreate the link if they differ — see the warning in step 3 above.
 - **`hosts.ini` is out of sync with `hosts.conf`.** Run `./scripts/manage-hosts.sh --sync`. Never edit `hosts.ini` directly — it's auto-generated.
 - **`tool_scope=system` errored with "requires has_sudo=true".** Pass both flags: `-e "tool_scope=system has_sudo=true"`.

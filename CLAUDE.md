@@ -100,6 +100,7 @@ Linux:
 ./scripts/manage-hosts.sh --format       # re-pad hosts.conf
 ./scripts/manage-hosts.sh --add --name N --ip I --user U --group G --skip-confirm
 ./scripts/manage-hosts.sh --remove
+./scripts/manage-hosts.sh --copy-id --name N    # copy ~/.ssh/id_ed25519.pub to host N
 ```
 
 Windows (feature-equivalent):
@@ -110,7 +111,10 @@ Windows (feature-equivalent):
 .\scripts\manage-hosts.ps1 -Format
 .\scripts\manage-hosts.ps1 -Add -Name N -Ip I -User U -Group G -SkipConfirm
 .\scripts\manage-hosts.ps1 -Remove
+.\scripts\manage-hosts.ps1 -CopyId -Name N      # copy %USERPROFILE%\.ssh\id_ed25519.pub
 ```
+
+`--copy-id` / `-CopyId`: looks up the host in `hosts.conf`, prompts to generate `~/.ssh/id_ed25519` (passphrase-less) if missing, then either uses native `ssh-copy-id` (Linux) or emulates it via `ssh user@host "mkdir -p ~/.ssh && cat >> authorized_keys && ..."` (Windows OpenSSH ships no `ssh-copy-id`). Successful `--add` prints a tip line pointing at this command.
 
 The two scripts produce **the same output** for the same `hosts.conf`. The banner in `ansible/inventory/hosts.ini` records which one regenerated it last (handy when debugging line-ending or formatting drift).
 
@@ -144,14 +148,17 @@ ansible-playbook playbooks/local.yml -e "tool_scope=user has_sudo=false install_
 ```
 Installs only the user-space tools to `~/.local/bin`.
 
-### Common steps for both modes
-1. Prereq check: `curl`, `git`, `python3` must be present.
-2. Clone the repo to `$HOME/.local/share/chezmoi` if not present (or `git pull --ff-only` if it is).
-3. Install `ansible-core` via `pip3 install --user --upgrade ansible-core` if `ansible-playbook` is not on PATH.
-4. Run the local playbook with the mode-appropriate `-e` overrides.
-5. **Self-registration**: invokes `manage-hosts.sh --add` with detected `hostname -s` + IP from `ip route get 1.1.1.1` (fallback `ip addr`) + `whoami` + group `rhel_vms`. `--skip-confirm` is passed; if the host already exists the call returns silently.
+### Common steps for both modes (in order)
+1. **Preflight**: collect-all check for `curl`, `git`, `python3`, `python3 -m pip`, and `ip` (iproute) — reports every missing tool in one message rather than one at a time. Verifies `python3 ≥ 3.9` (ansible-core's floor) and that `python3 -m pip` works.
+2. **Clone the repo** to `$HOME/.local/share/chezmoi` if not present (or `git pull --ff-only` if it is).
+3. **Self-registration** (now happens *before* Ansible runs): invokes `manage-hosts.sh --add` with detected `hostname -s` + IP from `ip route get 1.1.1.1` (fallback `ip addr`) + `whoami` + group `rhel_vms`. `--skip-confirm` is passed; if the host already exists the call returns silently. Then runs `manage-hosts.sh --sync` so the inventory and wezterm block are regenerated locally before the playbook runs (any chezmoi/Ansible logic that consumes `hosts.conf` sees the current list).
+4. **Install `ansible-core`** via `pip3 install --user --upgrade ansible-core` if `ansible-playbook` is not on PATH. After install, smoke-tests with `ansible-playbook --version` to fail fast if `~/.local/bin` isn't actually picked up.
+5. **Run the local playbook** with the mode-appropriate `-e` overrides.
+6. **Auto-commit + push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `wezterm.lua`) with the message `chore(hosts): register <hostname>`. Falls back to a synthetic `user.name`/`user.email` if git isn't configured. Warn-don't-fail on every error: if the commit or push fails (auth, conflict, no upstream), bootstrap prints the recovery `git push` command but does NOT abort. The playbook already succeeded by this point.
 
 Both modes are idempotent. Tool versions and install logic live entirely in Ansible — `bootstrap.sh` has no per-tool knowledge.
+
+The reordering is load-bearing: anything in Ansible/chezmoi that grows to read `hosts.conf` will see the new VM. Don't move self-registration back to "after the playbook" without explicit reason.
 
 ## Tool versions — single source of truth
 
@@ -235,6 +242,8 @@ When in doubt, ask: "Would a user reading only README.md still be able to set up
 | Refactored `tasks/tools.yml` to deduplicate the helix block | No | No CLI surface changed |
 | Added a new optional `-e "ansible_python_interpreter=..."` override | **Yes** | Add a "When to set this" note under Daily Ansible workflow |
 | Added a wezterm keybind (e.g. `CTRL+SHIFT+H` cheatsheet) | **Yes** | Mention it under the Windows section so users know it exists |
+| Added `--copy-id` / `-CopyId` to manage-hosts | **Yes** | New "Copy SSH key" subsection with both shells + a tip line in the post-bootstrap message |
+| Reordered `bootstrap.sh` flow (self-register before Ansible) | **Yes** | Setup section explains the new order and the auto-commit+push step |
 | Internal `set_fact` rename inside `main.yml` | No | Invisible from outside |
 
 ## Conventions and rules of thumb
@@ -242,6 +251,7 @@ When in doubt, ask: "Would a user reading only README.md still be able to set up
 - **Never edit `ansible/inventory/hosts.ini` by hand.** Edit `hosts.conf` and run `--sync`.
 - **Never edit the wezterm SSH-domains block by hand** between the sentinel comments — it gets clobbered on the next sync.
 - **Don't fixed-width-pad `hosts.conf`.** The save routine recalculates widths from data; manual padding gets normalised.
+- **`scripts/manage-hosts.sh` and `scripts/manage-hosts.ps1` are a parity pair.** Every user-visible capability — flags, menu options, prompts, default values, post-add flow, output glyphs — MUST exist in both. When you change one, change the other in the same commit. The two scripts produce identical output for the same `hosts.conf`; that invariant is load-bearing because either side regenerates `inventory/hosts.ini` and the wezterm sentinel block. Drift between them silently breaks reproducibility across Linux/Windows.
 - **All tool installs live in Ansible (`tasks/tools.yml`).** Never re-introduce per-tool install logic or version pins in `bootstrap.sh` — adding a tool there creates exactly the kind of drift this layout was rebuilt to eliminate. The shell script is a seed, nothing more.
 - **Tool versions live only in `ansible/group_vars/all.yml`.** One file, one bump.
 - **The chezmoi source dir is `chezmoi/`**, not the repo root. New dotfiles go under `chezmoi/home/` or `chezmoi/dot_config/`.
@@ -295,6 +305,8 @@ Adding a tool:
 - `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding until next save.
 - `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `ansible/group_vars/all.yml`; install logic lives only in `ansible/roles/rhel-base/tasks/tools.yml`.
 - `chezmoi/.chezmoiignore` — wrong entries here cause `chezmoi apply` to drop infrastructure files into `$HOME`.
+- `scripts/manage-hosts.ps1` **must remain UTF-8 with BOM**. PowerShell 5.1 (Windows PowerShell, the default `powershell.exe`) reads scripts as Windows-1252 unless a BOM is present, and the file contains Unicode glyphs (`✓`, `✗`, `─`) used in colored output. Without the BOM, PS 5.1 mis-decodes the multi-byte UTF-8 and the script fails to parse with cryptic "string missing terminator" errors. To restore the BOM after a tool overwrites it: `[System.IO.File]::WriteAllText($path, [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($path)), [System.Text.UTF8Encoding]::new($true))`.
+- `scripts/manage-hosts.sh` **must remain LF-only**. The Edit/Write tools on Windows tend to save with CRLF; the resulting file runs but `read -r` then leaks `\r` into parsed fields, polluting the inventory. After any edit, verify with `file scripts/manage-hosts.sh` (expect "Bourne-Again shell script", no "with CRLF line terminators"). Repair with `sed -i 's/\r$//' scripts/manage-hosts.sh`.
 - `wezterm.lua` is hard-linked from the repo to `%USERPROFILE%\.config\wezterm\wezterm.lua` on Windows. Editing tools that atomic-save (write-temp-then-rename) silently break the hardlink — the home file is left pointing at the original inode, and WezTerm keeps loading the stale version regardless of `CTRL|SHIFT+R` or `automatically_reload_config`. **After any edit to `wezterm.lua`, verify the link.** `Get-Item ...` reporting `LinkType=HardLink` is not sufficient (it shows what the file *was* created as, not whether it currently shares an inode); compare `LastWriteTime` and `Length` on both paths instead. If they diverge, recreate the link:
   ```powershell
   Remove-Item "$env:USERPROFILE\.config\wezterm\wezterm.lua" -Force
