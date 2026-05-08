@@ -9,9 +9,9 @@ Guidance for Claude Code working on this repository.
 - One **Windows host** (WezTerm config that auto-connects to the VMs).
 
 The repo is consumed three ways:
-1. **From a RHEL VM** — clone, run `bootstrap.sh`. Self-registers the VM in `hosts.conf`.
+1. **From a RHEL VM** — clone, run `bootstrap.sh`. The script seeds Ansible (via `pip3 install --user ansible-core` if missing), runs `playbooks/local.yml` against the local machine, and self-registers the VM in `hosts.conf`.
 2. **From the Windows host** — `wezterm.lua` is hard-linked into `%USERPROFILE%\.config\wezterm\` so the repo stays the source of truth.
-3. **From an ops machine** — run Ansible against multiple VMs at once.
+3. **From an ops machine** — run Ansible against multiple VMs at once via `playbooks/rhel.yml`.
 
 ## Layered architecture
 
@@ -19,43 +19,54 @@ Two separate provisioning layers, intentionally decoupled:
 
 | Layer | Tool | Where it runs | Needs sudo? |
 |---|---|---|---|
-| System | **Ansible** (`ansible/`) | Locally or against remote VMs | Yes (for `dnf` packages, `/etc/profile.d`) |
+| Provisioning | **Ansible** (`ansible/`) | Locally on a VM, or against remote VMs | Optional — controlled by `tool_scope` and `has_sudo` |
 | Dotfiles | **chezmoi** (`chezmoi/`) | On each VM as the dev user | No |
 
-Ansible installs `dnf` packages, sets system PATH, then triggers chezmoi to apply dotfiles. Chezmoi is also runnable standalone in user space when sudo is unavailable. Tools like `fzf`, `zellij`, `helix` are **always** installed as static binaries to `~/.local/bin` — never via `dnf` — so the same code path works with or without sudo.
+Ansible owns **all** installations. `bootstrap.sh` is a thin seed: it clones the repo, installs `ansible-core` via `pip3 --user` if missing, then runs `playbooks/local.yml` against the local machine. There is no duplicate install logic between the script and the role — adding a new tool means editing `tools.yml` (and bumping its version in `group_vars/all.yml`), nothing else.
+
+User-space tools (`fzf`, `zellij`, `helix`, etc.) are **always** installed as static binaries — never via `dnf` — but the **destination** is controlled by the `tool_scope` variable:
+
+| `tool_scope` | Binary destination | Helix runtime | Needs sudo |
+|---|---|---|---|
+| `user` (default) | `~/.local/bin` | `~/.config/helix/runtime` | No |
+| `system` | `/usr/local/bin` | `/usr/local/lib/helix/runtime` | Yes |
+
+`tool_scope=system` requires `has_sudo=true`; the role fails fast with a clear message otherwise. The same task definitions in `tools.yml` cover both scopes via `dest: "{{ tools_dest }}"` + `become: "{{ tools_become }}"`, both resolved in `tasks/main.yml` from `tool_scope`.
 
 ## Repo layout
 
 ```
 workstation/
-├── bootstrap.sh                  ← VM entry point
+├── bootstrap.sh                  ← VM entry point — thin seed, delegates to Ansible
 ├── hosts.conf                    ← single source of truth for VM list
 ├── wezterm.lua                   ← Windows terminal config (hardlinked, not copied)
-├── README.md                     ← user-facing setup
+├── README.md                     ← user-facing setup + daily commands
 ├── COMMANDS_WINDOWS.md           ← one-liner to hardlink wezterm.lua
 │
 ├── scripts/
 │   ├── manage-hosts.sh           ← Linux/RHEL host manager
 │   └── manage-hosts.ps1          ← Windows host manager (feature-parity)
 │
-├── ansible/                      ← system provisioning
+├── ansible/                      ← all provisioning lives here
 │   ├── ansible.cfg
-│   ├── group_vars/all.yml        ← dev_user, dotfiles_repo, tool versions
+│   ├── group_vars/all.yml        ← dev_user, dotfiles_repo, tool versions (single source of truth)
 │   ├── inventory/hosts.ini       ← AUTO-GENERATED — never edit
-│   ├── playbooks/rhel.yml        ← single playbook, applies rhel-base role
+│   ├── playbooks/
+│   │   ├── rhel.yml              ← targets remote rhel_vms group (control-machine flow)
+│   │   └── local.yml             ← targets localhost (used by bootstrap.sh)
 │   └── roles/rhel-base/
-│       ├── defaults/main.yml     ← install_*, has_sudo, arch flags
+│       ├── defaults/main.yml     ← install_*, has_sudo, tool_scope, arch
 │       ├── handlers/main.yml
 │       └── tasks/
-│           ├── main.yml          ← orchestrator with `when:` gates
+│           ├── main.yml          ← validates + resolves scope vars, then orchestrates
 │           ├── packages.yml      ← dnf (sudo)
-│           ├── tools.yml         ← static binaries to ~/.local/bin
+│           ├── tools.yml         ← static binaries; honors tool_scope (user/system)
 │           ├── shell.yml         ← PATH via /etc/profile.d (sudo fallback to ~/.bashrc)
-│           └── dotfiles.yml      ← chezmoi init/update --apply
+│           └── dotfiles.yml      ← chezmoi init/update --apply (uses tools_dest)
 │
 └── chezmoi/                      ← chezmoi source dir (NOT the repo root)
     ├── .chezmoi.toml.tmpl        ← prompts for name/email on first init
-    ├── .chezmoiignore            ← excludes wezterm.lua, ansible/, bootstrap.sh
+    ├── .chezmoiignore            ← excludes wezterm.lua, ansible/, bootstrap.sh, README.md
     ├── .chezmoiscripts/
     │   └── run_once_after_init.sh ← inits ~/notes for nb on first apply
     ├── home/                     ← targets ~/
@@ -77,7 +88,7 @@ workstation/
 | Output | Generated by | Marker |
 |---|---|---|
 | `ansible/inventory/hosts.ini` | full overwrite, banner at top | `# AUTO-GENERATED by scripts/manage-hosts.{sh,ps1}` |
-| wezterm.lua SSH domains block | in-place replace between sentinels | `-- HOSTS:START` / `-- HOSTS:END` |
+| `wezterm.lua` SSH-domains block | in-place replace between sentinels | `-- HOSTS:START` / `-- HOSTS:END` |
 
 ### Host management commands
 
@@ -117,39 +128,44 @@ Both sentinels must be present at column 0. The bash script uses `awk` to print 
 
 ## bootstrap.sh
 
-Two modes, picked from `$1`:
+A thin seed that delegates everything to Ansible. Two modes, picked from `$1`:
 
-### `--full` (Ansible + chezmoi, requires sudo)
-1. Verifies `ansible-playbook` is on PATH.
-2. Clones the dotfiles repo to `$HOME/.local/share/chezmoi` if not present.
-3. Runs `ansible-playbook playbooks/rhel.yml -i inventory/hosts.ini --ask-become-pass` from `$CHEZMOI_SOURCE/ansible`.
+### `--full` (system scope, requires sudo)
+Runs:
+```
+ansible-playbook playbooks/local.yml -e "tool_scope=system has_sudo=true" --ask-become-pass
+```
+Installs `dnf` packages and writes static binaries to `/usr/local/bin`.
 
 ### Default / `user` mode (no sudo)
-1. Installs static binaries to `~/.local/bin`: `fzf`, `zoxide`, `starship`, `zellij`, `glow`, `nb` (curl), `helix`, `chezmoi` (via `get.chezmoi.io`).
-2. Each installer skips if the binary already exists at `$BIN/<name>`.
-3. Runs `chezmoi init --apply` (first run) or `chezmoi update --apply` (subsequent) against `$DOTFILES_REPO`.
-4. **Self-registration**: invokes `manage-hosts.sh --add` with detected `hostname -s` + IP from `ip route get 1.1.1.1` (fallback `ip addr`) + `whoami` + group `rhel_vms`. `--skip-confirm` is passed; if the host already exists the call returns silently.
+Runs:
+```
+ansible-playbook playbooks/local.yml -e "tool_scope=user has_sudo=false install_system_packages=false"
+```
+Installs only the user-space tools to `~/.local/bin`.
 
-Both modes are idempotent.
+### Common steps for both modes
+1. Prereq check: `curl`, `git`, `python3` must be present.
+2. Clone the repo to `$HOME/.local/share/chezmoi` if not present (or `git pull --ff-only` if it is).
+3. Install `ansible-core` via `pip3 install --user --upgrade ansible-core` if `ansible-playbook` is not on PATH.
+4. Run the local playbook with the mode-appropriate `-e` overrides.
+5. **Self-registration**: invokes `manage-hosts.sh --add` with detected `hostname -s` + IP from `ip route get 1.1.1.1` (fallback `ip addr`) + `whoami` + group `rhel_vms`. `--skip-confirm` is passed; if the host already exists the call returns silently.
 
-## Tool versions — duplicated in two places, must stay in sync
+Both modes are idempotent. Tool versions and install logic live entirely in Ansible — `bootstrap.sh` has no per-tool knowledge.
 
-| Variable | bootstrap.sh | ansible/group_vars/all.yml |
-|---|---|---|
-| fzf | `FZF_VERSION` | `fzf_version` |
-| zoxide | `ZOXIDE_VERSION` | `zoxide_version` |
-| starship | `STARSHIP_VERSION` | `starship_version` |
-| zellij | `ZELLIJ_VERSION` | `zellij_version` |
-| glow | `GLOW_VERSION` | `glow_version` |
-| helix | `HELIX_VERSION` | `helix_version` |
+## Tool versions — single source of truth
 
-When bumping a tool version, update **both** files in the same commit. There is no shared variable file. The chezmoi-only path on a no-sudo VM uses `bootstrap.sh`; the Ansible path on a sudo VM uses `group_vars/all.yml`. Drift between them produces VMs running different versions depending on entry path.
+All tool versions live in `ansible/group_vars/all.yml` (`fzf_version`, `zoxide_version`, `starship_version`, `zellij_version`, `glow_version`, `helix_version`, `chezmoi_version`). `bootstrap.sh` contains no version pins — it just hands off to Ansible. To bump a tool, edit one file. To add a new tool, add an install task in `ansible/roles/rhel-base/tasks/tools.yml` and the corresponding `<name>_version` variable in `group_vars/all.yml`.
+
+The historical `bootstrap.sh` `*_VERSION` constants have been removed; do not re-introduce per-tool variables to the shell script.
 
 ## Ansible role: `rhel-base`
 
-Single role, four task files orchestrated by `tasks/main.yml`:
+Single role, four task files orchestrated by `tasks/main.yml`. Before any task imports run, `main.yml` validates `tool_scope` vs `has_sudo` and resolves three computed facts (`tools_dest`, `tools_become`, `helix_runtime_dest`) for downstream tasks to consume:
 
 ```yaml
+- fail: msg=...   when: tool_scope == 'system' and not has_sudo
+- set_fact: tools_dest, tools_become, helix_runtime_dest   # resolved from tool_scope
 - import_tasks: packages.yml   when: install_system_packages and has_sudo   become: true
 - import_tasks: tools.yml      when: install_user_tools
 - import_tasks: shell.yml      # always
@@ -161,12 +177,18 @@ Defaults from `roles/rhel-base/defaults/main.yml`:
 - `install_user_tools: true`
 - `apply_dotfiles: true`
 - `has_sudo: true`
+- `tool_scope: user`
 - `arch: "x86_64"`
 - `linux_target: "unknown-linux-musl"`
 
-Override via `-e` to skip steps, e.g. `-e "install_system_packages=false has_sudo=false"` for a no-sudo dotfiles-only run.
+Override via `-e` to change scope or skip steps, e.g.:
+- `-e "tool_scope=system has_sudo=true"` — system-wide install to `/usr/local/bin`
+- `-e "tool_scope=user has_sudo=false install_system_packages=false"` — pure user-space, no sudo
+- `-e "install_user_tools=false"` — dotfiles only
 
-`shell.yml` writes PATH to `/etc/profile.d/local-bin.sh` when `has_sudo`, otherwise `lineinfile`-appends `export PATH=...` to `~/.bashrc`. `dotfiles.yml` checks for an existing `chezmoi_source/.git` to decide between `chezmoi init --apply` and `chezmoi update`.
+`tools.yml` uses `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"` on every install task, so a single set of task definitions covers both scopes. The Helix runtime is the one special case — it goes to `helix_runtime_dest`, which is `~/.config/helix/runtime` for user scope and `/usr/local/lib/helix/runtime` for system scope (both are paths Helix searches by default).
+
+`shell.yml` writes PATH to `/etc/profile.d/local-bin.sh` when `has_sudo`, otherwise `lineinfile`-appends `export PATH=...` to `~/.bashrc`. `dotfiles.yml` checks for an existing `chezmoi_source/.git` to decide between `chezmoi init --apply` and `chezmoi update`, and finds the `chezmoi` binary via `tools_dest` (so it works with either scope).
 
 ## chezmoi source layout & templating
 
@@ -183,15 +205,49 @@ Override via `-e` to skip steps, e.g. `-e "install_system_packages=false has_sud
 - `~/.bashrc.local` is the *un-tracked* per-machine override. It's listed in `.gitignore` and is not part of chezmoi's source.
 - `.chezmoiignore` excludes `wezterm.lua`, `ansible/`, `bootstrap.sh`, `README.md`, `.gitignore`, `home/dot_bashrc.local` so chezmoi doesn't try to apply those to `$HOME` during a `chezmoi apply`.
 
+## README.md must mirror user-facing changes
+
+`README.md` is reference material the user runs against — setup commands, daily workflows, scope flags, file locations. **Whenever you change something the user needs to know or maintain, update `README.md` in the same change**, with concrete usage examples (a copyable command block, not just prose).
+
+This includes:
+- Setup or install steps (new prerequisite, changed entry point, renamed flag).
+- Daily-workflow surface (new `manage-hosts.sh` flag, new playbook, new chezmoi alias).
+- Variables the user is expected to override (`tool_scope`, `has_sudo`, anything in `defaults/main.yml`).
+- File locations the user reads/writes (`hosts.conf`, `~/.bashrc.local`, `chezmoi/home/`, hardlink target).
+- New tool added — at minimum, mention it in the Stack table; if it has end-user CLI surface, show it.
+- Deprecations or removals — don't leave stale instructions in README pointing at removed flags or files.
+
+This does NOT include:
+- Internal Ansible task refactors that don't change CLI overrides or file locations.
+- Comment edits, formatting changes, variable renames invisible from outside the role.
+- Bumping a tool version — `group_vars/all.yml` is the source of truth, README doesn't pin versions.
+
+When in doubt, ask: "Would a user reading only README.md still be able to set up and operate this repo correctly after my change?" If no, update README.
+
+### Worked examples
+
+| Change | README update? | What to add |
+|---|---|---|
+| Added `tool_scope=system` support | **Yes** | Install scopes table + `-e "tool_scope=system"` example under Daily Ansible workflow |
+| Renamed `manage-hosts.sh --sync` to `--regen` | **Yes** | Replace every command example, add a one-line "renamed from `--sync`" note for one release |
+| Added `direnv` to `tools.yml` + `direnv_version` | **Yes** | Add `direnv` to Stack table; show how `tool_scope` controls its destination |
+| Bumped `fzf_version: 0.54.0` → `0.55.0` | No | Versions live in `group_vars/all.yml` only |
+| Refactored `tasks/tools.yml` to deduplicate the helix block | No | No CLI surface changed |
+| Added a new optional `-e "ansible_python_interpreter=..."` override | **Yes** | Add a "When to set this" note under Daily Ansible workflow |
+| Added a wezterm keybind (e.g. `CTRL+SHIFT+H` cheatsheet) | **Yes** | Mention it under the Windows section so users know it exists |
+| Internal `set_fact` rename inside `main.yml` | No | Invisible from outside |
+
 ## Conventions and rules of thumb
 
 - **Never edit `ansible/inventory/hosts.ini` by hand.** Edit `hosts.conf` and run `--sync`.
 - **Never edit the wezterm SSH-domains block by hand** between the sentinel comments — it gets clobbered on the next sync.
 - **Don't fixed-width-pad `hosts.conf`.** The save routine recalculates widths from data; manual padding gets normalised.
-- **`bootstrap.sh` and `ansible/group_vars/all.yml` must agree on tool versions.** Bump both in one commit.
+- **All tool installs live in Ansible (`tasks/tools.yml`).** Never re-introduce per-tool install logic or version pins in `bootstrap.sh` — adding a tool there creates exactly the kind of drift this layout was rebuilt to eliminate. The shell script is a seed, nothing more.
+- **Tool versions live only in `ansible/group_vars/all.yml`.** One file, one bump.
 - **The chezmoi source dir is `chezmoi/`**, not the repo root. New dotfiles go under `chezmoi/home/` or `chezmoi/dot_config/`.
 - **Per-machine overrides go in `~/.bashrc.local` on each VM** — un-tracked, sourced last by the templated bashrc.
 - **`wezterm.lua` is hard-linked** into `%USERPROFILE%\.config\wezterm\` on Windows. Edit either path; the repo stays canonical.
+- **User-facing changes get mirrored into `README.md`** in the same commit (see the section above for what counts).
 
 ## Daily workflows
 
@@ -206,25 +262,38 @@ czs                 # status
 cd ~/.local/share/chezmoi && git add -A && git commit -m "..." && git push
 ```
 
-Ansible (from any machine with the repo and ansible installed):
+Ansible — remote (control machine, targets all `rhel_vms`):
 ```bash
 cd ansible
-ansible-playbook playbooks/rhel.yml -i inventory/hosts.ini --ask-become-pass
-ansible-playbook playbooks/rhel.yml -i inventory/hosts.ini --limit <name> --ask-become-pass
-ansible-playbook playbooks/rhel.yml -i inventory/hosts.ini --check                    # dry run
-ansible-playbook playbooks/rhel.yml -i inventory/hosts.ini -e "has_sudo=false install_system_packages=false"
+ansible-playbook playbooks/rhel.yml --ask-become-pass
+ansible-playbook playbooks/rhel.yml --limit <name> --ask-become-pass
+ansible-playbook playbooks/rhel.yml --check                                          # dry run
+ansible-playbook playbooks/rhel.yml -e "tool_scope=system" --ask-become-pass         # system-wide install
+ansible-playbook playbooks/rhel.yml -e "has_sudo=false install_system_packages=false" # dotfiles + user tools only
+```
+
+Ansible — local (self-provisioning, used by `bootstrap.sh`):
+```bash
+cd ansible
+ansible-playbook playbooks/local.yml -e "tool_scope=user has_sudo=false install_system_packages=false"
+ansible-playbook playbooks/local.yml -e "tool_scope=system has_sudo=true" --ask-become-pass
 ```
 
 Adding a VM:
 1. On the new VM: `git clone … && ./bootstrap.sh` (or `--full`). Self-registration appends to `hosts.conf`.
-2. From the Windows host or another machine, `git pull` and run `--sync` (or just commit and push from the VM, then pull elsewhere) so the inventory and wezterm block update.
+2. From the Windows host or another machine, `git pull` and run `--sync` (or commit and push from the VM, then pull elsewhere) so the inventory and wezterm block update.
+
+Adding a tool:
+1. Add an install task in `ansible/roles/rhel-base/tasks/tools.yml` using `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"`.
+2. Add `<name>_version: "X.Y.Z"` to `ansible/group_vars/all.yml`.
+3. If the tool has user-facing CLI surface, mention it in `README.md` (see "README.md must mirror user-facing changes").
 
 ## Files Claude should be careful with
 
 - `ansible/inventory/hosts.ini` — auto-gen, never edit.
 - `wezterm.lua` SSH-domains block — auto-gen between sentinels.
 - `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding until next save.
-- `bootstrap.sh` and `ansible/group_vars/all.yml` — tool-version drift is silent and breaks reproducibility.
+- `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `ansible/group_vars/all.yml`; install logic lives only in `ansible/roles/rhel-base/tasks/tools.yml`.
 - `chezmoi/.chezmoiignore` — wrong entries here cause `chezmoi apply` to drop infrastructure files into `$HOME`.
 - `wezterm.lua` is hard-linked from the repo to `%USERPROFILE%\.config\wezterm\wezterm.lua` on Windows. Editing tools that atomic-save (write-temp-then-rename) silently break the hardlink — the home file is left pointing at the original inode, and WezTerm keeps loading the stale version regardless of `CTRL|SHIFT+R` or `automatically_reload_config`. **After any edit to `wezterm.lua`, verify the link.** `Get-Item ...` reporting `LinkType=HardLink` is not sufficient (it shows what the file *was* created as, not whether it currently shares an inode); compare `LastWriteTime` and `Length` on both paths instead. If they diverge, recreate the link:
   ```powershell
@@ -236,6 +305,8 @@ Adding a VM:
 
 After changes:
 - `./scripts/manage-hosts.sh --sync` — regenerates inventory + wezterm block, no errors.
-- `cd ansible && ansible-playbook playbooks/rhel.yml -i inventory/hosts.ini --check` — dry-run on all VMs.
+- `cd ansible && ansible-playbook playbooks/rhel.yml --check` — dry-run on all VMs.
+- `cd ansible && ansible-playbook playbooks/local.yml --check -e "tool_scope=user has_sudo=false install_system_packages=false"` — dry-run the local playbook in user scope.
 - `chezmoi diff` on a VM — shows pending dotfile changes, no surprises.
 - `bootstrap.sh` on a fresh VM — completes both modes idempotently.
+- `git diff README.md` — verify the user-facing surface still matches reality.

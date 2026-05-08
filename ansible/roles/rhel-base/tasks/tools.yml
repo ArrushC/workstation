@@ -1,76 +1,87 @@
 # =============================================================================
 # roles/rhel-base/tasks/tools.yml
-# User-space tools installed to ~/.local/bin — no sudo required
+# Tools installed as static binaries to either:
+#   - tool_scope=user   → ~/.local/bin       (no sudo)
+#   - tool_scope=system → /usr/local/bin     (sudo)
+#
+# tools_dest, tools_become, and helix_runtime_dest are resolved in main.yml.
 # =============================================================================
 
-- name: "Ensure ~/.local/bin exists"
+- name: "Ensure tool install directory exists"
   ansible.builtin.file:
-    path: "{{ dev_bin }}"
+    path: "{{ tools_dest }}"
     state: directory
     mode: "0755"
+  become: "{{ tools_become }}"
 
 # --- fzf ---------------------------------------------------------------------
 - name: "Install fzf"
   ansible.builtin.unarchive:
     src: "https://github.com/junegunn/fzf/releases/download/v{{ fzf_version }}/fzf-{{ fzf_version }}-linux_amd64.tar.gz"
-    dest: "{{ dev_bin }}"
+    dest: "{{ tools_dest }}"
     remote_src: true
     mode: "0755"
   args:
-    creates: "{{ dev_bin }}/fzf"
+    creates: "{{ tools_dest }}/fzf"
+  become: "{{ tools_become }}"
 
 # --- zoxide ------------------------------------------------------------------
 - name: "Install zoxide"
   ansible.builtin.unarchive:
     src: "https://github.com/ajeetdsouza/zoxide/releases/download/v{{ zoxide_version }}/zoxide-{{ zoxide_version }}-{{ arch }}-{{ linux_target }}.tar.gz"
-    dest: "{{ dev_bin }}"
+    dest: "{{ tools_dest }}"
     remote_src: true
     include:
       - zoxide
     mode: "0755"
   args:
-    creates: "{{ dev_bin }}/zoxide"
+    creates: "{{ tools_dest }}/zoxide"
+  become: "{{ tools_become }}"
 
 # --- starship ----------------------------------------------------------------
 - name: "Install starship"
   ansible.builtin.unarchive:
     src: "https://github.com/starship/starship/releases/download/v{{ starship_version }}/starship-{{ arch }}-{{ linux_target }}.tar.gz"
-    dest: "{{ dev_bin }}"
+    dest: "{{ tools_dest }}"
     remote_src: true
     mode: "0755"
   args:
-    creates: "{{ dev_bin }}/starship"
+    creates: "{{ tools_dest }}/starship"
+  become: "{{ tools_become }}"
 
 # --- zellij ------------------------------------------------------------------
 - name: "Install zellij"
   ansible.builtin.unarchive:
     src: "https://github.com/zellij-org/zellij/releases/download/v{{ zellij_version }}/zellij-{{ arch }}-{{ linux_target }}.tar.gz"
-    dest: "{{ dev_bin }}"
+    dest: "{{ tools_dest }}"
     remote_src: true
     mode: "0755"
   args:
-    creates: "{{ dev_bin }}/zellij"
+    creates: "{{ tools_dest }}/zellij"
+  become: "{{ tools_become }}"
 
 # --- glow --------------------------------------------------------------------
 - name: "Install glow"
   ansible.builtin.unarchive:
     src: "https://github.com/charmbracelet/glow/releases/download/v{{ glow_version }}/glow_{{ glow_version }}_Linux_x86_64.tar.gz"
-    dest: "{{ dev_bin }}"
+    dest: "{{ tools_dest }}"
     remote_src: true
     include:
       - glow
     mode: "0755"
   args:
-    creates: "{{ dev_bin }}/glow"
+    creates: "{{ tools_dest }}/glow"
+  become: "{{ tools_become }}"
 
 # --- nb ----------------------------------------------------------------------
 - name: "Install nb"
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/xwmx/nb/master/nb"
-    dest: "{{ dev_bin }}/nb"
+    dest: "{{ tools_dest }}/nb"
     mode: "0755"
   args:
-    creates: "{{ dev_bin }}/nb"
+    creates: "{{ tools_dest }}/nb"
+  become: "{{ tools_become }}"
 
 # --- helix -------------------------------------------------------------------
 - name: "Create helix temp dir"
@@ -84,24 +95,33 @@
     dest: "{{ helix_tmp.path }}"
     remote_src: true
   args:
-    creates: "{{ dev_bin }}/hx"
+    creates: "{{ tools_dest }}/hx"
 
 - name: "Copy helix binary"
   ansible.builtin.copy:
     src: "{{ helix_tmp.path }}/helix-{{ helix_version }}-{{ arch }}-linux/hx"
-    dest: "{{ dev_bin }}/hx"
+    dest: "{{ tools_dest }}/hx"
     mode: "0755"
     remote_src: true
   args:
-    creates: "{{ dev_bin }}/hx"
+    creates: "{{ tools_dest }}/hx"
+  become: "{{ tools_become }}"
+
+- name: "Ensure helix runtime parent directory exists"
+  ansible.builtin.file:
+    path: "{{ helix_runtime_dest }}"
+    state: directory
+    mode: "0755"
+  become: "{{ tools_become }}"
 
 - name: "Copy helix runtime"
   ansible.builtin.copy:
     src: "{{ helix_tmp.path }}/helix-{{ helix_version }}-{{ arch }}-linux/runtime"
-    dest: "{{ dev_home }}/.config/helix/runtime"
+    dest: "{{ helix_runtime_dest }}/runtime"
     remote_src: true
   args:
-    creates: "{{ dev_home }}/.config/helix/runtime"
+    creates: "{{ helix_runtime_dest }}/runtime"
+  become: "{{ tools_become }}"
 
 - name: "Clean up helix temp dir"
   ansible.builtin.file:
@@ -111,5 +131,6 @@
 # --- chezmoi -----------------------------------------------------------------
 - name: "Install chezmoi"
   ansible.builtin.shell:
-    cmd: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ dev_bin }}"
-    creates: "{{ dev_bin }}/chezmoi"
+    cmd: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ tools_dest }}"
+    creates: "{{ tools_dest }}/chezmoi"
+  become: "{{ tools_become }}"

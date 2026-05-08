@@ -32,7 +32,9 @@ rhel_optional_packages:
   - fd-find       # fd — faster find alternative
   - bash-completion
 
-# --- Tool versions (keep in sync with bootstrap.sh) -------------------------
+# --- Tool versions ----------------------------------------------------------
+# This file is the single source of truth for tool versions. bootstrap.sh
+# delegates to Ansible, so there is nothing to keep in sync elsewhere.
 fzf_version: "0.54.0"
 zoxide_version: "0.9.4"
 starship_version: "1.19.0"

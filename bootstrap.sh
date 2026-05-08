@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 # =============================================================================
-# bootstrap.sh — workstation setup
+# bootstrap.sh — workstation setup (Ansible seed)
 #
-# Two modes:
+# Two modes — both delegate ALL tool installs to Ansible:
 #
-#   FULL (Ansible + chezmoi) — use when you have sudo and Ansible installed:
+#   FULL (sudo, system-wide install to /usr/local/bin):
 #     ./bootstrap.sh --full
 #
-#   USER ONLY (chezmoi + static binaries, no sudo) — use on any VM:
+#   USER (no sudo, install to ~/.local/bin):
 #     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #     or: ./bootstrap.sh
 #
+# This script does the bare minimum needed to hand off to Ansible:
+#   - clone the repo
+#   - install ansible-core via pip3 --user (if missing)
+#   - run ansible/playbooks/local.yml against this machine
+#
+# Tool versions, URLs, and install logic live in
+#   ansible/group_vars/all.yml + ansible/roles/rhel-base/tasks/tools.yml
+# — there is no longer a duplicate set of versions in this script.
 # =============================================================================
 
 set -euo pipefail
@@ -27,98 +35,49 @@ DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
 CHEZMOI_SOURCE="$HOME/.local/share/chezmoi"
 BIN="$HOME/.local/bin"
 
-FZF_VERSION="0.54.0"
-ZOXIDE_VERSION="0.9.4"
-STARSHIP_VERSION="1.19.0"
-ZELLIJ_VERSION="0.40.1"
-GLOW_VERSION="1.5.1"
-HELIX_VERSION="24.03"
-ARCH="x86_64"
-
 MODE="${1:-user}"
 
-log "Checking environment..."
-command -v curl &>/dev/null || fail "curl is required"
-command -v git  &>/dev/null || fail "git is required"
+# --- Prereqs -----------------------------------------------------------------
+log "Checking prerequisites..."
+command -v curl    &>/dev/null || fail "curl is required"
+command -v git     &>/dev/null || fail "git is required"
+command -v python3 &>/dev/null || fail "python3 is required (used to install ansible-core)"
+
 mkdir -p "$BIN"
 export PATH="$BIN:$PATH"
 
-# =============================================================================
-# FULL MODE — Ansible handles system packages then applies chezmoi
-# =============================================================================
-if [[ "$MODE" == "--full" ]]; then
-  log "Full mode: running Ansible playbook..."
-  command -v ansible-playbook &>/dev/null \
-    || fail "ansible-playbook not found. Install with: pip3 install --user ansible"
-
-  if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
-    git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE"
-  fi
-
-  cd "$CHEZMOI_SOURCE/ansible"
-  ansible-playbook playbooks/rhel.yml \
-    -i inventory/hosts.ini \
-    --ask-become-pass
-
-  ok "Full provisioning complete"
-  exit 0
+# --- Repo --------------------------------------------------------------------
+if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
+  log "Cloning workstation repo into $CHEZMOI_SOURCE..."
+  git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE"
+  ok "Repo cloned"
+else
+  log "Repo already present at $CHEZMOI_SOURCE — pulling latest..."
+  git -C "$CHEZMOI_SOURCE" pull --ff-only \
+    || warn "Could not fast-forward — continuing with current state"
 fi
 
-# =============================================================================
-# USER MODE — static binaries + chezmoi, no sudo required
-# =============================================================================
-log "User mode: installing tools to ~/.local/bin (no sudo required)"
-
-install_tar() {
-  local name="$1" url="$2" binary_path="$3"
-  if [[ -x "$BIN/$name" ]]; then warn "$name already installed, skipping"; return; fi
-  log "Installing $name..."
-  local tmp; tmp=$(mktemp -d)
-  curl -fsSL "$url" | tar -xz -C "$tmp"
-  cp "$tmp/$binary_path" "$BIN/$name"
-  chmod +x "$BIN/$name"
-  rm -rf "$tmp"
-  ok "$name installed"
-}
-
-install_tar "fzf"     "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" "fzf"
-install_tar "zoxide"  "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-${ARCH}-unknown-linux-musl.tar.gz" "zoxide"
-install_tar "starship" "https://github.com/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${ARCH}-unknown-linux-musl.tar.gz" "starship"
-install_tar "zellij"  "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/zellij-${ARCH}-unknown-linux-musl.tar.gz" "zellij"
-install_tar "glow"    "https://github.com/charmbracelet/glow/releases/download/v${GLOW_VERSION}/glow_${GLOW_VERSION}_Linux_x86_64.tar.gz" "glow"
-
-if [[ ! -x "$BIN/nb" ]]; then
-  log "Installing nb..."
-  curl -fsSL "https://raw.githubusercontent.com/xwmx/nb/master/nb" -o "$BIN/nb"
-  chmod +x "$BIN/nb"
-  ok "nb installed"
-else warn "nb already installed, skipping"; fi
-
-if [[ ! -x "$BIN/hx" ]]; then
-  log "Installing helix..."
-  tmp=$(mktemp -d)
-  curl -fsSL "https://github.com/helix-editor/helix/releases/download/${HELIX_VERSION}/helix-${HELIX_VERSION}-${ARCH}-linux.tar.xz" \
-    | tar -xJ -C "$tmp"
-  cp "$tmp/helix-${HELIX_VERSION}-${ARCH}-linux/hx" "$BIN/hx"
-  mkdir -p "$HOME/.config/helix"
-  cp -r "$tmp/helix-${HELIX_VERSION}-${ARCH}-linux/runtime" "$HOME/.config/helix/runtime"
-  rm -rf "$tmp"
-  ok "helix installed"
-else warn "helix already installed, skipping"; fi
-
-if [[ ! -x "$BIN/chezmoi" ]]; then
-  log "Installing chezmoi..."
-  sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$BIN"
-  ok "chezmoi installed"
-else warn "chezmoi already installed, skipping"; fi
-
-log "Applying dotfiles via chezmoi..."
-if [[ -d "$CHEZMOI_SOURCE/.git" ]]; then
-  "$BIN/chezmoi" update --apply --source "$CHEZMOI_SOURCE"
-  ok "Dotfiles updated"
+# --- Seed Ansible (user-space) if missing ------------------------------------
+if ! command -v ansible-playbook &>/dev/null; then
+  log "Installing ansible-core via pip3 --user..."
+  python3 -m pip install --user --upgrade ansible-core
+  ok "ansible-core installed"
 else
-  "$BIN/chezmoi" init --apply --source "$CHEZMOI_SOURCE" "$DOTFILES_REPO"
-  ok "Dotfiles applied"
+  ok "ansible-playbook already on PATH"
+fi
+
+# --- Hand off to Ansible -----------------------------------------------------
+cd "$CHEZMOI_SOURCE/ansible"
+
+if [[ "$MODE" == "--full" ]]; then
+  log "Full mode — system-wide install (sudo)"
+  ansible-playbook playbooks/local.yml \
+    -e "tool_scope=system has_sudo=true" \
+    --ask-become-pass
+else
+  log "User mode — installing to ~/.local/bin (no sudo)"
+  ansible-playbook playbooks/local.yml \
+    -e "tool_scope=user has_sudo=false install_system_packages=false"
 fi
 
 # =============================================================================
@@ -132,18 +91,16 @@ register_host() {
     return
   fi
 
-  # Detect this VM's hostname and IP
   local vm_name vm_ip vm_user
-
   vm_name=$(hostname -s 2>/dev/null || hostname)
   vm_user=$(whoami)
 
-  # Try to find the primary non-loopback IP
-  vm_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  vm_ip=$(ip route get 1.1.1.1 2>/dev/null \
+    | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
 
-  # Fallback: first non-loopback IP from ip addr
   if [[ -z "$vm_ip" ]]; then
-    vm_ip=$(ip addr show 2>/dev/null       | awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}'       | head -1)
+    vm_ip=$(ip addr show 2>/dev/null \
+      | awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}' | head -1)
   fi
 
   if [[ -z "$vm_ip" ]]; then
@@ -152,9 +109,12 @@ register_host() {
   fi
 
   log "Self-registration: ${vm_name} (${vm_user}@${vm_ip})"
-
-  # Call manage-hosts.sh --add with all fields — skips silently if already exists
-  bash "$manage_script" --add     --name  "$vm_name"     --ip    "$vm_ip"       --user  "$vm_user"     --group "rhel_vms"     --skip-confirm
+  bash "$manage_script" --add \
+    --name  "$vm_name" \
+    --ip    "$vm_ip" \
+    --user  "$vm_user" \
+    --group "rhel_vms" \
+    --skip-confirm
 }
 
 register_host

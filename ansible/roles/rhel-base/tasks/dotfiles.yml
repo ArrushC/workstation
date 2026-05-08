@@ -1,7 +1,13 @@
 # =============================================================================
 # roles/rhel-base/tasks/dotfiles.yml
 # Applies dotfiles via chezmoi — runs as the dev user, no sudo
+# Uses tools_dest (resolved in main.yml) to find the chezmoi binary,
+# falling back to dev_bin if tools.yml didn't run.
 # =============================================================================
+
+- name: "Resolve chezmoi binary path"
+  ansible.builtin.set_fact:
+    chezmoi_bin: "{{ tools_dest | default(dev_bin) }}/chezmoi"
 
 - name: "Check if chezmoi source dir already exists"
   ansible.builtin.stat:
@@ -11,16 +17,16 @@
 - name: "Init and apply chezmoi dotfiles (first run)"
   ansible.builtin.command:
     cmd: >
-      {{ dev_bin }}/chezmoi init --apply
+      {{ chezmoi_bin }} init --apply
       --source {{ chezmoi_source }}
       {{ dotfiles_repo }}
   when: not chezmoi_source_stat.stat.exists
   environment:
-    PATH: "{{ dev_bin }}:{{ ansible_env.PATH }}"
+    PATH: "{{ tools_dest | default(dev_bin) }}:{{ dev_bin }}:{{ ansible_env.PATH }}"
 
 - name: "Update existing chezmoi dotfiles"
   ansible.builtin.command:
-    cmd: "{{ dev_bin }}/chezmoi update --source {{ chezmoi_source }}"
+    cmd: "{{ chezmoi_bin }} update --source {{ chezmoi_source }}"
   when: chezmoi_source_stat.stat.exists
   environment:
-    PATH: "{{ dev_bin }}:{{ ansible_env.PATH }}"
+    PATH: "{{ tools_dest | default(dev_bin) }}:{{ dev_bin }}:{{ ansible_env.PATH }}"
