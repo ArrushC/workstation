@@ -93,19 +93,38 @@ You should not need to edit `ansible/inventory/hosts.ini` — it is regenerated 
 
 `bootstrap.sh` needs only `curl`, `git`, `python3` (≥ 3.9), `python3 -m pip`, and `iproute` (`ip` command). It does a single preflight check that reports **all** missing prereqs at once — no more discovering them one by one. It installs `ansible-core` itself (via `pip3 install --user`) on first run and smoke-tests it before handing off to Ansible.
 
-**With sudo** (system-wide install to `/usr/local/bin`, plus `dnf` packages):
-```bash
-git clone https://github.com/ArrushC/workstation.git
-cd workstation && ./bootstrap.sh --full
-# or one-liner (fresh VM, repo not cloned yet):
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --full
-```
+#### Three env vars to set before running
 
-**No sudo** (everything to `~/.local/bin`):
+| Var | Why | Where to keep it |
+|---|---|---|
+| `GITHUB_TOKEN` | Authenticates the curl fetch of `bootstrap.sh` AND the script's internal `git clone`/`pull`/`push` for this private repo. Persisted into `.git/config` (`http.https://github.com/.extraheader`) so `chezmoi update`, manual `git pull`, and the auto-push step keep working without re-passing it. | Password manager (1Password, Bitwarden, KeePass). **Never committed.** Generate with `repo` scope (classic) or Contents:Read (fine-grained) at https://github.com/settings/tokens. |
+| `GIT_USER_NAME` | Author name on the auto-registration commit (the script falls back to `whoami` synthetic identity if unset). | Same — your password-manager note next to the token, so the values travel together. |
+| `GIT_USER_EMAIL` | Author email on the auto-registration commit (synthetic fallback is `whoami@hostname`). | Same. |
+
+#### Copy-paste one-liners (replace `<your-PAT>` with the real token from your password manager)
+
+**Personal RHEL VMs (no sudo, install to `~/.local/bin`):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
+# === Bootstrap: ATC personal RHEL VM (user-scope, ~/.local/bin) ===
+export GITHUB_TOKEN='<your-PAT>' \
+       GIT_USER_NAME='Arrush Chaturvedi' \
+       GIT_USER_EMAIL='contact@arrushc.com' && \
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash && \
 source ~/.bashrc
 ```
+
+**Personal RHEL VMs with sudo (system-wide install to `/usr/local/bin` + `dnf` packages):**
+```bash
+# === Bootstrap: ATC personal RHEL VM (system-scope, sudo) ===
+export GITHUB_TOKEN='<your-PAT>' \
+       GIT_USER_NAME='Arrush Chaturvedi' \
+       GIT_USER_EMAIL='contact@arrushc.com' && \
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --full
+```
+
+> If you bootstrap from machines with different identities (e.g., a work laptop where commits should use a different email), keep separate copy-paste blocks in your password manager — one per identity profile, with the comment line at the top labelling which machine it's for. The `GIT_USER_NAME`/`GIT_USER_EMAIL` envs override `~/.gitconfig` for the duration of that one bootstrap run only — your existing chezmoi-applied gitconfig is left untouched on disk.
 
 What `bootstrap.sh` does, in order:
 1. Preflight check (curl/git/python3/pip/iproute, python ≥ 3.9).
@@ -330,6 +349,7 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 - **Bootstrap fails with "python3 ≥ 3.9 required for ansible-core".** Your distro's `python3` is too old. On RHEL 8: enable a newer module stream (`sudo dnf module install python39`) or install `python3.11` and ensure `python3` resolves to it.
 - **Bootstrap fails with "ansible-playbook not on PATH after pip install".** `pip install --user` dropped the binary in `~/.local/bin` but your shell hasn't picked that up yet. Run `export PATH="$HOME/.local/bin:$PATH"` and re-run `./bootstrap.sh`. After this run completes, [shell.yml](ansible/roles/rhel-base/tasks/shell.yml) wires the PATH permanently.
 - **Bootstrap finishes with "Push failed (auth, conflict, or no upstream)".** Provisioning succeeded — only the host-list push didn't. Recover with `cd ~/.local/share/chezmoi && git push`. Common causes: no SSH key for the git remote, a divergent upstream (`git pull --rebase` first), or you've forked and never set the remote.
+- **Private repo: clone fails with "Authentication failed" or 404.** Set `GITHUB_TOKEN` to a PAT with `repo` (classic) or Contents:Read (fine-grained) scope and re-run. The token is written into `.git/config` as `http.https://github.com/.extraheader` so subsequent ops (push, `chezmoi update`, manual `git pull`) all work — re-passing the env var on later runs just refreshes the stored value. To clear it: `git -C ~/.local/share/chezmoi config --unset http.https://github.com/.extraheader`.
 - **`./scripts/manage-hosts.sh --copy-id` keeps prompting for a password every connection.** The key landed but `sshd` isn't using it. Check the target's `/etc/ssh/sshd_config` (`PubkeyAuthentication yes`, `AuthorizedKeysFile .ssh/authorized_keys`) and the perms (`~/.ssh` = 700, `~/.ssh/authorized_keys` = 600). On SELinux RHEL: `restorecon -R -v ~/.ssh`.
 - **`ssh-keygen` on Windows opens a passphrase prompt despite `-N '""'`.** Some PowerShell quoting variants strip the empty-passphrase argument. Re-run interactively and just press Enter twice; the rest of the flow is unchanged.
 - **`ansible-playbook: command not found` after a fresh `bootstrap.sh` run.** Same root cause as above — PATH didn't include `~/.local/bin`. Either `source ~/.bashrc` or run `export PATH="$HOME/.local/bin:$PATH"` and retry.

@@ -11,6 +11,17 @@
 #     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #     or: ./bootstrap.sh
 #
+# PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME, and
+# GIT_USER_EMAIL before running. The token is used for both the bootstrap.sh
+# fetch AND the script's internal git clone/pull/push; the name/email drive
+# the auto-registration commit's author identity.
+#
+#   export GITHUB_TOKEN='<your-PAT>' \
+#          GIT_USER_NAME='Arrush Chaturvedi' \
+#          GIT_USER_EMAIL='contact@arrushc.com'
+#   curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+#     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
+#
 # Flow (both modes):
 #   1. preflight             — check curl/git/python3/pip/iproute, python>=3.9
 #   2. clone repo            — into ~/.local/share/chezmoi (or git pull if present)
@@ -37,6 +48,11 @@ fail() { echo -e "${RED} ✗${RESET} $*"; exit 1; }
 DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
 CHEZMOI_SOURCE="$HOME/.local/share/chezmoi"
 BIN="$HOME/.local/bin"
+
+# http.extraheader key scoped to github.com so the token never leaks to
+# other remotes. Stored in the cloned repo's .git/config so subsequent
+# git push, `chezmoi update`, and manual git ops all authenticate.
+GH_HEADER_KEY="http.https://github.com/.extraheader"
 
 MODE="${1:-user}"
 
@@ -172,11 +188,21 @@ push_host_changes() {
   log "Committing host registration..."
   git add hosts.conf ansible/inventory/hosts.ini wezterm.lua 2>/dev/null || true
 
-  # Use a deterministic identity if user.name/email aren't configured yet,
-  # so commit doesn't fail with "please tell me who you are".
+  # Identity priority for the auto-commit:
+  #   1. GIT_USER_NAME / GIT_USER_EMAIL env vars (set in the bootstrap one-liner)
+  #   2. Existing git config (e.g. ~/.gitconfig already populated by chezmoi)
+  #   3. Synthetic fallback (whoami@hostname) so the commit never fails outright
   local cfg_args=()
-  git config user.name  >/dev/null 2>&1 || cfg_args+=(-c "user.name=$(whoami)")
-  git config user.email >/dev/null 2>&1 || cfg_args+=(-c "user.email=$(whoami)@$(hostname)")
+  if [[ -n "${GIT_USER_NAME:-}" ]]; then
+    cfg_args+=(-c "user.name=$GIT_USER_NAME")
+  elif ! git config user.name >/dev/null 2>&1; then
+    cfg_args+=(-c "user.name=$(whoami)")
+  fi
+  if [[ -n "${GIT_USER_EMAIL:-}" ]]; then
+    cfg_args+=(-c "user.email=$GIT_USER_EMAIL")
+  elif ! git config user.email >/dev/null 2>&1; then
+    cfg_args+=(-c "user.email=$(whoami)@$(hostname)")
+  fi
 
   if ! git "${cfg_args[@]}" commit -m "chore(hosts): register $(hostname -s)" 2>/dev/null; then
     warn "Commit failed — inspect with:  cd $CHEZMOI_SOURCE && git status"
@@ -200,12 +226,31 @@ mkdir -p "$BIN"
 export PATH="$BIN:$PATH"
 
 # --- Repo --------------------------------------------------------------------
+# If GITHUB_TOKEN is set, use it via http.extraheader (scoped to github.com).
+# This works for both public and private repos. The token is persisted into
+# the cloned repo's .git/config so push, pull, and chezmoi update all auth.
+GH_HEADER_VAL=""
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  GH_HEADER_VAL="Authorization: bearer $GITHUB_TOKEN"
+fi
+
 if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
   log "Cloning workstation repo into $CHEZMOI_SOURCE..."
-  git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE"
+  if [[ -n "$GH_HEADER_VAL" ]]; then
+    git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" \
+      || fail "Clone failed. For a private repo, set GITHUB_TOKEN to a PAT with repo read access."
+    git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+  else
+    git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" \
+      || fail "Clone failed. If the repo is private, set GITHUB_TOKEN and re-run."
+  fi
   ok "Repo cloned"
 else
   log "Repo already present at $CHEZMOI_SOURCE — pulling latest..."
+  # Refresh the stored token if a new one was passed in this invocation.
+  if [[ -n "$GH_HEADER_VAL" ]]; then
+    git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+  fi
   git -C "$CHEZMOI_SOURCE" pull --ff-only \
     || warn "Could not fast-forward — continuing with current state"
 fi
