@@ -41,7 +41,6 @@ workstation/
 ├── hosts.conf                    ← single source of truth for VM list
 ├── wezterm.lua                   ← Windows terminal config (hardlinked, not copied)
 ├── README.md                     ← user-facing setup + daily commands
-├── COMMANDS_WINDOWS.md           ← one-liner to hardlink wezterm.lua
 │
 ├── scripts/
 │   ├── manage-hosts.sh           ← Linux/RHEL host manager

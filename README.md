@@ -36,7 +36,6 @@ workstation/
 ├── bootstrap.sh                        ← VM entry point — thin seed, delegates to Ansible
 ├── hosts.conf                          ← single source of truth for VM list
 ├── wezterm.lua                         ← Windows terminal config (hardlinked to %USERPROFILE%\.config\wezterm\)
-├── COMMANDS_WINDOWS.md                 ← one-liner to create the WezTerm hardlink
 │
 ├── scripts/
 │   ├── manage-hosts.sh                 ← Linux/RHEL host manager
@@ -151,8 +150,6 @@ New-Item -ItemType HardLink `
     -Path "$env:USERPROFILE\.config\wezterm\wezterm.lua" `
     -Target "C:\Git\workstation\wezterm.lua"
 ```
-
-(Same one-liner is in [COMMANDS_WINDOWS.md](COMMANDS_WINDOWS.md).)
 
 WezTerm auto-opens a tab per VM on launch and attaches to a persistent Zellij session. Press **`CTRL+SHIFT+H`** inside WezTerm for a cheatsheet of keybinds, aliases, and hosts. Other useful binds:
 
