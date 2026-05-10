@@ -1,0 +1,25 @@
+{{/*
+.chezmoiignore — files chezmoi skips when applying to the target machine.
+Templated so Linux- and Windows-only files are scoped to their OS.
+Paths are relative to the chezmoi source state root (this directory),
+which is configured via .chezmoiroot at the repo root.
+*/}}
+
+# --- Local machine overrides — never tracked --------------------------------
+dot_bashrc.local
+dot_config/workstation.local.ps1
+Documents/PowerShell/Microsoft.PowerShell_profile.local.ps1
+Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
+
+{{ if eq .chezmoi.os "windows" }}
+# --- On Windows, ignore Linux-only dotfiles ---------------------------------
+dot_bashrc.tmpl
+dot_nbrc
+dot_config/helix
+dot_config/zellij
+.chezmoiscripts/run_once_after_init.sh
+{{ else }}
+# --- On Linux/macOS, ignore Windows-only paths ------------------------------
+AppData
+Documents
+{{ end }}
