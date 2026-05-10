@@ -17,7 +17,12 @@
 #                         used if the machine didn't have one already.
 #   4. chezmoi apply    — applies chezmoi/ to %USERPROFILE% (wezterm,
 #                         Zed, VSCode, PowerShell profile, etc.)
-#   5. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
+#   5. wezterm hardlink — replace the chezmoi-written regular file at
+#                         %USERPROFILE%\.config\wezterm\wezterm.lua with a
+#                         hardlink to the chezmoi source. Gives WezTerm
+#                         live-reload on edits to the repo without losing
+#                         chezmoi tracking.
+#   6. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
 #
 # WHY CHOCOLATEY (not winget)
 #   winget exists on Win10 1909+ / Win11 but its PATH propagation is flaky —
@@ -127,11 +132,16 @@ want to run the chezmoi-apply + ssh-key steps non-elevated, re-run with:
 "@
         }
     } else {
-        # With tool install skipped, git and chezmoi must already exist —
-        # otherwise step 3 (clone) and step 4 (chezmoi) will both fail.
+        # With tool install skipped, git must already exist for the clone
+        # step. chezmoi is only required if the chezmoi-apply step will run
+        # (i.e. -SkipChezmoi was NOT also passed). Bootstrap can also be
+        # invoked as a hardlink-restore tool with all three skips:
+        #   .\bootstrap.ps1 -SkipToolInstall -SkipChezmoi -SkipKeyGen
         $missing = @()
-        if (-not (Get-Command git     -ErrorAction SilentlyContinue)) { $missing += "git" }
-        if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) { $missing += "chezmoi" }
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) { $missing += "git" }
+        if (-not $SkipChezmoi) {
+            if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) { $missing += "chezmoi" }
+        }
         if ($missing.Count -gt 0) {
             Write-Fail @"
 -SkipToolInstall was passed but these required tools aren't on PATH: $($missing -join ', ')
@@ -294,7 +304,43 @@ function Invoke-Chezmoi {
 }
 
 # =============================================================================
-# 5. SSH KEY (optional, prompt-driven)
+# 5. WEZTERM HARDLINK — restore the live-reload link to the chezmoi source.
+#    chezmoi writes a regular file at the target path; replacing it with a
+#    hardlink lets edits to chezmoi/dot_config/wezterm/wezterm.lua (e.g. from
+#    manage-hosts --sync) appear in WezTerm immediately via
+#    automatically_reload_config, without needing a `chezmoi apply` after
+#    every edit.
+# =============================================================================
+function Invoke-WeztermHardlink {
+    $source = Join-Path $RepoPath "chezmoi\dot_config\wezterm\wezterm.lua"
+    $target = "$env:USERPROFILE\.config\wezterm\wezterm.lua"
+
+    if (-not (Test-Path $source)) {
+        Write-Warn "Skipping wezterm hardlink — chezmoi source not found at $source"
+        return
+    }
+
+    $targetDir = Split-Path $target -Parent
+    if (-not (Test-Path $targetDir)) {
+        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+    }
+
+    # Always re-create. New-Item -ItemType HardLink fails if the target
+    # already exists, so we delete first. This is idempotent: if the existing
+    # target was already a correct hardlink, the new one shares the same
+    # inode anyway — content is identical, and any other hardlink siblings
+    # to the source are unaffected (the source inode persists).
+    if (Test-Path $target) {
+        Remove-Item $target -Force
+    }
+
+    Write-Log "Hardlinking wezterm.lua to chezmoi source..."
+    New-Item -ItemType HardLink -Path $target -Target $source | Out-Null
+    Write-Ok "Hardlinked: $target -> $source"
+}
+
+# =============================================================================
+# 6. SSH KEY (optional, prompt-driven)
 # =============================================================================
 function Invoke-EnsureSshKey {
     if ($SkipKeyGen) {
@@ -336,9 +382,10 @@ function Invoke-EnsureSshKey {
 # MAIN
 # =============================================================================
 Invoke-Preflight
-Invoke-ChocoInstall   # before clone — installs git if the machine doesn't have one
+Invoke-ChocoInstall      # before clone — installs git if the machine doesn't have one
 Invoke-CloneRepo
 Invoke-Chezmoi
+Invoke-WeztermHardlink   # after chezmoi apply — restore the live-reload link
 Invoke-EnsureSshKey
 
 Write-Host ""

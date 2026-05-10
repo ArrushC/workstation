@@ -258,6 +258,7 @@ When in doubt, ask: "Would a user reading only README.md still be able to set up
 | Added `GITHUB_TOKEN` + `GIT_USER_NAME` + `GIT_USER_EMAIL` env-var support to `bootstrap.sh` | **Yes** | Setup section shows the labelled per-machine one-liner, the env-var purpose table, and a troubleshooting entry for clone-failure recovery. Token kept as `<your-PAT>` placeholder; identity values can be concrete to your real setup since the repo is single-user. |
 | Added `bootstrap.ps1` for the Windows client side | **Yes** | Setup → On Windows section shows the `irm \| iex` one-liner with `$env:GITHUB_TOKEN`, calls out that it must run elevated, lists the five-step flow (preflight → choco install → clone → chezmoi apply → ssh-key), and documents the flags. |
 | Switched bootstrap.ps1 from winget to Chocolatey | **Yes** | "WHY CHOCOLATEY" rationale stays in the script's header for future-me; README needs the elevated-shell note and the package IDs (which differ from winget's). |
+| Added wezterm hardlink step to bootstrap.ps1 (chezmoi-tracked + hardlinked hybrid) | **Yes** | Setup → On Windows section needs to call out that bootstrap re-hardlinks `wezterm.lua` after chezmoi apply, so manual `--sync` edits show up in WezTerm without an explicit `cza`. Troubleshooting entry on broken hardlinks → re-run bootstrap.ps1. |
 | Made the chezmoi source state cross-platform (added `.chezmoiroot`, OS-aware `.chezmoiignore.tmpl`, Windows AppData/Documents paths, migrated `wezterm.lua` under chezmoi) | **Yes** | New "chezmoi cross-platform" subsection under Setup → On Windows; updated repo-structure tree; "Editing dotfiles" workflow gets `cza`/`czd`/`cze` alias mentions for Windows. |
 | Internal `set_fact` rename inside `main.yml` | No | Invisible from outside |
 
@@ -271,7 +272,7 @@ When in doubt, ask: "Would a user reading only README.md still be able to set up
 - **Tool versions live only in `ansible/group_vars/all.yml`.** One file, one bump.
 - **The chezmoi source dir is `chezmoi/`**, not the repo root. New dotfiles go under `chezmoi/home/` or `chezmoi/dot_config/`.
 - **Per-machine overrides go in `~/.bashrc.local` on each VM** — un-tracked, sourced last by the templated bashrc.
-- **`wezterm.lua` is chezmoi-managed** at `chezmoi/dot_config/wezterm/wezterm.lua` — edits in the repo, `chezmoi apply` to deploy. The previous repo↔home hardlink approach is gone (it had an atomic-save fragility); chezmoi writes a regular file at `%USERPROFILE%\.config\wezterm\wezterm.lua`.
+- **`wezterm.lua` is chezmoi-tracked AND hardlinked.** The chezmoi source at `chezmoi/dot_config/wezterm/wezterm.lua` is the canonical file; `bootstrap.ps1`'s final step replaces the chezmoi-written copy at `%USERPROFILE%\.config\wezterm\wezterm.lua` with a hardlink to the source. This is a hybrid: chezmoi tracks the file (so it ships through `chezmoi apply` and the OS-aware ignore rules) AND the hardlink gives WezTerm live-reload on direct edits to the repo file (e.g. from `manage-hosts.ps1 --sync`). Caveat: if `chezmoi apply` ever needs to atomic-write the target (only happens on a content mismatch — e.g. if someone manually edits the home file out of band), it breaks the link, and the next `bootstrap.ps1` re-run restores it.
 - **User-facing changes get mirrored into `README.md`** in the same commit (see the section above for what counts).
 
 ## Daily workflows
@@ -316,7 +317,7 @@ Adding a tool:
 ## Files Claude should be careful with
 
 - `ansible/inventory/hosts.ini` — auto-gen, never edit.
-- `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block — auto-gen between `-- HOSTS:START` / `-- HOSTS:END` sentinels by both manage-hosts scripts. Edit anywhere outside the sentinels freely.
+- `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block — auto-gen between `-- HOSTS:START` / `-- HOSTS:END` sentinels by both manage-hosts scripts. Edit anywhere outside the sentinels freely. On Windows, edits to this file appear in WezTerm immediately (via the hardlink at `%USERPROFILE%\.config\wezterm\wezterm.lua` that `bootstrap.ps1` maintains); on Linux VMs without WezTerm the file is ignored by chezmoi.
 - `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding (and sort order) until next save.
 - `.chezmoiroot` — one-line file at the repo root containing `chezmoi`. Required for chezmoi's source state to point at the `chezmoi/` subdirectory; without it, all `dot_*` paths break. Don't delete or edit.
 - `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `ansible/group_vars/all.yml`; install logic lives only in `ansible/roles/rhel-base/tasks/tools.yml`.
