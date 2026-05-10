@@ -34,7 +34,7 @@ The same task definitions run for both — pick one with a single `-e` flag (or 
 ```
 workstation/
 ├── bootstrap.sh                        ← RHEL VM entry point — thin Ansible seed
-├── bootstrap.ps1                       ← Windows client entry point — winget tools + chezmoi apply
+├── bootstrap.ps1                       ← Windows client entry point — choco tools + chezmoi apply (run elevated)
 ├── .chezmoiroot                        ← redirects chezmoi's source state to chezmoi/ subdir
 ├── hosts.conf                          ← single source of truth for VM list
 │
@@ -147,11 +147,13 @@ Both modes are idempotent — re-run any time to pick up updates. Re-running can
 
 ### 3. On Windows
 
-The Windows host is a **client** — no Ansible, but **chezmoi runs here too** to deploy the dotfiles tracked in this repo (`wezterm.lua`, the PowerShell profile, Zed settings, VSCode settings). `bootstrap.ps1` is the parallel of `bootstrap.sh` — preflight, clone, install tools via winget, run `chezmoi init --apply`, and (optionally) generate an SSH key.
+The Windows host is a **client** — no Ansible, but **chezmoi runs here too** to deploy the dotfiles tracked in this repo (`wezterm.lua`, the PowerShell profile, Zed settings, VSCode settings). `bootstrap.ps1` is the parallel of `bootstrap.sh`: preflight (admin check) → install Chocolatey + the dev tools → clone → `chezmoi init --apply` → optional SSH-key generation.
 
-**Tools installed by bootstrap.ps1 (via winget):** chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode. Optional ones warn-not-fail; chezmoi and Git are required.
+> **Run from an elevated PowerShell.** Chocolatey itself needs admin to install, as do most package installs. Right-click PowerShell → "Run as administrator", or use `Start-Process pwsh -Verb RunAs`. If you already have everything installed and just want the chezmoi-apply step, pass `-SkipToolInstall` to skip the elevation requirement.
 
-**Recommended one-liner** (private repo — set the same `GITHUB_TOKEN`/`GIT_USER_NAME`/`GIT_USER_EMAIL` you'd use for a Linux bootstrap):
+**Tools installed by bootstrap.ps1 (via Chocolatey):** chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode. Optional ones warn-not-fail; chezmoi and Git are required. Choco rather than winget because winget's PATH propagation is unreliable mid-session — tools install but aren't always resolvable when chezmoi tries to use them in the next step.
+
+**Recommended one-liner** (run from elevated PowerShell — private repo with the same `GITHUB_TOKEN`/`GIT_USER_NAME`/`GIT_USER_EMAIL` you'd use for a Linux bootstrap):
 
 ```powershell
 # === Bootstrap: Windows client ===
@@ -167,17 +169,17 @@ Or after cloning the repo manually:
 ```powershell
 git clone https://github.com/ArrushC/workstation.git C:\Git\workstation
 cd C:\Git\workstation
-.\bootstrap.ps1                                          # default flow
+.\bootstrap.ps1                                          # default flow (must be elevated)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation             # alternate clone path
-.\bootstrap.ps1 -SkipToolInstall                         # skip winget step (tools already installed)
+.\bootstrap.ps1 -SkipToolInstall                         # skip choco step (tools already installed; non-elevated OK)
 .\bootstrap.ps1 -SkipChezmoi                             # clone + install but don't deploy dotfiles yet
 .\bootstrap.ps1 -SkipKeyGen                              # skip the SSH-key prompt
 ```
 
 What `bootstrap.ps1` does:
-1. **Preflight** — `git` and `winget` are required (winget ships with Win10 1909+ / Win11). OpenSSH client is warned-not-failed.
-2. **Clone the repo** into `-RepoPath` (default `C:\Git\workstation`), or `git pull --ff-only` if already present. `GITHUB_TOKEN` is persisted into `.git/config` (`http.https://github.com/.extraheader`, github.com-scoped) so subsequent `git push`, `git pull`, `chezmoi update`, and `manage-hosts.ps1` ops authenticate without re-passing the env var.
-3. **Install tools via winget** — chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode. Skipped silently per-tool if already installed; warned-not-failed on optional install errors.
+1. **Preflight** — admin check (required unless `-SkipToolInstall` is passed). With `-SkipToolInstall`, expects `git` and `chezmoi` already on PATH. OpenSSH client is warned-not-failed either way.
+2. **Bootstrap Chocolatey + install tools** — if `choco` isn't already on PATH, fetches and runs the official install script from `community.chocolatey.org`. Then `choco install -y` runs for each of: chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode. Required tools (chezmoi, Git) fail the whole script if their install errors; optional tools warn-and-continue. After installs, the session's `$env:PATH` is refreshed from the registry so the new binaries resolve in the next step.
+3. **Clone the repo** into `-RepoPath` (default `C:\Git\workstation`), or `git pull --ff-only` if already present. `GITHUB_TOKEN` is persisted into `.git/config` (`http.https://github.com/.extraheader`, github.com-scoped) so subsequent `git push`, `git pull`, `chezmoi update`, and `manage-hosts.ps1` ops authenticate without re-passing the env var.
 4. **Run `chezmoi init --apply --source <RepoPath>`** — `.chezmoiroot` at the repo root redirects the source state into the `chezmoi/` subdirectory, where the OS-aware `.chezmoiignore.tmpl` filters out Linux-only files (helix, zellij, dot_bashrc.tmpl, dot_nbrc) and applies the Windows-targeted ones (PowerShell profile to `%USERPROFILE%\Documents\PowerShell\`, Zed/VSCode settings to `%APPDATA%\…`, `wezterm.lua` to `%USERPROFILE%\.config\wezterm\`).
 5. **SSH key** — prompts to generate `%USERPROFILE%\.ssh\id_ed25519` if missing. Used by `manage-hosts.ps1 -CopyId` to copy your public key to VMs for passwordless SSH.
 
@@ -391,5 +393,8 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 - **`ssh-keygen` on Windows opens a passphrase prompt despite `-N '""'`.** Some PowerShell quoting variants strip the empty-passphrase argument. Re-run interactively and just press Enter twice; the rest of the flow is unchanged.
 - **`ansible-playbook: command not found` after a fresh `bootstrap.sh` run.** Same root cause as above — PATH didn't include `~/.local/bin`. Either `source ~/.bashrc` or run `export PATH="$HOME/.local/bin:$PATH"` and retry.
 - **WezTerm shows old config after an edit.** Edits to `chezmoi/dot_config/wezterm/wezterm.lua` only take effect once `chezmoi apply` (or `cza`) writes them out to `%USERPROFILE%\.config\wezterm\wezterm.lua`. Run `czd` to confirm there's a pending diff, then `cza`. (The previous repo↔home hardlink approach with its atomic-save fragility is gone — chezmoi writes a regular file.)
+- **`bootstrap.ps1` aborts with "This script must run from an elevated PowerShell".** Chocolatey and most package installs need admin. Close the shell, right-click PowerShell → "Run as administrator", re-run. If you already have every tool installed (chezmoi, git, starship, zoxide, WezTerm, Zed, VSCode), pass `-SkipToolInstall` to bypass the elevation requirement and only do the chezmoi-apply + ssh-key steps.
+- **`bootstrap.ps1` reports "Chocolatey install completed but `choco` is not on PATH".** The choco installer succeeded but the current shell's PATH wasn't refreshed in time. Close the elevated PowerShell, open a new elevated PowerShell, and re-run — the new session inherits the updated machine PATH and picks up `choco` correctly.
+- **A `choco install` step says "package not found" or "deprecated".** Choco package IDs occasionally get renamed/retired upstream. Edit `$ChocoTools` in `bootstrap.ps1` to point at the current ID (search at https://community.chocolatey.org/packages), or set the tool as `Required = $false` so the rest of the install proceeds and install it manually.
 - **`hosts.ini` is out of sync with `hosts.conf`.** Run `./scripts/manage-hosts.sh --sync`. Never edit `hosts.ini` directly — it's auto-generated.
 - **`tool_scope=system` errored with "requires has_sudo=true".** Pass both flags: `-e "tool_scope=system has_sudo=true"`.

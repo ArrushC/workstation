@@ -3,16 +3,27 @@
 #
 # The Windows host is a CLIENT — Ansible runs on RHEL VMs only. On Windows
 # this script handles its slice of the same workflow: install dev tools via
-# winget, then hand off to chezmoi to deploy the dotfiles tracked in this
+# Chocolatey, then hand off to chezmoi to deploy the dotfiles tracked in this
 # repo (Zed, VSCode, PowerShell profile, WezTerm config, Starship, Git).
 #
 # Flow:
-#   1. preflight        — git on PATH; OpenSSH client warned-not-failed
-#   2. clone repo       — into -RepoPath (default C:\Git\workstation)
-#   3. winget install   — chezmoi + every tool whose dotfiles we manage
+#   1. preflight        — must run as admin (choco needs it); OpenSSH client
+#                         warned-not-failed
+#   2. choco install    — bootstrap Chocolatey itself if missing, then
+#                         install chezmoi, Git, Starship, zoxide, WezTerm,
+#                         Zed, VSCode
+#   3. clone repo       — into -RepoPath (default C:\Git\workstation).
+#                         Done after choco so the freshly-installed git is
+#                         used if the machine didn't have one already.
 #   4. chezmoi apply    — applies chezmoi/ to %USERPROFILE% (wezterm,
 #                         Zed, VSCode, PowerShell profile, etc.)
 #   5. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
+#
+# WHY CHOCOLATEY (not winget)
+#   winget exists on Win10 1909+ / Win11 but its PATH propagation is flaky —
+#   tools install but don't always become resolvable in the current shell
+#   session, leaving chezmoi unable to find git in step 3. Choco's installs
+#   write to a predictable PATH location and the refresh is reliable.
 #
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME,
 # GIT_USER_EMAIL before running. The token authenticates the bootstrap.ps1
@@ -21,7 +32,8 @@
 # github.com) so subsequent push/pull and manage-hosts.ps1 ops work without
 # re-passing the env var.
 #
-# One-liner from a fresh Windows machine (PowerShell 5.1 or 7+):
+# One-liner from a fresh Windows machine (RUN FROM AN ELEVATED PowerShell —
+# Right-click PowerShell → "Run as administrator"):
 #
 #   $env:GITHUB_TOKEN  = '<your-PAT>'
 #   $env:GIT_USER_NAME = 'Arrush Chaturvedi'
@@ -38,7 +50,8 @@
 # Flags:
 #   -RepoPath <path>    override clone target (default C:\Git\workstation)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the winget step (assume tools already installed)
+#   -SkipToolInstall    skip the choco step entirely (assume tools installed;
+#                       admin not required in this case)
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 # =============================================================================
 
@@ -74,35 +87,58 @@ $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 # it never leaks to other remotes.
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
-# winget IDs for everything chezmoi manages on Windows. Chezmoi is required;
-# the rest are skipped silently (with a warning) if winget can't find them.
-$WingetTools = @(
-    @{ Id = "twpayne.chezmoi";     Name = "chezmoi";    Required = $true  },
-    @{ Id = "Git.Git";             Name = "Git";        Required = $true  },
-    @{ Id = "Starship.Starship";   Name = "Starship";   Required = $false },
-    @{ Id = "ajeetdsouza.zoxide";  Name = "zoxide";     Required = $false },
-    @{ Id = "wez.wezterm";         Name = "WezTerm";    Required = $false },
-    @{ Id = "Zed.Zed";             Name = "Zed";        Required = $false },
-    @{ Id = "Microsoft.VisualStudioCode"; Name = "VSCode"; Required = $false }
+# Choco package IDs for everything chezmoi manages on Windows. Required tools
+# fail the whole bootstrap if their install errors out; optional ones warn-not-
+# fail so a stale or moved package ID doesn't block the rest.
+$ChocoTools = @(
+    @{ Id = "chezmoi";   Name = "chezmoi";  Required = $true  },
+    @{ Id = "git";       Name = "Git";      Required = $true  },
+    @{ Id = "starship";  Name = "Starship"; Required = $false },
+    @{ Id = "zoxide";    Name = "zoxide";   Required = $false },
+    @{ Id = "wezterm";   Name = "WezTerm";  Required = $false },
+    @{ Id = "zed";       Name = "Zed";      Required = $false },
+    @{ Id = "vscode";    Name = "VSCode";   Required = $false }
 )
 
 # =============================================================================
-# 1. PREFLIGHT
+# 1. PREFLIGHT — admin check (unless -SkipToolInstall), then soft checks
 # =============================================================================
+function Test-IsAdmin {
+    $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $pr = [System.Security.Principal.WindowsPrincipal]::new($id)
+    return $pr.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 function Invoke-Preflight {
     Write-Log "Checking prerequisites..."
 
-    $missing = @()
-    if (-not (Get-Command git    -ErrorAction SilentlyContinue)) { $missing += "git" }
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { $missing += "winget" }
+    # Admin is required to install Chocolatey + packages. If the user is
+    # skipping tool install, they're vouching that everything's already there,
+    # so we don't need elevation.
+    if (-not $SkipToolInstall) {
+        if (-not (Test-IsAdmin)) {
+            Write-Fail @"
+This script must run from an elevated PowerShell to install Chocolatey
+and the dev tools. Open PowerShell as administrator and re-run.
 
-    if ($missing.Count -gt 0) {
-        Write-Fail @"
-Missing required prerequisites: $($missing -join ', ')
-  git    : winget install --id Git.Git    (or https://git-scm.com/download/win)
-  winget : built into Windows 10 1909+ / Windows 11. Update via Microsoft Store
-           (search 'App Installer') if missing.
+If you already have chezmoi, git, and the other tools installed and just
+want to run the chezmoi-apply + ssh-key steps non-elevated, re-run with:
+  .\bootstrap.ps1 -SkipToolInstall
 "@
+        }
+    } else {
+        # With tool install skipped, git and chezmoi must already exist —
+        # otherwise step 3 (clone) and step 4 (chezmoi) will both fail.
+        $missing = @()
+        if (-not (Get-Command git     -ErrorAction SilentlyContinue)) { $missing += "git" }
+        if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) { $missing += "chezmoi" }
+        if ($missing.Count -gt 0) {
+            Write-Fail @"
+-SkipToolInstall was passed but these required tools aren't on PATH: $($missing -join ', ')
+Install them (admin shell, then `choco install -y git chezmoi`) or drop
+-SkipToolInstall and let this script install them.
+"@
+        }
     }
 
     if (-not (Get-Command ssh-keygen -ErrorAction SilentlyContinue)) {
@@ -157,45 +193,77 @@ function Invoke-CloneRepo {
 }
 
 # =============================================================================
-# 3. WINGET INSTALL — chezmoi + every tool whose dotfiles we manage
+# 2. CHOCOLATEY + DEV TOOLS
 # =============================================================================
-function Test-WingetInstalled {
-    param([string]$PackageId)
-    $listOutput = winget list --id $PackageId --exact 2>&1 | Out-String
-    return ($LASTEXITCODE -eq 0 -and $listOutput -match [regex]::Escape($PackageId))
+function Update-SessionPath {
+    # Choco installs append to the Machine and User PATH entries in the
+    # registry, but the current PowerShell session keeps its own copy. Rebuild
+    # $env:PATH from the registry so freshly-installed tools resolve right away.
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH", "User")
 }
 
-function Invoke-WingetInstall {
+function Install-Chocolatey {
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Ok "Chocolatey already installed"
+        return
+    }
+
+    Write-Log "Installing Chocolatey (official bootstrap script from community.chocolatey.org)..."
+
+    # Mirrors the install snippet at https://chocolatey.org/install — we need
+    # the TLS-1.2 bump for older default .NET configs and Bypass scope so the
+    # script runs even if the user has a restrictive ExecutionPolicy.
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = `
+        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+        'https://community.chocolatey.org/install.ps1'))
+
+    Update-SessionPath
+
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Fail @"
+Chocolatey install completed but `choco` is not on PATH in this session.
+Open a new elevated PowerShell and re-run this script — the new shell
+will inherit the updated PATH.
+"@
+    }
+    Write-Ok "Chocolatey installed"
+}
+
+function Invoke-ChocoInstall {
     if ($SkipToolInstall) {
         Write-Log "Tool install skipped (-SkipToolInstall)"
         return
     }
 
-    Write-Log "Installing tools via winget..."
+    Install-Chocolatey
 
-    foreach ($tool in $WingetTools) {
-        if (Test-WingetInstalled -PackageId $tool.Id) {
-            Write-Ok "$($tool.Name) already installed"
-            continue
-        }
+    Write-Log "Installing tools via Chocolatey..."
 
+    foreach ($tool in $ChocoTools) {
         Write-Log "Installing $($tool.Name) ($($tool.Id))..."
-        winget install --id $tool.Id --exact --silent --accept-source-agreements --accept-package-agreements
+
+        # -y     : auto-confirm
+        # --no-progress : suppress the spinner so the log stays scannable
+        # --limit-output: one-line summary instead of a banner
+        # If the package is already installed, choco prints a short notice and
+        # returns 0 — same outcome as a no-op, no need to pre-check.
+        choco install $tool.Id -y --no-progress --limit-output
+
         if ($LASTEXITCODE -ne 0) {
             if ($tool.Required) {
                 Write-Fail "$($tool.Name) install failed — required tool, cannot continue."
             } else {
-                Write-Warn "$($tool.Name) install failed (winget exit $LASTEXITCODE) — skipping; install manually if needed."
+                Write-Warn "$($tool.Name) install failed (choco exit $LASTEXITCODE) — skipping; install manually if needed."
             }
             continue
         }
         Write-Ok "$($tool.Name) installed"
     }
 
-    # winget installs may have added entries to PATH that this session doesn't
-    # see yet. Refresh from the registry so chezmoi etc. resolve in step 4.
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    Update-SessionPath
 }
 
 # =============================================================================
@@ -208,8 +276,8 @@ function Invoke-Chezmoi {
     }
 
     if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
-        Write-Warn "chezmoi not on PATH after winget install. Open a new shell and re-run, or install manually:"
-        Write-Warn "  winget install --id twpayne.chezmoi"
+        Write-Warn "chezmoi not on PATH after install. Open a new elevated shell and re-run, or install manually:"
+        Write-Warn "  choco install -y chezmoi"
         return
     }
 
@@ -268,8 +336,8 @@ function Invoke-EnsureSshKey {
 # MAIN
 # =============================================================================
 Invoke-Preflight
+Invoke-ChocoInstall   # before clone — installs git if the machine doesn't have one
 Invoke-CloneRepo
-Invoke-WingetInstall
 Invoke-Chezmoi
 Invoke-EnsureSshKey
 

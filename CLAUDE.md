@@ -10,7 +10,7 @@ Guidance for Claude Code working on this repository.
 
 The repo is consumed three ways:
 1. **From a RHEL VM** — clone, run `bootstrap.sh`. The script seeds Ansible (via `pip3 install --user ansible-core` if missing), runs `playbooks/local.yml` against the local machine, and self-registers the VM in `hosts.conf`.
-2. **From the Windows host** — `bootstrap.ps1` clones the repo, installs tooling via `winget` (chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode), and runs `chezmoi init --apply` to deploy `wezterm.lua`, the PowerShell profile, Zed/VSCode settings, etc. into `%USERPROFILE%\…`.
+2. **From the Windows host** — `bootstrap.ps1` (run from an **elevated** PowerShell) bootstraps Chocolatey, installs tooling via `choco` (chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode), clones the repo, and runs `chezmoi init --apply` to deploy `wezterm.lua`, the PowerShell profile, Zed/VSCode settings, etc. into `%USERPROFILE%\…`. Choco rather than winget because winget's PATH propagation is unreliable mid-session and leaves freshly-installed binaries unresolvable to the next step.
 3. **From an ops machine** — run Ansible against multiple VMs at once via `playbooks/rhel.yml`.
 
 ## Layered architecture
@@ -38,7 +38,7 @@ User-space tools (`fzf`, `zellij`, `helix`, etc.) are **always** installed as st
 ```
 workstation/
 ├── bootstrap.sh                  ← RHEL VM entry point — thin Ansible seed
-├── bootstrap.ps1                 ← Windows client entry point — winget tools + chezmoi apply
+├── bootstrap.ps1                 ← Windows client entry point — choco tools + chezmoi apply (elevated)
 ├── .chezmoiroot                  ← contains "chezmoi" — redirects chezmoi's source state to the chezmoi/ subdir
 ├── hosts.conf                    ← single source of truth for VM list
 ├── README.md                     ← user-facing setup + daily commands
@@ -256,7 +256,8 @@ When in doubt, ask: "Would a user reading only README.md still be able to set up
 | Added `--copy-id` / `-CopyId` to manage-hosts | **Yes** | New "Copy SSH key" subsection with both shells + a tip line in the post-bootstrap message |
 | Reordered `bootstrap.sh` flow (self-register before Ansible) | **Yes** | Setup section explains the new order and the auto-commit+push step |
 | Added `GITHUB_TOKEN` + `GIT_USER_NAME` + `GIT_USER_EMAIL` env-var support to `bootstrap.sh` | **Yes** | Setup section shows the labelled per-machine one-liner, the env-var purpose table, and a troubleshooting entry for clone-failure recovery. Token kept as `<your-PAT>` placeholder; identity values can be concrete to your real setup since the repo is single-user. |
-| Added `bootstrap.ps1` for the Windows client side | **Yes** | Setup → On Windows section now shows the `irm \| iex` one-liner with `$env:GITHUB_TOKEN`, the four-step flow (preflight, clone, winget tool install, chezmoi apply, ssh-key), and the available flags. |
+| Added `bootstrap.ps1` for the Windows client side | **Yes** | Setup → On Windows section shows the `irm \| iex` one-liner with `$env:GITHUB_TOKEN`, calls out that it must run elevated, lists the five-step flow (preflight → choco install → clone → chezmoi apply → ssh-key), and documents the flags. |
+| Switched bootstrap.ps1 from winget to Chocolatey | **Yes** | "WHY CHOCOLATEY" rationale stays in the script's header for future-me; README needs the elevated-shell note and the package IDs (which differ from winget's). |
 | Made the chezmoi source state cross-platform (added `.chezmoiroot`, OS-aware `.chezmoiignore.tmpl`, Windows AppData/Documents paths, migrated `wezterm.lua` under chezmoi) | **Yes** | New "chezmoi cross-platform" subsection under Setup → On Windows; updated repo-structure tree; "Editing dotfiles" workflow gets `cza`/`czd`/`cze` alias mentions for Windows. |
 | Internal `set_fact` rename inside `main.yml` | No | Invisible from outside |
 
@@ -331,5 +332,5 @@ After changes:
 - `cd ansible && ansible-playbook playbooks/local.yml --check -e "tool_scope=user has_sudo=false install_system_packages=false"` — dry-run the local playbook in user scope.
 - `chezmoi diff` on a VM (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm); on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc).
 - `bootstrap.sh` on a fresh VM — completes both modes idempotently.
-- `bootstrap.ps1` on a fresh Windows machine — winget installs run, chezmoi applies, wezterm picks up the deployed config.
+- `bootstrap.ps1` on a fresh Windows machine (from an **elevated** PowerShell) — choco bootstraps itself, the seven tracked tools install, chezmoi applies, wezterm picks up the deployed config.
 - `git diff README.md` — verify the user-facing surface still matches reality.
