@@ -1,0 +1,20 @@
+{
+  // Minimal Zed settings — chezmoi-managed.
+  // Run `chezmoi add %APPDATA%\Zed\settings.json` to overwrite with your
+  // current Zed config, or edit this file via `chezmoi edit` and then
+  // `chezmoi apply`.
+  "theme": "One Dark",
+  "ui_font_size": 16,
+  "buffer_font_size": 14,
+  "buffer_font_family": "Monaspace Neon",
+  "vim_mode": false,
+  "format_on_save": "on",
+  "tab_size": 4,
+  "soft_wrap": "editor_width",
+  "show_whitespaces": "selection",
+  "auto_update": true,
+  "telemetry": {
+    "metrics": false,
+    "diagnostics": false
+  }
+}

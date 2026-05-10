@@ -1,0 +1,12 @@
+// VSCode keybindings — chezmoi-managed.
+// Place to override or add to the VSCode default keymap.
+// Run `chezmoi add %APPDATA%\Code\User\keybindings.json` after editing in
+// VSCode to capture your customisations.
+[
+  // Example: rebind Ctrl+Shift+T to revert closed editor (default behavior).
+  // Uncomment and adjust to taste.
+  // {
+  //   "key": "ctrl+shift+t",
+  //   "command": "workbench.action.reopenClosedEditor"
+  // }
+]
