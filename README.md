@@ -33,15 +33,16 @@ The same task definitions run for both — pick one with a single `-e` flag (or 
 
 ```
 workstation/
-├── bootstrap.sh                        ← VM entry point — thin seed, delegates to Ansible
+├── bootstrap.sh                        ← RHEL VM entry point — thin Ansible seed
+├── bootstrap.ps1                       ← Windows client entry point — winget tools + chezmoi apply
+├── .chezmoiroot                        ← redirects chezmoi's source state to chezmoi/ subdir
 ├── hosts.conf                          ← single source of truth for VM list
-├── wezterm.lua                         ← Windows terminal config (hardlinked to %USERPROFILE%\.config\wezterm\)
 │
 ├── scripts/
 │   ├── manage-hosts.sh                 ← Linux/RHEL host manager
 │   └── manage-hosts.ps1                ← Windows host manager (feature-parity)
 │
-├── ansible/                            ← all provisioning lives here
+├── ansible/                            ← RHEL provisioning
 │   ├── ansible.cfg
 │   ├── inventory/
 │   │   └── hosts.ini                   ← AUTO-GENERATED from hosts.conf
@@ -61,21 +62,28 @@ workstation/
 │               ├── shell.yml           ← PATH config
 │               └── dotfiles.yml        ← chezmoi apply (uses tools_dest to find chezmoi)
 │
-└── chezmoi/                            ← personal dotfiles (no sudo)
+└── chezmoi/                            ← cross-platform dotfiles (Linux + Windows)
     ├── .chezmoi.toml.tmpl              ← prompts for name/email on first init
-    ├── .chezmoiignore
+    ├── .chezmoiignore.tmpl             ← OS-aware: ignores Linux-only on Windows, vice versa
     ├── .chezmoiscripts/
-    │   └── run_once_after_init.sh      ← runs once on first apply
-    ├── home/
-    │   ├── dot_bashrc.tmpl             ← main shell config, per-machine templated
-    │   ├── dot_gitconfig.tmpl          ← git config
-    │   └── dot_nbrc                    ← nb notes config
-    └── dot_config/
-        ├── starship.toml
-        ├── helix/config.toml
-        └── zellij/
-            ├── config.kdl
-            └── layouts/dev.kdl
+    │   └── run_once_after_init.sh      ← runs once on first apply (Linux only)
+    │
+    ├── dot_bashrc.tmpl                 ← Linux: ~/.bashrc
+    ├── dot_gitconfig.tmpl              ← cross-platform: ~/.gitconfig
+    ├── dot_nbrc                        ← Linux: ~/.nbrc
+    ├── dot_config/                     ← cross-platform: ~/.config/
+    │   ├── starship.toml
+    │   ├── helix/config.toml
+    │   ├── zellij/{config.kdl, layouts/dev.kdl}    ← Linux only
+    │   └── wezterm/wezterm.lua                     ← Windows only (Linux-ignored)
+    │
+    ├── AppData/Roaming/                ← Windows: %USERPROFILE%\AppData\Roaming\
+    │   ├── Zed/settings.json
+    │   └── Code/User/{settings.json, keybindings.json}
+    │
+    └── Documents/                      ← Windows: %USERPROFILE%\Documents\
+        ├── PowerShell/Microsoft.PowerShell_profile.ps1.tmpl       ← PS 7
+        └── WindowsPowerShell/Microsoft.PowerShell_profile.ps1     ← PS 5.1 (dot-sources PS 7)
 ```
 
 ## Setup
@@ -128,10 +136,10 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 What `bootstrap.sh` does, in order:
 1. Preflight check (curl/git/python3/pip/iproute, python ≥ 3.9).
 2. Clone the repo into `~/.local/share/chezmoi` (or `git pull --ff-only` if present).
-3. **Self-register** the VM in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, group `rhel_vms`) and run `manage-hosts.sh --sync` so inventory + wezterm block are regenerated locally.
+3. **Self-register** the VM in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, group `rhel_vms`) and run `manage-hosts.sh --sync` so inventory + the chezmoi-tracked `chezmoi/dot_config/wezterm/wezterm.lua` block are regenerated locally.
 4. Install `ansible-core` via `pip3 --user` if missing, smoke-test `ansible-playbook --version`.
 5. Run `playbooks/local.yml` against the VM.
-6. **Auto-commit and push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `wezterm.lua`) with the message `chore(hosts): register <hostname>`. If the push fails (auth, conflict, no upstream), the script warns with a recovery `git push` command — it does **not** abort. Provisioning has already succeeded by this point.
+6. **Auto-commit and push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `chezmoi/dot_config/wezterm/wezterm.lua`) with the message `chore(hosts): register <hostname>`. If the push fails (auth, conflict, no upstream), the script warns with a recovery `git push` command — it does **not** abort. Provisioning has already succeeded by this point.
 
 After bootstrap finishes, copy your SSH key from your client (Windows host or another VM) — see [Host management → Copy SSH key](#copy-ssh-key) below.
 
@@ -139,17 +147,43 @@ Both modes are idempotent — re-run any time to pick up updates. Re-running can
 
 ### 3. On Windows
 
-WezTerm reads `%USERPROFILE%\.config\wezterm\wezterm.lua`. Hard-link it to the repo so edits stay in source control:
+The Windows host is a **client** — no Ansible, but **chezmoi runs here too** to deploy the dotfiles tracked in this repo (`wezterm.lua`, the PowerShell profile, Zed settings, VSCode settings). `bootstrap.ps1` is the parallel of `bootstrap.sh` — preflight, clone, install tools via winget, run `chezmoi init --apply`, and (optionally) generate an SSH key.
+
+**Tools installed by bootstrap.ps1 (via winget):** chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode. Optional ones warn-not-fail; chezmoi and Git are required.
+
+**Recommended one-liner** (private repo — set the same `GITHUB_TOKEN`/`GIT_USER_NAME`/`GIT_USER_EMAIL` you'd use for a Linux bootstrap):
 
 ```powershell
-# Create the wezterm config dir if it doesn't exist
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\wezterm"
-
-# Hard link — wezterm reads from here, git tracks from the repo
-New-Item -ItemType HardLink `
-    -Path "$env:USERPROFILE\.config\wezterm\wezterm.lua" `
-    -Target "C:\Git\workstation\wezterm.lua"
+# === Bootstrap: Windows client ===
+$env:GITHUB_TOKEN  = '<your-PAT>'
+$env:GIT_USER_NAME  = 'Arrush Chaturvedi'
+$env:GIT_USER_EMAIL = 'contact@arrushc.com'
+irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex
 ```
+
+Or after cloning the repo manually:
+
+```powershell
+git clone https://github.com/ArrushC/workstation.git C:\Git\workstation
+cd C:\Git\workstation
+.\bootstrap.ps1                                          # default flow
+.\bootstrap.ps1 -RepoPath D:\dev\workstation             # alternate clone path
+.\bootstrap.ps1 -SkipToolInstall                         # skip winget step (tools already installed)
+.\bootstrap.ps1 -SkipChezmoi                             # clone + install but don't deploy dotfiles yet
+.\bootstrap.ps1 -SkipKeyGen                              # skip the SSH-key prompt
+```
+
+What `bootstrap.ps1` does:
+1. **Preflight** — `git` and `winget` are required (winget ships with Win10 1909+ / Win11). OpenSSH client is warned-not-failed.
+2. **Clone the repo** into `-RepoPath` (default `C:\Git\workstation`), or `git pull --ff-only` if already present. `GITHUB_TOKEN` is persisted into `.git/config` (`http.https://github.com/.extraheader`, github.com-scoped) so subsequent `git push`, `git pull`, `chezmoi update`, and `manage-hosts.ps1` ops authenticate without re-passing the env var.
+3. **Install tools via winget** — chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode. Skipped silently per-tool if already installed; warned-not-failed on optional install errors.
+4. **Run `chezmoi init --apply --source <RepoPath>`** — `.chezmoiroot` at the repo root redirects the source state into the `chezmoi/` subdirectory, where the OS-aware `.chezmoiignore.tmpl` filters out Linux-only files (helix, zellij, dot_bashrc.tmpl, dot_nbrc) and applies the Windows-targeted ones (PowerShell profile to `%USERPROFILE%\Documents\PowerShell\`, Zed/VSCode settings to `%APPDATA%\…`, `wezterm.lua` to `%USERPROFILE%\.config\wezterm\`).
+5. **SSH key** — prompts to generate `%USERPROFILE%\.ssh\id_ed25519` if missing. Used by `manage-hosts.ps1 -CopyId` to copy your public key to VMs for passwordless SSH.
+
+After bootstrap, restart your shell so the chezmoi-applied `$PROFILE` picks up — starship prompt, `cz`/`cza`/`cze`/`czd`/`czu`/`czs` aliases, git aliases, etc.
+
+**Editing dotfiles**: same workflow as Linux. `cze <path>` opens the source-state copy in your editor; `cza` applies pending changes; `czd` shows the diff; `cz cd` jumps to the source dir for direct git ops.
 
 WezTerm auto-opens a tab per VM on launch and attaches to a persistent Zellij session. Press **`CTRL+SHIFT+H`** inside WezTerm for a cheatsheet of keybinds, aliases, and hosts. Other useful binds:
 
@@ -164,8 +198,6 @@ WezTerm auto-opens a tab per VM on launch and attaches to a persistent Zellij se
 | `ALT+1..9` | Jump to tab N |
 | `CTRL+SHIFT+R` | Reload `wezterm.lua` |
 
-> **Hardlink hazard**: editors that atomic-save (write-temp-then-rename) silently break the hardlink — the home-side file is left pointing at the old inode and WezTerm keeps loading the stale version. After any edit to `wezterm.lua`, compare `LastWriteTime` and `Length` between the repo path and `%USERPROFILE%\.config\wezterm\wezterm.lua`. If they diverge, recreate the link with the command above.
-
 ---
 
 ## Host management
@@ -173,7 +205,7 @@ WezTerm auto-opens a tab per VM on launch and attaches to a persistent Zellij se
 `hosts.conf` is the single source of truth for VMs. Two outputs are regenerated from it:
 
 - `ansible/inventory/hosts.ini` (full overwrite)
-- `wezterm.lua` SSH-domains block (in-place replace between `-- HOSTS:START` and `-- HOSTS:END` sentinels)
+- `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block (in-place replace between `-- HOSTS:START` and `-- HOSTS:END` sentinels). After running `--sync` on Windows, run `chezmoi apply` (or `cza`) to push the updated file into `%USERPROFILE%\.config\wezterm\`.
 
 Use the manage-hosts scripts; they re-pad column widths automatically and keep both outputs in sync.
 
@@ -232,26 +264,34 @@ Behaviour:
 
 ## Daily workflows
 
-### chezmoi (on any VM)
+### chezmoi (Linux VM or Windows host)
+
+The same aliases work on both OSes — defined in `dot_bashrc.tmpl` for Linux and the templated `Microsoft.PowerShell_profile.ps1.tmpl` for Windows:
 
 ```bash
-cze ~/.bashrc      # edit a dotfile
+cze ~/.bashrc      # edit a dotfile (Linux)         |  cze $PROFILE  on Windows
 cza                # apply changes locally
 czd                # diff — see what would change
 czu                # pull latest from repo and apply
 czs                # status
 
 # Push changes back to the repo
-cd ~/.local/share/chezmoi
+cd ~/.local/share/chezmoi   # or wherever the source state lives
 git add -A && git commit -m "update bashrc" && git push
 ```
 
-Per-machine overrides go in `~/.bashrc.local`, which is **not** tracked and is sourced last by the templated bashrc:
+**Per-machine overrides** are untracked and sourced last by the main config:
 
 ```bash
-# ~/.bashrc.local
+# Linux: ~/.bashrc.local
 export GOPATH="/opt/go"
 alias work='cd /opt/myproject'
+```
+
+```powershell
+# Windows: %USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.local.ps1
+$env:GOPATH = "C:\Go"
+function work { Set-Location "D:\dev\myproject" }
 ```
 
 ### Ansible — remote (control machine → all VMs in inventory)
@@ -336,7 +376,7 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
    ```
    Self-registration appends the VM to `hosts.conf`.
 2. From any other machine with the repo: `git pull` and run `./scripts/manage-hosts.sh --sync` (or `-Sync` on Windows) so `hosts.ini` and the wezterm block update everywhere.
-3. Commit and push the updated `hosts.conf`, `hosts.ini`, and `wezterm.lua`.
+3. Commit and push the updated `hosts.conf`, `hosts.ini`, and `chezmoi/dot_config/wezterm/wezterm.lua`.
 
 ---
 
@@ -350,6 +390,6 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 - **`./scripts/manage-hosts.sh --copy-id` keeps prompting for a password every connection.** The key landed but `sshd` isn't using it. Check the target's `/etc/ssh/sshd_config` (`PubkeyAuthentication yes`, `AuthorizedKeysFile .ssh/authorized_keys`) and the perms (`~/.ssh` = 700, `~/.ssh/authorized_keys` = 600). On SELinux RHEL: `restorecon -R -v ~/.ssh`.
 - **`ssh-keygen` on Windows opens a passphrase prompt despite `-N '""'`.** Some PowerShell quoting variants strip the empty-passphrase argument. Re-run interactively and just press Enter twice; the rest of the flow is unchanged.
 - **`ansible-playbook: command not found` after a fresh `bootstrap.sh` run.** Same root cause as above — PATH didn't include `~/.local/bin`. Either `source ~/.bashrc` or run `export PATH="$HOME/.local/bin:$PATH"` and retry.
-- **WezTerm shows old config after an edit.** The hardlink broke (atomic-save). Compare `LastWriteTime`/`Length` between the repo path and `%USERPROFILE%\.config\wezterm\wezterm.lua` and recreate the link if they differ — see the warning in step 3 above.
+- **WezTerm shows old config after an edit.** Edits to `chezmoi/dot_config/wezterm/wezterm.lua` only take effect once `chezmoi apply` (or `cza`) writes them out to `%USERPROFILE%\.config\wezterm\wezterm.lua`. Run `czd` to confirm there's a pending diff, then `cza`. (The previous repo↔home hardlink approach with its atomic-save fragility is gone — chezmoi writes a regular file.)
 - **`hosts.ini` is out of sync with `hosts.conf`.** Run `./scripts/manage-hosts.sh --sync`. Never edit `hosts.ini` directly — it's auto-generated.
 - **`tool_scope=system` errored with "requires has_sudo=true".** Pass both flags: `-e "tool_scope=system has_sudo=true"`.
