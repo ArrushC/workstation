@@ -179,14 +179,14 @@ push_host_changes() {
   cd "$CHEZMOI_SOURCE"
 
   # Anything to commit (working tree OR already-staged)?
-  if git diff --quiet hosts.conf ansible/inventory/hosts.ini wezterm.lua 2>/dev/null \
-     && git diff --cached --quiet hosts.conf ansible/inventory/hosts.ini wezterm.lua 2>/dev/null; then
+  if git diff --quiet hosts.conf ansible/inventory/hosts.ini chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null \
+     && git diff --cached --quiet hosts.conf ansible/inventory/hosts.ini chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null; then
     log "No host-list changes to commit"
     return 0
   fi
 
   log "Committing host registration..."
-  git add hosts.conf ansible/inventory/hosts.ini wezterm.lua 2>/dev/null || true
+  git add hosts.conf ansible/inventory/hosts.ini chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null || true
 
   # Identity priority for the auto-commit:
   #   1. GIT_USER_NAME / GIT_USER_EMAIL env vars (set in the bootstrap one-liner)

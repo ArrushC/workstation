@@ -46,7 +46,7 @@ $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path -Parent $ScriptDir
 $HostsConf  = Join-Path $RepoRoot "hosts.conf"
 $Inventory  = Join-Path $RepoRoot "ansible\inventory\hosts.ini"
-$WeztermLua = Join-Path $RepoRoot "wezterm.lua"
+$WeztermLua = Join-Path $RepoRoot "chezmoi\dot_config\wezterm\wezterm.lua"
 
 # --- ANSI escape codes (matches manage-hosts.sh; rendered by WezTerm,
 #     Windows Terminal, and modern conhost. Old conhost shows raw codes.) -----

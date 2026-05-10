@@ -28,7 +28,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HOSTS_CONF="$REPO_ROOT/hosts.conf"
 ANSIBLE_INVENTORY="$REPO_ROOT/ansible/inventory/hosts.ini"
-WEZTERM_LUA="$REPO_ROOT/wezterm.lua"
+WEZTERM_LUA="$REPO_ROOT/chezmoi/dot_config/wezterm/wezterm.lua"
 
 # --- Colours -----------------------------------------------------------------
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
