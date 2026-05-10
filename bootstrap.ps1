@@ -92,17 +92,18 @@ $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 # it never leaks to other remotes.
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
-# Choco package IDs for everything chezmoi manages on Windows. Required tools
-# fail the whole bootstrap if their install errors out; optional ones warn-not-
-# fail so a stale or moved package ID doesn't block the rest.
+# Choco package IDs for everything chezmoi manages on Windows. The `Cmd`
+# field is the binary we expect on PATH after install — most match the
+# package name; vscode's binary is `code`. Required tools fail the whole
+# bootstrap if their install errors out; optional ones warn-not-fail.
 $ChocoTools = @(
-    @{ Id = "chezmoi";   Name = "chezmoi";  Required = $true  },
-    @{ Id = "git";       Name = "Git";      Required = $true  },
-    @{ Id = "starship";  Name = "Starship"; Required = $false },
-    @{ Id = "zoxide";    Name = "zoxide";   Required = $false },
-    @{ Id = "wezterm";   Name = "WezTerm";  Required = $false },
-    @{ Id = "zed";       Name = "Zed";      Required = $false },
-    @{ Id = "vscode";    Name = "VSCode";   Required = $false }
+    @{ Id = "chezmoi";  Cmd = "chezmoi";  Name = "chezmoi";  Required = $true  },
+    @{ Id = "git";      Cmd = "git";      Name = "Git";      Required = $true  },
+    @{ Id = "starship"; Cmd = "starship"; Name = "Starship"; Required = $false },
+    @{ Id = "zoxide";   Cmd = "zoxide";   Name = "zoxide";   Required = $false },
+    @{ Id = "wezterm";  Cmd = "wezterm";  Name = "WezTerm";  Required = $false },
+    @{ Id = "zed";      Cmd = "zed";      Name = "Zed";      Required = $false },
+    @{ Id = "vscode";   Cmd = "code";     Name = "VSCode";   Required = $false }
 )
 
 # =============================================================================
@@ -114,40 +115,95 @@ function Test-IsAdmin {
     return $pr.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Is a tool installed and actually usable? `Get-Command $Cmd` is the only
+# reliable signal — it confirms the binary exists AND is on PATH (which is
+# what every subsequent step of the bootstrap actually needs).
+#
+# We deliberately don't fall back to `choco list`: it can report a package
+# as installed when its binary is missing on disk (broken/orphaned entries
+# from a previous install that was interrupted or had its files removed),
+# which would cause the bootstrap to skip a reinstall that the user actually
+# needs. If `choco list` says yes but Get-Command says no, the right
+# behaviour is to treat it as missing and let `choco install` either fix it
+# or no-op cleanly (already-installed packages exit 0 silently).
+function Test-ToolInstalled {
+    param([hashtable]$Tool)
+    return [bool](Get-Command $Tool.Cmd -ErrorAction SilentlyContinue)
+}
+
+# Set by Invoke-Preflight; consumed by Invoke-ChocoInstall to skip work when
+# everything's already in place.
+$script:NeedsChocoInstall = $false
+
 function Invoke-Preflight {
     Write-Log "Checking prerequisites..."
 
-    # Admin is required to install Chocolatey + packages. If the user is
-    # skipping tool install, they're vouching that everything's already there,
-    # so we don't need elevation.
-    if (-not $SkipToolInstall) {
-        if (-not (Test-IsAdmin)) {
-            Write-Fail @"
-This script must run from an elevated PowerShell to install Chocolatey
-and the dev tools. Open PowerShell as administrator and re-run.
-
-If you already have chezmoi, git, and the other tools installed and just
-want to run the chezmoi-apply + ssh-key steps non-elevated, re-run with:
-  .\bootstrap.ps1 -SkipToolInstall
-"@
-        }
-    } else {
-        # With tool install skipped, git must already exist for the clone
-        # step. chezmoi is only required if the chezmoi-apply step will run
-        # (i.e. -SkipChezmoi was NOT also passed). Bootstrap can also be
-        # invoked as a hardlink-restore tool with all three skips:
-        #   .\bootstrap.ps1 -SkipToolInstall -SkipChezmoi -SkipKeyGen
+    if ($SkipToolInstall) {
+        # User vouches everything's installed. git is needed for the clone
+        # step; chezmoi only matters if the chezmoi-apply step will run.
         $missing = @()
         if (-not (Get-Command git -ErrorAction SilentlyContinue)) { $missing += "git" }
-        if (-not $SkipChezmoi) {
-            if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) { $missing += "chezmoi" }
+        if (-not $SkipChezmoi -and -not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
+            $missing += "chezmoi"
         }
         if ($missing.Count -gt 0) {
             Write-Fail @"
 -SkipToolInstall was passed but these required tools aren't on PATH: $($missing -join ', ')
-Install them (admin shell, then `choco install -y git chezmoi`) or drop
--SkipToolInstall and let this script install them.
+Either drop -SkipToolInstall and re-run from an elevated shell, or install
+them yourself first: choco install -y $($missing -join ' ')
 "@
+        }
+    } else {
+        # Smart detection: only require admin if there's actually something
+        # for choco to install. Three buckets:
+        #
+        #   - choco itself missing       → need admin to bootstrap it
+        #   - $missingReq non-empty      → need admin to install required tools
+        #   - only $missingOpt non-empty → installs would help but aren't
+        #     critical; if non-admin, skip the install step with a note rather
+        #     than failing the whole bootstrap.
+        # Classify each tool as installed / missing-required / missing-optional.
+        # Primary detection: Get-Command $Cmd works regardless of installer
+        # (choco / MSI / scoop / manual). Fallback to `choco list` covers GUI
+        # apps that don't put a binary on PATH.
+        $needsBootstrap = -not (Get-Command choco -ErrorAction SilentlyContinue)
+        $missingReqNames = @()
+        $missingReqIds  = @()
+        $missingOptNames = @()
+        foreach ($tool in $ChocoTools) {
+            if (Test-ToolInstalled -Tool $tool) { continue }
+            if ($tool.Required) {
+                $missingReqNames += $tool.Name
+                $missingReqIds   += $tool.Id
+            } else {
+                $missingOptNames += $tool.Name
+            }
+        }
+
+        $needsAdminWork = $needsBootstrap -or ($missingReqNames.Count -gt 0)
+
+        if ($needsAdminWork) {
+            if (-not (Test-IsAdmin)) {
+                $reqList = if ($needsBootstrap) { "Chocolatey itself" } else { $missingReqNames -join ', ' }
+                $idList  = if ($needsBootstrap) { "" } else { $missingReqIds -join ' ' }
+                Write-Fail @"
+Admin required to install: $reqList
+Open PowerShell as administrator and re-run.
+
+If you'd rather install $reqList yourself first (admin one-shot:
+  choco install -y $idList
+), you can then re-run this script non-elevated with:
+  .\bootstrap.ps1 -SkipToolInstall
+"@
+            }
+            $script:NeedsChocoInstall = $true
+        } elseif ($missingOptNames.Count -gt 0) {
+            $optList = $missingOptNames -join ', '
+            Write-Warn "Optional tools not installed: $optList"
+            Write-Warn "Re-run from an elevated shell to install them, or skip — they aren't required."
+            # NeedsChocoInstall stays false; we'll skip the install step.
+        } else {
+            Write-Ok "All Chocolatey-managed tools already installed"
         }
     }
 
@@ -247,20 +303,46 @@ function Invoke-ChocoInstall {
         Write-Log "Tool install skipped (-SkipToolInstall)"
         return
     }
+    if (-not $script:NeedsChocoInstall) {
+        # Preflight already determined there's nothing to install (or only
+        # optional packages are missing in a non-elevated session). Nothing
+        # to do here.
+        Write-Log "No Chocolatey packages to install"
+        return
+    }
 
     Install-Chocolatey
 
     Write-Log "Installing tools via Chocolatey..."
 
     foreach ($tool in $ChocoTools) {
+        # Skip ones that are already installed by any means — keeps the log
+        # scannable on partially-installed machines.
+        if (Test-ToolInstalled -Tool $tool) {
+            Write-Ok "$($tool.Name) already installed"
+            continue
+        }
+
+        # Orphan detection: choco's local DB might still list this package
+        # even though the binary's gone (interrupted install, manual delete,
+        # etc.). Plain `choco install` would say "already installed" and
+        # skip, leaving us broken. Detect this state and reinstall with -f.
+        $forceFlag = $null
+        $listOut = choco list --exact $tool.Id --limit-output 2>$null
+        if ($listOut -and ($listOut -match "^$([regex]::Escape($tool.Id))\|")) {
+            Write-Warn "$($tool.Name) is registered with choco but its binary isn't on PATH — re-installing with --force"
+            $forceFlag = "--force"
+        }
+
         Write-Log "Installing $($tool.Name) ($($tool.Id))..."
 
-        # -y     : auto-confirm
-        # --no-progress : suppress the spinner so the log stays scannable
-        # --limit-output: one-line summary instead of a banner
-        # If the package is already installed, choco prints a short notice and
-        # returns 0 — same outcome as a no-op, no need to pre-check.
-        choco install $tool.Id -y --no-progress --limit-output
+        # -y / --no-progress / --limit-output: scriptable, scannable output.
+        # --force only used when orphan was detected above.
+        if ($forceFlag) {
+            choco install $tool.Id -y --no-progress --limit-output $forceFlag
+        } else {
+            choco install $tool.Id -y --no-progress --limit-output
+        }
 
         if ($LASTEXITCODE -ne 0) {
             if ($tool.Required) {
