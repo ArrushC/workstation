@@ -11,6 +11,13 @@
 #     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #     or: ./bootstrap.sh
 #
+# REINSTALL — wipe the cloned repo + chezmoi config, then re-bootstrap fresh.
+# Does NOT remove installed tools or deployed dotfiles (those are idempotent
+# under re-bootstrap). Combine with --full and/or --yes (skip prompt):
+#
+#     ./bootstrap.sh --reinstall          # user-scope wipe + rebuild, prompts
+#     ./bootstrap.sh --reinstall --full --yes
+#
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME, and
 # GIT_USER_EMAIL before running. The token is used for both the bootstrap.sh
 # fetch AND the script's internal git clone/pull/push; the name/email drive
@@ -54,7 +61,104 @@ BIN="$HOME/.local/bin"
 # git push, `chezmoi update`, and manual git ops all authenticate.
 GH_HEADER_KEY="http.https://github.com/.extraheader"
 
-MODE="${1:-user}"
+# --- Argument parsing -------------------------------------------------------
+# Accepts in any order: --full, --reinstall, --yes/-y
+FULL_MODE=false
+REINSTALL=false
+YES=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --full)      FULL_MODE=true; shift ;;
+    --reinstall) REINSTALL=true; shift ;;
+    --yes|-y)    YES=true;       shift ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: ./bootstrap.sh [flags]
+
+Flags:
+  --full        Install system-wide to /usr/local/bin (requires sudo).
+                Default is user scope (~/.local/bin).
+  --reinstall   Wipe the cloned repo and chezmoi config, then bootstrap
+                fresh. Does NOT remove installed tools or deployed
+                dotfiles (those are no-op idempotent on re-bootstrap).
+  --yes, -y     Skip the --reinstall confirmation prompt.
+  -h, --help    Show this message.
+EOF
+      exit 0
+      ;;
+    *) fail "Unknown argument: $1 (try --help)" ;;
+  esac
+done
+
+# =============================================================================
+# 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
+#    the rest of the script re-bootstrap fresh. Installed tools and deployed
+#    dotfiles are left alone — re-running the bootstrap is idempotent on
+#    those, so the net effect is a fresh repo + fresh chezmoi init prompt.
+# =============================================================================
+do_reinstall() {
+  log "Reinstall mode — wipe + re-bootstrap"
+  echo ""
+  echo "  Will REMOVE:"
+  echo "    - $CHEZMOI_SOURCE   (cloned workstation repo)"
+  echo "    - $HOME/.config/chezmoi/    (chezmoi config + cached init data)"
+  echo ""
+  echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
+  echo "    - Installed tools in ~/.local/bin or /usr/local/bin"
+  echo "    - dnf packages, ansible-core, SSH keys"
+  echo "    - Deployed dotfiles in \$HOME (chezmoi will re-apply over them)"
+  echo ""
+  echo "  For a deeper uninstall (remove tools too), do that manually first:"
+  echo "    rm -f ~/.local/bin/{fzf,zoxide,starship,zellij,glow,hx,nb,chezmoi}"
+  echo "    sudo rm -f /usr/local/bin/{fzf,zoxide,starship,zellij,glow,hx,nb,chezmoi}"
+  echo ""
+
+  # Self-deletion guard: if this script is being run from inside the path
+  # we're about to delete, refuse. Use the curl-pipe form instead — it
+  # streams the script body through bash without backing it on disk.
+  local script_path="${BASH_SOURCE[0]}"
+  if [[ -n "$script_path" && -f "$script_path" ]]; then
+    local script_real
+    script_real=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
+    if [[ "$script_real" == "$CHEZMOI_SOURCE"* ]]; then
+      fail "Refusing to reinstall — running script is inside $CHEZMOI_SOURCE.
+Either pipe the remote script (runs from memory):
+  curl -fsSL -H \"Authorization: token \$GITHUB_TOKEN\" \\
+    https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
+
+Or copy this script out of the repo first:
+  cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --reinstall"
+    fi
+  fi
+
+  if [[ "$YES" != true ]]; then
+    read -rp "  Proceed? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      warn "Aborted."
+      exit 0
+    fi
+  fi
+
+  if [[ -d "$CHEZMOI_SOURCE" ]]; then
+    log "Removing $CHEZMOI_SOURCE..."
+    rm -rf "$CHEZMOI_SOURCE"
+    ok "Repo removed"
+  else
+    log "$CHEZMOI_SOURCE not present — nothing to remove"
+  fi
+
+  if [[ -d "$HOME/.config/chezmoi" ]]; then
+    log "Removing $HOME/.config/chezmoi/..."
+    rm -rf "$HOME/.config/chezmoi"
+    ok "chezmoi config removed"
+  else
+    log "$HOME/.config/chezmoi/ not present — nothing to remove"
+  fi
+
+  echo ""
+  log "Wipe complete — continuing with fresh bootstrap..."
+  echo ""
+}
 
 # =============================================================================
 # 1. PREFLIGHT — collect-all prereq check, python version + pip module gate
@@ -159,7 +263,7 @@ Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
 run_playbook() {
   cd "$CHEZMOI_SOURCE/ansible"
 
-  if [[ "$MODE" == "--full" ]]; then
+  if [[ "$FULL_MODE" == true ]]; then
     log "Full mode — system-wide install (sudo)"
     ansible-playbook playbooks/local.yml \
       -e "tool_scope=system has_sudo=true" \
@@ -221,6 +325,9 @@ push_host_changes() {
 # =============================================================================
 # MAIN
 # =============================================================================
+if [[ "$REINSTALL" == true ]]; then
+  do_reinstall
+fi
 preflight
 mkdir -p "$BIN"
 export PATH="$BIN:$PATH"

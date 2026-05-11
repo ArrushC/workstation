@@ -145,6 +145,41 @@ After bootstrap finishes, copy your SSH key from your client (Windows host or an
 
 Both modes are idempotent — re-run any time to pick up updates. Re-running can also switch scopes; binaries left from the previous scope can be cleaned up manually if you want a tidy state.
 
+#### Reinstalling from scratch (`--reinstall`)
+
+If the local state has drifted, you've half-uninstalled chezmoi, or you just want a clean slate:
+
+```bash
+./bootstrap.sh --reinstall              # user scope (prompts before wiping)
+./bootstrap.sh --reinstall --full --yes # system scope, skip prompt
+
+# Or from outside the repo (script streams from memory, won't self-delete):
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall --yes
+```
+
+```powershell
+.\bootstrap.ps1 -Reinstall          # prompts before wiping
+.\bootstrap.ps1 -Reinstall -Yes     # skip prompt
+
+# Or from outside the repo:
+irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex
+```
+
+`--reinstall` wipes:
+- The cloned repo (`~/.local/share/chezmoi` on Linux, `C:\Git\workstation` on Windows by default)
+- chezmoi's config dir (`~/.config/chezmoi/`) — so `chezmoi init` re-prompts for name/email
+
+It deliberately does **not** wipe:
+- Installed tools (re-bootstrap detects them and skips — no-op)
+- Deployed dotfiles in `$HOME` (chezmoi re-applies over them)
+- SSH keys, ansible-core, system packages
+
+If you also want to uninstall the tools themselves, do that manually first (`choco uninstall …` on Windows, `rm ~/.local/bin/{fzf,zoxide,…}` on Linux) — the script intentionally won't touch those.
+
+> **Self-deletion guard**: running `.\bootstrap.ps1 -Reinstall` from inside the repo would delete the script while it's executing. Both scripts detect this and refuse with a clear instruction to use the curl-pipe form (script runs from memory) or copy the script outside the repo first.
+
 ### 3. On Windows
 
 The Windows host is a **client** — no Ansible, but **chezmoi runs here too** to deploy the dotfiles tracked in this repo (`wezterm.lua`, the PowerShell profile, Zed settings, VSCode settings). `bootstrap.ps1` is the parallel of `bootstrap.sh`: preflight (admin check) → install Chocolatey + the dev tools → clone → `chezmoi init --apply` → optional SSH-key generation.

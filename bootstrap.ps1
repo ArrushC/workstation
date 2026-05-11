@@ -58,6 +58,12 @@
 #   -SkipToolInstall    skip the choco step entirely (assume tools installed;
 #                       admin not required in this case)
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
+#   -Reinstall          wipe the cloned repo and chezmoi config first, then
+#                       run the normal flow. Does NOT remove installed tools
+#                       or deployed dotfiles — the bootstrap is idempotent
+#                       over those. Prompts for confirmation unless -Yes
+#                       is also passed.
+#   -Yes                skip the -Reinstall confirmation prompt.
 # =============================================================================
 
 [CmdletBinding()]
@@ -65,7 +71,9 @@ param(
     [string]$RepoPath = "C:\Git\workstation",
     [switch]$SkipKeyGen,
     [switch]$SkipToolInstall,
-    [switch]$SkipChezmoi
+    [switch]$SkipChezmoi,
+    [switch]$Reinstall,
+    [switch]$Yes
 )
 
 Set-StrictMode -Version Latest
@@ -105,6 +113,79 @@ $ChocoTools = @(
     @{ Id = "zed";      Cmd = "zed";      Name = "Zed";      Required = $false },
     @{ Id = "vscode";   Cmd = "code";     Name = "VSCode";   Required = $false }
 )
+
+# =============================================================================
+# 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
+#    the rest of the script re-bootstrap fresh. Installed tools and deployed
+#    dotfiles are left alone — re-running the bootstrap is idempotent on
+#    those, so the net effect is a fresh repo + fresh chezmoi init prompt.
+# =============================================================================
+function Invoke-Reinstall {
+    $chezmoiCfg = Join-Path $env:USERPROFILE ".config\chezmoi"
+
+    Write-Log "Reinstall mode — wipe + re-bootstrap"
+    Write-Host ""
+    Write-Host "  Will REMOVE:"
+    Write-Host "    - $RepoPath  (cloned workstation repo)"
+    Write-Host "    - $chezmoiCfg  (chezmoi config + cached init data)"
+    Write-Host ""
+    Write-Host "  Will NOT remove (leaving for re-bootstrap to no-op over):"
+    Write-Host "    - Chocolatey-installed tools (re-bootstrap will detect them and skip)"
+    Write-Host "    - Deployed dotfiles in `$HOME / `$env:APPDATA (chezmoi will re-apply)"
+    Write-Host "    - SSH keys"
+    Write-Host ""
+    Write-Host "  For a deeper uninstall (remove tools too), do that manually first:"
+    Write-Host "    choco uninstall -y chezmoi zoxide vscode wezterm zed starship"
+    Write-Host ""
+
+    # Self-deletion guard: if this script is being run from inside the path
+    # we're about to delete, refuse. Use the curl|iex one-liner instead, which
+    # runs from memory and isn't backed by a file on disk. $PSCommandPath is
+    # the standard automatic variable for the running script's full path; it
+    # is $null when the script is being executed from a string (iex/irm-pipe).
+    if ($PSCommandPath -and $PSCommandPath.StartsWith($RepoPath, [StringComparison]::OrdinalIgnoreCase)) {
+        Write-Fail @"
+Refusing to reinstall — the running script is inside $RepoPath, which would
+be deleted, leaving this invocation orphaned. Either:
+
+  1. Use the curl-pipe form from any directory (script runs from memory):
+       irm -Headers @{Authorization="token `$env:GITHUB_TOKEN"} ``
+         https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex
+
+  2. Copy this script somewhere outside the repo first, then re-run:
+       Copy-Item $PSCommandPath `$env:TEMP\bootstrap.ps1
+       & `$env:TEMP\bootstrap.ps1 -Reinstall
+"@
+    }
+
+    if (-not $Yes) {
+        $ans = Read-Host "  Proceed? [y/N]"
+        if ($ans -notmatch '^[Yy]') {
+            Write-Warn "Aborted."
+            exit 0
+        }
+    }
+
+    if (Test-Path $RepoPath) {
+        Write-Log "Removing $RepoPath..."
+        Remove-Item -Recurse -Force $RepoPath
+        Write-Ok "Repo removed"
+    } else {
+        Write-Log "$RepoPath not present — nothing to remove"
+    }
+
+    if (Test-Path $chezmoiCfg) {
+        Write-Log "Removing $chezmoiCfg..."
+        Remove-Item -Recurse -Force $chezmoiCfg
+        Write-Ok "chezmoi config removed"
+    } else {
+        Write-Log "$chezmoiCfg not present — nothing to remove"
+    }
+
+    Write-Host ""
+    Write-Log "Wipe complete — continuing with fresh bootstrap..."
+    Write-Host ""
+}
 
 # =============================================================================
 # 1. PREFLIGHT — admin check (unless -SkipToolInstall), then soft checks
@@ -463,6 +544,7 @@ function Invoke-EnsureSshKey {
 # =============================================================================
 # MAIN
 # =============================================================================
+if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
 Invoke-ChocoInstall      # before clone — installs git if the machine doesn't have one
 Invoke-CloneRepo
