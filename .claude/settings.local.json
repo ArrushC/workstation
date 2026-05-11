@@ -22,7 +22,11 @@
       "Bash(bash -n scripts/manage-hosts.sh)",
       "Bash(bash scripts/manage-hosts.sh --add --name test-prompt --ip 9.9.9.9 --user u)",
       "Bash(bash -n bootstrap.sh)",
-      "Bash(git -C /c/Git/workstation status --short .claude/)"
+      "Bash(git -C /c/Git/workstation status --short .claude/)",
+      "Bash(git -C /c/Git/workstation commit -m ' *)",
+      "Bash(git -C /c/Git/workstation push)",
+      "Bash(git -C /c/Git/workstation add .claude/settings.local.json)",
+      "Bash(git -C /c/Git/workstation log --oneline -3)"
     ]
   }
 }
