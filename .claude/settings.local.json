@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($f1 = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Git\\\\workstation\\\\scripts\\\\manage-hosts.ps1\"\\)[0..2]; $f2 = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Git\\\\workstation\\\\bootstrap.ps1\"\\)[0..2]; \"manage-hosts.ps1 first 3 bytes: $\\($f1 -join ','\\)\"; \"bootstrap.ps1 first 3 bytes:    $\\($f2 -join ','\\)\"; \"\\(UTF-8 BOM = 239,187,191\\)\")",
+      "PowerShell(& \"C:\\\\Git\\\\workstation\\\\scripts\\\\manage-hosts.ps1\" -Sync)",
+      "Bash(bash -n /c/Git/workstation/bootstrap.sh)",
+      "Bash(bash -n /c/Git/workstation/scripts/manage-hosts.sh)",
+      "PowerShell($ErrorActionPreference = 'Stop'; $errs = $null; [void][System.Management.Automation.Language.Parser]::ParseFile\\(\"C:\\\\Git\\\\workstation\\\\scripts\\\\manage-hosts.ps1\", [ref]$null, [ref]$errs\\); if \\($errs\\) { \"manage-hosts.ps1 PARSE ERRORS:\"; $errs } else { \"manage-hosts.ps1: syntax OK\" })",
+      "Bash(bash bootstrap.sh)",
+      "Bash(bash bootstrap.sh --full)",
+      "Bash(bash bootstrap.sh --dev --prod)",
+      "Bash(bash bootstrap.sh --help)",
+      "Bash(bash scripts/manage-hosts.sh --add --name testhost --ip 1.2.3.4 --user u --group foo --skip-confirm)",
+      "Bash(bash scripts/manage-hosts.sh --add --name testhost --ip 9.9.9.9 --user u --group dev_machine --skip-confirm)",
+      "Bash(bash scripts/manage-hosts.sh --sync)",
+      "Bash(cp ansible/inventory/hosts.ini /tmp/hosts.ini.bash)",
+      "Bash(cp ansible/inventory/hosts.ini /tmp/hosts.ini.bash-regen)",
+      "Read(//tmp/**)",
+      "Bash(awk '/\\\\[all:vars\\\\]/,EOF' /tmp/hosts.ini.bash-regen)",
+      "Bash(awk '/\\\\[all:vars\\\\]/,EOF' /tmp/hosts.ini.ps)",
+      "Bash(git -C /c/Git/workstation status --short)",
+      "Bash(bash -n scripts/manage-hosts.sh)",
+      "Bash(bash scripts/manage-hosts.sh --add --name test-prompt --ip 9.9.9.9 --user u)",
+      "Bash(bash -n bootstrap.sh)",
+      "Bash(git -C /c/Git/workstation status --short .claude/)"
+    ]
+  }
+}
