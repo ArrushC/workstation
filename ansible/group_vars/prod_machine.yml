@@ -1,0 +1,13 @@
+# =============================================================================
+# group_vars/prod_machine.yml — variables for hosts you don't fully own (no sudo)
+# =============================================================================
+# Single source of truth for the prod-machine scope. Loaded automatically when
+# Ansible runs against any host in the [prod_machine] inventory group, and
+# loaded by bootstrap.sh for the local self-provisioning flow via
+#   ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
+# Keep this file aligned with bootstrap.sh's --prod branch.
+# =============================================================================
+
+tool_scope: user
+has_sudo: false
+install_system_packages: false

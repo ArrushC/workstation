@@ -18,16 +18,18 @@ Ansible owns **all** installations — system packages, user-space tools, and th
 | Notes | **nb + glow** | CLI notes, markdown preview |
 | Terminal | **WezTerm** | Windows terminal, auto-connects to VMs |
 
-## Install scopes
+## Machine types
 
-User-space tools are installed as static binaries either to your home directory or system-wide. The destination is controlled by the `tool_scope` Ansible variable:
+Every host belongs to exactly one of two Ansible groups. The group decides the install scope — there is no separate scope flag.
 
-| `tool_scope` | Binary destination | Helix runtime | Needs sudo |
-|---|---|---|---|
-| `user` (default) | `~/.local/bin` | `~/.config/helix/runtime` | No |
-| `system` | `/usr/local/bin` | `/usr/local/lib/helix/runtime` | Yes |
+| Group | Sudo? | Binary destination | Helix runtime | Used for |
+|---|---|---|---|---|
+| `dev_machine` | Yes | `/usr/local/bin` | `/usr/local/lib/helix/runtime` | Hosts you own — full system-wide install via `dnf` + `/usr/local/bin`. |
+| `prod_machine` | No | `~/.local/bin` | `~/.config/helix/runtime` | Hosts you don't fully own — user-wide install only, no `dnf`. |
 
-The same task definitions run for both — pick one with a single `-e` flag (or use the `bootstrap.sh` mode shortcut). `tool_scope=system` requires `has_sudo=true`; the role fails fast otherwise.
+The scope values for each group live in `ansible/group_vars/dev_machine.yml` and `ansible/group_vars/prod_machine.yml`. Ansible loads them automatically for remote runs; `bootstrap.sh` loads the same file for its local self-provisioning run via `-e "@group_vars/<group>.yml"`. Same file, same values — local and remote stay aligned.
+
+Pick a group with `./bootstrap.sh --dev` or `./bootstrap.sh --prod`. Exactly one of the two is required.
 
 ## Repo structure
 
@@ -47,10 +49,12 @@ workstation/
 │   ├── inventory/
 │   │   └── hosts.ini                   ← AUTO-GENERATED from hosts.conf
 │   ├── group_vars/
-│   │   └── all.yml                     ← shared variables + tool versions (single source of truth)
+│   │   ├── all.yml                     ← shared variables + tool versions (single source of truth)
+│   │   ├── dev_machine.yml             ← sudo, system-wide install (tool_scope=system, has_sudo=true)
+│   │   └── prod_machine.yml            ← no sudo, user-wide install  (tool_scope=user,  has_sudo=false)
 │   ├── playbooks/
-│   │   ├── rhel.yml                    ← targets remote rhel_vms group (control-machine flow)
-│   │   └── local.yml                   ← targets localhost (used by bootstrap.sh)
+│   │   ├── rhel.yml                    ← targets dev_machine + prod_machine groups (control-machine flow)
+│   │   └── local.yml                   ← targets localhost (used by bootstrap.sh; group_vars loaded via -e "@...")
 │   └── roles/
 │       └── rhel-base/
 │           ├── defaults/main.yml       ← install_*, has_sudo, tool_scope, arch
@@ -110,25 +114,27 @@ You should not need to edit `ansible/inventory/hosts.ini` — it is regenerated 
 
 #### Copy-paste one-liners (replace `<your-PAT>` with the real token from your password manager)
 
-**Personal RHEL VMs (no sudo, install to `~/.local/bin`):**
+Exactly one of `--dev` or `--prod` is required — it decides both the group this host registers as in `hosts.conf` and the scope the local playbook runs in. There is no default.
+
+**Prod machine (host you don't fully own — no sudo, install to `~/.local/bin`):**
 ```bash
-# === Bootstrap: ATC personal RHEL VM (user-scope, ~/.local/bin) ===
+# === Bootstrap: prod machine (no sudo, ~/.local/bin) ===
 export GITHUB_TOKEN='<your-PAT>' \
        GIT_USER_NAME='Arrush Chaturvedi' \
        GIT_USER_EMAIL='contact@arrushc.com' && \
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash && \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
 source ~/.bashrc
 ```
 
-**Personal RHEL VMs with sudo (system-wide install to `/usr/local/bin` + `dnf` packages):**
+**Dev machine (host you own — sudo, system-wide install to `/usr/local/bin` + `dnf` packages):**
 ```bash
-# === Bootstrap: ATC personal RHEL VM (system-scope, sudo) ===
+# === Bootstrap: dev machine (sudo, /usr/local/bin + dnf) ===
 export GITHUB_TOKEN='<your-PAT>' \
        GIT_USER_NAME='Arrush Chaturvedi' \
        GIT_USER_EMAIL='contact@arrushc.com' && \
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --full
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev
 ```
 
 > If you bootstrap from machines with different identities (e.g., a work laptop where commits should use a different email), keep separate copy-paste blocks in your password manager — one per identity profile, with the comment line at the top labelling which machine it's for. The `GIT_USER_NAME`/`GIT_USER_EMAIL` envs override `~/.gitconfig` for the duration of that one bootstrap run only — your existing chezmoi-applied gitconfig is left untouched on disk.
@@ -136,26 +142,26 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 What `bootstrap.sh` does, in order:
 1. Preflight check (curl/git/python3/pip/iproute, python ≥ 3.9).
 2. Clone the repo into `~/.local/share/chezmoi` (or `git pull --ff-only` if present).
-3. **Self-register** the VM in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, group `rhel_vms`) and run `manage-hosts.sh --sync` so inventory + the chezmoi-tracked `chezmoi/dot_config/wezterm/wezterm.lua` block are regenerated locally.
+3. **Self-register** the VM in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, and the group derived from the `--dev`/`--prod` flag — `dev_machine` or `prod_machine`) and run `manage-hosts.sh --sync` so inventory + the chezmoi-tracked `chezmoi/dot_config/wezterm/wezterm.lua` block are regenerated locally.
 4. Install `ansible-core` via `pip3 --user` if missing, smoke-test `ansible-playbook --version`.
-5. Run `playbooks/local.yml` against the VM.
+5. Run `playbooks/local.yml` with `-e "@group_vars/<dev|prod>_machine.yml"` so scope (`tool_scope`, `has_sudo`, `install_system_packages`) comes from the same file that the remote `rhel.yml` playbook uses.
 6. **Auto-commit and push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `chezmoi/dot_config/wezterm/wezterm.lua`) with the message `chore(hosts): register <hostname>`. If the push fails (auth, conflict, no upstream), the script warns with a recovery `git push` command — it does **not** abort. Provisioning has already succeeded by this point.
 
 After bootstrap finishes, copy your SSH key from your client (Windows host or another VM) — see [Host management → Copy SSH key](#copy-ssh-key) below.
 
-Both modes are idempotent — re-run any time to pick up updates. Re-running can also switch scopes; binaries left from the previous scope can be cleaned up manually if you want a tidy state.
+Both modes are idempotent — re-run any time to pick up updates. Re-running with a different `--dev`/`--prod` flag changes the host's group and scope; binaries left from the previous scope can be cleaned up manually if you want a tidy state.
 
 #### Reinstalling from scratch (`--reinstall`)
 
 If the local state has drifted, you've half-uninstalled chezmoi, or you just want a clean slate:
 
 ```bash
-./bootstrap.sh --reinstall              # user scope (prompts before wiping)
-./bootstrap.sh --reinstall --full --yes # system scope, skip prompt
+./bootstrap.sh --prod --reinstall              # prod machine (prompts before wiping)
+./bootstrap.sh --dev  --reinstall --yes        # dev machine, skip prompt
 
 # Or from outside the repo (script streams from memory, won't self-delete):
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall --yes
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod --reinstall --yes
 ```
 
 ```powershell
@@ -254,7 +260,7 @@ Use the manage-hosts scripts; they re-pad column widths automatically and keep b
 ./scripts/manage-hosts.sh --sync         # regenerate inventory + wezterm block
 ./scripts/manage-hosts.sh --list         # print table
 ./scripts/manage-hosts.sh --format       # re-pad hosts.conf
-./scripts/manage-hosts.sh --add --name N --ip I --user U --group G --skip-confirm
+./scripts/manage-hosts.sh --add --name N --ip I --user U --group dev_machine --skip-confirm
 ./scripts/manage-hosts.sh --remove
 ```
 
@@ -265,9 +271,11 @@ Use the manage-hosts scripts; they re-pad column widths automatically and keep b
 .\scripts\manage-hosts.ps1 -Sync
 .\scripts\manage-hosts.ps1 -List
 .\scripts\manage-hosts.ps1 -Format
-.\scripts\manage-hosts.ps1 -Add -Name N -Ip I -User U -Group G -SkipConfirm
+.\scripts\manage-hosts.ps1 -Add -Name N -Ip I -User U -Group prod_machine -SkipConfirm
 .\scripts\manage-hosts.ps1 -Remove
 ```
+
+> **Group must be `dev_machine` or `prod_machine`.** Both scripts validate the input and reject anything else, because an unknown group means no `group_vars/<group>.yml` exists and scope resolution silently breaks. The interactive prompt defaults to `prod_machine`.
 
 The two scripts produce **identical output** for the same `hosts.conf`. After any change to `hosts.conf`, run `--sync` (or `-Sync`) before committing so the inventory and wezterm block stay in lockstep.
 
@@ -332,23 +340,22 @@ $env:GOPATH = "C:\Go"
 function work { Set-Location "D:\dev\myproject" }
 ```
 
-### Ansible — remote (control machine → all VMs in inventory)
+### Ansible — remote (control machine → all hosts in inventory)
+
+Scope per host comes from its `group_vars/<group>.yml`. You don't normally pass `tool_scope` / `has_sudo` on the CLI — the group decides.
 
 ```bash
 cd ansible
 
-# Default: provision all VMs in user scope (~/.local/bin)
+# Provision every managed host (both groups). Sudo prompt is for dev_machine hosts.
 ansible-playbook playbooks/rhel.yml --ask-become-pass
 
-# System scope (install to /usr/local/bin instead)
-ansible-playbook playbooks/rhel.yml -e "tool_scope=system" --ask-become-pass
+# Only one group
+ansible-playbook playbooks/rhel.yml --limit dev_machine --ask-become-pass
+ansible-playbook playbooks/rhel.yml --limit prod_machine
 
-# Single VM
-ansible-playbook playbooks/rhel.yml --limit rhel-dev-01 --ask-become-pass
-
-# Dotfiles + user tools only, no sudo
-ansible-playbook playbooks/rhel.yml \
-  -e "has_sudo=false install_system_packages=false"
+# Single host
+ansible-playbook playbooks/rhel.yml --limit atc-cache-dev09
 
 # Dry run (show what would change)
 ansible-playbook playbooks/rhel.yml --check
@@ -356,20 +363,19 @@ ansible-playbook playbooks/rhel.yml --check
 
 ### Ansible — local (self-provisioning, what `bootstrap.sh` runs under the hood)
 
+`bootstrap.sh` loads the relevant group_vars file as extra-vars so the local playbook sees the same scope values that the remote playbook would apply to a host in that group.
+
 ```bash
 cd ansible
 
-# User scope (no sudo)
-ansible-playbook playbooks/local.yml \
-  -e "tool_scope=user has_sudo=false install_system_packages=false"
+# Prod machine (no sudo)
+ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
 
-# System scope (sudo)
-ansible-playbook playbooks/local.yml \
-  -e "tool_scope=system has_sudo=true" --ask-become-pass
+# Dev machine (sudo)
+ansible-playbook playbooks/local.yml -e "@group_vars/dev_machine.yml" --ask-become-pass
 
 # Dry run
-ansible-playbook playbooks/local.yml --check \
-  -e "tool_scope=user has_sudo=false install_system_packages=false"
+ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"
 ```
 
 ---
@@ -408,11 +414,11 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 
 ## Adding a new VM
 
-1. On the new VM:
+1. On the new VM, pick the group with the appropriate flag:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod  # or --dev
    ```
-   Self-registration appends the VM to `hosts.conf`.
+   Self-registration appends the VM to `hosts.conf` under `prod_machine` or `dev_machine`.
 2. From any other machine with the repo: `git pull` and run `./scripts/manage-hosts.sh --sync` (or `-Sync` on Windows) so `hosts.ini` and the wezterm block update everywhere.
 3. Commit and push the updated `hosts.conf`, `hosts.ini`, and `chezmoi/dot_config/wezterm/wezterm.lua`.
 
@@ -434,4 +440,6 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 - **`bootstrap.ps1` reports "Chocolatey install completed but `choco` is not on PATH".** The choco installer succeeded but the current shell's PATH wasn't refreshed in time. Close the elevated PowerShell, open a new elevated PowerShell, and re-run — the new session inherits the updated machine PATH and picks up `choco` correctly.
 - **A `choco install` step says "package not found" or "deprecated".** Choco package IDs occasionally get renamed/retired upstream. Edit `$ChocoTools` in `bootstrap.ps1` to point at the current ID (search at https://community.chocolatey.org/packages), or set the tool as `Required = $false` so the rest of the install proceeds and install it manually.
 - **`hosts.ini` is out of sync with `hosts.conf`.** Run `./scripts/manage-hosts.sh --sync`. Never edit `hosts.ini` directly — it's auto-generated.
-- **`tool_scope=system` errored with "requires has_sudo=true".** Pass both flags: `-e "tool_scope=system has_sudo=true"`.
+- **Bootstrap errored with "Missing required flag: --dev or --prod".** The script no longer has a default scope — exactly one of `--dev` (sudo, system-wide) or `--prod` (no sudo, user-wide) must be passed. The old `--full` flag was removed; if you still have it in a script or paste buffer, replace it with `--dev`.
+- **`manage-hosts.{sh,ps1} --add` errored with "Invalid group".** The only valid groups are `dev_machine` and `prod_machine` — anything else means there's no `group_vars/<group>.yml` to source scope from. Re-run with one of those two values (default is `prod_machine`).
+- **An Ansible run errored with "tool_scope=system requires has_sudo=true".** A host's `group_vars` and the playbook's CLI overrides disagreed — usually because something passed `-e "tool_scope=system"` against a `prod_machine` host. Drop the `-e` override and let the group decide, or use `--limit dev_machine` to scope the run to hosts that actually have sudo.

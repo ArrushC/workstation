@@ -30,6 +30,10 @@ HOSTS_CONF="$REPO_ROOT/hosts.conf"
 ANSIBLE_INVENTORY="$REPO_ROOT/ansible/inventory/hosts.ini"
 WEZTERM_LUA="$REPO_ROOT/chezmoi/dot_config/wezterm/wezterm.lua"
 
+# Valid Ansible groups. An unknown group means no group_vars/<group>.yml
+# exists, which silently breaks scope resolution downstream.
+VALID_GROUPS=("dev_machine" "prod_machine")
+
 # --- Colours -----------------------------------------------------------------
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -95,6 +99,17 @@ host_exists() {
   read_hosts | awk '{print $1}' | grep -qx "$name" 2>/dev/null
 }
 
+# Validate a group name against VALID_GROUPS. Echos a comma-separated list
+# of valid options on failure for the caller's error message.
+is_valid_group() {
+  local g="$1"
+  local v
+  for v in "${VALID_GROUPS[@]}"; do
+    [[ "$g" == "$v" ]] && return 0
+  done
+  return 1
+}
+
 # =============================================================================
 # GENERATORS
 # =============================================================================
@@ -129,14 +144,16 @@ HEADER
     done <<< "$(read_hosts)"
   done <<< "$groups"
 
-  # Write group vars section (use the first group's user as default)
+  # Connection-level vars apply identically to every managed host regardless
+  # of group, so we emit a single [all:vars] section. Per-group scope vars
+  # (tool_scope, has_sudo, etc.) live in ansible/group_vars/<group>.yml.
   local default_user
   default_user=$(read_hosts | awk 'NR==1{print $3}')
 
   cat >> "$tmp" << VARS
 
-# Group vars applied to all VMs
-[rhel_vms:vars]
+# Connection vars applied to every managed host
+[all:vars]
 ansible_user=${default_user}
 ansible_ssh_private_key_file=~/.ssh/id_ed25519
 ansible_python_interpreter=/usr/bin/python3
@@ -260,8 +277,9 @@ add_host() {
   #     add_host
   #
   #   Non-interactive (from bootstrap.sh or other scripts):
-  #     add_host --name rhel-dev-03 --ip 10.0.0.12 --user arrush --group rhel_vms --skip-confirm
+  #     add_host --name rhel-dev-03 --ip 10.0.0.12 --user arrush --group prod_machine --skip-confirm
   #
+  # Group MUST be one of VALID_GROUPS (dev_machine, prod_machine).
   local name="" ip="" user="" group="" skip_confirm=false
 
   # Parse named flags if any were passed
@@ -320,8 +338,23 @@ add_host() {
   fi
 
   if [[ -z "$group" ]]; then
-    read -rp "  Ansible group [rhel_vms]:       " group
-    group="${group:-rhel_vms}"
+    local group_choice
+    echo ""
+    echo "  Ansible group options:"
+    echo "    1) prod_machine  (no sudo, user-wide — default)"
+    echo "    2) dev_machine   (sudo, system-wide)"
+    read -rp "  Choice [1]: " group_choice
+    group_choice="${group_choice:-1}"
+
+    case "$group_choice" in
+      1) group="prod_machine" ;;
+      2) group="dev_machine" ;;
+      *) fail "Invalid choice '$group_choice'. Pick 1 or 2." ;;
+    esac
+  fi
+
+  if ! is_valid_group "$group"; then
+    fail "Invalid group '$group'. Must be one of: ${VALID_GROUPS[*]}"
   fi
 
   echo ""
@@ -424,6 +457,10 @@ edit_host() {
 
   read -rp "  Ansible group [$cur_group]:      " new_group
   new_group="${new_group:-$cur_group}"
+
+  if ! is_valid_group "$new_group"; then
+    fail "Invalid group '$new_group'. Must be one of: ${VALID_GROUPS[*]}"
+  fi
 
   echo ""
   printf "  Updated: ${BOLD}%-20s %-18s %-14s %-14s${RESET}\n" "$name" "$new_ip" "$new_user" "$new_group"

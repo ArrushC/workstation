@@ -1,25 +1,26 @@
 # =============================================================================
 # ansible/playbooks/rhel.yml — main playbook
-# Provisions RHEL VMs and applies dotfiles
+# Provisions managed RHEL hosts (dev_machine + prod_machine) and applies
+# dotfiles. Scope (tool_scope, has_sudo, install_system_packages) is set per
+# host from group_vars/dev_machine.yml and group_vars/prod_machine.yml.
 #
 # Usage:
-#   Full run (with sudo):
+#   All managed hosts:
 #     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --ask-become-pass
 #
-#   Dotfiles only (no sudo needed):
-#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml \
-#       -e "install_system_packages=false has_sudo=false"
+#   Single group:
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --limit dev_machine --ask-become-pass
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --limit prod_machine
 #
-#   Single VM:
-#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml \
-#       --limit rhel-dev-01 --ask-become-pass
+#   Single host:
+#     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --limit atc-cache-dev09
 #
 #   Dry run (see what would change):
 #     ansible-playbook -i inventory/hosts.ini playbooks/rhel.yml --check
 # =============================================================================
 
-- name: "Provision RHEL dev VMs"
-  hosts: rhel_vms
+- name: "Provision managed RHEL hosts"
+  hosts: dev_machine:prod_machine
   gather_facts: true
 
   roles:

@@ -2,21 +2,26 @@
 # =============================================================================
 # bootstrap.sh — workstation setup (Ansible seed)
 #
-# Two modes — both delegate ALL tool installs to Ansible:
+# Exactly one of --dev or --prod is required — it decides both the inventory
+# group this host registers as AND the scope the local playbook runs in:
 #
-#   FULL (sudo, system-wide install to /usr/local/bin):
-#     ./bootstrap.sh --full
+#   DEV  (host you own, sudo, system-wide install to /usr/local/bin):
+#     ./bootstrap.sh --dev
 #
-#   USER (no sudo, install to ~/.local/bin):
-#     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
-#     or: ./bootstrap.sh
+#   PROD (host you don't fully own, no sudo, install to ~/.local/bin):
+#     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
+#     or: ./bootstrap.sh --prod
+#
+# The scope values come from ansible/group_vars/{dev,prod}_machine.yml —
+# the same files the remote rhel.yml playbook uses, so a host configured
+# locally and a host configured remotely end up identical.
 #
 # REINSTALL — wipe the cloned repo + chezmoi config, then re-bootstrap fresh.
 # Does NOT remove installed tools or deployed dotfiles (those are idempotent
-# under re-bootstrap). Combine with --full and/or --yes (skip prompt):
+# under re-bootstrap). Combine with --dev/--prod and optional --yes:
 #
-#     ./bootstrap.sh --reinstall          # user-scope wipe + rebuild, prompts
-#     ./bootstrap.sh --reinstall --full --yes
+#     ./bootstrap.sh --prod --reinstall          # prod-scope wipe + rebuild, prompts
+#     ./bootstrap.sh --dev --reinstall --yes
 #
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME, and
 # GIT_USER_EMAIL before running. The token is used for both the bootstrap.sh
@@ -62,22 +67,39 @@ BIN="$HOME/.local/bin"
 GH_HEADER_KEY="http.https://github.com/.extraheader"
 
 # --- Argument parsing -------------------------------------------------------
-# Accepts in any order: --full, --reinstall, --yes/-y
-FULL_MODE=false
+# Accepts in any order: --dev | --prod (exactly one required), --reinstall, --yes/-y
+MACHINE_TYPE=""
 REINSTALL=false
 YES=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --full)      FULL_MODE=true; shift ;;
+    --dev)
+      [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
+      MACHINE_TYPE="dev"; shift ;;
+    --prod)
+      [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
+      MACHINE_TYPE="prod"; shift ;;
+    --full)
+      fail "--full was removed.
+
+Use one of the new mutually-exclusive flags:
+  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + dnf packages
+  ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
+
+Run ./bootstrap.sh --help for the full flag list." ;;
     --reinstall) REINSTALL=true; shift ;;
     --yes|-y)    YES=true;       shift ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./bootstrap.sh [flags]
+Usage: ./bootstrap.sh (--dev | --prod) [flags]
 
-Flags:
-  --full        Install system-wide to /usr/local/bin (requires sudo).
-                Default is user scope (~/.local/bin).
+Required (exactly one):
+  --dev         Host you own. Sudo available. Installs system-wide to
+                /usr/local/bin and via dnf. Registers as group dev_machine.
+  --prod        Host you don't fully own. No sudo. Installs user-wide to
+                ~/.local/bin. Registers as group prod_machine.
+
+Optional flags:
   --reinstall   Wipe the cloned repo and chezmoi config, then bootstrap
                 fresh. Does NOT remove installed tools or deployed
                 dotfiles (those are no-op idempotent on re-bootstrap).
@@ -89,6 +111,24 @@ EOF
     *) fail "Unknown argument: $1 (try --help)" ;;
   esac
 done
+
+if [[ -z "$MACHINE_TYPE" ]]; then
+  fail "Missing required flag: --dev or --prod.
+
+Pick one based on the host you're bootstrapping:
+  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + dnf packages
+  ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
+
+Curl-pipe form (private repo with token):
+  curl -fsSL -H \"Authorization: token \$GITHUB_TOKEN\" \\
+    https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
+
+Run ./bootstrap.sh --help for all flags."
+fi
+
+# Derived values used by self_register and run_playbook
+GROUP_NAME="${MACHINE_TYPE}_machine"
+GROUP_VARS_FILE="group_vars/${GROUP_NAME}.yml"
 
 # =============================================================================
 # 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
@@ -124,10 +164,10 @@ do_reinstall() {
       fail "Refusing to reinstall — running script is inside $CHEZMOI_SOURCE.
 Either pipe the remote script (runs from memory):
   curl -fsSL -H \"Authorization: token \$GITHUB_TOKEN\" \\
-    https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
+    https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --${MACHINE_TYPE} --reinstall
 
 Or copy this script out of the repo first:
-  cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --reinstall"
+  cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --${MACHINE_TYPE} --reinstall"
     fi
   fi
 
@@ -221,12 +261,12 @@ self_register() {
     return
   fi
 
-  log "Self-registration: ${vm_name} (${vm_user}@${vm_ip})"
+  log "Self-registration: ${vm_name} (${vm_user}@${vm_ip}) as ${GROUP_NAME}"
   bash "$manage_script" --add \
     --name  "$vm_name" \
     --ip    "$vm_ip" \
     --user  "$vm_user" \
-    --group "rhel_vms" \
+    --group "$GROUP_NAME" \
     --skip-confirm
 
   # Regenerate inventory + wezterm block from the (possibly) updated hosts.conf
@@ -263,15 +303,15 @@ Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
 run_playbook() {
   cd "$CHEZMOI_SOURCE/ansible"
 
-  if [[ "$FULL_MODE" == true ]]; then
-    log "Full mode — system-wide install (sudo)"
+  if [[ "$MACHINE_TYPE" == "dev" ]]; then
+    log "Dev mode — system-wide install (sudo) from ${GROUP_VARS_FILE}"
     ansible-playbook playbooks/local.yml \
-      -e "tool_scope=system has_sudo=true" \
+      -e "@${GROUP_VARS_FILE}" \
       --ask-become-pass
   else
-    log "User mode — installing to ~/.local/bin (no sudo)"
+    log "Prod mode — user-scope install (no sudo) from ${GROUP_VARS_FILE}"
     ansible-playbook playbooks/local.yml \
-      -e "tool_scope=user has_sudo=false install_system_packages=false"
+      -e "@${GROUP_VARS_FILE}"
   fi
 }
 

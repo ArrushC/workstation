@@ -48,6 +48,10 @@ $HostsConf  = Join-Path $RepoRoot "hosts.conf"
 $Inventory  = Join-Path $RepoRoot "ansible\inventory\hosts.ini"
 $WeztermLua = Join-Path $RepoRoot "chezmoi\dot_config\wezterm\wezterm.lua"
 
+# Valid Ansible groups. An unknown group means no group_vars/<group>.yml
+# exists, which silently breaks scope resolution downstream.
+$ValidGroups = @('dev_machine', 'prod_machine')
+
 # --- ANSI escape codes (matches manage-hosts.sh; rendered by WezTerm,
 #     Windows Terminal, and modern conhost. Old conhost shows raw codes.) -----
 $Esc    = [char]27
@@ -98,6 +102,11 @@ function Test-HostExists {
     $hosts = Read-Hosts
     if (-not $hosts) { return $false }
     return ($hosts | Where-Object { $_.Name -eq $HostName } | Measure-Object).Count -gt 0
+}
+
+function Test-ValidGroup {
+    param([string]$GroupName)
+    return $ValidGroups -contains $GroupName
 }
 
 function Show-Hosts {
@@ -152,10 +161,13 @@ function Invoke-GenerateInventory {
         }
     }
 
+    # Connection-level vars apply identically to every managed host regardless
+    # of group, so we emit a single [all:vars] section. Per-group scope vars
+    # (tool_scope, has_sudo, etc.) live in ansible/group_vars/<group>.yml.
     $defaultUser = ($hosts | Select-Object -First 1).User
     $lines.Add("")
-    $lines.Add("# Group vars applied to all VMs")
-    $lines.Add("[rhel_vms:vars]")
+    $lines.Add("# Connection vars applied to every managed host")
+    $lines.Add("[all:vars]")
     $lines.Add("ansible_user=$defaultUser")
     $lines.Add("ansible_ssh_private_key_file=~/.ssh/id_ed25519")
     $lines.Add("ansible_python_interpreter=/usr/bin/python3")
@@ -318,8 +330,22 @@ function Add-Host {
     }
 
     if (-not $HostGroup) {
-        $typed = Read-Host "  Ansible group [rhel_vms]"
-        $HostGroup = if ($typed) { $typed } else { "rhel_vms" }
+        Write-Host ""
+        Write-Host "  Ansible group options:"
+        Write-Host "    1) prod_machine  (no sudo, user-wide -- default)"
+        Write-Host "    2) dev_machine   (sudo, system-wide)"
+        $groupChoice = Read-Host "  Choice [1]"
+        if (-not $groupChoice) { $groupChoice = "1" }
+
+        switch ($groupChoice) {
+            "1" { $HostGroup = "prod_machine" }
+            "2" { $HostGroup = "dev_machine" }
+            default { Write-Fail "Invalid choice '$groupChoice'. Pick 1 or 2." }
+        }
+    }
+
+    if (-not (Test-ValidGroup $HostGroup)) {
+        Write-Fail "Invalid group '$HostGroup'. Must be one of: $($ValidGroups -join ', ')"
     }
 
     Write-Host ""
@@ -408,6 +434,10 @@ function Edit-HostEntry {
 
     $newGroup = Read-Host "  Ansible group [$($current.Group)]"
     $newGroup = if ($newGroup) { $newGroup } else { $current.Group }
+
+    if (-not (Test-ValidGroup $newGroup)) {
+        Write-Fail "Invalid group '$newGroup'. Must be one of: $($ValidGroups -join ', ')"
+    }
 
     Write-Host ""
     Write-Host ("  Updated: ${Bold}{0,-20} {1,-18} {2,-14} {3,-14}${Reset}" -f $HostName, $newIp, $newUser, $newGroup)
