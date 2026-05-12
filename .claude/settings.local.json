@@ -32,7 +32,12 @@
       "Bash(command -v ansible-playbook)",
       "Bash(ansible-playbook playbooks/linux.yml --syntax-check)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(bash --version)",
+      "Bash(./scripts/manage-hosts.sh --sync)",
+      "Bash(grep -nP ' +$' ansible/inventory/hosts.ini)",
+      "Bash(git checkout *)"
     ]
   }
 }
