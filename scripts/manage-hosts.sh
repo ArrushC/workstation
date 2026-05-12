@@ -139,7 +139,7 @@ HEADER
     while IFS= read -r line; do
       read -r name ip user grp <<< "$line"
       if [[ "$grp" == "$group" ]]; then
-        printf "%-20s ansible_host=%-18s\n" "$name" "$ip" >> "$tmp"
+        printf "%-20s ansible_host=%s\n" "$name" "$ip" >> "$tmp"
       fi
     done <<< "$(read_hosts)"
   done <<< "$groups"
