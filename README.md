@@ -1,8 +1,8 @@
 # workstation
 
-Dev environment provisioning for RHEL VMs, plus the WezTerm config that connects to them from Windows.
+Dev environment provisioning for Linux hosts, plus the WezTerm config that connects to them from Windows.
 
-Ansible owns **all** installations — system packages, user-space tools, and the chezmoi handoff for dotfiles. `bootstrap.sh` is a thin seed: it clones the repo, installs `ansible-core` via `pip3 --user` if needed, then runs a local Ansible playbook against the VM. There is no duplicated install logic — adding a tool is a one-file edit.
+Ansible owns **all** installations — system packages, user-space tools, and the chezmoi handoff for dotfiles. `bootstrap.sh` is a thin seed: it clones the repo, installs `ansible-core` via `pip3 --user` if needed, then runs a local Ansible playbook against the host. There is no duplicated install logic — adding a tool is a one-file edit.
 
 ## Stack
 
@@ -16,7 +16,7 @@ Ansible owns **all** installations — system packages, user-space tools, and th
 | Jump | **zoxide** | Smarter `cd` |
 | Editor | **helix** | Modal editor, zero config |
 | Notes | **nb + glow** | CLI notes, markdown preview |
-| Terminal | **WezTerm** | Windows terminal, auto-connects to VMs |
+| Terminal | **WezTerm** | Windows terminal, auto-connects to hosts |
 
 ## Machine types
 
@@ -24,8 +24,8 @@ Every host belongs to exactly one of two Ansible groups. The group decides the i
 
 | Group | Sudo? | Binary destination | Helix runtime | Used for |
 |---|---|---|---|---|
-| `dev_machine` | Yes | `/usr/local/bin` | `/usr/local/lib/helix/runtime` | Hosts you own — full system-wide install via `dnf` + `/usr/local/bin`. |
-| `prod_machine` | No | `~/.local/bin` | `~/.config/helix/runtime` | Hosts you don't fully own — user-wide install only, no `dnf`. |
+| `dev_machine` | Yes | `/usr/local/bin` | `/usr/local/lib/helix/runtime` | Hosts you own — full system-wide install via the OS package manager (dnf on RHEL/Fedora today) + `/usr/local/bin`. |
+| `prod_machine` | No | `~/.local/bin` | `~/.config/helix/runtime` | Hosts you don't fully own — user-wide install only, no system packages. |
 
 The scope values for each group live in `ansible/group_vars/dev_machine.yml` and `ansible/group_vars/prod_machine.yml`. Ansible loads them automatically for remote runs; `bootstrap.sh` loads the same file for its local self-provisioning run via `-e "@group_vars/<group>.yml"`. Same file, same values — local and remote stay aligned.
 
@@ -35,16 +35,16 @@ Pick a group with `./bootstrap.sh --dev` or `./bootstrap.sh --prod`. Exactly one
 
 ```
 workstation/
-├── bootstrap.sh                        ← RHEL VM entry point — thin Ansible seed
+├── bootstrap.sh                        ← Linux host entry point — thin Ansible seed
 ├── bootstrap.ps1                       ← Windows client entry point — choco tools + chezmoi apply (run elevated)
 ├── .chezmoiroot                        ← redirects chezmoi's source state to chezmoi/ subdir
-├── hosts.conf                          ← single source of truth for VM list
+├── hosts.conf                          ← single source of truth for host list
 │
 ├── scripts/
-│   ├── manage-hosts.sh                 ← Linux/RHEL host manager
+│   ├── manage-hosts.sh                 ← Linux host manager
 │   └── manage-hosts.ps1                ← Windows host manager (feature-parity)
 │
-├── ansible/                            ← RHEL provisioning
+├── ansible/                            ← Linux provisioning
 │   ├── ansible.cfg
 │   ├── inventory/
 │   │   └── hosts.ini                   ← AUTO-GENERATED from hosts.conf
@@ -53,15 +53,15 @@ workstation/
 │   │   ├── dev_machine.yml             ← sudo, system-wide install (tool_scope=system, has_sudo=true)
 │   │   └── prod_machine.yml            ← no sudo, user-wide install  (tool_scope=user,  has_sudo=false)
 │   ├── playbooks/
-│   │   ├── rhel.yml                    ← targets dev_machine + prod_machine groups (control-machine flow)
+│   │   ├── linux.yml                   ← targets dev_machine + prod_machine groups (control-machine flow)
 │   │   └── local.yml                   ← targets localhost (used by bootstrap.sh; group_vars loaded via -e "@...")
 │   └── roles/
-│       └── rhel-base/
+│       └── linux-base/
 │           ├── defaults/main.yml       ← install_*, has_sudo, tool_scope, arch
 │           ├── handlers/main.yml
 │           └── tasks/
 │               ├── main.yml            ← validates + resolves scope vars, then orchestrates
-│               ├── packages.yml        ← dnf packages (sudo)
+│               ├── packages.yml        ← system packages via ansible.builtin.package (sudo)
 │               ├── tools.yml           ← static binaries; honours tool_scope (user/system)
 │               ├── shell.yml           ← PATH config
 │               └── dotfiles.yml        ← chezmoi apply (uses tools_dest to find chezmoi)
@@ -96,11 +96,11 @@ workstation/
 
 Update before pushing your fork:
 - [ ] `ansible/group_vars/all.yml` — set `dev_user` and `dotfiles_repo` to your fork's URL.
-- [ ] `hosts.conf` — add VMs with `./scripts/manage-hosts.sh --add ...` (or edit and `--format`), or let `bootstrap.sh` self-register them.
+- [ ] `hosts.conf` — add hosts with `./scripts/manage-hosts.sh --add ...` (or edit and `--format`), or let `bootstrap.sh` self-register them.
 
 You should not need to edit `ansible/inventory/hosts.ini` — it is regenerated from `hosts.conf` by the `manage-hosts` scripts.
 
-### 2. On each RHEL VM
+### 2. On each Linux host
 
 `bootstrap.sh` needs only `curl`, `git`, `python3` (≥ 3.9), `python3 -m pip`, and `iproute` (`ip` command). It does a single preflight check that reports **all** missing prereqs at once — no more discovering them one by one. It installs `ansible-core` itself (via `pip3 install --user`) on first run and smoke-tests it before handing off to Ansible.
 
@@ -127,9 +127,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 source ~/.bashrc
 ```
 
-**Dev machine (host you own — sudo, system-wide install to `/usr/local/bin` + `dnf` packages):**
+**Dev machine (host you own — sudo, system-wide install to `/usr/local/bin` + system packages):**
 ```bash
-# === Bootstrap: dev machine (sudo, /usr/local/bin + dnf) ===
+# === Bootstrap: dev machine (sudo, /usr/local/bin + system packages) ===
 export GITHUB_TOKEN='<your-PAT>' \
        GIT_USER_NAME='Arrush Chaturvedi' \
        GIT_USER_EMAIL='contact@arrushc.com' && \
@@ -142,12 +142,12 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 What `bootstrap.sh` does, in order:
 1. Preflight check (curl/git/python3/pip/iproute, python ≥ 3.9).
 2. Clone the repo into `~/.local/share/chezmoi` (or `git pull --ff-only` if present).
-3. **Self-register** the VM in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, and the group derived from the `--dev`/`--prod` flag — `dev_machine` or `prod_machine`) and run `manage-hosts.sh --sync` so inventory + the chezmoi-tracked `chezmoi/dot_config/wezterm/wezterm.lua` block are regenerated locally.
+3. **Self-register** the host in `hosts.conf` (via `hostname -s`, detected primary IP, `whoami`, and the group derived from the `--dev`/`--prod` flag — `dev_machine` or `prod_machine`) and run `manage-hosts.sh --sync` so inventory + the chezmoi-tracked `chezmoi/dot_config/wezterm/wezterm.lua` block are regenerated locally.
 4. Install `ansible-core` via `pip3 --user` if missing, smoke-test `ansible-playbook --version`.
-5. Run `playbooks/local.yml` with `-e "@group_vars/<dev|prod>_machine.yml"` so scope (`tool_scope`, `has_sudo`, `install_system_packages`) comes from the same file that the remote `rhel.yml` playbook uses.
+5. Run `playbooks/local.yml` with `-e "@group_vars/<dev|prod>_machine.yml"` so scope (`tool_scope`, `has_sudo`, `install_system_packages`) comes from the same file that the remote `linux.yml` playbook uses.
 6. **Auto-commit and push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `chezmoi/dot_config/wezterm/wezterm.lua`) with the message `chore(hosts): register <hostname>`. If the push fails (auth, conflict, no upstream), the script warns with a recovery `git push` command — it does **not** abort. Provisioning has already succeeded by this point.
 
-After bootstrap finishes, copy your SSH key from your client (Windows host or another VM) — see [Host management → Copy SSH key](#copy-ssh-key) below.
+After bootstrap finishes, copy your SSH key from your client (Windows host or another Linux host) — see [Host management → Copy SSH key](#copy-ssh-key) below.
 
 Both modes are idempotent — re-run any time to pick up updates. Re-running with a different `--dev`/`--prod` flag changes the host's group and scope; binaries left from the previous scope can be cleaned up manually if you want a tidy state.
 
@@ -223,13 +223,13 @@ What `bootstrap.ps1` does:
 3. **Clone the repo** into `-RepoPath` (default `C:\Git\workstation`), or `git pull --ff-only` if already present. `GITHUB_TOKEN` is persisted into `.git/config` (`http.https://github.com/.extraheader`, github.com-scoped) so subsequent `git push`, `git pull`, `chezmoi update`, and `manage-hosts.ps1` ops authenticate without re-passing the env var.
 4. **Run `chezmoi init --apply --source <RepoPath>`** — `.chezmoiroot` at the repo root redirects the source state into the `chezmoi/` subdirectory, where the OS-aware `.chezmoiignore.tmpl` filters out Linux-only files (helix, zellij, dot_bashrc.tmpl, dot_nbrc) and applies the Windows-targeted ones (PowerShell profile to `%USERPROFILE%\Documents\PowerShell\`, Zed/VSCode settings to `%APPDATA%\…`, `wezterm.lua` to `%USERPROFILE%\.config\wezterm\`).
 5. **Re-hardlink `wezterm.lua`** — replaces the chezmoi-written regular file at `%USERPROFILE%\.config\wezterm\wezterm.lua` with a hardlink to the chezmoi-tracked source at `chezmoi\dot_config\wezterm\wezterm.lua`. **Hybrid model**: chezmoi tracks the file (so it ships through the same `chezmoi apply` workflow as everything else), and the hardlink lets edits to the repo file — including from `manage-hosts.ps1 -Sync` — appear in WezTerm immediately via `automatically_reload_config`, without you having to run `cza` after every host-list change. If `chezmoi apply` ever atomic-writes the file (only if content has drifted out of band), the link breaks; re-run `bootstrap.ps1` to restore it.
-6. **SSH key** — prompts to generate `%USERPROFILE%\.ssh\id_ed25519` if missing. Used by `manage-hosts.ps1 -CopyId` to copy your public key to VMs for passwordless SSH.
+6. **SSH key** — prompts to generate `%USERPROFILE%\.ssh\id_ed25519` if missing. Used by `manage-hosts.ps1 -CopyId` to copy your public key to hosts for passwordless SSH.
 
 After bootstrap, restart your shell so the chezmoi-applied `$PROFILE` picks up — starship prompt, `cz`/`cza`/`cze`/`czd`/`czu`/`czs` aliases, git aliases, etc.
 
 **Editing dotfiles**: same workflow as Linux. `cze <path>` opens the source-state copy in your editor; `cza` applies pending changes; `czd` shows the diff; `cz cd` jumps to the source dir for direct git ops.
 
-WezTerm auto-opens a tab per VM on launch and attaches to a persistent Zellij session. Press **`CTRL+SHIFT+H`** inside WezTerm for a cheatsheet of keybinds, aliases, and hosts. Other useful binds:
+WezTerm auto-opens a tab per host on launch and attaches to a persistent Zellij session. Press **`CTRL+SHIFT+H`** inside WezTerm for a cheatsheet of keybinds, aliases, and hosts. Other useful binds:
 
 | Bind | Action |
 |---|---|
@@ -246,14 +246,14 @@ WezTerm auto-opens a tab per VM on launch and attaches to a persistent Zellij se
 
 ## Host management
 
-`hosts.conf` is the single source of truth for VMs. Two outputs are regenerated from it:
+`hosts.conf` is the single source of truth for hosts. Two outputs are regenerated from it:
 
 - `ansible/inventory/hosts.ini` (full overwrite)
 - `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block (in-place replace between `-- HOSTS:START` and `-- HOSTS:END` sentinels). After running `--sync` on Windows, run `chezmoi apply` (or `cza`) to push the updated file into `%USERPROFILE%\.config\wezterm\`.
 
 Use the manage-hosts scripts; they re-pad column widths automatically and keep both outputs in sync.
 
-### Linux / RHEL
+### Linux
 
 ```bash
 ./scripts/manage-hosts.sh                # interactive menu
@@ -285,17 +285,17 @@ The two scripts produce **identical output** for the same `hosts.conf`. After an
 
 ### Copy SSH key
 
-After a VM is registered, you still need your public key in its `~/.ssh/authorized_keys` before WezTerm or Ansible can connect without a password. Both scripts have a `--copy-id` / `-CopyId` command for this.
+After a host is registered, you still need your public key in its `~/.ssh/authorized_keys` before WezTerm or Ansible can connect without a password. Both scripts have a `--copy-id` / `-CopyId` command for this.
 
-Linux / RHEL:
+Linux:
 ```bash
-./scripts/manage-hosts.sh --copy-id --name rhel-dev-03   # explicit
+./scripts/manage-hosts.sh --copy-id --name dev-01        # explicit
 ./scripts/manage-hosts.sh --copy-id                      # interactive picker
 ```
 
 Windows:
 ```powershell
-.\scripts\manage-hosts.ps1 -CopyId -Name rhel-dev-03     # explicit
+.\scripts\manage-hosts.ps1 -CopyId -Name dev-01          # explicit
 .\scripts\manage-hosts.ps1 -CopyId                       # interactive picker
 ```
 
@@ -310,7 +310,7 @@ Behaviour:
 
 ## Daily workflows
 
-### chezmoi (Linux VM or Windows host)
+### chezmoi (Linux or Windows host)
 
 The same aliases work on both OSes — defined in `dot_bashrc.tmpl` for Linux and the templated `Microsoft.PowerShell_profile.ps1.tmpl` for Windows:
 
@@ -348,17 +348,17 @@ Scope per host comes from its `group_vars/<group>.yml`. You don't normally pass 
 cd ansible
 
 # Provision every managed host (both groups). Sudo prompt is for dev_machine hosts.
-ansible-playbook playbooks/rhel.yml --ask-become-pass
+ansible-playbook playbooks/linux.yml --ask-become-pass
 
 # Only one group
-ansible-playbook playbooks/rhel.yml --limit dev_machine --ask-become-pass
-ansible-playbook playbooks/rhel.yml --limit prod_machine
+ansible-playbook playbooks/linux.yml --limit dev_machine --ask-become-pass
+ansible-playbook playbooks/linux.yml --limit prod_machine
 
 # Single host
-ansible-playbook playbooks/rhel.yml --limit atc-cache-dev09
+ansible-playbook playbooks/linux.yml --limit atc-cache-dev09
 
 # Dry run (show what would change)
-ansible-playbook playbooks/rhel.yml --check
+ansible-playbook playbooks/linux.yml --check
 ```
 
 ### Ansible — local (self-provisioning, what `bootstrap.sh` runs under the hood)
@@ -384,7 +384,7 @@ ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"
 
 There is **one** place to edit, not two:
 
-1. Add an install task in `ansible/roles/rhel-base/tasks/tools.yml`. Use `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"` — the role resolves these from `tool_scope`.
+1. Add an install task in `ansible/roles/linux-base/tasks/tools.yml`. Use `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"` — the role resolves these from `tool_scope`.
 
    Example (a `direnv`-style static binary):
    ```yaml
@@ -412,13 +412,13 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 
 ---
 
-## Adding a new VM
+## Adding a new host
 
-1. On the new VM, pick the group with the appropriate flag:
+1. On the new host, pick the group with the appropriate flag:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod  # or --dev
    ```
-   Self-registration appends the VM to `hosts.conf` under `prod_machine` or `dev_machine`.
+   Self-registration appends the host to `hosts.conf` under `prod_machine` or `dev_machine`.
 2. From any other machine with the repo: `git pull` and run `./scripts/manage-hosts.sh --sync` (or `-Sync` on Windows) so `hosts.ini` and the wezterm block update everywhere.
 3. Commit and push the updated `hosts.conf`, `hosts.ini`, and `chezmoi/dot_config/wezterm/wezterm.lua`.
 
@@ -426,9 +426,9 @@ Edit `ansible/group_vars/all.yml`, change one line, commit. The next `ansible-pl
 
 ## Troubleshooting
 
-- **Bootstrap reports "Missing required prerequisites: …".** Install all listed tools at once. RHEL: `sudo dnf install curl git python3 python3-pip iproute`. Bootstrap deliberately collects every gap up front so you only have to install once.
+- **Bootstrap reports "Missing required prerequisites: …".** Install all listed tools at once via your distro's package manager. RHEL/Fedora: `sudo dnf install curl git python3 python3-pip iproute`. Debian/Ubuntu: `sudo apt install curl git python3 python3-pip iproute2`. Bootstrap deliberately collects every gap up front so you only have to install once.
 - **Bootstrap fails with "python3 ≥ 3.9 required for ansible-core".** Your distro's `python3` is too old. On RHEL 8: enable a newer module stream (`sudo dnf module install python39`) or install `python3.11` and ensure `python3` resolves to it.
-- **Bootstrap fails with "ansible-playbook not on PATH after pip install".** `pip install --user` dropped the binary in `~/.local/bin` but your shell hasn't picked that up yet. Run `export PATH="$HOME/.local/bin:$PATH"` and re-run `./bootstrap.sh`. After this run completes, [shell.yml](ansible/roles/rhel-base/tasks/shell.yml) wires the PATH permanently.
+- **Bootstrap fails with "ansible-playbook not on PATH after pip install".** `pip install --user` dropped the binary in `~/.local/bin` but your shell hasn't picked that up yet. Run `export PATH="$HOME/.local/bin:$PATH"` and re-run `./bootstrap.sh`. After this run completes, [shell.yml](ansible/roles/linux-base/tasks/shell.yml) wires the PATH permanently.
 - **Bootstrap finishes with "Push failed (auth, conflict, or no upstream)".** Provisioning succeeded — only the host-list push didn't. Recover with `cd ~/.local/share/chezmoi && git push`. Common causes: no SSH key for the git remote, a divergent upstream (`git pull --rebase` first), or you've forked and never set the remote.
 - **Private repo: clone fails with "Authentication failed" or 404.** Set `GITHUB_TOKEN` to a PAT with `repo` (classic) or Contents:Read (fine-grained) scope and re-run. The token is written into `.git/config` as `http.https://github.com/.extraheader` so subsequent ops (push, `chezmoi update`, manual `git pull`) all work — re-passing the env var on later runs just refreshes the stored value. To clear it: `git -C ~/.local/share/chezmoi config --unset http.https://github.com/.extraheader`.
 - **`./scripts/manage-hosts.sh --copy-id` keeps prompting for a password every connection.** The key landed but `sshd` isn't using it. Check the target's `/etc/ssh/sshd_config` (`PubkeyAuthentication yes`, `AuthorizedKeysFile .ssh/authorized_keys`) and the perms (`~/.ssh` = 700, `~/.ssh/authorized_keys` = 600). On SELinux RHEL: `restorecon -R -v ~/.ssh`.

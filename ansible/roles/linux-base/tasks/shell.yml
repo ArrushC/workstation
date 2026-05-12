@@ -1,5 +1,5 @@
 # =============================================================================
-# roles/rhel-base/tasks/shell.yml
+# roles/linux-base/tasks/shell.yml
 # Ensures ~/.local/bin is on PATH in /etc/profile.d (system-wide, requires sudo)
 # and sets up bash_completion
 # =============================================================================

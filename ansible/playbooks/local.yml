@@ -1,16 +1,15 @@
 # =============================================================================
 # ansible/playbooks/local.yml — self-provisioning
-# Runs the rhel-base role against the machine you're sitting on.
-# Used by bootstrap.sh for both --full (system scope) and user mode.
+# Runs the linux-base role against the machine you're sitting on.
+# Used by bootstrap.sh; scope comes from the group_vars file passed via -e.
 #
 # Usage (typically invoked via bootstrap.sh):
-#   System scope (sudo, /usr/local/bin):
-#     ansible-playbook playbooks/local.yml \
-#       -e "tool_scope=system has_sudo=true" --ask-become-pass
+#   prod_machine (no sudo, ~/.local/bin):
+#     ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
 #
-#   User scope (no sudo, ~/.local/bin):
+#   dev_machine (sudo, /usr/local/bin + system packages):
 #     ansible-playbook playbooks/local.yml \
-#       -e "tool_scope=user has_sudo=false install_system_packages=false"
+#       -e "@group_vars/dev_machine.yml" --ask-become-pass
 # =============================================================================
 
 - name: "Provision the local machine"
@@ -19,4 +18,4 @@
   gather_facts: true
 
   roles:
-    - rhel-base
+    - linux-base

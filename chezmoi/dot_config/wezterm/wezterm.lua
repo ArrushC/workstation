@@ -1,5 +1,5 @@
 -- =============================================================================
--- wezterm.lua — Windows config for remote RHEL dev
+-- wezterm.lua — Windows config for remote Linux dev
 -- Place at: %USERPROFILE%\.config\wezterm\wezterm.lua
 --   (or alongside wezterm.exe as wezterm.lua)
 -- =============================================================================
@@ -82,7 +82,7 @@ for _, domain in ipairs(ssh_domains) do
 end
 
 -- ---------------------------------------------------------------------------
--- Startup workspace — open a tab per VM on launch
+-- Startup workspace — open a tab per host on launch
 -- ---------------------------------------------------------------------------
 -- wezterm.on('gui-startup', function(cmd)
 --   local _, _, window = wezterm.mux.spawn_window(cmd or {})
@@ -92,7 +92,7 @@ end
 --       -- First tab uses the initial window
 --       window:active_tab():set_title(domain.name)
 --     else
---       -- Subsequent VMs get their own tab
+--       -- Subsequent hosts get their own tab
 --       window:spawn_tab({
 --         domain = { DomainName = domain.name },
 --       })
@@ -139,9 +139,9 @@ config.default_cursor_style = 'SteadyBar'
 -- ---------------------------------------------------------------------------
 -- Per-host tab color
 -- ---------------------------------------------------------------------------
--- Stable hash from the SSH domain name → HSL hue, so each VM gets a distinct
+-- Stable hash from the SSH domain name → HSL hue, so each host gets a distinct
 -- and consistent tab color. Cheap visual guard against typing into the wrong
--- VM. Pulls names from ssh_domains, so any host added via manage-hosts +
+-- host. Pulls names from ssh_domains, so any host added via manage-hosts +
 -- sync gets coloured automatically — no extra auto-managed block needed.
 local function host_hue(name)
   local h = 0
@@ -230,7 +230,7 @@ end)
 config.ssh_domains = ssh_domains
 
 -- ---------------------------------------------------------------------------
--- Host quick-picker — fuzzy-find a VM and open a tab into it
+-- Host quick-picker — fuzzy-find a host and open a tab into it
 -- ---------------------------------------------------------------------------
 -- Bound to CTRL|SHIFT+J below (J = jump). Choices are derived from
 -- ssh_domains, so every host added via manage-hosts.{sh,ps1} --add becomes
@@ -247,7 +247,7 @@ local function host_picker_choices()
 end
 
 local pick_host = act.InputSelector {
-  title    = 'Connect to VM',
+  title    = 'Connect to host',
   fuzzy    = true,
   choices  = host_picker_choices(),
   action   = wezterm.action_callback(function(window, pane, id, _label)
@@ -304,7 +304,7 @@ end)
 -- (no-op on selection); host rows actually launch the host in a new tab so
 -- the help doubles as a launcher. Esc dismisses.
 --
--- Bash aliases and functions are only active inside SSH'd VM tabs (defined
+-- Bash aliases and functions are only active inside SSH'd host tabs (defined
 -- in chezmoi/home/dot_bashrc.tmpl). Keep this in sync with that file when
 -- adding/renaming aliases — there's no runtime introspection across SSH.
 local function help_choices()
@@ -332,7 +332,7 @@ local function help_choices()
     -- Wezterm: config
     { label = 'key   CTRL+SHIFT+R     Reload wezterm config',               id = '' },
 
-    -- Bash aliases (VM tabs only) — git
+    -- Bash aliases (host tabs only) — git
     { label = 'alias gs               git status',                          id = '' },
     { label = 'alias ga               git add',                             id = '' },
     { label = 'alias gc               git commit',                          id = '' },
@@ -361,7 +361,7 @@ local function help_choices()
     { label = 'alias zjl              zellij list-sessions',                id = '' },
     { label = 'alias zja              zellij attach',                       id = '' },
 
-    -- Bash functions (VM tabs only)
+    -- Bash functions (host tabs only)
     { label = 'fn    fh               fzf history search (Ctrl+R enhanced)', id = '' },
     { label = 'fn    fcd [dir]        fzf cd into any subdirectory',        id = '' },
     { label = 'fn    fssh             fzf ssh — pick from ~/.ssh/config',   id = '' },
@@ -483,7 +483,7 @@ config.keys = {
   -- New local tab
   { key = 't', mods = 'CTRL|SHIFT', action = act.SpawnTab 'CurrentPaneDomain' },
 
-  -- Fuzzy-pick a VM and open it in a new tab (J = jump)
+  -- Fuzzy-pick a host and open it in a new tab (J = jump)
   { key = 'j', mods = 'CTRL|SHIFT', action = pick_host },
 
   -- Show keybind + host cheatsheet

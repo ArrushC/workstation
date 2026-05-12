@@ -1,5 +1,5 @@
 # ~/.config/starship.toml — managed by chezmoi
-# Clean, informative prompt optimised for remote RHEL dev work
+# Clean, informative prompt optimised for remote Linux dev work
 
 "$schema" = 'https://starship.rs/config-schema.json'
 

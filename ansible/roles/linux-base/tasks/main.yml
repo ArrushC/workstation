@@ -1,5 +1,5 @@
 # =============================================================================
-# roles/rhel-base/tasks/main.yml
+# roles/linux-base/tasks/main.yml
 # Orchestrates all task files in order
 # =============================================================================
 

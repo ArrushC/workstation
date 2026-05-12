@@ -1,18 +1,22 @@
 # =============================================================================
-# roles/rhel-base/tasks/packages.yml
-# System-level packages via dnf — requires sudo
+# roles/linux-base/tasks/packages.yml
+# System-level packages via the OS package manager — requires sudo.
+# ansible.builtin.package dispatches to dnf/apt/pacman/... based on
+# ansible_pkg_mgr fact detection. Package names in group_vars/all.yml are
+# RHEL/Fedora-flavored today; override per-host (or per-group) if you add a
+# host on a different distro.
 # =============================================================================
 
 - name: "Ensure core packages are installed"
-  ansible.builtin.dnf:
-    name: "{{ rhel_packages }}"
+  ansible.builtin.package:
+    name: "{{ linux_packages }}"
     state: present
 
 - name: "Attempt optional packages (non-fatal if unavailable)"
-  ansible.builtin.dnf:
+  ansible.builtin.package:
     name: "{{ item }}"
     state: present
-  loop: "{{ rhel_optional_packages }}"
+  loop: "{{ linux_optional_packages }}"
   ignore_errors: true
 
 - name: "Ensure ~/.local/bin exists"

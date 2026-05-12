@@ -13,7 +13,7 @@
 #     or: ./bootstrap.sh --prod
 #
 # The scope values come from ansible/group_vars/{dev,prod}_machine.yml —
-# the same files the remote rhel.yml playbook uses, so a host configured
+# the same files the remote linux.yml playbook uses, so a host configured
 # locally and a host configured remotely end up identical.
 #
 # REINSTALL — wipe the cloned repo + chezmoi config, then re-bootstrap fresh.
@@ -37,13 +37,13 @@
 # Flow (both modes):
 #   1. preflight             — check curl/git/python3/pip/iproute, python>=3.9
 #   2. clone repo            — into ~/.local/share/chezmoi (or git pull if present)
-#   3. self_register         — add this VM to hosts.conf + sync inventory
+#   3. self_register         — add this host to hosts.conf + sync inventory
 #   4. ensure_ansible        — pip install --user ansible-core if missing, smoke test
 #   5. run playbook          — ansible-playbook playbooks/local.yml
 #   6. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
 #
 # Tool versions, URLs, and install logic live in
-#   ansible/group_vars/all.yml + ansible/roles/rhel-base/tasks/tools.yml
+#   ansible/group_vars/all.yml + ansible/roles/linux-base/tasks/tools.yml
 # — there is no longer a duplicate set of versions in this script.
 # =============================================================================
 
@@ -83,7 +83,7 @@ while [[ $# -gt 0 ]]; do
       fail "--full was removed.
 
 Use one of the new mutually-exclusive flags:
-  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + dnf packages
+  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + system packages
   ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
 
 Run ./bootstrap.sh --help for the full flag list." ;;
@@ -95,7 +95,9 @@ Usage: ./bootstrap.sh (--dev | --prod) [flags]
 
 Required (exactly one):
   --dev         Host you own. Sudo available. Installs system-wide to
-                /usr/local/bin and via dnf. Registers as group dev_machine.
+                /usr/local/bin and pulls system packages via the OS package
+                manager (dnf on RHEL/Fedora today). Registers as group
+                dev_machine.
   --prod        Host you don't fully own. No sudo. Installs user-wide to
                 ~/.local/bin. Registers as group prod_machine.
 
@@ -116,7 +118,7 @@ if [[ -z "$MACHINE_TYPE" ]]; then
   fail "Missing required flag: --dev or --prod.
 
 Pick one based on the host you're bootstrapping:
-  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + dnf packages
+  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + system packages
   ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
 
 Curl-pipe form (private repo with token):
@@ -214,12 +216,15 @@ preflight() {
 
   if (( ${#missing[@]} > 0 )); then
     fail "Missing required prerequisites: ${missing[*]}
-Install with: sudo dnf install curl git python3 python3-pip iproute"
+Install via your distro's package manager, e.g.
+  RHEL/Fedora:   sudo dnf install curl git python3 python3-pip iproute
+  Debian/Ubuntu: sudo apt install curl git python3 python3-pip iproute2"
   fi
 
   # python3 -m pip available?
   if ! python3 -m pip --version &>/dev/null; then
-    fail "python3 has no pip module. Install with: sudo dnf install python3-pip"
+    fail "python3 has no pip module. Install via your distro's package manager
+(RHEL/Fedora: sudo dnf install python3-pip; Debian/Ubuntu: sudo apt install python3-pip)"
   fi
 
   # python3 >= 3.9 (ansible-core requirement)
@@ -234,7 +239,7 @@ Install with: sudo dnf install curl git python3 python3-pip iproute"
 }
 
 # =============================================================================
-# 2. SELF-REGISTER — add this VM to hosts.conf + regenerate inventory
+# 2. SELF-REGISTER — add this host to hosts.conf + regenerate inventory
 # =============================================================================
 self_register() {
   local manage_script="$CHEZMOI_SOURCE/scripts/manage-hosts.sh"
@@ -244,28 +249,28 @@ self_register() {
     return
   fi
 
-  local vm_name vm_ip vm_user
-  vm_name=$(hostname -s 2>/dev/null || hostname)
-  vm_user=$(whoami)
+  local host_name host_ip host_user
+  host_name=$(hostname -s 2>/dev/null || hostname)
+  host_user=$(whoami)
 
-  vm_ip=$(ip route get 1.1.1.1 2>/dev/null \
+  host_ip=$(ip route get 1.1.1.1 2>/dev/null \
     | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
 
-  if [[ -z "$vm_ip" ]]; then
-    vm_ip=$(ip addr show 2>/dev/null \
+  if [[ -z "$host_ip" ]]; then
+    host_ip=$(ip addr show 2>/dev/null \
       | awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}' | head -1)
   fi
 
-  if [[ -z "$vm_ip" ]]; then
+  if [[ -z "$host_ip" ]]; then
     warn "Could not detect IP address — skipping self-registration."
     return
   fi
 
-  log "Self-registration: ${vm_name} (${vm_user}@${vm_ip}) as ${GROUP_NAME}"
+  log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
   bash "$manage_script" --add \
-    --name  "$vm_name" \
-    --ip    "$vm_ip" \
-    --user  "$vm_user" \
+    --name  "$host_name" \
+    --ip    "$host_ip" \
+    --user  "$host_user" \
     --group "$GROUP_NAME" \
     --skip-confirm
 
@@ -411,5 +416,5 @@ echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
 echo -e "Re-source your shell: ${YELLOW}source ~/.bashrc${RESET}"
 echo -e "Enable passwordless SSH from your client:"
-echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux/RHEL)"
+echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux)"
 echo -e "  ${YELLOW}.\\scripts\\manage-hosts.ps1 -CopyId -Name $(hostname -s)${RESET}  (Windows)"

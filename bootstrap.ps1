@@ -1,7 +1,7 @@
 ﻿# =============================================================================
 # bootstrap.ps1 — workstation setup (Windows client side)
 #
-# The Windows host is a CLIENT — Ansible runs on RHEL VMs only. On Windows
+# The Windows host is a CLIENT — Ansible runs on Linux hosts only. On Windows
 # this script handles its slice of the same workflow: install dev tools via
 # Chocolatey, then hand off to chezmoi to deploy the dotfiles tracked in this
 # repo (Zed, VSCode, PowerShell profile, WezTerm config, Starship, Git).
@@ -559,12 +559,12 @@ Write-Host "Restart your shell (or open a new PowerShell tab) so the chezmoi-app
 Write-Host "$PROFILE picks up — starship prompt, chezmoi/git aliases, etc."
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  1. Add a VM to hosts.conf:"
+Write-Host "  1. Add a host to hosts.conf:"
 Write-Host "       cd $RepoPath"
 Write-Host "       .\scripts\manage-hosts.ps1     # interactive menu"
-Write-Host "  2. Copy your SSH key to a registered VM:"
-Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -Name <vm-name>"
-Write-Host "  3. Launch WezTerm — it auto-opens a tab per VM in hosts.conf."
+Write-Host "  2. Copy your SSH key to a registered host:"
+Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -Name <host-name>"
+Write-Host "  3. Launch WezTerm — it auto-opens a tab per host in hosts.conf."
 Write-Host ""
 Write-Host "Editing dotfiles:"
 Write-Host "  cze   # chezmoi edit (opens the file in chezmoi's source)"

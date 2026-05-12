@@ -1,5 +1,5 @@
 # =============================================================================
-# group_vars/all.yml — variables shared across all VMs
+# group_vars/all.yml — variables shared across all hosts
 # =============================================================================
 
 # --- User config -------------------------------------------------------------
@@ -12,9 +12,11 @@ dotfiles_repo: "https://github.com/ArrushC/workstation.git"
 chezmoi_source: "{{ dev_home }}/.local/share/chezmoi"
 
 # --- System packages to install (requires sudo) ------------------------------
-# These are installed via dnf. Add anything your dev workflow needs at the
-# system level — things that can't be covered by static binaries in ~/.local/bin
-rhel_packages:
+# Installed via the distro's package manager (dnf on RHEL/Fedora today; the
+# ansible.builtin.package module dispatches to whatever pkg manager Ansible
+# detects). Add anything your dev workflow needs at the system level — things
+# that can't be covered by static binaries in ~/.local/bin.
+linux_packages:
   - git
   - curl
   - wget
@@ -26,8 +28,8 @@ rhel_packages:
   - python3
   - python3-pip
 
-# --- Optional packages (comment out if not available on your RHEL version) --
-rhel_optional_packages:
+# --- Optional packages (comment out if not available on your distro) --------
+linux_optional_packages:
   - ripgrep       # rg — used by fzf for file search
   - fd-find       # fd — faster find alternative
   - bash-completion

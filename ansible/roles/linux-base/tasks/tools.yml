@@ -1,5 +1,5 @@
 # =============================================================================
-# roles/rhel-base/tasks/tools.yml
+# roles/linux-base/tasks/tools.yml
 # Tools installed as static binaries to either:
 #   - tool_scope=user   → ~/.local/bin       (no sudo)
 #   - tool_scope=system → /usr/local/bin     (sudo)

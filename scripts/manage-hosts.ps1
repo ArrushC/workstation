@@ -173,7 +173,7 @@ function Invoke-GenerateInventory {
     $lines.Add("ansible_python_interpreter=/usr/bin/python3")
 
     # Write LF-only (Environment.NewLine on Windows is CRLF, which propagates
-    # stray \r into fields when the file is read on a Linux VM).
+    # stray \r into fields when the file is read on a Linux host).
     $content = ($lines -join "`n") + "`n"
     [System.IO.File]::WriteAllText($Inventory, $content, [System.Text.UTF8Encoding]::new($false))
 
@@ -270,7 +270,7 @@ function Save-Hosts {
     }
 
     # Write LF-only (Environment.NewLine on Windows is CRLF, which propagates
-    # stray \r into fields when the file is read on a Linux VM).
+    # stray \r into fields when the file is read on a Linux host).
     $content = ($output -join "`n") + "`n"
     [System.IO.File]::WriteAllText($HostsConf, $content, [System.Text.UTF8Encoding]::new($false))
 }
@@ -286,7 +286,7 @@ function Add-Host {
 
     if (-not $HostName) {
         Write-Header "Add a new host"
-        $HostName = Read-Host "  Host name (e.g. rhel-dev-03)"
+        $HostName = Read-Host "  Host name (e.g. dev-01)"
         if (-not $HostName) { Write-Fail "Name cannot be empty" }
     }
 

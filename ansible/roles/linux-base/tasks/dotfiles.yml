@@ -1,5 +1,5 @@
 # =============================================================================
-# roles/rhel-base/tasks/dotfiles.yml
+# roles/linux-base/tasks/dotfiles.yml
 # Applies dotfiles via chezmoi — runs as the dev user, no sudo
 # Uses tools_dest (resolved in main.yml) to find the chezmoi binary,
 # falling back to dev_bin if tools.yml didn't run.

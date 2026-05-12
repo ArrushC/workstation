@@ -277,7 +277,7 @@ add_host() {
   #     add_host
   #
   #   Non-interactive (from bootstrap.sh or other scripts):
-  #     add_host --name rhel-dev-03 --ip 10.0.0.12 --user arrush --group prod_machine --skip-confirm
+  #     add_host --name dev-01 --ip 10.0.0.12 --user arrush --group prod_machine --skip-confirm
   #
   # Group MUST be one of VALID_GROUPS (dev_machine, prod_machine).
   local name="" ip="" user="" group="" skip_confirm=false
@@ -297,7 +297,7 @@ add_host() {
   # If any required field is missing, fall into interactive prompts
   if [[ -z "$name" ]]; then
     header "Add a new host"
-    read -rp "  Host name (e.g. rhel-dev-03):  " name
+    read -rp "  Host name (e.g. dev-01):  " name
     [[ -z "$name" ]] && fail "Name cannot be empty"
   fi
 

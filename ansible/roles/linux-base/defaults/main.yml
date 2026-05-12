@@ -1,5 +1,5 @@
 # =============================================================================
-# roles/rhel-base/defaults/main.yml
+# roles/linux-base/defaults/main.yml
 # Default values — override in group_vars or host_vars as needed
 # =============================================================================
 
@@ -7,7 +7,7 @@ install_system_packages: true
 install_user_tools: true
 apply_dotfiles: true
 
-# Set to false if you don't have sudo on a particular VM
+# Set to false if you don't have sudo on a particular host
 has_sudo: true
 
 # Where user-space tools (fzf, zoxide, helix, etc.) get installed:
