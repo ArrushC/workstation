@@ -37,7 +37,10 @@
       "Bash(bash --version)",
       "Bash(./scripts/manage-hosts.sh --sync)",
       "Bash(grep -nP ' +$' ansible/inventory/hosts.ini)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git -C C:/Git/workstation push)",
+      "Bash(git -C C:/Git/workstation add .claude/settings.local.json)",
+      "Bash(git -C C:/Git/workstation commit -m ' *)"
     ]
   }
 }
