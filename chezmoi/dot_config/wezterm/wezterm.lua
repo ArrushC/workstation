@@ -325,6 +325,7 @@ local function help_choices()
     -- Wezterm: editing
     { label = 'key   CTRL+SHIFT+C     Copy selection',                      id = '' },
     { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
+    { label = 'key   CTRL+SHIFT+A     Copy entire scrollback to clipboard', id = '' },
     -- Wezterm: font
     { label = 'key   CTRL+=           Increase font size',                  id = '' },
     { label = 'key   CTRL+-           Decrease font size',                  id = '' },
@@ -521,6 +522,19 @@ config.keys = {
   -- Copy/paste
   { key = 'c', mods = 'CTRL|SHIFT', action = act.CopyTo 'Clipboard' },
   { key = 'v', mods = 'CTRL|SHIFT', action = act.PasteFrom 'Clipboard' },
+
+  -- Copy entire scrollback to clipboard (enters copy mode, selects all, copies, exits)
+  {
+    key = 'a', mods = 'CTRL|SHIFT',
+    action = act.Multiple {
+      act.ActivateCopyMode,
+      act.CopyMode 'MoveToScrollbackTop',
+      act.CopyMode { SetSelectionMode = 'Cell' },
+      act.CopyMode 'MoveToScrollbackBottom',
+      act.CopyTo 'Clipboard',
+      act.CopyMode 'Close',
+    },
+  },
 
   -- Font size
   { key = '=', mods = 'CTRL', action = act.IncreaseFontSize },
