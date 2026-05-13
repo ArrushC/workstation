@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>workstation</title>
+<style>
+  :root {
+    --bg:           #0d1117;
+    --surface:      #161b22;
+    --surface-2:    #1c2129;
+    --border:       #30363d;
+    --border-soft:  #21262d;
+    --text:         #c9d1d9;
+    --muted:        #8b949e;
+    --muted-2:      #6e7681;
+    --accent:       #58a6ff;
+    --accent-hover: #79b8ff;
+    --linux:        #4493f8;
+    --windows:      #a371f7;
+    --warn:         #d29922;
+    --ok:           #3fb950;
+    --bad:          #f85149;
+    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    font-family: var(--sans);
+    font-size: 14.5px;
+    line-height: 1.55;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+  code, pre, kbd { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; border: 1px solid var(--border-soft); }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; overflow-x: auto; margin: 0.5rem 0; }
+  pre code { background: none; border: none; padding: 0; font-size: 0.9em; }
+  kbd { background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0.1em 0.45em; font-size: 0.8em; color: var(--text); }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    max-width: 1280px;
+    margin: 0 auto;
+    gap: 2rem;
+    padding: 1.5rem 1.5rem 4rem;
+  }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 1rem 0;
+    border-right: 1px solid var(--border-soft);
+    font-size: 0.9rem;
+  }
+  nav.toc h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.5rem; padding-right: 1rem; }
+  nav.toc ol { list-style: none; padding: 0; margin: 0 0 1rem; }
+  nav.toc li { margin: 0.15rem 0; }
+  nav.toc a { color: var(--muted); display: block; padding: 0.15rem 0.5rem 0.15rem 0; border-left: 2px solid transparent; padding-left: 0.6rem; }
+  nav.toc a:hover { color: var(--text); border-left-color: var(--accent); text-decoration: none; }
+  nav.toc .sub { padding-left: 1.4rem; font-size: 0.85em; }
+
+  main { min-width: 0; }
+
+  /* Headings */
+  h1 { font-size: 2rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+  h1 .tag { font-family: var(--mono); font-size: 0.9rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.15em 0.5em; margin-left: 0.6em; vertical-align: middle; font-weight: 500; }
+  h2 { font-size: 1.35rem; margin: 2.5rem 0 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-soft); letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--text); }
+  h4 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .lede { color: var(--muted); font-size: 1rem; margin: 0 0 1rem; max-width: 70ch; }
+
+  /* Tables */
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom-color: var(--border); }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+
+  /* Cards / panes */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; }
+  .stack { display: grid; gap: 1rem; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .os-card { background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 0.9rem 1rem; }
+  .os-card.linux { border-left-color: var(--linux); }
+  .os-card.windows { border-left-color: var(--windows); }
+  .os-card .os-label { display: inline-block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 0.5rem; }
+  .os-card.linux .os-label { color: var(--linux); }
+  .os-card.windows .os-label { color: var(--windows); }
+
+  /* Flow chips */
+  .flow { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: stretch; margin: 0.5rem 0; }
+  .flow .step { display: flex; align-items: center; gap: 0.55rem; padding: 0.45rem 0.7rem 0.45rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; }
+  .flow .step .num { flex-shrink: 0; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); color: #0d1117; display: grid; place-items: center; font-weight: 700; font-size: 0.78rem; }
+  .flow .step .lbl { color: var(--text); }
+  .flow .step .note { color: var(--muted); font-size: 0.78rem; }
+  .flow .arrow { display: grid; place-items: center; color: var(--muted-2); padding: 0 0.1rem; }
+
+  /* Tabs (CSS-only via radio) */
+  .tabs { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .tabs input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+  .tab-labels { display: flex; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .tab-labels label {
+    padding: 0.55rem 1rem;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.88rem;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    user-select: none;
+  }
+  .tab-labels label:hover { color: var(--text); }
+  .tab-panels { padding: 1rem 1.1rem; }
+  .tab-panel { display: none; }
+
+  /* Specific tab wirings */
+  #pdev:checked ~ .tab-labels label[for="pdev"],
+  #pprod:checked ~ .tab-labels label[for="pprod"] { color: var(--accent); border-bottom-color: var(--accent); }
+  #pdev:checked ~ .tab-panels .panel-dev,
+  #pprod:checked ~ .tab-panels .panel-prod { display: block; }
+
+  #ar-all:checked ~ .tab-labels label[for="ar-all"],
+  #ar-group:checked ~ .tab-labels label[for="ar-group"],
+  #ar-host:checked ~ .tab-labels label[for="ar-host"],
+  #ar-check:checked ~ .tab-labels label[for="ar-check"] { color: var(--accent); border-bottom-color: var(--accent); }
+  #ar-all:checked ~ .tab-panels .ar-panel-all,
+  #ar-group:checked ~ .tab-panels .ar-panel-group,
+  #ar-host:checked ~ .tab-panels .ar-panel-host,
+  #ar-check:checked ~ .tab-panels .ar-panel-check { display: block; }
+
+  /* Details / accordion */
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0; margin: 0.4rem 0; overflow: hidden; }
+  details summary { cursor: pointer; padding: 0.6rem 0.9rem; list-style: none; user-select: none; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 0.6rem; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "▸"; color: var(--muted); transition: transform 0.15s ease; display: inline-block; font-size: 0.85em; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details > :not(summary) { padding: 0 0.9rem 0.8rem; }
+  details .ts-body { padding: 0 0.9rem 0.8rem; color: var(--muted); }
+  details .ts-body p { margin: 0.3rem 0; }
+  details .ts-body code { color: var(--text); }
+  details summary .tag-sym { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+
+  /* Nested tree using details */
+  .tree details { background: transparent; border: none; margin: 0; }
+  .tree details > summary { padding: 0.1rem 0; }
+  .tree details > div, .tree details > ul { padding: 0 0 0 1.2rem; border-left: 1px dashed var(--border-soft); margin-left: 0.4rem; }
+  .tree ul { list-style: none; padding-left: 1.2rem; margin: 0; border-left: 1px dashed var(--border-soft); }
+  .tree li { padding: 0.05rem 0; font-family: var(--mono); font-size: 0.85rem; color: var(--text); }
+  .tree .note { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; }
+  .tree summary { font-family: var(--mono); font-size: 0.85rem; }
+
+  /* Misc */
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li::before { content: "☐"; color: var(--muted); margin-right: 0.5rem; }
+  .badge { display: inline-block; font-size: 0.72rem; padding: 0.1em 0.5em; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); }
+  .badge.dev { color: var(--ok); border-color: rgba(63,185,80,0.4); }
+  .badge.prod { color: var(--warn); border-color: rgba(210,153,34,0.4); }
+  .note-row { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+  .callout { background: var(--surface); border-left: 3px solid var(--warn); padding: 0.6rem 0.9rem; border-radius: 4px; margin: 0.7rem 0; color: var(--muted); font-size: 0.9rem; }
+  .callout strong { color: var(--text); }
+
+  /* Search filter */
+  .filter-bar { position: sticky; top: 0; background: var(--bg); padding: 0.5rem 0; z-index: 5; margin-bottom: 0.5rem; }
+  .filter-bar input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.55rem 0.8rem;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 0.95rem;
+  }
+  .filter-bar input:focus { outline: none; border-color: var(--accent); }
+  .filter-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+
+  /* Mobile */
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; padding: 1rem; }
+    nav.toc { position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--border-soft); padding-bottom: 1rem; margin-bottom: 0.5rem; }
+    .flow { flex-direction: column; align-items: stretch; }
+    .flow .arrow { transform: rotate(90deg); padding: 0.2rem 0; }
+  }
+
+  /* Print */
+  @media print {
+    nav.toc { display: none; }
+    .layout { display: block; max-width: none; padding: 0; }
+    details[open] > :not(summary), details > :not(summary) { display: block !important; padding: 0 0 0.5rem; }
+    details { break-inside: avoid; border: none; }
+    .grid-2 { display: block; }
+    .tab-panel { display: block !important; }
+    .filter-bar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<nav class="toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#intro">Overview</a></li>
+    <li><a href="#stack">Stack</a></li>
+    <li><a href="#machines">Machine types</a></li>
+    <li><a href="#layout">Repo layout</a></li>
+    <li><a href="#setup">Setup</a>
+      <ol class="sub">
+        <li><a href="#setup-config">Configure once</a></li>
+        <li><a href="#setup-linux">On each Linux host</a></li>
+        <li><a href="#setup-windows">On Windows</a></li>
+        <li><a href="#setup-wezterm">WezTerm keybinds</a></li>
+      </ol>
+    </li>
+    <li><a href="#hosts">Host management</a></li>
+    <li><a href="#daily">Daily workflows</a></li>
+    <li><a href="#adding">Adding tools / hosts</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header id="intro">
+  <h1>workstation <span class="tag">dev env</span></h1>
+  <p class="lede">
+    Dev-environment provisioning for Linux hosts, plus the WezTerm config that connects to them from Windows.
+    Ansible owns <strong>all</strong> installs (system packages, user-space tools, and the chezmoi handoff for dotfiles);
+    <code>bootstrap.sh</code> is a thin seed. Adding a tool is a one-file edit.
+  </p>
+</header>
+
+<section id="stack">
+<h2>Stack</h2>
+<table>
+  <thead><tr><th>Layer</th><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>Provisioning</td><td><strong>Ansible</strong></td><td>Packages, tool installs, PATH, dotfiles trigger</td></tr>
+    <tr><td>Dotfiles</td><td><strong>chezmoi</strong></td><td>Personal shell config, templated per machine</td></tr>
+    <tr><td>Shell prompt</td><td><strong>starship</strong></td><td>Prompt</td></tr>
+    <tr><td>Multiplexer</td><td><strong>zellij</strong></td><td>Persistent sessions, layouts</td></tr>
+    <tr><td>Fuzzy find</td><td><strong>fzf</strong></td><td>History, files, SSH hosts</td></tr>
+    <tr><td>Jump</td><td><strong>zoxide</strong></td><td>Smarter <code>cd</code></td></tr>
+    <tr><td>Editor</td><td><strong>helix</strong></td><td>Modal editor, zero config</td></tr>
+    <tr><td>Notes</td><td><strong>nb + glow</strong></td><td>CLI notes, markdown preview</td></tr>
+    <tr><td>Terminal</td><td><strong>WezTerm</strong></td><td>Windows terminal, auto-connects to hosts</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section id="machines">
+<h2>Machine types</h2>
+<p class="lede">Every host belongs to exactly one Ansible group. The group decides install scope &mdash; no separate scope flag.</p>
+<table>
+  <thead><tr><th>Group</th><th>Sudo</th><th>Binary dest</th><th>Helix runtime</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="badge dev">dev_machine</span></td>
+      <td>Yes</td>
+      <td><code>/usr/local/bin</code></td>
+      <td><code>/usr/local/lib/helix/runtime</code></td>
+      <td>Hosts you own &mdash; full system-wide install via OS package manager (dnf on RHEL/Fedora) + <code>/usr/local/bin</code>.</td>
+    </tr>
+    <tr>
+      <td><span class="badge prod">prod_machine</span></td>
+      <td>No</td>
+      <td><code>~/.local/bin</code></td>
+      <td><code>~/.config/helix/runtime</code></td>
+      <td>Hosts you don&rsquo;t fully own &mdash; user-wide install only, no system packages.</td>
+    </tr>
+  </tbody>
+</table>
+<p class="note-row">
+  Scope values live in <code>ansible/group_vars/{dev,prod}_machine.yml</code>. Ansible loads them automatically for remote runs;
+  <code>bootstrap.sh</code> loads the same file for its local self-provisioning run via <code>-e "@group_vars/&lt;group&gt;.yml"</code>.
+  Pick a group with <code>./bootstrap.sh --dev</code> or <code>--prod</code>. Exactly one is required.
+</p>
+</section>
+
+<section id="layout">
+<h2>Repo layout</h2>
+<div class="card tree">
+  <details open><summary><strong>workstation/</strong></summary>
+  <div>
+    <ul>
+      <li>bootstrap.sh <span class="note">&mdash; Linux host entry point (thin Ansible seed)</span></li>
+      <li>bootstrap.ps1 <span class="note">&mdash; Windows entry point (choco + chezmoi apply, elevated)</span></li>
+      <li>.chezmoiroot <span class="note">&mdash; redirects chezmoi source to chezmoi/</span></li>
+      <li>hosts.conf <span class="note">&mdash; single source of truth for host list</span></li>
+    </ul>
+    <details open><summary>scripts/</summary>
+      <ul>
+        <li>manage-hosts.sh <span class="note">&mdash; Linux host manager</span></li>
+        <li>manage-hosts.ps1 <span class="note">&mdash; Windows host manager (parity)</span></li>
+      </ul>
+    </details>
+    <details open><summary>ansible/ <span class="note">&mdash; Linux provisioning</span></summary>
+      <ul>
+        <li>ansible.cfg</li>
+      </ul>
+      <details><summary>inventory/</summary>
+        <ul><li>hosts.ini <span class="note">&mdash; AUTO-GENERATED from hosts.conf</span></li></ul>
+      </details>
+      <details><summary>group_vars/</summary>
+        <ul>
+          <li>all.yml <span class="note">&mdash; shared vars + tool versions (SoT)</span></li>
+          <li>dev_machine.yml <span class="note">&mdash; tool_scope=system, has_sudo=true</span></li>
+          <li>prod_machine.yml <span class="note">&mdash; tool_scope=user, has_sudo=false</span></li>
+        </ul>
+      </details>
+      <details><summary>playbooks/</summary>
+        <ul>
+          <li>linux.yml <span class="note">&mdash; targets dev_machine + prod_machine</span></li>
+          <li>local.yml <span class="note">&mdash; targets localhost (used by bootstrap.sh)</span></li>
+        </ul>
+      </details>
+      <details><summary>roles/linux-base/</summary>
+        <ul>
+          <li>defaults/main.yml</li>
+          <li>handlers/main.yml</li>
+        </ul>
+        <details><summary>tasks/</summary>
+          <ul>
+            <li>main.yml <span class="note">&mdash; validates + resolves scope, then orchestrates</span></li>
+            <li>packages.yml <span class="note">&mdash; system packages via ansible.builtin.package</span></li>
+            <li>tools.yml <span class="note">&mdash; static binaries; honours tool_scope</span></li>
+            <li>shell.yml <span class="note">&mdash; PATH config</span></li>
+            <li>dotfiles.yml <span class="note">&mdash; chezmoi apply</span></li>
+          </ul>
+        </details>
+      </details>
+    </details>
+    <details open><summary>chezmoi/ <span class="note">&mdash; cross-platform dotfiles</span></summary>
+      <ul>
+        <li>.chezmoi.toml.tmpl <span class="note">&mdash; prompts for name/email on init</span></li>
+        <li>.chezmoiignore.tmpl <span class="note">&mdash; OS-aware ignore</span></li>
+        <li>.chezmoiscripts/run_once_after_init.sh <span class="note">&mdash; Linux-only</span></li>
+        <li>dot_bashrc.tmpl <span class="note">&mdash; Linux: ~/.bashrc</span></li>
+        <li>dot_gitconfig.tmpl <span class="note">&mdash; cross-platform: ~/.gitconfig</span></li>
+        <li>dot_nbrc <span class="note">&mdash; Linux: ~/.nbrc</span></li>
+      </ul>
+      <details><summary>dot_config/ <span class="note">&mdash; ~/.config/</span></summary>
+        <ul>
+          <li>starship.toml</li>
+          <li>helix/config.toml</li>
+          <li>zellij/{config.kdl, layouts/dev.kdl} <span class="note">&mdash; Linux only</span></li>
+          <li>wezterm/wezterm.lua <span class="note">&mdash; Windows only</span></li>
+        </ul>
+      </details>
+      <details><summary>AppData/Roaming/ <span class="note">&mdash; Windows</span></summary>
+        <ul>
+          <li>Zed/settings.json</li>
+          <li>Code/User/{settings.json, keybindings.json}</li>
+        </ul>
+      </details>
+      <details><summary>Documents/ <span class="note">&mdash; Windows</span></summary>
+        <ul>
+          <li>PowerShell/Microsoft.PowerShell_profile.ps1.tmpl <span class="note">&mdash; PS 7</span></li>
+          <li>WindowsPowerShell/Microsoft.PowerShell_profile.ps1 <span class="note">&mdash; PS 5.1 (dot-sources PS 7)</span></li>
+        </ul>
+      </details>
+    </details>
+  </div>
+  </details>
+</div>
+</section>
+
+<section id="setup">
+<h2>Setup</h2>
+
+<h3 id="setup-config">1. Configure once</h3>
+<p>Update before pushing your fork:</p>
+<ul class="checklist">
+  <li><code>ansible/group_vars/all.yml</code> &mdash; set <code>dev_user</code> and <code>dotfiles_repo</code> to your fork&rsquo;s URL.</li>
+  <li><code>hosts.conf</code> &mdash; add hosts with <code>./scripts/manage-hosts.sh --add ...</code> (or edit and <code>--format</code>), or let <code>bootstrap.sh</code> self-register them.</li>
+</ul>
+<p class="note-row">You should not need to edit <code>ansible/inventory/hosts.ini</code> &mdash; it&rsquo;s regenerated from <code>hosts.conf</code>.</p>
+
+<h3 id="setup-linux">2. On each Linux host</h3>
+<p class="lede">
+  <code>bootstrap.sh</code> needs only <code>curl</code>, <code>git</code>, <code>python3</code> (&ge;&nbsp;3.9), <code>python3 -m pip</code>, and <code>iproute</code> (<code>ip</code>).
+  A single preflight check reports <strong>all</strong> missing prereqs at once. It installs <code>ansible-core</code> itself via <code>pip3 install --user</code> on first run.
+</p>
+
+<h4>Env vars to set before running</h4>
+<table>
+  <thead><tr><th>Var</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>GITHUB_TOKEN</code></td>
+      <td>Authenticates the curl fetch of <code>bootstrap.sh</code> + the script&rsquo;s internal <code>git clone</code>/<code>pull</code>/<code>push</code>. Persisted into <code>.git/config</code> so <code>chezmoi update</code>, manual <code>git pull</code>, and the auto-push step keep working without re-passing it. <strong>Never committed.</strong> Generate at <a href="https://github.com/settings/tokens">github.com/settings/tokens</a> with <code>repo</code> scope (classic) or Contents:Read (fine-grained).</td>
+    </tr>
+    <tr><td><code>GIT_USER_NAME</code></td><td>Author name on the auto-registration commit (falls back to <code>whoami</code>).</td></tr>
+    <tr><td><code>GIT_USER_EMAIL</code></td><td>Author email on the auto-registration commit (falls back to <code>whoami@hostname</code>).</td></tr>
+  </tbody>
+</table>
+<p class="note-row">Keep these in a password manager (1Password, Bitwarden, KeePass) so the token and identity travel together.</p>
+
+<h4>Copy-paste one-liner</h4>
+<div class="tabs">
+  <input type="radio" id="pprod" name="tabset-bs" checked>
+  <input type="radio" id="pdev" name="tabset-bs">
+  <div class="tab-labels">
+    <label for="pprod"><span class="badge prod">prod</span>&nbsp; no sudo, <code>~/.local/bin</code></label>
+    <label for="pdev"><span class="badge dev">dev</span>&nbsp; sudo, <code>/usr/local/bin</code> + system pkgs</label>
+  </div>
+  <div class="tab-panels">
+    <div class="tab-panel panel-prod">
+<pre><code># === Bootstrap: prod machine (no sudo, ~/.local/bin) ===
+export GITHUB_TOKEN='&lt;your-PAT&gt;' \
+       GIT_USER_NAME='Arrush Chaturvedi' \
+       GIT_USER_EMAIL='contact@arrushc.com' && \
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
+source ~/.bashrc</code></pre>
+    </div>
+    <div class="tab-panel panel-dev">
+<pre><code># === Bootstrap: dev machine (sudo, /usr/local/bin + system packages) ===
+export GITHUB_TOKEN='&lt;your-PAT&gt;' \
+       GIT_USER_NAME='Arrush Chaturvedi' \
+       GIT_USER_EMAIL='contact@arrushc.com' && \
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
+    </div>
+  </div>
+</div>
+
+<h4>What <code>bootstrap.sh</code> does, in order</h4>
+<div class="flow">
+  <div class="step"><span class="num">1</span><span class="lbl">Preflight</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">2</span><span class="lbl">Clone repo</span><span class="note">~/.local/share/chezmoi</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">3</span><span class="lbl">Self-register host</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">4</span><span class="lbl">Install ansible-core</span><span class="note">if missing</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">5</span><span class="lbl">Run local.yml</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">6</span><span class="lbl">Commit + push</span><span class="note">warn-don&rsquo;t-fail</span></div>
+</div>
+<p class="note-row">Self-registration uses <code>hostname -s</code>, detected primary IP, <code>whoami</code>, and the group from <code>--dev</code>/<code>--prod</code>. Push failures (auth, conflict, no upstream) print a recovery command but don&rsquo;t abort &mdash; provisioning has already succeeded. Both modes are idempotent; re-run any time. After bootstrap, copy your SSH key from a client &mdash; see <a href="#hosts">Host management &rarr; Copy SSH key</a>.</p>
+
+<details>
+<summary>Reinstalling from scratch (<code>--reinstall</code>)</summary>
+<div class="grid-2">
+  <div class="os-card linux">
+    <span class="os-label">Linux</span>
+<pre><code>./bootstrap.sh --prod --reinstall              # prompts before wiping
+./bootstrap.sh --dev  --reinstall --yes        # skip prompt
+
+# From outside the repo (script in memory, won&rsquo;t self-delete):
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod --reinstall --yes</code></pre>
+  </div>
+  <div class="os-card windows">
+    <span class="os-label">Windows</span>
+<pre><code>.\bootstrap.ps1 -Reinstall          # prompts before wiping
+.\bootstrap.ps1 -Reinstall -Yes     # skip prompt
+
+# From outside the repo:
+irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
+  </div>
+</div>
+<p><strong>Wipes:</strong> the cloned repo (<code>~/.local/share/chezmoi</code> / <code>C:\Git\workstation</code>) and chezmoi&rsquo;s config dir (<code>~/.config/chezmoi/</code>).</p>
+<p><strong>Does not wipe:</strong> installed tools (re-bootstrap detects and skips), deployed dotfiles in <code>$HOME</code> (chezmoi re-applies over them), SSH keys, ansible-core, system packages.</p>
+<div class="callout"><strong>Self-deletion guard.</strong> Running <code>.\bootstrap.ps1 -Reinstall</code> from inside the repo would delete the script while executing. Both scripts detect this and refuse with a clear message &mdash; use the curl/irm-pipe form or copy the script outside first.</div>
+</details>
+
+<h3 id="setup-windows">3. On Windows</h3>
+<p class="lede">
+  The Windows host is a <strong>client</strong> &mdash; no Ansible, but chezmoi runs here too to deploy <code>wezterm.lua</code>, the PowerShell profile, Zed/VSCode settings.
+  <code>bootstrap.ps1</code> is the parallel of <code>bootstrap.sh</code>.
+</p>
+<div class="callout"><strong>Run from elevated PowerShell.</strong> Chocolatey needs admin to install, as do most package installs. Right-click PowerShell &rarr; &ldquo;Run as administrator&rdquo;. With <code>-SkipToolInstall</code>, elevation is not required.</div>
+<p>
+  <strong>Tools installed (via Chocolatey):</strong> chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode.
+  Required: chezmoi, Git. Optional ones warn-not-fail. Choco rather than winget because winget&rsquo;s PATH propagation is unreliable mid-session.
+</p>
+
+<h4>One-liner (elevated PowerShell)</h4>
+<pre><code># === Bootstrap: Windows client ===
+$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
+$env:GIT_USER_NAME  = 'Arrush Chaturvedi'
+$env:GIT_USER_EMAIL = 'contact@arrushc.com'
+irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
+
+<h4>Or after cloning manually</h4>
+<pre><code>git clone https://github.com/ArrushC/workstation.git C:\Git\workstation
+cd C:\Git\workstation
+.\bootstrap.ps1                                  # default flow (must be elevated)
+.\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
+.\bootstrap.ps1 -SkipToolInstall                 # tools already installed; non-elevated OK
+.\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
+.\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt</code></pre>
+
+<h4>What <code>bootstrap.ps1</code> does</h4>
+<div class="flow">
+  <div class="step"><span class="num">1</span><span class="lbl">Preflight</span><span class="note">admin check</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">2</span><span class="lbl">Bootstrap Choco + tools</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">3</span><span class="lbl">Clone repo</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">4</span><span class="lbl">chezmoi init --apply</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">5</span><span class="lbl">Re-hardlink wezterm.lua</span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">6</span><span class="lbl">SSH key</span><span class="note">prompt</span></div>
+</div>
+<p class="note-row">
+  Admin is required <strong>only if</strong> there are required tools to install. If everything&rsquo;s on PATH, no admin needed and the install step short-circuits.
+  <code>GITHUB_TOKEN</code> persists into <code>.git/config</code> (github.com-scoped) so subsequent <code>git push</code>, <code>chezmoi update</code>, and <code>manage-hosts.ps1</code> ops authenticate without re-passing the env var.
+</p>
+<p class="note-row">
+  <strong>Hybrid wezterm.lua model:</strong> chezmoi tracks the file (so it ships through the standard apply flow), and step 5 replaces the chezmoi-written copy with a hardlink to <code>chezmoi\dot_config\wezterm\wezterm.lua</code>.
+  Edits to the repo file &mdash; including from <code>manage-hosts.ps1 -Sync</code> &mdash; appear in WezTerm immediately via <code>automatically_reload_config</code>, without running <code>cza</code> after every host-list change.
+  If <code>chezmoi apply</code> ever atomic-writes the file (content drift), the link breaks &mdash; re-run <code>bootstrap.ps1</code> to restore it.
+</p>
+<p class="note-row">After bootstrap, restart your shell so the chezmoi-applied <code>$PROFILE</code> picks up &mdash; starship prompt, <code>cz</code>/<code>cza</code>/<code>cze</code>/<code>czd</code>/<code>czu</code>/<code>czs</code> aliases, git aliases, etc. <strong>Editing dotfiles:</strong> same workflow as Linux. <code>cze &lt;path&gt;</code> opens the source-state copy; <code>cza</code> applies; <code>czd</code> shows the diff; <code>cz cd</code> jumps to the source dir for direct git ops.</p>
+
+<h3 id="setup-wezterm">WezTerm keybinds</h3>
+<p class="lede">
+  WezTerm auto-opens a tab per host on launch and attaches to a persistent Zellij session. Press <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>H</kbd> inside WezTerm for a cheatsheet of keybinds, aliases, and hosts.
+</p>
+<table>
+  <thead><tr><th>Bind</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>H</kbd></td><td>Cheatsheet overlay</td></tr>
+    <tr><td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>J</kbd></td><td>Pick a host (fuzzy) and spawn a tab to it</td></tr>
+    <tr><td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd></td><td>Switch tab (fuzzy)</td></tr>
+    <tr><td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd></td><td>New tab in current domain</td></tr>
+    <tr><td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>W</kbd></td><td>Close current tab (confirm)</td></tr>
+    <tr><td><kbd>CTRL</kbd>+<kbd>TAB</kbd> / <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>TAB</kbd></td><td>Cycle tabs</td></tr>
+    <tr><td><kbd>ALT</kbd>+<kbd>1</kbd>..<kbd>9</kbd></td><td>Jump to tab N</td></tr>
+    <tr><td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>R</kbd></td><td>Reload <code>wezterm.lua</code></td></tr>
+  </tbody>
+</table>
+</section>
+
+<section id="hosts">
+<h2>Host management</h2>
+<p class="lede">
+  <code>hosts.conf</code> is the single source of truth. Two outputs are regenerated from it:
+  <code>ansible/inventory/hosts.ini</code> (full overwrite) and <code>chezmoi/dot_config/wezterm/wezterm.lua</code>
+  SSH-domains block (in-place replace between <code>-- HOSTS:START</code> / <code>-- HOSTS:END</code> sentinels).
+  After <code>--sync</code> on Windows, run <code>chezmoi apply</code> (or <code>cza</code>) to push the updated file into <code>%USERPROFILE%\.config\wezterm\</code>.
+</p>
+<div class="callout">
+  <strong>Group must be <code>dev_machine</code> or <code>prod_machine</code>.</strong>
+  Both scripts validate the input and reject anything else &mdash; an unknown group means no <code>group_vars/&lt;group&gt;.yml</code> exists and scope resolution silently breaks.
+  Interactive prompt defaults to <code>prod_machine</code>.
+</div>
+<p class="note-row">
+  <strong>Don&rsquo;t hand-pad <code>hosts.conf</code>.</strong> The save routine recalculates column widths from data; manual padding gets normalised away on next save.
+  <strong>Auto-sorted</strong> by group, then by name, on every save &mdash; manual reordering won&rsquo;t survive.
+</p>
+
+<h3>Commands</h3>
+<div class="grid-2">
+  <div class="os-card linux">
+    <span class="os-label">Linux</span>
+<pre><code>./scripts/manage-hosts.sh                # interactive menu
+./scripts/manage-hosts.sh --sync         # regenerate inventory + wezterm
+./scripts/manage-hosts.sh --list         # print table
+./scripts/manage-hosts.sh --format       # re-pad hosts.conf
+./scripts/manage-hosts.sh --add --name N --ip I \
+    --user U --group dev_machine --skip-confirm
+./scripts/manage-hosts.sh --remove</code></pre>
+  </div>
+  <div class="os-card windows">
+    <span class="os-label">Windows</span>
+<pre><code>.\scripts\manage-hosts.ps1               # interactive menu
+.\scripts\manage-hosts.ps1 -Sync
+.\scripts\manage-hosts.ps1 -List
+.\scripts\manage-hosts.ps1 -Format
+.\scripts\manage-hosts.ps1 -Add -Name N -Ip I `
+    -User U -Group prod_machine -SkipConfirm
+.\scripts\manage-hosts.ps1 -Remove</code></pre>
+  </div>
+</div>
+
+<h3>Copy SSH key</h3>
+<p>
+  After a host is registered, you still need your public key in its <code>~/.ssh/authorized_keys</code> before WezTerm or Ansible can connect without a password.
+</p>
+<div class="grid-2">
+  <div class="os-card linux">
+    <span class="os-label">Linux</span>
+<pre><code>./scripts/manage-hosts.sh --copy-id --name dev-01  # explicit
+./scripts/manage-hosts.sh --copy-id                # interactive picker</code></pre>
+  </div>
+  <div class="os-card windows">
+    <span class="os-label">Windows</span>
+<pre><code>.\scripts\manage-hosts.ps1 -CopyId -Name dev-01    # explicit
+.\scripts\manage-hosts.ps1 -CopyId                 # interactive picker</code></pre>
+  </div>
+</div>
+<ul>
+  <li>Looks the host up in <code>hosts.conf</code> and uses its <code>User</code>/<code>Ip</code> columns.</li>
+  <li>If <code>id_ed25519</code> is missing, prompts to generate one with <code>ssh-keygen -t ed25519 -N ""</code> (no passphrase). Decline and the command exits without copying.</li>
+  <li>Linux uses native <code>ssh-copy-id</code> if available; otherwise falls back to a manual SSH method that de-duplicates the file. Windows always uses the manual method (no <code>ssh-copy-id</code> in Windows OpenSSH).</li>
+  <li>After a successful <code>--add</code>, both scripts print a tip line that pre-fills the host name for you.</li>
+</ul>
+</section>
+
+<section id="daily">
+<h2>Daily workflows</h2>
+
+<h3>chezmoi (Linux or Windows)</h3>
+<p>Same aliases on both OSes &mdash; defined in <code>dot_bashrc.tmpl</code> (Linux) and the templated PowerShell profile (Windows):</p>
+<table>
+  <thead><tr><th>Alias</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>cze &lt;path&gt;</code></td><td>Edit a dotfile in source state (e.g. <code>cze ~/.bashrc</code>, <code>cze $PROFILE</code>)</td></tr>
+    <tr><td><code>cza</code></td><td>Apply pending changes locally</td></tr>
+    <tr><td><code>czd</code></td><td>Diff &mdash; see what would change</td></tr>
+    <tr><td><code>czu</code></td><td>Pull latest from repo and apply</td></tr>
+    <tr><td><code>czs</code></td><td>Status</td></tr>
+    <tr><td><code>cz cd</code></td><td>Jump to the source dir for direct git ops</td></tr>
+  </tbody>
+</table>
+<p>To push changes back to the repo:</p>
+<pre><code>cd ~/.local/share/chezmoi   # or wherever the source state lives
+git add -A && git commit -m "update bashrc" && git push</code></pre>
+
+<h4>Per-machine overrides (untracked, sourced last)</h4>
+<div class="grid-2">
+  <div class="os-card linux">
+    <span class="os-label">Linux &mdash; ~/.bashrc.local</span>
+<pre><code>export GOPATH="/opt/go"
+alias work='cd /opt/myproject'</code></pre>
+  </div>
+  <div class="os-card windows">
+    <span class="os-label">Windows &mdash; ...\PowerShell\Microsoft.PowerShell_profile.local.ps1</span>
+<pre><code>$env:GOPATH = "C:\Go"
+function work { Set-Location "D:\dev\myproject" }</code></pre>
+  </div>
+</div>
+
+<h3>Ansible &mdash; remote (control machine &rarr; all hosts)</h3>
+<p class="note-row">Scope per host comes from its <code>group_vars/&lt;group&gt;.yml</code>. Don&rsquo;t normally pass <code>tool_scope</code>/<code>has_sudo</code> on the CLI &mdash; the group decides.</p>
+<div class="tabs">
+  <input type="radio" id="ar-all" name="tabset-ar" checked>
+  <input type="radio" id="ar-group" name="tabset-ar">
+  <input type="radio" id="ar-host" name="tabset-ar">
+  <input type="radio" id="ar-check" name="tabset-ar">
+  <div class="tab-labels">
+    <label for="ar-all">All hosts</label>
+    <label for="ar-group">By group</label>
+    <label for="ar-host">Single host</label>
+    <label for="ar-check">Dry run</label>
+  </div>
+  <div class="tab-panels">
+    <div class="tab-panel ar-panel-all"><pre><code># Sudo prompt is for dev_machine hosts.
+cd ansible
+ansible-playbook playbooks/linux.yml --ask-become-pass</code></pre></div>
+    <div class="tab-panel ar-panel-group"><pre><code>cd ansible
+ansible-playbook playbooks/linux.yml --limit dev_machine --ask-become-pass
+ansible-playbook playbooks/linux.yml --limit prod_machine</code></pre></div>
+    <div class="tab-panel ar-panel-host"><pre><code>cd ansible
+ansible-playbook playbooks/linux.yml --limit atc-cache-dev09</code></pre></div>
+    <div class="tab-panel ar-panel-check"><pre><code>cd ansible
+ansible-playbook playbooks/linux.yml --check</code></pre></div>
+  </div>
+</div>
+
+<h3>Ansible &mdash; local (self-provisioning &mdash; what bootstrap.sh runs)</h3>
+<p class="note-row"><code>bootstrap.sh</code> loads the relevant group_vars file as extra-vars so the local playbook sees the same scope values that the remote playbook would apply.</p>
+<pre><code>cd ansible
+
+# Prod (no sudo)
+ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
+
+# Dev (sudo)
+ansible-playbook playbooks/local.yml -e "@group_vars/dev_machine.yml" --ask-become-pass
+
+# Dry run
+ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"</code></pre>
+</section>
+
+<section id="adding">
+<h2>Adding tools &amp; hosts</h2>
+
+<h3>Adding a new tool</h3>
+<p>One place to edit, not two:</p>
+<ol>
+  <li>Add an install task in <code>ansible/roles/linux-base/tasks/tools.yml</code>. Use <code>dest: "{{ tools_dest }}"</code> and <code>become: "{{ tools_become }}"</code> &mdash; the role resolves these from <code>tool_scope</code>.</li>
+  <li>Pin the version in <code>ansible/group_vars/all.yml</code>.</li>
+</ol>
+<pre><code># --- direnv ----------------------------------------------------------------
+- name: "Install direnv"
+  ansible.builtin.get_url:
+    url: "https://github.com/direnv/direnv/releases/download/v{{ direnv_version }}/direnv.linux-amd64"
+    dest: "{{ tools_dest }}/direnv"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/direnv"
+  become: "{{ tools_become }}"</code></pre>
+<pre><code># group_vars/all.yml
+direnv_version: "2.34.0"</code></pre>
+<p class="note-row">Both user and system scope work automatically. <strong>Do not</strong> add tool-specific logic or version pins to <code>bootstrap.sh</code>.</p>
+
+<h3>Bumping a tool version</h3>
+<p>Edit <code>ansible/group_vars/all.yml</code>, change one line, commit. The next <code>ansible-playbook</code> run picks up the new version. No second file to keep in sync.</p>
+
+<h3>Adding a new host</h3>
+<div class="flow">
+  <div class="step"><span class="num">1</span><span class="lbl">On new host: <code>bootstrap.sh --prod</code> or <code>--dev</code></span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">2</span><span class="lbl">Elsewhere: <code>git pull</code> + <code>--sync</code> / <code>-Sync</code></span></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><span class="num">3</span><span class="lbl">Commit + push the host-list files</span></div>
+</div>
+<p class="note-row">Self-registration appends the host to <code>hosts.conf</code> under <code>prod_machine</code> or <code>dev_machine</code>. Step 2 updates <code>hosts.ini</code> and the wezterm block everywhere.</p>
+</section>
+
+<section id="troubleshooting">
+<h2>Troubleshooting</h2>
+<div class="filter-bar">
+  <input id="ts-filter" type="search" placeholder="Filter entries (e.g. 'choco', 'PATH', 'wezterm')…" autocomplete="off">
+  <div class="filter-meta" id="ts-count"></div>
+</div>
+
+<details data-ts>
+  <summary>Bootstrap reports <em>&ldquo;Missing required prerequisites: &hellip;&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>Install all listed tools at once via your distro&rsquo;s package manager.</p>
+    <p><strong>RHEL/Fedora:</strong> <code>sudo dnf install curl git python3 python3-pip iproute</code></p>
+    <p><strong>Debian/Ubuntu:</strong> <code>sudo apt install curl git python3 python3-pip iproute2</code></p>
+    <p>Bootstrap deliberately collects every gap up front so you only have to install once.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>Bootstrap fails with <em>&ldquo;python3 &ge; 3.9 required for ansible-core&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>Your distro&rsquo;s <code>python3</code> is too old.</p>
+    <p>On RHEL 8: enable a newer module stream (<code>sudo dnf module install python39</code>) or install <code>python3.11</code> and ensure <code>python3</code> resolves to it.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>Bootstrap fails with <em>&ldquo;ansible-playbook not on PATH after pip install&rdquo;</em></summary>
+  <div class="ts-body">
+    <p><code>pip install --user</code> dropped the binary in <code>~/.local/bin</code> but your shell hasn&rsquo;t picked that up yet.</p>
+    <p>Run <code>export PATH="$HOME/.local/bin:$PATH"</code> and re-run <code>./bootstrap.sh</code>. After this run completes, <code>shell.yml</code> wires the PATH permanently.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>Bootstrap finishes with <em>&ldquo;Push failed (auth, conflict, or no upstream)&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>Provisioning succeeded &mdash; only the host-list push didn&rsquo;t.</p>
+    <p>Recover with <code>cd ~/.local/share/chezmoi &amp;&amp; git push</code>.</p>
+    <p>Common causes: no SSH key for the git remote, a divergent upstream (<code>git pull --rebase</code> first), or you&rsquo;ve forked and never set the remote.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>Private repo: clone fails with <em>&ldquo;Authentication failed&rdquo;</em> or 404</summary>
+  <div class="ts-body">
+    <p>Set <code>GITHUB_TOKEN</code> to a PAT with <code>repo</code> (classic) or Contents:Read (fine-grained) scope and re-run.</p>
+    <p>The token is written into <code>.git/config</code> as <code>http.https://github.com/.extraheader</code> so subsequent ops (push, <code>chezmoi update</code>, manual <code>git pull</code>) all work &mdash; re-passing the env var on later runs just refreshes the stored value.</p>
+    <p><strong>To clear:</strong> <code>git -C ~/.local/share/chezmoi config --unset http.https://github.com/.extraheader</code>.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>manage-hosts.sh --copy-id</code> keeps prompting for a password every connection</summary>
+  <div class="ts-body">
+    <p>The key landed but <code>sshd</code> isn&rsquo;t using it.</p>
+    <p>Check the target&rsquo;s <code>/etc/ssh/sshd_config</code>: <code>PubkeyAuthentication yes</code>, <code>AuthorizedKeysFile .ssh/authorized_keys</code>.</p>
+    <p>Check perms: <code>~/.ssh</code> = 700, <code>~/.ssh/authorized_keys</code> = 600.</p>
+    <p>On SELinux RHEL: <code>restorecon -R -v ~/.ssh</code>.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>ssh-keygen</code> on Windows opens a passphrase prompt despite <code>-N '""'</code></summary>
+  <div class="ts-body">
+    <p>Some PowerShell quoting variants strip the empty-passphrase argument.</p>
+    <p>Re-run interactively and just press <kbd>Enter</kbd> twice; the rest of the flow is unchanged.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>ansible-playbook: command not found</code> after a fresh <code>bootstrap.sh</code> run</summary>
+  <div class="ts-body">
+    <p>Same root cause as the PATH issue above &mdash; PATH didn&rsquo;t include <code>~/.local/bin</code>.</p>
+    <p>Either <code>source ~/.bashrc</code> or run <code>export PATH="$HOME/.local/bin:$PATH"</code> and retry.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>WezTerm shows old config after an edit</summary>
+  <div class="ts-body">
+    <p>Normally edits to <code>chezmoi/dot_config/wezterm/wezterm.lua</code> are visible immediately because <code>bootstrap.ps1</code> hardlinks the home path to the chezmoi source.</p>
+    <p><strong>Confirm the link is intact:</strong></p>
+    <pre><code>fsutil hardlink list "$env:USERPROFILE\.config\wezterm\wezterm.lua"</code></pre>
+    <p>Both the home path and the repo path should be listed. If only the home path appears, the link broke (chezmoi atomic-write, an editor that doesn&rsquo;t preserve hardlinks, or someone deleted and re-created the file).</p>
+    <p><strong>Restore:</strong> <code>.\bootstrap.ps1 -SkipToolInstall -SkipChezmoi -SkipKeyGen</code> (just the hardlink step) or full <code>bootstrap.ps1</code>.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>bootstrap.ps1</code> aborts with <em>&ldquo;Admin required to install: &hellip;&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>The preflight names exactly which tools are missing and require elevation. Two paths:</p>
+    <p><strong>(a)</strong> Close the shell, right-click PowerShell &rarr; &ldquo;Run as administrator&rdquo;, re-run.</p>
+    <p><strong>(b)</strong> <code>choco install -y</code> the named packages yourself in an admin one-shot, then re-run non-elevated with <code>-SkipToolInstall</code>.</p>
+    <p>If every tool is already installed and on PATH, the script just notes &ldquo;All Chocolatey-managed tools already installed&rdquo; and proceeds without asking for admin.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>bootstrap.ps1</code> says <em>&ldquo;&lt;Tool&gt; is registered with choco but its binary isn&rsquo;t on PATH &mdash; re-installing with --force&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>Recoverable warning &mdash; choco&rsquo;s local database lists the package as installed but the binary&rsquo;s missing (usually from an interrupted install or someone removing files).</p>
+    <p>The script automatically passes <code>--force</code> to reinstall it. If <code>choco install --force</code> itself fails:</p>
+    <pre><code>choco uninstall &lt;id&gt; -y
+choco install -y &lt;id&gt;</code></pre>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>bootstrap.ps1</code> reports <em>&ldquo;Chocolatey install completed but `choco` is not on PATH&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>The choco installer succeeded but the current shell&rsquo;s PATH wasn&rsquo;t refreshed in time.</p>
+    <p>Close the elevated PowerShell, open a new elevated PowerShell, and re-run &mdash; the new session inherits the updated machine PATH and picks up <code>choco</code> correctly.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>A <code>choco install</code> step says <em>&ldquo;package not found&rdquo;</em> or <em>&ldquo;deprecated&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>Choco package IDs occasionally get renamed/retired upstream.</p>
+    <p>Edit <code>$ChocoTools</code> in <code>bootstrap.ps1</code> to point at the current ID (search at <a href="https://community.chocolatey.org/packages">community.chocolatey.org/packages</a>), or set the tool as <code>Required = $false</code> so the rest of the install proceeds and install it manually.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>hosts.ini</code> is out of sync with <code>hosts.conf</code></summary>
+  <div class="ts-body">
+    <p>Run <code>./scripts/manage-hosts.sh --sync</code>. Never edit <code>hosts.ini</code> directly &mdash; it&rsquo;s auto-generated.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>Bootstrap errored with <em>&ldquo;Missing required flag: --dev or --prod&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>The script no longer has a default scope &mdash; exactly one of <code>--dev</code> (sudo, system-wide) or <code>--prod</code> (no sudo, user-wide) must be passed.</p>
+    <p>The old <code>--full</code> flag was removed; if you still have it in a script or paste buffer, replace it with <code>--dev</code>.</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary><code>manage-hosts.{sh,ps1} --add</code> errored with <em>&ldquo;Invalid group&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>The only valid groups are <code>dev_machine</code> and <code>prod_machine</code> &mdash; anything else means there&rsquo;s no <code>group_vars/&lt;group&gt;.yml</code> to source scope from.</p>
+    <p>Re-run with one of those two values (default is <code>prod_machine</code>).</p>
+  </div>
+</details>
+
+<details data-ts>
+  <summary>An Ansible run errored with <em>&ldquo;tool_scope=system requires has_sudo=true&rdquo;</em></summary>
+  <div class="ts-body">
+    <p>A host&rsquo;s <code>group_vars</code> and the playbook&rsquo;s CLI overrides disagreed &mdash; usually because something passed <code>-e "tool_scope=system"</code> against a <code>prod_machine</code> host.</p>
+    <p>Drop the <code>-e</code> override and let the group decide, or use <code>--limit dev_machine</code> to scope the run to hosts that actually have sudo.</p>
+  </div>
+</details>
+
+</section>
+
+</main>
+</div>
+
+<script>
+(function() {
+  const filter = document.getElementById('ts-filter');
+  const count  = document.getElementById('ts-count');
+  const items  = Array.from(document.querySelectorAll('[data-ts]'));
+  if (!filter || !items.length) return;
+
+  function update() {
+    const q = filter.value.trim().toLowerCase();
+    let shown = 0;
+    items.forEach(d => {
+      if (!q) {
+        d.hidden = false;
+        d.open = false;
+      } else {
+        const match = d.textContent.toLowerCase().includes(q);
+        d.hidden = !match;
+        d.open = match;
+        if (match) shown++;
+      }
+    });
+    count.textContent = q ? `${shown} of ${items.length} matching` : '';
+  }
+  filter.addEventListener('input', update);
+})();
+</script>
+
+</body>
+</html>

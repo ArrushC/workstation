@@ -43,7 +43,7 @@ workstation/
 ├── bootstrap.ps1                 ← Windows client entry point — choco tools + chezmoi apply (elevated)
 ├── .chezmoiroot                  ← contains "chezmoi" — redirects chezmoi's source state to the chezmoi/ subdir
 ├── hosts.conf                    ← single source of truth for host list
-├── README.md                     ← user-facing setup + daily commands
+├── README.html                   ← user-facing setup + daily commands (single self-contained HTML; open in a browser)
 │
 ├── scripts/
 │   ├── manage-hosts.sh           ← Linux host manager
@@ -236,9 +236,13 @@ Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the grou
   - **Windows**: `Microsoft.PowerShell_profile.local.ps1` next to the main profile — un-tracked, dot-sourced last by the templated profile.
 - `dot_bashrc.tmpl` ends with a hostname-templated block (currently a `PROJECT_ROOT` switch on `rhel-dev-01`) before the `.bashrc.local` source. The Windows PS profile applies the same pattern.
 
-## README.md must mirror user-facing changes
+## README.html must mirror user-facing changes
 
-`README.md` is reference material the user runs against — setup commands, daily workflows, scope flags, file locations. **Whenever you change something the user needs to know or maintain, update `README.md` in the same change**, with concrete usage examples (a copyable command block, not just prose).
+`README.html` is reference material the user runs against — setup commands, daily workflows, scope flags, file locations. It is a single self-contained HTML file at the repo root, opened directly in a browser; there is no `README.md` (the GitHub landing page is deliberately bare). **Whenever you change something the user needs to know or maintain, update `README.html` in the same change**, with concrete usage examples (a copyable command block, not just prose).
+
+Authoring HTML by hand is heavier than markdown, so two practical rules:
+- Match the existing visual primitives already in `README.html` — `<table>`, `.flow` chips, `.tabs` panels, `.os-card`, `<details>` for collapsible sections. Don't invent new components for a one-off addition.
+- The `<style>` block at the top of the file is the only stylesheet; keep additions there (no external CSS).
 
 This includes:
 - Setup or install steps (new prerequisite, changed entry point, renamed flag).
@@ -246,14 +250,14 @@ This includes:
 - Variables the user is expected to override (`tool_scope`, `has_sudo`, anything in `defaults/main.yml`).
 - File locations the user reads/writes (`hosts.conf`, `~/.bashrc.local`, `chezmoi/home/`, hardlink target).
 - New tool added — at minimum, mention it in the Stack table; if it has end-user CLI surface, show it.
-- Deprecations or removals — don't leave stale instructions in README pointing at removed flags or files.
+- Deprecations or removals — don't leave stale instructions in `README.html` pointing at removed flags or files.
 
 This does NOT include:
 - Internal Ansible task refactors that don't change CLI overrides or file locations.
 - Comment edits, formatting changes, variable renames invisible from outside the role.
-- Bumping a tool version — `group_vars/all.yml` is the source of truth, README doesn't pin versions.
+- Bumping a tool version — `group_vars/all.yml` is the source of truth, `README.html` doesn't pin versions.
 
-When in doubt, ask: "Would a user reading only README.md still be able to set up and operate this repo correctly after my change?" If no, update README.
+When in doubt, ask: "Would a user reading only `README.html` still be able to set up and operate this repo correctly after my change?" If no, update `README.html`.
 
 ### Worked examples
 
@@ -289,7 +293,7 @@ When in doubt, ask: "Would a user reading only README.md still be able to set up
 - **Per-machine overrides go in `~/.bashrc.local` on each host** — un-tracked, sourced last by the templated bashrc.
 - **`wezterm.lua` is chezmoi-tracked AND hardlinked.** The chezmoi source at `chezmoi/dot_config/wezterm/wezterm.lua` is the canonical file; `bootstrap.ps1`'s final step replaces the chezmoi-written copy at `%USERPROFILE%\.config\wezterm\wezterm.lua` with a hardlink to the source. This is a hybrid: chezmoi tracks the file (so it ships through `chezmoi apply` and the OS-aware ignore rules) AND the hardlink gives WezTerm live-reload on direct edits to the repo file (e.g. from `manage-hosts.ps1 --sync`). Caveat: if `chezmoi apply` ever needs to atomic-write the target (only happens on a content mismatch — e.g. if someone manually edits the home file out of band), it breaks the link, and the next `bootstrap.ps1` re-run restores it.
 - **Only two valid Ansible groups: `dev_machine` and `prod_machine`.** Both `manage-hosts` scripts validate the group on `--add`/`--edit` and reject anything else, because an unknown group means no `group_vars/<group>.yml` exists and downstream scope resolution silently breaks. The group's scope semantics (sudo? system or user?) live in `ansible/group_vars/<group>.yml` — that file is the single source of truth, used by both the remote `linux.yml` playbook and (via `-e "@..."`) by `bootstrap.sh` for the local self-provisioning run. Keep the two aligned: if `bootstrap.sh` ever needs different values than the remote flow, that's a smell — fix the group_vars file, not the script.
-- **User-facing changes get mirrored into `README.md`** in the same commit (see the section above for what counts).
+- **User-facing changes get mirrored into `README.html`** in the same commit (see the section above for what counts). There is no `README.md` — `README.html` is the only user-facing reference, opened in a browser from the local clone.
 
 ## Daily workflows
 
@@ -329,7 +333,7 @@ Adding a host:
 Adding a tool:
 1. Add an install task in `ansible/roles/linux-base/tasks/tools.yml` using `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"`.
 2. Add `<name>_version: "X.Y.Z"` to `ansible/group_vars/all.yml`.
-3. If the tool has user-facing CLI surface, mention it in `README.md` (see "README.md must mirror user-facing changes").
+3. If the tool has user-facing CLI surface, mention it in `README.html` (see "README.html must mirror user-facing changes").
 
 ## Files Claude should be careful with
 
@@ -355,4 +359,4 @@ After changes:
 - `chezmoi diff` on a host (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm); on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc).
 - `bootstrap.sh --dev` and `bootstrap.sh --prod` on fresh hosts — each completes idempotently and self-registers under the matching group.
 - `bootstrap.ps1` on a fresh Windows machine (from an **elevated** PowerShell) — choco bootstraps itself, the seven tracked tools install, chezmoi applies, wezterm picks up the deployed config.
-- `git diff README.md` — verify the user-facing surface still matches reality.
+- `git diff README.html` — verify the user-facing surface still matches reality. Open the file in a browser too — visual primitives (tabs, flow chips, accordion filter) need to render, not just diff cleanly.
