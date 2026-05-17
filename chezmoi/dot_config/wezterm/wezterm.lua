@@ -107,20 +107,54 @@ local config = wezterm.config_builder()
 
 config.color_scheme = 'Tokyo Night'
 config.font         = wezterm.font('JetBrains Mono', { weight = 'Regular' })
-config.font_size    = 12.0
+config.font_size    = 10.5
 
--- Window chrome — TITLE alone hides resize handles, which also blocks
--- Windows snap (Win+Arrow). Adding RESIZE keeps the title bar AND lets
--- the OS resize/snap the window.
-config.window_decorations          = 'TITLE | RESIZE'
+-- Toggle between fancy (native GUI, proportional/custom font, top only,
+-- frameless Chrome-style) and retro (terminal-cell, supports bottom
+-- placement, supports the format-tab-title padding trick below, keeps
+-- OS title bar). Flip this single flag to switch styles end-to-end.
+local fancy_tabs                   = true
+
+-- Window chrome — fancy mode uses INTEGRATED_BUTTONS|RESIZE for the Chrome
+-- look: no OS title bar, WezTerm-drawn min/max/close buttons integrated into
+-- the tab bar (colors via button_* in window_frame), resize border preserved.
+-- (Pure 'RESIZE' alone leaves a more obvious gap where the OS title used to
+-- be on Windows. 'NONE' eliminates the resize border too but breaks Win+Arrow
+-- snap and minimize.) Retro keeps the OS title bar since the retro tab bar
+-- sits at the bottom and there's no top chrome to host the buttons.
+config.window_decorations          = fancy_tabs and 'INTEGRATED_BUTTONS|RESIZE' or 'TITLE | RESIZE'
 config.window_background_opacity   = 1.0 -- 0.95
 config.enable_tab_bar              = true
-config.use_fancy_tab_bar           = false
-config.tab_bar_at_bottom           = true
+config.use_fancy_tab_bar           = fancy_tabs
+-- tab_bar_at_bottom is only honored by the retro bar; fancy is always top.
+config.tab_bar_at_bottom           = not fancy_tabs
 config.hide_tab_bar_if_only_one_tab = false
--- Raise the per-tab cap so format-tab-title can pad labels to fill the bar
--- evenly. Without this the cap (default 16) would clip the padded labels.
-config.tab_max_width               = 100
+-- Retro needs headroom for the format-tab-title padding (raise above the
+-- default 16 to avoid clipping). Fancy auto-sizes tabs so a smaller cap
+-- keeps the bar compact.
+config.tab_max_width               = fancy_tabs and 32 or 100
+
+-- Fancy-mode chrome (Tokyo Night-matched). Ignored when use_fancy_tab_bar = false.
+-- Font is JetBrains Mono Medium so the tab bar carries the terminal's identity
+-- but stays distinct from body text (which uses Regular). The retro tab bar
+-- inherits the main terminal font automatically, so JetBrains Mono is applied
+-- in both modes without needing a separate retro override.
+config.window_frame = {
+  font                            = wezterm.font { family = 'JetBrains Mono', weight = 'Medium' },
+  font_size                       = 10,
+  -- Active bar sits slightly elevated above main bg (#1a1b26) for separation;
+  -- inactive drops down to Tokyo Night bg_dark.
+  active_titlebar_bg              = '#1f2335',
+  inactive_titlebar_bg            = '#16161e',
+  active_titlebar_fg              = '#c0caf5',
+  inactive_titlebar_fg            = '#565f89',
+  active_titlebar_border_bottom   = '#292e42',
+  inactive_titlebar_border_bottom = '#15161e',
+  button_bg                       = '#1f2335',
+  button_fg                       = '#c0caf5',
+  button_hover_bg                 = '#292e42',
+  button_hover_fg                 = '#c0caf5',
+}
 
 -- Slightly padded inner margins
 config.window_padding = {
@@ -176,7 +210,16 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, _hover, m
 
   local title = tab.tab_title
   if title == nil or #title == 0 then
-    title = host or pane.title or ''
+    if host then
+      title = host
+    else
+      -- Shell-set titles (PROMPT_COMMAND OSC escape, e.g. "user@host:~") get
+      -- their leading "user@" stripped. The host + cwd are the useful bits;
+      -- the username is just noise that's already implied by being logged in.
+      -- Character class covers letters/digits/dot/underscore/hyphen — typical
+      -- Unix username chars.
+      title = (pane.title or ''):gsub('^[%w%._%-]+@', '')
+    end
   end
 
   -- Re-derive position from the live tabs array — tab.tab_index reflects the
@@ -191,37 +234,40 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, _hover, m
   end
   local label = string.format(' %d: %s ', idx, title)
 
-  -- Stretch tabs to fill the bar evenly. Use the widest pane's cell width as
-  -- a proxy for window content width (single-pane tabs are the common case;
-  -- with splits we still get a sensible upper bound). Reserve exactly the
-  -- live right-status width (+ a small margin), then split the remainder
-  -- across all tabs and pad the label centered to that width. Capped at
-  -- max_width (= tab_max_width).
-  local total_cols = 0
-  for _, p in ipairs(panes) do
-    if p.width and p.width > total_cols then total_cols = p.width end
-  end
-  if total_cols > 0 and #all_tabs > 0 then
-    local reserved = right_status_cells + 4
-    local available = math.max(8, total_cols - reserved)
-    local target = math.floor(available / #all_tabs)
-    target = math.min(target, max_width)
-    local pad = target - #label
-    if pad > 0 then
-      local left = math.floor(pad / 2)
-      label = string.rep(' ', left) .. label .. string.rep(' ', pad - left)
+  -- Retro mode: stretch tabs to fill the bar evenly. Fancy mode auto-sizes
+  -- tabs and uses a proportional font, so this padding only wastes space —
+  -- skip it. (fancy_tabs is the module-scope flag set near use_fancy_tab_bar.)
+  if not fancy_tabs then
+    local total_cols = 0
+    for _, p in ipairs(panes) do
+      if p.width and p.width > total_cols then total_cols = p.width end
+    end
+    if total_cols > 0 and #all_tabs > 0 then
+      local reserved = right_status_cells + 4
+      local available = math.max(8, total_cols - reserved)
+      local target = math.floor(available / #all_tabs)
+      target = math.min(target, max_width)
+      local pad = target - #label
+      if pad > 0 then
+        local left = math.floor(pad / 2)
+        label = string.rep(' ', left) .. label .. string.rep(' ', pad - left)
+      end
     end
   end
 
+  -- Always return a FormatItems list so we can layer attributes (e.g. bold
+  -- on the active tab) without branching on host vs non-host twice.
+  local items = {}
   if host then
     local bg, fg = host_colors(host, tab.is_active)
-    return {
-      { Background = { Color = bg } },
-      { Foreground = { Color = fg } },
-      { Text = label },
-    }
+    table.insert(items, { Background = { Color = bg } })
+    table.insert(items, { Foreground = { Color = fg } })
   end
-  return label
+  if tab.is_active then
+    table.insert(items, { Attribute = { Intensity = 'Bold' } })
+  end
+  table.insert(items, { Text = label })
+  return items
 end)
 
 -- ---------------------------------------------------------------------------
@@ -442,34 +488,123 @@ local function time_icon()
   end
 end
 
-wezterm.on('update-right-status', function(window, pane)
-  local dim = pane:get_dimensions()
-  local cols = (dim and dim.cols) or 80
+-- "Copied!" badge: timestamps per-window, fires from the 'copied' event
+-- emitted by the CTRL+SHIFT+C / CTRL+SHIFT+A bindings below. Visible for
+-- COPIED_BADGE_DURATION seconds, then the next ~1s tick of update-right-status
+-- removes it. The badge is rendered immediately on copy (not on the next
+-- tick) by calling render_right_status from the 'copied' handler directly.
+local copied_at = {}
+local COPIED_BADGE_DURATION = 2
 
+local function render_right_status(window, pane)
+  local dim_info = pane:get_dimensions()
+  local cols = (dim_info and dim_info.cols) or 80
+
+  -- Each part: { text = string, fg = '#hex' (optional), bold = bool (optional) }
   local parts = {}
 
   local domain = pane:get_domain_name()
   if domain and domain ~= 'local' then
-    table.insert(parts, domain)
+    table.insert(parts, { text = domain })
     if cols >= 130 then
-      table.insert(parts, 'zellij:main')
+      table.insert(parts, { text = 'zellij:main' })
     end
   end
 
   if cols >= 80 then
     local bat = format_battery()
-    if bat then table.insert(parts, bat) end
+    if bat then table.insert(parts, { text = bat }) end
   end
 
   if cols >= 60 then
-    table.insert(parts, time_icon() .. ' ' .. wezterm.strftime('%H:%M'))
+    table.insert(parts, { text = time_icon() .. ' ' .. wezterm.strftime('%H:%M') })
   else
-    table.insert(parts, wezterm.strftime('%H:%M'))
+    table.insert(parts, { text = wezterm.strftime('%H:%M') })
   end
 
-  local status = ' ' .. table.concat(parts, '  │  ') .. ' '
-  window:set_right_status(status)
-  right_status_cells = display_width(status)
+  -- Tighter separator (' · ' instead of '  │  ') in a dim color so the bar
+  -- doesn't dominate visually. The fancy tab bar font (JetBrains Mono Medium)
+  -- rendered the heavy '│' with too much weight against the lighter labels.
+  local FG     = '#c0caf5'
+  local FG_DIM = '#565f89'
+  local SEP    = ' · '
+
+  local items = {}
+  local plain = ''  -- plain text only — for cell-width measurement
+
+  if #parts > 0 then
+    table.insert(items, { Text = ' ' })
+    plain = ' '
+  end
+
+  for i, p in ipairs(parts) do
+    if i > 1 then
+      table.insert(items, { Foreground = { Color = FG_DIM } })
+      table.insert(items, { Attribute = { Intensity = 'Normal' } })
+      table.insert(items, { Text = SEP })
+      plain = plain .. SEP
+    end
+    table.insert(items, { Foreground = { Color = p.fg or FG } })
+    table.insert(items, { Attribute = { Intensity = p.bold and 'Bold' or 'Normal' } })
+    table.insert(items, { Text = p.text })
+    plain = plain .. p.text
+  end
+
+  if #parts > 0 then
+    table.insert(items, { Text = ' ' })
+    plain = plain .. ' '
+  end
+
+  local normal_w = display_width(plain)
+
+  -- When a recent copy is active, replace the rendered text with the badge —
+  -- but center-pad it to the SAME cell width as the normal status so the
+  -- right-status block doesn't resize and the tab-bar layout doesn't shift.
+  -- Width-measurement uses the normal width in both branches so format-tab-title
+  -- reserves the same space throughout.
+  local wid = window:window_id()
+  if copied_at[wid] and (os.time() - copied_at[wid] < COPIED_BADGE_DURATION) then
+    local badge   = '📋 Copied!'
+    local badge_w = display_width(badge)
+    local extra   = math.max(0, normal_w - badge_w)
+    local left    = math.floor(extra / 2)
+    local right   = extra - left
+    window:set_right_status(wezterm.format {
+      { Text = string.rep(' ', left) },
+      { Foreground = { Color = '#9ece6a' } },
+      { Attribute = { Intensity = 'Bold' } },
+      { Text = badge },
+      { Attribute = { Intensity = 'Normal' } },
+      { Text = string.rep(' ', right) },
+    })
+  else
+    window:set_right_status(wezterm.format(items))
+  end
+
+  right_status_cells = normal_w
+end
+
+wezterm.on('update-right-status', render_right_status)
+
+-- Emitted by act.EmitEvent 'copied' in the copy keybindings (CTRL+SHIFT+C,
+-- CTRL+SHIFT+A). Re-renders the right status immediately so the badge appears
+-- without waiting for the next ~1s update-right-status tick.
+wezterm.on('copied', function(window, pane)
+  copied_at[window:window_id()] = os.time()
+  render_right_status(window, pane)
+end)
+
+-- Selection-aware copy: writes to clipboard ONLY if there's a non-empty
+-- selection, then fires the badge. Used for every keyboard + mouse copy path
+-- so the badge can't appear on a click with no selection or an empty Ctrl-C.
+-- For scrollback-all (CTRL+SHIFT+A) we skip this helper since the action chain
+-- explicitly creates a selection — we already know there's content to copy.
+local copy_and_announce = wezterm.action_callback(function(window, pane)
+  local sel = window:get_selection_text_for_pane(pane)
+  if not sel or #sel == 0 then return end
+  window:perform_action(act.CopyTo 'Clipboard', pane)
+  copied_at[window:window_id()] = os.time()
+  render_right_status(window, pane)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -477,6 +612,22 @@ end)
 -- ---------------------------------------------------------------------------
 -- Zellij owns Ctrl+p and pane management inside the session.
 -- Wezterm handles window/tab creation at the OS level.
+-- Mouse: drag-then-release on left button completes the selection AND, if
+-- non-empty, writes to clipboard + flashes the "Copied!" badge. The Up event
+-- also fires on plain clicks; copy_and_announce no-ops on empty selection, so
+-- there's no spurious badge. We don't override Shift-Up or double/triple-click
+-- streaks — those keep their default behavior (link-open, word/line select).
+-- Mouse bindings layer over defaults, so other mouse actions are preserved.
+config.mouse_bindings = {
+  {
+    event = { Up = { streak = 1, button = 'Left' } },
+    action = act.Multiple {
+      act.CompleteSelection 'PrimarySelection',
+      copy_and_announce,
+    },
+  },
+}
+
 config.keys = {
   -- New window
   { key = 'n', mods = 'CTRL|SHIFT', action = act.SpawnWindow },
@@ -519,9 +670,13 @@ config.keys = {
     },
   },
 
-  -- Copy/paste
-  { key = 'c', mods = 'CTRL|SHIFT', action = act.CopyTo 'Clipboard' },
-  { key = 'v', mods = 'CTRL|SHIFT', action = act.PasteFrom 'Clipboard' },
+  -- Copy/paste. copy_and_announce is selection-aware: it only writes to the
+  -- clipboard (and shows the badge) if there's actually a selection, so a
+  -- bare keypress with nothing selected is a no-op. Bound to both CTRL+SHIFT+C
+  -- and the legacy CTRL+Insert.
+  { key = 'c',      mods = 'CTRL|SHIFT', action = copy_and_announce },
+  { key = 'Insert', mods = 'CTRL',       action = copy_and_announce },
+  { key = 'v',      mods = 'CTRL|SHIFT', action = act.PasteFrom 'Clipboard' },
 
   -- Copy entire scrollback to clipboard (enters copy mode, selects all, copies, exits)
   {
@@ -533,6 +688,7 @@ config.keys = {
       act.CopyMode 'MoveToScrollbackBottom',
       act.CopyTo 'Clipboard',
       act.CopyMode 'Close',
+      act.EmitEvent 'copied',
     },
   },
 
