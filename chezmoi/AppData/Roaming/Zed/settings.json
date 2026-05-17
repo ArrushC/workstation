@@ -1,20 +1,200 @@
+// Zed settings
+//
+// For information on how to configure Zed, see the Zed
+// documentation: https://zed.dev/docs/configuring-zed
+//
+// To see all of Zed's default settings without changing your
+// custom settings, run `zed: open default settings` from the
+// command palette (cmd-shift-p / ctrl-shift-p)
+// 
+// Chezmoi-managed:
+// Run `chezmoi add %APPDATA%\Zed\settings.json` to overwrite with your
+// current Zed config, or edit this file via `chezmoi edit` and then
+// `chezmoi apply`.
 {
-  // Minimal Zed settings — chezmoi-managed.
-  // Run `chezmoi add %APPDATA%\Zed\settings.json` to overwrite with your
-  // current Zed config, or edit this file via `chezmoi edit` and then
-  // `chezmoi apply`.
-  "theme": "One Dark",
-  "ui_font_size": 16,
-  "buffer_font_size": 14,
-  "buffer_font_family": "Monaspace Neon",
-  "vim_mode": false,
+  "ui_font_family": ".ZedSans",
+  "buffer_font_family": "JetBrains Mono",
+  "diagnostics": {
+    "inline": {
+      "enabled": false
+    }
+  },
+  "scrollbar": {
+    "diagnostics": "all"
+  },
+  "auto_signature_help": true,
+  "sticky_scroll": {
+    "enabled": true
+  },
+  "which_key": {
+    "enabled": false
+  },
+  "inlay_hints": {
+    "show_parameter_hints": false,
+    "show_background": false,
+    "enabled": true
+  },
+  "code_lens": "on",
+  "proxy": "",
+  "toolbar": {
+    "code_actions": true,
+    "breadcrumbs": true
+  },
+  "cli_default_open_behavior": "existing_window",
+  "outline_panel": {
+    "dock": "left"
+  },
+  "diff_view_style": "split",
+  "gutter": {
+    "bookmarks": true,
+    "breakpoints": false,
+  },
+  "collaboration_panel": {
+    "dock": "left",
+    "button": true,
+  },
+  "search": {
+    "button": false,
+  },
+  "cursor_blink": false,
+  "cursor_shape": "bar",
+  "autosave": {
+    "after_delay": {
+      "milliseconds": 1000,
+    },
+  },
+  "session": {
+    "trust_all_worktrees": true,
+  },
+  "indent_guides": {
+    "background_coloring": "indent_aware",
+    "coloring": "indent_aware",
+  },
+  "show_wrap_guides": false,
+  "terminal": {
+    "font_size": 13.0,
+    "font_family": "JetBrains Mono",
+    "toolbar": {
+      "breadcrumbs": true,
+    },
+    "working_directory": "current_project_directory",
+    "detect_venv": {
+      "on": {
+        "directories": [".venv", "venv", "env", ".env"],
+        "activate_script": "default"
+      }
+    }
+  },
+  "debugger": {
+    "button": false,
+  },
+  "colorize_brackets": true,
+  "tab_bar": {
+    "show_pinned_tabs_in_separate_row": true,
+  },
+  "disable_ai": true,
+  "document_symbols": "on",
+  "document_folding_ranges": "on",
+  "agent_servers": {
+    "claude-acp": {
+      "type": "registry",
+      "default_config_options": {
+        "mode": "plan",
+      },
+    },
+  },
+  "show_edit_predictions": false,
+  "show_whitespaces": "all",
+  "git_panel": {
+    "dock": "left",
+    "collapse_untracked_diff": true,
+    "tree_view": true,
+  },
+  "languages": {
+    "C++": {
+      "ensure_final_newline_on_save": false,
+      "remove_trailing_whitespace_on_save": false,
+      "format_on_save": "off",
+    },
+    "C": {
+      "ensure_final_newline_on_save": false,
+      "remove_trailing_whitespace_on_save": false,
+      "format_on_save": "off",
+    },
+    "XML": {
+      "ensure_final_newline_on_save": true,
+      "remove_trailing_whitespace_on_save": true,
+      "format_on_save": "on",
+    },
+  },
+  "agent": {
+    "dock": "left",
+    "play_sound_when_agent_done": "always",
+    "model_parameters": [],
+  },
+  "preview_tabs": {
+    "enabled": false,
+  },
+  "minimap": {
+    "thumb": "always",
+    "thumb_border": "left_open",
+    "current_line_highlight": "all",
+    "max_width_columns": 68,
+    "show": "never",
+  },
+  "tabs": {
+    "show_diagnostics": "all",
+    "file_icons": true,
+    "git_status": true,
+  },
+  "project_panel": {
+    "hide_root": false,
+    "git_status": true,
+    "git_status_indicator": true,
+    "diagnostic_badges": true,
+    "scrollbar": {
+      "show": "always",
+    },
+    "indent_size": 14.0,
+    "dock": "right",
+    "sticky_scroll": true,
+    "entry_spacing": "standard",
+  },
+  "title_bar": {
+    "show_branch_status_icon": true,
+    "show_menus": false,
+  },
+  "use_smartcase_search": true,
+  "ensure_final_newline_on_save": true,
+  "remove_trailing_whitespace_on_save": true,
   "format_on_save": "on",
-  "tab_size": 4,
-  "soft_wrap": "editor_width",
-  "show_whitespaces": "selection",
-  "auto_update": true,
-  "telemetry": {
-    "metrics": false,
-    "diagnostics": false
-  }
+  "hard_tabs": false,
+  "autoscroll_on_clicks": true,
+  "buffer_line_height": "standard",
+  "icon_theme": {
+    "mode": "dark",
+    "light": "Zed (Default)",
+    "dark": "Material Icon Theme",
+  },
+  "ui_font_size": 14.0,
+  "buffer_font_size": 13.0,
+  "theme": {
+    "mode": "dark",
+    "light": "Gruvbox Light",
+    "dark": "Ayu Dark",
+  },
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "arguments": [
+          "--background-index-priority=low",
+          "--background-index",
+          "--header-insertion=never",
+          "--completion-style=detailed",
+          "--pch-storage=disk",
+          "--malloc-trim",
+        ],
+      },
+    },
+  },
 }
