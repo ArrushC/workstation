@@ -265,12 +265,16 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, ma
     if host then
       title = host
     else
-      -- Shell-set titles (PROMPT_COMMAND OSC escape, e.g. "user@host:~") get
-      -- their leading "user@" stripped. The host + cwd are the useful bits;
-      -- the username is just noise that's already implied by being logged in.
-      -- Character class covers letters/digits/dot/underscore/hyphen — typical
-      -- Unix username chars.
-      title = (pane.title or ''):gsub('^[%w%._%-]+@', '')
+      -- Two cleanups, both no-ops when not applicable:
+      --   1. Strip leading "user@" from SSH'd shell titles (PROMPT_COMMAND
+      --      OSC escapes, e.g. "user@host:~"). The host + cwd are the useful
+      --      bits; the username is implied by being logged in.
+      --   2. Reduce a bare Windows .exe path to its basename, since cmd /
+      --      powershell tabs come in titled with the full path
+      --      (e.g. "C:\WINDOWS\system32\cmd.exe" → "cmd").
+      title = (pane.title or '')
+        :gsub('^[%w%._%-]+@', '')
+        :gsub('^.*[\\/]([^\\/]+)%.[Ee][Xx][Ee]$', '%1')
     end
   end
 
