@@ -41,7 +41,9 @@
       "Bash(git -C C:/Git/workstation push)",
       "Bash(git -C C:/Git/workstation add .claude/settings.local.json)",
       "Bash(git -C C:/Git/workstation commit -m ' *)",
-      "WebFetch(domain:wezterm.org)"
+      "WebFetch(domain:wezterm.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:dev.yorhel.nl)"
     ]
   }
 }
