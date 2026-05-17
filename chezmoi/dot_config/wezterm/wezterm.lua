@@ -156,6 +156,19 @@ config.window_frame = {
   button_hover_fg                 = '#c0caf5',
 }
 
+-- Tab-bar surfaces (background behind tabs in retro mode + new-tab "+" button
+-- in both modes). Per-tab active/inactive/hover colors are driven by
+-- format-tab-title above for every tab, so we only need to style the chrome
+-- around them. Matches the window_frame palette so retro and fancy modes
+-- share the same visual language.
+config.colors = {
+  tab_bar = {
+    background    = '#1a1b26',
+    new_tab       = { bg_color = '#1a1b26', fg_color = '#565f89' },
+    new_tab_hover = { bg_color = '#292e42', fg_color = '#c0caf5' },
+  },
+}
+
 -- Slightly padded inner margins
 config.window_padding = {
   left   = 8,
@@ -171,27 +184,54 @@ config.front_end = 'WebGpu'
 config.default_cursor_style = 'SteadyBar'
 
 -- ---------------------------------------------------------------------------
--- Per-host tab color
+-- Tab colors — Tokyo Night accent palette + state variants
 -- ---------------------------------------------------------------------------
--- Stable hash from the SSH domain name → HSL hue, so each host gets a distinct
--- and consistent tab color. Cheap visual guard against typing into the wrong
--- host. Pulls names from ssh_domains, so any host added via manage-hosts +
--- sync gets coloured automatically — no extra auto-managed block needed.
-local function host_hue(name)
+-- SSH hosts get a stable accent from this curated Tokyo Night palette
+-- (8-bucket hash on the host name), so you have a cheap visual guard against
+-- typing into the wrong host. Active tabs use the full accent for pop; hover
+-- darkens slightly to indicate interactivity; inactive desaturates + darkens
+-- to a subtle tint that still hints at the color so per-host distinction is
+-- preserved when not focused.
+--
+-- Local tabs (no SSH-domain match) use neutral Tokyo Night surfaces matched
+-- to the window_frame palette: bg_highlight when active, bg_dark when
+-- inactive — flush with the chrome.
+local HOST_ACCENTS = {
+  '#7aa2f7',  -- blue
+  '#bb9af7',  -- magenta
+  '#7dcfff',  -- cyan
+  '#9ece6a',  -- green
+  '#e0af68',  -- yellow
+  '#ff9e64',  -- orange
+  '#f7768e',  -- red
+  '#73daca',  -- teal
+}
+
+local function host_hash(name)
   local h = 0
   for i = 1, #name do
-    h = (h * 131 + name:byte(i)) % 360
+    h = (h * 131 + name:byte(i)) % 65521
   end
   return h
 end
 
-local function host_colors(name, is_active)
-  local hue = host_hue(name)
-  local sat = is_active and 0.55 or 0.35
-  local lit = is_active and 0.42 or 0.28
-  local bg  = wezterm.color.from_hsla(hue, sat, lit, 1.0)
-  local fg  = wezterm.color.from_hsla(hue, 0.15, 0.96, 1.0)
-  return tostring(bg), tostring(fg)
+local function tab_colors(host, is_active, is_hover)
+  if host then
+    local accent = wezterm.color.parse(HOST_ACCENTS[(host_hash(host) % #HOST_ACCENTS) + 1])
+    if is_active then
+      return tostring(accent),                                '#15161e'
+    elseif is_hover then
+      return tostring(accent:darken(0.20)),                   '#1a1b26'
+    end
+    return   tostring(accent:desaturate(0.60):darken(0.55)),  '#a9b1d6'
+  end
+  -- Local tab — neutral Tokyo Night surfaces aligned with window_frame.
+  if is_active then
+    return '#292e42', '#c0caf5'
+  elseif is_hover then
+    return '#1f2335', '#c0caf5'
+  end
+  return '#16161e', '#565f89'
 end
 
 -- Forward-declared upvalue: cell width of the right-status line. Assigned
@@ -199,13 +239,20 @@ end
 -- in sync with whatever the status line is actually rendering this tick.
 local right_status_cells = 30
 
-wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, _hover, max_width)
+wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, max_width)
   local pane   = tab.active_pane
   local domain = pane.domain_name or ''
 
   local host
   for _, d in ipairs(ssh_domains) do
     if d.name == domain then host = d.name break end
+  end
+  -- Fallback: if not a WezTerm SSH-domain tab but the shell-set title is in
+  -- "user@host[:cwd]" form (typical for manual `ssh <host>` from a local
+  -- tab), extract the host so the tab still picks up the per-host accent.
+  if not host then
+    local detected = (pane.title or ''):match('^[%w%._%-]+@([%w%._%-]+)')
+    if detected and #detected > 0 then host = detected end
   end
 
   local title = tab.tab_title
@@ -255,14 +302,13 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, _hover, m
     end
   end
 
-  -- Always return a FormatItems list so we can layer attributes (e.g. bold
-  -- on the active tab) without branching on host vs non-host twice.
-  local items = {}
-  if host then
-    local bg, fg = host_colors(host, tab.is_active)
-    table.insert(items, { Background = { Color = bg } })
-    table.insert(items, { Foreground = { Color = fg } })
-  end
+  -- Every tab (host or local) gets explicit bg/fg from tab_colors so active,
+  -- hover, and inactive states are visually distinct. Active also gets bold.
+  local bg, fg = tab_colors(host, tab.is_active, hover)
+  local items = {
+    { Background = { Color = bg } },
+    { Foreground = { Color = fg } },
+  }
   if tab.is_active then
     table.insert(items, { Attribute = { Intensity = 'Bold' } })
   end
