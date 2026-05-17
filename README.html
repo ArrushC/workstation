@@ -257,6 +257,31 @@
     <tr><td>Terminal</td><td><strong>WezTerm</strong></td><td>Windows terminal, auto-connects to hosts</td></tr>
   </tbody>
 </table>
+
+<h3>Toolbelt</h3>
+<p class="lede">CLI tools installed on every host via <code>ansible/roles/linux-base/tasks/tools.yml</code>. Default install is a static binary on both <code>dev_machine</code> and <code>prod_machine</code>. Inline tags mark exceptions: <code>ᵈⁿᶠ</code> &mdash; <span class="badge dev">dev_machine</span> only via dnf; <code>ᵖⁱᵖ</code> &mdash; via <code>pip --user</code> (still both hosts); <code>ⁱⁿˢ</code> &mdash; via upstream installer script.</p>
+<table>
+  <thead><tr><th>Category</th><th>Tools</th></tr></thead>
+  <tbody>
+    <tr><td>File ops &amp; viewing</td><td><code>fd</code>, <code>bat</code>, <code>broot</code>, <code>lnav</code>, <code>eza</code>, <code>yazi</code>, <code>delta</code>, <code>sd</code></td></tr>
+    <tr><td>Editors</td><td><code>helix</code>, <code>micro</code></td></tr>
+    <tr><td>Search / grep</td><td><code>ripgrep</code>, <code>sg</code>/<code>ast-grep</code>, <code>tv</code> (television)</td></tr>
+    <tr><td>System monitor</td><td><code>btop</code>, <code>ncdu</code>, <code>fastfetch</code>, <code>witr</code>, <code>glances</code><sup>pip</sup>, <code>htop</code><sup>dnf</sup>, <code>multitail</code><sup>dnf</sup>, <code>goaccess</code><sup>dnf</sup></td></tr>
+    <tr><td>Network</td><td><code>bandwhich</code>, <code>gping</code>, <code>xh</code>, <code>ssh-copy-id</code>, <code>nmap</code><sup>dnf</sup>, <code>mtr</code><sup>dnf</sup>, <code>tcpdump</code><sup>dnf</sup></td></tr>
+    <tr><td>File transfer</td><td><code>rclone</code>, <code>croc</code>, <code>rsync</code><sup>dnf</sup> (usually pre-installed on prod)</td></tr>
+    <tr><td>Archive / compression</td><td><code>ouch</code> (tar/zip/7z/rar/gz/bz2/xz/zst/lz4/snappy)</td></tr>
+    <tr><td>Git TUIs / VCS</td><td><code>gh</code>, <code>gitui</code>, <code>lazygit</code>, <code>jj</code> (jujutsu)</td></tr>
+    <tr><td>Containers</td><td><code>lazydocker</code>, <code>ctop</code>, <code>k9s</code>, <code>dive</code></td></tr>
+    <tr><td>Data / SQL</td><td><code>jq</code>, <code>yq</code>, <code>htmlq</code>, <code>usql</code>, <code>dsq</code>, <code>harlequin</code><sup>pip</sup></td></tr>
+    <tr><td>Security</td><td><code>age</code>, <code>sops</code>, <code>gopass</code></td></tr>
+    <tr><td>Quality / linting</td><td><code>shellcheck</code><sup>dnf</sup></td></tr>
+    <tr><td>Profiling / debug</td><td><code>hyperfine</code>, <code>strace</code><sup>dnf</sup>, <code>perf</code><sup>dnf</sup>, <code>gdb</code><sup>dnf</sup>, <code>lsof</code><sup>dnf</sup></td></tr>
+    <tr><td>Lang managers</td><td><code>mise</code>, <code>uv</code> (+ <code>uvx</code>)</td></tr>
+    <tr><td>Shell augmentation</td><td><code>atuin</code> (history), <code>tldr</code> (tealdeer), <code>asciinema</code><sup>pip</sup></td></tr>
+    <tr><td>Shell &amp; dev utilities</td><td><code>zsh</code><sup>dnf</sup>, <code>parallel</code><sup>dnf</sup>, <code>pv</code><sup>dnf</sup>, <code>entr</code><sup>dnf</sup>, <code>tree</code><sup>dnf</sup>, <code>cronie</code><sup>dnf</sup>, <code>time</code><sup>dnf</sup>, <code>xxd</code><sup>dnf</sup> (via <code>vim-common</code>)</td></tr>
+    <tr><td>AI</td><td><code>claude</code><sup>ins</sup> (Claude Code CLI, <span class="badge dev">dev_machine</span> only)</td></tr>
+  </tbody>
+</table>
 </section>
 
 <section id="machines">

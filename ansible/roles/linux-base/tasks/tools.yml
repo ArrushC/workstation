@@ -134,3 +134,575 @@
     cmd: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "{{ tools_dest }}"
     creates: "{{ tools_dest }}/chezmoi"
   become: "{{ tools_become }}"
+
+# =============================================================================
+# Toolbelt expansion — every task below installs a single static binary into
+# tools_dest with a creates: idempotency guard. Mix of three patterns:
+#   - unarchive       : archives whose binary sits at root
+#   - get_url         : single-binary downloads and upstream shell scripts
+#   - shell + tar/unzip: archives where the binary lives in a wrapper dir
+#                        (extract to tempdir, install one file, clean up)
+# =============================================================================
+
+# --- fd (sharkdp/fd) ---------------------------------------------------------
+- name: "Install fd"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/sharkdp/fd/releases/download/v{{ fd_version }}/fd-v{{ fd_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$tmp"/fd-v*/fd "{{ tools_dest }}/fd"
+    creates: "{{ tools_dest }}/fd"
+  become: "{{ tools_become }}"
+
+# --- bat (sharkdp/bat) -------------------------------------------------------
+- name: "Install bat"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/sharkdp/bat/releases/download/v{{ bat_version }}/bat-v{{ bat_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$tmp"/bat-v*/bat "{{ tools_dest }}/bat"
+    creates: "{{ tools_dest }}/bat"
+  become: "{{ tools_become }}"
+
+# --- btop (aristocratos/btop) ------------------------------------------------
+- name: "Install btop"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/aristocratos/btop/releases/download/v{{ btop_version }}/btop-x86_64-linux-musl.tbz" | tar -xjf - -C "$tmp"
+      install -m 0755 "$tmp/btop/bin/btop" "{{ tools_dest }}/btop"
+    creates: "{{ tools_dest }}/btop"
+  become: "{{ tools_become }}"
+
+# --- ncdu (dev.yorhel.nl, Zig rewrite) ---------------------------------------
+- name: "Install ncdu"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://dev.yorhel.nl/download/ncdu-{{ ncdu_version }}-linux-x86_64.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$tmp"/ncdu "{{ tools_dest }}/ncdu"
+    creates: "{{ tools_dest }}/ncdu"
+  become: "{{ tools_become }}"
+
+# --- bandwhich (imsnif/bandwhich) --------------------------------------------
+- name: "Install bandwhich"
+  ansible.builtin.unarchive:
+    src: "https://github.com/imsnif/bandwhich/releases/download/v{{ bandwhich_version }}/bandwhich-v{{ bandwhich_version }}-x86_64-unknown-linux-musl.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - bandwhich
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/bandwhich"
+  become: "{{ tools_become }}"
+
+# --- jq (jqlang/jq) — single binary -----------------------------------------
+- name: "Install jq"
+  ansible.builtin.get_url:
+    url: "https://github.com/jqlang/jq/releases/download/jq-{{ jq_version }}/jq-linux-amd64"
+    dest: "{{ tools_dest }}/jq"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/jq"
+  become: "{{ tools_become }}"
+
+# --- yq (mikefarah/yq) — single binary --------------------------------------
+- name: "Install yq"
+  ansible.builtin.get_url:
+    url: "https://github.com/mikefarah/yq/releases/download/v{{ yq_version }}/yq_linux_amd64"
+    dest: "{{ tools_dest }}/yq"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/yq"
+  become: "{{ tools_become }}"
+
+# --- tldr (tealdeer) — single binary -----------------------------------------
+- name: "Install tldr (tealdeer)"
+  ansible.builtin.get_url:
+    url: "https://github.com/tealdeer-rs/tealdeer/releases/download/v{{ tealdeer_version }}/tealdeer-linux-x86_64-musl"
+    dest: "{{ tools_dest }}/tldr"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/tldr"
+  become: "{{ tools_become }}"
+
+# --- witr (pranshuparmar/witr) — single binary -------------------------------
+- name: "Install witr"
+  ansible.builtin.get_url:
+    url: "https://github.com/pranshuparmar/witr/releases/download/v{{ witr_version }}/witr-linux-amd64"
+    dest: "{{ tools_dest }}/witr"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/witr"
+  become: "{{ tools_become }}"
+
+# --- broot (Canop/broot) — single binary from dystroy.org --------------------
+# Upstream-hosted at dystroy.org rather than github releases (the github
+# release ships only a multi-platform zip). Trade-off: floats with their
+# "latest" — broot is stable enough that this is fine.
+- name: "Install broot"
+  ansible.builtin.get_url:
+    url: "https://dystroy.org/broot/download/x86_64-linux/broot"
+    dest: "{{ tools_dest }}/broot"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/broot"
+  become: "{{ tools_become }}"
+
+# --- usql (xo/usql) ----------------------------------------------------------
+- name: "Install usql"
+  ansible.builtin.unarchive:
+    src: "https://github.com/xo/usql/releases/download/v{{ usql_version }}/usql-{{ usql_version }}-linux-amd64.tar.bz2"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - usql
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/usql"
+  become: "{{ tools_become }}"
+
+# --- lazydocker (jesseduffield/lazydocker) -----------------------------------
+- name: "Install lazydocker"
+  ansible.builtin.unarchive:
+    src: "https://github.com/jesseduffield/lazydocker/releases/download/v{{ lazydocker_version }}/lazydocker_{{ lazydocker_version }}_Linux_x86_64.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - lazydocker
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/lazydocker"
+  become: "{{ tools_become }}"
+
+# --- dive (wagoodman/dive) ---------------------------------------------------
+- name: "Install dive"
+  ansible.builtin.unarchive:
+    src: "https://github.com/wagoodman/dive/releases/download/v{{ dive_version }}/dive_{{ dive_version }}_linux_amd64.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - dive
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/dive"
+  become: "{{ tools_become }}"
+
+# --- lnav (tstack/lnav) ------------------------------------------------------
+# Ships in a versioned wrapper dir inside the zip; extract to tempdir, copy.
+- name: "Install lnav"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL -o "$tmp/lnav.zip" "https://github.com/tstack/lnav/releases/download/v{{ lnav_version }}/lnav-{{ lnav_version }}-linux-musl-x86_64.zip"
+      unzip -q "$tmp/lnav.zip" -d "$tmp"
+      install -m 0755 "$tmp"/lnav-*/lnav "{{ tools_dest }}/lnav"
+    creates: "{{ tools_dest }}/lnav"
+  become: "{{ tools_become }}"
+
+# --- gopass (gopasspw/gopass) ------------------------------------------------
+- name: "Install gopass"
+  ansible.builtin.unarchive:
+    src: "https://github.com/gopasspw/gopass/releases/download/v{{ gopass_version }}/gopass-{{ gopass_version }}-linux-amd64.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - gopass
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/gopass"
+  become: "{{ tools_become }}"
+
+# --- age + age-keygen (FiloSottile/age) --------------------------------------
+# Tarball ships age/ wrapper dir with two binaries. Extract both.
+- name: "Install age + age-keygen"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/FiloSottile/age/releases/download/v{{ age_version }}/age-v{{ age_version }}-linux-amd64.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$tmp/age/age" "{{ tools_dest }}/age"
+      install -m 0755 "$tmp/age/age-keygen" "{{ tools_dest }}/age-keygen"
+    creates: "{{ tools_dest }}/age"
+  become: "{{ tools_become }}"
+
+# --- fastfetch (fastfetch-cli/fastfetch) -------------------------------------
+- name: "Install fastfetch"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/fastfetch-cli/fastfetch/releases/download/{{ fastfetch_version }}/fastfetch-musl-amd64.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name fastfetch -type f | head -1)" "{{ tools_dest }}/fastfetch"
+    creates: "{{ tools_dest }}/fastfetch"
+  become: "{{ tools_become }}"
+
+# --- ssh-copy-id (upstream openssh-portable script) --------------------------
+# Most RHEL hosts already ship this via openssh-clients; we install our own
+# copy at tools_dest so prod_machine (no sudo, no openssh-clients install path)
+# gets a working copy too.
+- name: "Install ssh-copy-id"
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/openssh/openssh-portable/master/contrib/ssh-copy-id"
+    dest: "{{ tools_dest }}/ssh-copy-id"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/ssh-copy-id"
+  become: "{{ tools_become }}"
+
+# =============================================================================
+# Second-wave toolbelt — same three install patterns as the first wave.
+# Where the archive's internal structure is uncertain (wrapper dir vs flat),
+# the shell task uses `find` to locate the binary so it works either way.
+# =============================================================================
+
+# --- gitui (gitui-org/gitui) ------------------------------------------------
+- name: "Install gitui"
+  ansible.builtin.unarchive:
+    src: "https://github.com/gitui-org/gitui/releases/download/v{{ gitui_version }}/gitui-linux-x86_64.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - gitui
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/gitui"
+  become: "{{ tools_become }}"
+
+# --- lazygit (jesseduffield/lazygit) ----------------------------------------
+- name: "Install lazygit"
+  ansible.builtin.unarchive:
+    src: "https://github.com/jesseduffield/lazygit/releases/download/v{{ lazygit_version }}/lazygit_{{ lazygit_version }}_Linux_x86_64.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - lazygit
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/lazygit"
+  become: "{{ tools_become }}"
+
+# --- jj (jj-vcs/jj) ---------------------------------------------------------
+- name: "Install jj (jujutsu)"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/jj-vcs/jj/releases/download/v{{ jujutsu_version }}/jj-v{{ jujutsu_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name jj -type f | head -1)" "{{ tools_dest }}/jj"
+    creates: "{{ tools_dest }}/jj"
+  become: "{{ tools_become }}"
+
+# --- yazi (sxyazi/yazi) — ships `yazi` and `ya` -----------------------------
+- name: "Install yazi (+ ya)"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL -o "$tmp/yazi.zip" "https://github.com/sxyazi/yazi/releases/download/v{{ yazi_version }}/yazi-x86_64-unknown-linux-musl.zip"
+      unzip -q "$tmp/yazi.zip" -d "$tmp"
+      install -m 0755 "$(find "$tmp" -name yazi -type f | head -1)" "{{ tools_dest }}/yazi"
+      install -m 0755 "$(find "$tmp" -name ya   -type f | head -1)" "{{ tools_dest }}/ya"
+    creates: "{{ tools_dest }}/yazi"
+  become: "{{ tools_become }}"
+
+# --- ast-grep (ast-grep/ast-grep) — ships `sg` and `ast-grep` ---------------
+- name: "Install ast-grep (sg)"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL -o "$tmp/sg.zip" "https://github.com/ast-grep/ast-grep/releases/download/{{ ast_grep_version }}/app-x86_64-unknown-linux-musl.zip"
+      unzip -q "$tmp/sg.zip" -d "$tmp"
+      install -m 0755 "$(find "$tmp" -name sg       -type f | head -1)" "{{ tools_dest }}/sg"
+      install -m 0755 "$(find "$tmp" -name ast-grep -type f | head -1)" "{{ tools_dest }}/ast-grep"
+    creates: "{{ tools_dest }}/sg"
+  become: "{{ tools_become }}"
+
+# --- television (alexpasmantier/television) — binary is `tv` ----------------
+- name: "Install television (tv)"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/alexpasmantier/television/releases/download/{{ television_version }}/tv-{{ television_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name tv -type f | head -1)" "{{ tools_dest }}/tv"
+    creates: "{{ tools_dest }}/tv"
+  become: "{{ tools_become }}"
+
+# --- xh (ducaale/xh) — ships `xh` and `xhs` symlink -------------------------
+- name: "Install xh"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/ducaale/xh/releases/download/v{{ xh_version }}/xh-v{{ xh_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name xh -type f | head -1)" "{{ tools_dest }}/xh"
+    creates: "{{ tools_dest }}/xh"
+  become: "{{ tools_become }}"
+
+# --- gping (orf/gping) — tag uses `gping-v` prefix --------------------------
+- name: "Install gping"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/orf/gping/releases/download/gping-v{{ gping_version }}/gping-Linux-musl-x86_64.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name gping -type f | head -1)" "{{ tools_dest }}/gping"
+    creates: "{{ tools_dest }}/gping"
+  become: "{{ tools_become }}"
+
+# --- atuin (atuinsh/atuin) --------------------------------------------------
+- name: "Install atuin"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/atuinsh/atuin/releases/download/v{{ atuin_version }}/atuin-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name atuin -type f | head -1)" "{{ tools_dest }}/atuin"
+    creates: "{{ tools_dest }}/atuin"
+  become: "{{ tools_become }}"
+
+# --- delta (dandavison/delta) — Git diff pager ------------------------------
+- name: "Install delta"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/dandavison/delta/releases/download/{{ delta_version }}/delta-{{ delta_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name delta -type f | head -1)" "{{ tools_dest }}/delta"
+    creates: "{{ tools_dest }}/delta"
+  become: "{{ tools_become }}"
+
+# --- micro (zyedidia/micro) — terminal editor -------------------------------
+- name: "Install micro"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/zyedidia/micro/releases/download/v{{ micro_version }}/micro-{{ micro_version }}-linux64-static.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name micro -type f | head -1)" "{{ tools_dest }}/micro"
+    creates: "{{ tools_dest }}/micro"
+  become: "{{ tools_become }}"
+
+# --- eza (eza-community/eza) ------------------------------------------------
+- name: "Install eza"
+  ansible.builtin.unarchive:
+    src: "https://github.com/eza-community/eza/releases/download/v{{ eza_version }}/eza_x86_64-unknown-linux-musl.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - eza
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/eza"
+  become: "{{ tools_become }}"
+
+# --- sd (chmln/sd) — sed replacement ----------------------------------------
+- name: "Install sd"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/chmln/sd/releases/download/v{{ sd_version }}/sd-v{{ sd_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name sd -type f | head -1)" "{{ tools_dest }}/sd"
+    creates: "{{ tools_dest }}/sd"
+  become: "{{ tools_become }}"
+
+# --- ctop (bcicen/ctop) — single binary -------------------------------------
+- name: "Install ctop"
+  ansible.builtin.get_url:
+    url: "https://github.com/bcicen/ctop/releases/download/v{{ ctop_version }}/ctop-{{ ctop_version }}-linux-amd64"
+    dest: "{{ tools_dest }}/ctop"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/ctop"
+  become: "{{ tools_become }}"
+
+# --- k9s (derailed/k9s) — Kubernetes TUI ------------------------------------
+- name: "Install k9s"
+  ansible.builtin.unarchive:
+    src: "https://github.com/derailed/k9s/releases/download/v{{ k9s_version }}/k9s_Linux_amd64.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - k9s
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/k9s"
+  become: "{{ tools_become }}"
+
+# --- rclone (rclone/rclone) — cloud storage sync ----------------------------
+- name: "Install rclone"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL -o "$tmp/rclone.zip" "https://github.com/rclone/rclone/releases/download/v{{ rclone_version }}/rclone-v{{ rclone_version }}-linux-amd64.zip"
+      unzip -q "$tmp/rclone.zip" -d "$tmp"
+      install -m 0755 "$(find "$tmp" -name rclone -type f | head -1)" "{{ tools_dest }}/rclone"
+    creates: "{{ tools_dest }}/rclone"
+  become: "{{ tools_become }}"
+
+# --- croc (schollz/croc) — file transfer ------------------------------------
+- name: "Install croc"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/schollz/croc/releases/download/v{{ croc_version }}/croc_v{{ croc_version }}_Linux-64bit.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name croc -type f | head -1)" "{{ tools_dest }}/croc"
+    creates: "{{ tools_dest }}/croc"
+  become: "{{ tools_become }}"
+
+# --- hyperfine (sharkdp/hyperfine) — command-line benchmarking --------------
+- name: "Install hyperfine"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/sharkdp/hyperfine/releases/download/v{{ hyperfine_version }}/hyperfine-v{{ hyperfine_version }}-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name hyperfine -type f | head -1)" "{{ tools_dest }}/hyperfine"
+    creates: "{{ tools_dest }}/hyperfine"
+  become: "{{ tools_become }}"
+
+# --- mise (jdx/mise) — polyglot language version manager -------------------
+- name: "Install mise"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/jdx/mise/releases/download/v{{ mise_version }}/mise-v{{ mise_version }}-linux-x64-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name mise -type f | head -1)" "{{ tools_dest }}/mise"
+    creates: "{{ tools_dest }}/mise"
+  become: "{{ tools_become }}"
+
+# --- uv + uvx (astral-sh/uv) — fast Python installer -----------------------
+- name: "Install uv (+ uvx)"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/astral-sh/uv/releases/download/{{ uv_version }}/uv-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name uv  -type f | head -1)" "{{ tools_dest }}/uv"
+      install -m 0755 "$(find "$tmp" -name uvx -type f | head -1)" "{{ tools_dest }}/uvx"
+    creates: "{{ tools_dest }}/uv"
+  become: "{{ tools_become }}"
+
+# --- dsq (multiprocessio/dsq) — SQL over JSON/CSV --------------------------
+- name: "Install dsq"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL -o "$tmp/dsq.zip" "https://github.com/multiprocessio/dsq/releases/download/v{{ dsq_version }}/dsq-linux-x64-v{{ dsq_version }}.zip"
+      unzip -q "$tmp/dsq.zip" -d "$tmp"
+      install -m 0755 "$(find "$tmp" -name dsq -type f | head -1)" "{{ tools_dest }}/dsq"
+    creates: "{{ tools_dest }}/dsq"
+  become: "{{ tools_become }}"
+
+# --- gh (cli/cli) — official GitHub CLI -------------------------------------
+# Archive ships as gh_VERSION_linux_amd64/bin/gh — wrapper dir, use find.
+- name: "Install gh"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/cli/cli/releases/download/v{{ gh_version }}/gh_{{ gh_version }}_linux_amd64.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name gh -type f | head -1)" "{{ tools_dest }}/gh"
+    creates: "{{ tools_dest }}/gh"
+  become: "{{ tools_become }}"
+
+# --- sops (getsops/sops) — single binary -----------------------------------
+- name: "Install sops"
+  ansible.builtin.get_url:
+    url: "https://github.com/getsops/sops/releases/download/v{{ sops_version }}/sops-v{{ sops_version }}.linux.amd64"
+    dest: "{{ tools_dest }}/sops"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/sops"
+  become: "{{ tools_become }}"
+
+# --- htmlq (mgdm/htmlq) — jq-style HTML query -------------------------------
+- name: "Install htmlq"
+  ansible.builtin.unarchive:
+    src: "https://github.com/mgdm/htmlq/releases/download/v{{ htmlq_version }}/htmlq-x86_64-linux.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - htmlq
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/htmlq"
+  become: "{{ tools_become }}"
+
+# --- ouch (ouch-org/ouch) — universal compress / decompress -----------------
+# One CLI for tar / zip / 7z / rar / gz / bz2 / xz / zstd / lz4 / snappy.
+# Static musl binary with all decoders built in — no system codec deps.
+- name: "Install ouch"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/ouch-org/ouch/releases/download/{{ ouch_version }}/ouch-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$(find "$tmp" -name ouch -type f | head -1)" "{{ tools_dest }}/ouch"
+    creates: "{{ tools_dest }}/ouch"
+  become: "{{ tools_become }}"
+
+# --- Python tools via pip --user --------------------------------------------
+# Python-based tools without clean standalone binary distributions. pip --user
+# writes to ~/.local/bin/<binary> regardless of scope (it's the running user's
+# home, not root's), so the same task path works in both dev and prod modes.
+# Run as the dev_user (no become), and only on systems that have python3 + pip.
+- name: "Install Python tools via pip --user"
+  ansible.builtin.pip:
+    name:
+      - glances
+      - asciinema
+      - harlequin
+    extra_args: --user
+    state: present
+  become: false
+
+# --- claude (Claude Code CLI — dev_machine only) ----------------------------
+# Tier-4: official upstream installer (curl | bash) — no Node.js / npm needed.
+# The installer is user-scope by default (lands in ~/.local/bin/claude), so
+# this runs as the dev_user without become. Gated by tool_scope='system' to
+# keep claude off prod hosts per the user's requirement.
+- name: "Install claude"
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://claude.ai/install.sh | bash
+    creates: "{{ dev_home }}/.local/bin/claude"
+  when: tool_scope == 'system'
+  become: false
