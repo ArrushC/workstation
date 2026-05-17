@@ -163,9 +163,14 @@ config.window_frame = {
 -- share the same visual language.
 config.colors = {
   tab_bar = {
-    background    = '#1a1b26',
-    new_tab       = { bg_color = '#1a1b26', fg_color = '#565f89' },
-    new_tab_hover = { bg_color = '#292e42', fg_color = '#c0caf5' },
+    background        = '#1a1b26',
+    -- Hide the thin tab-edge divider — the default color is a light gray that
+    -- pops against the bar bg only when the adjacent surface lightens (e.g.
+    -- when hovering the "+" button). Match the bar bg so it disappears in
+    -- every state.
+    inactive_tab_edge = '#1a1b26',
+    new_tab           = { bg_color = '#1a1b26', fg_color = '#565f89' },
+    new_tab_hover     = { bg_color = '#292e42', fg_color = '#c0caf5' },
   },
 }
 
