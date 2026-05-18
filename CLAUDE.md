@@ -43,7 +43,9 @@ workstation/
 ├── bootstrap.ps1                 ← Windows client entry point — choco tools + chezmoi apply (elevated)
 ├── .chezmoiroot                  ← contains "chezmoi" — redirects chezmoi's source state to the chezmoi/ subdir
 ├── hosts.conf                    ← single source of truth for host list
-├── README.html                   ← user-facing setup + daily commands (single self-contained HTML; open in a browser)
+├── README.html                   ← user-facing setup + daily commands (structural HTML; loads README.css + README.js as siblings)
+├── README.css                    ← all styles for README.html (theme tokens at the top)
+├── README.js                     ← behavior for README.html (theme toggle, scroll-spy TOC, search, filter UIs)
 │
 ├── scripts/
 │   ├── manage-hosts.sh           ← Linux host manager
@@ -238,11 +240,11 @@ Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the grou
 
 ## README.html must mirror user-facing changes
 
-`README.html` is reference material the user runs against — setup commands, daily workflows, scope flags, file locations. It is a single self-contained HTML file at the repo root, opened directly in a browser; there is no `README.md` (the GitHub landing page is deliberately bare). **Whenever you change something the user needs to know or maintain, update `README.html` in the same change**, with concrete usage examples (a copyable command block, not just prose).
+`README.html` is reference material the user runs against — setup commands, daily workflows, scope flags, file locations. It is split across three sibling files at the repo root: `README.html` (structural markup) loads `README.css` (all styles, with theme tokens at the top) and `README.js` (theme toggle, scroll-spy TOC, search, filter UIs) via relative `href`/`src`. All three must travel together — moving or copying the docs means moving all three. Opening `README.html` directly from the local clone in a browser pulls in the other two via relative paths, no server needed. There is no `README.md` (the GitHub landing page is deliberately bare). **Whenever you change something the user needs to know or maintain, update `README.html` (and `README.css` / `README.js` if needed) in the same change**, with concrete usage examples (a copyable command block, not just prose).
 
 Authoring HTML by hand is heavier than markdown, so two practical rules:
 - Match the existing visual primitives already in `README.html` — `<table>`, `.flow` chips, `.tabs` panels, `.os-card`, `<details>` for collapsible sections. Don't invent new components for a one-off addition.
-- The `<style>` block at the top of the file is the only stylesheet; keep additions there (no external CSS).
+- Add styles to `README.css` and behavior to `README.js` — don't re-introduce inline `<style>` or `<script>` blocks in `README.html`. Keep style additions cohesive with the existing CSS-variable token system (`--bg`, `--accent`, `--border`, etc. at the top of `README.css`).
 
 This includes:
 - Setup or install steps (new prerequisite, changed entry point, renamed flag).
@@ -359,4 +361,4 @@ After changes:
 - `chezmoi diff` on a host (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm); on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc).
 - `bootstrap.sh --dev` and `bootstrap.sh --prod` on fresh hosts — each completes idempotently and self-registers under the matching group.
 - `bootstrap.ps1` on a fresh Windows machine (from an **elevated** PowerShell) — choco bootstraps itself, the seven tracked tools install, chezmoi applies, wezterm picks up the deployed config.
-- `git diff README.html` — verify the user-facing surface still matches reality. Open the file in a browser too — visual primitives (tabs, flow chips, accordion filter) need to render, not just diff cleanly.
+- `git diff README.html README.css README.js` — verify the user-facing surface still matches reality. Open the file in a browser too — visual primitives (tabs, flow chips, accordion filter) need to render, not just diff cleanly. If the browser loads `README.html` but no styles or interactions apply, check that `README.css` / `README.js` are present as siblings (relative paths break if any of the three are moved without the others).
