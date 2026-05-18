@@ -1,218 +1,588 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>workstation</title>
 <style>
-  :root {
-    --bg:           #0d1117;
-    --surface:      #161b22;
-    --surface-2:    #1c2129;
-    --border:       #30363d;
-    --border-soft:  #21262d;
-    --text:         #c9d1d9;
-    --muted:        #8b949e;
-    --muted-2:      #6e7681;
-    --accent:       #58a6ff;
-    --accent-hover: #79b8ff;
-    --linux:        #4493f8;
-    --windows:      #a371f7;
-    --warn:         #d29922;
-    --ok:           #3fb950;
-    --bad:          #f85149;
-    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+/* ---------- Theme tokens ---------- */
+:root, [data-theme="dark"] {
+  --bg:           #0d1117;
+  --bg-soft:      #0d1117;
+  --surface:      #161b22;
+  --surface-2:    #1c2129;
+  --surface-3:    #21262d;
+  --border:       #30363d;
+  --border-soft:  #21262d;
+  --text:         #e6edf3;
+  --text-soft:    #c9d1d9;
+  --muted:        #8b949e;
+  --muted-2:      #6e7681;
+  --accent:       #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-soft:  rgba(88, 166, 255, 0.12);
+  --linux:        #4493f8;
+  --windows:      #a371f7;
+  --warn:         #d29922;
+  --ok:           #3fb950;
+  --bad:          #f85149;
+  --pink:         #ff7b72;
+  --teal:         #56d4cf;
+  --shadow:       0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.4);
+  --mark-bg:      rgba(210, 153, 34, 0.35);
+  --mark-fg:      #ffd97a;
+}
+@media (prefers-color-scheme: light) {
+  [data-theme="auto"] {
+    --bg:           #ffffff;
+    --bg-soft:      #f6f8fa;
+    --surface:      #ffffff;
+    --surface-2:    #f6f8fa;
+    --surface-3:    #eaeef2;
+    --border:       #d0d7de;
+    --border-soft:  #eaeef2;
+    --text:         #1f2328;
+    --text-soft:    #424a53;
+    --muted:        #59636e;
+    --muted-2:      #818b98;
+    --accent:       #0969da;
+    --accent-hover: #0550ae;
+    --accent-soft:  rgba(9, 105, 218, 0.08);
+    --linux:        #0969da;
+    --windows:      #8250df;
+    --warn:         #9a6700;
+    --ok:           #1f883d;
+    --bad:          #cf222e;
+    --pink:         #cf222e;
+    --teal:         #1b7c83;
+    --shadow:       0 1px 0 rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.05);
+    --mark-bg:      #fff8c5;
+    --mark-fg:      #1f2328;
   }
-  * { box-sizing: border-box; }
-  html, body { background: var(--bg); color: var(--text); }
-  body {
-    font-family: var(--sans);
-    font-size: 14.5px;
-    line-height: 1.55;
-    margin: 0;
-    -webkit-font-smoothing: antialiased;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { color: var(--accent-hover); text-decoration: underline; }
-  code, pre, kbd { font-family: var(--mono); font-size: 0.88em; }
-  code { background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; border: 1px solid var(--border-soft); }
-  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; overflow-x: auto; margin: 0.5rem 0; }
-  pre code { background: none; border: none; padding: 0; font-size: 0.9em; }
-  kbd { background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0.1em 0.45em; font-size: 0.8em; color: var(--text); }
+}
+[data-theme="light"] {
+  --bg:           #ffffff;
+  --bg-soft:      #f6f8fa;
+  --surface:      #ffffff;
+  --surface-2:    #f6f8fa;
+  --surface-3:    #eaeef2;
+  --border:       #d0d7de;
+  --border-soft:  #eaeef2;
+  --text:         #1f2328;
+  --text-soft:    #424a53;
+  --muted:        #59636e;
+  --muted-2:      #818b98;
+  --accent:       #0969da;
+  --accent-hover: #0550ae;
+  --accent-soft:  rgba(9, 105, 218, 0.08);
+  --linux:        #0969da;
+  --windows:      #8250df;
+  --warn:         #9a6700;
+  --ok:           #1f883d;
+  --bad:          #cf222e;
+  --pink:         #cf222e;
+  --teal:         #1b7c83;
+  --shadow:       0 1px 0 rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.05);
+  --mark-bg:      #fff8c5;
+  --mark-fg:      #1f2328;
+}
 
-  /* Layout */
-  .layout {
-    display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    max-width: 1280px;
-    margin: 0 auto;
-    gap: 2rem;
-    padding: 1.5rem 1.5rem 4rem;
-  }
-  nav.toc {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    max-height: 100vh;
-    overflow-y: auto;
-    padding: 1rem 0;
-    border-right: 1px solid var(--border-soft);
-    font-size: 0.9rem;
-  }
-  nav.toc h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.5rem; padding-right: 1rem; }
-  nav.toc ol { list-style: none; padding: 0; margin: 0 0 1rem; }
-  nav.toc li { margin: 0.15rem 0; }
-  nav.toc a { color: var(--muted); display: block; padding: 0.15rem 0.5rem 0.15rem 0; border-left: 2px solid transparent; padding-left: 0.6rem; }
-  nav.toc a:hover { color: var(--text); border-left-color: var(--accent); text-decoration: none; }
-  nav.toc .sub { padding-left: 1.4rem; font-size: 0.85em; }
+/* ---------- Fonts & reset ---------- */
+:root {
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+html, body { background: var(--bg); color: var(--text); }
+body {
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.65;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); text-decoration: underline; }
 
-  main { min-width: 0; }
+/* ---------- Typography ---------- */
+h1 { font-size: 2.2rem; margin: 0 0 0.35rem; letter-spacing: -0.015em; font-weight: 700; }
+h1 .tag { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.2em 0.6em; margin-left: 0.6em; vertical-align: middle; font-weight: 500; }
+h2 { font-size: 1.55rem; margin: 3rem 0 1rem; padding: 0.1rem 0 0.5rem 0.8rem; border-left: 4px solid var(--accent); letter-spacing: -0.01em; position: relative; }
+h3 { font-size: 1.15rem; margin: 1.8rem 0 0.6rem; color: var(--text); font-weight: 600; position: relative; }
+h4 { font-size: 0.95rem; margin: 1.1rem 0 0.5rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.lede { color: var(--muted); font-size: 1rem; margin: 0 0 1.1rem; max-width: 72ch; line-height: 1.6; }
+p { margin: 0.6rem 0; }
+strong { color: var(--text); }
 
-  /* Headings */
-  h1 { font-size: 2rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
-  h1 .tag { font-family: var(--mono); font-size: 0.9rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.15em 0.5em; margin-left: 0.6em; vertical-align: middle; font-weight: 500; }
-  h2 { font-size: 1.35rem; margin: 2.5rem 0 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-soft); letter-spacing: -0.01em; }
-  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--text); }
-  h4 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-  .lede { color: var(--muted); font-size: 1rem; margin: 0 0 1rem; max-width: 70ch; }
+/* Anchor link icons */
+.heading-anchor {
+  opacity: 0;
+  margin-left: 0.5rem;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.8em;
+  transition: opacity 0.15s ease;
+  text-decoration: none;
+}
+h2:hover .heading-anchor, h3:hover .heading-anchor, h4:hover .heading-anchor { opacity: 1; }
+.heading-anchor:hover { color: var(--accent); text-decoration: none; }
 
-  /* Tables */
-  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.9rem; }
-  th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom-color: var(--border); }
-  tr:last-child td { border-bottom: none; }
-  td code { white-space: nowrap; }
+/* ---------- Code ---------- */
+code, pre, kbd { font-family: var(--mono); font-size: 0.88em; }
+:not(pre) > code {
+  background: var(--surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  border: 1px solid var(--border-soft);
+  font-size: 0.85em;
+}
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+  position: relative;
+  box-shadow: var(--shadow);
+}
+pre code { background: none; border: none; padding: 0; font-size: 0.88em; line-height: 1.5; }
+kbd {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.1em 0.45em;
+  font-size: 0.8em;
+  color: var(--text);
+}
 
-  /* Cards / panes */
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; }
-  .stack { display: grid; gap: 1rem; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+/* Copy-to-clipboard button */
+.copy-btn {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  font-family: var(--sans);
+}
+pre:hover .copy-btn, .copy-btn:focus-visible { opacity: 1; }
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
+.copy-btn.copied { color: var(--ok); border-color: var(--ok); }
 
-  .os-card { background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 0.9rem 1rem; }
-  .os-card.linux { border-left-color: var(--linux); }
-  .os-card.windows { border-left-color: var(--windows); }
-  .os-card .os-label { display: inline-block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 0.5rem; }
-  .os-card.linux .os-label { color: var(--linux); }
-  .os-card.windows .os-label { color: var(--windows); }
+/* ---------- Layout ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  max-width: 1320px;
+  gap: 2.2rem;
+  padding: 1.5rem 1.8rem 5rem;
+}
 
-  /* Flow chips */
-  .flow { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: stretch; margin: 0.5rem 0; }
-  .flow .step { display: flex; align-items: center; gap: 0.55rem; padding: 0.45rem 0.7rem 0.45rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; }
-  .flow .step .num { flex-shrink: 0; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); color: #0d1117; display: grid; place-items: center; font-weight: 700; font-size: 0.78rem; }
-  .flow .step .lbl { color: var(--text); }
-  .flow .step .note { color: var(--muted); font-size: 0.78rem; }
-  .flow .arrow { display: grid; place-items: center; color: var(--muted-2); padding: 0 0.1rem; }
+/* ---------- TOC sidebar ---------- */
+nav.toc {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 1rem 0.5rem 1rem 0;
+  font-size: 0.9rem;
+  scrollbar-width: thin;
+}
+.toc-search {
+  margin: 0 0 1rem;
+}
+.toc-search input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.7rem 0.5rem 2.1rem;
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'%3E%3C/circle%3E%3Cline x1='21' y1='21' x2='16.5' y2='16.5'%3E%3C/line%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0.55rem center;
+}
+.toc-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.toc-search .kbd-hint { font-family: var(--mono); font-size: 0.7rem; color: var(--muted-2); margin-top: 0.3rem; padding-left: 0.2rem; }
+nav.toc h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 0.5rem; padding: 0; border: none; }
+nav.toc ol { list-style: none; padding: 0; margin: 0 0 1rem; }
+nav.toc li { margin: 0.05rem 0; }
+nav.toc a {
+  color: var(--muted);
+  display: block;
+  padding: 0.3rem 0.5rem 0.3rem 0.7rem;
+  border-left: 2px solid transparent;
+  border-radius: 0 4px 4px 0;
+  transition: color 0.1s ease, background 0.1s ease, border-color 0.1s ease;
+}
+nav.toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+nav.toc a.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+nav.toc .sub { padding-left: 0.6rem; font-size: 0.85em; margin-bottom: 0.5rem; }
+nav.toc li.hidden { display: none; }
+.toc-search-meta { color: var(--muted-2); font-size: 0.75rem; padding: 0 0.5rem; }
 
-  /* Tabs (CSS-only via radio) */
-  .tabs { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .tabs input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
-  .tab-labels { display: flex; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-  .tab-labels label {
-    padding: 0.55rem 1rem;
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 0.88rem;
-    font-weight: 500;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    user-select: none;
-  }
-  .tab-labels label:hover { color: var(--text); }
-  .tab-panels { padding: 1rem 1.1rem; }
-  .tab-panel { display: none; }
+main { min-width: 0; }
 
-  /* Specific tab wirings */
-  #pdev:checked ~ .tab-labels label[for="pdev"],
-  #pprod:checked ~ .tab-labels label[for="pprod"] { color: var(--accent); border-bottom-color: var(--accent); }
-  #pdev:checked ~ .tab-panels .panel-dev,
-  #pprod:checked ~ .tab-panels .panel-prod { display: block; }
+/* ---------- Theme toggle ---------- */
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  box-shadow: var(--shadow);
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); transform: scale(1.05); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  #ar-all:checked ~ .tab-labels label[for="ar-all"],
-  #ar-group:checked ~ .tab-labels label[for="ar-group"],
-  #ar-host:checked ~ .tab-labels label[for="ar-host"],
-  #ar-check:checked ~ .tab-labels label[for="ar-check"] { color: var(--accent); border-bottom-color: var(--accent); }
-  #ar-all:checked ~ .tab-panels .ar-panel-all,
-  #ar-group:checked ~ .tab-panels .ar-panel-group,
-  #ar-host:checked ~ .tab-panels .ar-panel-host,
-  #ar-check:checked ~ .tab-panels .ar-panel-check { display: block; }
+/* ---------- Hero ---------- */
+header#intro {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 0.5rem;
+}
+.hero-quickstart {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1.5rem 0 1rem;
+}
+@media (max-width: 760px) { .hero-quickstart { grid-template-columns: 1fr; } }
+.qs-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.2rem;
+  border-top-width: 3px;
+  display: flex;
+  flex-direction: column;
+}
+.qs-card.linux { border-top-color: var(--linux); }
+.qs-card.windows { border-top-color: var(--windows); }
+.qs-card h3 { margin: 0 0 0.4rem; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+.qs-card h3 .qs-icon { font-size: 1.15rem; }
+.qs-card .qs-sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.7rem; }
+.qs-card pre { margin: 0; font-size: 0.78rem; flex: 1; }
+.qs-card pre code { font-size: 0.95em; }
+.hero-help { color: var(--muted); font-size: 0.9rem; margin-top: 0.6rem; }
 
-  /* Details / accordion */
-  details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0; margin: 0.4rem 0; overflow: hidden; }
-  details summary { cursor: pointer; padding: 0.6rem 0.9rem; list-style: none; user-select: none; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 0.6rem; }
-  details summary::-webkit-details-marker { display: none; }
-  details summary::before { content: "▸"; color: var(--muted); transition: transform 0.15s ease; display: inline-block; font-size: 0.85em; }
-  details[open] summary::before { transform: rotate(90deg); }
-  details > :not(summary) { padding: 0 0.9rem 0.8rem; }
-  details .ts-body { padding: 0 0.9rem 0.8rem; color: var(--muted); }
-  details .ts-body p { margin: 0.3rem 0; }
-  details .ts-body code { color: var(--text); }
-  details summary .tag-sym { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+/* ---------- Cards & grids ---------- */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; }
+.stack { display: grid; gap: 1rem; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
 
-  /* Nested tree using details */
-  .tree details { background: transparent; border: none; margin: 0; }
-  .tree details > summary { padding: 0.1rem 0; }
-  .tree details > div, .tree details > ul { padding: 0 0 0 1.2rem; border-left: 1px dashed var(--border-soft); margin-left: 0.4rem; }
-  .tree ul { list-style: none; padding-left: 1.2rem; margin: 0; border-left: 1px dashed var(--border-soft); }
-  .tree li { padding: 0.05rem 0; font-family: var(--mono); font-size: 0.85rem; color: var(--text); }
-  .tree .note { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; }
-  .tree summary { font-family: var(--mono); font-size: 0.85rem; }
+/* Stack grid */
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.8rem;
+  margin: 0.7rem 0;
+}
+.stack-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.stack-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.stack-card .layer-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.stack-card h3 { margin: 0.15rem 0 0.35rem; font-size: 1rem; color: var(--text); }
+.stack-card p { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+.stack-card .ico { font-size: 1.05rem; margin-right: 0.35rem; }
 
-  /* Misc */
-  .checklist { list-style: none; padding-left: 0; }
-  .checklist li::before { content: "☐"; color: var(--muted); margin-right: 0.5rem; }
-  .badge { display: inline-block; font-size: 0.72rem; padding: 0.1em 0.5em; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); }
-  .badge.dev { color: var(--ok); border-color: rgba(63,185,80,0.4); }
-  .badge.prod { color: var(--warn); border-color: rgba(210,153,34,0.4); }
-  .note-row { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
-  .callout { background: var(--surface); border-left: 3px solid var(--warn); padding: 0.6rem 0.9rem; border-radius: 4px; margin: 0.7rem 0; color: var(--muted); font-size: 0.9rem; }
-  .callout strong { color: var(--text); }
+/* OS card variant */
+.os-card { background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 0.9rem 1rem; }
+.os-card.linux { border-left-color: var(--linux); }
+.os-card.windows { border-left-color: var(--windows); }
+.os-card .os-label { display: inline-block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 0.5rem; }
+.os-card.linux .os-label { color: var(--linux); }
+.os-card.windows .os-label { color: var(--windows); }
 
-  /* Search filter */
-  .filter-bar { position: sticky; top: 0; background: var(--bg); padding: 0.5rem 0; z-index: 5; margin-bottom: 0.5rem; }
-  .filter-bar input {
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 0.55rem 0.8rem;
-    border-radius: 8px;
-    font-family: var(--sans);
-    font-size: 0.95rem;
-  }
-  .filter-bar input:focus { outline: none; border-color: var(--accent); }
-  .filter-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+/* ---------- Tables ---------- */
+table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom-color: var(--border); background: var(--surface-2); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface-2); }
+td code { white-space: nowrap; }
 
-  /* Mobile */
-  @media (max-width: 800px) {
-    .layout { grid-template-columns: 1fr; padding: 1rem; }
-    nav.toc { position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--border-soft); padding-bottom: 1rem; margin-bottom: 0.5rem; }
-    .flow { flex-direction: column; align-items: stretch; }
-    .flow .arrow { transform: rotate(90deg); padding: 0.2rem 0; }
-  }
+/* ---------- Toolbelt cards & chips ---------- */
+.tools-meta { color: var(--muted-2); font-size: 0.78rem; margin: 0.3rem 0 0.8rem; padding-left: 0.1rem; }
+.toolbelt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.85rem;
+  margin: 0.7rem 0;
+}
+.tool-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem 0.95rem;
+  border-top: 3px solid var(--accent);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.tool-card.cat-files     { border-top-color: var(--linux); }
+.tool-card.cat-editors   { border-top-color: var(--windows); }
+.tool-card.cat-search    { border-top-color: var(--warn); }
+.tool-card.cat-monitor   { border-top-color: var(--ok); }
+.tool-card.cat-network   { border-top-color: var(--teal); }
+.tool-card.cat-transfer  { border-top-color: var(--accent); }
+.tool-card.cat-archive   { border-top-color: var(--pink); }
+.tool-card.cat-vcs       { border-top-color: var(--windows); }
+.tool-card.cat-containers{ border-top-color: var(--teal); }
+.tool-card.cat-data      { border-top-color: var(--accent); }
+.tool-card.cat-security  { border-top-color: var(--pink); }
+.tool-card.cat-quality   { border-top-color: var(--warn); }
+.tool-card.cat-profiling { border-top-color: var(--bad); }
+.tool-card.cat-lang      { border-top-color: var(--ok); }
+.tool-card.cat-shellaug  { border-top-color: var(--accent); }
+.tool-card.cat-shellutil { border-top-color: var(--muted); }
+.tool-card.cat-ai        { border-top-color: var(--pink); }
+.tool-card.dimmed { opacity: 0.25; }
+.tool-card h4 { margin: 0 0 0.5rem; font-size: 0.78rem; color: var(--text); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem 0.35rem; }
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  position: relative;
+  cursor: help;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.chip:hover, .chip:focus-visible { background: var(--accent-soft); border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+.chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.chip small { font-size: 0.62rem; color: var(--muted); margin-left: 0.15rem; font-family: var(--sans); font-weight: 600; letter-spacing: 0.04em; }
+.chip.match-hit { background: var(--mark-bg); color: var(--mark-fg); border-color: var(--mark-fg); transform: translateY(-1px); }
 
-  /* Print */
-  @media print {
-    nav.toc { display: none; }
-    .layout { display: block; max-width: none; padding: 0; }
-    details[open] > :not(summary), details > :not(summary) { display: block !important; padding: 0 0 0.5rem; }
-    details { break-inside: avoid; border: none; }
-    .grid-2 { display: block; }
-    .tab-panel { display: block !important; }
-    .filter-bar { display: none; }
-  }
+/* Visually hidden but in-DOM text for screen readers / LLMs / HTML-to-text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  user-select: none;
+}
+
+/* Tooltip via data-tip */
+.chip[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 10;
+  box-shadow: var(--shadow);
+}
+.chip[data-tip]:hover::after, .chip[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- Flow chips ---------- */
+.flow { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: stretch; margin: 0.5rem 0; }
+.flow .step { display: flex; align-items: center; gap: 0.55rem; padding: 0.45rem 0.8rem 0.45rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; }
+.flow .step .num { flex-shrink: 0; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--accent); color: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 0.78rem; }
+.flow .step .lbl { color: var(--text); }
+.flow .step .note { color: var(--muted); font-size: 0.78rem; }
+.flow .arrow { display: grid; place-items: center; color: var(--muted-2); padding: 0 0.1rem; }
+
+/* ---------- Tabs (CSS-only via radio) ---------- */
+.tabs { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.tabs input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.tab-labels { display: flex; border-bottom: 1px solid var(--border); background: var(--surface-2); flex-wrap: wrap; }
+.tab-labels label {
+  padding: 0.65rem 1.1rem;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.tab-labels label:hover { color: var(--text); background: var(--surface); }
+.tab-panels { padding: 1rem 1.1rem; }
+.tab-panel { display: none; }
+
+#pdev:checked ~ .tab-labels label[for="pdev"],
+#pprod:checked ~ .tab-labels label[for="pprod"] { color: var(--text); border-bottom-color: var(--accent); background: var(--surface); }
+#pdev:checked ~ .tab-panels .panel-dev,
+#pprod:checked ~ .tab-panels .panel-prod { display: block; }
+
+#ar-all:checked ~ .tab-labels label[for="ar-all"],
+#ar-group:checked ~ .tab-labels label[for="ar-group"],
+#ar-host:checked ~ .tab-labels label[for="ar-host"],
+#ar-check:checked ~ .tab-labels label[for="ar-check"] { color: var(--text); border-bottom-color: var(--accent); background: var(--surface); }
+#ar-all:checked ~ .tab-panels .ar-panel-all,
+#ar-group:checked ~ .tab-panels .ar-panel-group,
+#ar-host:checked ~ .tab-panels .ar-panel-host,
+#ar-check:checked ~ .tab-panels .ar-panel-check { display: block; }
+
+/* ---------- Details / accordion ---------- */
+details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0; margin: 0.5rem 0; overflow: hidden; transition: border-color 0.12s ease; }
+details[open] { border-color: var(--accent); }
+details summary { cursor: pointer; padding: 0.65rem 0.95rem; list-style: none; user-select: none; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 0.6rem; transition: background 0.12s ease; }
+details summary:hover { background: var(--surface-2); }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸"; color: var(--muted); transition: transform 0.18s ease; display: inline-block; font-size: 0.85em; flex-shrink: 0; }
+details[open] summary::before { transform: rotate(90deg); color: var(--accent); }
+details > :not(summary) { padding: 0 0.95rem 0.85rem; }
+details .ts-body { padding: 0 0.95rem 0.85rem; color: var(--muted); }
+details .ts-body p { margin: 0.3rem 0; }
+details .ts-body code { color: var(--text); }
+details summary .tag-sym { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+
+/* Nested tree using details */
+.tree details { background: transparent; border: none; margin: 0; }
+.tree details > summary { padding: 0.15rem 0; }
+.tree details > div, .tree details > ul { padding: 0 0 0 1.2rem; border-left: 1px dashed var(--border-soft); margin-left: 0.4rem; }
+.tree ul { list-style: none; padding-left: 1.2rem; margin: 0; border-left: 1px dashed var(--border-soft); }
+.tree li { padding: 0.05rem 0; font-family: var(--mono); font-size: 0.85rem; color: var(--text); }
+.tree .note { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; }
+.tree summary { font-family: var(--mono); font-size: 0.85rem; }
+
+/* ---------- Misc ---------- */
+.checklist { list-style: none; padding-left: 0; }
+.checklist li { padding: 0.15rem 0 0.15rem 1.4rem; position: relative; }
+.checklist li::before { content: "▸"; color: var(--accent); position: absolute; left: 0.3rem; font-size: 0.9em; }
+.badge { display: inline-block; font-size: 0.72rem; padding: 0.1em 0.55em; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); font-weight: 500; }
+.badge.dev { color: var(--ok); border-color: var(--ok); background: rgba(63,185,80,0.08); }
+.badge.prod { color: var(--warn); border-color: var(--warn); background: rgba(210,153,34,0.08); }
+.note-row { color: var(--muted); font-size: 0.88rem; margin-top: 0.3rem; line-height: 1.55; }
+.callout { background: var(--surface); border-left: 3px solid var(--warn); padding: 0.7rem 1rem; border-radius: 6px; margin: 0.8rem 0; color: var(--text-soft); font-size: 0.92rem; }
+.callout strong { color: var(--text); }
+
+/* Search filter (troubleshooting + tools) */
+.filter-bar { position: sticky; top: 0; background: var(--bg); padding: 0.5rem 0; z-index: 5; margin-bottom: 0.5rem; }
+.filter-bar input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+}
+.filter-bar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.filter-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+
+/* Global search highlight */
+mark { background: var(--mark-bg); color: var(--mark-fg); border-radius: 2px; padding: 0 0.15em; }
+section.dimmed { opacity: 0.25; pointer-events: none; }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; padding: 1rem; gap: 1rem; }
+  nav.toc { position: static; max-height: none; padding-bottom: 0.5rem; }
+  nav.toc.mobile-collapsed > .toc-collapse-ctrl + * { display: none; }
+  .toc-collapse-ctrl { display: block; width: 100%; padding: 0.6rem 0.8rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--sans); font-size: 0.9rem; cursor: pointer; text-align: left; margin-bottom: 0.5rem; }
+  .toc-collapse-ctrl::after { content: " ▾"; color: var(--muted); float: right; }
+  .flow { flex-direction: column; align-items: stretch; }
+  .flow .arrow { transform: rotate(90deg); padding: 0.2rem 0; }
+  .theme-toggle { top: 0.5rem; right: 0.5rem; }
+  h1 { font-size: 1.7rem; }
+  h2 { font-size: 1.3rem; }
+}
+@media (min-width: 901px) {
+  .toc-collapse-ctrl { display: none; }
+}
+
+/* ---------- Print ---------- */
+@media print {
+  nav.toc, .theme-toggle, .copy-btn, .filter-bar, .toc-search { display: none !important; }
+  .layout { display: block; max-width: none; padding: 0; }
+  details[open] > :not(summary), details > :not(summary) { display: block !important; padding: 0 0 0.5rem; }
+  details { break-inside: avoid; border: none; }
+  .grid-2, .stack-grid, .toolbelt-grid, .hero-quickstart { display: block; }
+  .tab-panel { display: block !important; }
+  .chip { background: none; border: 1px solid #999; }
+  body { color: #000; background: #fff; }
+}
 </style>
 </head>
 <body>
 
+<noscript>
+  <div style="padding:0.7rem 1rem;margin:0.5rem;background:#fff8c5;color:#1f2328;border-left:3px solid #9a6700;border-radius:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:0.92rem;">
+    <strong>JavaScript is disabled.</strong> Copy-to-clipboard, search, scroll-spy, theme toggle, and the toolbelt/troubleshooting filters are inactive. All content is still readable below.
+  </div>
+</noscript>
+
+<button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme (auto / light / dark)" title="Toggle theme">
+  <span id="theme-icon">◐</span>
+</button>
+
 <div class="layout">
 
-<nav class="toc" aria-label="Table of contents">
+<nav class="toc" aria-label="Table of contents" id="toc">
+  <button class="toc-collapse-ctrl" id="toc-collapse-ctrl" aria-expanded="true">Contents</button>
+  <div class="toc-search">
+    <input id="global-search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off">
+    <div class="kbd-hint">Press <kbd>/</kbd> to focus &middot; <kbd>Esc</kbd> to clear</div>
+  </div>
+  <div class="toc-search-meta" id="toc-search-meta"></div>
   <h2>Contents</h2>
-  <ol>
-    <li><a href="#intro">Overview</a></li>
-    <li><a href="#stack">Stack</a></li>
+  <ol id="toc-list">
+    <li><a href="#intro">Overview &amp; quickstart</a></li>
+    <li><a href="#stack">Stack</a>
+      <ol class="sub">
+        <li><a href="#toolbelt">Toolbelt</a></li>
+      </ol>
+    </li>
     <li><a href="#machines">Machine types</a></li>
     <li><a href="#layout">Repo layout</a></li>
     <li><a href="#setup">Setup</a>
@@ -230,7 +600,7 @@
   </ol>
 </nav>
 
-<main>
+<main id="main">
 
 <header id="intro">
   <h1>workstation <span class="tag">dev env</span></h1>
@@ -239,49 +609,226 @@
     Ansible owns <strong>all</strong> installs (system packages, user-space tools, and the chezmoi handoff for dotfiles);
     <code>bootstrap.sh</code> is a thin seed. Adding a tool is a one-file edit.
   </p>
+
+  <div class="hero-quickstart">
+    <article class="qs-card linux">
+      <h3><span class="qs-icon">🐧</span> First-time setup on a Linux host</h3>
+      <p class="qs-sub">Pick <span class="badge prod">prod</span> for no-sudo / user-wide install, <span class="badge dev">dev</span> for sudo / system-wide. Sets a token + identity, then pipes <code>bootstrap.sh</code>.</p>
+<pre><code>export GITHUB_TOKEN='&lt;your-PAT&gt;' \
+       GIT_USER_NAME='Arrush Chaturvedi' \
+       GIT_USER_EMAIL='contact@arrushc.com' && \
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh \
+  | bash -s -- --prod</code></pre>
+    </article>
+    <article class="qs-card windows">
+      <h3><span class="qs-icon">🪟</span> First-time setup on Windows</h3>
+      <p class="qs-sub">Run from an <strong>elevated</strong> PowerShell. Installs choco + tools, applies dotfiles, hard-links the wezterm config.</p>
+<pre><code>$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
+$env:GIT_USER_NAME  = 'Arrush Chaturvedi'
+$env:GIT_USER_EMAIL = 'contact@arrushc.com'
+irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
+    </article>
+  </div>
+  <p class="hero-help">Already set up? Jump to <a href="#daily">Daily workflows</a> &middot; <a href="#hosts">Host management</a> &middot; <a href="#troubleshooting">Troubleshooting</a>.</p>
 </header>
 
 <section id="stack">
 <h2>Stack</h2>
-<table>
-  <thead><tr><th>Layer</th><th>Tool</th><th>Purpose</th></tr></thead>
-  <tbody>
-    <tr><td>Provisioning</td><td><strong>Ansible</strong></td><td>Packages, tool installs, PATH, dotfiles trigger</td></tr>
-    <tr><td>Dotfiles</td><td><strong>chezmoi</strong></td><td>Personal shell config, templated per machine</td></tr>
-    <tr><td>Shell prompt</td><td><strong>starship</strong></td><td>Prompt</td></tr>
-    <tr><td>Multiplexer</td><td><strong>zellij</strong></td><td>Persistent sessions, layouts</td></tr>
-    <tr><td>Fuzzy find</td><td><strong>fzf</strong></td><td>History, files, SSH hosts</td></tr>
-    <tr><td>Jump</td><td><strong>zoxide</strong></td><td>Smarter <code>cd</code></td></tr>
-    <tr><td>Editor</td><td><strong>helix</strong></td><td>Modal editor, zero config</td></tr>
-    <tr><td>Notes</td><td><strong>nb + glow</strong></td><td>CLI notes, markdown preview</td></tr>
-    <tr><td>Terminal</td><td><strong>WezTerm</strong></td><td>Windows terminal, auto-connects to hosts</td></tr>
-  </tbody>
-</table>
+<p class="lede">The architectural layers — what tool plays what role across the whole setup.</p>
+<div class="stack-grid">
+  <article class="stack-card"><div class="layer-label">Provisioning</div><h3><span class="ico" aria-hidden="true">⚙️</span> Ansible</h3><p>Packages, tool installs, PATH, dotfiles trigger.</p></article>
+  <article class="stack-card"><div class="layer-label">Dotfiles</div><h3><span class="ico" aria-hidden="true">📂</span> chezmoi</h3><p>Personal shell config, templated per machine.</p></article>
+  <article class="stack-card"><div class="layer-label">Shell prompt</div><h3><span class="ico" aria-hidden="true">✨</span> starship</h3><p>The prompt itself.</p></article>
+  <article class="stack-card"><div class="layer-label">Multiplexer</div><h3><span class="ico" aria-hidden="true">🪟</span> zellij</h3><p>Persistent sessions, layouts.</p></article>
+  <article class="stack-card"><div class="layer-label">Fuzzy find</div><h3><span class="ico" aria-hidden="true">🔍</span> fzf</h3><p>History, files, SSH hosts.</p></article>
+  <article class="stack-card"><div class="layer-label">Jump</div><h3><span class="ico" aria-hidden="true">🚀</span> zoxide</h3><p>Smarter <code>cd</code> via frecency.</p></article>
+  <article class="stack-card"><div class="layer-label">Editor</div><h3><span class="ico" aria-hidden="true">📝</span> helix</h3><p>Modal editor, zero config.</p></article>
+  <article class="stack-card"><div class="layer-label">Notes</div><h3><span class="ico" aria-hidden="true">📓</span> nb + glow</h3><p>CLI notes, markdown preview.</p></article>
+  <article class="stack-card"><div class="layer-label">Terminal</div><h3><span class="ico" aria-hidden="true">🖥️</span> WezTerm</h3><p>Windows terminal, auto-connects to hosts.</p></article>
+</div>
 
-<h3>Toolbelt</h3>
-<p class="lede">CLI tools installed on every host via <code>ansible/roles/linux-base/tasks/tools.yml</code>. Default install is a static binary on both <code>dev_machine</code> and <code>prod_machine</code>. Inline tags mark exceptions: <code>ᵈⁿᶠ</code> &mdash; <span class="badge dev">dev_machine</span> only via dnf; <code>ᵖⁱᵖ</code> &mdash; via <code>pip --user</code> (still both hosts); <code>ⁱⁿˢ</code> &mdash; via upstream installer script.</p>
-<table>
-  <thead><tr><th>Category</th><th>Tools</th></tr></thead>
-  <tbody>
-    <tr><td>File ops &amp; viewing</td><td><code>fd</code>, <code>bat</code>, <code>broot</code>, <code>lnav</code>, <code>eza</code>, <code>yazi</code>, <code>delta</code>, <code>sd</code></td></tr>
-    <tr><td>Editors</td><td><code>helix</code>, <code>micro</code></td></tr>
-    <tr><td>Search / grep</td><td><code>ripgrep</code>, <code>sg</code>/<code>ast-grep</code>, <code>tv</code> (television)</td></tr>
-    <tr><td>System monitor</td><td><code>btop</code>, <code>ncdu</code>, <code>fastfetch</code>, <code>witr</code>, <code>glances</code><sup>pip</sup>, <code>htop</code><sup>dnf</sup>, <code>multitail</code><sup>dnf</sup>, <code>goaccess</code><sup>dnf</sup></td></tr>
-    <tr><td>Network</td><td><code>bandwhich</code>, <code>gping</code>, <code>xh</code>, <code>ssh-copy-id</code>, <code>nmap</code><sup>dnf</sup>, <code>mtr</code><sup>dnf</sup>, <code>tcpdump</code><sup>dnf</sup></td></tr>
-    <tr><td>File transfer</td><td><code>rclone</code>, <code>croc</code>, <code>rsync</code><sup>dnf</sup> (usually pre-installed on prod)</td></tr>
-    <tr><td>Archive / compression</td><td><code>ouch</code> (tar/zip/7z/rar/gz/bz2/xz/zst/lz4/snappy)</td></tr>
-    <tr><td>Git TUIs / VCS</td><td><code>gh</code>, <code>gitui</code>, <code>lazygit</code>, <code>jj</code> (jujutsu)</td></tr>
-    <tr><td>Containers</td><td><code>lazydocker</code>, <code>ctop</code>, <code>k9s</code>, <code>dive</code></td></tr>
-    <tr><td>Data / SQL</td><td><code>jq</code>, <code>yq</code>, <code>htmlq</code>, <code>usql</code>, <code>dsq</code>, <code>harlequin</code><sup>pip</sup></td></tr>
-    <tr><td>Security</td><td><code>age</code>, <code>sops</code>, <code>gopass</code></td></tr>
-    <tr><td>Quality / linting</td><td><code>shellcheck</code><sup>dnf</sup></td></tr>
-    <tr><td>Profiling / debug</td><td><code>hyperfine</code>, <code>strace</code><sup>dnf</sup>, <code>perf</code><sup>dnf</sup>, <code>gdb</code><sup>dnf</sup>, <code>lsof</code><sup>dnf</sup></td></tr>
-    <tr><td>Lang managers</td><td><code>mise</code>, <code>uv</code> (+ <code>uvx</code>)</td></tr>
-    <tr><td>Shell augmentation</td><td><code>atuin</code> (history), <code>tldr</code> (tealdeer), <code>asciinema</code><sup>pip</sup></td></tr>
-    <tr><td>Shell &amp; dev utilities</td><td><code>zsh</code><sup>dnf</sup>, <code>parallel</code><sup>dnf</sup>, <code>pv</code><sup>dnf</sup>, <code>entr</code><sup>dnf</sup>, <code>tree</code><sup>dnf</sup>, <code>cronie</code><sup>dnf</sup>, <code>time</code><sup>dnf</sup>, <code>xxd</code><sup>dnf</sup> (via <code>vim-common</code>)</td></tr>
-    <tr><td>AI</td><td><code>claude</code><sup>ins</sup> (Claude Code CLI, <span class="badge dev">dev_machine</span> only)</td></tr>
-  </tbody>
-</table>
+<h3 id="toolbelt">Toolbelt</h3>
+<p class="lede">CLI tools installed on every host via <code>ansible/roles/linux-base/tasks/tools.yml</code>. Default install is a static binary on both <code>dev_machine</code> and <code>prod_machine</code>. Scope tags: <code>(dnf)</code> = <span class="badge dev">dev_machine</span> only via dnf, <code>(pip)</code> = via <code>pip --user</code> (both hosts), <code>(ins)</code> = via upstream installer. Hover any chip for a one-line purpose.</p>
+<div class="filter-bar">
+  <input id="tool-filter" type="search" placeholder="Filter tools (try &ldquo;jq&rdquo;, &ldquo;docker&rdquo;, &ldquo;git&rdquo;)…" autocomplete="off">
+  <div class="filter-meta" id="tool-filter-meta"></div>
+</div>
+<div class="toolbelt-grid" id="toolbelt-grid">
+
+  <article class="tool-card cat-files" data-cat="files">
+    <h4>File ops &amp; viewing</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Faster `find` replacement">fd<span class="sr-only"> — faster `find` replacement</span></span>
+      <span class="chip" tabindex="0" data-tip="Syntax-highlighted `cat`">bat<span class="sr-only"> — syntax-highlighted `cat`</span></span>
+      <span class="chip" tabindex="0" data-tip="Interactive directory tree navigator">broot<span class="sr-only"> — interactive directory tree navigator</span></span>
+      <span class="chip" tabindex="0" data-tip="Log file navigator with filtering">lnav<span class="sr-only"> — log file navigator with filtering</span></span>
+      <span class="chip" tabindex="0" data-tip="Modern `ls` with git status + icons">eza<span class="sr-only"> — modern `ls` with git status + icons</span></span>
+      <span class="chip" tabindex="0" data-tip="TUI file manager (Rust)">yazi<span class="sr-only"> — TUI file manager (Rust)</span></span>
+      <span class="chip" tabindex="0" data-tip="Syntax-highlighted Git diff pager">delta<span class="sr-only"> — syntax-highlighted Git diff pager</span></span>
+      <span class="chip" tabindex="0" data-tip="Simpler `sed` for find/replace">sd<span class="sr-only"> — simpler `sed` for find/replace</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-editors" data-cat="editors">
+    <h4>Editors</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Modal terminal editor (vim-style)">helix<span class="sr-only"> — modal terminal editor (vim-style)</span></span>
+      <span class="chip" tabindex="0" data-tip="Nano-style editor with mouse support">micro<span class="sr-only"> — nano-style editor with mouse support</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-search" data-cat="search">
+    <h4>Search / grep</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Fast recursive grep (rg)">ripgrep<span class="sr-only"> — fast recursive grep (rg)</span></span>
+      <span class="chip" tabindex="0" data-tip="Structural code search (AST-aware)">sg / ast-grep<span class="sr-only"> — structural code search (AST-aware)</span></span>
+      <span class="chip" tabindex="0" data-tip="Fuzzy launcher TUI (television)">tv<span class="sr-only"> — fuzzy launcher TUI (television)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-monitor" data-cat="monitor">
+    <h4>System monitor</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="TUI process / memory / disk monitor">btop<span class="sr-only"> — TUI process / memory / disk monitor</span></span>
+      <span class="chip" tabindex="0" data-tip="TUI disk usage explorer">ncdu<span class="sr-only"> — TUI disk usage explorer</span></span>
+      <span class="chip" tabindex="0" data-tip="System info banner (fast neofetch successor)">fastfetch<span class="sr-only"> — system info banner (fast neofetch successor)</span></span>
+      <span class="chip" tabindex="0" data-tip="&ldquo;Why is this running?&rdquo; process explainer">witr<span class="sr-only"> — &ldquo;Why is this running?&rdquo; process explainer</span></span>
+      <span class="chip" tabindex="0" data-tip="Python TUI monitor with optional web UI">glances <small>(pip)</small><span class="sr-only"> — Python TUI monitor with optional web UI (installed via pip --user)</span></span>
+      <span class="chip" tabindex="0" data-tip="Classic process viewer">htop <small>(dnf)</small><span class="sr-only"> — classic process viewer (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Multi-pane `tail` viewer">multitail <small>(dnf)</small><span class="sr-only"> — multi-pane `tail` viewer (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Real-time web log analyzer">goaccess <small>(dnf)</small><span class="sr-only"> — real-time web log analyzer (dev_machine only via dnf)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-network" data-cat="network">
+    <h4>Network</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Live network throughput by process">bandwhich<span class="sr-only"> — live network throughput by process</span></span>
+      <span class="chip" tabindex="0" data-tip="Ping with terminal graph">gping<span class="sr-only"> — ping with terminal graph</span></span>
+      <span class="chip" tabindex="0" data-tip="Fast HTTPie-style HTTP client">xh<span class="sr-only"> — fast HTTPie-style HTTP client</span></span>
+      <span class="chip" tabindex="0" data-tip="Copy SSH key to a remote host">ssh-copy-id<span class="sr-only"> — copy SSH key to a remote host</span></span>
+      <span class="chip" tabindex="0" data-tip="Network port scanner">nmap <small>(dnf)</small><span class="sr-only"> — network port scanner (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Live traceroute + ping">mtr <small>(dnf)</small><span class="sr-only"> — live traceroute + ping (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Packet capture / inspection">tcpdump <small>(dnf)</small><span class="sr-only"> — packet capture / inspection (dev_machine only via dnf)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-transfer" data-cat="transfer">
+    <h4>File transfer</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Cloud storage sync (S3 / GCS / Drive / etc.)">rclone<span class="sr-only"> — cloud storage sync (S3 / GCS / Drive / etc.)</span></span>
+      <span class="chip" tabindex="0" data-tip="Easy peer-to-peer file transfer">croc<span class="sr-only"> — easy peer-to-peer file transfer</span></span>
+      <span class="chip" tabindex="0" data-tip="Efficient file/dir sync (usually pre-installed on prod)">rsync <small>(dnf)</small><span class="sr-only"> — efficient file/dir sync (dev_machine only via dnf; usually pre-installed on prod)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-archive" data-cat="archive">
+    <h4>Archive / compression</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Universal compress/decompress (tar/zip/7z/rar/gz/bz2/xz/zst/lz4/snappy)">ouch<span class="sr-only"> — universal compress/decompress (tar/zip/7z/rar/gz/bz2/xz/zst/lz4/snappy)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-vcs" data-cat="vcs">
+    <h4>Git TUIs / VCS</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Official GitHub CLI (PRs, issues, releases, auth)">gh<span class="sr-only"> — official GitHub CLI (PRs, issues, releases, auth)</span></span>
+      <span class="chip" tabindex="0" data-tip="Keyboard-driven Git TUI">gitui<span class="sr-only"> — keyboard-driven Git TUI</span></span>
+      <span class="chip" tabindex="0" data-tip="Visual Git TUI">lazygit<span class="sr-only"> — visual Git TUI</span></span>
+      <span class="chip" tabindex="0" data-tip="Experimental Git-compatible VCS">jj<span class="sr-only"> — experimental Git-compatible VCS (jujutsu)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-containers" data-cat="containers">
+    <h4>Containers</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Docker TUI">lazydocker<span class="sr-only"> — Docker TUI</span></span>
+      <span class="chip" tabindex="0" data-tip="Docker container `top`">ctop<span class="sr-only"> — Docker container `top`</span></span>
+      <span class="chip" tabindex="0" data-tip="Kubernetes TUI">k9s<span class="sr-only"> — Kubernetes TUI</span></span>
+      <span class="chip" tabindex="0" data-tip="Inspect Docker image layers">dive<span class="sr-only"> — inspect Docker image layers</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-data" data-cat="data">
+    <h4>Data / SQL</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Query / edit JSON">jq<span class="sr-only"> — query / edit JSON</span></span>
+      <span class="chip" tabindex="0" data-tip="Query / edit YAML / XML">yq<span class="sr-only"> — query / edit YAML / XML</span></span>
+      <span class="chip" tabindex="0" data-tip="Query HTML like jq queries JSON">htmlq<span class="sr-only"> — query HTML like jq queries JSON</span></span>
+      <span class="chip" tabindex="0" data-tip="Universal SQL CLI (postgres, mysql, sqlite, ...)">usql<span class="sr-only"> — universal SQL CLI (postgres, mysql, sqlite, etc.)</span></span>
+      <span class="chip" tabindex="0" data-tip="SQL over JSON / CSV / XLSX">dsq<span class="sr-only"> — SQL over JSON / CSV / XLSX</span></span>
+      <span class="chip" tabindex="0" data-tip="TUI SQL IDE">harlequin <small>(pip)</small><span class="sr-only"> — TUI SQL IDE (installed via pip --user)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-security" data-cat="security">
+    <h4>Security</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Modern file encryption">age<span class="sr-only"> — modern file encryption</span></span>
+      <span class="chip" tabindex="0" data-tip="Encrypt secrets in YAML / JSON (pair with age)">sops<span class="sr-only"> — encrypt secrets in YAML / JSON (pair with age)</span></span>
+      <span class="chip" tabindex="0" data-tip="Go-based pass replacement (password store)">gopass<span class="sr-only"> — Go-based pass replacement (password store)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-quality" data-cat="quality">
+    <h4>Quality / linting</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Bash script linter (gold standard)">shellcheck <small>(dnf)</small><span class="sr-only"> — bash script linter, the gold standard (dev_machine only via dnf)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-profiling" data-cat="profiling">
+    <h4>Profiling / debug</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Command-line benchmarking">hyperfine<span class="sr-only"> — command-line benchmarking</span></span>
+      <span class="chip" tabindex="0" data-tip="Syscall tracer">strace <small>(dnf)</small><span class="sr-only"> — syscall tracer (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Linux performance profiler">perf <small>(dnf)</small><span class="sr-only"> — Linux performance profiler (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Debugger for compiled code">gdb <small>(dnf)</small><span class="sr-only"> — debugger for compiled code (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="List open files / sockets">lsof <small>(dnf)</small><span class="sr-only"> — list open files / sockets (dev_machine only via dnf)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-lang" data-cat="lang">
+    <h4>Lang managers</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Polyglot dev tool version manager (asdf successor)">mise<span class="sr-only"> — polyglot dev tool version manager (asdf successor)</span></span>
+      <span class="chip" tabindex="0" data-tip="Fast Python installer + venv (replaces pip + venv)">uv (+ uvx)<span class="sr-only"> — fast Python installer + venv (replaces pip + venv)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-shellaug" data-cat="shellaug">
+    <h4>Shell augmentation</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Better shell history (search + optional sync)">atuin<span class="sr-only"> — better shell history (search + optional sync)</span></span>
+      <span class="chip" tabindex="0" data-tip="Practical command examples">tldr<span class="sr-only"> — practical command examples (tealdeer)</span></span>
+      <span class="chip" tabindex="0" data-tip="Record + share terminal sessions">asciinema <small>(pip)</small><span class="sr-only"> — record + share terminal sessions (installed via pip --user)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-shellutil" data-cat="shellutil">
+    <h4>Shell &amp; dev utilities</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Alternative shell">zsh <small>(dnf)</small><span class="sr-only"> — alternative shell (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="GNU parallel — run commands in parallel">parallel <small>(dnf)</small><span class="sr-only"> — GNU parallel; run commands in parallel (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Pipe viewer — data through pipes">pv <small>(dnf)</small><span class="sr-only"> — pipe viewer; monitor data through pipes (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Run commands on file changes">entr <small>(dnf)</small><span class="sr-only"> — run commands on file changes (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Directory tree listing">tree <small>(dnf)</small><span class="sr-only"> — directory tree listing (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Cron daemon + crontab">cronie <small>(dnf)</small><span class="sr-only"> — cron daemon + crontab (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="GNU /usr/bin/time (richer than bash builtin)">time <small>(dnf)</small><span class="sr-only"> — GNU /usr/bin/time, richer than the bash builtin (dev_machine only via dnf)</span></span>
+      <span class="chip" tabindex="0" data-tip="Hex dump utility (provided by vim-common)">xxd <small>(dnf)</small><span class="sr-only"> — hex dump utility, provided by vim-common (dev_machine only via dnf)</span></span>
+    </div>
+  </article>
+
+  <article class="tool-card cat-ai" data-cat="ai">
+    <h4>AI</h4>
+    <div class="chips">
+      <span class="chip" tabindex="0" data-tip="Claude Code CLI — Anthropic's coding agent (via official install.sh)">claude <small>(ins)</small><span class="sr-only"> — Claude Code CLI; Anthropic's coding agent (installed via official install.sh, dev_machine only)</span></span>
+    </div>
+  </article>
+
+</div>
 </section>
 
 <section id="machines">
@@ -757,7 +1304,7 @@ direnv_version: "2.34.0"</code></pre>
 <section id="troubleshooting">
 <h2>Troubleshooting</h2>
 <div class="filter-bar">
-  <input id="ts-filter" type="search" placeholder="Filter entries (e.g. 'choco', 'PATH', 'wezterm')…" autocomplete="off">
+  <input id="ts-filter" type="search" placeholder="Filter entries (e.g. &lsquo;choco&rsquo;, &lsquo;PATH&rsquo;, &lsquo;wezterm&rsquo;)…" autocomplete="off">
   <div class="filter-meta" id="ts-count"></div>
 </div>
 
@@ -916,15 +1463,276 @@ choco install -y &lt;id&gt;</code></pre>
 
 <script>
 (function() {
-  const filter = document.getElementById('ts-filter');
-  const count  = document.getElementById('ts-count');
-  const items  = Array.from(document.querySelectorAll('[data-ts]'));
-  if (!filter || !items.length) return;
+  'use strict';
 
-  function update() {
-    const q = filter.value.trim().toLowerCase();
+  // ============================================================
+  // 1. Theme toggle (auto / light / dark) with localStorage
+  // ============================================================
+  const themeToggle = document.getElementById('theme-toggle');
+  const themeIcon   = document.getElementById('theme-icon');
+  const html        = document.documentElement;
+  const themes      = ['auto', 'light', 'dark'];
+  const icons       = { auto: '◐', light: '☀', dark: '☾' };
+  const labels      = { auto: 'Theme: auto (follows system)', light: 'Theme: light', dark: 'Theme: dark' };
+
+  function applyTheme(t) {
+    html.setAttribute('data-theme', t);
+    themeIcon.textContent = icons[t];
+    themeToggle.setAttribute('title', labels[t]);
+    themeToggle.setAttribute('aria-label', labels[t]);
+  }
+  let current = localStorage.getItem('readme-theme') || 'auto';
+  if (!themes.includes(current)) current = 'auto';
+  applyTheme(current);
+  themeToggle.addEventListener('click', () => {
+    current = themes[(themes.indexOf(current) + 1) % themes.length];
+    localStorage.setItem('readme-theme', current);
+    applyTheme(current);
+  });
+
+  // ============================================================
+  // 2. Copy-to-clipboard buttons on every <pre>
+  // ============================================================
+  document.querySelectorAll('pre').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.type = 'button';
+    btn.textContent = 'Copy';
+    btn.setAttribute('aria-label', 'Copy code to clipboard');
+    pre.appendChild(btn);
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const code = pre.querySelector('code');
+      const text = code ? code.innerText : pre.innerText.replace(/Copy$/, '').trimEnd();
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 1500);
+      } catch (_) {
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      }
+    });
+  });
+
+  // ============================================================
+  // 3. Anchor link icons on h2/h3/h4 with an id
+  // ============================================================
+  document.querySelectorAll('main h2[id], main h3[id], main h4[id]').forEach(h => {
+    const a = document.createElement('a');
+    a.className = 'heading-anchor';
+    a.href = '#' + h.id;
+    a.textContent = '#';
+    a.setAttribute('aria-label', 'Link to ' + (h.textContent || '').trim());
+    h.appendChild(a);
+  });
+
+  // ============================================================
+  // 4. Scroll-spy TOC
+  // ============================================================
+  const tocLinks = Array.from(document.querySelectorAll('nav.toc a[href^="#"]'));
+  const linkByHash = new Map(tocLinks.map(a => [a.getAttribute('href'), a]));
+  const observed = Array.from(document.querySelectorAll('main section[id], main h3[id]'));
+
+  function setActive(hash) {
+    tocLinks.forEach(a => a.classList.remove('active'));
+    tocLinks.forEach(a => a.removeAttribute('aria-current'));
+    const link = linkByHash.get(hash);
+    if (link) {
+      link.classList.add('active');
+      link.setAttribute('aria-current', 'location');
+    }
+  }
+
+  const visible = new Set();
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      const id = '#' + e.target.id;
+      if (e.isIntersecting) visible.add(id); else visible.delete(id);
+    });
+    // Pick the first (topmost) visible target with a TOC link
+    const ordered = observed.map(el => '#' + el.id).filter(id => visible.has(id) && linkByHash.has(id));
+    if (ordered.length) setActive(ordered[0]);
+  }, { rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+  observed.forEach(el => io.observe(el));
+
+  // Manual click — set active immediately for snappy feel
+  tocLinks.forEach(a => a.addEventListener('click', () => {
+    setTimeout(() => setActive(a.getAttribute('href')), 50);
+  }));
+
+  // ============================================================
+  // 5. Global search — highlight matches + dim sections without
+  // ============================================================
+  const globalSearch = document.getElementById('global-search');
+  const tocSearchMeta = document.getElementById('toc-search-meta');
+  const sections = Array.from(document.querySelectorAll('main section'));
+  // Map sections to their TOC links (top-level entry)
+  const sectionToTopLink = new Map(sections.map(s => [s, linkByHash.get('#' + s.id) || null]));
+
+  function clearHighlights() {
+    document.querySelectorAll('main mark').forEach(m => {
+      const parent = m.parentNode;
+      parent.replaceChild(document.createTextNode(m.textContent), m);
+      parent.normalize();
+    });
+  }
+
+  function highlightInNode(node, regex) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.nodeValue;
+      if (!regex.test(text)) return 0;
+      regex.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let lastIndex = 0;
+      let match;
+      let hits = 0;
+      while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        const mark = document.createElement('mark');
+        mark.textContent = match[0];
+        frag.appendChild(mark);
+        lastIndex = match.index + match[0].length;
+        hits++;
+        if (match.index === regex.lastIndex) regex.lastIndex++;
+      }
+      if (lastIndex < text.length) frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      node.parentNode.replaceChild(frag, node);
+      return hits;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      // Skip already-marked, inputs, scripts, styles
+      const skip = ['MARK', 'SCRIPT', 'STYLE', 'INPUT', 'BUTTON', 'TEXTAREA'];
+      if (skip.includes(node.tagName)) return 0;
+      let total = 0;
+      Array.from(node.childNodes).forEach(child => { total += highlightInNode(child, regex); });
+      return total;
+    }
+    return 0;
+  }
+
+  function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function runGlobalSearch(query) {
+    clearHighlights();
+    sections.forEach(s => s.classList.remove('dimmed'));
+    tocLinks.forEach(a => {
+      const li = a.closest('li');
+      if (li) li.classList.remove('hidden');
+    });
+    if (!query) {
+      tocSearchMeta.textContent = '';
+      return;
+    }
+    const regex = new RegExp(escapeRegex(query), 'gi');
+    let totalHits = 0;
+    let matchedSections = 0;
+    sections.forEach(s => {
+      const hits = highlightInNode(s, new RegExp(escapeRegex(query), 'gi'));
+      if (hits > 0) {
+        matchedSections++;
+        totalHits += hits;
+      } else {
+        s.classList.add('dimmed');
+        const link = sectionToTopLink.get(s);
+        if (link) {
+          const li = link.closest('li');
+          if (li) li.classList.add('hidden');
+        }
+      }
+    });
+    tocSearchMeta.textContent = totalHits
+      ? totalHits + ' match' + (totalHits === 1 ? '' : 'es') + ' in ' + matchedSections + ' section' + (matchedSections === 1 ? '' : 's')
+      : 'No matches';
+  }
+
+  let searchDebounce;
+  globalSearch.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => runGlobalSearch(globalSearch.value.trim()), 120);
+  });
+
+  // ============================================================
+  // 6. Keyboard shortcuts: '/' focuses search, Esc clears
+  // ============================================================
+  document.addEventListener('keydown', (e) => {
+    const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+    if (e.key === '/' && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      globalSearch.focus();
+      globalSearch.select();
+    }
+    if (e.key === 'Escape') {
+      if (document.activeElement === globalSearch && globalSearch.value) {
+        globalSearch.value = '';
+        runGlobalSearch('');
+      } else if (document.activeElement === document.getElementById('tool-filter') && document.getElementById('tool-filter').value) {
+        document.getElementById('tool-filter').value = '';
+        runToolFilter('');
+      } else if (document.activeElement === document.getElementById('ts-filter') && document.getElementById('ts-filter').value) {
+        document.getElementById('ts-filter').value = '';
+        runToolFilter.tsUpdate && runToolFilter.tsUpdate();
+      } else {
+        document.activeElement.blur();
+      }
+    }
+  });
+
+  // ============================================================
+  // 7. Toolbelt filter — dim non-matching cards, highlight chips
+  // ============================================================
+  const toolFilter = document.getElementById('tool-filter');
+  const toolFilterMeta = document.getElementById('tool-filter-meta');
+  const toolCards = Array.from(document.querySelectorAll('#toolbelt-grid .tool-card'));
+
+  function runToolFilter(q) {
+    q = q.trim().toLowerCase();
+    let visibleCards = 0;
+    let matchedChips = 0;
+    toolCards.forEach(card => {
+      card.classList.remove('dimmed');
+      const chips = card.querySelectorAll('.chip');
+      let cardHas = false;
+      chips.forEach(c => {
+        c.classList.remove('match-hit');
+        if (!q) return;
+        const name = c.textContent.toLowerCase();
+        const tip = (c.getAttribute('data-tip') || '').toLowerCase();
+        const cat = (card.getAttribute('data-cat') || '').toLowerCase();
+        const heading = (card.querySelector('h4').textContent || '').toLowerCase();
+        if (name.includes(q) || tip.includes(q) || cat.includes(q) || heading.includes(q)) {
+          c.classList.add('match-hit');
+          matchedChips++;
+          cardHas = true;
+        }
+      });
+      if (q && !cardHas) card.classList.add('dimmed');
+      else visibleCards++;
+    });
+    if (!q) {
+      toolFilterMeta.textContent = '';
+    } else {
+      toolFilterMeta.textContent = matchedChips
+        ? matchedChips + ' tool' + (matchedChips === 1 ? '' : 's') + ' in ' + visibleCards + ' categor' + (visibleCards === 1 ? 'y' : 'ies')
+        : 'No tools match';
+    }
+  }
+  toolFilter.addEventListener('input', () => runToolFilter(toolFilter.value));
+
+  // ============================================================
+  // 8. Troubleshooting filter (existing)
+  // ============================================================
+  const tsFilter = document.getElementById('ts-filter');
+  const tsCount  = document.getElementById('ts-count');
+  const tsItems  = Array.from(document.querySelectorAll('[data-ts]'));
+
+  function tsUpdate() {
+    const q = tsFilter.value.trim().toLowerCase();
     let shown = 0;
-    items.forEach(d => {
+    tsItems.forEach(d => {
       if (!q) {
         d.hidden = false;
         d.open = false;
@@ -935,9 +1743,31 @@ choco install -y &lt;id&gt;</code></pre>
         if (match) shown++;
       }
     });
-    count.textContent = q ? `${shown} of ${items.length} matching` : '';
+    tsCount.textContent = q ? shown + ' of ' + tsItems.length + ' matching' : '';
   }
-  filter.addEventListener('input', update);
+  tsFilter.addEventListener('input', tsUpdate);
+  runToolFilter.tsUpdate = tsUpdate; // expose for Esc handler above
+
+  // ============================================================
+  // 9. Mobile TOC collapse toggle
+  // ============================================================
+  const tocCollapseCtrl = document.getElementById('toc-collapse-ctrl');
+  const tocEl = document.getElementById('toc');
+  function syncTocCollapsed() {
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      tocEl.classList.add('mobile-collapsed');
+      tocCollapseCtrl.setAttribute('aria-expanded', 'false');
+    } else {
+      tocEl.classList.remove('mobile-collapsed');
+      tocCollapseCtrl.setAttribute('aria-expanded', 'true');
+    }
+  }
+  syncTocCollapsed();
+  window.addEventListener('resize', syncTocCollapsed);
+  tocCollapseCtrl.addEventListener('click', () => {
+    const isCollapsed = tocEl.classList.toggle('mobile-collapsed');
+    tocCollapseCtrl.setAttribute('aria-expanded', String(!isCollapsed));
+  });
 })();
 </script>
 
