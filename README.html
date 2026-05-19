@@ -1597,11 +1597,19 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl">Run local.yml</span>
+                            ><span class="lbl">Install community.general</span
+                            ><span class="note"
+                                >yaml stdout callback</span
+                            >
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">6</span
+                            ><span class="lbl">Run local.yml</span>
+                        </div>
+                        <div class="arrow">&rarr;</div>
+                        <div class="step">
+                            <span class="num">7</span
                             ><span class="lbl">Commit + push</span
                             ><span class="note">warn-don&rsquo;t-fail</span>
                         </div>
@@ -2299,6 +2307,36 @@ direnv_version: "2.34.0"</code></pre>
                                 this run completes, <code>shell.yml</code> wires
                                 the PATH permanently.
                             </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Ansible fails immediately with
+                            <em
+                                >&ldquo;Invalid callback for stdout specified:
+                                yaml&rdquo;</em
+                            >
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                <code>ansible/ansible.cfg</code> sets
+                                <code>stdout_callback = yaml</code>, but that
+                                callback lives in the
+                                <code>community.general</code> collection &mdash;
+                                which ships with the full <code>ansible</code>
+                                package but not with bare
+                                <code>ansible-core</code> (what
+                                <code>bootstrap.sh</code> pip-installs).
+                            </p>
+                            <p>
+                                Current <code>bootstrap.sh</code> installs the
+                                collection automatically. If you&rsquo;re hitting
+                                this on an older install, run once and re-run
+                                bootstrap:
+                            </p>
+                            <pre><code>~/.local/bin/ansible-galaxy collection install community.general
+./bootstrap.sh --prod   # or --dev</code></pre>
                         </div>
                     </details>
 

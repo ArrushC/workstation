@@ -283,23 +283,34 @@ self_register() {
 # 3. ENSURE ANSIBLE — install ansible-core via pip if missing, smoke-test
 # =============================================================================
 ensure_ansible() {
-  if command -v ansible-playbook &>/dev/null; then
-    ok "ansible-playbook already on PATH"
-    return
-  fi
-
-  log "Installing ansible-core via pip3 --user..."
-  python3 -m pip install --user --upgrade ansible-core
-
-  # pip might have just dropped the binary somewhere not yet on PATH
-  export PATH="$HOME/.local/bin:$PATH"
-
   if ! command -v ansible-playbook &>/dev/null; then
-    fail "ansible-playbook not on PATH after pip install.
+    log "Installing ansible-core via pip3 --user..."
+    python3 -m pip install --user --upgrade ansible-core
+
+    # pip might have just dropped the binary somewhere not yet on PATH
+    export PATH="$HOME/.local/bin:$PATH"
+
+    if ! command -v ansible-playbook &>/dev/null; then
+      fail "ansible-playbook not on PATH after pip install.
 Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+
+    ok "ansible-playbook: $(ansible-playbook --version 2>/dev/null | head -1)"
+  else
+    ok "ansible-playbook already on PATH"
   fi
 
-  ok "ansible-playbook: $(ansible-playbook --version 2>/dev/null | head -1)"
+  # ansible-core ships without bundled collections. ansible/ansible.cfg sets
+  # stdout_callback=yaml which lives in community.general — without this the
+  # playbook fails immediately with "Invalid callback for stdout specified".
+  if ! ansible-galaxy collection list community.general &>/dev/null; then
+    log "Installing community.general collection (provides the yaml stdout callback)..."
+    ansible-galaxy collection install community.general \
+      || fail "ansible-galaxy collection install community.general failed"
+    ok "community.general installed"
+  else
+    ok "community.general already installed"
+  fi
 }
 
 # =============================================================================
@@ -381,9 +392,16 @@ export PATH="$BIN:$PATH"
 # If GITHUB_TOKEN is set, use it via http.extraheader (scoped to github.com).
 # This works for both public and private repos. The token is persisted into
 # the cloned repo's .git/config so push, pull, and chezmoi update all auth.
+#
+# We use HTTP Basic with a base64-encoded "x-access-token:<PAT>" pair — the
+# same scheme GitHub Actions' `actions/checkout` uses. `Authorization: bearer`
+# works for the REST/raw API (and that's how curl fetches bootstrap.sh) but
+# is NOT accepted by git's smart-HTTP endpoint on github.com — GitHub falls
+# through to credential prompting, which breaks any non-interactive clone.
 GH_HEADER_VAL=""
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-  GH_HEADER_VAL="Authorization: bearer $GITHUB_TOKEN"
+  GH_HEADER_B64=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+  GH_HEADER_VAL="Authorization: Basic $GH_HEADER_B64"
 fi
 
 if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
@@ -403,8 +421,17 @@ else
   if [[ -n "$GH_HEADER_VAL" ]]; then
     git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   fi
-  git -C "$CHEZMOI_SOURCE" pull --ff-only \
-    || warn "Could not fast-forward — continuing with current state"
+  # A failed pull means we'd run Ansible against a stale-or-broken tree —
+  # better to bail out and let the user inspect.
+  if ! git -C "$CHEZMOI_SOURCE" pull --ff-only; then
+    fail "git pull --ff-only failed in $CHEZMOI_SOURCE.
+This usually means stale credentials in .git/config, or local commits/conflicts.
+Inspect with:
+  cd $CHEZMOI_SOURCE && git status && git log --oneline -5
+
+To start over from scratch (wipes the cloned repo, not your tools/dotfiles):
+  ./bootstrap.sh --${MACHINE_TYPE} --reinstall"
+  fi
 fi
 
 self_register

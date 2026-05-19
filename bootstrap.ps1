@@ -300,9 +300,16 @@ If you'd rather install $reqList yourself first (admin one-shot:
 # 2. CLONE REPO (with $env:GITHUB_TOKEN support for private repo)
 # =============================================================================
 function Invoke-CloneRepo {
+    # HTTP Basic with base64-encoded "x-access-token:<PAT>" — same scheme
+    # actions/checkout uses. "Authorization: bearer" works for the REST/raw
+    # API (and that's how irm fetches bootstrap.ps1) but is NOT accepted by
+    # git's smart-HTTP endpoint on github.com — git silently falls through to
+    # credential prompting, which breaks any non-interactive clone.
     $headerVal = ""
     if ($env:GITHUB_TOKEN) {
-        $headerVal = "Authorization: bearer $env:GITHUB_TOKEN"
+        $b64 = [Convert]::ToBase64String(
+            [System.Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GITHUB_TOKEN"))
+        $headerVal = "Authorization: Basic $b64"
     }
 
     if (-not (Test-Path "$RepoPath\.git")) {
