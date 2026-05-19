@@ -244,7 +244,10 @@ Install via your distro's package manager, e.g.
 self_register() {
   local manage_script="$CHEZMOI_SOURCE/scripts/manage-hosts.sh"
 
-  if [[ ! -x "$manage_script" ]]; then
+  # We invoke via `bash "$manage_script"` below, so the executable bit isn't
+  # required — just the file. -x would skip on any clone where git didn't
+  # preserve mode 0755 (Windows checkouts, fresh clones with core.filemode=false).
+  if [[ ! -f "$manage_script" ]]; then
     warn "manage-hosts.sh not found at $manage_script — skipping self-registration."
     return
   fi
@@ -303,10 +306,18 @@ Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
   # ansible-core ships without bundled collections. ansible/ansible.cfg sets
   # stdout_callback=yaml which lives in community.general — without this the
   # playbook fails immediately with "Invalid callback for stdout specified".
+  #
+  # We install from the git URL rather than the Galaxy index because
+  # ansible-core 2.15.x (the highest line that runs on Python 3.9, what
+  # RHEL 9 / EL9 ships) has a known bug parsing galaxy.ansible.com's v3 API
+  # responses — `ansible-galaxy collection install community.general` dies
+  # with "'results'" KeyError. Cloning from GitHub bypasses Galaxy entirely
+  # and works on every ansible-core version we support.
   if ! ansible-galaxy collection list community.general &>/dev/null; then
     log "Installing community.general collection (provides the yaml stdout callback)..."
-    ansible-galaxy collection install community.general \
-      || fail "ansible-galaxy collection install community.general failed"
+    ansible-galaxy collection install \
+      git+https://github.com/ansible-collections/community.general.git \
+      || fail "ansible-galaxy collection install community.general (via git) failed"
     ok "community.general installed"
   else
     ok "community.general already installed"

@@ -2316,7 +2316,9 @@ direnv_version: "2.34.0"</code></pre>
                             <em
                                 >&ldquo;Invalid callback for stdout specified:
                                 yaml&rdquo;</em
-                            >
+                            >, or
+                            <code>ansible-galaxy</code> dies with
+                            <em>&ldquo;Unexpected Exception ... 'results'&rdquo;</em>
                         </summary>
                         <div class="ts-body">
                             <p>
@@ -2331,11 +2333,26 @@ direnv_version: "2.34.0"</code></pre>
                             </p>
                             <p>
                                 Current <code>bootstrap.sh</code> installs the
-                                collection automatically. If you&rsquo;re hitting
-                                this on an older install, run once and re-run
-                                bootstrap:
+                                collection automatically &mdash; from the
+                                <strong>GitHub URL</strong>, not the Galaxy
+                                index. The Galaxy path
+                                (<code
+                                    >ansible-galaxy collection install
+                                    community.general</code
+                                >) crashes with
+                                <code>KeyError: 'results'</code> on
+                                <code>ansible-core 2.15.x</code>, which is the
+                                highest line that runs on Python 3.9 (what
+                                RHEL 9 / EL9 ships). The bug is fixed in
+                                <code>ansible-core 2.16+</code>, but that
+                                requires Python 3.10+. Cloning from GitHub
+                                bypasses Galaxy entirely.
                             </p>
-                            <pre><code>~/.local/bin/ansible-galaxy collection install community.general
+                            <p>
+                                On an older install, recover with:
+                            </p>
+                            <pre><code>~/.local/bin/ansible-galaxy collection install \
+  git+https://github.com/ansible-collections/community.general.git
 ./bootstrap.sh --prod   # or --dev</code></pre>
                         </div>
                     </details>
