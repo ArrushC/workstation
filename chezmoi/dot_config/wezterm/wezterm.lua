@@ -105,6 +105,28 @@ end
 -- ---------------------------------------------------------------------------
 local config = wezterm.config_builder()
 
+-- Default shell for local tabs on Windows. Decision tree based on detected
+-- WSL distros (parsed from `wsl.exe -l -v` by wezterm.default_wsl_domains()):
+--   0 distros  → powershell.exe (Windows PowerShell 5.1, always present).
+--   1 distro   → default_domain points at that distro; new tabs land in WSL.
+--   2+ distros → powershell.exe placeholder + a one-shot picker fires on the
+--                first update-status tick, replacing the placeholder with the
+--                user-chosen distro. See gui-startup + update-status handlers
+--                near the bottom of this file.
+-- SSH-domain tabs still spawn `zellij attach --create main` via per-domain
+-- default_prog — this only affects local (non-SSH) tabs.
+local wsl_doms = {}
+if wezterm.target_triple:find('windows') then
+  wsl_doms = wezterm.default_wsl_domains()
+  config.wsl_domains = wsl_doms
+  if #wsl_doms == 1 then
+    config.default_domain = wsl_doms[1].name
+  else
+    -- 0 or 2+: default to powershell. For 2+, picker replaces this on launch.
+    config.default_prog = { 'powershell.exe', '-NoLogo' }
+  end
+end
+
 config.color_scheme = 'Tokyo Night'
 config.font         = wezterm.font('JetBrains Mono', { weight = 'Regular' })
 config.font_size    = 10.5
@@ -247,21 +269,47 @@ local right_status_cells = 30
 wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, max_width)
   local pane   = tab.active_pane
   local domain = pane.domain_name or ''
+  local is_wsl = domain:find('^WSL:') ~= nil
 
   local host
   for _, d in ipairs(ssh_domains) do
     if d.name == domain then host = d.name break end
   end
-  -- Fallback: if not a WezTerm SSH-domain tab but the shell-set title is in
-  -- "user@host[:cwd]" form (typical for manual `ssh <host>` from a local
-  -- tab), extract the host so the tab still picks up the per-host accent.
+  -- WSL: derive host from the distro segment so the HOST_ACCENTS hash is
+  -- deterministic across renders. Without this, host was only set later via
+  -- the user@host fallback once the shell got around to emitting its OSC
+  -- title, which made coloring race with shell startup.
+  if not host and is_wsl then
+    host = domain:gsub('^WSL:', '')  -- e.g. "AlmaLinux-9"
+  end
+  -- Fallback: if not a WezTerm SSH-domain tab and not WSL, but the shell-set
+  -- title is in "user@host[:cwd]" form (typical for manual `ssh <host>` from
+  -- a local tab), extract the host so the tab still picks up the per-host
+  -- accent.
   if not host then
     local detected = (pane.title or ''):match('^[%w%._%-]+@([%w%._%-]+)')
     if detected and #detected > 0 then host = detected end
   end
 
+  -- Heuristic: a tab_title in "user@host[:cwd]" form was almost certainly set
+  -- by the shell's PROMPT_COMMAND via OSC. Anything else (plain words, paths
+  -- without @) is treated as a deliberate user rename via CTRL+SHIFT+E and
+  -- preserved. We need this because WezTerm exposes a single tab_title field
+  -- — shell-set and user-set are indistinguishable at the API level.
+  local function looks_shell_set(t)
+    return t and t:match('^[%w%._%-]+@[%w%._%-]+') ~= nil
+  end
+
   local title = tab.tab_title
-  if title == nil or #title == 0 then
+  if is_wsl then
+    -- Always show "WSL:<distro>" unless the user has renamed the tab.
+    -- Without this branch the title flickered between the domain (first
+    -- render, tab_title empty) and the shell-set "user@<distro>:<cwd>"
+    -- (later renders, after PROMPT_COMMAND fired).
+    if title == nil or #title == 0 or looks_shell_set(title) then
+      title = domain
+    end
+  elseif title == nil or #title == 0 then
     if host then
       title = host
     else
@@ -358,6 +406,48 @@ local pick_host = act.InputSelector {
 }
 
 -- ---------------------------------------------------------------------------
+-- WSL distro picker — used by the gui-startup handler when 2+ distros exist
+-- ---------------------------------------------------------------------------
+-- InputSelector listing every distro from wezterm.default_wsl_domains(). The
+-- action spawns the chosen distro as a new tab and (if a placeholder tab id
+-- was captured by gui-startup) closes the placeholder so the window ends with
+-- exactly one tab.
+local function wsl_picker_choices()
+  local choices = {}
+  for _, d in ipairs(wezterm.default_wsl_domains()) do
+    table.insert(choices, {
+      label = d.distribution or d.name,
+      id    = d.name,
+    })
+  end
+  return choices
+end
+
+local function build_wsl_picker(placeholder_tab_id)
+  return act.InputSelector {
+    title    = 'Pick a WSL distro',
+    fuzzy    = true,
+    choices  = wsl_picker_choices(),
+    action   = wezterm.action_callback(function(window, pane, id, _label)
+      if not id then return end  -- Esc cancels; placeholder stays as fallback
+      -- Spawn chosen distro first (becomes active — 2 tabs in window)
+      window:perform_action(act.SpawnTab { DomainName = id }, pane)
+      -- Then activate the placeholder and close it. CloseCurrentTab acts on
+      -- the active tab, so we activate by id first.
+      if placeholder_tab_id then
+        for _, t in ipairs(window:mux_window():tabs()) do
+          if t:tab_id() == placeholder_tab_id then
+            t:activate()
+            window:perform_action(act.CloseCurrentTab { confirm = false }, pane)
+            break
+          end
+        end
+      end
+    end),
+  }
+end
+
+-- ---------------------------------------------------------------------------
 -- Tab switcher — fuzzy list with explicit tab index + domain
 -- ---------------------------------------------------------------------------
 -- The built-in ShowLauncher renumbers entries after fuzzy filtering, so the
@@ -423,6 +513,8 @@ local function help_choices()
     -- Wezterm: hosts
     { label = 'key   CTRL+SHIFT+J     Open SSH host picker',                id = '' },
     { label = 'key   CTRL+SHIFT+H     Show this help',                      id = '' },
+    -- Wezterm: WSL
+    { label = 'note  WSL on launch    Picker shows if 2+ WSL distros installed', id = '' },
     -- Wezterm: editing
     { label = 'key   CTRL+SHIFT+C     Copy selection',                      id = '' },
     { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
@@ -559,7 +651,13 @@ local function render_right_status(window, pane)
   local parts = {}
 
   local domain = pane:get_domain_name()
-  if domain and domain ~= 'local' then
+  -- Show domain + zellij:main in the right status ONLY for SSH-domain tabs.
+  -- Local tabs ('local') and WSL tabs ('WSL:<distro>') skip this block:
+  -- local tabs have nothing meaningful to show, and WSL surfaces its distro
+  -- name via the tab title (format-tab-title) — repeating it next to
+  -- battery/time is redundant noise. WSL also has no zellij wrap so
+  -- 'zellij:main' would be a lie there.
+  if domain and domain ~= 'local' and not domain:find('^WSL:') then
     table.insert(parts, { text = domain })
     if cols >= 130 then
       table.insert(parts, { text = 'zellij:main' })
@@ -766,6 +864,33 @@ config.keys = {
 
 -- Pass through Ctrl+p to Zellij unmodified
 config.key_tables = {}
+
+-- ---------------------------------------------------------------------------
+-- Multi-distro WSL picker (deferred to first update-status tick)
+-- ---------------------------------------------------------------------------
+-- The "show picker before first tab" UX requires bridging gui-startup (no GUI
+-- Window yet) and update-status (GUI Window exists, ~1s after launch). We
+-- spawn the placeholder powershell tab in gui-startup, stash its tab id keyed
+-- by mux window id, then fire the picker from update-status — once per window.
+-- The existing update-status handler at render_right_status is a separate
+-- registration; WezTerm composes multiple handlers per event without conflict.
+local wsl_picker_pending = {}
+
+wezterm.on('gui-startup', function(cmd)
+  if not wezterm.target_triple:find('windows') then return end
+  if #wsl_doms < 2 then return end  -- 0 or 1 handled by default_prog/default_domain
+
+  local tab, _, mux_window = wezterm.mux.spawn_window(cmd or {})
+  wsl_picker_pending[mux_window:window_id()] = tab:tab_id()
+end)
+
+wezterm.on('update-status', function(window, pane)
+  local wid = window:window_id()
+  local placeholder_tab_id = wsl_picker_pending[wid]
+  if not placeholder_tab_id then return end
+  wsl_picker_pending[wid] = nil  -- one-shot per window
+  window:perform_action(build_wsl_picker(placeholder_tab_id), pane)
+end)
 
 -- ---------------------------------------------------------------------------
 -- SSH quick-connect function (call from wezterm CLI)
