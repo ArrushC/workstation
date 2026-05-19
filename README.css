@@ -866,6 +866,7 @@ td code {
     flex-wrap: wrap;
 }
 .tab-labels label {
+    flex: 1 1 0;
     padding: 0.65rem 1.1rem;
     cursor: pointer;
     color: var(--muted);
@@ -876,6 +877,7 @@ td code {
     user-select: none;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.4rem;
     transition:
         color 0.12s ease,
@@ -891,6 +893,12 @@ td code {
 }
 .tab-panel {
     display: none;
+}
+.tab-meta {
+    margin: 0 0 0.6rem;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.55;
 }
 
 #pdev:checked ~ .tab-labels label[for="pdev"],

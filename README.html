@@ -1530,17 +1530,22 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         />
                         <input type="radio" id="pdev" name="tabset-bs" />
                         <div class="tab-labels">
-                            <label for="pprod"
-                                ><span class="badge prod">prod</span>&nbsp; no
-                                sudo, <code>~/.local/bin</code></label
-                            >
-                            <label for="pdev"
-                                ><span class="badge dev">dev</span>&nbsp; sudo,
-                                <code>/usr/local/bin</code> + system pkgs</label
-                            >
+                            <label for="pprod">
+                                <span class="badge prod">prod</span>
+                                <span>No-sudo install</span>
+                            </label>
+                            <label for="pdev">
+                                <span class="badge dev">dev</span>
+                                <span>Sudo + system packages</span>
+                            </label>
                         </div>
                         <div class="tab-panels">
                             <div class="tab-panel panel-prod">
+                                <p class="tab-meta">
+                                    Binaries &rarr;
+                                    <code>~/.local/bin</code> &middot; no
+                                    <code>dnf</code> step.
+                                </p>
                                 <pre><code># === Bootstrap: prod machine (no sudo, ~/.local/bin) ===
 export GITHUB_TOKEN='&lt;your-PAT&gt;' \
        GIT_USER_NAME='Arrush Chaturvedi' \
@@ -1550,6 +1555,12 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 source ~/.bashrc</code></pre>
                             </div>
                             <div class="tab-panel panel-dev">
+                                <p class="tab-meta">
+                                    Binaries &rarr;
+                                    <code>/usr/local/bin</code> &middot;
+                                    installs system packages via
+                                    <code>dnf</code>.
+                                </p>
                                 <pre><code># === Bootstrap: dev machine (sudo, /usr/local/bin + system packages) ===
 export GITHUB_TOKEN='&lt;your-PAT&gt;' \
        GIT_USER_NAME='Arrush Chaturvedi' \
