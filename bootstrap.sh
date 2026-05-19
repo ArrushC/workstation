@@ -270,16 +270,15 @@ self_register() {
   fi
 
   log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
+  # --add already runs sync_all on success, so don't double-sync here —
+  # any Ansible/chezmoi step that reads hosts.conf downstream sees the
+  # current inventory + wezterm block from the single --add pass.
   bash "$manage_script" --add \
     --name  "$host_name" \
     --ip    "$host_ip" \
     --user  "$host_user" \
     --group "$GROUP_NAME" \
     --skip-confirm
-
-  # Regenerate inventory + wezterm block from the (possibly) updated hosts.conf
-  # so anything Ansible/chezmoi consumes downstream sees the current list.
-  bash "$manage_script" --sync
 }
 
 # =============================================================================

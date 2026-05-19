@@ -2323,8 +2323,10 @@ direnv_version: "2.34.0"</code></pre>
                         <div class="ts-body">
                             <p>
                                 <code>ansible/ansible.cfg</code> sets
-                                <code>stdout_callback = yaml</code>, but that
-                                callback lives in the
+                                <code
+                                    >stdout_callback =
+                                    community.general.yaml</code
+                                >, but that callback lives in the
                                 <code>community.general</code> collection &mdash;
                                 which ships with the full <code>ansible</code>
                                 package but not with bare
