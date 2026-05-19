@@ -680,6 +680,53 @@
     creates: "{{ tools_dest }}/ouch"
   become: "{{ tools_become }}"
 
+# --- bottom / btm (ClementTsang/bottom) -------------------------------------
+- name: "Install bottom (btm)"
+  ansible.builtin.unarchive:
+    src: "https://github.com/ClementTsang/bottom/releases/download/{{ bottom_version }}/bottom_x86_64-unknown-linux-musl.tar.gz"
+    dest: "{{ tools_dest }}"
+    remote_src: true
+    include:
+      - btm
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/btm"
+  become: "{{ tools_become }}"
+
+# --- systemctl-tui (rgwood/systemctl-tui) -----------------------------------
+# Tarball contains just the binary at root; shell-extract for clarity.
+- name: "Install systemctl-tui"
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      curl -fL "https://github.com/rgwood/systemctl-tui/releases/download/v{{ systemctl_tui_version }}/systemctl-tui-x86_64-unknown-linux-musl.tar.gz" | tar -xzf - -C "$tmp"
+      install -m 0755 "$tmp/systemctl-tui" "{{ tools_dest }}/systemctl-tui"
+    creates: "{{ tools_dest }}/systemctl-tui"
+  become: "{{ tools_become }}"
+
+# --- lazyjournal (Lifailon/lazyjournal) — single binary ---------------------
+- name: "Install lazyjournal"
+  ansible.builtin.get_url:
+    url: "https://github.com/Lifailon/lazyjournal/releases/download/{{ lazyjournal_version }}/lazyjournal-{{ lazyjournal_version }}-linux-amd64"
+    dest: "{{ tools_dest }}/lazyjournal"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/lazyjournal"
+  become: "{{ tools_become }}"
+
+# --- sysz (joehillen/sysz) — bash script -------------------------------------
+# Pure bash; depends on fzf (installed above) + systemctl (ships with systemd).
+- name: "Install sysz"
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/joehillen/sysz/{{ sysz_version }}/sysz"
+    dest: "{{ tools_dest }}/sysz"
+    mode: "0755"
+  args:
+    creates: "{{ tools_dest }}/sysz"
+  become: "{{ tools_become }}"
+
 # --- Python tools via pip --user --------------------------------------------
 # Python-based tools without clean standalone binary distributions. pip --user
 # writes to ~/.local/bin/<binary> regardless of scope (it's the running user's

@@ -696,6 +696,9 @@ td code {
 .tool-card.cat-ai {
     border-top-color: var(--pink);
 }
+.tool-card.cat-services {
+    border-top-color: var(--warn);
+}
 .tool-card.dimmed {
     opacity: 0.25;
 }

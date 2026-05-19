@@ -119,3 +119,10 @@ gh_version: "2.92.0"
 sops_version: "3.13.1"
 htmlq_version: "0.4.0"
 ouch_version: "0.7.1"
+
+# Service / journal / cgroup observability.
+# (systemd-cgls and systemd-cgtop ship with systemd itself — no install needed.)
+bottom_version: "0.12.3"
+systemctl_tui_version: "0.5.2"
+lazyjournal_version: "0.8.6"
+sysz_version: "1.4.3"
