@@ -68,7 +68,7 @@ fzf_version: "0.54.0"
 zoxide_version: "0.9.4"
 starship_version: "1.19.0"
 zellij_version: "0.40.1"
-glow_version: "1.5.1"
+glow_version: "2.1.2"
 helix_version: "24.03"
 chezmoi_version: "latest"
 
