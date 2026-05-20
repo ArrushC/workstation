@@ -285,42 +285,23 @@ self_register() {
 # 3. ENSURE ANSIBLE — install ansible-core via pip if missing, smoke-test
 # =============================================================================
 ensure_ansible() {
-  if ! command -v ansible-playbook &>/dev/null; then
-    log "Installing ansible-core via pip3 --user..."
-    python3 -m pip install --user --upgrade ansible-core
-
-    # pip might have just dropped the binary somewhere not yet on PATH
-    export PATH="$HOME/.local/bin:$PATH"
-
-    if ! command -v ansible-playbook &>/dev/null; then
-      fail "ansible-playbook not on PATH after pip install.
-Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
-    fi
-
-    ok "ansible-playbook: $(ansible-playbook --version 2>/dev/null | head -1)"
-  else
+  if command -v ansible-playbook &>/dev/null; then
     ok "ansible-playbook already on PATH"
+    return
   fi
 
-  # ansible-core ships without bundled collections. ansible/ansible.cfg sets
-  # stdout_callback=yaml which lives in community.general — without this the
-  # playbook fails immediately with "Invalid callback for stdout specified".
-  #
-  # We install from the git URL rather than the Galaxy index because
-  # ansible-core 2.15.x (the highest line that runs on Python 3.9, what
-  # RHEL 9 / EL9 ships) has a known bug parsing galaxy.ansible.com's v3 API
-  # responses — `ansible-galaxy collection install community.general` dies
-  # with "'results'" KeyError. Cloning from GitHub bypasses Galaxy entirely
-  # and works on every ansible-core version we support.
-  if ! ansible-galaxy collection list community.general &>/dev/null; then
-    log "Installing community.general collection (provides the yaml stdout callback)..."
-    ansible-galaxy collection install \
-      git+https://github.com/ansible-collections/community.general.git \
-      || fail "ansible-galaxy collection install community.general (via git) failed"
-    ok "community.general installed"
-  else
-    ok "community.general already installed"
+  log "Installing ansible-core via pip3 --user..."
+  python3 -m pip install --user --upgrade ansible-core
+
+  # pip might have just dropped the binary somewhere not yet on PATH
+  export PATH="$HOME/.local/bin:$PATH"
+
+  if ! command -v ansible-playbook &>/dev/null; then
+    fail "ansible-playbook not on PATH after pip install.
+Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
   fi
+
+  ok "ansible-playbook: $(ansible-playbook --version 2>/dev/null | head -1)"
 }
 
 # =============================================================================
