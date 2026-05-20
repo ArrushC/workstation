@@ -62,21 +62,29 @@
 
 # --- glow --------------------------------------------------------------------
 # v2.x ships with goreleaser's `wrap_in_directory: true`, so the binary lives
-# at `glow_<ver>_Linux_x86_64/glow` inside the archive — not at the root.
-# Use the same tempfile→unarchive→copy pattern as helix below (a flat
-# unarchive + `include: [glow]` would extract nothing on v2.x).
+# at `glow_<ver>_Linux_x86_64/glow` inside the archive — not at the root. Use
+# the tempfile → unarchive → copy chain.
+#
+# `creates:` is NOT a parameter of ansible.builtin.copy, so we can't put it
+# on the copy task. Instead, stat the destination once and gate the whole
+# chain on `not glow_dest.stat.exists` — skips network + filesystem on re-runs.
+- name: "Stat glow binary"
+  ansible.builtin.stat:
+    path: "{{ tools_dest }}/glow"
+  register: glow_dest
+
 - name: "Create glow temp dir"
   ansible.builtin.tempfile:
     state: directory
   register: glow_tmp
+  when: not glow_dest.stat.exists
 
 - name: "Download and extract glow"
   ansible.builtin.unarchive:
     src: "https://github.com/charmbracelet/glow/releases/download/v{{ glow_version }}/glow_{{ glow_version }}_Linux_x86_64.tar.gz"
     dest: "{{ glow_tmp.path }}"
     remote_src: true
-  args:
-    creates: "{{ tools_dest }}/glow"
+  when: not glow_dest.stat.exists
 
 - name: "Install glow binary"
   ansible.builtin.copy:
@@ -84,33 +92,42 @@
     dest: "{{ tools_dest }}/glow"
     mode: "0755"
     remote_src: true
-  args:
-    creates: "{{ tools_dest }}/glow"
   become: "{{ tools_become }}"
+  when: not glow_dest.stat.exists
 
 # --- nb ----------------------------------------------------------------------
+# get_url is naturally idempotent: `force` defaults to false, which means
+# "skip if dest exists". `creates:` is NOT a valid get_url parameter, so
+# `args: creates:` would fail with "Unsupported parameters" on ansible-core
+# 2.15+. Same pattern applies to every get_url task below.
 - name: "Install nb"
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/xwmx/nb/master/nb"
     dest: "{{ tools_dest }}/nb"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/nb"
   become: "{{ tools_become }}"
 
 # --- helix -------------------------------------------------------------------
+# Same shape as glow: archive wraps the binary in a versioned subdirectory
+# plus a `runtime/` tree that needs separate placement. `creates:` doesn't
+# work on copy, so we stat the destination once and gate the whole chain.
+- name: "Stat helix binary"
+  ansible.builtin.stat:
+    path: "{{ tools_dest }}/hx"
+  register: helix_dest
+
 - name: "Create helix temp dir"
   ansible.builtin.tempfile:
     state: directory
   register: helix_tmp
+  when: not helix_dest.stat.exists
 
 - name: "Download and extract helix"
   ansible.builtin.unarchive:
     src: "https://github.com/helix-editor/helix/releases/download/{{ helix_version }}/helix-{{ helix_version }}-{{ arch }}-linux.tar.xz"
     dest: "{{ helix_tmp.path }}"
     remote_src: true
-  args:
-    creates: "{{ tools_dest }}/hx"
+  when: not helix_dest.stat.exists
 
 - name: "Copy helix binary"
   ansible.builtin.copy:
@@ -118,9 +135,8 @@
     dest: "{{ tools_dest }}/hx"
     mode: "0755"
     remote_src: true
-  args:
-    creates: "{{ tools_dest }}/hx"
   become: "{{ tools_become }}"
+  when: not helix_dest.stat.exists
 
 - name: "Ensure helix runtime parent directory exists"
   ansible.builtin.file:
@@ -128,20 +144,21 @@
     state: directory
     mode: "0755"
   become: "{{ tools_become }}"
+  when: not helix_dest.stat.exists
 
 - name: "Copy helix runtime"
   ansible.builtin.copy:
     src: "{{ helix_tmp.path }}/helix-{{ helix_version }}-{{ arch }}-linux/runtime"
     dest: "{{ helix_runtime_dest }}/runtime"
     remote_src: true
-  args:
-    creates: "{{ helix_runtime_dest }}/runtime"
   become: "{{ tools_become }}"
+  when: not helix_dest.stat.exists
 
 - name: "Clean up helix temp dir"
   ansible.builtin.file:
     path: "{{ helix_tmp.path }}"
     state: absent
+  when: not helix_dest.stat.exists
 
 # --- chezmoi -----------------------------------------------------------------
 - name: "Install chezmoi"
@@ -226,8 +243,6 @@
     url: "https://github.com/jqlang/jq/releases/download/jq-{{ jq_version }}/jq-linux-amd64"
     dest: "{{ tools_dest }}/jq"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/jq"
   become: "{{ tools_become }}"
 
 # --- yq (mikefarah/yq) — single binary --------------------------------------
@@ -236,8 +251,6 @@
     url: "https://github.com/mikefarah/yq/releases/download/v{{ yq_version }}/yq_linux_amd64"
     dest: "{{ tools_dest }}/yq"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/yq"
   become: "{{ tools_become }}"
 
 # --- tldr (tealdeer) — single binary -----------------------------------------
@@ -246,8 +259,6 @@
     url: "https://github.com/tealdeer-rs/tealdeer/releases/download/v{{ tealdeer_version }}/tealdeer-linux-x86_64-musl"
     dest: "{{ tools_dest }}/tldr"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/tldr"
   become: "{{ tools_become }}"
 
 # --- witr (pranshuparmar/witr) — single binary -------------------------------
@@ -256,8 +267,6 @@
     url: "https://github.com/pranshuparmar/witr/releases/download/v{{ witr_version }}/witr-linux-amd64"
     dest: "{{ tools_dest }}/witr"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/witr"
   become: "{{ tools_become }}"
 
 # --- broot (Canop/broot) — single binary from dystroy.org --------------------
@@ -269,8 +278,6 @@
     url: "https://dystroy.org/broot/download/x86_64-linux/broot"
     dest: "{{ tools_dest }}/broot"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/broot"
   become: "{{ tools_become }}"
 
 # --- usql (xo/usql) ----------------------------------------------------------
@@ -374,8 +381,6 @@
     url: "https://raw.githubusercontent.com/openssh/openssh-portable/master/contrib/ssh-copy-id"
     dest: "{{ tools_dest }}/ssh-copy-id"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/ssh-copy-id"
   become: "{{ tools_become }}"
 
 # =============================================================================
@@ -553,8 +558,6 @@
     url: "https://github.com/bcicen/ctop/releases/download/v{{ ctop_version }}/ctop-{{ ctop_version }}-linux-amd64"
     dest: "{{ tools_dest }}/ctop"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/ctop"
   become: "{{ tools_become }}"
 
 # --- k9s (derailed/k9s) — Kubernetes TUI ------------------------------------
@@ -664,8 +667,6 @@
     url: "https://github.com/getsops/sops/releases/download/v{{ sops_version }}/sops-v{{ sops_version }}.linux.amd64"
     dest: "{{ tools_dest }}/sops"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/sops"
   become: "{{ tools_become }}"
 
 # --- htmlq (mgdm/htmlq) — jq-style HTML query -------------------------------
@@ -727,8 +728,6 @@
     url: "https://github.com/Lifailon/lazyjournal/releases/download/{{ lazyjournal_version }}/lazyjournal-{{ lazyjournal_version }}-linux-amd64"
     dest: "{{ tools_dest }}/lazyjournal"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/lazyjournal"
   become: "{{ tools_become }}"
 
 # --- sysz (joehillen/sysz) — bash script -------------------------------------
@@ -738,8 +737,6 @@
     url: "https://raw.githubusercontent.com/joehillen/sysz/{{ sysz_version }}/sysz"
     dest: "{{ tools_dest }}/sysz"
     mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/sysz"
   become: "{{ tools_become }}"
 
 # --- Python tools via pip --user --------------------------------------------
