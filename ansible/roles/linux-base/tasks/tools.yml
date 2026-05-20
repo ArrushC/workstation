@@ -61,14 +61,29 @@
   become: "{{ tools_become }}"
 
 # --- glow --------------------------------------------------------------------
-- name: "Install glow"
+# v2.x ships with goreleaser's `wrap_in_directory: true`, so the binary lives
+# at `glow_<ver>_Linux_x86_64/glow` inside the archive — not at the root.
+# Use the same tempfile→unarchive→copy pattern as helix below (a flat
+# unarchive + `include: [glow]` would extract nothing on v2.x).
+- name: "Create glow temp dir"
+  ansible.builtin.tempfile:
+    state: directory
+  register: glow_tmp
+
+- name: "Download and extract glow"
   ansible.builtin.unarchive:
     src: "https://github.com/charmbracelet/glow/releases/download/v{{ glow_version }}/glow_{{ glow_version }}_Linux_x86_64.tar.gz"
-    dest: "{{ tools_dest }}"
+    dest: "{{ glow_tmp.path }}"
     remote_src: true
-    include:
-      - glow
+  args:
+    creates: "{{ tools_dest }}/glow"
+
+- name: "Install glow binary"
+  ansible.builtin.copy:
+    src: "{{ glow_tmp.path }}/glow_{{ glow_version }}_Linux_x86_64/glow"
+    dest: "{{ tools_dest }}/glow"
     mode: "0755"
+    remote_src: true
   args:
     creates: "{{ tools_dest }}/glow"
   become: "{{ tools_become }}"
