@@ -17,5 +17,14 @@
   connection: local
   gather_facts: true
 
+  # `hosts: localhost` uses Ansible's implicit-localhost inventory, which
+  # does NOT auto-load `group_vars/all.yml` the way the remote `linux.yml`
+  # flow does (there `all.yml` resolves via inventory group membership).
+  # Load it explicitly so shared vars (linux_packages, *_version) are
+  # defined. Group scope still comes from `-e "@group_vars/<group>.yml"`,
+  # which has higher precedence and overrides anything in all.yml.
+  vars_files:
+    - ../group_vars/all.yml
+
   roles:
     - linux-base
