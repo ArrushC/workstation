@@ -406,6 +406,28 @@ local pick_host = act.InputSelector {
 }
 
 -- ---------------------------------------------------------------------------
+-- SSH pane reconnect — recovery half of the broken-pipe self-healing
+-- ---------------------------------------------------------------------------
+-- Bound to CTRL|SHIFT+F5 below. When an SSH connection dies (broken pipe,
+-- NAT drop, server-alive timeout), the pane goes zombie. One keystroke
+-- spawns a fresh tab against the same domain; Zellij's attach --create
+-- (in default_prog) reattaches the existing remote session, so the user
+-- lands back where they were. Prevention half lives in ~/.ssh/config
+-- (ServerAliveInterval=30, ServerAliveCountMax=3) — chezmoi source at
+-- private_dot_ssh/private_config.
+--
+-- The dead tab is intentionally left open: its scrollback is useful for
+-- diagnosing the disconnect. Close it with CTRL+SHIFT+W when done.
+local reconnect_ssh_pane = wezterm.action_callback(function(window, pane)
+  local domain = pane:get_domain_name()
+  if not domain or domain == '' or domain == 'local' then
+    window:toast_notification('WezTerm', 'Not an SSH pane — nothing to reconnect', nil, 3000)
+    return
+  end
+  window:perform_action(act.SpawnTab { DomainName = domain }, pane)
+end)
+
+-- ---------------------------------------------------------------------------
 -- WSL distro picker — used by the gui-startup handler when 2+ distros exist
 -- ---------------------------------------------------------------------------
 -- InputSelector listing every distro from wezterm.default_wsl_domains(). The
@@ -512,6 +534,7 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+N     New window',                          id = '' },
     -- Wezterm: hosts
     { label = 'key   CTRL+SHIFT+J     Open SSH host picker',                id = '' },
+    { label = 'key   CTRL+SHIFT+F5    Reconnect current SSH pane (new tab, Zellij reattaches)', id = '' },
     { label = 'key   CTRL+SHIFT+H     Show this help',                      id = '' },
     -- Wezterm: WSL
     { label = 'note  WSL on launch    Picker shows if 2+ WSL distros installed', id = '' },
@@ -790,6 +813,11 @@ config.keys = {
 
   -- Fuzzy-pick a host and open it in a new tab (J = jump)
   { key = 'j', mods = 'CTRL|SHIFT', action = pick_host },
+
+  -- Reconnect the current SSH pane after a broken pipe (F5 = refresh).
+  -- Spawns a new tab against the same domain; Zellij reattaches the remote
+  -- session via default_prog. Dead tab is left open for scrollback.
+  { key = 'F5', mods = 'CTRL|SHIFT', action = reconnect_ssh_pane },
 
   -- Show keybind + host cheatsheet
   { key = 'h', mods = 'CTRL|SHIFT', action = show_help },

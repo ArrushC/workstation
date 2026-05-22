@@ -1,0 +1,10 @@
+# Managed by chezmoi (workstation repo).
+# Per-machine overrides go in ~/.ssh/config.local (un-tracked).
+# Include must come FIRST — Host/Match are first-match-wins for most options.
+Include config.local
+
+Host *
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+    ConnectTimeout 10

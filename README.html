@@ -1362,6 +1362,17 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                 >&mdash; Linux: ~/.nbrc</span
                                             >
                                         </li>
+                                        <li>
+                                            private_dot_ssh/private_config
+                                            <span class="note"
+                                                >&mdash; cross-platform:
+                                                ~/.ssh/config (0600, parent
+                                                0700). Ships keepalive
+                                                defaults; per-host overrides
+                                                live in un-tracked
+                                                ~/.ssh/config.local</span
+                                            >
+                                        </li>
                                     </ul>
                                     <details>
                                         <summary>
@@ -1865,6 +1876,21 @@ cd C:\Git\workstation
                                     <kbd>ALT</kbd>+<kbd>1</kbd>..<kbd>9</kbd>
                                 </td>
                                 <td>Jump to tab N</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                        >F5</kbd
+                                    >
+                                </td>
+                                <td>
+                                    Reconnect current SSH pane after a broken
+                                    pipe. Spawns a new tab against the same
+                                    domain; Zellij reattaches the existing
+                                    remote session. The dead tab is left open
+                                    for scrollback &mdash; close it with
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>W</kbd>.
+                                </td>
                             </tr>
                             <tr>
                                 <td>
@@ -2432,6 +2458,61 @@ direnv_version: "2.34.0"</code></pre>
                                     >export PATH="$HOME/.local/bin:$PATH"</code
                                 >
                                 and retry.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            WezTerm SSH tab dies with
+                            <em>&ldquo;client_loop: send disconnect: Broken
+                                pipe&rdquo;</em>
+                            and floods the pane with garbage
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Two layers of self-healing apply &mdash; both
+                                are already configured by chezmoi.
+                            </p>
+                            <p>
+                                <strong>Prevention.</strong> Chezmoi ships
+                                <code>~/.ssh/config</code> with
+                                <code>ServerAliveInterval 30</code>,
+                                <code>ServerAliveCountMax 3</code>, and
+                                <code>TCPKeepAlive yes</code>. Dead
+                                connections are detected within ~90s instead
+                                of hours, so the cursor-position-report
+                                flood you see when the remote keeps writing
+                                into a zombied pipe should be rare. Confirm
+                                with
+                                <code>ssh -G &lt;hostname&gt; | grep -i
+                                    serveralive</code>.
+                            </p>
+                            <p>
+                                <strong>Recovery.</strong> When a pipe does
+                                break, press
+                                <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                    >F5</kbd
+                                >
+                                inside the dead tab. WezTerm spawns a new
+                                tab against the same SSH domain; Zellij&rsquo;s
+                                <code>attach --create main</code> (from
+                                <code>default_prog</code>) reattaches the
+                                existing remote session, so you land back
+                                exactly where you were. The dead tab is left
+                                open for scrollback &mdash; close it with
+                                <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>W</kbd>
+                                once you&rsquo;ve confirmed the reconnect.
+                            </p>
+                            <p>
+                                <strong>Per-machine overrides.</strong> Add
+                                host blocks to the un-tracked
+                                <code>~/.ssh/config.local</code> file (same
+                                pattern as <code>~/.bashrc.local</code>) &mdash;
+                                the tracked config has
+                                <code>Include config.local</code> at the
+                                top, so per-host overrides win over the
+                                global <code>Host *</code> defaults.
                             </p>
                         </div>
                     </details>

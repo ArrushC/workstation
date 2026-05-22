@@ -79,6 +79,8 @@ workstation/
     ├── dot_bashrc.tmpl           ← → ~/.bashrc       (Linux)
     ├── dot_gitconfig.tmpl        ← → ~/.gitconfig    (cross-platform)
     ├── dot_nbrc                  ← → ~/.nbrc         (Linux)
+    ├── private_dot_ssh/          ← → ~/.ssh/         (cross-platform, 0700)
+    │   └── private_config        ← → ~/.ssh/config   (0600; keepalives + Include config.local)
     ├── dot_config/               ← → ~/.config/      (cross-platform)
     │   ├── starship.toml
     │   ├── helix/config.toml
@@ -227,6 +229,7 @@ Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the grou
   - `dot_config/X` → `~/.config/X` (cross-platform; chezmoi resolves `~/` to `%USERPROFILE%\` on Windows).
   - `AppData/Roaming/X/file` → `%USERPROFILE%\AppData\Roaming\X\file` (Windows-only by ignore rule).
   - `Documents/PowerShell/X` → `%USERPROFILE%\Documents\PowerShell\X` (Windows-only).
+  - `private_X` prefix enforces restrictive Unix mode (file = 0600, dir = 0700) — required for `~/.ssh/` since OpenSSH on both Linux and Windows refuses world-readable config/keys. Example: `private_dot_ssh/private_config` → `~/.ssh/config` at 0600 inside `~/.ssh/` at 0700.
   - Trailing `.tmpl` triggers Go-template rendering.
   - `.chezmoiscripts/run_once_after_init.sh` runs once after first `chezmoi apply`; rename to re-run on a new host.
 - Cross-platform OS gating is in `.chezmoiignore.tmpl`. On Windows it ignores Linux-only files (`dot_bashrc.tmpl`, `dot_nbrc`, `dot_config/helix`, `dot_config/zellij`, `.chezmoiscripts/run_once_after_init.sh`); on Linux it ignores Windows-only paths (`AppData`, `Documents`, `dot_config/wezterm`). Per-machine override files (`dot_bashrc.local`, PowerShell `*.local.ps1` variants) are always ignored.
@@ -236,6 +239,7 @@ Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the grou
 - Per-machine overrides:
   - **Linux**: `~/.bashrc.local` — un-tracked, sourced last by `dot_bashrc.tmpl` if present.
   - **Windows**: `Microsoft.PowerShell_profile.local.ps1` next to the main profile — un-tracked, dot-sourced last by the templated profile.
+  - **Both (SSH)**: `~/.ssh/config.local` — un-tracked, `Include`d at the top of the tracked `~/.ssh/config` so per-host blocks override the global `Host *` keepalive defaults.
 - `dot_bashrc.tmpl` ends with a hostname-templated block (currently a `PROJECT_ROOT` switch on `rhel-dev-01`) before the `.bashrc.local` source. The Windows PS profile applies the same pattern.
 
 ## README.html must mirror user-facing changes
@@ -358,7 +362,9 @@ After changes:
 - `cd ansible && ansible-playbook playbooks/local.yml --check -e "@group_vars/dev_machine.yml"` — dry-run in dev scope (plans dnf installs to `/usr/local/bin`).
 - `./bootstrap.sh` with no flags must error out (no default). `./bootstrap.sh --dev --prod` must error out (mutually exclusive). `./bootstrap.sh --full` must error out with a clear "use --dev or --prod" message.
 - `./scripts/manage-hosts.sh --add --name t --ip 1.2.3.4 --user u --group foo --skip-confirm` must reject `foo` with a "must be dev_machine or prod_machine" error. The PowerShell side (`-Add -Group foo`) must reject the same way.
-- `chezmoi diff` on a host (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm); on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc).
+- `chezmoi diff` on a host (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm) plus the cross-platform `.ssh/config`; on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc) plus the cross-platform `.ssh/config`.
+- `ssh -G <managed-host> | grep -iE 'serveralive|tcpkeepalive|connecttimeout'` after `chezmoi apply` — confirms the keepalive defaults from `private_dot_ssh/private_config` made it into the live `~/.ssh/config`. Should print `serveraliveinterval 30`, `serveralivecountmax 3`, `tcpkeepalive yes`, `connecttimeout 10`.
+- In WezTerm, press `CTRL+SHIFT+F5` inside an SSH tab — a new tab against the same domain spawns and Zellij reattaches. In a local tab, it shows a toast "Not an SSH pane — nothing to reconnect".
 - `bootstrap.sh --dev` and `bootstrap.sh --prod` on fresh hosts — each completes idempotently and self-registers under the matching group.
 - `bootstrap.ps1` on a fresh Windows machine (from an **elevated** PowerShell) — choco bootstraps itself, the seven tracked tools install, chezmoi applies, wezterm picks up the deployed config.
 - `git diff README.html README.css README.js` — verify the user-facing surface still matches reality. Open the file in a browser too — visual primitives (tabs, flow chips, accordion filter) need to render, not just diff cleanly. If the browser loads `README.html` but no styles or interactions apply, check that `README.css` / `README.js` are present as siblings (relative paths break if any of the three are moved without the others).
