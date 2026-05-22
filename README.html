@@ -1796,6 +1796,78 @@ cd C:\Git\workstation
                         git ops.
                     </p>
 
+                    <h4 id="setup-wsl">Bootstrapping WSL distros</h4>
+                    <p>
+                        WSL distros are first-class managed hosts &mdash; same
+                        tools, same chezmoi-tracked bashrc + starship prompt
+                        + aliases as a real Linux box. They&rsquo;re accessed
+                        through wezterm&rsquo;s WSL domain mechanism, not
+                        SSH, so <code>bootstrap.sh</code> auto-detects WSL
+                        (<code>$WSL_DISTRO_NAME</code> /
+                        <code>/proc/version</code>) and skips the
+                        <code>hosts.conf</code> self-registration step. The
+                        rest of the flow (tool install, dotfiles apply) runs
+                        unchanged.
+                    </p>
+                    <p>
+                        Open a WSL tab in WezTerm (or
+                        <code>wsl.exe</code> in any shell) and run:
+                    </p>
+                    <pre><code># Inside the WSL distro:
+sudo dnf install -y curl git python3 python3-pip iproute    # RHEL / AlmaLinux / Fedora
+# or: sudo apt install -y curl git python3 python3-pip iproute2   # Debian / Ubuntu
+export GITHUB_TOKEN='&lt;your-PAT&gt;'
+export GIT_USER_NAME='Arrush Chaturvedi'
+export GIT_USER_EMAIL='contact@arrushc.com'
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
+                    <p class="note-row">
+                        Use <code>--dev</code> for WSL distros where you have
+                        sudo (the common case &mdash; you own the WSL host).
+                        Tools land in <code>/usr/local/bin</code>, starship +
+                        aliases + fzf + zoxide + zellij all become available
+                        on next shell.
+                    </p>
+                    <p class="note-row">
+                        <strong>Why WSL tabs land in <code>~</code>:</strong>
+                        Two complementary mechanisms in
+                        <code>chezmoi/dot_config/wezterm/wezterm.lua</code>:
+                        (1) <code>default_cwd = '~'</code> on every WSL
+                        domain, so a <em>fresh</em> WSL tab cd&rsquo;s to
+                        the WSL user&rsquo;s home instead of inheriting
+                        wezterm&rsquo;s own cwd (typically
+                        <code>/mnt/c/Users/&lt;windows-user&gt;</code>); and
+                        (2) a <code>smart_new_tab</code> callback bound to
+                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd> that
+                        forces <code>cwd = '~'</code> for WSL panes whose
+                        cwd isn&rsquo;t tracked &mdash; otherwise
+                        <code>act.SpawnTab 'CurrentPaneDomain'</code> would
+                        fall back to wezterm&rsquo;s own cwd on every new
+                        tab. Without these, the default bash prompt renders
+                        <code>\W</code> as the literal Windows-user folder
+                        name instead of substituting <code>~</code>.
+                    </p>
+                    <p class="note-row">
+                        <strong>Cwd tracking via OSC 7:</strong> the
+                        chezmoi-tracked <code>~/.bashrc</code> emits an
+                        <a
+                            href="https://wezfurlong.org/wezterm/shell-integration.html"
+                            >OSC 7</a
+                        >
+                        <code>file://&lt;host&gt;/&lt;pwd&gt;</code>
+                        sequence after every prompt
+                        (<code>__wezterm_osc7</code> in
+                        <code>chezmoi/dot_bashrc.tmpl</code>). Once WSL is
+                        bootstrapped, <code>cd /tmp</code> followed by
+                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd> lands
+                        the new tab in <code>/tmp</code>, not <code>~</code>
+                        &mdash; <code>smart_new_tab</code> sees the tracked
+                        cwd and defers to wezterm&rsquo;s normal inheritance.
+                        Pre-bootstrap (default WSL bash, no OSC 7), the
+                        callback&rsquo;s fallback keeps new tabs in
+                        <code>~</code>.
+                    </p>
+
                     <h3 id="setup-wezterm">WezTerm keybinds</h3>
                     <p class="lede">
                         WezTerm auto-opens a tab per host on launch and attaches

@@ -118,6 +118,15 @@ local config = wezterm.config_builder()
 local wsl_doms = {}
 if wezterm.target_triple:find('windows') then
   wsl_doms = wezterm.default_wsl_domains()
+  -- Force every WSL tab to start in the WSL user's home directory (~).
+  -- Without this, wezterm inherits its own cwd — typically
+  -- /mnt/c/Users/<windows-user> when launched from a Start-menu shortcut —
+  -- and the bash default prompt renders \W as the literal Windows-user
+  -- folder name instead of substituting ~. The override is per-domain so
+  -- it survives wezterm.default_wsl_domains() re-evaluation on each load.
+  for _, d in ipairs(wsl_doms) do
+    d.default_cwd = '~'
+  end
   config.wsl_domains = wsl_doms
   if #wsl_doms == 1 then
     config.default_domain = wsl_doms[1].name
@@ -425,6 +434,44 @@ local reconnect_ssh_pane = wezterm.action_callback(function(window, pane)
     return
   end
   window:perform_action(act.SpawnTab { DomainName = domain }, pane)
+end)
+
+-- ---------------------------------------------------------------------------
+-- Smart new-tab — honors WSL default_cwd when cwd isn't otherwise tracked
+-- ---------------------------------------------------------------------------
+-- Bound to CTRL|SHIFT+T below. The naive `act.SpawnTab 'CurrentPaneDomain'`
+-- inherits the current pane's cwd if known, otherwise falls back to
+-- wezterm's own cwd (typically /mnt/c/Users/<windows-user> on Windows
+-- launches) — which means our `default_cwd = '~'` on WSL domains gets
+-- ignored for every tab after the first.
+--
+-- Fix: for WSL panes that don't have a tracked cwd (no OSC 7 from the
+-- shell), do a "fresh" SpawnTab into the SAME named domain — wezterm
+-- then uses the domain's default_cwd='~', passes that LITERAL '~' to
+-- wsl.exe via --cd, and wsl.exe expands it inside the distro to
+-- /home/<wsluser>. This mirrors the pick_host pattern further up.
+--
+-- DO NOT replace this with `act.SpawnCommandInNewTab { cwd = '~' }`:
+-- wezterm tilde-expands cwd ON THE WINDOWS HOST SIDE before passing
+-- to wsl.exe, so `cwd = '~'` becomes `C:\Users\<windows-user>`, which
+-- wsl.exe then interprets as `/mnt/c/Users/<windows-user>`. Same
+-- basename as the WSL home, so it looks superficially right but lands
+-- you in the Windows-mounted-into-WSL path instead of $HOME — which
+-- is exactly the bug this callback exists to fix.
+--
+-- For WSL panes that DO have a tracked cwd (chezmoi-applied bashrc
+-- emits OSC 7 — see __wezterm_osc7 in dot_bashrc.tmpl), defer to the
+-- default inheritance so `cd /tmp` then CTRL+SHIFT+T lands in /tmp.
+-- For non-WSL panes (local PowerShell, SSH), the default action
+-- already does the right thing — Zellij owns SSH session state
+-- regardless of cwd.
+local smart_new_tab = wezterm.action_callback(function(window, pane)
+  local domain = pane:get_domain_name() or ''
+  if domain:find('^WSL:') and not pane:get_current_working_dir() then
+    window:perform_action(act.SpawnTab { DomainName = domain }, pane)
+  else
+    window:perform_action(act.SpawnTab 'CurrentPaneDomain', pane)
+  end
 end)
 
 -- ---------------------------------------------------------------------------
@@ -808,8 +855,10 @@ config.keys = {
   -- New window
   { key = 'n', mods = 'CTRL|SHIFT', action = act.SpawnWindow },
 
-  -- New local tab
-  { key = 't', mods = 'CTRL|SHIFT', action = act.SpawnTab 'CurrentPaneDomain' },
+  -- New tab in current domain. Uses smart_new_tab (see callback above) so
+  -- WSL tabs without OSC 7 cwd-tracking land in ~ instead of inheriting
+  -- wezterm's Windows-side cwd.
+  { key = 't', mods = 'CTRL|SHIFT', action = smart_new_tab },
 
   -- Fuzzy-pick a host and open it in a new tab (J = jump)
   { key = 'j', mods = 'CTRL|SHIFT', action = pick_host },

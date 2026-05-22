@@ -52,6 +52,22 @@ if command -v starship &>/dev/null; then
   eval "$(starship init bash)"
 fi
 
+# --- WezTerm OSC 7 (cwd tracking for new tabs/panes) -------------------------
+# Emit the current working directory as an OSC 7 file:// URL after every
+# prompt so WezTerm tracks cwd. New WezTerm tabs (CTRL+SHIFT+T) and panes
+# then start in the same directory as the parent pane instead of falling
+# back to wezterm's own cwd (a Windows path for WSL hosts, a stale path for
+# SSH'd hosts). Harmless on terminals that don't speak OSC 7 — they ignore
+# the sequence. The case-guard prevents double-registration if the bashrc
+# gets sourced twice in the same shell.
+__wezterm_osc7() {
+  printf '\033]7;file://%s%s\033\\' "${HOSTNAME:-$(hostname)}" "$PWD"
+}
+case ":${PROMPT_COMMAND:-}:" in
+  *:__wezterm_osc7:*) ;;
+  *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}__wezterm_osc7" ;;
+esac
+
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
 export NB_DIR="$HOME/notes"

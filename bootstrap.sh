@@ -38,9 +38,17 @@
 #   1. preflight             — check curl/git/python3/pip/iproute, python>=3.9
 #   2. clone repo            — into ~/.local/share/chezmoi (or git pull if present)
 #   3. self_register         — add this host to hosts.conf + sync inventory
+#                              (auto-skipped inside WSL — see is_wsl below)
 #   4. ensure_ansible        — pip install --user ansible-core if missing, smoke test
 #   5. run playbook          — ansible-playbook playbooks/local.yml
 #   6. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
+#                              (no-op inside WSL since self_register made no edits)
+#
+# WSL — running inside a WSL distro is supported and treated as a managed host
+# for tools + dotfiles, but NOT as an SSH target. is_wsl() (defined below)
+# detects WSL via $WSL_DISTRO_NAME or /proc/version's microsoft marker and
+# short-circuits self_register so hosts.conf and the wezterm SSH-domain block
+# are never touched. The end-of-bootstrap copy-id tip is also suppressed.
 #
 # Tool versions, URLs, and install logic live in
 #   ansible/group_vars/all.yml + ansible/roles/linux-base/tasks/tools.yml
@@ -56,6 +64,17 @@ log()  { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
 ok()   { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
 fail() { echo -e "${RED} ✗${RESET} $*"; exit 1; }
+
+# WSL detection — used to skip hosts.conf self-registration and the SSH
+# copy-id tip. WSL distros are accessed via wezterm WSL domains (not SSH),
+# so registering them as SSH targets would pollute the inventory with an
+# IP that's only reachable from the host Windows machine and would also
+# create a redundant wezterm SSH-domain entry alongside the WSL one.
+#   - WSL_DISTRO_NAME is exported by WSL 2 inside the distro
+#   - /proc/version's "microsoft" marker is the universal backup signal
+is_wsl() {
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null
+}
 
 DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
 CHEZMOI_SOURCE="$HOME/.local/share/chezmoi"
@@ -242,6 +261,16 @@ Install via your distro's package manager, e.g.
 # 2. SELF-REGISTER — add this host to hosts.conf + regenerate inventory
 # =============================================================================
 self_register() {
+  # WSL distros are accessed via wezterm WSL domains, not SSH. Registering
+  # them in hosts.conf would (a) add an SSH-domain entry to wezterm.lua that
+  # duplicates the existing WSL domain, and (b) record a WSL-internal IP
+  # that's only reachable from the host Windows machine. Skip.
+  if is_wsl; then
+    log "Detected WSL (${WSL_DISTRO_NAME:-via /proc/version}) — skipping hosts.conf self-registration"
+    ok "WSL is reached through wezterm WSL domains, not SSH"
+    return
+  fi
+
   local manage_script="$CHEZMOI_SOURCE/scripts/manage-hosts.sh"
 
   # We invoke via `bash "$manage_script"` below, so the executable bit isn't
@@ -433,6 +462,11 @@ push_host_changes
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
 echo -e "Re-source your shell: ${YELLOW}source ~/.bashrc${RESET}"
-echo -e "Enable passwordless SSH from your client:"
-echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux)"
-echo -e "  ${YELLOW}.\\scripts\\manage-hosts.ps1 -CopyId -Name $(hostname -s)${RESET}  (Windows)"
+if is_wsl; then
+  echo -e "Running inside WSL — opening a new WezTerm WSL tab will land you in"
+  echo -e "  ${YELLOW}~${RESET} with starship + the chezmoi-tracked aliases active."
+else
+  echo -e "Enable passwordless SSH from your client:"
+  echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux)"
+  echo -e "  ${YELLOW}.\\scripts\\manage-hosts.ps1 -CopyId -Name $(hostname -s)${RESET}  (Windows)"
+fi
