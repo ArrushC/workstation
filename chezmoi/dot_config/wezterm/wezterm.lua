@@ -203,12 +203,20 @@ config.colors = {
     new_tab           = { bg_color = '#1a1b26', fg_color = '#565f89' },
     new_tab_hover     = { bg_color = '#292e42', fg_color = '#c0caf5' },
   },
+  -- Scrollbar thumb — visible against the Tokyo Night bg without screaming
+  scrollbar_thumb = '#414868',
 }
 
--- Slightly padded inner margins
+-- Show the right-side scrollbar. It lives inside window_padding.right, so
+-- the right padding is bumped below to give it room without crowding text.
+config.enable_scroll_bar = true
+
+-- Slightly padded inner margins. Right padding is wider than the others so
+-- the scrollbar (enable_scroll_bar above) has room without sitting on the
+-- last column of text.
 config.window_padding = {
   left   = 8,
-  right  = 8,
+  right  = 16,
   top    = 6,
   bottom = 6,
 }
@@ -216,8 +224,15 @@ config.window_padding = {
 -- GPU rendering
 config.front_end = 'WebGpu'
 
--- Cursor — vertical bar (I-beam) instead of block
-config.default_cursor_style = 'SteadyBar'
+-- Animation framerate — affects blinking cursor, blinking text, and visual
+-- bell easing only (NOT scrolling — terminals scroll by row). Default is 10,
+-- which makes blinks visibly choppy on a 60 Hz+ display. Harmless to leave
+-- high even when using a Steady* cursor; only applies when something blinks.
+config.animation_fps = 60
+
+-- Cursor — blinking vertical bar (I-beam). animation_fps above smooths the
+-- blink transitions; cursor_blink_rate (default 800ms) controls the period.
+config.default_cursor_style = 'BlinkingBar'
 
 -- ---------------------------------------------------------------------------
 -- Tab colors — Tokyo Night accent palette + state variants
