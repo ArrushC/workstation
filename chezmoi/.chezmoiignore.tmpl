@@ -18,6 +18,12 @@ dot_nbrc
 dot_config/helix
 dot_config/zellij
 .chezmoiscripts/run_once_after_init.sh
+# wezterm.lua: bootstrap.ps1 sets a User-scope WEZTERM_CONFIG_FILE env var
+# pointing at the chezmoi source directly, so WezTerm reads the repo file
+# without chezmoi needing to deploy a copy to %USERPROFILE%\.config\wezterm\.
+# This eliminates the pre-v2 hardlink dance (which broke on chezmoi
+# atomic-writes). See "WEZTERM_CONFIG_FILE" notes in CLAUDE.md + README.html.
+dot_config/wezterm
 {{ else }}
 # --- On Linux/macOS, ignore Windows-only paths ------------------------------
 AppData

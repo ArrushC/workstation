@@ -1711,13 +1711,27 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
 
                     <h4>Or after cloning manually</h4>
-                    <pre><code>git clone https://github.com/ArrushC/workstation.git C:\Git\workstation
-cd C:\Git\workstation
+                    <pre><code>git clone https://github.com/ArrushC/workstation.git `
+  "$env:USERPROFILE\.local\share\chezmoi"
+cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1                                  # default flow (must be elevated)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
 .\bootstrap.ps1 -SkipToolInstall                 # tools already installed; non-elevated OK
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt</code></pre>
+                    <p class="note-row">
+                        <strong>Default clone path</strong> is
+                        <code>%USERPROFILE%\.local\share\chezmoi</code>, which
+                        matches <code>bootstrap.sh</code>&rsquo;s
+                        <code>$HOME/.local/share/chezmoi</code> and chezmoi&rsquo;s
+                        own default source directory. If you previously cloned to
+                        the pre-v2 default <code>C:\Git\workstation</code>,
+                        <code>bootstrap.ps1</code> detects it and offers to
+                        move the clone to the new location. Pass
+                        <code>-RepoPath C:\Git\workstation</code> to keep the
+                        legacy path, or <code>-Yes</code> to auto-move without
+                        prompting.
+                    </p>
 
                     <h4>What <code>bootstrap.ps1</code> does</h4>
                     <div class="flow">
@@ -1744,7 +1758,9 @@ cd C:\Git\workstation
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl">Re-hardlink wezterm.lua</span>
+                            ><span class="lbl"
+                                >Set WEZTERM_CONFIG_FILE</span
+                            ><span class="note">User env var</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -1765,19 +1781,26 @@ cd C:\Git\workstation
                         re-passing the env var.
                     </p>
                     <p class="note-row">
-                        <strong>Hybrid wezterm.lua model:</strong> chezmoi
-                        tracks the file (so it ships through the standard apply
-                        flow), and step 5 replaces the chezmoi-written copy with
-                        a hardlink to
-                        <code>chezmoi\dot_config\wezterm\wezterm.lua</code>.
-                        Edits to the repo file &mdash; including from
-                        <code>manage-hosts.ps1 -Sync</code> &mdash; appear in
-                        WezTerm immediately via
-                        <code>automatically_reload_config</code>, without
-                        running <code>cza</code> after every host-list change.
-                        If <code>chezmoi apply</code> ever atomic-writes the
-                        file (content drift), the link breaks &mdash; re-run
-                        <code>bootstrap.ps1</code> to restore it.
+                        <strong>WezTerm config model:</strong> chezmoi tracks
+                        <code>chezmoi/dot_config/wezterm/wezterm.lua</code> as
+                        the canonical source, but
+                        <code>.chezmoiignore.tmpl</code> skips
+                        <code>dot_config/wezterm</code> on Windows &mdash;
+                        chezmoi <em>never</em> writes a copy to
+                        <code>%USERPROFILE%\.config\wezterm\</code>. Step 5
+                        instead sets a User-scope environment variable
+                        <code>WEZTERM_CONFIG_FILE</code> pointing directly at
+                        the chezmoi source path. WezTerm reads the repo file
+                        live, so edits (including
+                        <code>manage-hosts.ps1 -Sync</code> rewriting the
+                        sentinel block) appear immediately via
+                        <code>automatically_reload_config</code>. This replaces
+                        the pre-v2 hardlink mechanism, which broke whenever
+                        chezmoi atomic-wrote the target on a content mismatch.
+                        Bootstrap also cleans up any legacy
+                        <code>%USERPROFILE%\.config\wezterm\wezterm.lua</code>
+                        left from prior hardlinked installs, so a stale fallback
+                        can&rsquo;t silently win if you ever unset the env var.
                     </p>
                     <p class="note-row">
                         After bootstrap, restart your shell so the
@@ -2623,17 +2646,27 @@ direnv_version: "2.34.0"</code></pre>
                                     >chezmoi/dot_config/wezterm/wezterm.lua</code
                                 >
                                 are visible immediately because
-                                <code>bootstrap.ps1</code> hardlinks the home
-                                path to the chezmoi source.
+                                <code>bootstrap.ps1</code> sets a User-scope
+                                <code>WEZTERM_CONFIG_FILE</code> env var
+                                pointing directly at the chezmoi source, and
+                                WezTerm&rsquo;s
+                                <code>automatically_reload_config</code> picks
+                                up file edits live.
                             </p>
-                            <p><strong>Confirm the link is intact:</strong></p>
-                            <pre><code>fsutil hardlink list "$env:USERPROFILE\.config\wezterm\wezterm.lua"</code></pre>
                             <p>
-                                Both the home path and the repo path should be
-                                listed. If only the home path appears, the link
-                                broke (chezmoi atomic-write, an editor that
-                                doesn&rsquo;t preserve hardlinks, or someone
-                                deleted and re-created the file).
+                                <strong>Confirm the env var is set:</strong>
+                            </p>
+                            <pre><code>[Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')</code></pre>
+                            <p>
+                                Should print the full chezmoi-source path
+                                (something like
+                                <code
+                                    >C:\Users\you\.local\share\chezmoi\chezmoi\dot_config\wezterm\wezterm.lua</code
+                                >). If it&rsquo;s empty, the env var was never
+                                set (bootstrap didn&rsquo;t run, or it was set
+                                in System scope but cleared from User scope).
+                                If it points at a stale path, the repo was
+                                moved without re-running bootstrap.
                             </p>
                             <p>
                                 <strong>Restore:</strong>
@@ -2641,8 +2674,25 @@ direnv_version: "2.34.0"</code></pre>
                                     >.\bootstrap.ps1 -SkipToolInstall
                                     -SkipChezmoi -SkipKeyGen</code
                                 >
-                                (just the hardlink step) or full
-                                <code>bootstrap.ps1</code>.
+                                (just re-runs the env-var step) or a full
+                                <code>bootstrap.ps1</code>. <strong>Restart any
+                                    running WezTerm instances</strong> after
+                                &mdash; the env var is read at process start.
+                            </p>
+                            <p>
+                                <strong>Migrated from a pre-v2 install?</strong>
+                                The old layout hardlinked
+                                <code
+                                    >%USERPROFILE%\.config\wezterm\wezterm.lua</code
+                                >
+                                to the chezmoi source. The new bootstrap
+                                deletes that file as a hygiene step &mdash; if
+                                <code>WEZTERM_CONFIG_FILE</code> is ever
+                                unset, WezTerm falls back to its default
+                                search path and would find the stale legacy
+                                hardlink. If you ever see WezTerm picking up
+                                stale content after switching bootstraps,
+                                re-run <code>bootstrap.ps1</code> to clear it.
                             </p>
                         </div>
                     </details>

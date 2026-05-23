@@ -7,22 +7,34 @@
 # repo (Zed, VSCode, PowerShell profile, WezTerm config, Starship, Git).
 #
 # Flow:
-#   1. preflight        — must run as admin (choco needs it); OpenSSH client
+#   1. legacy detect    — if a clone exists at C:\Git\workstation (the
+#                         pre-v2 default) and -RepoPath was not explicitly
+#                         passed, offer to move it to the new home-dir
+#                         location. Skip with -Yes (auto-move) or
+#                         -RepoPath C:\Git\workstation (keep legacy).
+#   2. preflight        — must run as admin (choco needs it); OpenSSH client
 #                         warned-not-failed
-#   2. choco install    — bootstrap Chocolatey itself if missing, then
+#   3. choco install    — bootstrap Chocolatey itself if missing, then
 #                         install chezmoi, Git, Starship, zoxide, WezTerm,
 #                         Zed, VSCode
-#   3. clone repo       — into -RepoPath (default C:\Git\workstation).
-#                         Done after choco so the freshly-installed git is
-#                         used if the machine didn't have one already.
-#   4. chezmoi apply    — applies chezmoi/ to %USERPROFILE% (wezterm,
-#                         Zed, VSCode, PowerShell profile, etc.)
-#   5. wezterm hardlink — replace the chezmoi-written regular file at
-#                         %USERPROFILE%\.config\wezterm\wezterm.lua with a
-#                         hardlink to the chezmoi source. Gives WezTerm
-#                         live-reload on edits to the repo without losing
-#                         chezmoi tracking.
-#   6. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
+#   4. clone repo       — into -RepoPath (default
+#                         %USERPROFILE%\.local\share\chezmoi, matching
+#                         bootstrap.sh's $HOME/.local/share/chezmoi and
+#                         chezmoi's own default source dir). Done after
+#                         choco so the freshly-installed git is used if
+#                         the machine didn't have one already.
+#   5. chezmoi apply    — applies chezmoi/ to %USERPROFILE% (Zed, VSCode,
+#                         PowerShell profile, etc.). wezterm.lua is
+#                         ignored on Windows (see .chezmoiignore.tmpl);
+#                         WezTerm reads it directly via the env var below.
+#   6. wezterm env var  — set User-scope WEZTERM_CONFIG_FILE pointing at
+#                         the chezmoi source. WezTerm then reads the repo
+#                         file directly — no hardlink to maintain, and
+#                         automatically_reload_config picks up edits to
+#                         the repo (e.g. from manage-hosts.ps1 -Sync)
+#                         immediately. Also cleans up any legacy hardlink
+#                         left over at %USERPROFILE%\.config\wezterm\.
+#   7. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
 #
 # WHY CHOCOLATEY (not winget)
 #   winget exists on Win10 1909+ / Win11 but its PATH propagation is flaky —
@@ -48,12 +60,14 @@
 #
 # Or clone manually + run:
 #
-#   git clone https://github.com/ArrushC/workstation.git C:\Git\workstation
-#   cd C:\Git\workstation
+#   git clone https://github.com/ArrushC/workstation.git `
+#     "$env:USERPROFILE\.local\share\chezmoi"
+#   cd "$env:USERPROFILE\.local\share\chezmoi"
 #   .\bootstrap.ps1
 #
 # Flags:
-#   -RepoPath <path>    override clone target (default C:\Git\workstation)
+#   -RepoPath <path>    override clone target
+#                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
 #   -SkipToolInstall    skip the choco step entirely (assume tools installed;
 #                       admin not required in this case)
@@ -63,12 +77,13 @@
 #                       or deployed dotfiles — the bootstrap is idempotent
 #                       over those. Prompts for confirmation unless -Yes
 #                       is also passed.
-#   -Yes                skip the -Reinstall confirmation prompt.
+#   -Yes                skip confirmation prompts (Reinstall + legacy-path
+#                       auto-move when one is detected).
 # =============================================================================
 
 [CmdletBinding()]
 param(
-    [string]$RepoPath = "C:\Git\workstation",
+    [string]$RepoPath = (Join-Path $env:USERPROFILE ".local\share\chezmoi"),
     [switch]$SkipKeyGen,
     [switch]$SkipToolInstall,
     [switch]$SkipChezmoi,
@@ -115,7 +130,78 @@ $ChocoTools = @(
 )
 
 # =============================================================================
-# 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
+# 0a. LEGACY PATH MIGRATION — pre-v2 bootstrap.ps1 defaulted -RepoPath to
+#     C:\Git\workstation. The current default is %USERPROFILE%\.local\share
+#     \chezmoi to match bootstrap.sh's $HOME/.local/share/chezmoi (chezmoi's
+#     own default source dir). If a legacy clone exists at the old path AND
+#     the user didn't explicitly pass -RepoPath, offer to move it.
+#
+#     -Yes auto-moves without prompting. -RepoPath C:\Git\workstation opts
+#     out entirely (keeps the legacy location). Bypassed when -RepoPath is
+#     explicitly passed via $PSBoundParameters.
+# =============================================================================
+function Invoke-LegacyPathMigrate {
+    $legacy = "C:\Git\workstation"
+
+    # User explicitly passed -RepoPath — they know what they want, don't meddle.
+    if ($PSBoundParameters.ContainsKey('RepoPath')) { return }
+    if ($RepoPath -eq $legacy)                     { return }
+    if (-not (Test-Path "$legacy\.git"))           { return }
+
+    if (Test-Path "$RepoPath\.git") {
+        Write-Warn "Both clones exist:"
+        Write-Warn "  legacy: $legacy"
+        Write-Warn "  new:    $RepoPath"
+        Write-Warn "Bootstrap will use $RepoPath. Remove the legacy clone manually"
+        Write-Warn "when you've confirmed everything still works:"
+        Write-Warn "  Remove-Item -Recurse -Force '$legacy'"
+        return
+    }
+
+    Write-Warn "Found legacy clone at $legacy"
+    Write-Host "  The default clone path is now $RepoPath"
+    Write-Host "  (matches bootstrap.sh's `$HOME/.local/share/chezmoi)."
+    Write-Host ""
+    Write-Host "  Options:"
+    Write-Host "    1. Move it now to the new location (recommended)"
+    Write-Host "    2. Keep the legacy location — re-run with:"
+    Write-Host "         .\bootstrap.ps1 -RepoPath '$legacy'"
+    Write-Host ""
+
+    if (-not $Yes) {
+        $ans = Read-Host "  Move it now? [Y/n]"
+        if ($ans -and $ans -notmatch '^[Yy]') {
+            Write-Warn "Keeping legacy location not chosen — re-run with -RepoPath '$legacy' to use it."
+            exit 0
+        }
+    }
+
+    $parent = Split-Path $RepoPath -Parent
+    if (-not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+
+    Write-Log "Moving $legacy → $RepoPath..."
+    try {
+        Move-Item -Path $legacy -Destination $RepoPath -Force -ErrorAction Stop
+        Write-Ok "Moved"
+    } catch {
+        Write-Fail @"
+Move-Item failed: $($_.Exception.Message)
+
+Likely cause: a file inside $legacy is locked by another process
+(WezTerm reading wezterm.lua, an editor holding a file open, etc.). Close
+those and re-run, OR do the move manually:
+  Move-Item '$legacy' '$RepoPath'
+
+Or keep the legacy path explicitly:
+  .\bootstrap.ps1 -RepoPath '$legacy'
+"@
+    }
+}
+
+# =============================================================================
+# 0b. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
 #    the rest of the script re-bootstrap fresh. Installed tools and deployed
 #    dotfiles are left alone — re-running the bootstrap is idempotent on
 #    those, so the net effect is a fresh repo + fresh chezmoi init prompt.
@@ -474,39 +560,59 @@ function Invoke-Chezmoi {
 }
 
 # =============================================================================
-# 5. WEZTERM HARDLINK — restore the live-reload link to the chezmoi source.
-#    chezmoi writes a regular file at the target path; replacing it with a
-#    hardlink lets edits to chezmoi/dot_config/wezterm/wezterm.lua (e.g. from
-#    manage-hosts --sync) appear in WezTerm immediately via
-#    automatically_reload_config, without needing a `chezmoi apply` after
-#    every edit.
+# 5. WEZTERM_CONFIG_FILE — point WezTerm directly at the chezmoi source.
+#    Replaces the pre-v2 hardlink mechanism: WezTerm reads its config from
+#    whatever path $env:WEZTERM_CONFIG_FILE resolves to, and the chezmoi
+#    source path is reachable as a normal file. automatically_reload_config
+#    still picks up edits live (e.g. from manage-hosts.ps1 -Sync), and
+#    chezmoi atomic-writes are no longer a footgun — the home path isn't
+#    touched at all because dot_config/wezterm is in .chezmoiignore.tmpl on
+#    Windows.
+#
+#    Idempotent: re-running the bootstrap with the same RepoPath is a no-op.
+#    Also cleans up any legacy hardlink/regular file left from pre-v2 layouts
+#    at %USERPROFILE%\.config\wezterm\wezterm.lua so it doesn't accidentally
+#    win if a user later unsets the env var.
 # =============================================================================
-function Invoke-WeztermHardlink {
-    $source = Join-Path $RepoPath "chezmoi\dot_config\wezterm\wezterm.lua"
-    $target = "$env:USERPROFILE\.config\wezterm\wezterm.lua"
+function Invoke-WeztermConfigEnv {
+    $envName  = 'WEZTERM_CONFIG_FILE'
+    $newValue = Join-Path $RepoPath "chezmoi\dot_config\wezterm\wezterm.lua"
 
-    if (-not (Test-Path $source)) {
-        Write-Warn "Skipping wezterm hardlink — chezmoi source not found at $source"
+    if (-not (Test-Path $newValue)) {
+        Write-Warn "Skipping $envName setup — chezmoi source not found at $newValue"
         return
     }
 
-    $targetDir = Split-Path $target -Parent
-    if (-not (Test-Path $targetDir)) {
-        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+    $current = [Environment]::GetEnvironmentVariable($envName, 'User')
+
+    if ($current -eq $newValue) {
+        Write-Ok "$envName already points at the chezmoi source"
+    } else {
+        Write-Log "Setting User-scope $envName to $newValue..."
+        [Environment]::SetEnvironmentVariable($envName, $newValue, 'User')
+        # Propagate to the current session so anything later in this script
+        # (and any wezterm spawned from the same shell) sees the new value.
+        Set-Item "Env:$envName" $newValue
+        if ($current) {
+            Write-Ok "$envName updated (was: $current)"
+        } else {
+            Write-Ok "$envName set"
+        }
+        Write-Warn "Restart any running WezTerm instances to pick up the new config location."
     }
 
-    # Always re-create. New-Item -ItemType HardLink fails if the target
-    # already exists, so we delete first. This is idempotent: if the existing
-    # target was already a correct hardlink, the new one shares the same
-    # inode anyway — content is identical, and any other hardlink siblings
-    # to the source are unaffected (the source inode persists).
-    if (Test-Path $target) {
-        Remove-Item $target -Force
+    # Clean up legacy hardlink/regular-file at the old home path. With
+    # dot_config/wezterm now in .chezmoiignore.tmpl on Windows, chezmoi
+    # neither writes nor manages this path anymore — but the file may exist
+    # from a previous bootstrap that DID hardlink it. Leaving it would let
+    # WezTerm fall back to it if the user ever unset WEZTERM_CONFIG_FILE,
+    # silently surfacing stale config.
+    $legacyTarget = "$env:USERPROFILE\.config\wezterm\wezterm.lua"
+    if (Test-Path $legacyTarget) {
+        Write-Log "Removing legacy home-path wezterm.lua (no longer used)..."
+        Remove-Item $legacyTarget -Force
+        Write-Ok "Removed $legacyTarget"
     }
-
-    Write-Log "Hardlinking wezterm.lua to chezmoi source..."
-    New-Item -ItemType HardLink -Path $target -Target $source | Out-Null
-    Write-Ok "Hardlinked: $target -> $source"
 }
 
 # =============================================================================
@@ -551,19 +657,22 @@ function Invoke-EnsureSshKey {
 # =============================================================================
 # MAIN
 # =============================================================================
+Invoke-LegacyPathMigrate  # before everything else — may move the clone, update $RepoPath context
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
-Invoke-ChocoInstall      # before clone — installs git if the machine doesn't have one
+Invoke-ChocoInstall       # before clone — installs git if the machine doesn't have one
 Invoke-CloneRepo
 Invoke-Chezmoi
-Invoke-WeztermHardlink   # after chezmoi apply — restore the live-reload link
+Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
 Invoke-EnsureSshKey
 
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
 Write-Host "Restart your shell (or open a new PowerShell tab) so the chezmoi-applied"
-Write-Host "$PROFILE picks up — starship prompt, chezmoi/git aliases, etc."
+Write-Host "`$PROFILE picks up — starship prompt, chezmoi/git aliases, etc."
+Write-Host "Restart WezTerm too if any instances were running — they need a fresh process"
+Write-Host "to see the new ${Bold}WEZTERM_CONFIG_FILE${Reset} env var."
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Add a host to hosts.conf:"
@@ -571,6 +680,7 @@ Write-Host "       cd $RepoPath"
 Write-Host "       .\scripts\manage-hosts.ps1     # interactive menu"
 Write-Host "  2. Copy your SSH key to a registered host:"
 Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -Name <host-name>"
+Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -All     # or, bulk to every host"
 Write-Host "  3. Launch WezTerm — it auto-opens a tab per host in hosts.conf."
 Write-Host ""
 Write-Host "Editing dotfiles:"
