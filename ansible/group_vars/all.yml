@@ -62,67 +62,11 @@ linux_optional_packages:
   - tcpdump         # packet inspection
 
 # --- Tool versions ----------------------------------------------------------
-# This file is the single source of truth for tool versions. bootstrap.sh
-# delegates to Ansible, so there is nothing to keep in sync elsewhere.
-fzf_version: "0.54.0"
-zoxide_version: "0.9.4"
-starship_version: "1.19.0"
-zellij_version: "0.40.1"
-glow_version: "2.1.2"
-helix_version: "24.03"
-chezmoi_version: "latest"
-
-# Toolbelt additions (Tier-1 static binaries — work on both dev_machine and
-# prod_machine via the tools_dest/tools_become facts resolved in main.yml).
-fd_version: "10.4.2"
-bat_version: "0.26.1"
-btop_version: "1.4.7"
-jq_version: "1.8.1"
-yq_version: "4.53.2"
-witr_version: "0.3.2"
-bandwhich_version: "0.23.1"
-tealdeer_version: "1.8.1"
-usql_version: "0.21.4"
-lazydocker_version: "0.25.2"
-dive_version: "0.13.1"
-lnav_version: "0.14.0"
-gopass_version: "1.16.1"
-age_version: "1.3.1"
-fastfetch_version: "2.63.1"
-ncdu_version: "2.9.1"
-
-# Toolbelt second wave (2026-05 expansion).
-gitui_version: "0.28.1"
-lazygit_version: "0.61.1"
-jujutsu_version: "0.41.0"
-yazi_version: "26.5.6"
-ast_grep_version: "0.42.2"
-television_version: "0.15.7"
-xh_version: "0.25.3"
-gping_version: "1.20.1"
-atuin_version: "18.16.1"
-delta_version: "0.19.2"
-micro_version: "2.0.15"
-eza_version: "0.23.4"
-sd_version: "1.1.0"
-ctop_version: "0.7.7"
-k9s_version: "0.50.18"
-rclone_version: "1.74.1"
-croc_version: "10.4.3"
-hyperfine_version: "1.20.0"
-mise_version: "2026.5.10"
-uv_version: "0.11.14"
-dsq_version: "0.23.0"
-
-# Robustness gap-fillers — universal static binaries.
-gh_version: "2.92.0"
-sops_version: "3.13.1"
-htmlq_version: "0.4.0"
-ouch_version: "0.7.1"
-
-# Service / journal / cgroup observability.
-# (systemd-cgls and systemd-cgtop ship with systemd itself — no install needed.)
-bottom_version: "0.12.3"
-systemctl_tui_version: "0.5.2"
-lazyjournal_version: "0.8.6"
-sysz_version: "1.4.3"
+# Versions now live in scripts/install/versions.mk. tools.yml delegates the
+# static-binary installs to that Makefile (parallel `make -j8 all`), so
+# Ansible no longer needs to know individual tool versions. Bump versions
+# by editing versions.mk; the stamp filename embeds the version, so changes
+# trigger reinstall on the next `bootstrap.sh` run.
+#
+# Search for `*_version: "..."` lines in git log if you need the historical
+# pre-Makefile values — they were here through commit 0665737.

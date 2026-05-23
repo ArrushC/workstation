@@ -261,12 +261,15 @@ preflight() {
   command -v git     &>/dev/null || missing+=("git")
   command -v python3 &>/dev/null || missing+=("python3")
   command -v ip      &>/dev/null || missing+=("iproute (for self-registration)")
+  command -v make    &>/dev/null || missing+=("make (for scripts/install/Makefile)")
+  command -v tar     &>/dev/null || missing+=("tar (for archive extraction)")
+  command -v unzip   &>/dev/null || missing+=("unzip (for .zip releases like lnav/yazi/rclone)")
 
   if (( ${#missing[@]} > 0 )); then
     fail "Missing required prerequisites: ${missing[*]}
 Install via your distro's package manager, e.g.
-  RHEL/Fedora:   sudo dnf install curl git python3 python3-pip iproute
-  Debian/Ubuntu: sudo apt install curl git python3 python3-pip iproute2"
+  RHEL/Fedora:   sudo dnf install curl git python3 python3-pip iproute make tar unzip
+  Debian/Ubuntu: sudo apt install curl git python3 python3-pip iproute2 make tar unzip"
   fi
 
   # python3 -m pip available?
