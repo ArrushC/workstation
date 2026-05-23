@@ -41,6 +41,10 @@
 #                              (auto-skipped inside WSL — see is_wsl below)
 #   4. ensure_ansible        — pip install --user ansible-core if missing, smoke test
 #   5. run playbook          — ansible-playbook playbooks/local.yml
+#   5b. ensure_chezmoi_initialized — `chezmoi init --apply` interactively if
+#                              ~/.config/chezmoi/chezmoi.toml is missing. Ansible
+#                              can't prompt for name/email (no TTY in command
+#                              module), so this closes the first-run gap.
 #   6. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
 #                              (no-op inside WSL since self_register made no edits)
 #
@@ -57,9 +61,13 @@
 
 set -euo pipefail
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'
-BOLD='\033[1m'; DIM='\033[2m'; RESET='\033[0m'
+# ANSI-C quoting ($'...') stores the actual ESC byte at assignment time, so
+# these work in `echo` (with or without -e), `printf`, AND here-docs/cat.
+# Plain '\033[...]' would only work with `echo -e`, breaking the here-doc
+# in print_recap_legend below (which printed the literal bytes).
+RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'; CYAN=$'\033[0;36m'; MAGENTA=$'\033[0;35m'
+BOLD=$'\033[1m'; DIM=$'\033[2m'; RESET=$'\033[0m'
 
 log()  { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
 ok()   { echo -e "${GREEN} ✓${RESET} $*"; }
@@ -383,6 +391,52 @@ run_playbook() {
 }
 
 # =============================================================================
+# 4.5. ENSURE CHEZMOI IS INITIALIZED — run `chezmoi init --apply` once.
+#
+# Ansible installed the chezmoi binary but cannot run `chezmoi init` itself:
+# `.chezmoi.toml.tmpl` calls promptStringOnce for name/email, and Ansible's
+# `command` module has no TTY for the prompts. So dotfiles.yml runs only
+# `chezmoi update` (pull + apply), gated on the config file's existence.
+#
+# That leaves a first-run gap: chezmoi config doesn't exist yet, so the
+# update task is skipped, and the dotfiles never land. This function closes
+# the gap by running `chezmoi init --apply` interactively after the playbook
+# finishes, with stdin explicitly redirected from /dev/tty so prompts also
+# work under `curl … | bash` (where script stdin is the curl pipe).
+#
+# Idempotent: if the config file already exists, returns immediately.
+# =============================================================================
+ensure_chezmoi_initialized() {
+  local chezmoi_bin
+  chezmoi_bin=$(command -v chezmoi || true)
+  if [[ -z "$chezmoi_bin" ]]; then
+    warn "chezmoi binary not on PATH after the playbook — dotfiles not applied."
+    warn "Run manually: chezmoi init --apply --source $CHEZMOI_SOURCE"
+    return 0
+  fi
+
+  local config="$HOME/.config/chezmoi/chezmoi.toml"
+  if [[ -f "$config" ]]; then
+    ok "chezmoi already initialized ($config)"
+    return 0
+  fi
+
+  if [[ ! -r /dev/tty ]]; then
+    warn "No TTY — skipping chezmoi init. Run interactively after this script:"
+    warn "  $chezmoi_bin init --apply --source $CHEZMOI_SOURCE"
+    return 0
+  fi
+
+  log "First-time chezmoi setup — prompting for name/email..."
+  if "$chezmoi_bin" init --apply --source "$CHEZMOI_SOURCE" </dev/tty; then
+    ok "chezmoi initialized + dotfiles applied"
+  else
+    warn "chezmoi init failed. Inspect with: chezmoi diff --source $CHEZMOI_SOURCE"
+    return 0
+  fi
+}
+
+# =============================================================================
 # 5. PUSH HOST CHANGES — commit hosts.conf + inventory + wezterm, push upstream
 #    Warn-don't-fail: the playbook already succeeded, so we never abort here.
 # =============================================================================
@@ -488,6 +542,7 @@ fi
 self_register
 ensure_ansible
 run_playbook
+ensure_chezmoi_initialized
 push_host_changes
 
 echo ""
