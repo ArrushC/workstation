@@ -22,7 +22,7 @@ Two separate provisioning layers, intentionally decoupled:
 | Provisioning | **Ansible** (`ansible/`) | Locally on a host, or against remote hosts | Optional — controlled by `tool_scope` and `has_sudo` |
 | Dotfiles | **chezmoi** (`chezmoi/`) | On each host as the dev user | No |
 
-Ansible owns **all** installations. `bootstrap.sh` is a thin seed: it clones the repo, installs `ansible-core` via `pip3 --user` if missing, then runs `playbooks/local.yml` against the local machine. There is no duplicate install logic between the script and the role — adding a new tool means editing `tools.yml` (and bumping its version in `group_vars/all.yml`), nothing else.
+Ansible drives **provisioning** but delegates **tool installs** to a parallel Makefile under `scripts/install/`. `bootstrap.sh` is a thin seed: it clones the repo, installs `ansible-core` via `pip3 --user` if missing, then runs `playbooks/local.yml`. The playbook handles dnf packages, PATH setup, chezmoi orchestration — and for static-binary tool installs (the ~55 things that used to be per-tool `unarchive`/`get_url` blocks in `tools.yml`), it calls `make -j8 all` inside `scripts/install/`. That Makefile is now the single source of truth for tool versions, URLs, and per-tool quirks. Adding a new tool means editing two lines (`scripts/install/versions.mk` + `scripts/install/tools.mk`), nothing else.
 
 User-space tools (`fzf`, `zellij`, `helix`, etc.) are **always** installed as static binaries — never via `dnf` — but the **destination** is controlled by the `tool_scope` variable, which is set per host from its group_vars file:
 
@@ -33,7 +33,7 @@ User-space tools (`fzf`, `zellij`, `helix`, etc.) are **always** installed as st
 
 The values live in `ansible/group_vars/{dev,prod}_machine.yml` — single source of truth. The remote `linux.yml` playbook picks them up automatically per host; `bootstrap.sh` loads the same file via `-e "@group_vars/<group>.yml"` for the local self-provisioning run.
 
-`tool_scope=system` requires `has_sudo=true`; the role fails fast with a clear message otherwise. The same task definitions in `tools.yml` cover both scopes via `dest: "{{ tools_dest }}"` + `become: "{{ tools_become }}"`, both resolved in `tasks/main.yml` from `tool_scope`.
+`tool_scope=system` requires `has_sudo=true`; the role fails fast with a clear message otherwise. `tools.yml` is now a thin shim that invokes `make -j8 all` in `scripts/install/` with `DEST={{ tools_dest }}` and `become: "{{ tools_become }}"` — the same Makefile handles both scopes by reading `DEST` from the environment. Helix's runtime tree is handled by passing `HELIX_RUNTIME_DEST` separately (helix is the only tool that lays down more than just a binary).
 
 ## Repo layout
 
@@ -49,12 +49,22 @@ workstation/
 │
 ├── scripts/
 │   ├── manage-hosts.sh           ← Linux host manager
-│   └── manage-hosts.ps1          ← Windows host manager (feature-parity)
+│   ├── manage-hosts.ps1          ← Windows host manager (feature-parity)
+│   └── install/                  ← Makefile-driven tool installer (called from tools.yml)
+│       ├── Makefile              ← orchestration + TOOL/USER_TOOL macros + phony targets
+│       ├── versions.mk           ← single source of truth for tool versions
+│       ├── tools.mk              ← per-tool install rules (one $(eval $(call ...)) line each)
+│       └── lib/
+│           ├── archive.sh        ← curl + extract + find-and-install (tar.gz/bz2/xz/zip)
+│           ├── direct.sh         ← curl + chmod for raw binary URLs
+│           ├── pipe.sh           ← curl-piped upstream installers (chezmoi, claude)
+│           ├── pip.sh            ← pip install --user wrapper
+│           └── helix.sh          ← multi-file: binary + runtime/ tree (special-cased)
 │
-├── ansible/                      ← all provisioning lives here
+├── ansible/                      ← provisioning + dotfiles orchestration
 │   ├── ansible.cfg
 │   ├── group_vars/
-│   │   ├── all.yml               ← dev_user, dotfiles_repo, tool versions (single source of truth)
+│   │   ├── all.yml               ← dev_user, dotfiles_repo, system-package lists
 │   │   ├── dev_machine.yml       ← scope vars for sudo/system-wide hosts (tool_scope=system, has_sudo=true)
 │   │   └── prod_machine.yml      ← scope vars for no-sudo/user-wide hosts (tool_scope=user, has_sudo=false)
 │   ├── inventory/hosts.ini       ← AUTO-GENERATED — never edit
@@ -67,7 +77,7 @@ workstation/
 │       └── tasks/
 │           ├── main.yml          ← validates + resolves scope vars, then orchestrates
 │           ├── packages.yml      ← dnf (sudo)
-│           ├── tools.yml         ← static binaries; honors tool_scope (user/system)
+│           ├── tools.yml         ← thin wrapper: `make -C scripts/install all/user-tools/claude-cli`
 │           ├── shell.yml         ← PATH via /etc/profile.d (sudo fallback to ~/.bashrc)
 │           └── dotfiles.yml      ← chezmoi init/update --apply (uses tools_dest)
 │
@@ -203,9 +213,9 @@ If `is_wsl()` ever needs to distinguish WSL 1 from WSL 2 or distro families, ext
 
 ## Tool versions — single source of truth
 
-All tool versions live in `ansible/group_vars/all.yml` (`fzf_version`, `zoxide_version`, `starship_version`, `zellij_version`, `glow_version`, `helix_version`, `chezmoi_version`). `bootstrap.sh` contains no version pins — it just hands off to Ansible. To bump a tool, edit one file. To add a new tool, add an install task in `ansible/roles/linux-base/tasks/tools.yml` and the corresponding `<name>_version` variable in `group_vars/all.yml`.
+All tool versions live in `scripts/install/versions.mk` (`FZF_VERSION`, `ZOXIDE_VERSION`, etc. — one uppercase variable per tool). `bootstrap.sh` and Ansible have no version pins. To bump a tool, edit `versions.mk`; the version is baked into the stamp filename at `$STAMP/<tool>-<version>.done`, so changing it invalidates the old stamp and triggers reinstall on the next `make all`. To add a new tool, add a `<NAME>_VERSION := X.Y.Z` line to `versions.mk` plus one `$(eval $(call TOOL,...))` line to `tools.mk` — pick the helper that matches the tool's release shape (`archive.sh` / `direct.sh` / `pip.sh` / `pipe.sh` / `helix.sh`).
 
-The historical `bootstrap.sh` `*_VERSION` constants have been removed; do not re-introduce per-tool variables to the shell script.
+The historical `bootstrap.sh` `*_VERSION` constants and the `*_version:` entries in `group_vars/all.yml` have been removed; do not re-introduce per-tool variables to either file.
 
 ## Ansible role: `linux-base`
 
@@ -238,7 +248,7 @@ For local self-provisioning (or any ad-hoc one-off), pass the group_vars file as
 
 Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the group_vars source of truth and quietly diverge from what the remote playbook would do to the same host.
 
-`tools.yml` uses `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"` on every install task, so a single set of task definitions covers both scopes. The Helix runtime is the one special case — it goes to `helix_runtime_dest`, which is `~/.config/helix/runtime` for user scope and `/usr/local/lib/helix/runtime` for system scope (both are paths Helix searches by default).
+`tools.yml` is a three-task wrapper around `scripts/install/Makefile`: it runs `make all DEST={{ tools_dest }} HELIX_RUNTIME_DEST={{ helix_runtime_dest }}` under `become: "{{ tools_become }}"`, then `make user-tools` without become (for the pip-installed Python tools), then `make claude-cli` without become and only when `tool_scope == 'system'` (preserves the historical dev_machine-only gate for the Claude Code CLI). The Helix runtime tree (`helix_runtime_dest`) is the one special case — `~/.config/helix/runtime` for user scope, `/usr/local/lib/helix/runtime` for system scope (both are paths Helix searches by default). `scripts/install/lib/helix.sh` handles the binary+runtime split.
 
 `shell.yml` writes PATH to `/etc/profile.d/local-bin.sh` when `has_sudo`, otherwise `lineinfile`-appends `export PATH=...` to `~/.bashrc`. `dotfiles.yml` checks for an existing `chezmoi_source/.git` to decide between `chezmoi init --apply` and `chezmoi update`, and finds the `chezmoi` binary via `tools_dest` (so it works with either scope).
 
@@ -292,9 +302,10 @@ When in doubt, ask: "Would a user reading only `README.html` still be able to se
 |---|---|---|
 | Added `tool_scope=system` support | **Yes** | Install scopes table + `-e "tool_scope=system"` example under Daily Ansible workflow |
 | Renamed `manage-hosts.sh --sync` to `--regen` | **Yes** | Replace every command example, add a one-line "renamed from `--sync`" note for one release |
-| Added `direnv` to `tools.yml` + `direnv_version` | **Yes** | Add `direnv` to Stack table; show how `tool_scope` controls its destination |
-| Bumped `fzf_version: 0.54.0` → `0.55.0` | No | Versions live in `group_vars/all.yml` only |
-| Refactored `tasks/tools.yml` to deduplicate the helix block | No | No CLI surface changed |
+| Added `direnv` (one line in `tools.mk` + `DIRENV_VERSION` in `versions.mk`) | **Yes** | Add `direnv` to Stack table; show how `tool_scope` controls its destination |
+| Bumped `FZF_VERSION` in `versions.mk` | No | Versions live in `scripts/install/versions.mk` only |
+| Refactored `lib/archive.sh` to deduplicate extraction logic | No | No CLI surface changed |
+| Migrated tools.yml's per-tool blocks into `scripts/install/Makefile` (this commit) | **Yes** | Rewrote "Adding a tool" + "Bumping a version" sections in README.html; removed the YAML example; added the Makefile example. |
 | Added a new optional `-e "ansible_python_interpreter=..."` override | **Yes** | Add a "When to set this" note under Daily Ansible workflow |
 | Added a wezterm keybind (e.g. `CTRL+SHIFT+H` cheatsheet) | **Yes** | Mention it under the Windows section so users know it exists |
 | Added `--copy-id` / `-CopyId` to manage-hosts | **Yes** | New "Copy SSH key" subsection with both shells + a tip line in the post-bootstrap message |
@@ -317,8 +328,8 @@ When in doubt, ask: "Would a user reading only `README.html` still be able to se
 - **Never edit the wezterm SSH-domains block by hand** between the sentinel comments — it gets clobbered on the next sync.
 - **Don't fixed-width-pad `hosts.conf`.** The save routine recalculates widths from data; manual padding gets normalised.
 - **`scripts/manage-hosts.sh` and `scripts/manage-hosts.ps1` are a parity pair.** Every user-visible capability — flags, menu options, prompts, default values, post-add flow, output glyphs — MUST exist in both. When you change one, change the other in the same commit. The two scripts produce identical output for the same `hosts.conf`; that invariant is load-bearing because either side regenerates `inventory/hosts.ini` and the wezterm sentinel block. Drift between them silently breaks reproducibility across Linux/Windows.
-- **All tool installs live in Ansible (`tasks/tools.yml`).** Never re-introduce per-tool install logic or version pins in `bootstrap.sh` — adding a tool there creates exactly the kind of drift this layout was rebuilt to eliminate. The shell script is a seed, nothing more.
-- **Tool versions live only in `ansible/group_vars/all.yml`.** One file, one bump.
+- **All tool installs live in `scripts/install/Makefile`** (one `$(eval $(call TOOL,...))` line per tool in `tools.mk`, version in `versions.mk`). Ansible's `tools.yml` is a thin wrapper that invokes `make`. Never re-introduce per-tool install logic anywhere else — neither in `bootstrap.sh` nor as new per-tool YAML blocks in `tools.yml`.
+- **Tool versions live only in `scripts/install/versions.mk`.** One file, one bump. The version is baked into the stamp filename, so changes auto-trigger reinstall on the next `make` run.
 - **The chezmoi source dir is `chezmoi/`**, not the repo root. New dotfiles go under `chezmoi/home/` or `chezmoi/dot_config/`.
 - **Per-machine overrides go in `~/.bashrc.local` on each host** — un-tracked, sourced last by the templated bashrc.
 - **`wezterm.lua` is chezmoi-tracked but NOT deployed to `%USERPROFILE%`.** The chezmoi source at `chezmoi/dot_config/wezterm/wezterm.lua` is the canonical file, and `.chezmoiignore.tmpl` skips `dot_config/wezterm` on Windows so chezmoi never writes a copy under `%USERPROFILE%\.config\wezterm\`. Instead, `bootstrap.ps1` sets a User-scope environment variable **`WEZTERM_CONFIG_FILE`** pointing at the chezmoi source path — WezTerm reads the repo file directly. `automatically_reload_config` still picks up edits live (including from `manage-hosts.ps1 -Sync` rewriting the sentinel block). This replaces the pre-v2 hardlink hack, which broke whenever chezmoi atomic-wrote the target on a content mismatch. If a user ever unsets `WEZTERM_CONFIG_FILE`, WezTerm falls back to its default search path — `bootstrap.ps1` also cleans up the legacy home-path copy on each run so a stale fallback can't silently win.
@@ -361,9 +372,15 @@ Adding a host:
 2. From the Windows host or another machine, `git pull` and run `--sync` (or commit and push from the host, then pull elsewhere) so the inventory and `chezmoi/dot_config/wezterm/wezterm.lua` block update. On Windows, also run `chezmoi apply` (or the `cza` alias) to push the new wezterm config into `%USERPROFILE%\.config\wezterm\`.
 
 Adding a tool:
-1. Add an install task in `ansible/roles/linux-base/tasks/tools.yml` using `dest: "{{ tools_dest }}"` and `become: "{{ tools_become }}"`.
-2. Add `<name>_version: "X.Y.Z"` to `ansible/group_vars/all.yml`.
-3. If the tool has user-facing CLI surface, mention it in `README.html` (see "README.html must mirror user-facing changes").
+1. Add `<NAME>_VERSION := X.Y.Z` to `scripts/install/versions.mk`.
+2. Add one `$(eval $(call TOOL,...))` line to `scripts/install/tools.mk` — pick the helper that matches the release shape:
+   - `$(LIB)/archive.sh <binary[:other_binary:...]> <url>` for tar.gz/tar.bz2/tar.xz/zip (covers ~85% of tools, including multi-binary ones like `age:age-keygen` or `yazi:ya`).
+   - `$(LIB)/direct.sh <name> <url>` for raw binary URLs (jq, broot, sops).
+   - `$(LIB)/pipe.sh <name> <url> [-- <installer args>]` for upstream `curl | sh` installers (chezmoi takes `-b $(DEST)`).
+   - `$(LIB)/pip.sh <pkg>` for Python tools — register via `USER_TOOL` macro instead of `TOOL`, so it goes into `make user-tools` (no sudo, always `~/.local`).
+   - `$(LIB)/helix.sh <version>` if the tool is helix-shaped (binary + a runtime tree). Currently helix only.
+3. Test before pushing: `cd scripts/install && make <name> DEST=/tmp/test STAMP=/tmp/test-stamps`. Re-run should be a no-op (no `==>` line). For multi-binary tools, verify every binary lands in `/tmp/test/`.
+4. If the tool has user-facing CLI surface, mention it in `README.html` (see "README.html must mirror user-facing changes").
 
 ## Files Claude should be careful with
 
@@ -371,7 +388,10 @@ Adding a tool:
 - `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block — auto-gen between `-- HOSTS:START` / `-- HOSTS:END` sentinels by both manage-hosts scripts. Edit anywhere outside the sentinels freely. On Windows, edits to this file appear in WezTerm immediately because `bootstrap.ps1` sets `WEZTERM_CONFIG_FILE` to point at this file directly; on Linux hosts without WezTerm the file is ignored by chezmoi.
 - `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding (and sort order) until next save. Column 4 (group) must be `dev_machine` or `prod_machine` — the manage-hosts scripts reject anything else on save.
 - `.chezmoiroot` — one-line file at the repo root containing `chezmoi`. Required for chezmoi's source state to point at the `chezmoi/` subdirectory; without it, all `dot_*` paths break. Don't delete or edit.
-- `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `ansible/group_vars/all.yml`; install logic lives only in `ansible/roles/linux-base/tasks/tools.yml`. Scope values (tool_scope, has_sudo, install_system_packages) must NOT be inlined — they come from `ansible/group_vars/<group>.yml` via `-e "@..."`. If `bootstrap.sh` and the group_vars file ever disagree on scope, fix the group_vars file.
+- `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `scripts/install/versions.mk`; install logic lives only in `scripts/install/tools.mk` + `lib/*.sh`. Scope values (tool_scope, has_sudo, install_system_packages) must NOT be inlined — they come from `ansible/group_vars/<group>.yml` via `-e "@..."`. If `bootstrap.sh` and the group_vars file ever disagree on scope, fix the group_vars file.
+- `scripts/install/Makefile` and `tools.mk` — the install machinery. The Makefile defines two macros (`TOOL` / `USER_TOOL`) plus a bespoke `claude-cli` rule; `tools.mk` is the per-tool data file. Recipe lines in the Makefile MUST be tab-indented (not spaces) — Make is strict. The TOOL macro's body uses `$$` to defer variable expansion to rule-fire time; don't switch to single `$` without testing.
+- `scripts/install/versions.mk` — single source of truth for tool versions. Variables are uppercase (`FZF_VERSION`, `GITUI_VERSION`, etc.) and consumed by URL templates in `tools.mk`. Use `latest` for tools that have no upstream version pin (broot, nb, pip packages).
+- `scripts/install/lib/*.sh` — install helpers. All shell scripts here MUST remain LF-only (same trap as `manage-hosts.sh`); `file scripts/install/lib/archive.sh` should say "Bourne-Again shell script", NOT "with CRLF line terminators". Repair with `sed -i 's/\r$//' scripts/install/lib/*.sh`.
 - `ansible/group_vars/dev_machine.yml` and `ansible/group_vars/prod_machine.yml` — single source of truth for per-group scope. Used by both the remote `linux.yml` playbook (automatically) and `bootstrap.sh` (via `-e "@..."`). Adding a new scope-level variable means adding it to both files (or to `group_vars/all.yml` if it's shared).
 - `chezmoi/.chezmoiignore.tmpl` — wrong entries here cause `chezmoi apply` to drop infrastructure files into `$HOME` (or to skip files you wanted applied). Edit-then-test: `chezmoi diff` on a sandbox host/Windows machine before pushing.
 - `scripts/manage-hosts.ps1` and `bootstrap.ps1` **must remain UTF-8 with BOM**. PowerShell 5.1 (Windows PowerShell, the default `powershell.exe`) reads scripts as Windows-1252 unless a BOM is present, and both files contain Unicode glyphs (`✓`, `✗`, `─`) used in colored output. Without the BOM, PS 5.1 mis-decodes the multi-byte UTF-8 and the script fails to parse with cryptic "string missing terminator" errors. To restore the BOM after a tool overwrites it: `[System.IO.File]::WriteAllText($path, [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($path)), [System.Text.UTF8Encoding]::new($true))`.
@@ -384,6 +404,8 @@ After changes:
 - `cd ansible && ansible-playbook playbooks/linux.yml --check` — dry-run on every managed host. Each host should resolve its own scope from its `group_vars/<group>.yml` (prod_machine hosts skip `packages.yml` since `install_system_packages=false`).
 - `cd ansible && ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"` — dry-run the local playbook in prod scope.
 - `cd ansible && ansible-playbook playbooks/local.yml --check -e "@group_vars/dev_machine.yml"` — dry-run in dev scope (plans dnf installs to `/usr/local/bin`).
+- `cd scripts/install && make list` — should show every managed tool grouped by target: ~55 scope-tools, 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call TOOL,...))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced in the call wasn't defined in `versions.mk`.
+- `cd scripts/install && make -j8 all DEST=/tmp/install-test HELIX_RUNTIME_DEST=/tmp/helix-rt STAMP=/tmp/install-test-stamps` — full install to a sandbox. Should finish in 25-30s on a reasonable connection; `ls /tmp/install-test | wc -l` ≈ 59 (the extra 4 are the multi-binary companions: `age-keygen`, `sg`, `ya`, `uvx`). Re-running the same command should be a sub-second no-op.
 - `./bootstrap.sh` with no flags must error out (no default). `./bootstrap.sh --dev --prod` must error out (mutually exclusive). `./bootstrap.sh --full` must error out with a clear "use --dev or --prod" message.
 - `./scripts/manage-hosts.sh --add --name t --ip 1.2.3.4 --user u --group foo --skip-confirm` must reject `foo` with a "must be dev_machine or prod_machine" error. The PowerShell side (`-Add -Group foo`) must reject the same way.
 - `chezmoi diff` on a host (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm) plus the cross-platform `.ssh/config`; on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc) plus the cross-platform `.ssh/config`.

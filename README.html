@@ -99,10 +99,13 @@
                     <p class="lede">
                         Dev-environment provisioning for Linux hosts, plus the
                         WezTerm config that connects to them from Windows.
-                        Ansible owns <strong>all</strong> installs (system
-                        packages, user-space tools, and the chezmoi handoff for
-                        dotfiles); <code>bootstrap.sh</code> is a thin seed.
-                        Adding a tool is a one-file edit.
+                        Ansible orchestrates system packages, PATH, and the
+                        chezmoi handoff for dotfiles; static-binary tool
+                        installs are delegated to a parallel
+                        <code>Makefile</code> under
+                        <code>scripts/install/</code>.
+                        <code>bootstrap.sh</code> is a thin seed.
+                        Adding a tool is a two-line edit.
                     </p>
 
                     <div class="hero-quickstart">
@@ -236,8 +239,10 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 
                     <h3 id="toolbelt">Toolbelt</h3>
                     <p class="lede">
-                        CLI tools installed on every host via
-                        <code>ansible/roles/linux-base/tasks/tools.yml</code>.
+                        CLI tools installed on every host via the
+                        <code>scripts/install/Makefile</code>
+                        (invoked from
+                        <code>ansible/roles/linux-base/tasks/tools.yml</code>).
                         Default install is a static binary on both
                         <code>dev_machine</code> and <code>prod_machine</code>.
                         Scope tags: <code>(dnf)</code> =
@@ -1196,6 +1201,41 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                             >
                                         </li>
                                     </ul>
+                                    <details>
+                                        <summary>install/</summary>
+                                        <ul>
+                                            <li>
+                                                Makefile
+                                                <span class="note"
+                                                    >&mdash; orchestration,
+                                                    TOOL/USER_TOOL macros,
+                                                    phony targets</span
+                                                >
+                                            </li>
+                                            <li>
+                                                versions.mk
+                                                <span class="note"
+                                                    >&mdash; tool versions
+                                                    (SoT)</span
+                                                >
+                                            </li>
+                                            <li>
+                                                tools.mk
+                                                <span class="note"
+                                                    >&mdash; per-tool rules
+                                                    (one line each)</span
+                                                >
+                                            </li>
+                                            <li>
+                                                lib/
+                                                <span class="note"
+                                                    >&mdash; archive.sh /
+                                                    direct.sh / pipe.sh /
+                                                    pip.sh / helix.sh</span
+                                                >
+                                            </li>
+                                        </ul>
+                                    </details>
                                 </details>
                                 <details open>
                                     <summary>
@@ -1225,8 +1265,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                             <li>
                                                 all.yml
                                                 <span class="note"
-                                                    >&mdash; shared vars + tool
-                                                    versions (SoT)</span
+                                                    >&mdash; shared vars
+                                                    (dev_user, dotfiles_repo,
+                                                    system packages)</span
                                                 >
                                             </li>
                                             <li>
@@ -1292,9 +1333,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                 <li>
                                                     tools.yml
                                                     <span class="note"
-                                                        >&mdash; static
-                                                        binaries; honours
-                                                        tool_scope</span
+                                                        >&mdash; thin wrapper:
+                                                        invokes
+                                                        scripts/install/Makefile</span
                                                     >
                                                 </li>
                                                 <li>
@@ -2278,44 +2319,69 @@ ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"</
                     <h2>Adding tools &amp; hosts</h2>
 
                     <h3>Adding a new tool</h3>
-                    <p>One place to edit, not two:</p>
+                    <p>
+                        Two files, one line each. Tool installs live in
+                        <code>scripts/install/</code> — Ansible's
+                        <code>tools.yml</code> just runs
+                        <code>make -j8 all</code> there.
+                    </p>
                     <ol>
                         <li>
-                            Add an install task in
-                            <code>ansible/roles/linux-base/tasks/tools.yml</code
-                            >. Use <code>dest: "{{ tools_dest }}"</code> and
-                            <code>become: "{{ tools_become }}"</code> &mdash;
-                            the role resolves these from
-                            <code>tool_scope</code>.
+                            Pin the version in
+                            <code>scripts/install/versions.mk</code>.
                         </li>
                         <li>
-                            Pin the version in
-                            <code>ansible/group_vars/all.yml</code>.
+                            Add one
+                            <code>$(eval $(call TOOL,...))</code> line in
+                            <code>scripts/install/tools.mk</code>, picking
+                            the helper that matches the release shape:
+                            <code>archive.sh</code> (tar/zip),
+                            <code>direct.sh</code> (raw binary URL),
+                            <code>pipe.sh</code> (curl-piped installer),
+                            <code>pip.sh</code> (Python user-site, register
+                            as <code>USER_TOOL</code>), or
+                            <code>helix.sh</code> (multi-file special).
                         </li>
                     </ol>
-                    <pre><code># --- direnv ----------------------------------------------------------------
-- name: "Install direnv"
-  ansible.builtin.get_url:
-    url: "https://github.com/direnv/direnv/releases/download/v{{ direnv_version }}/direnv.linux-amd64"
-    dest: "{{ tools_dest }}/direnv"
-    mode: "0755"
-  args:
-    creates: "{{ tools_dest }}/direnv"
-  become: "{{ tools_become }}"</code></pre>
-                    <pre><code># group_vars/all.yml
-direnv_version: "2.34.0"</code></pre>
+                    <pre><code># scripts/install/versions.mk
+DIRENV_VERSION := 2.34.0</code></pre>
+                    <pre><code># scripts/install/tools.mk
+$(eval $(call TOOL,direnv,$(DIRENV_VERSION),\
+  $(LIB)/direct.sh direnv https://github.com/direnv/direnv/releases/download/v$(DIRENV_VERSION)/direnv.linux-amd64))</code></pre>
                     <p class="note-row">
-                        Both user and system scope work automatically.
-                        <strong>Do not</strong> add tool-specific logic or
-                        version pins to <code>bootstrap.sh</code>.
+                        Both user and system scope work automatically &mdash;
+                        the Makefile reads <code>DEST</code> from the
+                        environment (Ansible passes
+                        <code>tools_dest</code>). <strong>Do not</strong> add
+                        tool-specific logic to <code>bootstrap.sh</code> or
+                        re-introduce per-tool Ansible tasks.
                     </p>
+                    <p>
+                        Sanity-test before pushing:
+                    </p>
+                    <pre><code>cd scripts/install
+make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps
+ls /tmp/install-test/direnv            # binary present?
+make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run: no output (stamp protected)</code></pre>
 
                     <h3>Bumping a tool version</h3>
                     <p>
-                        Edit <code>ansible/group_vars/all.yml</code>, change one
-                        line, commit. The next <code>ansible-playbook</code> run
-                        picks up the new version. No second file to keep in
-                        sync.
+                        Edit one line in
+                        <code>scripts/install/versions.mk</code> and commit.
+                        The version is baked into the stamp filename at
+                        <code>$STAMP/&lt;tool&gt;-&lt;version&gt;.done</code>,
+                        so the change invalidates the old stamp; the next
+                        <code>make all</code> redownloads the new release
+                        automatically. No <code>make clean</code> needed.
+                    </p>
+                    <p>
+                        Multi-binary tools (e.g.
+                        <code>yazi</code>+<code>ya</code>,
+                        <code>age</code>+<code>age-keygen</code>) use a
+                        colon-separated binary spec in the
+                        <code>archive.sh</code> call; each name listed gets
+                        installed independently. See
+                        <code>scripts/install/tools.mk</code> for examples.
                     </p>
 
                     <h3>Adding a new host</h3>
