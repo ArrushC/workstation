@@ -538,8 +538,9 @@
     src: "https://github.com/eza-community/eza/releases/download/v{{ eza_version }}/eza_x86_64-unknown-linux-musl.tar.gz"
     dest: "{{ tools_dest }}"
     remote_src: true
-    include:
-      - eza
+    # No `include:` — the tarball packs the binary as `./eza`, which doesn't
+    # match a literal `eza` filter and makes unarchive fall through every
+    # extractor probe (same trap as gitui — see comment on that task).
     mode: "0755"
   args:
     creates: "{{ tools_dest }}/eza"
