@@ -390,13 +390,18 @@
 # =============================================================================
 
 # --- gitui (gitui-org/gitui) ------------------------------------------------
+# The release tarball packs the binary as `./gitui` (with a leading `./`).
+# An `include: [gitui]` filter looks for the literal entry `gitui` and misses
+# the `./gitui` path, which makes unarchive fall through all of its extractor
+# probes (unzip/bzip2/xz) and fail with a confusing "End-of-central-directory
+# signature not found". Since the archive contains only the binary, we just
+# drop the filter and extract everything — tar normalizes `./gitui` to
+# `{{ tools_dest }}/gitui` on disk, which is what `creates:` already expects.
 - name: "Install gitui"
   ansible.builtin.unarchive:
     src: "https://github.com/gitui-org/gitui/releases/download/v{{ gitui_version }}/gitui-linux-x86_64.tar.gz"
     dest: "{{ tools_dest }}"
     remote_src: true
-    include:
-      - gitui
     mode: "0755"
   args:
     creates: "{{ tools_dest }}/gitui"
