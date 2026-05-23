@@ -58,12 +58,33 @@
 set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; BOLD='\033[1m'; RESET='\033[0m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'
+BOLD='\033[1m'; DIM='\033[2m'; RESET='\033[0m'
 
 log()  { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
 ok()   { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
 fail() { echo -e "${RED} ✗${RESET} $*"; exit 1; }
+
+# Glossary for Ansible's PLAY RECAP counts. Printed right after each
+# ansible-playbook run (success OR failure) so users can decode the
+# `ok=… changed=… failed=…` line without leaving the terminal. Category
+# names are colored to match Ansible's own recap output (green ok,
+# yellow changed, red failed/unreachable, cyan skipped, …).
+print_recap_legend() {
+  cat <<EOF
+
+${BOLD}PLAY RECAP legend${RESET} ${DIM}(decodes the counts on the line above)${RESET}
+  ${GREEN}ok${RESET}           task ran and made no changes (state already matched, or read-only)
+  ${YELLOW}changed${RESET}      task made a modification (installed, wrote, downloaded)
+  ${RED}failed${RESET}       task errored — aborts further tasks on that host (unless rescued/ignored)
+  ${CYAN}skipped${RESET}      conditional was false (when:, or creates:/stat showed already-installed)
+  ${RED}unreachable${RESET}  could not connect to the host (network, SSH, inventory)
+  ${MAGENTA}rescued${RESET}      task failed but was caught by a rescue: block (try/except)
+  ${YELLOW}ignored${RESET}      task failed but had ignore_errors: true, so the play continued
+
+EOF
+}
 
 # WSL detection — used to skip hosts.conf self-registration and the SSH
 # copy-id tip. WSL distros are accessed via wezterm WSL domains (not SSH),
@@ -339,15 +360,25 @@ Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
 run_playbook() {
   cd "$CHEZMOI_SOURCE/ansible"
 
+  # Capture exit status so we can always print the recap legend below,
+  # then re-fail with the original code if ansible-playbook errored.
+  # `set -e` would otherwise short-circuit before the legend gets a chance.
+  local rc=0
   if [[ "$MACHINE_TYPE" == "dev" ]]; then
     log "Dev mode — system-wide install (sudo) from ${GROUP_VARS_FILE}"
     ansible-playbook playbooks/local.yml \
       -e "@${GROUP_VARS_FILE}" \
-      --ask-become-pass
+      --ask-become-pass || rc=$?
   else
     log "Prod mode — user-scope install (no sudo) from ${GROUP_VARS_FILE}"
     ansible-playbook playbooks/local.yml \
-      -e "@${GROUP_VARS_FILE}"
+      -e "@${GROUP_VARS_FILE}" || rc=$?
+  fi
+
+  print_recap_legend
+
+  if [[ $rc -ne 0 ]]; then
+    fail "ansible-playbook exited with code $rc — see the PLAY RECAP and task output above"
   fi
 }
 
