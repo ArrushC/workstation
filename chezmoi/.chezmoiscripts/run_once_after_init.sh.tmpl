@@ -1,6 +1,11 @@
+{{ if eq .chezmoi.os "linux" -}}
 #!/usr/bin/env bash
 # run_once_after_init.sh — chezmoi runs this exactly once after first apply
 # Sets up nb notebook and any first-time config
+#
+# .tmpl gate: on non-Linux this renders to an empty file, and chezmoi skips
+# zero-byte scripts. .chezmoiignore does NOT apply to .chezmoiscripts/, so
+# the OS gate must live in the script itself.
 
 set -euo pipefail
 
@@ -17,3 +22,4 @@ fi
 
 # Set bash as default shell hint (can't chsh without root, but record preference)
 echo "Bootstrap complete on $(hostname) at $(date)" >> "$HOME/.local/share/chezmoi-init.log"
+{{- end }}

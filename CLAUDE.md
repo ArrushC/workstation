@@ -75,7 +75,7 @@ workstation/
     ├── .chezmoi.toml.tmpl        ← prompts for name/email on first init
     ├── .chezmoiignore.tmpl       ← OS-aware: ignores Linux-only on Windows, vice versa
     ├── .chezmoiscripts/
-    │   └── run_once_after_init.sh   ← inits ~/notes for nb (Linux only)
+    │   └── run_once_after_init.sh.tmpl   ← inits ~/notes for nb (Linux only — renders empty on Windows)
     ├── dot_bashrc.tmpl           ← → ~/.bashrc       (Linux)
     ├── dot_gitconfig.tmpl        ← → ~/.gitconfig    (cross-platform)
     ├── dot_nbrc                  ← → ~/.nbrc         (Linux)
@@ -251,8 +251,8 @@ Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the grou
   - `Documents/PowerShell/X` → `%USERPROFILE%\Documents\PowerShell\X` (Windows-only).
   - `private_X` prefix enforces restrictive Unix mode (file = 0600, dir = 0700) — required for `~/.ssh/` since OpenSSH on both Linux and Windows refuses world-readable config/keys. Example: `private_dot_ssh/private_config` → `~/.ssh/config` at 0600 inside `~/.ssh/` at 0700.
   - Trailing `.tmpl` triggers Go-template rendering.
-  - `.chezmoiscripts/run_once_after_init.sh` runs once after first `chezmoi apply`; rename to re-run on a new host.
-- Cross-platform OS gating is in `.chezmoiignore.tmpl`. On Windows it ignores Linux-only files (`dot_bashrc.tmpl`, `dot_nbrc`, `dot_config/helix`, `dot_config/zellij`, `.chezmoiscripts/run_once_after_init.sh`); on Linux it ignores Windows-only paths (`AppData`, `Documents`, `dot_config/wezterm`). Per-machine override files (`dot_bashrc.local`, PowerShell `*.local.ps1` variants) are always ignored.
+  - `.chezmoiscripts/run_once_after_init.sh.tmpl` runs once after first `chezmoi apply`; rename to re-run on a new host. The `.tmpl` gates the body with `{{ if eq .chezmoi.os "linux" }}...{{ end }}` so on Windows it renders to an empty file and chezmoi skips zero-byte scripts. **`.chezmoiignore` does NOT apply to entries under `.chezmoiscripts/`** — chezmoi treats scripts specially (they have no destination path), so OS gating has to live inside the script via `.tmpl`, not in `.chezmoiignore.tmpl`.
+- Cross-platform OS gating is in `.chezmoiignore.tmpl`. On Windows it ignores Linux-only files (`dot_bashrc.tmpl`, `dot_nbrc`, `dot_config/helix`, `dot_config/zellij`); on Linux it ignores Windows-only paths (`AppData`, `Documents`, `dot_config/wezterm`). Per-machine override files (`dot_bashrc.local`, PowerShell `*.local.ps1` variants) are always ignored. The Linux-only chezmoiscript is NOT in this list — it's gated inside the script itself (see above).
 - Variables available in templates:
   - `{{ .name }}`, `{{ .email }}` — populated by `promptStringOnce` in `.chezmoi.toml.tmpl` on first init.
   - `{{ .chezmoi.hostname }}`, `{{ .chezmoi.username }}`, `{{ .chezmoi.os }}` — built-in.

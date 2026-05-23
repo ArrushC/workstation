@@ -17,7 +17,10 @@ dot_bashrc.tmpl
 dot_nbrc
 dot_config/helix
 dot_config/zellij
-.chezmoiscripts/run_once_after_init.sh
+# .chezmoiscripts/ entries cannot be ignored via .chezmoiignore — chezmoi
+# treats scripts specially (no destination path). The Linux-only init script
+# is gated inside the file via .tmpl with an OS-conditional that renders
+# the body only on linux; chezmoi skips zero-byte scripts.
 # wezterm.lua: bootstrap.ps1 sets a User-scope WEZTERM_CONFIG_FILE env var
 # pointing at the chezmoi source directly, so WezTerm reads the repo file
 # without chezmoi needing to deploy a copy to %USERPROFILE%\.config\wezterm\.

@@ -2,8 +2,8 @@
 # Prompts are only asked once; answers stored in chezmoi's config.
 
 [data]
-    name     = "{{ promptStringOnce . \"name\" \"Full name\" }}"
-    email    = "{{ promptStringOnce . \"email\" \"Email address\" }}"
+    name     = "{{ promptStringOnce . "name" "Full name" }}"
+    email    = "{{ promptStringOnce . "email" "Email address" }}"
     hostname = "{{ .chezmoi.hostname }}"
     os       = "{{ .chezmoi.os }}"
 
