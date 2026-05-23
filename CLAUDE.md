@@ -117,6 +117,8 @@ Linux:
 ./scripts/manage-hosts.sh --add --name N --ip I --user U --group G --skip-confirm
 ./scripts/manage-hosts.sh --remove
 ./scripts/manage-hosts.sh --copy-id --name N    # copy ~/.ssh/id_ed25519.pub to host N
+./scripts/manage-hosts.sh --copy-id --all       # copy to every host in hosts.conf (prompts confirm)
+./scripts/manage-hosts.sh --copy-id --all --skip-confirm   # bulk, scripted (no prompt)
 ```
 
 Windows (feature-equivalent):
@@ -128,9 +130,11 @@ Windows (feature-equivalent):
 .\scripts\manage-hosts.ps1 -Add -Name N -Ip I -User U -Group G -SkipConfirm
 .\scripts\manage-hosts.ps1 -Remove
 .\scripts\manage-hosts.ps1 -CopyId -Name N      # copy %USERPROFILE%\.ssh\id_ed25519.pub
+.\scripts\manage-hosts.ps1 -CopyId -All         # bulk copy to every host (prompts confirm)
+.\scripts\manage-hosts.ps1 -CopyId -All -SkipConfirm
 ```
 
-`--copy-id` / `-CopyId`: looks up the host in `hosts.conf`, prompts to generate `~/.ssh/id_ed25519` (passphrase-less) if missing, then either uses native `ssh-copy-id` (Linux) or emulates it via `ssh user@host "mkdir -p ~/.ssh && cat >> authorized_keys && ..."` (Windows OpenSSH ships no `ssh-copy-id`). Successful `--add` prints a tip line pointing at this command.
+`--copy-id` / `-CopyId`: looks up the host in `hosts.conf`, prompts to generate `~/.ssh/id_ed25519` (passphrase-less) if missing, then either uses native `ssh-copy-id` (Linux) or emulates it via `ssh user@host "mkdir -p ~/.ssh && cat >> authorized_keys && ..."` (Windows OpenSSH ships no `ssh-copy-id`). Successful `--add` prints a tip line pointing at this command. The `--all` / `-All` variant loops over every host in `hosts.conf`, calls `ensure_ssh_key` (the keygen prompt) exactly once up front, then per-host prints `name (user@ip)... ✓` or `✗` and ends with an `N successful / M failed` summary. The loop is deliberately best-effort — partial success is normal (one host offline, password fatigue, etc.) — so it exits 0 even with failures. Pair with `--skip-confirm` / `-SkipConfirm` for scripted bulk runs.
 
 The two scripts produce **the same output** for the same `hosts.conf`. The banner in `ansible/inventory/hosts.ini` records which one regenerated it last (handy when debugging line-ending or formatting drift).
 
@@ -293,6 +297,7 @@ When in doubt, ask: "Would a user reading only `README.html` still be able to se
 | Added a new optional `-e "ansible_python_interpreter=..."` override | **Yes** | Add a "When to set this" note under Daily Ansible workflow |
 | Added a wezterm keybind (e.g. `CTRL+SHIFT+H` cheatsheet) | **Yes** | Mention it under the Windows section so users know it exists |
 | Added `--copy-id` / `-CopyId` to manage-hosts | **Yes** | New "Copy SSH key" subsection with both shells + a tip line in the post-bootstrap message |
+| Added bulk `--copy-id --all` / `-CopyId -All` to manage-hosts (menu option 6, renumbers 7-9) | **Yes** | Existing "Copy SSH key" subsection gets new code-block lines for the bulk form in both shells, plus a one-sentence note that the loop is best-effort and per-host status is shown live. |
 | Reordered `bootstrap.sh` flow (self-register before Ansible) | **Yes** | Setup section explains the new order and the auto-commit+push step |
 | Added `GITHUB_TOKEN` + `GIT_USER_NAME` + `GIT_USER_EMAIL` env-var support to `bootstrap.sh` | **Yes** | Setup section shows the labelled per-machine one-liner, the env-var purpose table, and a troubleshooting entry for clone-failure recovery. Token kept as `<your-PAT>` placeholder; identity values can be concrete to your real setup since the repo is single-user. |
 | Added `bootstrap.ps1` for the Windows client side | **Yes** | Setup → On Windows section shows the `irm \| iex` one-liner with `$env:GITHUB_TOKEN`, calls out that it must run elevated, lists the five-step flow (preflight → choco install → clone → chezmoi apply → ssh-key), and documents the flags. |

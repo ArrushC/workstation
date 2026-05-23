@@ -14,6 +14,7 @@
 #   .\scripts\manage-hosts.ps1 -Remove
 #   .\scripts\manage-hosts.ps1 -Add  -Name N -Ip I -User U -Group G [-SkipConfirm]
 #   .\scripts\manage-hosts.ps1 -CopyId [-Name N]
+#   .\scripts\manage-hosts.ps1 -CopyId -All [-SkipConfirm]
 #
 # This script is feature-paired with scripts/manage-hosts.sh — every
 # capability (flags, prompts, post-add flow) MUST be kept in lockstep.
@@ -30,6 +31,7 @@ param(
     [switch]$Add,
     [switch]$Remove,
     [switch]$CopyId,
+    [switch]$All,
     [string]$Name,
     [string]$Ip,
     [string]$User      = "",
@@ -454,6 +456,51 @@ function Edit-HostEntry {
     Invoke-SyncAll
 }
 
+# Ensure %USERPROFILE%\.ssh\id_ed25519.pub exists; prompt to ssh-keygen if
+# missing. Calls Write-Fail if the user declines. Returns the pubkey path.
+# Single-host Invoke-CopyId and bulk Invoke-CopyIdAll both call this once
+# at the top so the keygen prompt only ever fires zero or one times.
+function Invoke-EnsureSshKey {
+    $privKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
+    $pubKey  = "$privKey.pub"
+
+    if (Test-Path $pubKey) { return $pubKey }
+
+    Write-Warn "No SSH key at $privKey"
+    $ans = Read-Host "  Generate one now? [y/N]"
+    if ($ans -match '^[Yy]') {
+        $sshDir = Split-Path $privKey -Parent
+        if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+        ssh-keygen -t ed25519 -f $privKey -N '""' -C "$env:USERNAME@$env:COMPUTERNAME"
+        if ($LASTEXITCODE -ne 0) { Write-Fail "ssh-keygen failed" }
+        Write-Ok "Generated $privKey"
+        return $pubKey
+    } else {
+        Write-Fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
+    }
+}
+
+# Push the local pubkey to <User>@<Ip>. Returns $true on success, $false
+# on failure. Windows OpenSSH ships no ssh-copy-id, so we always emulate
+# it via ssh + remote mkdir/chmod. Caller decides whether to abort
+# (single-host) or continue (bulk).
+function Invoke-DoCopySshId {
+    param(
+        [string]$User,
+        [string]$Ip,
+        [string]$PubKey
+    )
+
+    $keyContent = (Get-Content $PubKey -Raw).Trim()
+    $remoteCmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && " +
+                 "echo '$keyContent' >> ~/.ssh/authorized_keys && " +
+                 "sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && " +
+                 "chmod 600 ~/.ssh/authorized_keys"
+
+    ssh "$User@$Ip" $remoteCmd
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Invoke-CopyId {
     param([string]$TargetName)
 
@@ -472,38 +519,61 @@ function Invoke-CopyId {
     }
 
     $target = $hosts | Where-Object { $_.Name -eq $TargetName } | Select-Object -First 1
+    $pubKey = Invoke-EnsureSshKey
 
-    $privKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
-    $pubKey  = "$privKey.pub"
-
-    if (-not (Test-Path $pubKey)) {
-        Write-Warn "No SSH key at $privKey"
-        $ans = Read-Host "  Generate one now? [y/N]"
-        if ($ans -match '^[Yy]') {
-            $sshDir = Split-Path $privKey -Parent
-            if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
-            ssh-keygen -t ed25519 -f $privKey -N '""' -C "$env:USERNAME@$env:COMPUTERNAME"
-            if ($LASTEXITCODE -ne 0) { Write-Fail "ssh-keygen failed" }
-            Write-Ok "Generated $privKey"
-        } else {
-            Write-Fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
-        }
-    }
-
-    $keyContent = (Get-Content $pubKey -Raw).Trim()
     Write-Log "Copying $pubKey to $($target.User)@$($target.Ip)..."
-
-    # Windows OpenSSH ships no ssh-copy-id — emulate it manually.
-    $remoteCmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && " +
-                 "echo '$keyContent' >> ~/.ssh/authorized_keys && " +
-                 "sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && " +
-                 "chmod 600 ~/.ssh/authorized_keys"
-
-    ssh "$($target.User)@$($target.Ip)" $remoteCmd
-    if ($LASTEXITCODE -eq 0) {
+    if (Invoke-DoCopySshId -User $target.User -Ip $target.Ip -PubKey $pubKey) {
         Write-Ok "Key copied to $($target.User)@$($target.Ip)"
     } else {
         Write-Fail "ssh failed (exit $LASTEXITCODE) -- check connectivity, password, sshd"
+    }
+}
+
+# Bulk: copy the local pubkey to every host in hosts.conf. Loop is
+# deliberately best-effort -- partial success is normal (some hosts
+# offline, password fatigue, key already installed). Final summary lists
+# failures.
+function Invoke-CopyIdAll {
+    param([bool]$NoConfirm = $false)
+
+    Write-Header "Copy SSH key to ALL hosts"
+
+    $hosts = Read-Hosts
+    if (-not $hosts) { Write-Warn "No hosts in hosts.conf"; return }
+
+    Show-Hosts
+
+    $count = ($hosts | Measure-Object).Count
+
+    if (-not $NoConfirm) {
+        $confirm = Read-Host "  Copy SSH key to all $count hosts? [Y/n]"
+        if (-not $confirm) { $confirm = "Y" }
+        if ($confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
+    }
+
+    $pubKey = Invoke-EnsureSshKey
+    Write-Host ""
+
+    $okCount   = 0
+    $failCount = 0
+    $failed    = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($h in $hosts) {
+        Write-Host "  ${Bold}$($h.Name)${Reset} ($($h.User)@$($h.Ip))... " -NoNewline
+        if (Invoke-DoCopySshId -User $h.User -Ip $h.Ip -PubKey $pubKey) {
+            Write-Host "${Green}✓${Reset}"
+            $okCount++
+        } else {
+            Write-Host "${Red}✗${Reset}"
+            $failed.Add($h.Name)
+            $failCount++
+        }
+    }
+
+    Write-Host ""
+    Write-Ok "$okCount host(s) successful"
+    if ($failCount -gt 0) {
+        Write-Warn "$failCount host(s) failed: $($failed -join ', ')"
     }
 }
 
@@ -559,9 +629,10 @@ function Show-Menu {
     Write-Host "  ${Bold}3)${Reset} Edit host"
     Write-Host "  ${Bold}4)${Reset} Test SSH connection"
     Write-Host "  ${Bold}5)${Reset} Copy SSH key"
-    Write-Host "  ${Bold}6)${Reset} Sync configs"
-    Write-Host "  ${Bold}7)${Reset} View hosts.conf"
-    Write-Host "  ${Bold}8)${Reset} Reformat hosts.conf"
+    Write-Host "  ${Bold}6)${Reset} Copy SSH key to ALL hosts"
+    Write-Host "  ${Bold}7)${Reset} Sync configs"
+    Write-Host "  ${Bold}8)${Reset} View hosts.conf"
+    Write-Host "  ${Bold}9)${Reset} Reformat hosts.conf"
     Write-Host "  ${Bold}q)${Reset} Quit"
     Write-Host ""
     $choice = Read-Host "Choice"
@@ -572,9 +643,10 @@ function Show-Menu {
         "3" { Edit-HostEntry }
         "4" { Test-SshConnection }
         "5" { Invoke-CopyId }
-        "6" { Invoke-SyncAll }
-        "7" { Get-Content $HostsConf }
-        "8" { Invoke-FormatHosts }
+        "6" { Invoke-CopyIdAll }
+        "7" { Invoke-SyncAll }
+        "8" { Get-Content $HostsConf }
+        "9" { Invoke-FormatHosts }
         "q" { Write-Host "Bye."; exit 0 }
         default { Write-Warn "Unknown option: $choice" }
     }
@@ -590,7 +662,15 @@ if ($Sync)   { Invoke-SyncAll; exit 0 }
 if ($Format) { Invoke-FormatHosts; exit 0 }
 if ($List)   { Show-Hosts; exit 0 }
 if ($Remove) { Remove-HostEntry; exit 0 }
-if ($CopyId) { Invoke-CopyId -TargetName $Name; exit 0 }
+if ($CopyId) {
+    if ($All.IsPresent) {
+        # -All wins over -Name if both are passed
+        Invoke-CopyIdAll -NoConfirm $SkipConfirm.IsPresent
+    } else {
+        Invoke-CopyId -TargetName $Name
+    }
+    exit 0
+}
 
 if ($Add) {
     Add-Host `

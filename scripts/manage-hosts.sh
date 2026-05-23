@@ -15,6 +15,7 @@
 #   ./scripts/manage-hosts.sh --remove
 #   ./scripts/manage-hosts.sh --add  --name N --ip I --user U --group G [--skip-confirm]
 #   ./scripts/manage-hosts.sh --copy-id [--name N]
+#   ./scripts/manage-hosts.sh --copy-id --all [--skip-confirm]
 #
 # This script is feature-paired with scripts/manage-hosts.ps1 — every
 # capability (flags, prompts, post-add flow) MUST be kept in lockstep.
@@ -487,6 +488,48 @@ edit_host() {
   fi
 }
 
+# Ensure ~/.ssh/id_ed25519.pub exists; prompt to ssh-keygen if missing.
+# Calls fail() if the user declines — single-host copy_ssh_id and bulk
+# copy_ssh_id_all both rely on this happening exactly once at the top.
+ensure_ssh_key() {
+  local privkey="$HOME/.ssh/id_ed25519"
+  local pubkey="$HOME/.ssh/id_ed25519.pub"
+
+  [[ -f "$pubkey" ]] && return 0
+
+  warn "No SSH key at $privkey"
+  read -rp "  Generate one now? [y/N]: " ans
+  if [[ "$ans" =~ ^[Yy]$ ]]; then
+    mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+    ssh-keygen -t ed25519 -f "$privkey" -N "" -C "$(whoami)@$(hostname -s)" \
+      || fail "ssh-keygen failed"
+    ok "Generated $privkey"
+  else
+    fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
+  fi
+}
+
+# Push the local pubkey to <user>@<ip>. Returns 0 on success, non-zero on
+# failure — caller decides whether to abort (single-host) or continue
+# (bulk). Stderr/stdout are NOT swallowed so password prompts and useful
+# error text still reach the user.
+do_copy_ssh_id() {
+  local user="$1" ip="$2"
+  local pubkey="$HOME/.ssh/id_ed25519.pub"
+
+  if command -v ssh-copy-id &>/dev/null; then
+    ssh-copy-id -i "$pubkey" "${user}@${ip}"
+  else
+    # Manual fallback for distros without ssh-copy-id
+    local key_content
+    key_content=$(cat "$pubkey")
+    ssh "${user}@${ip}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+echo '$key_content' >> ~/.ssh/authorized_keys && \
+sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && \
+chmod 600 ~/.ssh/authorized_keys"
+  fi
+}
+
 copy_ssh_id() {
   local target="${1:-}"
 
@@ -506,37 +549,66 @@ copy_ssh_id() {
   line=$(read_hosts | awk -v n="$target" '$1==n {print; exit}')
   read -r _ ip user _ <<< "$line"
 
-  local privkey="$HOME/.ssh/id_ed25519"
-  local pubkey="$HOME/.ssh/id_ed25519.pub"
+  ensure_ssh_key
 
-  if [[ ! -f "$pubkey" ]]; then
-    warn "No SSH key at $privkey"
-    read -rp "  Generate one now? [y/N]: " ans
-    if [[ "$ans" =~ ^[Yy]$ ]]; then
-      mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
-      ssh-keygen -t ed25519 -f "$privkey" -N "" -C "$(whoami)@$(hostname -s)" \
-        || fail "ssh-keygen failed"
-      ok "Generated $privkey"
-    else
-      fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
-    fi
-  fi
-
-  log "Copying $pubkey to ${user}@${ip}..."
-  if command -v ssh-copy-id &>/dev/null; then
-    ssh-copy-id -i "$pubkey" "${user}@${ip}" \
-      || fail "ssh-copy-id failed (check connectivity, password, sshd config)"
+  log "Copying $HOME/.ssh/id_ed25519.pub to ${user}@${ip}..."
+  if do_copy_ssh_id "$user" "$ip"; then
+    ok "Key copied to ${user}@${ip}"
   else
-    # Manual fallback for distros without ssh-copy-id
-    local key_content
-    key_content=$(cat "$pubkey")
-    ssh "${user}@${ip}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
-echo '$key_content' >> ~/.ssh/authorized_keys && \
-sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && \
-chmod 600 ~/.ssh/authorized_keys" \
-      || fail "Remote key install failed"
+    fail "Copy failed (check connectivity, password, sshd config)"
   fi
-  ok "Key copied to ${user}@${ip}"
+}
+
+# Bulk: copy the local pubkey to every host in hosts.conf. Loop is
+# deliberately best-effort — partial success is normal (some hosts offline,
+# password fatigue, key already installed). Final summary lists failures.
+copy_ssh_id_all() {
+  local skip_confirm="${1:-false}"
+
+  header "Copy SSH key to ALL hosts"
+
+  local hosts
+  hosts=$(read_hosts)
+  if [[ -z "$hosts" ]]; then
+    warn "No hosts in hosts.conf"
+    return
+  fi
+
+  print_hosts
+
+  local count
+  count=$(echo "$hosts" | wc -l | tr -d ' ')
+
+  if [[ "$skip_confirm" != "true" ]]; then
+    read -rp "  Copy SSH key to all $count hosts? [Y/n]: " confirm
+    confirm="${confirm:-Y}"
+    [[ ! "$confirm" =~ ^[Yy]$ ]] && { warn "Aborted."; return; }
+  fi
+
+  ensure_ssh_key
+  echo ""
+
+  local ok_count=0 fail_count=0
+  local failed=()
+  local name ip user
+  while IFS= read -r line; do
+    read -r name ip user _ <<< "$line"
+    echo -ne "  ${BOLD}${name}${RESET} (${user}@${ip})... "
+    if do_copy_ssh_id "$user" "$ip" >/dev/null 2>&1; then
+      echo -e "${GREEN}✓${RESET}"
+      ((ok_count++)) || true
+    else
+      echo -e "${RED}✗${RESET}"
+      failed+=("$name")
+      ((fail_count++)) || true
+    fi
+  done <<< "$hosts"
+
+  echo ""
+  ok "$ok_count host(s) successful"
+  if (( fail_count > 0 )); then
+    warn "$fail_count host(s) failed: ${failed[*]}"
+  fi
 }
 
 test_host() {
@@ -589,9 +661,10 @@ show_menu() {
   echo -e "  ${BOLD}3)${RESET} Edit host"
   echo -e "  ${BOLD}4)${RESET} Test SSH connection"
   echo -e "  ${BOLD}5)${RESET} Copy SSH key"
-  echo -e "  ${BOLD}6)${RESET} Sync configs (regenerate inventory + wezterm.lua)"
-  echo -e "  ${BOLD}7)${RESET} View hosts.conf"
-  echo -e "  ${BOLD}8)${RESET} Reformat hosts.conf"
+  echo -e "  ${BOLD}6)${RESET} Copy SSH key to ALL hosts"
+  echo -e "  ${BOLD}7)${RESET} Sync configs (regenerate inventory + wezterm.lua)"
+  echo -e "  ${BOLD}8)${RESET} View hosts.conf"
+  echo -e "  ${BOLD}9)${RESET} Reformat hosts.conf"
   echo -e "  ${BOLD}q)${RESET} Quit"
   echo ""
   read -rp "Choice: " choice
@@ -603,9 +676,10 @@ show_menu() {
     3) edit_host ;;
     4) test_host ;;
     5) copy_ssh_id ;;
-    6) sync_all ;;
-    7) cat "$HOSTS_CONF" ;;
-    8) format_hosts ;;
+    6) copy_ssh_id_all ;;
+    7) sync_all ;;
+    8) cat "$HOSTS_CONF" ;;
+    9) format_hosts ;;
     q|Q) echo "Bye."; exit 0 ;;
     *) warn "Unknown option: $choice" ;;
   esac
@@ -627,13 +701,22 @@ case "${1:-}" in
   --copy-id)
     shift
     cid_name=""
+    cid_all=false
+    cid_skip_confirm=false
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --name) cid_name="$2"; shift 2 ;;
-        *)      shift ;;
+        --name)         cid_name="$2";       shift 2 ;;
+        --all)          cid_all=true;        shift   ;;
+        --skip-confirm) cid_skip_confirm=true; shift ;;
+        *)              shift ;;
       esac
     done
-    copy_ssh_id "$cid_name"
+    if [[ "$cid_all" == true ]]; then
+      # --all wins over --name if both are passed
+      copy_ssh_id_all "$cid_skip_confirm"
+    else
+      copy_ssh_id "$cid_name"
+    fi
     exit 0
     ;;
   "")
@@ -644,7 +727,7 @@ case "${1:-}" in
   *)
     echo "Usage: $0 [--sync | --list | --format | --remove"
     echo "          | --add [--name N --ip I --user U --group G --skip-confirm]"
-    echo "          | --copy-id [--name N]]"
+    echo "          | --copy-id [--name N | --all [--skip-confirm]]]"
     exit 1
     ;;
 esac

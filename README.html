@@ -2049,12 +2049,16 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="os-card linux">
                             <span class="os-label">Linux</span>
                             <pre><code>./scripts/manage-hosts.sh --copy-id --name dev-01  # explicit
-./scripts/manage-hosts.sh --copy-id                # interactive picker</code></pre>
+./scripts/manage-hosts.sh --copy-id                # interactive picker
+./scripts/manage-hosts.sh --copy-id --all          # bulk: every host in hosts.conf
+./scripts/manage-hosts.sh --copy-id --all --skip-confirm   # bulk, scripted</code></pre>
                         </div>
                         <div class="os-card windows">
                             <span class="os-label">Windows</span>
                             <pre><code>.\scripts\manage-hosts.ps1 -CopyId -Name dev-01    # explicit
-.\scripts\manage-hosts.ps1 -CopyId                 # interactive picker</code></pre>
+.\scripts\manage-hosts.ps1 -CopyId                 # interactive picker
+.\scripts\manage-hosts.ps1 -CopyId -All            # bulk: every host
+.\scripts\manage-hosts.ps1 -CopyId -All -SkipConfirm</code></pre>
                         </div>
                     </div>
                     <ul>
@@ -2075,6 +2079,25 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             method that de-duplicates the file. Windows always
                             uses the manual method (no
                             <code>ssh-copy-id</code> in Windows OpenSSH).
+                        </li>
+                        <li>
+                            <strong>Bulk
+                                (<code>--all</code>&nbsp;/&nbsp;<code>-All</code>):</strong>
+                            menu option <strong>6</strong>, or the flag above.
+                            Loops over every host in <code>hosts.conf</code>;
+                            the keygen prompt fires at most once, then each
+                            host prints
+                            <code
+                                ><kbd>name</kbd>
+                                (user@ip)&hellip;&nbsp;✓</code
+                            >
+                            or <code>✗</code> live. Final summary lists any
+                            failures. The loop is <em>best-effort</em> &mdash;
+                            a single failed host (offline, password fatigue,
+                            key already present blocking append) does
+                            <em>not</em> abort the run, and the exit code is
+                            still 0. Useful right after bootstrapping a fresh
+                            client.
                         </li>
                         <li>
                             After a successful <code>--add</code>, both scripts
