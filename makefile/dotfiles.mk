@@ -29,5 +29,8 @@ dotfiles:
 	else \
 	  "$(CHEZMOI_BIN)" init --no-tty >/dev/null 2>&1 || true; \
 	  printf '==> chezmoi update\n'; \
+	  printf '    if prompted ("<file> has changed since chezmoi last wrote it?"), pick:\n'; \
+	  printf '      d=diff (delta)   m=merge (vimdiff)   o=overwrite this   a=overwrite all\n'; \
+	  printf '      s=skip (keep your version)   q=quit (abort update)\n'; \
 	  "$(CHEZMOI_BIN)" update --source "$(CHEZMOI_SOURCE)"; \
 	fi
