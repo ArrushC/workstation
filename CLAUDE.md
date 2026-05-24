@@ -9,37 +9,37 @@ Guidance for Claude Code working on this repository.
 - One **Windows host** (WezTerm config that auto-connects to the Linux hosts).
 
 The repo is consumed three ways:
-1. **From a Linux host** — clone, run `bootstrap.sh --dev` or `bootstrap.sh --prod`. The script seeds Ansible (via `pip3 install --user ansible-core` if missing), runs `playbooks/local.yml` with `-e "@group_vars/<group>.yml"`, and self-registers the host in `hosts.conf` under the chosen group.
+1. **From a Linux host** — clone, run `bootstrap.sh --dev` or `bootstrap.sh --prod`. The script preflight-checks the toolchain (curl/git/make/tar/unzip/iproute), self-registers the host in `hosts.conf` under the chosen group, then runs `make MODE=dev|prod provision` inside `makefile/` — which handles dnf packages, PATH wiring, ~55 tool installs, and chezmoi orchestration in one parallel pass.
 2. **From the Windows host** — `bootstrap.ps1` (run from an **elevated** PowerShell) bootstraps Chocolatey, installs tooling via `choco` (chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode), clones the repo, and runs `chezmoi init --apply` to deploy `wezterm.lua`, the PowerShell profile, Zed/VSCode settings, etc. into `%USERPROFILE%\…`. Choco rather than winget because winget's PATH propagation is unreliable mid-session and leaves freshly-installed binaries unresolvable to the next step.
-3. **From an ops machine** — run Ansible against every managed host at once via `playbooks/linux.yml` (targets `dev_machine:prod_machine`).
+3. **From an ops machine** — run `scripts/update-hosts.sh --group dev_machine` (or `--group prod_machine`, or no flag for all hosts) to ssh into every managed host in parallel and re-run `git pull && make provision`. Replaces the pre-migration `ansible-playbook playbooks/linux.yml --limit …` workflow.
 
 ## Layered architecture
 
-Two separate provisioning layers, intentionally decoupled:
+Two separate concerns, intentionally decoupled:
 
-| Layer | Tool | Where it runs | Needs sudo? |
+| Concern | Tool | Where it runs | Needs sudo? |
 |---|---|---|---|
-| Provisioning | **Ansible** (`ansible/`) | Locally on a host, or against remote hosts | Optional — controlled by `tool_scope` and `has_sudo` |
+| Provisioning | **Make** (`makefile/`) | Locally on a host (bootstrap.sh) or remotely (update-hosts.sh) | Per-recipe via `$(SUDO)` — empty for prod, `sudo` for dev |
 | Dotfiles | **chezmoi** (`chezmoi/`) | On each host as the dev user | No |
 
-Ansible drives **provisioning** but delegates **tool installs** to a parallel Makefile under `scripts/install/`. `bootstrap.sh` is a thin seed: it clones the repo, installs `ansible-core` via `pip3 --user` if missing, then runs `playbooks/local.yml`. The playbook handles dnf packages, PATH setup, chezmoi orchestration — and for static-binary tool installs (the ~55 things that used to be per-tool `unarchive`/`get_url` blocks in `tools.yml`), it calls `make -j8 all` inside `scripts/install/`. That Makefile is now the single source of truth for tool versions, URLs, and per-tool quirks. Adding a new tool means editing two lines (`scripts/install/versions.mk` + `scripts/install/tools.mk`), nothing else.
+Make drives **everything** under `makefile/`: dnf packages (`packages.mk`), PATH wiring (`shell.mk`), ~55 tool installs (`tools.mk` + `lib/*.sh`), chezmoi orchestration (`dotfiles.mk`), and scope-fact derivation (`scope.mk`). `bootstrap.sh` is a thin seed: it clones the repo, self-registers the host, then runs `make MODE=<dev|prod> provision` inside `makefile/`. Adding a new tool is two lines: one `<NAME>_VERSION` in `versions.mk` and one `$(eval $(call TOOL,...))` in `tools.mk`.
 
-User-space tools (`fzf`, `zellij`, `helix`, etc.) are **always** installed as static binaries — never via `dnf` — but the **destination** is controlled by the `tool_scope` variable, which is set per host from its group_vars file:
+User-space tools (`fzf`, `zellij`, `helix`, etc.) are **always** installed as static binaries — never via `dnf` — but the **destination** is controlled by `MODE`, which is set per host based on its group in `hosts.conf`:
 
-| Group | `tool_scope` | `has_sudo` | `install_system_packages` | Binary destination | Helix runtime |
+| Group | `MODE` | sudo? | dnf packages | Binary destination | Helix runtime |
 |---|---|---|---|---|---|
-| `dev_machine` | `system` | `true` | `true` | `/usr/local/bin` | `/usr/local/lib/helix/runtime` |
-| `prod_machine` | `user` | `false` | `false` | `~/.local/bin` | `~/.config/helix/runtime` |
+| `dev_machine` | `dev` | yes | installed | `/usr/local/bin` | `/usr/local/lib/helix/runtime` |
+| `prod_machine` | `prod` | no | skipped (no sudo) | `~/.local/bin` | `~/.config/helix/runtime` |
 
-The values live in `ansible/group_vars/{dev,prod}_machine.yml` — single source of truth. The remote `linux.yml` playbook picks them up automatically per host; `bootstrap.sh` loads the same file via `-e "@group_vars/<group>.yml"` for the local self-provisioning run.
+The mapping is resolved in `makefile/scope.mk` — single source of truth. `bootstrap.sh` picks `MODE` from its `--dev` / `--prod` flag, and `scripts/update-hosts.sh` derives `MODE` per host from the group column of `hosts.conf`.
 
-`tool_scope=system` requires `has_sudo=true`; the role fails fast with a clear message otherwise. `tools.yml` is now a thin shim that invokes `make -j8 all` in `scripts/install/` with `DEST={{ tools_dest }}` and `become: "{{ tools_become }}"` — the same Makefile handles both scopes by reading `DEST` from the environment. Helix's runtime tree is handled by passing `HELIX_RUNTIME_DEST` separately (helix is the only tool that lays down more than just a binary).
+`MODE=dev` parse-time-errors out unless sudo is available (system scope without sudo is impossible). The `$(SUDO)` prefix is threaded through the `TOOL` macro so individual recipe lines that write to `/usr/local/bin` get root, while make itself runs as the dev user end-to-end — pip user-site tools and the claude installer never accidentally get sudo'd. Helix's runtime tree is handled by `lib/helix.sh` (the only tool that lays down more than just a binary).
 
 ## Repo layout
 
 ```
 workstation/
-├── bootstrap.sh                  ← Linux host entry point — thin Ansible seed
+├── bootstrap.sh                  ← Linux host entry point — thin Make seed
 ├── bootstrap.ps1                 ← Windows client entry point — choco tools + chezmoi apply (elevated)
 ├── .chezmoiroot                  ← contains "chezmoi" — redirects chezmoi's source state to the chezmoi/ subdir
 ├── hosts.conf                    ← single source of truth for host list
@@ -48,38 +48,24 @@ workstation/
 ├── README.js                     ← behavior for README.html (theme toggle, scroll-spy TOC, search, filter UIs)
 │
 ├── scripts/
-│   ├── manage-hosts.sh           ← Linux host manager
+│   ├── manage-hosts.sh           ← Linux host manager (CRUD hosts.conf + regenerate wezterm sentinel block)
 │   ├── manage-hosts.ps1          ← Windows host manager (feature-parity)
-│   └── install/                  ← Makefile-driven tool installer (called from tools.yml)
-│       ├── Makefile              ← orchestration + TOOL/USER_TOOL macros + phony targets
-│       ├── versions.mk           ← single source of truth for tool versions
-│       ├── tools.mk              ← per-tool install rules (one $(eval $(call ...)) line each)
-│       └── lib/
-│           ├── archive.sh        ← curl + extract + find-and-install (tar.gz/bz2/xz/zip)
-│           ├── direct.sh         ← curl + chmod for raw binary URLs
-│           ├── pipe.sh           ← curl-piped upstream installers (chezmoi, claude)
-│           ├── pip.sh            ← pip install --user wrapper
-│           └── helix.sh          ← multi-file: binary + runtime/ tree (special-cased)
+│   └── update-hosts.sh           ← multi-host updater — ssh-loop over hosts.conf, runs `git pull && make provision`
 │
-├── ansible/                      ← provisioning + dotfiles orchestration
-│   ├── ansible.cfg
-│   ├── group_vars/
-│   │   ├── all.yml               ← dev_user, dotfiles_repo, system-package lists
-│   │   ├── dev_machine.yml       ← scope vars for sudo/system-wide hosts (tool_scope=system, has_sudo=true)
-│   │   └── prod_machine.yml      ← scope vars for no-sudo/user-wide hosts (tool_scope=user, has_sudo=false)
-│   ├── inventory/hosts.ini       ← AUTO-GENERATED — never edit
-│   ├── playbooks/
-│   │   ├── linux.yml             ← targets dev_machine:prod_machine (control-machine flow)
-│   │   └── local.yml             ← targets localhost (used by bootstrap.sh; loads group_vars via -e "@...")
-│   └── roles/linux-base/
-│       ├── defaults/main.yml     ← install_*, has_sudo, tool_scope, arch
-│       ├── handlers/main.yml
-│       └── tasks/
-│           ├── main.yml          ← validates + resolves scope vars, then orchestrates
-│           ├── packages.yml      ← dnf (sudo)
-│           ├── tools.yml         ← thin wrapper: `make -C scripts/install all/user-tools/claude-cli`
-│           ├── shell.yml         ← PATH via /etc/profile.d (sudo fallback to ~/.bashrc)
-│           └── dotfiles.yml      ← chezmoi init/update --apply (uses tools_dest)
+├── makefile/                     ← provisioning (replaces the old ansible/ tree)
+│   ├── Makefile                  ← top-level: include & provision/dev/prod targets + TOOL/USER_TOOL macros
+│   ├── scope.mk                  ← MODE=dev|prod → DEST / SUDO / HAS_SUDO / INSTALL_PACKAGES
+│   ├── versions.mk               ← single source of truth for tool versions
+│   ├── tools.mk                  ← per-tool install rules (one $(eval $(call ...)) line each)
+│   ├── packages.mk               ← dnf core + EPEL (RHEL-family) + optional best-effort loop
+│   ├── shell.mk                  ← PATH via /etc/profile.d (sudo) or ~/.bashrc (no sudo); bash-completion
+│   ├── dotfiles.mk               ← `chezmoi update` gated on ~/.config/chezmoi/chezmoi.toml existing
+│   └── lib/
+│       ├── archive.sh            ← curl + extract + find-and-install (tar.gz/bz2/xz/zip)
+│       ├── direct.sh             ← curl + chmod for raw binary URLs
+│       ├── pipe.sh               ← curl-piped upstream installers (chezmoi, claude)
+│       ├── pip.sh                ← pip install --user wrapper
+│       └── helix.sh              ← multi-file: binary + runtime/ tree (special-cased)
 │
 └── chezmoi/                      ← chezmoi source state (set by .chezmoiroot at repo root)
     ├── .chezmoi.toml.tmpl        ← prompts for name/email on first init
@@ -109,19 +95,20 @@ workstation/
 
 `hosts.conf` lists hosts. Format: 4 whitespace-separated columns — `name  ip  user  group`. Comments (`#`) are preserved at the top of the file. **Both manage-hosts scripts re-pad column widths dynamically on every save** — never hand-pad to fixed widths.
 
-`hosts.conf` is the only file you edit. Two outputs are regenerated from it:
+`hosts.conf` is the only file you edit. One output is regenerated from it:
 
 | Output | Generated by | Marker |
 |---|---|---|
-| `ansible/inventory/hosts.ini` | full overwrite, banner at top | `# AUTO-GENERATED by scripts/manage-hosts.{sh,ps1}` |
 | `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block | in-place replace between sentinels | `-- HOSTS:START` / `-- HOSTS:END` |
+
+`scripts/update-hosts.sh` also reads `hosts.conf` directly (no separate inventory file) — it parses the group column to derive `MODE=dev|prod` per host when running bulk updates.
 
 ### Host management commands
 
 Linux:
 ```bash
 ./scripts/manage-hosts.sh                # interactive menu
-./scripts/manage-hosts.sh --sync         # regenerate inventory + wezterm block
+./scripts/manage-hosts.sh --sync         # regenerate wezterm sentinel block
 ./scripts/manage-hosts.sh --list         # print table
 ./scripts/manage-hosts.sh --format       # re-pad hosts.conf
 ./scripts/manage-hosts.sh --add --name N --ip I --user U --group G --skip-confirm
@@ -146,7 +133,7 @@ Windows (feature-equivalent):
 
 `--copy-id` / `-CopyId`: looks up the host in `hosts.conf`, prompts to generate `~/.ssh/id_ed25519` (passphrase-less) if missing, then either uses native `ssh-copy-id` (Linux) or emulates it via `ssh user@host "mkdir -p ~/.ssh && cat >> authorized_keys && ..."` (Windows OpenSSH ships no `ssh-copy-id`). Successful `--add` prints a tip line pointing at this command. The `--all` / `-All` variant loops over every host in `hosts.conf`, calls `ensure_ssh_key` (the keygen prompt) exactly once up front, then per-host prints `name (user@ip)... ✓` or `✗` and ends with an `N successful / M failed` summary. The loop is deliberately best-effort — partial success is normal (one host offline, password fatigue, etc.) — so it exits 0 even with failures. Pair with `--skip-confirm` / `-SkipConfirm` for scripted bulk runs.
 
-The two scripts produce **the same output** for the same `hosts.conf`. The banner in `ansible/inventory/hosts.ini` records which one regenerated it last (handy when debugging line-ending or formatting drift).
+The two scripts produce **the same output** for the same `hosts.conf` — the same wezterm sentinel block, regardless of which platform regenerates it.
 
 ### Wezterm sentinel mechanism
 
@@ -162,42 +149,41 @@ Both sentinels must be present at column 0. The bash script uses `awk` to print 
 
 ## bootstrap.sh
 
-A thin seed that delegates everything to Ansible. Exactly one of `--dev` or `--prod` is required — it decides both the group this host registers as AND the scope the local playbook runs in. No default — the choice is too load-bearing to silently fall through.
+A thin seed that delegates everything to `make`. Exactly one of `--dev` or `--prod` is required — it decides both the group this host registers as in `hosts.conf` AND the `MODE` `make provision` runs in. No default — the choice is too load-bearing to silently fall through.
 
 ### `--dev` (dev_machine, sudo, system scope)
 Runs:
 ```
-ansible-playbook playbooks/local.yml -e "@group_vars/dev_machine.yml" --ask-become-pass
+make -C makefile MODE=dev provision
 ```
-Installs `dnf` packages and writes static binaries to `/usr/local/bin`. Self-registers as `dev_machine`.
+Installs `dnf` packages (under `$(SUDO)`), writes static binaries to `/usr/local/bin`, wires PATH via `/etc/profile.d/local-bin.sh`, runs `chezmoi update` if config exists. Self-registers as `dev_machine` in `hosts.conf`.
 
 ### `--prod` (prod_machine, no sudo, user scope)
 Runs:
 ```
-ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
+make -C makefile MODE=prod provision
 ```
-Installs only the user-space tools to `~/.local/bin`. Skips dnf. Self-registers as `prod_machine`.
+Installs only the user-space tools to `~/.local/bin`. Skips dnf (the `packages` target is a no-op when `INSTALL_PACKAGES=false`). Wires PATH via `~/.bashrc`. Self-registers as `prod_machine`.
 
-The scope values are not hardcoded in `bootstrap.sh` — they come from the same `ansible/group_vars/<group>.yml` file the remote `linux.yml` playbook uses, so a host configured locally and a host configured remotely end up identical. Keep that DRY: when scope semantics change, edit only the group_vars file; `bootstrap.sh` picks it up automatically.
+The scope values are not hardcoded in `bootstrap.sh` — they come from `makefile/scope.mk`, which maps `MODE` to `DEST` / `SUDO` / `HAS_SUDO` / `INSTALL_PACKAGES`. `scripts/update-hosts.sh` reads the same Makefile for remote bulk updates, so a host configured locally and a host configured remotely end up identical.
 
 ### Common steps for both modes (in order)
-1. **Preflight**: collect-all check for `curl`, `git`, `python3`, `python3 -m pip`, and `ip` (iproute) — reports every missing tool in one message rather than one at a time. Verifies `python3 ≥ 3.9` (ansible-core's floor) and that `python3 -m pip` works.
-2. **Clone the repo** to `$HOME/.local/share/chezmoi` if not present (or `git pull --ff-only` if it is). If `GITHUB_TOKEN` is set in env, the script passes it via `git -c http.https://github.com/.extraheader=Authorization: bearer …` for the clone, and persists the same key into the cloned repo's `.git/config`. That single token then covers all subsequent git ops in this script (push), in Ansible (`chezmoi update`), and any manual `git pull`/`git push` the user runs in the repo. The header key is github.com-scoped, so the token never leaks to other remotes. To clear: `git config --unset http.https://github.com/.extraheader` in the repo.
-3. **Self-registration** (now happens *before* Ansible runs): invokes `manage-hosts.sh --add` with detected `hostname -s` + IP from `ip route get 1.1.1.1` (fallback `ip addr`) + `whoami` + group `${MACHINE_TYPE}_machine` (i.e. `dev_machine` or `prod_machine` based on the flag). `--skip-confirm` is passed; if the host already exists the call returns silently. Then runs `manage-hosts.sh --sync` so the inventory and wezterm block are regenerated locally before the playbook runs (any chezmoi/Ansible logic that consumes `hosts.conf` sees the current list). **Auto-skipped inside WSL** — `is_wsl()` (checks `$WSL_DISTRO_NAME` and `/proc/version`'s microsoft marker) short-circuits this step because WSL distros are reached via wezterm WSL domains, not SSH; registering them would pollute `hosts.conf` with a WSL-internal IP and duplicate the WSL domain as an SSH-domain entry in `wezterm.lua`.
-4. **Install `ansible-core`** via `pip3 install --user --upgrade ansible-core` if `ansible-playbook` is not on PATH. After install, smoke-tests with `ansible-playbook --version` to fail fast if `~/.local/bin` isn't actually picked up.
-5. **Run the local playbook** with `-e "@group_vars/${GROUP_NAME}.yml"`. The playbook prints a colored **PLAY RECAP legend** afterwards explaining each count (ok/changed/failed/skipped/unreachable/rescued/ignored) — printed on both success and failure, then exit code is preserved.
-5b. **Ensure chezmoi is initialized** — if `~/.config/chezmoi/chezmoi.toml` doesn't exist (first-ever bootstrap on this host), runs `chezmoi init --apply --source $CHEZMOI_SOURCE </dev/tty` interactively. The `</dev/tty` redirect is load-bearing: under `curl … | bash` the script's own stdin is the curl pipe, so `chezmoi`'s `promptStringOnce` calls for name/email would otherwise read EOF and fail. Ansible can't do this — its `command` module has no TTY — which is why the corresponding `dotfiles.yml` task is gated on the config existing and runs only `chezmoi update` (pull + apply), never `init`.
-6. **Auto-commit + push** the host-list changes (`hosts.conf`, `ansible/inventory/hosts.ini`, `chezmoi/dot_config/wezterm/wezterm.lua`) with the message `chore(hosts): register <hostname>`. Identity priority for the commit: `GIT_USER_NAME` / `GIT_USER_EMAIL` env vars (highest — set in the bootstrap one-liner) → existing `git config user.name`/`user.email` (e.g. from a chezmoi-applied `~/.gitconfig`) → synthetic `whoami@hostname` fallback so the commit never fails outright. Warn-don't-fail on every error: if the commit or push fails (auth, conflict, no upstream), bootstrap prints the recovery `git push` command but does NOT abort. The playbook already succeeded by this point. **No-op inside WSL** — since `self_register` was skipped, none of the host-list files changed and the existing `git diff --quiet` guard at the top of `push_host_changes` returns early.
+1. **Preflight**: collect-all check for `curl`, `git`, `make`, `tar`, `unzip`, and `ip` (iproute) — reports every missing tool in one message rather than one at a time. No Python checks (Ansible is gone).
+2. **Clone the repo** to `$HOME/.local/share/chezmoi` if not present (or `git pull --ff-only` if it is). If `GITHUB_TOKEN` is set in env, the script passes it via `git -c http.https://github.com/.extraheader=Authorization: Basic …` for the clone, and persists the same key into the cloned repo's `.git/config`. That single token then covers all subsequent git ops in this script (push), in `chezmoi update`, and any manual `git pull`/`git push` the user runs in the repo. The header key is github.com-scoped, so the token never leaks to other remotes. To clear: `git config --unset http.https://github.com/.extraheader` in the repo.
+3. **Self-registration** (happens *before* `make` runs): invokes `manage-hosts.sh --add` with detected `hostname -s` + IP from `ip route get 1.1.1.1` (fallback `ip addr`) + `whoami` + group `${MACHINE_TYPE}_machine` (i.e. `dev_machine` or `prod_machine` based on the flag). `--skip-confirm` is passed; if the host already exists the call returns silently. The sync regenerates the wezterm sentinel block locally before `make` runs. **Auto-skipped inside WSL** — `is_wsl()` (checks `$WSL_DISTRO_NAME` and `/proc/version`'s microsoft marker) short-circuits this step because WSL distros are reached via wezterm WSL domains, not SSH; registering them would pollute `hosts.conf` with a WSL-internal IP and duplicate the WSL domain as an SSH-domain entry in `wezterm.lua`.
+4. **Run `make MODE=<dev|prod> provision`** in `makefile/`. The Makefile resolves scope facts from `MODE` via `scope.mk`, then runs the equivalent of every old Ansible task in one parallel pass: dnf packages (`packages.mk`), static-binary tool installs (`tools.mk` × ~55 tools), PATH wiring (`shell.mk`), `chezmoi update` (`dotfiles.mk`), and the Claude Code CLI (only on dev mode). Sudo is prefixed onto recipe lines that need it — make itself never runs under sudo, so stamps stay user-owned and pip-installed tools never accidentally land in `/root`.
+4b. **Ensure chezmoi is initialized** — if `~/.config/chezmoi/chezmoi.toml` doesn't exist (first-ever bootstrap on this host), runs `chezmoi init --apply --source $CHEZMOI_SOURCE </dev/tty` interactively. The `</dev/tty` redirect is load-bearing: under `curl … | bash` the script's own stdin is the curl pipe, so `chezmoi`'s `promptStringOnce` calls for name/email would otherwise read EOF and fail. Make recipes can't do this either — no TTY in `command`-style execution — which is why `dotfiles.mk` is gated on the config existing and runs only `chezmoi update` (pull + apply), never `init`.
+5. **Auto-commit + push** the host-list changes (`hosts.conf`, `chezmoi/dot_config/wezterm/wezterm.lua`) with the message `chore(hosts): register <hostname>`. Identity priority for the commit: `GIT_USER_NAME` / `GIT_USER_EMAIL` env vars (highest — set in the bootstrap one-liner) → existing `git config user.name`/`user.email` (e.g. from a chezmoi-applied `~/.gitconfig`) → synthetic `whoami@hostname` fallback so the commit never fails outright. Warn-don't-fail on every error: if the commit or push fails (auth, conflict, no upstream), bootstrap prints the recovery `git push` command but does NOT abort. `make provision` already succeeded by this point. **No-op inside WSL** — since `self_register` was skipped, none of the host-list files changed and the existing `git diff --quiet` guard at the top of `push_host_changes` returns early.
 
-Both modes are idempotent. Tool versions and install logic live entirely in Ansible — `bootstrap.sh` has no per-tool knowledge.
+Both modes are idempotent. Tool versions and install logic live entirely in `makefile/` — `bootstrap.sh` has no per-tool knowledge.
 
 `--full` was removed when `--dev`/`--prod` landed. The script gives a clear error if anyone passes `--full` so old paste-buffer one-liners fail loudly instead of silently doing the wrong thing.
 
-The reordering is load-bearing: anything in Ansible/chezmoi that grows to read `hosts.conf` will see the new host. Don't move self-registration back to "after the playbook" without explicit reason.
+The reordering is load-bearing: anything in `make`/chezmoi that grows to read `hosts.conf` will see the new host. Don't move self-registration back to "after make runs" without explicit reason.
 
 ### Running inside WSL
 
-WSL distros are supported as managed hosts (tools + dotfiles) but NOT as SSH targets. `bootstrap.sh` defines `is_wsl()` and uses it to short-circuit two things: `self_register` (step 3) and the final "Enable passwordless SSH from your client" tip. Everything else — preflight, clone, ansible-core install, playbook run — is unchanged.
+WSL distros are supported as managed hosts (tools + dotfiles) but NOT as SSH targets. `bootstrap.sh` defines `is_wsl()` and uses it to short-circuit two things: `self_register` (step 3) and the final "Enable passwordless SSH from your client" tip. Everything else — preflight, clone, `make provision`, chezmoi init — is unchanged.
 
 The complementary wezterm side is in `chezmoi/dot_config/wezterm/wezterm.lua` and has three load-bearing pieces:
 
@@ -213,44 +199,45 @@ If `is_wsl()` ever needs to distinguish WSL 1 from WSL 2 or distro families, ext
 
 ## Tool versions — single source of truth
 
-All tool versions live in `scripts/install/versions.mk` (`FZF_VERSION`, `ZOXIDE_VERSION`, etc. — one uppercase variable per tool). `bootstrap.sh` and Ansible have no version pins. To bump a tool, edit `versions.mk`; the version is baked into the stamp filename at `$STAMP/<tool>-<version>.done`, so changing it invalidates the old stamp and triggers reinstall on the next `make all`. To add a new tool, add a `<NAME>_VERSION := X.Y.Z` line to `versions.mk` plus one `$(eval $(call TOOL,...))` line to `tools.mk` — pick the helper that matches the tool's release shape (`archive.sh` / `direct.sh` / `pip.sh` / `pipe.sh` / `helix.sh`).
+All tool versions live in `makefile/versions.mk` (`FZF_VERSION`, `ZOXIDE_VERSION`, etc. — one uppercase variable per tool). `bootstrap.sh` and the Makefile-driven provisioning layer have no inline version pins. To bump a tool, edit `versions.mk`; the version is baked into the stamp filename at `$STAMP/<tool>-<version>.done`, so changing it invalidates the old stamp and triggers reinstall on the next `make provision` (or targeted `make <tool>`). To add a new tool, add a `<NAME>_VERSION := X.Y.Z` line to `versions.mk` plus one `$(eval $(call TOOL,...))` line to `tools.mk` — pick the helper that matches the tool's release shape (`archive.sh` / `direct.sh` / `pip.sh` / `pipe.sh` / `helix.sh`).
 
-The historical `bootstrap.sh` `*_VERSION` constants and the `*_version:` entries in `group_vars/all.yml` have been removed; do not re-introduce per-tool variables to either file.
+`bootstrap.sh` has never carried `*_VERSION` constants; the historical `group_vars/all.yml` `*_version:` entries are gone (along with the whole `ansible/` tree). Do not re-introduce per-tool variables anywhere outside `versions.mk`.
 
-## Ansible role: `linux-base`
+## Makefile layout: `makefile/`
 
-Single role, four task files orchestrated by `tasks/main.yml`. Before any task imports run, `main.yml` validates `tool_scope` vs `has_sudo` and resolves three computed facts (`tools_dest`, `tools_become`, `helix_runtime_dest`) for downstream tasks to consume:
+Replaces the old `ansible/` tree. Composition (in include order — order matters for variable visibility):
 
-```yaml
-- fail: msg=...   when: tool_scope == 'system' and not has_sudo
-- set_fact: tools_dest, tools_become, helix_runtime_dest   # resolved from tool_scope
-- import_tasks: packages.yml   when: install_system_packages and has_sudo   become: true
-- import_tasks: tools.yml      when: install_user_tools
-- import_tasks: shell.yml      # always
-- import_tasks: dotfiles.yml   when: apply_dotfiles
+```
+include scope.mk      # MODE=dev|prod → DEST / SUDO / HAS_SUDO / INSTALL_PACKAGES
+include versions.mk   # tool versions (single source of truth)
+include tools.mk      # per-tool $(eval $(call TOOL,...)) calls
+include packages.mk   # dnf core + EPEL (RHEL-family conditional) + optional loop
+include shell.mk      # PATH wiring
+include dotfiles.mk   # chezmoi update gate
 ```
 
-Defaults from `roles/linux-base/defaults/main.yml`:
-- `install_system_packages: true`
-- `install_user_tools: true`
-- `apply_dotfiles: true`
-- `has_sudo: true`
-- `tool_scope: user`
-- `arch: "x86_64"`
-- `linux_target: "unknown-linux-musl"`
+Top-level phony targets:
 
-Scope normally comes from group_vars — `group_vars/dev_machine.yml` for hosts in `[dev_machine]`, `group_vars/prod_machine.yml` for hosts in `[prod_machine]`. The role's defaults are only the fallback for ad-hoc runs without group membership.
+```
+make dev              # MODE=dev provision (sudo, /usr/local/bin)
+make prod             # MODE=prod provision (no sudo, ~/.local/bin)
+make provision MODE=… # explicit MODE
+make all MODE=…       # scope-tools only (~55 binaries); synonym retained from earlier migration
+make user-tools       # pip tools (glances/asciinema/harlequin)
+make claude-cli       # Claude Code CLI (dev_machine flow runs this; prod skips)
+make <tool>           # single tool, e.g. make gitui MODE=prod
+make clean-<tool>     # wipe stamp (+ binary for scope tools)
+make list MODE=…      # list every managed tool, grouped
+make help             # this help text
+```
 
-For local self-provisioning (or any ad-hoc one-off), pass the group_vars file as extra-vars so values stay aligned with the remote flow:
-- `-e "@group_vars/dev_machine.yml"` — what `bootstrap.sh --dev` passes (sudo, system scope)
-- `-e "@group_vars/prod_machine.yml"` — what `bootstrap.sh --prod` passes (no sudo, user scope)
-- `-e "install_user_tools=false"` — dotfiles only (orthogonal to scope; stack with either)
+`provision` depends on: `packages` (no-op for prod), `tools` (= `$(SCOPE_TOOLS)`), `user-tools`, `shell`, `dotfiles`. On `MODE=dev` it additionally depends on `claude-cli`.
 
-Avoid raw `-e "tool_scope=..."` overrides in normal use — they bypass the group_vars source of truth and quietly diverge from what the remote playbook would do to the same host.
+Scope is resolved at parse time by `scope.mk`. Without `MODE=…` (or `make dev`/`make prod`), `scope.mk` errors out — there is deliberately no default, because the two scopes are too load-bearing to silently fall through to one. The `make dev` / `make prod` aliases re-invoke make with `MODE=…` set, so users can stay scope-aware without typing `MODE=`.
 
-`tools.yml` is a three-task wrapper around `scripts/install/Makefile`: it runs `make all DEST={{ tools_dest }} HELIX_RUNTIME_DEST={{ helix_runtime_dest }}` under `become: "{{ tools_become }}"`, then `make user-tools` without become (for the pip-installed Python tools), then `make claude-cli` without become and only when `tool_scope == 'system'` (preserves the historical dev_machine-only gate for the Claude Code CLI). The Helix runtime tree (`helix_runtime_dest`) is the one special case — `~/.config/helix/runtime` for user scope, `/usr/local/lib/helix/runtime` for system scope (both are paths Helix searches by default). `scripts/install/lib/helix.sh` handles the binary+runtime split.
+The `$(SUDO)` thread: `scope.mk` sets `SUDO := sudo` for `MODE=dev` and `SUDO :=` (empty) for `MODE=prod`. The `TOOL` macro in `Makefile` prefixes the install command with `$(SUDO)`, so dev-mode scope tools land in `/usr/local/bin` via sudo while prod-mode ones land in `~/.local/bin` as the dev user. `USER_TOOL` (used by pip targets) never gets `$(SUDO)` — pip user-site always belongs to the calling user. Claude's bespoke rule in `Makefile` also skips `$(SUDO)` for the same reason. Make itself runs as the dev user end-to-end, so stamps under `$HOME/.local/share/workstation-install/` stay readable on re-runs.
 
-`shell.yml` writes PATH to `/etc/profile.d/local-bin.sh` when `has_sudo`, otherwise `lineinfile`-appends `export PATH=...` to `~/.bashrc`. `dotfiles.yml` checks for an existing `chezmoi_source/.git` to decide between `chezmoi init --apply` and `chezmoi update`, and finds the `chezmoi` binary via `tools_dest` (so it works with either scope).
+The Helix runtime tree (`helix_runtime_dest`) is the one special case — `~/.config/helix/runtime` for user scope, `/usr/local/lib/helix/runtime` for system scope (both are paths Helix searches by default). `makefile/lib/helix.sh` handles the binary+runtime split via the `TOOL` macro.
 
 ## chezmoi source layout & templating
 
@@ -283,16 +270,16 @@ Authoring HTML by hand is heavier than markdown, so two practical rules:
 
 This includes:
 - Setup or install steps (new prerequisite, changed entry point, renamed flag).
-- Daily-workflow surface (new `manage-hosts.sh` flag, new playbook, new chezmoi alias).
-- Variables the user is expected to override (`tool_scope`, `has_sudo`, anything in `defaults/main.yml`).
+- Daily-workflow surface (new `manage-hosts.sh` flag, new `make` target, new chezmoi alias).
+- Variables the user is expected to override (`MODE`, anything in `makefile/scope.mk`).
 - File locations the user reads/writes (`hosts.conf`, `~/.bashrc.local`, `chezmoi/home/`, `WEZTERM_CONFIG_FILE` target).
 - New tool added — at minimum, mention it in the Stack table; if it has end-user CLI surface, show it.
 - Deprecations or removals — don't leave stale instructions in `README.html` pointing at removed flags or files.
 
 This does NOT include:
-- Internal Ansible task refactors that don't change CLI overrides or file locations.
-- Comment edits, formatting changes, variable renames invisible from outside the role.
-- Bumping a tool version — `group_vars/all.yml` is the source of truth, `README.html` doesn't pin versions.
+- Internal Makefile refactors that don't change CLI overrides or file locations.
+- Comment edits, formatting changes, variable renames invisible from outside `makefile/`.
+- Bumping a tool version — `versions.mk` is the source of truth, `README.html` doesn't pin versions.
 
 When in doubt, ask: "Would a user reading only `README.html` still be able to set up and operate this repo correctly after my change?" If no, update `README.html`.
 
@@ -300,17 +287,16 @@ When in doubt, ask: "Would a user reading only `README.html` still be able to se
 
 | Change | README update? | What to add |
 |---|---|---|
-| Added `tool_scope=system` support | **Yes** | Install scopes table + `-e "tool_scope=system"` example under Daily Ansible workflow |
+| Added `MODE=dev|prod` support | **Yes** | Scope-mapping table + `make MODE=...` examples under Daily make workflow |
 | Renamed `manage-hosts.sh --sync` to `--regen` | **Yes** | Replace every command example, add a one-line "renamed from `--sync`" note for one release |
-| Added `direnv` (one line in `tools.mk` + `DIRENV_VERSION` in `versions.mk`) | **Yes** | Add `direnv` to Stack table; show how `tool_scope` controls its destination |
-| Bumped `FZF_VERSION` in `versions.mk` | No | Versions live in `scripts/install/versions.mk` only |
+| Added `direnv` (one line in `tools.mk` + `DIRENV_VERSION` in `versions.mk`) | **Yes** | Add `direnv` to Stack table; show how `MODE` controls its destination |
+| Bumped `FZF_VERSION` in `versions.mk` | No | Versions live in `makefile/versions.mk` only |
 | Refactored `lib/archive.sh` to deduplicate extraction logic | No | No CLI surface changed |
-| Migrated tools.yml's per-tool blocks into `scripts/install/Makefile` (this commit) | **Yes** | Rewrote "Adding a tool" + "Bumping a version" sections in README.html; removed the YAML example; added the Makefile example. |
-| Added a new optional `-e "ansible_python_interpreter=..."` override | **Yes** | Add a "When to set this" note under Daily Ansible workflow |
+| Dropped Ansible entirely (this commit) | **Yes** | New "What changed if you used Ansible" callout under Daily workflows; commands `ansible-playbook playbooks/local.yml` → `make MODE=… provision`, `ansible-playbook playbooks/linux.yml --limit X` → `scripts/update-hosts.sh --group X`; preflight no longer needs python3 or pip; bootstrap no longer installs ansible-core. |
 | Added a wezterm keybind (e.g. `CTRL+SHIFT+H` cheatsheet) | **Yes** | Mention it under the Windows section so users know it exists |
 | Added `--copy-id` / `-CopyId` to manage-hosts | **Yes** | New "Copy SSH key" subsection with both shells + a tip line in the post-bootstrap message |
 | Added bulk `--copy-id --all` / `-CopyId -All` to manage-hosts (menu option 6, renumbers 7-9) | **Yes** | Existing "Copy SSH key" subsection gets new code-block lines for the bulk form in both shells, plus a one-sentence note that the loop is best-effort and per-host status is shown live. |
-| Reordered `bootstrap.sh` flow (self-register before Ansible) | **Yes** | Setup section explains the new order and the auto-commit+push step |
+| Reordered `bootstrap.sh` flow (self-register before make runs) | **Yes** | Setup section explains the new order and the auto-commit+push step |
 | Added `GITHUB_TOKEN` + `GIT_USER_NAME` + `GIT_USER_EMAIL` env-var support to `bootstrap.sh` | **Yes** | Setup section shows the labelled per-machine one-liner, the env-var purpose table, and a troubleshooting entry for clone-failure recovery. Token kept as `<your-PAT>` placeholder; identity values can be concrete to your real setup since the repo is single-user. |
 | Added `bootstrap.ps1` for the Windows client side | **Yes** | Setup → On Windows section shows the `irm \| iex` one-liner with `$env:GITHUB_TOKEN`, calls out that it must run elevated, lists the five-step flow (preflight → choco install → clone → chezmoi apply → ssh-key), and documents the flags. |
 | Switched bootstrap.ps1 from winget to Chocolatey | **Yes** | "WHY CHOCOLATEY" rationale stays in the script's header for future-me; README needs the elevated-shell note and the package IDs (which differ from winget's). |
@@ -324,19 +310,24 @@ When in doubt, ask: "Would a user reading only `README.html` still be able to se
 
 ## Conventions and rules of thumb
 
-- **Never edit `ansible/inventory/hosts.ini` by hand.** Edit `hosts.conf` and run `--sync`.
 - **Never edit the wezterm SSH-domains block by hand** between the sentinel comments — it gets clobbered on the next sync.
 - **Don't fixed-width-pad `hosts.conf`.** The save routine recalculates widths from data; manual padding gets normalised.
-- **`scripts/manage-hosts.sh` and `scripts/manage-hosts.ps1` are a parity pair.** Every user-visible capability — flags, menu options, prompts, default values, post-add flow, output glyphs — MUST exist in both. When you change one, change the other in the same commit. The two scripts produce identical output for the same `hosts.conf`; that invariant is load-bearing because either side regenerates `inventory/hosts.ini` and the wezterm sentinel block. Drift between them silently breaks reproducibility across Linux/Windows.
-- **All tool installs live in `scripts/install/Makefile`** (one `$(eval $(call TOOL,...))` line per tool in `tools.mk`, version in `versions.mk`). Ansible's `tools.yml` is a thin wrapper that invokes `make`. Never re-introduce per-tool install logic anywhere else — neither in `bootstrap.sh` nor as new per-tool YAML blocks in `tools.yml`.
-- **Tool versions live only in `scripts/install/versions.mk`.** One file, one bump. The version is baked into the stamp filename, so changes auto-trigger reinstall on the next `make` run.
+- **`scripts/manage-hosts.sh` and `scripts/manage-hosts.ps1` are a parity pair.** Every user-visible capability — flags, menu options, prompts, default values, post-add flow, output glyphs — MUST exist in both. When you change one, change the other in the same commit. The two scripts produce identical output for the same `hosts.conf`; that invariant is load-bearing because either side regenerates the wezterm sentinel block. Drift between them silently breaks reproducibility across Linux/Windows.
+- **All tool installs live in `makefile/Makefile` + `tools.mk`** (one `$(eval $(call TOOL,...))` line per tool in `tools.mk`, version in `versions.mk`). Never re-introduce per-tool install logic anywhere else — not in `bootstrap.sh`, not in a new playbook, not in a new shell script under `scripts/`.
+- **Tool versions live only in `makefile/versions.mk`.** One file, one bump. The version is baked into the stamp filename, so changes auto-trigger reinstall on the next `make` run.
 - **The chezmoi source dir is `chezmoi/`**, not the repo root. New dotfiles go under `chezmoi/home/` or `chezmoi/dot_config/`.
 - **Per-machine overrides go in `~/.bashrc.local` on each host** — un-tracked, sourced last by the templated bashrc.
 - **`wezterm.lua` is chezmoi-tracked but NOT deployed to `%USERPROFILE%`.** The chezmoi source at `chezmoi/dot_config/wezterm/wezterm.lua` is the canonical file, and `.chezmoiignore.tmpl` skips `dot_config/wezterm` on Windows so chezmoi never writes a copy under `%USERPROFILE%\.config\wezterm\`. Instead, `bootstrap.ps1` sets a User-scope environment variable **`WEZTERM_CONFIG_FILE`** pointing at the chezmoi source path — WezTerm reads the repo file directly. `automatically_reload_config` still picks up edits live (including from `manage-hosts.ps1 -Sync` rewriting the sentinel block). This replaces the pre-v2 hardlink hack, which broke whenever chezmoi atomic-wrote the target on a content mismatch. If a user ever unsets `WEZTERM_CONFIG_FILE`, WezTerm falls back to its default search path — `bootstrap.ps1` also cleans up the legacy home-path copy on each run so a stale fallback can't silently win.
-- **Only two valid Ansible groups: `dev_machine` and `prod_machine`.** Both `manage-hosts` scripts validate the group on `--add`/`--edit` and reject anything else, because an unknown group means no `group_vars/<group>.yml` exists and downstream scope resolution silently breaks. The group's scope semantics (sudo? system or user?) live in `ansible/group_vars/<group>.yml` — that file is the single source of truth, used by both the remote `linux.yml` playbook and (via `-e "@..."`) by `bootstrap.sh` for the local self-provisioning run. Keep the two aligned: if `bootstrap.sh` ever needs different values than the remote flow, that's a smell — fix the group_vars file, not the script.
+- **Only two valid host groups: `dev_machine` and `prod_machine`.** Both `manage-hosts` scripts validate the group on `--add`/`--edit` and reject anything else. The group is the input to `MODE` derivation (dev_machine → MODE=dev, prod_machine → MODE=prod) — `scripts/update-hosts.sh` reads each host's group column and passes the matching `MODE` to its remote `make provision`. Add a third group only if you also extend `makefile/scope.mk` and `update-hosts.sh`'s case branch.
 - **User-facing changes get mirrored into `README.html`** in the same commit (see the section above for what counts). There is no `README.md` — `README.html` is the only user-facing reference, opened in a browser from the local clone.
 
 ## Daily workflows
+
+> **Migrating from the Ansible era?** Quick mapping:
+> - `ansible-playbook playbooks/local.yml -e "@group_vars/dev_machine.yml" --ask-become-pass` → `make -C makefile MODE=dev provision` (or run `bootstrap.sh --dev`).
+> - `ansible-playbook playbooks/linux.yml --limit dev_machine --ask-become-pass` → `./scripts/update-hosts.sh --group dev_machine`.
+> - `ansible-playbook --check` → `make -n MODE=… provision` (Make's dry-run mode; prints the recipe lines without running them).
+> - `pip install ansible-core` → not needed; `bootstrap.sh`'s preflight no longer checks for Python.
 
 Dotfiles (on a host):
 ```bash
@@ -349,63 +340,69 @@ czs                 # status
 cd ~/.local/share/chezmoi && git add -A && git commit -m "..." && git push
 ```
 
-Ansible — remote (control machine, targets `dev_machine:prod_machine`):
+Provisioning — local (self-provisioning; same flow `bootstrap.sh` uses):
 ```bash
-cd ansible
-ansible-playbook playbooks/linux.yml --ask-become-pass              # all managed hosts; sudo prompt is for dev_machine hosts
-ansible-playbook playbooks/linux.yml --limit dev_machine --ask-become-pass
-ansible-playbook playbooks/linux.yml --limit prod_machine           # no sudo prompt — group_vars sets has_sudo=false
-ansible-playbook playbooks/linux.yml --limit <hostname>             # single host
-ansible-playbook playbooks/linux.yml --check                        # dry run
+cd makefile
+make MODE=prod provision                      # user scope (no sudo, ~/.local/bin)
+make MODE=dev provision                       # system scope (sudo, /usr/local/bin)
+make dev / make prod                          # friendly aliases for the above
+make -n MODE=dev provision                    # dry-run: print recipe lines
+make <tool> MODE=dev                          # single tool, e.g. make gitui MODE=dev
+make clean-<tool> MODE=dev                    # wipe stamp (+ binary for scope tools)
+make list MODE=dev                            # list every managed tool, grouped
 ```
-Scope per host comes from its group_vars file. Don't pass raw `-e "tool_scope=..."` overrides in normal use.
 
-Ansible — local (self-provisioning, used by `bootstrap.sh`):
+Provisioning — remote (control machine, targets every managed host):
 ```bash
-cd ansible
-ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
-ansible-playbook playbooks/local.yml -e "@group_vars/dev_machine.yml" --ask-become-pass
+./scripts/update-hosts.sh                            # every host in hosts.conf
+./scripts/update-hosts.sh --group dev_machine        # just dev hosts
+./scripts/update-hosts.sh --group prod_machine       # just prod hosts
+./scripts/update-hosts.sh --name dev-cache-qa1       # one specific host
+./scripts/update-hosts.sh --check                    # print actions, don't ssh
+./scripts/update-hosts.sh --parallel 1               # serialise (default 4)
 ```
+MODE per host comes from its group column in `hosts.conf` (dev_machine → MODE=dev, prod_machine → MODE=prod). The script runs `git pull && make MODE=<derived> provision` on each match in parallel via `xargs -P`; per-host status is printed live and a final summary tells you how many succeeded.
 
 Adding a host:
-1. On the new host: `git clone … && ./bootstrap.sh --prod` (or `--dev` for sudo). Self-registration appends to `hosts.conf` under `prod_machine` or `dev_machine`.
-2. From the Windows host or another machine, `git pull` and run `--sync` (or commit and push from the host, then pull elsewhere) so the inventory and `chezmoi/dot_config/wezterm/wezterm.lua` block update. On Windows, also run `chezmoi apply` (or the `cza` alias) to push the new wezterm config into `%USERPROFILE%\.config\wezterm\`.
+1. On the new host: `git clone … && ./bootstrap.sh --prod` (or `--dev` for sudo). Self-registration appends to `hosts.conf` under `prod_machine` or `dev_machine`, regenerates the wezterm sentinel block, commits, and pushes.
+2. From the Windows host or another machine, `git pull` and run `--sync` (or commit and push from the host, then pull elsewhere) so the `chezmoi/dot_config/wezterm/wezterm.lua` block updates. On Windows, also run `chezmoi apply` (or the `cza` alias) to push the new wezterm config into `%USERPROFILE%\.config\wezterm\`. (Actually wezterm reads the chezmoi source directly via `WEZTERM_CONFIG_FILE` — no apply needed for that one file.)
 
 Adding a tool:
-1. Add `<NAME>_VERSION := X.Y.Z` to `scripts/install/versions.mk`.
-2. Add one `$(eval $(call TOOL,...))` line to `scripts/install/tools.mk` — pick the helper that matches the release shape:
+1. Add `<NAME>_VERSION := X.Y.Z` to `makefile/versions.mk`.
+2. Add one `$(eval $(call TOOL,...))` line to `makefile/tools.mk` — pick the helper that matches the release shape:
    - `$(LIB)/archive.sh <binary[:other_binary:...]> <url>` for tar.gz/tar.bz2/tar.xz/zip (covers ~85% of tools, including multi-binary ones like `age:age-keygen` or `yazi:ya`).
    - `$(LIB)/direct.sh <name> <url>` for raw binary URLs (jq, broot, sops).
    - `$(LIB)/pipe.sh <name> <url> [-- <installer args>]` for upstream `curl | sh` installers (chezmoi takes `-b $(DEST)`).
    - `$(LIB)/pip.sh <pkg>` for Python tools — register via `USER_TOOL` macro instead of `TOOL`, so it goes into `make user-tools` (no sudo, always `~/.local`).
    - `$(LIB)/helix.sh <version>` if the tool is helix-shaped (binary + a runtime tree). Currently helix only.
-3. Test before pushing: `cd scripts/install && make <name> DEST=/tmp/test STAMP=/tmp/test-stamps`. Re-run should be a no-op (no `==>` line). For multi-binary tools, verify every binary lands in `/tmp/test/`.
+3. Test before pushing: `cd makefile && make <name> MODE=prod DEST=/tmp/test STAMP=/tmp/test-stamps`. Re-run should be a no-op (no `==>` line). For multi-binary tools, verify every binary lands in `/tmp/test/`.
 4. If the tool has user-facing CLI surface, mention it in `README.html` (see "README.html must mirror user-facing changes").
 
 ## Files Claude should be careful with
 
-- `ansible/inventory/hosts.ini` — auto-gen, never edit.
 - `chezmoi/dot_config/wezterm/wezterm.lua` SSH-domains block — auto-gen between `-- HOSTS:START` / `-- HOSTS:END` sentinels by both manage-hosts scripts. Edit anywhere outside the sentinels freely. On Windows, edits to this file appear in WezTerm immediately because `bootstrap.ps1` sets `WEZTERM_CONFIG_FILE` to point at this file directly; on Linux hosts without WezTerm the file is ignored by chezmoi.
-- `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding (and sort order) until next save. Column 4 (group) must be `dev_machine` or `prod_machine` — the manage-hosts scripts reject anything else on save.
+- `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding (and sort order) until next save. Column 4 (group) must be `dev_machine` or `prod_machine` — the manage-hosts scripts reject anything else on save, and `scripts/update-hosts.sh` can't derive a `MODE` from any other value.
 - `.chezmoiroot` — one-line file at the repo root containing `chezmoi`. Required for chezmoi's source state to point at the `chezmoi/` subdirectory; without it, all `dot_*` paths break. Don't delete or edit.
-- `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `scripts/install/versions.mk`; install logic lives only in `scripts/install/tools.mk` + `lib/*.sh`. Scope values (tool_scope, has_sudo, install_system_packages) must NOT be inlined — they come from `ansible/group_vars/<group>.yml` via `-e "@..."`. If `bootstrap.sh` and the group_vars file ever disagree on scope, fix the group_vars file.
-- `scripts/install/Makefile` and `tools.mk` — the install machinery. The Makefile defines two macros (`TOOL` / `USER_TOOL`) plus a bespoke `claude-cli` rule; `tools.mk` is the per-tool data file. Recipe lines in the Makefile MUST be tab-indented (not spaces) — Make is strict. The TOOL macro's body uses `$$` to defer variable expansion to rule-fire time; don't switch to single `$` without testing.
-- `scripts/install/versions.mk` — single source of truth for tool versions. Variables are uppercase (`FZF_VERSION`, `GITUI_VERSION`, etc.) and consumed by URL templates in `tools.mk`. Use `latest` for tools that have no upstream version pin (broot, nb, pip packages).
-- `scripts/install/lib/*.sh` — install helpers. All shell scripts here MUST remain LF-only (same trap as `manage-hosts.sh`); `file scripts/install/lib/archive.sh` should say "Bourne-Again shell script", NOT "with CRLF line terminators". Repair with `sed -i 's/\r$//' scripts/install/lib/*.sh`.
-- `ansible/group_vars/dev_machine.yml` and `ansible/group_vars/prod_machine.yml` — single source of truth for per-group scope. Used by both the remote `linux.yml` playbook (automatically) and `bootstrap.sh` (via `-e "@..."`). Adding a new scope-level variable means adding it to both files (or to `group_vars/all.yml` if it's shared).
+- `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `makefile/versions.mk`; install logic lives only in `makefile/tools.mk` + `makefile/lib/*.sh`. Scope values (`DEST`, `SUDO`, `HAS_SUDO`, `INSTALL_PACKAGES`) must NOT be inlined — they come from `makefile/scope.mk` via `MODE=dev|prod`. If `bootstrap.sh` and `scope.mk` ever disagree on scope, fix `scope.mk`.
+- `makefile/Makefile` and `tools.mk` — the install machinery. The Makefile defines two macros (`TOOL` / `USER_TOOL`) plus a bespoke `claude-cli` rule; `tools.mk` is the per-tool data file. Recipe lines in the Makefile MUST be tab-indented (not spaces) — Make is strict. The TOOL macro's body uses `$$` to defer variable expansion to rule-fire time; don't switch to single `$` without testing.
+- `makefile/scope.mk` — single source of truth for MODE → DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES. Errors at parse time if `MODE` is missing — that's intentional; don't add a default. The `$(SUDO)` thread through `Makefile`'s `TOOL` macro depends on this file resolving cleanly.
+- `makefile/{packages,shell,dotfiles}.mk` — replace the old Ansible task files one-for-one. `packages.mk` is the only one that does anything when `MODE=prod` (where it's a no-op). `shell.mk` branches on `HAS_SUDO`. `dotfiles.mk` is gated on `~/.config/chezmoi/chezmoi.toml` existing — first-run init is bootstrap.sh's job.
+- `makefile/versions.mk` — single source of truth for tool versions. Variables are uppercase (`FZF_VERSION`, `GITUI_VERSION`, etc.) and consumed by URL templates in `tools.mk`. Use `latest` for tools that have no upstream version pin (broot, nb, pip packages).
+- `makefile/lib/*.sh` and `scripts/update-hosts.sh` — install/orchestration helpers. All shell scripts here MUST remain LF-only (same trap as `manage-hosts.sh`); `file makefile/lib/archive.sh` should say "Bourne-Again shell script", NOT "with CRLF line terminators". Repair with `sed -i 's/\r$//' makefile/lib/*.sh scripts/update-hosts.sh`.
 - `chezmoi/.chezmoiignore.tmpl` — wrong entries here cause `chezmoi apply` to drop infrastructure files into `$HOME` (or to skip files you wanted applied). Edit-then-test: `chezmoi diff` on a sandbox host/Windows machine before pushing.
 - `scripts/manage-hosts.ps1` and `bootstrap.ps1` **must remain UTF-8 with BOM**. PowerShell 5.1 (Windows PowerShell, the default `powershell.exe`) reads scripts as Windows-1252 unless a BOM is present, and both files contain Unicode glyphs (`✓`, `✗`, `─`) used in colored output. Without the BOM, PS 5.1 mis-decodes the multi-byte UTF-8 and the script fails to parse with cryptic "string missing terminator" errors. To restore the BOM after a tool overwrites it: `[System.IO.File]::WriteAllText($path, [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($path)), [System.Text.UTF8Encoding]::new($true))`.
-- `scripts/manage-hosts.sh` **must remain LF-only**. The Edit/Write tools on Windows tend to save with CRLF; the resulting file runs but `read -r` then leaks `\r` into parsed fields, polluting the inventory. After any edit, verify with `file scripts/manage-hosts.sh` (expect "Bourne-Again shell script", no "with CRLF line terminators"). Repair with `sed -i 's/\r$//' scripts/manage-hosts.sh`.
+- `scripts/manage-hosts.sh` **must remain LF-only**. The Edit/Write tools on Windows tend to save with CRLF; the resulting file runs but `read -r` then leaks `\r` into parsed fields, polluting downstream regeneration. After any edit, verify with `file scripts/manage-hosts.sh` (expect "Bourne-Again shell script", no "with CRLF line terminators"). Repair with `sed -i 's/\r$//' scripts/manage-hosts.sh`.
 
 ## Quick verification
 
 After changes:
-- `./scripts/manage-hosts.sh --sync` — regenerates inventory + the chezmoi-tracked wezterm block, no errors. Output `ansible/inventory/hosts.ini` should contain the host groups present in `hosts.conf` (currently `[prod_machine]`) and a single `[all:vars]` connection block — no orphaned `[rhel_vms:vars]`.
-- `cd ansible && ansible-playbook playbooks/linux.yml --check` — dry-run on every managed host. Each host should resolve its own scope from its `group_vars/<group>.yml` (prod_machine hosts skip `packages.yml` since `install_system_packages=false`).
-- `cd ansible && ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"` — dry-run the local playbook in prod scope.
-- `cd ansible && ansible-playbook playbooks/local.yml --check -e "@group_vars/dev_machine.yml"` — dry-run in dev scope (plans dnf installs to `/usr/local/bin`).
-- `cd scripts/install && make list` — should show every managed tool grouped by target: ~55 scope-tools, 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call TOOL,...))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced in the call wasn't defined in `versions.mk`.
-- `cd scripts/install && make -j8 all DEST=/tmp/install-test HELIX_RUNTIME_DEST=/tmp/helix-rt STAMP=/tmp/install-test-stamps` — full install to a sandbox. Should finish in 25-30s on a reasonable connection; `ls /tmp/install-test | wc -l` ≈ 59 (the extra 4 are the multi-binary companions: `age-keygen`, `sg`, `ya`, `uvx`). Re-running the same command should be a sub-second no-op.
+- `./scripts/manage-hosts.sh --sync` — regenerates the chezmoi-tracked wezterm sentinel block, no errors.
+- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: ~55 scope-tools, 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call TOOL,...))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced in the call wasn't defined in `versions.mk`.
+- `cd makefile && make -n MODE=prod provision` — dry-run the full provision flow. Should print "skipping system packages (MODE=prod, INSTALL_PACKAGES=false)" then the sequence of tool installs.
+- `cd makefile && make -n MODE=dev provision` — dry-run dev scope. Should print the dnf install lines (under `sudo`), then EPEL, then optional packages, then the tool installs.
+- `cd makefile && make help` (with or without MODE) — shows the top-level targets. Help-only commands don't trigger `scope.mk`'s error-out.
+- `cd makefile && make -j8 all MODE=prod DEST=/tmp/install-test HELIX_RUNTIME_DEST=/tmp/helix-rt STAMP=/tmp/install-test-stamps` — full sandbox install. Should finish in 25-30s on a reasonable connection; `ls /tmp/install-test | wc -l` ≈ 59 (the extra 4 are the multi-binary companions: `age-keygen`, `sg`, `ya`, `uvx`). Re-running the same command should be a sub-second no-op.
+- `./scripts/update-hosts.sh --check --group dev_machine` — prints the planned action for each dev host without ssh'ing. Should derive MODE=dev correctly.
 - `./bootstrap.sh` with no flags must error out (no default). `./bootstrap.sh --dev --prod` must error out (mutually exclusive). `./bootstrap.sh --full` must error out with a clear "use --dev or --prod" message.
 - `./scripts/manage-hosts.sh --add --name t --ip 1.2.3.4 --user u --group foo --skip-confirm` must reject `foo` with a "must be dev_machine or prod_machine" error. The PowerShell side (`-Add -Group foo`) must reject the same way.
 - `chezmoi diff` on a host (or Windows machine) — shows pending dotfile changes, no surprises. On Windows, the diff should mention only Windows-targeted paths (AppData, Documents, dot_config/wezterm) plus the cross-platform `.ssh/config`; on Linux only Linux-targeted paths (dot_bashrc, dot_config/{starship,helix,zellij}, dot_gitconfig, dot_nbrc) plus the cross-platform `.ssh/config`.

@@ -99,13 +99,12 @@
                     <p class="lede">
                         Dev-environment provisioning for Linux hosts, plus the
                         WezTerm config that connects to them from Windows.
-                        Ansible orchestrates system packages, PATH, and the
-                        chezmoi handoff for dotfiles; static-binary tool
-                        installs are delegated to a parallel
-                        <code>Makefile</code> under
-                        <code>scripts/install/</code>.
-                        <code>bootstrap.sh</code> is a thin seed.
-                        Adding a tool is a two-line edit.
+                        A single <code>Makefile</code> under
+                        <code>makefile/</code> drives everything &mdash;
+                        system packages, PATH, tool installs, and the chezmoi
+                        handoff for dotfiles. <code>bootstrap.sh</code> is a
+                        thin seed that runs <code>make MODE=dev|prod
+                        provision</code>. Adding a tool is a two-line edit.
                     </p>
 
                     <div class="hero-quickstart">
@@ -165,10 +164,11 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <div class="layer-label">Provisioning</div>
                             <h3>
                                 <span class="ico" aria-hidden="true">⚙️</span>
-                                Ansible
+                                Make
                             </h3>
                             <p>
-                                Packages, tool installs, PATH, dotfiles trigger.
+                                Packages, tool installs, PATH, chezmoi handoff &mdash;
+                                all under <code>makefile/</code>.
                             </p>
                         </article>
                         <article class="stack-card">
@@ -239,10 +239,10 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 
                     <h3 id="toolbelt">Toolbelt</h3>
                     <p class="lede">
-                        CLI tools installed on every host via the
-                        <code>scripts/install/Makefile</code>
-                        (invoked from
-                        <code>ansible/roles/linux-base/tasks/tools.yml</code>).
+                        CLI tools installed on every host via
+                        <code>makefile/Makefile</code> (invoked by
+                        <code>bootstrap.sh</code> as
+                        <code>make MODE=dev|prod provision</code>).
                         Default install is a static binary on both
                         <code>dev_machine</code> and <code>prod_machine</code>.
                         Scope tags: <code>(dnf)</code> =
@@ -1091,9 +1091,10 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                 <section id="machines">
                     <h2>Machine types</h2>
                     <p class="lede">
-                        Every host belongs to exactly one Ansible group. The
-                        group decides install scope &mdash; no separate scope
-                        flag.
+                        Every host belongs to exactly one group in
+                        <code>hosts.conf</code>. The group decides the
+                        provisioning <code>MODE</code> &mdash; no separate
+                        scope flag.
                     </p>
                     <table>
                         <thead>
@@ -1136,14 +1137,14 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         </tbody>
                     </table>
                     <p class="note-row">
-                        Scope values live in
-                        <code>ansible/group_vars/{dev,prod}_machine.yml</code>.
-                        Ansible loads them automatically for remote runs;
-                        <code>bootstrap.sh</code> loads the same file for its
-                        local self-provisioning run via
-                        <code>-e "@group_vars/&lt;group&gt;.yml"</code>. Pick a
-                        group with <code>./bootstrap.sh --dev</code> or
-                        <code>--prod</code>. Exactly one is required.
+                        Scope values live in <code>makefile/scope.mk</code>,
+                        keyed off <code>MODE=dev|prod</code>.
+                        <code>bootstrap.sh</code> derives <code>MODE</code>
+                        from its <code>--dev</code> / <code>--prod</code> flag
+                        (exactly one is required);
+                        <code>scripts/update-hosts.sh</code> derives it from
+                        each host's group column in <code>hosts.conf</code>
+                        for bulk remote updates.
                     </p>
                 </section>
 
@@ -1158,7 +1159,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         bootstrap.sh
                                         <span class="note"
                                             >&mdash; Linux host entry point
-                                            (thin Ansible seed)</span
+                                            (thin Make seed)</span
                                         >
                                     </li>
                                     <li>
@@ -1189,8 +1190,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         <li>
                                             manage-hosts.sh
                                             <span class="note"
-                                                >&mdash; Linux host
-                                                manager</span
+                                                >&mdash; Linux host manager
+                                                (hosts.conf CRUD +
+                                                wezterm sentinel sync)</span
                                             >
                                         </li>
                                         <li>
@@ -1200,161 +1202,87 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                 (parity)</span
                                             >
                                         </li>
+                                        <li>
+                                            update-hosts.sh
+                                            <span class="note"
+                                                >&mdash; multi-host updater
+                                                (ssh-loop, runs
+                                                <code>git pull &amp;&amp;
+                                                make provision</code>)</span
+                                            >
+                                        </li>
                                     </ul>
-                                    <details>
-                                        <summary>install/</summary>
-                                        <ul>
-                                            <li>
-                                                Makefile
-                                                <span class="note"
-                                                    >&mdash; orchestration,
-                                                    TOOL/USER_TOOL macros,
-                                                    phony targets</span
-                                                >
-                                            </li>
-                                            <li>
-                                                versions.mk
-                                                <span class="note"
-                                                    >&mdash; tool versions
-                                                    (SoT)</span
-                                                >
-                                            </li>
-                                            <li>
-                                                tools.mk
-                                                <span class="note"
-                                                    >&mdash; per-tool rules
-                                                    (one line each)</span
-                                                >
-                                            </li>
-                                            <li>
-                                                lib/
-                                                <span class="note"
-                                                    >&mdash; archive.sh /
-                                                    direct.sh / pipe.sh /
-                                                    pip.sh / helix.sh</span
-                                                >
-                                            </li>
-                                        </ul>
-                                    </details>
                                 </details>
                                 <details open>
                                     <summary>
-                                        ansible/
+                                        makefile/
                                         <span class="note"
-                                            >&mdash; Linux provisioning</span
+                                            >&mdash; Linux provisioning
+                                            (packages + tools + PATH +
+                                            chezmoi)</span
                                         >
                                     </summary>
                                     <ul>
-                                        <li>ansible.cfg</li>
+                                        <li>
+                                            Makefile
+                                            <span class="note"
+                                                >&mdash; top-level: include
+                                                + provision/dev/prod targets
+                                                + TOOL/USER_TOOL macros</span
+                                            >
+                                        </li>
+                                        <li>
+                                            scope.mk
+                                            <span class="note"
+                                                >&mdash; MODE=dev|prod →
+                                                DEST / SUDO / HAS_SUDO /
+                                                INSTALL_PACKAGES</span
+                                            >
+                                        </li>
+                                        <li>
+                                            versions.mk
+                                            <span class="note"
+                                                >&mdash; tool versions
+                                                (SoT)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            tools.mk
+                                            <span class="note"
+                                                >&mdash; per-tool install
+                                                rules (one line each)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            packages.mk
+                                            <span class="note"
+                                                >&mdash; dnf core + EPEL +
+                                                optional loop</span
+                                            >
+                                        </li>
+                                        <li>
+                                            shell.mk
+                                            <span class="note"
+                                                >&mdash; PATH via
+                                                /etc/profile.d (sudo) or
+                                                ~/.bashrc (no sudo)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            dotfiles.mk
+                                            <span class="note"
+                                                >&mdash; chezmoi update gate</span
+                                            >
+                                        </li>
+                                        <li>
+                                            lib/
+                                            <span class="note"
+                                                >&mdash; archive.sh /
+                                                direct.sh / pipe.sh /
+                                                pip.sh / helix.sh</span
+                                            >
+                                        </li>
                                     </ul>
-                                    <details>
-                                        <summary>inventory/</summary>
-                                        <ul>
-                                            <li>
-                                                hosts.ini
-                                                <span class="note"
-                                                    >&mdash; AUTO-GENERATED from
-                                                    hosts.conf</span
-                                                >
-                                            </li>
-                                        </ul>
-                                    </details>
-                                    <details>
-                                        <summary>group_vars/</summary>
-                                        <ul>
-                                            <li>
-                                                all.yml
-                                                <span class="note"
-                                                    >&mdash; shared vars
-                                                    (dev_user, dotfiles_repo,
-                                                    system packages)</span
-                                                >
-                                            </li>
-                                            <li>
-                                                dev_machine.yml
-                                                <span class="note"
-                                                    >&mdash; tool_scope=system,
-                                                    has_sudo=true</span
-                                                >
-                                            </li>
-                                            <li>
-                                                prod_machine.yml
-                                                <span class="note"
-                                                    >&mdash; tool_scope=user,
-                                                    has_sudo=false</span
-                                                >
-                                            </li>
-                                        </ul>
-                                    </details>
-                                    <details>
-                                        <summary>playbooks/</summary>
-                                        <ul>
-                                            <li>
-                                                linux.yml
-                                                <span class="note"
-                                                    >&mdash; targets dev_machine
-                                                    + prod_machine</span
-                                                >
-                                            </li>
-                                            <li>
-                                                local.yml
-                                                <span class="note"
-                                                    >&mdash; targets localhost
-                                                    (used by bootstrap.sh)</span
-                                                >
-                                            </li>
-                                        </ul>
-                                    </details>
-                                    <details>
-                                        <summary>roles/linux-base/</summary>
-                                        <ul>
-                                            <li>defaults/main.yml</li>
-                                            <li>handlers/main.yml</li>
-                                        </ul>
-                                        <details>
-                                            <summary>tasks/</summary>
-                                            <ul>
-                                                <li>
-                                                    main.yml
-                                                    <span class="note"
-                                                        >&mdash; validates +
-                                                        resolves scope, then
-                                                        orchestrates</span
-                                                    >
-                                                </li>
-                                                <li>
-                                                    packages.yml
-                                                    <span class="note"
-                                                        >&mdash; system packages
-                                                        via
-                                                        ansible.builtin.package</span
-                                                    >
-                                                </li>
-                                                <li>
-                                                    tools.yml
-                                                    <span class="note"
-                                                        >&mdash; thin wrapper:
-                                                        invokes
-                                                        scripts/install/Makefile</span
-                                                    >
-                                                </li>
-                                                <li>
-                                                    shell.yml
-                                                    <span class="note"
-                                                        >&mdash; PATH
-                                                        config</span
-                                                    >
-                                                </li>
-                                                <li>
-                                                    dotfiles.yml
-                                                    <span class="note"
-                                                        >&mdash; chezmoi
-                                                        apply</span
-                                                    >
-                                                </li>
-                                            </ul>
-                                        </details>
-                                    </details>
                                 </details>
                                 <details open>
                                     <summary>
@@ -1492,9 +1420,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                     <p>Update before pushing your fork:</p>
                     <ul class="checklist">
                         <li>
-                            <code>ansible/group_vars/all.yml</code> &mdash; set
-                            <code>dev_user</code> and
-                            <code>dotfiles_repo</code> to your fork&rsquo;s URL.
+                            <code>bootstrap.sh</code> &mdash; if you forked the
+                            repo, change <code>DOTFILES_REPO</code> at the top
+                            of the script to point at your fork's clone URL.
                         </li>
                         <li>
                             <code>hosts.conf</code> &mdash; add hosts with
@@ -1503,22 +1431,19 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <code>bootstrap.sh</code> self-register them.
                         </li>
                     </ul>
-                    <p class="note-row">
-                        You should not need to edit
-                        <code>ansible/inventory/hosts.ini</code> &mdash;
-                        it&rsquo;s regenerated from <code>hosts.conf</code>.
-                    </p>
 
                     <h3 id="setup-linux">2. On each Linux host</h3>
                     <p class="lede">
                         <code>bootstrap.sh</code> needs only <code>curl</code>,
-                        <code>git</code>, <code>python3</code> (&ge;&nbsp;3.9),
-                        <code>python3 -m pip</code>, and
-                        <code>iproute</code> (<code>ip</code>). A single
-                        preflight check reports <strong>all</strong> missing
-                        prereqs at once. It installs
-                        <code>ansible-core</code> itself via
-                        <code>pip3 install --user</code> on first run.
+                        <code>git</code>, <code>make</code>, <code>tar</code>,
+                        <code>unzip</code>, and <code>iproute</code>
+                        (<code>ip</code>). A single preflight check reports
+                        <strong>all</strong> missing prereqs at once. The
+                        script then runs
+                        <code>make MODE=&lt;dev|prod&gt; provision</code>
+                        inside <code>makefile/</code> &mdash; no
+                        <code>ansible-core</code> install, no Python &ge; 3.9
+                        gate.
                     </p>
 
                     <h4>Env vars to set before running</h4>
@@ -1644,13 +1569,16 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">4</span
-                            ><span class="lbl">Install ansible-core</span
-                            ><span class="note">if missing</span>
+                            ><span class="lbl">make provision</span
+                            ><span class="note"
+                                >MODE=dev|prod, parallel</span
+                            >
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl">Run local.yml</span>
+                            ><span class="lbl">chezmoi init</span
+                            ><span class="note">if no config yet</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -1708,7 +1636,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <strong>Does not wipe:</strong> installed tools
                             (re-bootstrap detects and skips), deployed dotfiles
                             in <code>$HOME</code> (chezmoi re-applies over
-                            them), SSH keys, ansible-core, system packages.
+                            them), SSH keys, system packages.
                         </p>
                         <div class="callout">
                             <strong>Self-deletion guard.</strong> Running
@@ -1723,7 +1651,8 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                     <h3 id="setup-windows">3. On Windows</h3>
                     <p class="lede">
                         The Windows host is a <strong>client</strong> &mdash; no
-                        Ansible, but chezmoi runs here too to deploy
+                        provisioning Makefile (that's Linux-only), but chezmoi
+                        runs here too to deploy
                         <code>wezterm.lua</code>, the PowerShell profile,
                         Zed/VSCode settings. <code>bootstrap.ps1</code> is the
                         parallel of <code>bootstrap.sh</code>.
@@ -2045,27 +1974,30 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <h2>Host management</h2>
                     <p class="lede">
                         <code>hosts.conf</code> is the single source of truth.
-                        Two outputs are regenerated from it:
-                        <code>ansible/inventory/hosts.ini</code> (full
-                        overwrite) and
+                        One output is regenerated from it: the
                         <code>chezmoi/dot_config/wezterm/wezterm.lua</code>
                         SSH-domains block (in-place replace between
                         <code>-- HOSTS:START</code> /
-                        <code>-- HOSTS:END</code> sentinels). After
-                        <code>--sync</code> on Windows, run
-                        <code>chezmoi apply</code> (or <code>cza</code>) to push
-                        the updated file into
-                        <code>%USERPROFILE%\.config\wezterm\</code>.
+                        <code>-- HOSTS:END</code> sentinels). On Linux WezTerm
+                        is irrelevant; on Windows, edits propagate live via
+                        <code>WEZTERM_CONFIG_FILE</code> &mdash; no
+                        <code>chezmoi apply</code> needed for that file.
+                    </p>
+                    <p>
+                        <code>scripts/update-hosts.sh</code> reads
+                        <code>hosts.conf</code> directly when doing bulk
+                        remote updates &mdash; the group column drives the
+                        per-host <code>MODE</code>.
                     </p>
                     <div class="callout">
                         <strong
                             >Group must be <code>dev_machine</code> or
                             <code>prod_machine</code>.</strong
                         >
-                        Both scripts validate the input and reject anything else
-                        &mdash; an unknown group means no
-                        <code>group_vars/&lt;group&gt;.yml</code> exists and
-                        scope resolution silently breaks. Interactive prompt
+                        Both manage-hosts scripts validate the input and
+                        reject anything else &mdash; an unknown group means
+                        <code>update-hosts.sh</code> can't derive
+                        <code>MODE</code> from it. Interactive prompt
                         defaults to <code>prod_machine</code>.
                     </div>
                     <p class="note-row">
@@ -2108,7 +2040,8 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p>
                         After a host is registered, you still need your public
                         key in its <code>~/.ssh/authorized_keys</code> before
-                        WezTerm or Ansible can connect without a password.
+                        WezTerm or <code>update-hosts.sh</code> can connect
+                        without a password.
                     </p>
                     <div class="grid-2">
                         <div class="os-card linux">
@@ -2245,16 +2178,18 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </div>
 
                     <h3>
-                        Ansible &mdash; remote (control machine &rarr; all
-                        hosts)
+                        Make &mdash; remote (control machine &rarr; all
+                        hosts via SSH)
                     </h3>
                     <p class="note-row">
-                        Scope per host comes from its
-                        <code>group_vars/&lt;group&gt;.yml</code>. Don&rsquo;t
-                        normally pass <code>tool_scope</code>/<code
-                            >has_sudo</code
-                        >
-                        on the CLI &mdash; the group decides.
+                        <code>scripts/update-hosts.sh</code> ssh's into every
+                        managed host in <code>hosts.conf</code> and runs
+                        <code>git pull &amp;&amp; make provision</code>.
+                        <code>MODE</code> is derived per host from the group
+                        column (dev_machine &rarr; MODE=dev, prod_machine
+                        &rarr; MODE=prod) &mdash; one command bulk-updates a
+                        mixed set with the right scope per host. Replaces the
+                        pre-migration <code>ansible-playbook playbooks/linux.yml --limit ...</code>.
                     </p>
                     <div class="tabs">
                         <input
@@ -2274,45 +2209,54 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         </div>
                         <div class="tab-panels">
                             <div class="tab-panel ar-panel-all">
-                                <pre><code># Sudo prompt is for dev_machine hosts.
-cd ansible
-ansible-playbook playbooks/linux.yml --ask-become-pass</code></pre>
+                                <pre><code># Every host in hosts.conf, parallel (default -P 4).
+# Dev hosts will sudo-prompt during their remote `make provision`.
+./scripts/update-hosts.sh</code></pre>
                             </div>
                             <div class="tab-panel ar-panel-group">
-                                <pre><code>cd ansible
-ansible-playbook playbooks/linux.yml --limit dev_machine --ask-become-pass
-ansible-playbook playbooks/linux.yml --limit prod_machine</code></pre>
+                                <pre><code>./scripts/update-hosts.sh --group dev_machine
+./scripts/update-hosts.sh --group prod_machine</code></pre>
                             </div>
                             <div class="tab-panel ar-panel-host">
-                                <pre><code>cd ansible
-ansible-playbook playbooks/linux.yml --limit atc-cache-dev09</code></pre>
+                                <pre><code>./scripts/update-hosts.sh --name atc-cache-dev09</code></pre>
                             </div>
                             <div class="tab-panel ar-panel-check">
-                                <pre><code>cd ansible
-ansible-playbook playbooks/linux.yml --check</code></pre>
+                                <pre><code># Print planned actions for each host, don&rsquo;t ssh.
+./scripts/update-hosts.sh --check
+./scripts/update-hosts.sh --check --group prod_machine</code></pre>
                             </div>
                         </div>
                     </div>
 
                     <h3>
-                        Ansible &mdash; local (self-provisioning &mdash; what
+                        Make &mdash; local (self-provisioning &mdash; what
                         bootstrap.sh runs)
                     </h3>
                     <p class="note-row">
-                        <code>bootstrap.sh</code> loads the relevant group_vars
-                        file as extra-vars so the local playbook sees the same
-                        scope values that the remote playbook would apply.
+                        <code>bootstrap.sh</code> derives
+                        <code>MODE</code> from its
+                        <code>--dev</code>/<code>--prod</code> flag and runs
+                        <code>make MODE=&lt;mode&gt; provision</code> inside
+                        <code>makefile/</code>. You can invoke
+                        <code>make</code> manually for repeated runs without
+                        going through bootstrap each time.
                     </p>
-                    <pre><code>cd ansible
+                    <pre><code>cd makefile
 
-# Prod (no sudo)
-ansible-playbook playbooks/local.yml -e "@group_vars/prod_machine.yml"
+# Prod (no sudo, ~/.local/bin)
+make MODE=prod provision
+make prod                                       # friendly alias
 
-# Dev (sudo)
-ansible-playbook playbooks/local.yml -e "@group_vars/dev_machine.yml" --ask-become-pass
+# Dev (sudo, /usr/local/bin)
+make MODE=dev provision
+make dev                                        # friendly alias
 
-# Dry run
-ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"</code></pre>
+# Dry run (Make&rsquo;s built-in: print recipe lines, don&rsquo;t execute)
+make -n MODE=prod provision
+
+# Single tool — useful for iterating when one install is flaky
+make gitui MODE=prod
+make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                 </section>
 
                 <section id="adding">
@@ -2321,19 +2265,19 @@ ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"</
                     <h3>Adding a new tool</h3>
                     <p>
                         Two files, one line each. Tool installs live in
-                        <code>scripts/install/</code> — Ansible's
-                        <code>tools.yml</code> just runs
-                        <code>make -j8 all</code> there.
+                        <code>makefile/</code> &mdash;
+                        <code>make provision</code> invokes them as part of
+                        the normal bootstrap flow.
                     </p>
                     <ol>
                         <li>
                             Pin the version in
-                            <code>scripts/install/versions.mk</code>.
+                            <code>makefile/versions.mk</code>.
                         </li>
                         <li>
                             Add one
                             <code>$(eval $(call TOOL,...))</code> line in
-                            <code>scripts/install/tools.mk</code>, picking
+                            <code>makefile/tools.mk</code>, picking
                             the helper that matches the release shape:
                             <code>archive.sh</code> (tar/zip),
                             <code>direct.sh</code> (raw binary URL),
@@ -2343,31 +2287,33 @@ ansible-playbook playbooks/local.yml --check -e "@group_vars/prod_machine.yml"</
                             <code>helix.sh</code> (multi-file special).
                         </li>
                     </ol>
-                    <pre><code># scripts/install/versions.mk
+                    <pre><code># makefile/versions.mk
 DIRENV_VERSION := 2.34.0</code></pre>
-                    <pre><code># scripts/install/tools.mk
+                    <pre><code># makefile/tools.mk
 $(eval $(call TOOL,direnv,$(DIRENV_VERSION),\
   $(LIB)/direct.sh direnv https://github.com/direnv/direnv/releases/download/v$(DIRENV_VERSION)/direnv.linux-amd64))</code></pre>
                     <p class="note-row">
                         Both user and system scope work automatically &mdash;
-                        the Makefile reads <code>DEST</code> from the
-                        environment (Ansible passes
-                        <code>tools_dest</code>). <strong>Do not</strong> add
-                        tool-specific logic to <code>bootstrap.sh</code> or
-                        re-introduce per-tool Ansible tasks.
+                        <code>scope.mk</code> sets <code>DEST</code> from
+                        <code>MODE</code>, and the
+                        <code>TOOL</code> macro threads <code>$(SUDO)</code>
+                        through the install command (empty for prod, sudo
+                        for dev). <strong>Do not</strong> add tool-specific
+                        logic to <code>bootstrap.sh</code> or invent a
+                        parallel install path under <code>scripts/</code>.
                     </p>
                     <p>
                         Sanity-test before pushing:
                     </p>
                     <pre><code>cd scripts/install
-make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps
+make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps
 ls /tmp/install-test/direnv            # binary present?
-make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run: no output (stamp protected)</code></pre>
+make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run: no output (stamp protected)</code></pre>
 
                     <h3>Bumping a tool version</h3>
                     <p>
                         Edit one line in
-                        <code>scripts/install/versions.mk</code> and commit.
+                        <code>makefile/versions.mk</code> and commit.
                         The version is baked into the stamp filename at
                         <code>$STAMP/&lt;tool&gt;-&lt;version&gt;.done</code>,
                         so the change invalidates the old stamp; the next
@@ -2381,7 +2327,7 @@ make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run
                         colon-separated binary spec in the
                         <code>archive.sh</code> call; each name listed gets
                         installed independently. See
-                        <code>scripts/install/tools.mk</code> for examples.
+                        <code>makefile/tools.mk</code> for examples.
                     </p>
 
                     <h3>Adding a new host</h3>
@@ -2461,54 +2407,6 @@ make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run
                             <p>
                                 Bootstrap deliberately collects every gap up
                                 front so you only have to install once.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            Bootstrap fails with
-                            <em
-                                >&ldquo;python3 &ge; 3.9 required for
-                                ansible-core&rdquo;</em
-                            >
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Your distro&rsquo;s <code>python3</code> is too
-                                old.
-                            </p>
-                            <p>
-                                On RHEL 8: enable a newer module stream (<code
-                                    >sudo dnf module install python39</code
-                                >) or install <code>python3.11</code> and ensure
-                                <code>python3</code> resolves to it.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            Bootstrap fails with
-                            <em
-                                >&ldquo;ansible-playbook not on PATH after pip
-                                install&rdquo;</em
-                            >
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                <code>pip install --user</code> dropped the
-                                binary in <code>~/.local/bin</code> but your
-                                shell hasn&rsquo;t picked that up yet.
-                            </p>
-                            <p>
-                                Run
-                                <code
-                                    >export PATH="$HOME/.local/bin:$PATH"</code
-                                >
-                                and re-run <code>./bootstrap.sh</code>. After
-                                this run completes, <code>shell.yml</code> wires
-                                the PATH permanently.
                             </p>
                         </div>
                     </details>
@@ -2622,27 +2520,6 @@ make direnv DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run
                                 Re-run interactively and just press
                                 <kbd>Enter</kbd> twice; the rest of the flow is
                                 unchanged.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            <code>ansible-playbook: command not found</code>
-                            after a fresh <code>bootstrap.sh</code> run
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Same root cause as the PATH issue above &mdash;
-                                PATH didn&rsquo;t include
-                                <code>~/.local/bin</code>.
-                            </p>
-                            <p>
-                                Either <code>source ~/.bashrc</code> or run
-                                <code
-                                    >export PATH="$HOME/.local/bin:$PATH"</code
-                                >
-                                and retry.
                             </p>
                         </div>
                     </details>
@@ -2920,9 +2797,8 @@ choco install -y &lt;id&gt;</code></pre>
                                 The only valid groups are
                                 <code>dev_machine</code> and
                                 <code>prod_machine</code> &mdash; anything else
-                                means there&rsquo;s no
-                                <code>group_vars/&lt;group&gt;.yml</code> to
-                                source scope from.
+                                means <code>update-hosts.sh</code> can't
+                                derive a <code>MODE</code> from it.
                             </p>
                             <p>
                                 Re-run with one of those two values (default is
@@ -2933,25 +2809,30 @@ choco install -y &lt;id&gt;</code></pre>
 
                     <details data-ts>
                         <summary>
-                            An Ansible run errored with
+                            <code>make</code> errored with
                             <em
-                                >&ldquo;tool_scope=system requires
-                                has_sudo=true&rdquo;</em
+                                >&ldquo;MODE=dev requires HAS_SUDO=true&rdquo;</em
+                            >
+                            or
+                            <em
+                                >&ldquo;MODE not set&rdquo;</em
                             >
                         </summary>
                         <div class="ts-body">
                             <p>
-                                A host&rsquo;s <code>group_vars</code> and the
-                                playbook&rsquo;s CLI overrides disagreed &mdash;
-                                usually because something passed
-                                <code>-e "tool_scope=system"</code> against a
-                                <code>prod_machine</code> host.
+                                <code>scope.mk</code> guards both: you can't
+                                set <code>MODE=dev</code> without sudo
+                                (system-wide install is meaningless without
+                                it), and there's no default for
+                                <code>MODE</code> &mdash; the choice is too
+                                load-bearing to silently fall through.
                             </p>
                             <p>
-                                Drop the <code>-e</code> override and let the
-                                group decide, or use
-                                <code>--limit dev_machine</code> to scope the
-                                run to hosts that actually have sudo.
+                                Use one of <code>make dev</code> /
+                                <code>make prod</code> (which set
+                                <code>MODE</code> for you) or pass it
+                                explicitly: <code>make MODE=prod
+                                provision</code>.
                             </p>
                         </div>
                     </details>
