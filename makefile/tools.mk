@@ -23,6 +23,16 @@
 #      exactly what upstream publishes.
 
 # =============================================================================
+# META-INSTALLER (bootstrap)  — installs the eget binary that's used by
+# every EGET_TOOL entry below. eget itself is a regular GitHub-release
+# install, so we use the existing archive.sh path (no chicken-and-egg).
+# All EGET_TOOL rules carry an order-only `| eget` dep, so Make ensures
+# this stamp lands first under `make -j8`.
+# =============================================================================
+$(eval $(call TOOL,eget,$(EGET_VERSION),\
+  $(LIB)/archive.sh eget https://github.com/zyedidia/eget/releases/download/v$(EGET_VERSION)/eget-$(EGET_VERSION)-linux_amd64.tar.gz))
+
+# =============================================================================
 # ARCHIVE single-binary  (tar.gz / tar.bz2 / tar.xz / zip)
 # archive.sh walks the extracted tree with `find -name <binary>` and installs
 # the first match, so the internal layout doesn't matter — top-level,
@@ -42,8 +52,9 @@ $(eval $(call TOOL,starship,$(STARSHIP_VERSION),\
 $(eval $(call TOOL,zellij,$(ZELLIJ_VERSION),\
   $(LIB)/archive.sh zellij https://github.com/zellij-org/zellij/releases/download/v$(ZELLIJ_VERSION)/zellij-x86_64-unknown-linux-musl.tar.gz))
 
-$(eval $(call TOOL,glow,$(GLOW_VERSION),\
-  $(LIB)/archive.sh glow https://github.com/charmbracelet/glow/releases/download/v$(GLOW_VERSION)/glow_$(GLOW_VERSION)_Linux_x86_64.tar.gz))
+# glow — wrapper-dir tarball; default v-tag; default asset filters
+# exclude the .sbom.json side-file.
+$(eval $(call EGET_TOOL,glow,$(GLOW_VERSION),charmbracelet/glow))
 
 # --- Tier-1 ------------------------------------------------------------------
 $(eval $(call TOOL,fd,$(FD_VERSION),\
@@ -80,8 +91,8 @@ $(eval $(call TOOL,fastfetch,$(FASTFETCH_VERSION),\
   $(LIB)/archive.sh fastfetch https://github.com/fastfetch-cli/fastfetch/releases/download/$(FASTFETCH_VERSION)/fastfetch-musl-amd64.tar.gz))
 
 # --- Second-wave -------------------------------------------------------------
-$(eval $(call TOOL,gitui,$(GITUI_VERSION),\
-  $(LIB)/archive.sh gitui https://github.com/gitui-org/gitui/releases/download/v$(GITUI_VERSION)/gitui-linux-x86_64.tar.gz))
+# gitui — ./prefix tarball (auto-handled by eget); default v-tag.
+$(eval $(call EGET_TOOL,gitui,$(GITUI_VERSION),gitui-org/gitui))
 
 $(eval $(call TOOL,lazygit,$(LAZYGIT_VERSION),\
   $(LIB)/archive.sh lazygit https://github.com/jesseduffield/lazygit/releases/download/v$(LAZYGIT_VERSION)/lazygit_$(LAZYGIT_VERSION)_linux_x86_64.tar.gz))
@@ -94,8 +105,11 @@ $(eval $(call TOOL,yazi,$(YAZI_VERSION),\
   $(LIB)/archive.sh yazi:ya https://github.com/sxyazi/yazi/releases/download/v$(YAZI_VERSION)/yazi-x86_64-unknown-linux-musl.zip))
 
 # ast-grep ships two binaries (sg + ast-grep)
-$(eval $(call TOOL,ast-grep,$(AST_GREP_VERSION),\
-  $(LIB)/archive.sh sg:ast-grep https://github.com/ast-grep/ast-grep/releases/download/$(AST_GREP_VERSION)/app-x86_64-unknown-linux-gnu.zip))
+# ast-grep — multi-binary archive (installs both `sg` and `ast-grep`).
+# Tag has no `v` prefix. eget's auto-detect picks the right asset
+# (only one Linux variant published); --all extracts every executable.
+# Note: clean-ast-grep only removes ast-grep — `sg` lingers in $(DEST).
+$(eval $(call EGET_TOOL,ast-grep,$(AST_GREP_VERSION),ast-grep/ast-grep,$(AST_GREP_VERSION),--all))
 
 $(eval $(call TOOL,television,$(TELEVISION_VERSION),\
   $(LIB)/archive.sh tv https://github.com/alexpasmantier/television/releases/download/$(TELEVISION_VERSION)/tv-$(TELEVISION_VERSION)-x86_64-unknown-linux-musl.tar.gz))
@@ -103,14 +117,15 @@ $(eval $(call TOOL,television,$(TELEVISION_VERSION),\
 $(eval $(call TOOL,xh,$(XH_VERSION),\
   $(LIB)/archive.sh xh https://github.com/ducaale/xh/releases/download/v$(XH_VERSION)/xh-v$(XH_VERSION)-x86_64-unknown-linux-musl.tar.gz))
 
-$(eval $(call TOOL,gping,$(GPING_VERSION),\
-  $(LIB)/archive.sh gping https://github.com/orf/gping/releases/download/gping-v$(GPING_VERSION)/gping-Linux-musl-x86_64.tar.gz))
+# gping — non-standard tag prefix (gping-v$VERSION); both gnu and musl
+# variants published, prefer musl for static linking.
+$(eval $(call EGET_TOOL,gping,$(GPING_VERSION),orf/gping,gping-v$(GPING_VERSION),--asset musl))
 
 $(eval $(call TOOL,atuin,$(ATUIN_VERSION),\
   $(LIB)/archive.sh atuin https://github.com/atuinsh/atuin/releases/download/v$(ATUIN_VERSION)/atuin-x86_64-unknown-linux-musl.tar.gz))
 
-$(eval $(call TOOL,delta,$(DELTA_VERSION),\
-  $(LIB)/archive.sh delta https://github.com/dandavison/delta/releases/download/$(DELTA_VERSION)/delta-$(DELTA_VERSION)-x86_64-unknown-linux-musl.tar.gz))
+# delta — tag has no `v` prefix; both gnu and musl variants published.
+$(eval $(call EGET_TOOL,delta,$(DELTA_VERSION),dandavison/delta,$(DELTA_VERSION),--asset musl))
 
 $(eval $(call TOOL,micro,$(MICRO_VERSION),\
   $(LIB)/archive.sh micro https://github.com/zyedidia/micro/releases/download/v$(MICRO_VERSION)/micro-$(MICRO_VERSION)-linux64-static.tar.gz))

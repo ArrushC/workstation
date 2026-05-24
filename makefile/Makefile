@@ -72,6 +72,37 @@ clean-$(1):
 	@rm -f $$(STAMP)/$(1)-*.done
 endef
 
+# -----------------------------------------------------------------------------
+# EGET_TOOL — register a GitHub-release single-binary install via eget.
+#
+#   $(eval $(call EGET_TOOL,<name>,<version>,<user/repo>[,<tag>][,<extra>]))
+#
+#   $(1)  name        tool name (stamp + phony target + binary at $(DEST)).
+#   $(2)  version     pinned in versions.mk; baked into the stamp filename.
+#   $(3)  user/repo   GitHub owner/repo path.
+#   $(4)  tag         OPTIONAL explicit tag. Defaults to v$(version).
+#                     Override for tools whose release tag doesn't follow
+#                     vX.Y.Z (e.g. delta uses "0.19.2", gping uses
+#                     "gping-vX.Y.Z").
+#   $(5)  extra       OPTIONAL extra args forwarded to eget. Common cases:
+#                       --asset musl   prefer musl static over gnu
+#                       --asset <s>    other disambiguator
+#                       --all          install every executable in the
+#                                      archive (for multi-binary releases)
+#
+# Like TOOL: joins $(SCOPE_TOOLS), emits a stamp rule, threads $(SUDO).
+# Unlike TOOL: adds an order-only `| eget` prerequisite so the eget binary
+# (installed by archive.sh in tools.mk) exists before this rule fires.
+# -----------------------------------------------------------------------------
+define EGET_TOOL
+SCOPE_TOOLS += $(1)
+$(call _RULE_BODY,$(1),$(2),$(SUDO) $(LIB)/eget.sh $(3) $(if $(4),$(4),v$(2)) $(5))
+$$(STAMP)/$(1)-$(2).done: | $$(STAMP)/eget-$$(EGET_VERSION).done
+clean-$(1):
+	@rm -f $$(STAMP)/$(1)-*.done
+	@$(SUDO) rm -f $$(DEST)/$(1)
+endef
+
 SCOPE_TOOLS :=
 USER_TOOLS  :=
 include tools.mk

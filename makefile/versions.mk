@@ -9,6 +9,13 @@
 # literal string "latest" — the stamp filename never changes, so re-running
 # `make` won't redownload them. `make clean-<tool>` forces it.
 
+# --- Meta-installer ----------------------------------------------------------
+# eget downloads GitHub releases and figures out the right asset by repo+tag.
+# Tools registered via EGET_TOOL in tools.mk depend on this binary (installed
+# first via the regular archive.sh helper). Bumping invalidates the
+# eget-<version>.done stamp and triggers reinstall like any other tool.
+EGET_VERSION := 1.3.4
+
 # --- Tier-0: original toolbelt -----------------------------------------------
 FZF_VERSION      := 0.54.0
 ZOXIDE_VERSION   := 0.9.4
