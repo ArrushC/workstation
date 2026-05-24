@@ -46,7 +46,12 @@
       "WebFetch(domain:dev.yorhel.nl)",
       "PowerShell(chezmoi execute-template --source C:\\\\Users\\\\arrush.chaturvedi\\\\.local\\\\share\\\\chezmoi --init --file C:\\\\Users\\\\arrush.chaturvedi\\\\.local\\\\share\\\\chezmoi\\\\chezmoi\\\\.chezmoiignore.tmpl)",
       "PowerShell([Environment]::GetEnvironmentVariable\\('WEZTERM_CONFIG_FILE', 'User'\\); '---'; Test-Path \"$env:USERPROFILE\\\\.config\\\\wezterm\\\\wezterm.lua\")",
-      "Bash(chezmoi git *)"
+      "Bash(chezmoi git *)",
+      "Bash(bash -n /c/Users/arrush.chaturvedi/.local/share/chezmoi/bootstrap.sh)",
+      "Bash(bash -n /c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/manage-hosts.sh)",
+      "Bash(chmod +x /c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh)",
+      "Bash(bash -n /c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh)",
+      "Bash(/c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh --check --group dev_machine)"
     ]
   }
 }

@@ -1,7 +1,0 @@
-# =============================================================================
-# roles/linux-base/handlers/main.yml
-# =============================================================================
-
-- name: "reload shell"
-  ansible.builtin.shell: "source {{ dev_home }}/.bashrc"
-  listen: "reload shell"

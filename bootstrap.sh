@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# bootstrap.sh — workstation setup (Ansible seed)
+# bootstrap.sh — workstation setup (Make seed)
 #
-# Exactly one of --dev or --prod is required — it decides both the inventory
-# group this host registers as AND the scope the local playbook runs in:
+# Exactly one of --dev or --prod is required — it picks both the hosts.conf
+# group this host registers as AND the scope `make provision` runs in:
 #
 #   DEV  (host you own, sudo, system-wide install to /usr/local/bin):
 #     ./bootstrap.sh --dev
@@ -12,9 +12,10 @@
 #     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
 #     or: ./bootstrap.sh --prod
 #
-# The scope values come from ansible/group_vars/{dev,prod}_machine.yml —
-# the same files the remote linux.yml playbook uses, so a host configured
-# locally and a host configured remotely end up identical.
+# The scope-aware facts (DEST, SUDO, HAS_SUDO, INSTALL_PACKAGES) are
+# resolved from MODE=dev|prod by makefile/scope.mk. Same resolution
+# happens whether you bootstrap locally or update remotely via
+# scripts/update-hosts.sh.
 #
 # REINSTALL — wipe the cloned repo + chezmoi config, then re-bootstrap fresh.
 # Does NOT remove installed tools or deployed dotfiles (those are idempotent
@@ -35,17 +36,18 @@
 #     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
 # Flow (both modes):
-#   1. preflight             — check curl/git/python3/pip/iproute, python>=3.9
+#   1. preflight             — check curl/git/make/tar/unzip/iproute
 #   2. clone repo            — into ~/.local/share/chezmoi (or git pull if present)
-#   3. self_register         — add this host to hosts.conf + sync inventory
+#   3. self_register         — add this host to hosts.conf + sync wezterm block
 #                              (auto-skipped inside WSL — see is_wsl below)
-#   4. ensure_ansible        — pip install --user ansible-core if missing, smoke test
-#   5. run playbook          — ansible-playbook playbooks/local.yml
-#   5b. ensure_chezmoi_initialized — `chezmoi init --apply` interactively if
-#                              ~/.config/chezmoi/chezmoi.toml is missing. Ansible
-#                              can't prompt for name/email (no TTY in command
-#                              module), so this closes the first-run gap.
-#   6. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
+#   4. run_make              — `make MODE=<dev|prod> provision` inside makefile/
+#                              (packages + tools + shell + dotfiles in one pass)
+#   4b. ensure_chezmoi_initialized — `chezmoi init --apply` interactively if
+#                              ~/.config/chezmoi/chezmoi.toml is missing. The
+#                              `chezmoi update` invoked by makefile/dotfiles.mk
+#                              can't prompt (no TTY in make recipes), so this
+#                              closes the first-run gap with stdin from /dev/tty.
+#   5. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
 #                              (no-op inside WSL since self_register made no edits)
 #
 # WSL — running inside a WSL distro is supported and treated as a managed host
@@ -54,45 +56,20 @@
 # short-circuits self_register so hosts.conf and the wezterm SSH-domain block
 # are never touched. The end-of-bootstrap copy-id tip is also suppressed.
 #
-# Tool versions, URLs, and install logic live in
-#   ansible/group_vars/all.yml + ansible/roles/linux-base/tasks/tools.yml
-# — there is no longer a duplicate set of versions in this script.
+# Tool versions, URLs, dnf packages, PATH wiring, chezmoi orchestration —
+# everything lives under makefile/ (versions.mk, tools.mk, packages.mk,
+# shell.mk, dotfiles.mk, lib/*.sh). bootstrap.sh has no per-tool knowledge.
 # =============================================================================
 
 set -euo pipefail
 
-# ANSI-C quoting ($'...') stores the actual ESC byte at assignment time, so
-# these work in `echo` (with or without -e), `printf`, AND here-docs/cat.
-# Plain '\033[...]' would only work with `echo -e`, breaking the here-doc
-# in print_recap_legend below (which printed the literal bytes).
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
-BLUE=$'\033[0;34m'; CYAN=$'\033[0;36m'; MAGENTA=$'\033[0;35m'
-BOLD=$'\033[1m'; DIM=$'\033[2m'; RESET=$'\033[0m'
+BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
 
 log()  { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
 ok()   { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
 fail() { echo -e "${RED} ✗${RESET} $*"; exit 1; }
-
-# Glossary for Ansible's PLAY RECAP counts. Printed right after each
-# ansible-playbook run (success OR failure) so users can decode the
-# `ok=… changed=… failed=…` line without leaving the terminal. Category
-# names are colored to match Ansible's own recap output (green ok,
-# yellow changed, red failed/unreachable, cyan skipped, …).
-print_recap_legend() {
-  cat <<EOF
-
-${BOLD}PLAY RECAP legend${RESET} ${DIM}(decodes the counts on the line above)${RESET}
-  ${GREEN}ok${RESET}           task ran and made no changes (state already matched, or read-only)
-  ${YELLOW}changed${RESET}      task made a modification (installed, wrote, downloaded)
-  ${RED}failed${RESET}       task errored — aborts further tasks on that host (unless rescued/ignored)
-  ${CYAN}skipped${RESET}      conditional was false (when:, or creates:/stat showed already-installed)
-  ${RED}unreachable${RESET}  could not connect to the host (network, SSH, inventory)
-  ${MAGENTA}rescued${RESET}      task failed but was caught by a rescue: block (try/except)
-  ${YELLOW}ignored${RESET}      task failed but had ignore_errors: true, so the play continued
-
-EOF
-}
 
 # WSL detection — used to skip hosts.conf self-registration and the SSH
 # copy-id tip. WSL distros are accessed via wezterm WSL domains (not SSH),
@@ -176,9 +153,8 @@ Curl-pipe form (private repo with token):
 Run ./bootstrap.sh --help for all flags."
 fi
 
-# Derived values used by self_register and run_playbook
+# Derived value used by self_register (hosts.conf group column).
 GROUP_NAME="${MACHINE_TYPE}_machine"
-GROUP_VARS_FILE="group_vars/${GROUP_NAME}.yml"
 
 # =============================================================================
 # 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
@@ -195,7 +171,7 @@ do_reinstall() {
   echo ""
   echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
   echo "    - Installed tools in ~/.local/bin or /usr/local/bin"
-  echo "    - dnf packages, ansible-core, SSH keys"
+  echo "    - dnf packages, SSH keys"
   echo "    - Deployed dotfiles in \$HOME (chezmoi will re-apply over them)"
   echo ""
   echo "  For a deeper uninstall (remove tools too), do that manually first:"
@@ -251,42 +227,27 @@ Or copy this script out of the repo first:
 }
 
 # =============================================================================
-# 1. PREFLIGHT — collect-all prereq check, python version + pip module gate
+# 1. PREFLIGHT — collect-all prereq check
 # =============================================================================
 preflight() {
   log "Checking prerequisites..."
 
   local missing=()
-  command -v curl    &>/dev/null || missing+=("curl")
-  command -v git     &>/dev/null || missing+=("git")
-  command -v python3 &>/dev/null || missing+=("python3")
-  command -v ip      &>/dev/null || missing+=("iproute (for self-registration)")
-  command -v make    &>/dev/null || missing+=("make (for scripts/install/Makefile)")
-  command -v tar     &>/dev/null || missing+=("tar (for archive extraction)")
-  command -v unzip   &>/dev/null || missing+=("unzip (for .zip releases like lnav/yazi/rclone)")
+  command -v curl  &>/dev/null || missing+=("curl")
+  command -v git   &>/dev/null || missing+=("git")
+  command -v make  &>/dev/null || missing+=("make (drives makefile/Makefile)")
+  command -v tar   &>/dev/null || missing+=("tar (for archive extraction)")
+  command -v unzip &>/dev/null || missing+=("unzip (for .zip releases like lnav/yazi/rclone)")
+  command -v ip    &>/dev/null || missing+=("iproute (for self-registration)")
 
   if (( ${#missing[@]} > 0 )); then
     fail "Missing required prerequisites: ${missing[*]}
 Install via your distro's package manager, e.g.
-  RHEL/Fedora:   sudo dnf install curl git python3 python3-pip iproute make tar unzip
-  Debian/Ubuntu: sudo apt install curl git python3 python3-pip iproute2 make tar unzip"
+  RHEL/Fedora:   sudo dnf install curl git make tar unzip iproute
+  Debian/Ubuntu: sudo apt install curl git make tar unzip iproute2"
   fi
 
-  # python3 -m pip available?
-  if ! python3 -m pip --version &>/dev/null; then
-    fail "python3 has no pip module. Install via your distro's package manager
-(RHEL/Fedora: sudo dnf install python3-pip; Debian/Ubuntu: sudo apt install python3-pip)"
-  fi
-
-  # python3 >= 3.9 (ansible-core requirement)
-  local py_ver py_major py_minor
-  py_ver=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-  IFS='.' read -r py_major py_minor <<< "$py_ver"
-  if (( py_major < 3 )) || (( py_major == 3 && py_minor < 9 )); then
-    fail "python3 >= 3.9 required for ansible-core (found $py_ver)"
-  fi
-
-  ok "Prerequisites OK (python $py_ver)"
+  ok "Prerequisites OK"
 }
 
 # =============================================================================
@@ -332,7 +293,7 @@ self_register() {
 
   log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
   # --add already runs sync_all on success, so don't double-sync here —
-  # any Ansible/chezmoi step that reads hosts.conf downstream sees the
+  # any make/chezmoi step that reads hosts.conf downstream sees the
   # current inventory + wezterm block from the single --add pass.
   bash "$manage_script" --add \
     --name  "$host_name" \
@@ -343,69 +304,42 @@ self_register() {
 }
 
 # =============================================================================
-# 3. ENSURE ANSIBLE — install ansible-core via pip if missing, smoke-test
+# 3. RUN MAKE — invoke `make MODE=<dev|prod> provision` inside makefile/.
+#
+# The Makefile resolves DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES from MODE (see
+# makefile/scope.mk) and then runs the equivalent of every old Ansible task
+# in one parallel pass: dnf packages, PATH wiring, tool installs, chezmoi
+# update. Sudo is prefixed onto individual recipe lines that need it; make
+# itself runs as the dev user end-to-end, so stamps stay under $HOME and
+# pip/claude never accidentally get sudo'd.
 # =============================================================================
-ensure_ansible() {
-  if command -v ansible-playbook &>/dev/null; then
-    ok "ansible-playbook already on PATH"
-    return
-  fi
-
-  log "Installing ansible-core via pip3 --user..."
-  python3 -m pip install --user --upgrade ansible-core
-
-  # pip might have just dropped the binary somewhere not yet on PATH
-  export PATH="$HOME/.local/bin:$PATH"
-
-  if ! command -v ansible-playbook &>/dev/null; then
-    fail "ansible-playbook not on PATH after pip install.
-Add ~/.local/bin to PATH and re-run: export PATH=\"\$HOME/.local/bin:\$PATH\""
-  fi
-
-  ok "ansible-playbook: $(ansible-playbook --version 2>/dev/null | head -1)"
-}
-
-# =============================================================================
-# 4. RUN PLAYBOOK — hand off to Ansible (mode-specific overrides)
-# =============================================================================
-run_playbook() {
-  cd "$CHEZMOI_SOURCE/ansible"
-
-  # Capture exit status so we can always print the recap legend below,
-  # then re-fail with the original code if ansible-playbook errored.
-  # `set -e` would otherwise short-circuit before the legend gets a chance.
-  local rc=0
+run_make() {
+  cd "$CHEZMOI_SOURCE/makefile"
+  log "Running 'make MODE=${MACHINE_TYPE} provision'..."
   if [[ "$MACHINE_TYPE" == "dev" ]]; then
-    log "Dev mode — system-wide install (sudo) from ${GROUP_VARS_FILE}"
-    ansible-playbook playbooks/local.yml \
-      -e "@${GROUP_VARS_FILE}" \
-      --ask-become-pass || rc=$?
-  else
-    log "Prod mode — user-scope install (no sudo) from ${GROUP_VARS_FILE}"
-    ansible-playbook playbooks/local.yml \
-      -e "@${GROUP_VARS_FILE}" || rc=$?
+    log "Dev mode — sudo may prompt once early for dnf + /usr/local/bin writes"
   fi
 
-  print_recap_legend
-
-  if [[ $rc -ne 0 ]]; then
-    fail "ansible-playbook exited with code $rc — see the PLAY RECAP and task output above"
+  if ! make MODE="$MACHINE_TYPE" provision; then
+    fail "make provision failed — see the output above for the failing target."
   fi
+
+  ok "make provision complete"
 }
 
 # =============================================================================
 # 4.5. ENSURE CHEZMOI IS INITIALIZED — run `chezmoi init --apply` once.
 #
-# Ansible installed the chezmoi binary but cannot run `chezmoi init` itself:
-# `.chezmoi.toml.tmpl` calls promptStringOnce for name/email, and Ansible's
-# `command` module has no TTY for the prompts. So dotfiles.yml runs only
-# `chezmoi update` (pull + apply), gated on the config file's existence.
+# `make provision` installs the chezmoi binary but can't run `chezmoi init`
+# itself: `.chezmoi.toml.tmpl` calls promptStringOnce for name/email, and
+# make recipes have no TTY for the prompts. So makefile/dotfiles.mk runs
+# only `chezmoi update` (pull + apply), gated on the config file's existence.
 #
 # That leaves a first-run gap: chezmoi config doesn't exist yet, so the
 # update task is skipped, and the dotfiles never land. This function closes
-# the gap by running `chezmoi init --apply` interactively after the playbook
-# finishes, with stdin explicitly redirected from /dev/tty so prompts also
-# work under `curl … | bash` (where script stdin is the curl pipe).
+# the gap by running `chezmoi init --apply` interactively after `make
+# provision` returns, with stdin explicitly redirected from /dev/tty so
+# prompts also work under `curl … | bash` (where script stdin is the curl pipe).
 #
 # Idempotent: if the config file already exists, returns immediately.
 # =============================================================================
@@ -413,7 +347,7 @@ ensure_chezmoi_initialized() {
   local chezmoi_bin
   chezmoi_bin=$(command -v chezmoi || true)
   if [[ -z "$chezmoi_bin" ]]; then
-    warn "chezmoi binary not on PATH after the playbook — dotfiles not applied."
+    warn "chezmoi binary not on PATH after 'make provision' — dotfiles not applied."
     warn "Run manually: chezmoi init --apply --source $CHEZMOI_SOURCE"
     return 0
   fi
@@ -440,21 +374,21 @@ ensure_chezmoi_initialized() {
 }
 
 # =============================================================================
-# 5. PUSH HOST CHANGES — commit hosts.conf + inventory + wezterm, push upstream
-#    Warn-don't-fail: the playbook already succeeded, so we never abort here.
+# 5. PUSH HOST CHANGES — commit hosts.conf + wezterm sentinel block, push upstream.
+#    Warn-don't-fail: `make provision` already succeeded by now, so we never abort here.
 # =============================================================================
 push_host_changes() {
   cd "$CHEZMOI_SOURCE"
 
   # Anything to commit (working tree OR already-staged)?
-  if git diff --quiet hosts.conf ansible/inventory/hosts.ini chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null \
-     && git diff --cached --quiet hosts.conf ansible/inventory/hosts.ini chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null; then
+  if git diff --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null \
+     && git diff --cached --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null; then
     log "No host-list changes to commit"
     return 0
   fi
 
   log "Committing host registration..."
-  git add hosts.conf ansible/inventory/hosts.ini chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null || true
+  git add hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null || true
 
   # Identity priority for the auto-commit:
   #   1. GIT_USER_NAME / GIT_USER_EMAIL env vars (set in the bootstrap one-liner)
@@ -529,7 +463,7 @@ else
   if [[ -n "$GH_HEADER_VAL" ]]; then
     git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   fi
-  # A failed pull means we'd run Ansible against a stale-or-broken tree —
+  # A failed pull means we'd run make against a stale-or-broken tree —
   # better to bail out and let the user inspect.
   if ! git -C "$CHEZMOI_SOURCE" pull --ff-only; then
     fail "git pull --ff-only failed in $CHEZMOI_SOURCE.
@@ -543,8 +477,7 @@ To start over from scratch (wipes the cloned repo, not your tools/dotfiles):
 fi
 
 self_register
-ensure_ansible
-run_playbook
+run_make
 ensure_chezmoi_initialized
 push_host_changes
 
