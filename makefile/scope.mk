@@ -13,14 +13,22 @@
 # fall through to one.
 
 ifeq ($(MODE),dev)
-  # dev_machine — hosts you own, sudo available, system-wide install
+  # dev_machine — hosts you own, sudo available, system-wide install.
+  #
+  # `--preserve-env=DEST,HELIX_RUNTIME_DEST` is load-bearing: sudo's default
+  # is env_reset (every env var stripped except a whitelist), so without
+  # this flag the install helpers under lib/ see DEST as empty and abort
+  # with `archive.sh: DEST not set`. Listing the vars explicitly bypasses
+  # the sudoers env_check filter for exactly these (vs `-E` which preserves
+  # everything and is more easily blocked by site policy).
   DEST               := /usr/local/bin
   HELIX_RUNTIME_DEST := /usr/local/lib/helix
   HAS_SUDO           := true
   INSTALL_PACKAGES   := true
-  SUDO               := sudo
+  SUDO               := sudo --preserve-env=DEST,HELIX_RUNTIME_DEST
 else ifeq ($(MODE),prod)
-  # prod_machine — hosts you don't fully own, no sudo, per-user install
+  # prod_machine — hosts you don't fully own, no sudo, per-user install.
+  # SUDO is empty so install helpers inherit env directly from make.
   DEST               := $(HOME)/.local/bin
   HELIX_RUNTIME_DEST := $(HOME)/.config/helix
   HAS_SUDO           := false
