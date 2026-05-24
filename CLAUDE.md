@@ -53,15 +53,16 @@ workstation/
 │   └── update-hosts.sh           ← multi-host updater — ssh-loop over hosts.conf, runs `git pull && make provision`
 │
 ├── makefile/                     ← provisioning (replaces the old ansible/ tree)
-│   ├── Makefile                  ← top-level: include & provision/dev/prod targets + TOOL/USER_TOOL macros
+│   ├── Makefile                  ← top-level: include & provision/dev/prod targets + TOOL/USER_TOOL/EGET_TOOL macros
 │   ├── scope.mk                  ← MODE=dev|prod → DEST / SUDO / HAS_SUDO / INSTALL_PACKAGES
-│   ├── versions.mk               ← single source of truth for tool versions
+│   ├── versions.mk               ← single source of truth for tool versions (incl. EGET_VERSION for the meta-installer)
 │   ├── tools.mk                  ← per-tool install rules (one $(eval $(call ...)) line each)
 │   ├── packages.mk               ← dnf core + EPEL (RHEL-family) + optional best-effort loop
 │   ├── shell.mk                  ← PATH via /etc/profile.d (sudo) or ~/.bashrc (no sudo); bash-completion
 │   ├── dotfiles.mk               ← `chezmoi update` gated on ~/.config/chezmoi/chezmoi.toml existing
 │   └── lib/
-│       ├── archive.sh            ← curl + extract + find-and-install (tar.gz/bz2/xz/zip)
+│       ├── eget.sh               ← PREFERRED: thin wrapper around eget meta-installer (37 tools)
+│       ├── archive.sh            ← curl + extract + find-and-install (tar.gz/bz2/xz/zip) — multi-binary/non-GH cases
 │       ├── direct.sh             ← curl + chmod for raw binary URLs
 │       ├── pipe.sh               ← curl-piped upstream installers (chezmoi, claude)
 │       ├── pip.sh                ← pip install --user wrapper
@@ -199,7 +200,7 @@ If `is_wsl()` ever needs to distinguish WSL 1 from WSL 2 or distro families, ext
 
 ## Tool versions — single source of truth
 
-All tool versions live in `makefile/versions.mk` (`FZF_VERSION`, `ZOXIDE_VERSION`, etc. — one uppercase variable per tool). `bootstrap.sh` and the Makefile-driven provisioning layer have no inline version pins. To bump a tool, edit `versions.mk`; the version is baked into the stamp filename at `$STAMP/<tool>-<version>.done`, so changing it invalidates the old stamp and triggers reinstall on the next `make provision` (or targeted `make <tool>`). To add a new tool, add a `<NAME>_VERSION := X.Y.Z` line to `versions.mk` plus one `$(eval $(call TOOL,...))` line to `tools.mk` — pick the helper that matches the tool's release shape (`archive.sh` / `direct.sh` / `pip.sh` / `pipe.sh` / `helix.sh`).
+All tool versions live in `makefile/versions.mk` (`FZF_VERSION`, `ZOXIDE_VERSION`, `EGET_VERSION`, etc. — one uppercase variable per tool). `bootstrap.sh` and the Makefile-driven provisioning layer have no inline version pins. To bump a tool, edit `versions.mk`; the version is baked into the stamp filename at `$STAMP/<tool>-<version>.done`, so changing it invalidates the old stamp and triggers reinstall on the next `make provision` (or targeted `make <tool>`). To add a new tool, add a `<NAME>_VERSION := X.Y.Z` line to `versions.mk` plus one `$(eval $(call EGET_TOOL,...))` line to `tools.mk` (or one of the fallback macros for non-eget cases — see "Adding a tool" below).
 
 `bootstrap.sh` has never carried `*_VERSION` constants; the historical `group_vars/all.yml` `*_version:` entries are gone (along with the whole `ansible/` tree). Do not re-introduce per-tool variables anywhere outside `versions.mk`.
 
@@ -209,12 +210,17 @@ Replaces the old `ansible/` tree. Composition (in include order — order matter
 
 ```
 include scope.mk      # MODE=dev|prod → DEST / SUDO / HAS_SUDO / INSTALL_PACKAGES
-include versions.mk   # tool versions (single source of truth)
-include tools.mk      # per-tool $(eval $(call TOOL,...)) calls
+include versions.mk   # tool versions (single source of truth) — also EGET_VERSION
+include tools.mk      # per-tool $(eval $(call EGET_TOOL|TOOL|USER_TOOL,…)) calls
 include packages.mk   # dnf core + EPEL (RHEL-family conditional) + optional loop
 include shell.mk      # PATH wiring
 include dotfiles.mk   # chezmoi update gate
 ```
+
+Three macros register tools:
+- **`EGET_TOOL`** — preferred for single-binary GitHub releases (~38 of 56). Delegates to `lib/eget.sh` which wraps the [`eget` meta-installer](https://github.com/zyedidia/eget). One line per tool: `$(eval $(call EGET_TOOL,<name>,<version>,<user/repo>[,<tag>][,<extra args>]))`. eget itself is the first tool in `tools.mk` (installed via the regular `archive.sh` path); all EGET_TOOL rules add an order-only Make prerequisite on its stamp so `make -j8` always builds eget first.
+- **`TOOL`** — used for tools eget can't cleanly install: non-GitHub URLs (ncdu/broot/nb/sysz/ssh-copy-id), multi-binary archives with junk files (age, yazi), helix's multi-file install, the chezmoi/claude curl-pipe installers.
+- **`USER_TOOL`** — pip user-site tools (glances/asciinema/harlequin). Never under sudo. Joins `$(USER_TOOLS)`.
 
 Top-level phony targets:
 
@@ -235,7 +241,7 @@ make help             # this help text
 
 Scope is resolved at parse time by `scope.mk`. Without `MODE=…` (or `make dev`/`make prod`), `scope.mk` errors out — there is deliberately no default, because the two scopes are too load-bearing to silently fall through to one. The `make dev` / `make prod` aliases re-invoke make with `MODE=…` set, so users can stay scope-aware without typing `MODE=`.
 
-The `$(SUDO)` thread: `scope.mk` sets `SUDO := sudo` for `MODE=dev` and `SUDO :=` (empty) for `MODE=prod`. The `TOOL` macro in `Makefile` prefixes the install command with `$(SUDO)`, so dev-mode scope tools land in `/usr/local/bin` via sudo while prod-mode ones land in `~/.local/bin` as the dev user. `USER_TOOL` (used by pip targets) never gets `$(SUDO)` — pip user-site always belongs to the calling user. Claude's bespoke rule in `Makefile` also skips `$(SUDO)` for the same reason. Make itself runs as the dev user end-to-end, so stamps under `$HOME/.local/share/workstation-install/` stay readable on re-runs.
+The `$(SUDO)` thread: `scope.mk` sets `SUDO := sudo --preserve-env=DEST,HELIX_RUNTIME_DEST` for `MODE=dev` and `SUDO :=` (empty) for `MODE=prod`. Both `TOOL` and `EGET_TOOL` macros in `Makefile` prefix the install command with `$(SUDO)`, so dev-mode scope tools land in `/usr/local/bin` via sudo while prod-mode ones land in `~/.local/bin` as the dev user. The `--preserve-env=DEST,HELIX_RUNTIME_DEST` is load-bearing — sudo's default is env_reset and the lib scripts (archive.sh, eget.sh, helix.sh) read those vars to know where to install. `USER_TOOL` (used by pip targets) never gets `$(SUDO)` — pip user-site always belongs to the calling user. Claude's bespoke rule in `Makefile` also skips `$(SUDO)` for the same reason. Make itself runs as the dev user end-to-end, so stamps under `$HOME/.local/share/workstation-install/` stay readable on re-runs.
 
 The Helix runtime tree (`helix_runtime_dest`) is the one special case — `~/.config/helix/runtime` for user scope, `/usr/local/lib/helix/runtime` for system scope (both are paths Helix searches by default). `makefile/lib/helix.sh` handles the binary+runtime split via the `TOOL` macro.
 
@@ -292,6 +298,7 @@ When in doubt, ask: "Would a user reading only `README.html` still be able to se
 | Added `direnv` (one line in `tools.mk` + `DIRENV_VERSION` in `versions.mk`) | **Yes** | Add `direnv` to Stack table; show how `MODE` controls its destination |
 | Bumped `FZF_VERSION` in `versions.mk` | No | Versions live in `makefile/versions.mk` only |
 | Refactored `lib/archive.sh` to deduplicate extraction logic | No | No CLI surface changed |
+| Integrated eget meta-installer (new EGET_TOOL macro) | **Yes** | "Adding a tool" section gets EGET_TOOL as the preferred macro; existing tools listed by helper class; per-tool `--asset` patterns documented (`musl`, `static`, `.tar.gz`, `^server`, `64bit`). |
 | Dropped Ansible entirely (this commit) | **Yes** | New "What changed if you used Ansible" callout under Daily workflows; commands `ansible-playbook playbooks/local.yml` → `make MODE=… provision`, `ansible-playbook playbooks/linux.yml --limit X` → `scripts/update-hosts.sh --group X`; preflight no longer needs python3 or pip; bootstrap no longer installs ansible-core. |
 | Added a wezterm keybind (e.g. `CTRL+SHIFT+H` cheatsheet) | **Yes** | Mention it under the Windows section so users know it exists |
 | Added `--copy-id` / `-CopyId` to manage-hosts | **Yes** | New "Copy SSH key" subsection with both shells + a tip line in the post-bootstrap message |
@@ -369,13 +376,31 @@ Adding a host:
 
 Adding a tool:
 1. Add `<NAME>_VERSION := X.Y.Z` to `makefile/versions.mk`.
-2. Add one `$(eval $(call TOOL,...))` line to `makefile/tools.mk` — pick the helper that matches the release shape:
-   - `$(LIB)/archive.sh <binary[:other_binary:...]> <url>` for tar.gz/tar.bz2/tar.xz/zip (covers ~85% of tools, including multi-binary ones like `age:age-keygen` or `yazi:ya`).
-   - `$(LIB)/direct.sh <name> <url>` for raw binary URLs (jq, broot, sops).
+2. Add one `$(eval $(call …,…))` line to `makefile/tools.mk` — **pick `EGET_TOOL` first**; only fall back to a direct helper for the cases eget can't handle.
+
+   **`EGET_TOOL` — preferred for single-binary GitHub releases (~38 of the current 56 tools).**
+   ```makefile
+   $(eval $(call EGET_TOOL,<name>,<version>,<user/repo>[,<tag>][,<extra eget args>]))
+   ```
+   - `<tag>` defaults to `v$(version)`. Override for non-`v` tags (delta uses `0.19.2`, gping uses `gping-v1.20.1`).
+   - `<extra eget args>` are forwarded to eget. Common ones:
+     - `--asset musl` when upstream publishes both gnu+musl (we prefer musl for static linking)
+     - `--asset .tar.gz` when upstream publishes the same binary in multiple archive formats (mise has 4; fastfetch has both `.tar.gz` and `.zip`)
+     - `--asset static` for the static-linked variant (micro, usql)
+     - `--asset 64bit` for repos using non-standard arch tokens (croc)
+     - `--asset '^<pattern>'` to anti-match (atuin excludes `server` + `update`)
+     - `--all` for archives containing only the binaries we want and nothing else (ast-grep, uv — `sg`/`ast-grep` and `uv`/`uvx` respectively)
+   - `lib/eget.sh` already bakes in anti-matches for the common noise: `.sbom .sig .sha .asc .zip.gpg .deb .rpm .apk .pkg .proof`.
+
+   **`TOOL` — direct helper. Use when EGET_TOOL doesn't fit:**
+   - `$(LIB)/archive.sh <binary[:other:…]> <url>` for tar.gz/bz2/xz/zip. Used for non-GitHub URLs (ncdu) and multi-binary archives that contain LICENSE/completion files alongside the binaries (age has 5 files; yazi has a completions/ dir — `--all` would install all of them).
+   - `$(LIB)/direct.sh <name> <url>` for raw binary URLs (jq, broot, sops, lazyjournal, sysz, ssh-copy-id, nb).
    - `$(LIB)/pipe.sh <name> <url> [-- <installer args>]` for upstream `curl | sh` installers (chezmoi takes `-b $(DEST)`).
-   - `$(LIB)/pip.sh <pkg>` for Python tools — register via `USER_TOOL` macro instead of `TOOL`, so it goes into `make user-tools` (no sudo, always `~/.local`).
-   - `$(LIB)/helix.sh <version>` if the tool is helix-shaped (binary + a runtime tree). Currently helix only.
-3. Test before pushing: `cd makefile && make <name> MODE=prod DEST=/tmp/test STAMP=/tmp/test-stamps`. Re-run should be a no-op (no `==>` line). For multi-binary tools, verify every binary lands in `/tmp/test/`.
+   - `$(LIB)/helix.sh <version>` for helix specifically (binary + runtime tree; multi-file install).
+
+   **`USER_TOOL` — pip user-site, never under sudo.** Used by `make user-tools`. Currently just glances/asciinema/harlequin.
+
+3. Test before pushing: `cd makefile && make <name> MODE=prod DEST=/tmp/test STAMP=/tmp/test-stamps`. Re-run should be a no-op (no `==>` line). For multi-binary tools verify every binary lands in `/tmp/test/`. For EGET_TOOL tools, ensure `GITHUB_TOKEN` is set or you'll hit eget's unauthenticated rate limit after ~30 tool installs.
 4. If the tool has user-facing CLI surface, mention it in `README.html` (see "README.html must mirror user-facing changes").
 
 ## Files Claude should be careful with
@@ -384,11 +409,12 @@ Adding a tool:
 - `hosts.conf` — edit via the manage-hosts scripts when possible; manual edits work but lose dynamic padding (and sort order) until next save. Column 4 (group) must be `dev_machine` or `prod_machine` — the manage-hosts scripts reject anything else on save, and `scripts/update-hosts.sh` can't derive a `MODE` from any other value.
 - `.chezmoiroot` — one-line file at the repo root containing `chezmoi`. Required for chezmoi's source state to point at the `chezmoi/` subdirectory; without it, all `dot_*` paths break. Don't delete or edit.
 - `bootstrap.sh` — keep it a thin seed. It must NOT contain per-tool versions or install logic. Tool versions live only in `makefile/versions.mk`; install logic lives only in `makefile/tools.mk` + `makefile/lib/*.sh`. Scope values (`DEST`, `SUDO`, `HAS_SUDO`, `INSTALL_PACKAGES`) must NOT be inlined — they come from `makefile/scope.mk` via `MODE=dev|prod`. If `bootstrap.sh` and `scope.mk` ever disagree on scope, fix `scope.mk`.
-- `makefile/Makefile` and `tools.mk` — the install machinery. The Makefile defines two macros (`TOOL` / `USER_TOOL`) plus a bespoke `claude-cli` rule; `tools.mk` is the per-tool data file. Recipe lines in the Makefile MUST be tab-indented (not spaces) — Make is strict. The TOOL macro's body uses `$$` to defer variable expansion to rule-fire time; don't switch to single `$` without testing.
+- `makefile/Makefile` and `tools.mk` — the install machinery. The Makefile defines three macros (`TOOL`, `USER_TOOL`, `EGET_TOOL`) plus a bespoke `claude-cli` rule; `tools.mk` is the per-tool data file. Recipe lines in the Makefile MUST be tab-indented (not spaces) — Make is strict. Macro bodies use `$$` to defer variable expansion to rule-fire time; don't switch to single `$` without testing. **EGET_TOOL adds an order-only dep on `$(STAMP)/eget-$(EGET_VERSION).done` to the per-tool stamp rule** — this is load-bearing under `make -j`. The first attempt put the dep on the phony target and Make resolved the stamp directly, bypassing the order; if you ever refactor the macro, preserve the stamp-on-stamp dependency or parallel builds will race.
 - `makefile/scope.mk` — single source of truth for MODE → DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES. Errors at parse time if `MODE` is missing — that's intentional; don't add a default. The `$(SUDO)` thread through `Makefile`'s `TOOL` macro depends on this file resolving cleanly.
 - `makefile/{packages,shell,dotfiles}.mk` — replace the old Ansible task files one-for-one. `packages.mk` is the only one that does anything when `MODE=prod` (where it's a no-op). `shell.mk` branches on `HAS_SUDO`. `dotfiles.mk` is gated on `~/.config/chezmoi/chezmoi.toml` existing — first-run init is bootstrap.sh's job.
-- `makefile/versions.mk` — single source of truth for tool versions. Variables are uppercase (`FZF_VERSION`, `GITUI_VERSION`, etc.) and consumed by URL templates in `tools.mk`. Use `latest` for tools that have no upstream version pin (broot, nb, pip packages).
-- `makefile/lib/*.sh` and `scripts/update-hosts.sh` — install/orchestration helpers. All shell scripts here MUST remain LF-only (same trap as `manage-hosts.sh`); `file makefile/lib/archive.sh` should say "Bourne-Again shell script", NOT "with CRLF line terminators". Repair with `sed -i 's/\r$//' makefile/lib/*.sh scripts/update-hosts.sh`.
+- `makefile/versions.mk` — single source of truth for tool versions. Variables are uppercase (`FZF_VERSION`, `GITUI_VERSION`, etc.) and consumed by URL templates / repo paths in `tools.mk`. Use `latest` for tools that have no upstream version pin (broot, nb, pip packages). **`EGET_VERSION` pins the eget meta-installer itself** — bumping it triggers a fresh eget install via archive.sh, which then runs all the EGET_TOOL-registered installs.
+- `makefile/lib/eget.sh` — wrapper that bakes in the `--to $DEST --quiet` flags plus a long anti-match `--asset '^…'` filter list (`.sbom .sig .sha .asc .zip.gpg .deb .rpm .apk .pkg .proof`). When upstream adds a new noise file type that breaks asset auto-detection (e.g. `.tar.zst.sbom`), add it to this list rather than per-tool. Pass-through `$@` carries per-tool extras from the macro's 5th arg.
+- `makefile/lib/*.sh` and `scripts/update-hosts.sh` — install/orchestration helpers. All shell scripts here MUST remain LF-only (same trap as `manage-hosts.sh`); `file makefile/lib/archive.sh` should say "Bourne-Again shell script", NOT "with CRLF line terminators". Repair with `sed -i 's/\r$//' makefile/lib/*.sh scripts/update-hosts.sh`. **Executable bit:** the lib scripts must be mode 100755 in git (`git ls-files --stage makefile/lib/`); a fresh clone with mode 100644 will fail with `sudo: ... archive.sh: command not found`. Restore with `git update-index --chmod=+x makefile/lib/*.sh`.
 - `chezmoi/.chezmoiignore.tmpl` — wrong entries here cause `chezmoi apply` to drop infrastructure files into `$HOME` (or to skip files you wanted applied). Edit-then-test: `chezmoi diff` on a sandbox host/Windows machine before pushing.
 - `scripts/manage-hosts.ps1` and `bootstrap.ps1` **must remain UTF-8 with BOM**. PowerShell 5.1 (Windows PowerShell, the default `powershell.exe`) reads scripts as Windows-1252 unless a BOM is present, and both files contain Unicode glyphs (`✓`, `✗`, `─`) used in colored output. Without the BOM, PS 5.1 mis-decodes the multi-byte UTF-8 and the script fails to parse with cryptic "string missing terminator" errors. To restore the BOM after a tool overwrites it: `[System.IO.File]::WriteAllText($path, [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($path)), [System.Text.UTF8Encoding]::new($true))`.
 - `scripts/manage-hosts.sh` **must remain LF-only**. The Edit/Write tools on Windows tend to save with CRLF; the resulting file runs but `read -r` then leaks `\r` into parsed fields, polluting downstream regeneration. After any edit, verify with `file scripts/manage-hosts.sh` (expect "Bourne-Again shell script", no "with CRLF line terminators"). Repair with `sed -i 's/\r$//' scripts/manage-hosts.sh`.
@@ -397,11 +423,11 @@ Adding a tool:
 
 After changes:
 - `./scripts/manage-hosts.sh --sync` — regenerates the chezmoi-tracked wezterm sentinel block, no errors.
-- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: ~55 scope-tools, 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call TOOL,...))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced in the call wasn't defined in `versions.mk`.
+- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: 56 scope-tools (incl. `eget` itself), 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call …,…))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced in the call wasn't defined in `versions.mk`.
 - `cd makefile && make -n MODE=prod provision` — dry-run the full provision flow. Should print "skipping system packages (MODE=prod, INSTALL_PACKAGES=false)" then the sequence of tool installs.
 - `cd makefile && make -n MODE=dev provision` — dry-run dev scope. Should print the dnf install lines (under `sudo`), then EPEL, then optional packages, then the tool installs.
 - `cd makefile && make help` (with or without MODE) — shows the top-level targets. Help-only commands don't trigger `scope.mk`'s error-out.
-- `cd makefile && make -j8 all MODE=prod DEST=/tmp/install-test HELIX_RUNTIME_DEST=/tmp/helix-rt STAMP=/tmp/install-test-stamps` — full sandbox install. Should finish in 25-30s on a reasonable connection; `ls /tmp/install-test | wc -l` ≈ 59 (the extra 4 are the multi-binary companions: `age-keygen`, `sg`, `ya`, `uvx`). Re-running the same command should be a sub-second no-op.
+- `cd makefile && make -j8 all MODE=prod DEST=/tmp/install-test HELIX_RUNTIME_DEST=/tmp/helix-rt STAMP=/tmp/install-test-stamps` — full sandbox install. Should finish in 25-30s on a reasonable connection; `ls /tmp/install-test | wc -l` ≈ 60 (the extras are the multi-binary companions: `age-keygen`, `sg`, `ya`, `uvx`, plus `eget` itself). Re-running the same command should be a sub-second no-op. **Set `GITHUB_TOKEN`** before running or eget will hit the unauthenticated 60-req/hour API limit partway through (~30 tools is enough to exhaust it).
 - `./scripts/update-hosts.sh --check --group dev_machine` — prints the planned action for each dev host without ssh'ing. Should derive MODE=dev correctly.
 - `./bootstrap.sh` with no flags must error out (no default). `./bootstrap.sh --dev --prod` must error out (mutually exclusive). `./bootstrap.sh --full` must error out with a clear "use --dev or --prod" message.
 - `./scripts/manage-hosts.sh --add --name t --ip 1.2.3.4 --user u --group foo --skip-confirm` must reject `foo` with a "must be dev_machine or prod_machine" error. The PowerShell side (`-Add -Group foo`) must reject the same way.

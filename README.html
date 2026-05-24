@@ -1277,9 +1277,10 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         <li>
                                             lib/
                                             <span class="note"
-                                                >&mdash; archive.sh /
-                                                direct.sh / pipe.sh /
-                                                pip.sh / helix.sh</span
+                                                >&mdash; eget.sh /
+                                                archive.sh / direct.sh /
+                                                pipe.sh / pip.sh /
+                                                helix.sh</span
                                             >
                                         </li>
                                     </ul>
@@ -2267,7 +2268,10 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         Two files, one line each. Tool installs live in
                         <code>makefile/</code> &mdash;
                         <code>make provision</code> invokes them as part of
-                        the normal bootstrap flow.
+                        the normal bootstrap flow. There are three macros;
+                        <strong>prefer <code>EGET_TOOL</code></strong> for
+                        single-binary GitHub releases (the common case &mdash;
+                        ~38 of the current 56 tools use it).
                     </p>
                     <ol>
                         <li>
@@ -2276,36 +2280,54 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         </li>
                         <li>
                             Add one
-                            <code>$(eval $(call TOOL,...))</code> line in
-                            <code>makefile/tools.mk</code>, picking
-                            the helper that matches the release shape:
-                            <code>archive.sh</code> (tar/zip),
-                            <code>direct.sh</code> (raw binary URL),
-                            <code>pipe.sh</code> (curl-piped installer),
-                            <code>pip.sh</code> (Python user-site, register
-                            as <code>USER_TOOL</code>), or
-                            <code>helix.sh</code> (multi-file special).
+                            <code>$(eval $(call EGET_TOOL,&lt;name&gt;,$(&lt;NAME&gt;_VERSION),&lt;user/repo&gt;[,&lt;tag&gt;][,&lt;extra args&gt;]))</code>
+                            line in <code>makefile/tools.mk</code>. The 4th
+                            arg overrides the default <code>v$VERSION</code>
+                            tag (use it for tools like delta whose tag is
+                            <code>0.19.2</code>, not <code>v0.19.2</code>).
+                            The 5th arg passes flags to <a
+                                href="https://github.com/zyedidia/eget"
+                                >eget</a> &mdash; commonly
+                            <code>--asset musl</code> when upstream
+                            publishes both gnu and musl variants.
                         </li>
                     </ol>
                     <pre><code># makefile/versions.mk
 DIRENV_VERSION := 2.34.0</code></pre>
                     <pre><code># makefile/tools.mk
-$(eval $(call TOOL,direnv,$(DIRENV_VERSION),\
-  $(LIB)/direct.sh direnv https://github.com/direnv/direnv/releases/download/v$(DIRENV_VERSION)/direnv.linux-amd64))</code></pre>
+$(eval $(call EGET_TOOL,direnv,$(DIRENV_VERSION),direnv/direnv))</code></pre>
                     <p class="note-row">
-                        Both user and system scope work automatically &mdash;
-                        <code>scope.mk</code> sets <code>DEST</code> from
-                        <code>MODE</code>, and the
-                        <code>TOOL</code> macro threads <code>$(SUDO)</code>
-                        through the install command (empty for prod, sudo
-                        for dev). <strong>Do not</strong> add tool-specific
-                        logic to <code>bootstrap.sh</code> or invent a
-                        parallel install path under <code>scripts/</code>.
+                        eget figures out the right asset from
+                        <code>direnv/direnv</code> + the tag, downloads it,
+                        finds the binary inside, and installs to
+                        <code>$(DEST)</code>. The wrapper at
+                        <code>lib/eget.sh</code> bakes in noise filters
+                        (<code>.sbom</code>, <code>.sig</code>,
+                        <code>.deb</code>, etc.) so eget's auto-detection
+                        almost always picks unambiguously.
                     </p>
                     <p>
-                        Sanity-test before pushing:
+                        <strong>Fallback to <code>TOOL</code></strong> for the
+                        shapes eget can't handle: multi-binary archives with
+                        junk files (age has LICENSE, yazi has shell
+                        completions), non-GitHub URLs (ncdu at
+                        dystroy.org), raw binary URLs (jq, broot, sops),
+                        curl-pipe installers (chezmoi, claude), or helix's
+                        binary-plus-runtime layout. Use the matching helper:
+                        <code>archive.sh</code>, <code>direct.sh</code>,
+                        <code>pipe.sh</code>, or <code>helix.sh</code>.
+                        <strong>Fallback to <code>USER_TOOL</code></strong>
+                        for pip user-site tools. <strong>Do not</strong>
+                        add tool-specific logic to <code>bootstrap.sh</code>
+                        or invent a parallel install path under
+                        <code>scripts/</code>.
                     </p>
-                    <pre><code>cd scripts/install
+                    <p>
+                        Sanity-test before pushing (set
+                        <code>GITHUB_TOKEN</code> to avoid eget's
+                        unauthenticated rate limit):
+                    </p>
+                    <pre><code>cd makefile
 make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps
 ls /tmp/install-test/direnv            # binary present?
 make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run: no output (stamp protected)</code></pre>
@@ -2321,13 +2343,15 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         automatically. No <code>make clean</code> needed.
                     </p>
                     <p>
-                        Multi-binary tools (e.g.
-                        <code>yazi</code>+<code>ya</code>,
-                        <code>age</code>+<code>age-keygen</code>) use a
-                        colon-separated binary spec in the
-                        <code>archive.sh</code> call; each name listed gets
-                        installed independently. See
-                        <code>makefile/tools.mk</code> for examples.
+                        Multi-binary tools split into two camps. <strong>eget
+                        with <code>--all</code></strong> covers archives
+                        containing only the binaries we want (ast-grep ships
+                        <code>sg</code>+<code>ast-grep</code>, uv ships
+                        <code>uv</code>+<code>uvx</code>). <strong>archive.sh
+                        with a colon-separated binary spec</strong> covers
+                        archives that also have LICENSE / completion files
+                        we don't want to install (age, yazi). See
+                        <code>makefile/tools.mk</code> for both patterns.
                     </p>
 
                     <h3>Adding a new host</h3>
