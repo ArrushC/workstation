@@ -49,7 +49,12 @@ exec "$DEST/eget" "$user_repo" \
   --quiet \
   --asset '^.sbom' \
   --asset '^.sig' \
-  --asset '^.sha256' \
+  --asset '^.sha' \
   --asset '^.asc' \
   --asset '^.zip.gpg' \
+  --asset '^.deb' \
+  --asset '^.rpm' \
+  --asset '^.apk' \
+  --asset '^.pkg' \
+  --asset '^.proof' \
   "$@"

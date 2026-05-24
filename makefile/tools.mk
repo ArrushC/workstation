@@ -1,26 +1,41 @@
 # tools.mk — per-tool install rules.
 #
-# Each tool is one $(eval $(call ...,)) line. Both macros are defined in
-# the Makefile; pick the one that matches the tool's destination semantics:
+# Each tool is one $(eval $(call ...,)) line. Three macros are defined in
+# the Makefile; pick the one that matches the tool's install shape:
 #
-#   TOOL       — scope-aware install. Honors $(DEST). Joins $(SCOPE_TOOLS).
-#                Used by `make all`. Run under become when system scope.
-#   USER_TOOL  — installs to the dev user's ~/.local (pip user-site).
-#                Joins $(USER_TOOLS). Used by `make user-tools`. Never sudo.
+#   EGET_TOOL  — PREFERRED for single-binary GitHub releases. Delegates
+#                to eget which figures out the right asset and layout.
+#                One line per tool: name, version, user/repo[, tag][, extras].
+#                Used by ~38 tools below. Joins $(SCOPE_TOOLS).
 #
-# Helpers (all under lib/):
-#   archive.sh  <binary[:other:...]> <url>     tar.gz/tar.bz2/tar.xz/zip
-#   direct.sh   <name> <url>                   raw binary URL (no archive)
-#   pip.sh      <pkg>                          Python user-site
-#   helix.sh    <version>                      multi-file special case
-#   pipe.sh     <name> <url> [-- <args>]       curl-piped installer
+#   TOOL       — Direct call to a helper (archive.sh/direct.sh/pipe.sh/
+#                helix.sh). Use for: non-GitHub URLs (ncdu/broot/nb/sysz/
+#                ssh-copy-id), multi-binary archives where eget --all
+#                pulls in junk (age, yazi), helix's multi-file install,
+#                chezmoi's curl-pipe installer. Joins $(SCOPE_TOOLS).
 #
-# Adding a tool:
+#   USER_TOOL  — pip user-site tools (glances/asciinema/harlequin). Never
+#                under sudo. Joins $(USER_TOOLS); used by `make user-tools`.
+#
+# Library helpers (lib/):
+#   eget.sh     <user/repo> <tag> [extra eget args]    (called by EGET_TOOL)
+#   archive.sh  <binary[:other:...]> <url>             tar.gz/tar.bz2/tar.xz/zip
+#   direct.sh   <name> <url>                           raw binary URL (no archive)
+#   pip.sh      <pkg>                                  Python user-site
+#   helix.sh    <version>                              multi-file special case
+#   pipe.sh     <name> <url> [-- <args>]               curl-piped installer
+#
+# Adding a tool (preferred — most cases):
 #   1. <NAME>_VERSION := ...   in versions.mk
-#   2. one $(eval $(call ...)) line below, in the right section
-#   3. If the URL is unusual (no v prefix, weird tag format), check the
-#      tool's GitHub Releases page — the URL template here must match
-#      exactly what upstream publishes.
+#   2. $(eval $(call EGET_TOOL,<name>,$(<NAME>_VERSION),<user/repo>))
+#   3. If the upstream tag isn't `v$VERSION` (e.g. plain "0.19.2", or
+#      "gping-vX.Y.Z"), pass the explicit tag as the 4th arg.
+#   4. If eget auto-detect picks wrong (both musl and gnu published,
+#      `.deb` side-files, etc.), add disambiguating eget flags as the
+#      5th arg — typically "--asset musl" or "--asset '^.foo'".
+#
+# Adding a non-GitHub-release tool, multi-binary archive, helix-shape,
+# etc.: use TOOL/USER_TOOL with the matching helper.
 
 # =============================================================================
 # META-INSTALLER (bootstrap)  — installs the eget binary that's used by
@@ -40,67 +55,48 @@ $(eval $(call TOOL,eget,$(EGET_VERSION),\
 # =============================================================================
 
 # --- Tier-0 ------------------------------------------------------------------
-$(eval $(call TOOL,fzf,$(FZF_VERSION),\
-  $(LIB)/archive.sh fzf https://github.com/junegunn/fzf/releases/download/v$(FZF_VERSION)/fzf-$(FZF_VERSION)-linux_amd64.tar.gz))
-
-$(eval $(call TOOL,zoxide,$(ZOXIDE_VERSION),\
-  $(LIB)/archive.sh zoxide https://github.com/ajeetdsouza/zoxide/releases/download/v$(ZOXIDE_VERSION)/zoxide-$(ZOXIDE_VERSION)-x86_64-unknown-linux-musl.tar.gz))
-
-$(eval $(call TOOL,starship,$(STARSHIP_VERSION),\
-  $(LIB)/archive.sh starship https://github.com/starship/starship/releases/download/v$(STARSHIP_VERSION)/starship-x86_64-unknown-linux-musl.tar.gz))
-
-$(eval $(call TOOL,zellij,$(ZELLIJ_VERSION),\
-  $(LIB)/archive.sh zellij https://github.com/zellij-org/zellij/releases/download/v$(ZELLIJ_VERSION)/zellij-x86_64-unknown-linux-musl.tar.gz))
+$(eval $(call EGET_TOOL,fzf,$(FZF_VERSION),junegunn/fzf))
+$(eval $(call EGET_TOOL,zoxide,$(ZOXIDE_VERSION),ajeetdsouza/zoxide,,--asset musl))
+$(eval $(call EGET_TOOL,starship,$(STARSHIP_VERSION),starship/starship,,--asset musl))
+$(eval $(call EGET_TOOL,zellij,$(ZELLIJ_VERSION),zellij-org/zellij,,--asset musl))
 
 # glow — wrapper-dir tarball; default v-tag; default asset filters
 # exclude the .sbom.json side-file.
 $(eval $(call EGET_TOOL,glow,$(GLOW_VERSION),charmbracelet/glow))
 
 # --- Tier-1 ------------------------------------------------------------------
-$(eval $(call TOOL,fd,$(FD_VERSION),\
-  $(LIB)/archive.sh fd https://github.com/sharkdp/fd/releases/download/v$(FD_VERSION)/fd-v$(FD_VERSION)-x86_64-unknown-linux-musl.tar.gz))
+$(eval $(call EGET_TOOL,fd,$(FD_VERSION),sharkdp/fd,,--asset musl))
+$(eval $(call EGET_TOOL,bat,$(BAT_VERSION),sharkdp/bat,,--asset musl))
+$(eval $(call EGET_TOOL,btop,$(BTOP_VERSION),aristocratos/btop,,--asset musl))
 
-$(eval $(call TOOL,bat,$(BAT_VERSION),\
-  $(LIB)/archive.sh bat https://github.com/sharkdp/bat/releases/download/v$(BAT_VERSION)/bat-v$(BAT_VERSION)-x86_64-unknown-linux-musl.tar.gz))
-
-$(eval $(call TOOL,btop,$(BTOP_VERSION),\
-  $(LIB)/archive.sh btop https://github.com/aristocratos/btop/releases/download/v$(BTOP_VERSION)/btop-x86_64-unknown-linux-musl.tar.gz))
-
+# ncdu — published at dev.yorhel.nl, not GitHub. Stays on archive.sh.
 $(eval $(call TOOL,ncdu,$(NCDU_VERSION),\
   $(LIB)/archive.sh ncdu https://dev.yorhel.nl/download/ncdu-$(NCDU_VERSION)-linux-x86_64.tar.gz))
 
-$(eval $(call TOOL,bandwhich,$(BANDWHICH_VERSION),\
-  $(LIB)/archive.sh bandwhich https://github.com/imsnif/bandwhich/releases/download/v$(BANDWHICH_VERSION)/bandwhich-v$(BANDWHICH_VERSION)-x86_64-unknown-linux-musl.tar.gz))
+$(eval $(call EGET_TOOL,bandwhich,$(BANDWHICH_VERSION),imsnif/bandwhich,,--asset musl))
+# usql — both regular and `usql_static` variants published per arch.
+# `--asset '^_static'` excludes the static-linked one (matches the existing
+# behavior — we install the regular dynamically-linked usql).
+$(eval $(call EGET_TOOL,usql,$(USQL_VERSION),xo/usql,,--asset '^_static'))
+$(eval $(call EGET_TOOL,lazydocker,$(LAZYDOCKER_VERSION),jesseduffield/lazydocker))
+$(eval $(call EGET_TOOL,dive,$(DIVE_VERSION),wagoodman/dive))
+$(eval $(call EGET_TOOL,lnav,$(LNAV_VERSION),tstack/lnav,,--asset musl))
+$(eval $(call EGET_TOOL,gopass,$(GOPASS_VERSION),gopasspw/gopass))
 
-$(eval $(call TOOL,usql,$(USQL_VERSION),\
-  $(LIB)/archive.sh usql https://github.com/xo/usql/releases/download/v$(USQL_VERSION)/usql-$(USQL_VERSION)-linux-amd64.tar.bz2))
-
-$(eval $(call TOOL,lazydocker,$(LAZYDOCKER_VERSION),\
-  $(LIB)/archive.sh lazydocker https://github.com/jesseduffield/lazydocker/releases/download/v$(LAZYDOCKER_VERSION)/lazydocker_$(LAZYDOCKER_VERSION)_Linux_x86_64.tar.gz))
-
-$(eval $(call TOOL,dive,$(DIVE_VERSION),\
-  $(LIB)/archive.sh dive https://github.com/wagoodman/dive/releases/download/v$(DIVE_VERSION)/dive_$(DIVE_VERSION)_linux_amd64.tar.gz))
-
-$(eval $(call TOOL,lnav,$(LNAV_VERSION),\
-  $(LIB)/archive.sh lnav https://github.com/tstack/lnav/releases/download/v$(LNAV_VERSION)/lnav-$(LNAV_VERSION)-linux-musl-x86_64.zip))
-
-$(eval $(call TOOL,gopass,$(GOPASS_VERSION),\
-  $(LIB)/archive.sh gopass https://github.com/gopasspw/gopass/releases/download/v$(GOPASS_VERSION)/gopass-$(GOPASS_VERSION)-linux-amd64.tar.gz))
-
-$(eval $(call TOOL,fastfetch,$(FASTFETCH_VERSION),\
-  $(LIB)/archive.sh fastfetch https://github.com/fastfetch-cli/fastfetch/releases/download/$(FASTFETCH_VERSION)/fastfetch-musl-amd64.tar.gz))
+# fastfetch — non-v tag; publishes both .tar.gz and .zip per Linux variant.
+# Prefer the tarball for consistency with the other tools.
+$(eval $(call EGET_TOOL,fastfetch,$(FASTFETCH_VERSION),fastfetch-cli/fastfetch,$(FASTFETCH_VERSION),--asset musl --asset .tar.gz))
 
 # --- Second-wave -------------------------------------------------------------
 # gitui — ./prefix tarball (auto-handled by eget); default v-tag.
 $(eval $(call EGET_TOOL,gitui,$(GITUI_VERSION),gitui-org/gitui))
 
-$(eval $(call TOOL,lazygit,$(LAZYGIT_VERSION),\
-  $(LIB)/archive.sh lazygit https://github.com/jesseduffield/lazygit/releases/download/v$(LAZYGIT_VERSION)/lazygit_$(LAZYGIT_VERSION)_linux_x86_64.tar.gz))
+$(eval $(call EGET_TOOL,lazygit,$(LAZYGIT_VERSION),jesseduffield/lazygit))
+$(eval $(call EGET_TOOL,jj,$(JUJUTSU_VERSION),jj-vcs/jj))
 
-$(eval $(call TOOL,jj,$(JUJUTSU_VERSION),\
-  $(LIB)/archive.sh jj https://github.com/jj-vcs/jj/releases/download/v$(JUJUTSU_VERSION)/jj-v$(JUJUTSU_VERSION)-x86_64-unknown-linux-musl.tar.gz))
-
-# yazi ships two binaries (yazi + ya) in the same zip — colon-separated spec
+# yazi — multi-binary with shell completions in the archive. eget's --all
+# would install the completions/ subdir into $(DEST) as junk; stays on
+# archive.sh which uses an explicit binary spec to extract only yazi + ya.
 $(eval $(call TOOL,yazi,$(YAZI_VERSION),\
   $(LIB)/archive.sh yazi:ya https://github.com/sxyazi/yazi/releases/download/v$(YAZI_VERSION)/yazi-x86_64-unknown-linux-musl.zip))
 
@@ -111,71 +107,70 @@ $(eval $(call TOOL,yazi,$(YAZI_VERSION),\
 # Note: clean-ast-grep only removes ast-grep — `sg` lingers in $(DEST).
 $(eval $(call EGET_TOOL,ast-grep,$(AST_GREP_VERSION),ast-grep/ast-grep,$(AST_GREP_VERSION),--all))
 
-$(eval $(call TOOL,television,$(TELEVISION_VERSION),\
-  $(LIB)/archive.sh tv https://github.com/alexpasmantier/television/releases/download/$(TELEVISION_VERSION)/tv-$(TELEVISION_VERSION)-x86_64-unknown-linux-musl.tar.gz))
+# television — binary inside the archive is `tv`; non-v tag; both musl/gnu
+# published. eget extracts `tv` to $(DEST); the EGET_TOOL macro's stamp
+# uses the registered name (`television`).
+$(eval $(call EGET_TOOL,television,$(TELEVISION_VERSION),alexpasmantier/television,$(TELEVISION_VERSION),--asset musl))
 
-$(eval $(call TOOL,xh,$(XH_VERSION),\
-  $(LIB)/archive.sh xh https://github.com/ducaale/xh/releases/download/v$(XH_VERSION)/xh-v$(XH_VERSION)-x86_64-unknown-linux-musl.tar.gz))
+$(eval $(call EGET_TOOL,xh,$(XH_VERSION),ducaale/xh,,--asset musl))
 
 # gping — non-standard tag prefix (gping-v$VERSION); both gnu and musl
 # variants published, prefer musl for static linking.
 $(eval $(call EGET_TOOL,gping,$(GPING_VERSION),orf/gping,gping-v$(GPING_VERSION),--asset musl))
 
-$(eval $(call TOOL,atuin,$(ATUIN_VERSION),\
-  $(LIB)/archive.sh atuin https://github.com/atuinsh/atuin/releases/download/v$(ATUIN_VERSION)/atuin-x86_64-unknown-linux-musl.tar.gz))
+# atuin — publishes the client AND a `atuin-server` binary + per-binary
+# `-update` archives. We just want the regular client tarball.
+$(eval $(call EGET_TOOL,atuin,$(ATUIN_VERSION),atuinsh/atuin,,--asset musl --asset .tar.gz --asset '^server' --asset '^update'))
 
 # delta — tag has no `v` prefix; both gnu and musl variants published.
 $(eval $(call EGET_TOOL,delta,$(DELTA_VERSION),dandavison/delta,$(DELTA_VERSION),--asset musl))
 
-$(eval $(call TOOL,micro,$(MICRO_VERSION),\
-  $(LIB)/archive.sh micro https://github.com/zyedidia/micro/releases/download/v$(MICRO_VERSION)/micro-$(MICRO_VERSION)-linux64-static.tar.gz))
+# micro — publishes linux64.tar.gz AND linux64-static.tar.gz. We want the
+# static one for portability (matches our musl preference everywhere else).
+$(eval $(call EGET_TOOL,micro,$(MICRO_VERSION),zyedidia/micro,,--asset static))
+# eza — both .tar.gz and .zip variants published per arch; pick tarball.
+$(eval $(call EGET_TOOL,eza,$(EZA_VERSION),eza-community/eza,,--asset musl --asset .tar.gz))
+$(eval $(call EGET_TOOL,sd,$(SD_VERSION),chmln/sd,,--asset musl))
+$(eval $(call EGET_TOOL,k9s,$(K9S_VERSION),derailed/k9s))
+$(eval $(call EGET_TOOL,rclone,$(RCLONE_VERSION),rclone/rclone))
+# croc — release naming uses Linux-64bit / Linux-32bit / Linux-ARM
+# (not standard arch tokens), so eget's system detection doesn't narrow
+# automatically. `--asset 64bit` selects the right one.
+$(eval $(call EGET_TOOL,croc,$(CROC_VERSION),schollz/croc,,--asset 64bit))
+$(eval $(call EGET_TOOL,hyperfine,$(HYPERFINE_VERSION),sharkdp/hyperfine,,--asset musl))
+# mise — publishes the same binary in 4 archive formats per arch (tar.gz,
+# tar.xz, tar.zst, bare). --asset .tar.gz disambiguates after --asset musl
+# narrows to the right libc variant.
+$(eval $(call EGET_TOOL,mise,$(MISE_VERSION),jdx/mise,,--asset musl --asset .tar.gz))
 
-$(eval $(call TOOL,eza,$(EZA_VERSION),\
-  $(LIB)/archive.sh eza https://github.com/eza-community/eza/releases/download/v$(EZA_VERSION)/eza_x86_64-unknown-linux-musl.tar.gz))
+# uv — multi-binary tarball (uv + uvx) with no other files. Non-v tag.
+# --all extracts both binaries cleanly; verified the archive doesn't
+# contain extras that would pollute $(DEST).
+# Note: clean-uv only removes uv — `uvx` lingers in $(DEST).
+$(eval $(call EGET_TOOL,uv,$(UV_VERSION),astral-sh/uv,$(UV_VERSION),--asset musl --all))
 
-$(eval $(call TOOL,sd,$(SD_VERSION),\
-  $(LIB)/archive.sh sd https://github.com/chmln/sd/releases/download/v$(SD_VERSION)/sd-v$(SD_VERSION)-x86_64-unknown-linux-musl.tar.gz))
-
-$(eval $(call TOOL,k9s,$(K9S_VERSION),\
-  $(LIB)/archive.sh k9s https://github.com/derailed/k9s/releases/download/v$(K9S_VERSION)/k9s_Linux_amd64.tar.gz))
-
-$(eval $(call TOOL,rclone,$(RCLONE_VERSION),\
-  $(LIB)/archive.sh rclone https://github.com/rclone/rclone/releases/download/v$(RCLONE_VERSION)/rclone-v$(RCLONE_VERSION)-linux-amd64.zip))
-
-$(eval $(call TOOL,croc,$(CROC_VERSION),\
-  $(LIB)/archive.sh croc https://github.com/schollz/croc/releases/download/v$(CROC_VERSION)/croc_v$(CROC_VERSION)_Linux-64bit.tar.gz))
-
-$(eval $(call TOOL,hyperfine,$(HYPERFINE_VERSION),\
-  $(LIB)/archive.sh hyperfine https://github.com/sharkdp/hyperfine/releases/download/v$(HYPERFINE_VERSION)/hyperfine-v$(HYPERFINE_VERSION)-x86_64-unknown-linux-musl.tar.gz))
-
-$(eval $(call TOOL,mise,$(MISE_VERSION),\
-  $(LIB)/archive.sh mise https://github.com/jdx/mise/releases/download/v$(MISE_VERSION)/mise-v$(MISE_VERSION)-linux-x64-musl.tar.gz))
-
-# uv ships uv + uvx in the same tarball
-$(eval $(call TOOL,uv,$(UV_VERSION),\
-  $(LIB)/archive.sh uv:uvx https://github.com/astral-sh/uv/releases/download/$(UV_VERSION)/uv-x86_64-unknown-linux-musl.tar.gz))
-
-$(eval $(call TOOL,dsq,$(DSQ_VERSION),\
-  $(LIB)/archive.sh dsq https://github.com/multiprocessio/dsq/releases/download/v$(DSQ_VERSION)/dsq-linux-x64-v$(DSQ_VERSION).zip))
+$(eval $(call EGET_TOOL,dsq,$(DSQ_VERSION),multiprocessio/dsq))
 
 # --- Robustness gap-fillers --------------------------------------------------
-$(eval $(call TOOL,gh,$(GH_VERSION),\
-  $(LIB)/archive.sh gh https://github.com/cli/cli/releases/download/v$(GH_VERSION)/gh_$(GH_VERSION)_linux_amd64.tar.gz))
+# gh — tarball has wrapper-dir + nested bin/gh; eget walks the tree to find it.
+$(eval $(call EGET_TOOL,gh,$(GH_VERSION),cli/cli))
 
-$(eval $(call TOOL,htmlq,$(HTMLQ_VERSION),\
-  $(LIB)/archive.sh htmlq https://github.com/mgdm/htmlq/releases/download/v$(HTMLQ_VERSION)/htmlq-x86_64-linux.tar.gz))
+$(eval $(call EGET_TOOL,htmlq,$(HTMLQ_VERSION),mgdm/htmlq))
 
-$(eval $(call TOOL,ouch,$(OUCH_VERSION),\
-  $(LIB)/archive.sh ouch https://github.com/ouch-org/ouch/releases/download/$(OUCH_VERSION)/ouch-x86_64-unknown-linux-musl.tar.gz))
+# ouch — non-v tag; both musl/gnu published.
+$(eval $(call EGET_TOOL,ouch,$(OUCH_VERSION),ouch-org/ouch,$(OUCH_VERSION),--asset musl))
 
-# bottom's binary is named `btm` — that's what find looks for
-$(eval $(call TOOL,bottom,$(BOTTOM_VERSION),\
-  $(LIB)/archive.sh btm https://github.com/ClementTsang/bottom/releases/download/$(BOTTOM_VERSION)/bottom_x86_64-unknown-linux-musl.tar.gz))
+# bottom — non-v tag; binary inside archive is `btm`. EGET_TOOL macro
+# uses the registered name (`bottom`) for the stamp; eget extracts
+# `btm` to $(DEST). clean-bottom doesn't remove btm (cosmetic only).
+$(eval $(call EGET_TOOL,bottom,$(BOTTOM_VERSION),ClementTsang/bottom,$(BOTTOM_VERSION),--asset musl))
 
-$(eval $(call TOOL,systemctl-tui,$(SYSTEMCTL_TUI_VERSION),\
-  $(LIB)/archive.sh systemctl-tui https://github.com/rgwood/systemctl-tui/releases/download/v$(SYSTEMCTL_TUI_VERSION)/systemctl-tui-x86_64-unknown-linux-musl.tar.gz))
+$(eval $(call EGET_TOOL,systemctl-tui,$(SYSTEMCTL_TUI_VERSION),rgwood/systemctl-tui,,--asset musl))
 
-# age ships age + age-keygen
+# age — multi-binary archive with LICENSE + age-inspect + age-plugin-batchpass
+# alongside the wanted age + age-keygen. eget's --all would install all 5
+# (including LICENSE) into $(DEST). Stays on archive.sh which uses an
+# explicit binary spec to extract only the two we want.
 $(eval $(call TOOL,age,$(AGE_VERSION),\
   $(LIB)/archive.sh age:age-keygen https://github.com/FiloSottile/age/releases/download/v$(AGE_VERSION)/age-v$(AGE_VERSION)-linux-amd64.tar.gz))
 
