@@ -10,6 +10,27 @@
 [edit]
     command = "hx"
 
+# When the interactive apply prompt offers `diff/overwrite/skip/quit` and you
+# press `d`, chezmoi pipes its unified diff into this pager. `delta` (installed
+# by makefile/tools.mk) renders it as a syntax-highlighted side-by-side view
+# instead of plain red/green ±. Falls back to standard pager if delta isn't on
+# PATH yet (mid-first-bootstrap).
+[diff]
+    pager = "delta"
+
+# When the interactive apply prompt offers `m` (or you run `chezmoi merge`),
+# this command opens a 3-way merge view. vimdiff arg order is the chezmoi
+# standard: Destination = your local file, Source = chezmoi's pre-apply
+# source state, Target = the new state chezmoi wants to write. Edit any
+# pane, `:wqa`, and chezmoi takes the final Destination as the resolution.
+#
+# Requires vim-enhanced (packages.mk LINUX_OPTIONAL_PACKAGES on Linux dev
+# hosts). On prod hosts without vim-enhanced, chezmoi falls back to its
+# builtin merge prompt.
+[merge]
+    command = "vimdiff"
+    args    = ["{{ .Destination }}", "{{ .Source }}", "{{ .Target }}"]
+
 [git]
     autoCommit = false
     autoPush   = false

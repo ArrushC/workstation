@@ -34,7 +34,7 @@ LINUX_OPTIONAL_PACKAGES := \
   htop multitail goaccess \
   nmap mtr \
   zsh parallel pv entr tree strace perf cronie time \
-  rsync vim-common \
+  rsync vim-common vim-enhanced \
   shellcheck gdb lsof tcpdump
 
 .PHONY: packages packages-core packages-epel packages-optional

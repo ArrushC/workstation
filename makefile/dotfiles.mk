@@ -15,11 +15,19 @@ CHEZMOI_BIN    := $(DEST)/chezmoi
 CHEZMOI_SOURCE := $(HOME)/.local/share/chezmoi
 CHEZMOI_CONFIG := $(HOME)/.config/chezmoi/chezmoi.toml
 
+# Re-init the config first so a .chezmoi.toml.tmpl change (e.g. a new
+# [diff] / [merge] section) flows through without manual intervention.
+# chezmoi's state DB caches promptStringOnce answers from the original
+# init, so this doesn't re-prompt for name/email. --no-tty makes init
+# fail-fast if state's somehow corrupted; we swallow that error so
+# update still runs and the underlying problem surfaces there with a
+# more useful message.
 .PHONY: dotfiles
 dotfiles:
-	@if [ -f "$(CHEZMOI_CONFIG)" ]; then \
+	@if [ ! -f "$(CHEZMOI_CONFIG)" ]; then \
+	  printf '  no chezmoi config yet — bootstrap.sh will run `chezmoi init --apply` after this\n'; \
+	else \
+	  "$(CHEZMOI_BIN)" init --no-tty >/dev/null 2>&1 || true; \
 	  printf '==> chezmoi update\n'; \
 	  "$(CHEZMOI_BIN)" update --source "$(CHEZMOI_SOURCE)"; \
-	else \
-	  printf '  no chezmoi config yet — bootstrap.sh will run `chezmoi init --apply` after this\n'; \
 	fi
