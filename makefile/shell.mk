@@ -17,18 +17,28 @@ BC_LINE        := [[ -f /etc/bash_completion ]] && source /etc/bash_completion
 
 shell: shell-path shell-bashcompletion
 
+# Both branches probe the destination first and skip the write if it
+# already has the right content. Saves a sudo round-trip on re-runs (the
+# sudo-side branch) and an extra grep on the user-side branch — small
+# wins, but they add up across many `make provision` invocations.
 ifeq ($(HAS_SUDO),true)
 shell-path:
-	@printf '==> PATH via %s\n' "$(PROFILE_D_FILE)"
-	@printf '%s\n' '$(PATH_LINE)' | $(SUDO) tee $(PROFILE_D_FILE) >/dev/null
-	@$(SUDO) chmod 0644 $(PROFILE_D_FILE)
+	@if [ -f $(PROFILE_D_FILE) ] && grep -qxF '$(PATH_LINE)' $(PROFILE_D_FILE) 2>/dev/null; then \
+	  printf '  PATH already wired via %s\n' "$(PROFILE_D_FILE)"; \
+	else \
+	  printf '==> PATH via %s\n' "$(PROFILE_D_FILE)"; \
+	  printf '%s\n' '$(PATH_LINE)' | $(SUDO) tee $(PROFILE_D_FILE) >/dev/null; \
+	  $(SUDO) chmod 0644 $(PROFILE_D_FILE); \
+	fi
 else
 # No-sudo path: append to ~/.bashrc if not already there. grep -qxF matches
 # exact whole lines, so a partial substring elsewhere in the file won't
 # fool the duplicate-check.
 shell-path:
-	@printf '==> PATH via %s (no sudo)\n' "$(BASHRC)"
-	@if ! grep -qxF '$(PATH_LINE)' $(BASHRC) 2>/dev/null; then \
+	@if grep -qxF '$(PATH_LINE)' $(BASHRC) 2>/dev/null; then \
+	  printf '  PATH already in %s\n' "$(BASHRC)"; \
+	else \
+	  printf '==> PATH via %s (no sudo)\n' "$(BASHRC)"; \
 	  printf '%s\n' '$(PATH_LINE)' >> $(BASHRC); \
 	fi
 endif

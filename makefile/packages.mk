@@ -46,35 +46,56 @@ packages:
 	@echo "  skipping system packages (MODE=$(MODE), INSTALL_PACKAGES=$(INSTALL_PACKAGES))"
 endif
 
+# Fast-path strategy across all three package targets: `rpm -q <pkg>` is a
+# local rpmdb lookup (~10ms) vs dnf's ~500ms metadata + dependency round
+# trip. We probe with rpm -q first and only invoke `sudo dnf install` for
+# packages that aren't already installed. On a steady-state re-run this
+# means zero sudo invocations from this whole file — usually 20+ seconds
+# saved end-to-end.
 packages-core:
 	@printf '==> dnf core packages\n'
-	$(SUDO) dnf install -y $(LINUX_PACKAGES)
+	@missing=""; \
+	for pkg in $(LINUX_PACKAGES); do \
+	  rpm -q "$$pkg" >/dev/null 2>&1 || missing="$$missing $$pkg"; \
+	done; \
+	if [ -z "$$missing" ]; then \
+	  printf '  all %d core packages already installed\n' $(words $(LINUX_PACKAGES)); \
+	else \
+	  printf '  installing missing:%s\n' "$$missing"; \
+	  $(SUDO) dnf install -y $$missing; \
+	fi
 
 # EPEL — RHEL family (Rocky/Alma/RHEL/CentOS) only. Fedora has the same
 # packages in its base repo, so EPEL would be wrong there. Detection
 # matches the old `ansible_facts['os_family'] == 'RedHat' and
 # ansible_facts['distribution'] != 'Fedora'` condition.
-#
-# Wrapped in `|| true` to match the old `ignore_errors: true` — some
-# managed images already have EPEL configured at the system level and
-# dnf will exit non-zero with "Package epel-release is already installed".
 packages-epel:
-	@if [ -f /etc/redhat-release ] && ! grep -qi fedora /etc/os-release 2>/dev/null; then \
+	@if rpm -q epel-release >/dev/null 2>&1; then \
+	  printf '  EPEL already installed\n'; \
+	elif [ -f /etc/redhat-release ] && ! grep -qi fedora /etc/os-release 2>/dev/null; then \
 	  printf '==> EPEL (RHEL family)\n'; \
 	  $(SUDO) dnf install -y epel-release || true; \
 	else \
 	  printf '  skipping EPEL (non-RHEL or Fedora)\n'; \
 	fi
 
-# Optional packages — each in its own dnf call so one missing package
-# doesn't abort the rest. Equivalent to ansible's loop+ignore_errors.
-# Output is friendlier than ansible's JSON: skipped packages are named.
+# Optional packages — rpm-q fast-path skips dnf for installed ones. Only
+# packages not on the host yet hit dnf. The dnf call is per-package
+# (vs one batch call) so one bad name doesn't poison the rest — same
+# semantics as the old `loop + ignore_errors` shape, just an order of
+# magnitude faster on re-runs.
 packages-optional:
 	@printf '==> Optional packages (best-effort)\n'
-	@for pkg in $(LINUX_OPTIONAL_PACKAGES); do \
-	  if $(SUDO) dnf install -y "$$pkg" >/dev/null 2>&1; then \
-	    printf '  ok      %s\n' "$$pkg"; \
+	@n_installed=0; n_added=0; n_skipped=0; \
+	for pkg in $(LINUX_OPTIONAL_PACKAGES); do \
+	  if rpm -q "$$pkg" >/dev/null 2>&1; then \
+	    n_installed=$$((n_installed + 1)); \
+	  elif $(SUDO) dnf install -y "$$pkg" >/dev/null 2>&1; then \
+	    printf '  added   %s\n' "$$pkg"; \
+	    n_added=$$((n_added + 1)); \
 	  else \
 	    printf '  skipped %s\n' "$$pkg"; \
+	    n_skipped=$$((n_skipped + 1)); \
 	  fi; \
-	done
+	done; \
+	printf '  %d already installed, %d added, %d skipped\n' "$$n_installed" "$$n_added" "$$n_skipped"
