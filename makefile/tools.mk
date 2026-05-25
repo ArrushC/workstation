@@ -250,3 +250,7 @@ $(eval $(call USER_TOOL,asciinema,$(ASCIINEMA_VERSION),\
 
 $(eval $(call USER_TOOL,harlequin,$(HARLEQUIN_VERSION),\
   $(LIB)/pip.sh harlequin))
+
+# cheznav — dual-pane TUI for chezmoi. Launched via the `czt` alias.
+$(eval $(call USER_TOOL,cheznav,$(CHEZNAV_VERSION),\
+  $(LIB)/pip.sh cheznav))
