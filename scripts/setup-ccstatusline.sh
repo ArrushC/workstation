@@ -37,6 +37,50 @@ preflight() {
   fi
 }
 
+# --- sentinel block primitives ----------------------------------------------
+# Manages per-host opt-out lines between # CCSTATUSLINE:START / END markers
+# inside chezmoi/.chezmoiignore.tmpl. Each opted-out host contributes one
+# line of the form:
+#   {{ if eq .chezmoi.hostname "<host>" }}dot_config/ccstatusline/settings.json{{ end }}
+
+sentinel_contains() {
+  local host="$1"
+  awk -v host="$host" '
+    /^# CCSTATUSLINE:START$/ { inblock=1; next }
+    /^# CCSTATUSLINE:END$/   { inblock=0 }
+    inblock && index($0, "\"" host "\"") > 0 { found=1; exit }
+    END { exit !found }
+  ' "$IGNORE_TMPL"
+}
+
+sentinel_add() {
+  local host="$1"
+  if sentinel_contains "$host"; then return 0; fi
+  local stanza
+  stanza="$(printf '{{ if eq .chezmoi.hostname "%s" }}dot_config/ccstatusline/settings.json{{ end }}' "$host")"
+  local tmp
+  tmp="$(mktemp)"
+  awk -v end="$SENTINEL_END" -v stanza="$stanza" '
+    $0 == end { print stanza; print; next }
+    { print }
+  ' "$IGNORE_TMPL" > "$tmp"
+  mv "$tmp" "$IGNORE_TMPL"
+}
+
+sentinel_remove() {
+  local host="$1"
+  if ! sentinel_contains "$host"; then return 0; fi
+  local tmp
+  tmp="$(mktemp)"
+  awk -v host="$host" '
+    /^# CCSTATUSLINE:START$/ { inblock=1; print; next }
+    /^# CCSTATUSLINE:END$/   { inblock=0; print; next }
+    inblock && index($0, "\"" host "\"") > 0 { next }
+    { print }
+  ' "$IGNORE_TMPL" > "$tmp"
+  mv "$tmp" "$IGNORE_TMPL"
+}
+
 # --- options (skeletons; filled in by later tasks) -------------------------
 
 option_use_tracked()  { printf '%boption 1 (use tracked) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
