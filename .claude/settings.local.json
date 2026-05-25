@@ -51,7 +51,16 @@
       "Bash(bash -n /c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/manage-hosts.sh)",
       "Bash(chmod +x /c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh)",
       "Bash(bash -n /c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh)",
-      "Bash(/c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh --check --group dev_machine)"
+      "Bash(/c/Users/arrush.chaturvedi/.local/share/chezmoi/scripts/update-hosts.sh --check --group dev_machine)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(cat)",
+      "Bash(python3 /tmp/extract_user_msgs.py /home/arrush.chaturvedi/.claude/projects/-home-arrush-chaturvedi--local-share-chezmoi/995547af-0b3a-44aa-a8c1-5167b837c3c9.jsonl /home/arrush.chaturvedi/.claude/projects/-mnt-c-Users-arrush-chaturvedi--local-share-chezmoi/e219a585-86ed-4334-a4c1-b73909c7e2d8.jsonl /home/arrush.chaturvedi/.claude/projects/-mnt-c-Users-arrush-chaturvedi--local-share-chezmoi/115995f3-e205-48a7-a9cd-11416e75882c.jsonl)",
+      "Bash(python3 /tmp/find_patterns.py)",
+      "Bash(python3 /tmp/clean_extract.py)",
+      "Bash(python3 /tmp/find_feedback.py)",
+      "Bash(python3 /tmp/precise_extract.py)",
+      "Bash(python3 /tmp/extract_clean.py)",
+      "Bash(python3 *)"
     ]
   }
 }
