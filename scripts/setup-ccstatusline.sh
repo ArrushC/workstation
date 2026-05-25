@@ -129,12 +129,18 @@ option_set_global() {
     printf '%bRemoving %s from local-persist sentinel block (setting global overrides prior local-persist)...%b\n' "$BOLD" "$HOST" "$RESET"
     sentinel_remove "$HOST"
   fi
-  printf '%bPulling local config back into chezmoi source...%b\n' "$GREEN" "$RESET"
-  chezmoi re-add "$WIDGET_DEST" "$CLAUDE_SETTINGS_DEST"
+  printf '%bPulling widget config back into chezmoi source...%b\n' "$GREEN" "$RESET"
+  # NOTE: only the widget config is re-added. ~/.claude/settings.json is NOT
+  # re-added because ccstatusline's TUI "Install to Claude Code" path
+  # overwrites the local file with a statusLine-only block, which would
+  # strip every other key (skipAutoPermissionPrompt, tui, theme, etc.) on
+  # every save. That template is hand-managed via direct edits to
+  # chezmoi/private_dot_claude/private_settings.json.tmpl; statusline
+  # version bumps are a dual-edit with versions.mk per CLAUDE.md.
+  chezmoi re-add "$WIDGET_DEST"
   cd "$REPO_ROOT"
   git add \
     chezmoi/dot_config/ccstatusline/settings.json \
-    chezmoi/private_dot_claude/private_settings.json.tmpl \
     chezmoi/.chezmoiignore.tmpl
   if git diff --cached --quiet; then
     printf '%bNo changes to commit — local config matched tracked.%b\n' "$YELLOW" "$RESET"
