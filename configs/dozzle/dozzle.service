@@ -1,13 +1,25 @@
 [Unit]
-Description=Dozzle — real-time Docker log viewer
+Description=Dozzle — real-time Docker log viewer (containerized)
 Documentation=https://dozzle.dev/
 After=docker.service
-Wants=docker.service
+Requires=docker.service
 
 [Service]
 Type=simple
 EnvironmentFile=/etc/dozzle/dozzle.env
-ExecStart=/usr/local/bin/dozzle
+# Pre-flight: kill any leftover container from a prior unclean shutdown.
+# Leading `-` keeps systemd going if the container doesn't exist.
+ExecStartPre=-/usr/bin/docker stop dozzle
+ExecStartPre=-/usr/bin/docker rm dozzle
+ExecStartPre=/usr/bin/docker pull ${DOZZLE_IMAGE}
+# Foreground run (no -d) so systemd owns the lifecycle.
+ExecStart=/usr/bin/docker run --rm --name dozzle \
+  -p ${DOZZLE_BIND}:8080 \
+  -e DOZZLE_LEVEL=${DOZZLE_LEVEL} \
+  -e DOZZLE_NO_ANALYTICS=${DOZZLE_NO_ANALYTICS} \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  ${DOZZLE_IMAGE}
+ExecStop=/usr/bin/docker stop dozzle
 Restart=on-failure
 RestartSec=5
 
