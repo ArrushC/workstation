@@ -160,10 +160,15 @@ $(eval $(call EGET_TOOL,htmlq,$(HTMLQ_VERSION),mgdm/htmlq))
 # ouch — non-v tag; both musl/gnu published.
 $(eval $(call EGET_TOOL,ouch,$(OUCH_VERSION),ouch-org/ouch,$(OUCH_VERSION),--asset musl))
 
-# bottom — non-v tag; binary inside archive is `btm`. EGET_TOOL macro
-# uses the registered name (`bottom`) for the stamp; eget extracts
-# `btm` to $(DEST). clean-bottom doesn't remove btm (cosmetic only).
-$(eval $(call EGET_TOOL,bottom,$(BOTTOM_VERSION),ClementTsang/bottom,$(BOTTOM_VERSION),--asset musl))
+# bottom — non-v tag; binary inside archive is `btm`. Archive also ships
+# a zsh completion at completion/_btm which eget would otherwise treat as
+# a candidate (it fuzzy-matches the tool name `bottom` against any file
+# ending in `btm`), bailing with "2 candidates ... please select manually".
+# Pinning --file btm tells eget to pick the binary unambiguously. The
+# EGET_TOOL macro uses the registered name (`bottom`) for the stamp;
+# eget extracts `btm` to $(DEST). clean-bottom doesn't remove btm
+# (cosmetic only).
+$(eval $(call EGET_TOOL,bottom,$(BOTTOM_VERSION),ClementTsang/bottom,$(BOTTOM_VERSION),--asset musl --file btm))
 
 $(eval $(call EGET_TOOL,systemctl-tui,$(SYSTEMCTL_TUI_VERSION),rgwood/systemctl-tui,,--asset musl))
 
