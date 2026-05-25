@@ -119,7 +119,32 @@ option_this_machine() {
       ;;
   esac
 }
-option_set_global()   { printf '%boption 3 (set new global) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
+option_set_global() {
+  printf '%bLaunching ccstatusline TUI (v%s)...%b\n' "$BOLD" "$CCSTATUSLINE_VERSION" "$RESET"
+  if ! npx -y "ccstatusline@$CCSTATUSLINE_VERSION" </dev/tty; then
+    printf '%bTUI exited non-zero or was cancelled — no changes.%b\n' "$YELLOW" "$RESET"
+    return 0
+  fi
+  if sentinel_contains "$HOST"; then
+    printf '%bRemoving %s from local-persist sentinel block (setting global overrides prior local-persist)...%b\n' "$BOLD" "$HOST" "$RESET"
+    sentinel_remove "$HOST"
+  fi
+  printf '%bPulling local config back into chezmoi source...%b\n' "$GREEN" "$RESET"
+  chezmoi re-add "$WIDGET_DEST" "$CLAUDE_SETTINGS_DEST"
+  cd "$REPO_ROOT"
+  git add \
+    chezmoi/dot_config/ccstatusline/settings.json \
+    chezmoi/private_dot_claude/private_settings.json.tmpl \
+    chezmoi/.chezmoiignore.tmpl
+  if git diff --cached --quiet; then
+    printf '%bNo changes to commit — local config matched tracked.%b\n' "$YELLOW" "$RESET"
+    return 0
+  fi
+  git commit -m "$(printf 'feat(claude): update ccstatusline tracked config\n\nUpdated via setup-ccstatusline.sh on %s.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>' "$HOST")"
+  printf '%bPushing to origin...%b\n' "$GREEN" "$RESET"
+  git push origin "$(git symbolic-ref --short HEAD)"
+  printf '%bDone.%b\n' "$GREEN" "$RESET"
+}
 option_skip()         { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
 
 # --- menu -------------------------------------------------------------------
