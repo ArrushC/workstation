@@ -36,3 +36,13 @@ Documents
 # want WezTerm config on a Linux desktop.
 dot_config/wezterm
 {{ end }}
+
+{{/*
+Per-host opt-out of the chezmoi-tracked ccstatusline widget config.
+Managed by scripts/setup-ccstatusline.sh — hand-edits between markers
+get clobbered on the next prompt run. Each host that picks "this
+machine + persist=y" gets a single-line entry of the form:
+  {{ "{{" }} if eq .chezmoi.hostname "name" {{ "}}" }}dot_config/ccstatusline/settings.json{{ "{{" }} end {{ "}}" }}
+*/}}
+# CCSTATUSLINE:START
+# CCSTATUSLINE:END
