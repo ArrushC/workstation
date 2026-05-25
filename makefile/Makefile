@@ -164,6 +164,48 @@ else
 	@echo "claude-statusline is a dev_machine target — skipping (MODE=$(MODE))"
 endif
 
+# -----------------------------------------------------------------------------
+# dozzle-service — install systemd unit + env file, pull image, enable + start.
+#   - dev_machine only (recipe body gated on MODE=dev).
+#   - Env file is templated: `@DOZZLE_VERSION@` in configs/dozzle/dozzle.env
+#     is substituted with $(DOZZLE_VERSION) at install time via sed. Keeps
+#     versions.mk as the single source of truth for the image tag.
+#   - Stamp encodes $(DOZZLE_VERSION); bumping the pin invalidates the
+#     stamp so the next `make dev` re-renders dozzle.env, re-pulls the
+#     image, and restarts the unit.
+#   - Sanity-checks `command -v docker` at the top of the recipe (this
+#     repo doesn't install Docker; lazydocker/dive/ctop already assume
+#     it). Loud failure with a clear message if Docker is missing.
+# -----------------------------------------------------------------------------
+.PHONY: dozzle-service clean-dozzle-service
+ifeq ($(MODE),dev)
+dozzle-service: $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done
+$(STAMP)/dozzle-service-$(DOZZLE_VERSION).done:
+	@printf '==> dozzle-service (docker + systemd)\n'
+	@if ! command -v docker >/dev/null 2>&1; then \
+	   printf '  ERROR: docker is not installed. Dozzle runs as a container.\n' >&2; \
+	   printf '         Install Docker (or Podman with a docker shim) and retry.\n' >&2; \
+	   exit 1; \
+	 fi
+	@$(SUDO) install -m 0755 -d /etc/dozzle
+	@sed 's|@DOZZLE_VERSION@|$(DOZZLE_VERSION)|g' ../configs/dozzle/dozzle.env \
+	   | $(SUDO) install -m 0644 /dev/stdin /etc/dozzle/dozzle.env
+	@$(SUDO) install -m 0644 ../configs/dozzle/dozzle.service /etc/systemd/system/dozzle.service
+	@$(SUDO) systemctl daemon-reload
+	@$(SUDO) systemctl enable --now dozzle.service
+	@mkdir -p $(@D) && touch $@
+else
+dozzle-service:
+	@echo "dozzle-service is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-dozzle-service:
+	@$(SUDO) systemctl disable --now dozzle.service 2>/dev/null || true
+	@$(SUDO) docker rm -f dozzle 2>/dev/null || true
+	@$(SUDO) rm -f /etc/systemd/system/dozzle.service /etc/dozzle/dozzle.env
+	@$(SUDO) rmdir /etc/dozzle 2>/dev/null || true
+	@$(SUDO) systemctl daemon-reload
+	@rm -f $(STAMP)/dozzle-service-*.done
+
 include packages.mk
 include shell.mk
 include dotfiles.mk
