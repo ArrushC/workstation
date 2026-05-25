@@ -1265,7 +1265,11 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                             <span class="note"
                                                 >&mdash; PATH via
                                                 /etc/profile.d (sudo) or
-                                                ~/.bashrc (no sudo)</span
+                                                ~/.bashrc (no sudo); the
+                                                chezmoi-tracked
+                                                ~/.zshrc / ~/.bashrc
+                                                already export PATH on
+                                                their own</span
                                             >
                                         </li>
                                         <li>
@@ -1315,9 +1319,18 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                             >
                                         </li>
                                         <li>
+                                            dot_zshrc.tmpl
+                                            <span class="note"
+                                                >&mdash; Linux: ~/.zshrc
+                                                (default login shell)</span
+                                            >
+                                        </li>
+                                        <li>
                                             dot_bashrc.tmpl
                                             <span class="note"
-                                                >&mdash; Linux: ~/.bashrc</span
+                                                >&mdash; Linux: ~/.bashrc
+                                                (fallback for explicit bash
+                                                invocations)</span
                                             >
                                         </li>
                                         <li>
@@ -1531,7 +1544,7 @@ export GITHUB_TOKEN='&lt;your-PAT&gt;' \
        GIT_USER_EMAIL='contact@arrushc.com' && \
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
-source ~/.bashrc</code></pre>
+exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
                             </div>
                             <div class="tab-panel panel-dev">
                                 <p class="tab-meta">
@@ -1584,6 +1597,15 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">6</span
+                            ><span class="lbl">Set zsh as default</span
+                            ><span class="note"
+                                >sudo usermod -s on dev; warns
+                                with manual chsh on prod</span
+                            >
+                        </div>
+                        <div class="arrow">&rarr;</div>
+                        <div class="step">
+                            <span class="num">7</span
                             ><span class="lbl">Commit + push</span
                             ><span class="note">warn-don&rsquo;t-fail</span>
                         </div>
@@ -1842,7 +1864,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                     <h4 id="setup-wsl">Bootstrapping WSL distros</h4>
                     <p>
                         WSL distros are first-class managed hosts &mdash; same
-                        tools, same chezmoi-tracked bashrc + starship prompt
+                        tools, same chezmoi-tracked zshrc + starship prompt
                         + aliases as a real Linux box. They&rsquo;re accessed
                         through wezterm&rsquo;s WSL domain mechanism, not
                         SSH, so <code>bootstrap.sh</code> auto-detects WSL
@@ -1892,15 +1914,19 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </p>
                     <p class="note-row">
                         <strong>Cwd tracking via OSC 7:</strong> the
-                        chezmoi-tracked <code>~/.bashrc</code> emits an
+                        chezmoi-tracked <code>~/.zshrc</code> (and
+                        <code>~/.bashrc</code> for bash fallback) emits an
                         <a
                             href="https://wezfurlong.org/wezterm/shell-integration.html"
                             >OSC 7</a
                         >
                         <code>file://&lt;host&gt;/&lt;pwd&gt;</code>
                         sequence after every prompt
-                        (<code>__wezterm_osc7</code> in
-                        <code>chezmoi/dot_bashrc.tmpl</code>). Once WSL is
+                        (<code>__wezterm_osc7</code> wired via
+                        <code>add-zsh-hook precmd</code> in
+                        <code>dot_zshrc.tmpl</code>;
+                        <code>PROMPT_COMMAND</code> append in
+                        <code>dot_bashrc.tmpl</code>). Once WSL is
                         bootstrapped, <code>cd /tmp</code> followed by
                         <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd> lands
                         the new tab in <code>/tmp</code>, not <code>~</code>
@@ -2160,6 +2186,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <h3>chezmoi (Linux or Windows)</h3>
                     <p>
                         Same aliases on both OSes &mdash; defined in
+                        <code>dot_zshrc.tmpl</code> /
                         <code>dot_bashrc.tmpl</code> (Linux) and the templated
                         PowerShell profile (Windows):
                     </p>
@@ -2175,7 +2202,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 <td><code>cze &lt;path&gt;</code></td>
                                 <td>
                                     Edit a dotfile in source state (e.g.
-                                    <code>cze ~/.bashrc</code>,
+                                    <code>cze ~/.zshrc</code>,
                                     <code>cze $PROFILE</code>)
                                 </td>
                             </tr>
@@ -2227,13 +2254,14 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </table>
                     <p>To push changes back to the repo:</p>
                     <pre><code>cd ~/.local/share/chezmoi   # or wherever the source state lives
-git add -A && git commit -m "update bashrc" && git push</code></pre>
+git add -A && git commit -m "update zshrc" && git push</code></pre>
 
                     <h4>Per-machine overrides (untracked, sourced last)</h4>
                     <div class="grid-2">
                         <div class="os-card linux">
                             <span class="os-label"
-                                >Linux &mdash; ~/.bashrc.local</span
+                                >Linux &mdash; ~/.zshrc.local
+                                (or ~/.bashrc.local for bash)</span
                             >
                             <pre><code>export GOPATH="/opt/go"
 alias work='cd /opt/myproject'</code></pre>
@@ -2710,7 +2738,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 <strong>Per-machine overrides.</strong> Add
                                 host blocks to the un-tracked
                                 <code>~/.ssh/config.local</code> file (same
-                                pattern as <code>~/.bashrc.local</code>) &mdash;
+                                pattern as <code>~/.zshrc.local</code>) &mdash;
                                 the tracked config has
                                 <code>Include config.local</code> at the
                                 top, so per-host overrides win over the

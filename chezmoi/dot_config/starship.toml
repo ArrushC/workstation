@@ -8,7 +8,10 @@ format = """
 [╰─](bold green)$character"""
 
 [os]
-disabled = false
+# Disabled: on WSL the detection probe costs ~150-230ms per prompt render
+# (vs <1ms for every other module). $os in the format string just renders
+# empty when disabled — re-enable here if a host shows the module is fast.
+disabled = true
 style = "bold blue"
 
 [os.symbols]
