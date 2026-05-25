@@ -47,6 +47,12 @@
 #                              `chezmoi update` invoked by makefile/dotfiles.mk
 #                              can't prompt (no TTY in make recipes), so this
 #                              closes the first-run gap with stdin from /dev/tty.
+#   4c. set_default_shell    — `sudo usermod -s "$(command -v zsh)" "$USER"`
+#                              on --dev only. The chezmoi-tracked rc lives at
+#                              ~/.zshrc; we switch the login shell so new
+#                              WezTerm/SSH sessions land in zsh. Best-effort:
+#                              prints the manual chsh command on prod or
+#                              when usermod isn't permitted.
 #   5. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
 #                              (no-op inside WSL since self_register made no edits)
 #
@@ -377,6 +383,55 @@ ensure_chezmoi_initialized() {
 }
 
 # =============================================================================
+# 4.7. SET DEFAULT SHELL — switch the user's login shell to zsh.
+#
+# The chezmoi-tracked rc is `dot_zshrc.tmpl` → ~/.zshrc; switching the login
+# shell is what makes new WezTerm/SSH/WSL sessions actually read it. `chsh`
+# isn't installed by default on AlmaLinux 9 (needs util-linux-user) and even
+# when present requires PAM auth (interactive password). `sudo usermod -s`
+# edits /etc/passwd directly — works under our existing dev-mode sudo flow.
+#
+# Prod hosts have no sudo, so we just print the manual chsh command. Same
+# fallback on dev hosts where usermod fails (most often: $SUDO_ASKPASS missing
+# under curl|bash from a remote machine).
+# =============================================================================
+set_default_shell() {
+  local zsh_path
+  zsh_path=$(command -v zsh || true)
+  if [[ -z "$zsh_path" ]]; then
+    warn "zsh not on PATH — default shell unchanged. Re-run after a manual install:"
+    warn "  sudo dnf install -y zsh   (or apt install zsh)"
+    return 0
+  fi
+
+  # /etc/passwd is authoritative; don't trust $SHELL (set by the parent shell).
+  local current_shell
+  current_shell=$(getent passwd "$USER" | cut -d: -f7)
+
+  if [[ "$current_shell" == "$zsh_path" ]]; then
+    ok "Default shell is already zsh ($zsh_path)"
+    return 0
+  fi
+
+  if [[ "$MACHINE_TYPE" != "dev" ]]; then
+    # No sudo on prod. chsh would work interactively but we can't drive it
+    # cleanly under curl|bash. Tell the user and move on.
+    warn "Default shell is $current_shell, not zsh. Change it manually on this host:"
+    warn "  chsh -s $zsh_path        (interactive — needs your account password)"
+    return 0
+  fi
+
+  log "Setting default shell to $zsh_path (current: $current_shell)..."
+  if sudo usermod -s "$zsh_path" "$USER" 2>/dev/null; then
+    ok "Default shell set to zsh — log out + back in (or open a new tab) to land in it"
+  else
+    warn "Couldn't set default shell automatically. Run one of:"
+    warn "  sudo usermod -s $zsh_path $USER     (no password prompt)"
+    warn "  chsh -s $zsh_path                   (interactive)"
+  fi
+}
+
+# =============================================================================
 # 5. PUSH HOST CHANGES — commit hosts.conf + wezterm sentinel block, push upstream.
 #    Warn-don't-fail: `make provision` already succeeded by now, so we never abort here.
 # =============================================================================
@@ -482,6 +537,7 @@ fi
 self_register
 run_make
 ensure_chezmoi_initialized
+set_default_shell
 push_host_changes
 
 # --- ccstatusline setup (dev only) -----------------------------------------
@@ -493,7 +549,8 @@ fi
 
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
-echo -e "Re-source your shell: ${YELLOW}source ~/.bashrc${RESET}"
+echo -e "Default shell is zsh — open a new tab (or log out + back in) to land in it."
+echo -e "To use the new shell in this terminal right now: ${YELLOW}exec zsh${RESET}"
 if is_wsl; then
   echo -e "Running inside WSL — opening a new WezTerm WSL tab will land you in"
   echo -e "  ${YELLOW}~${RESET} with starship + the chezmoi-tracked aliases active."

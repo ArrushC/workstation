@@ -24,7 +24,8 @@ LINUX_PACKAGES := \
   gcc \
   openssl-devel \
   python3 \
-  python3-pip
+  python3-pip \
+  zsh
 
 # Nice-to-haves — installed per-package with `|| true` so a missing package
 # in some distro variant doesn't poison the whole bootstrap. Order doesn't
@@ -33,7 +34,7 @@ LINUX_OPTIONAL_PACKAGES := \
   ripgrep bash-completion \
   htop multitail goaccess \
   nmap mtr \
-  zsh parallel pv entr tree strace perf cronie time \
+  parallel pv entr tree strace perf cronie time \
   rsync vim-common vim-enhanced \
   shellcheck gdb lsof tcpdump
 
