@@ -399,8 +399,17 @@ set_default_shell() {
   local zsh_path
   zsh_path=$(command -v zsh || true)
   if [[ -z "$zsh_path" ]]; then
-    warn "zsh not on PATH — default shell unchanged. Re-run after a manual install:"
-    warn "  sudo dnf install -y zsh   (or apt install zsh)"
+    if [[ "$MACHINE_TYPE" == "dev" ]]; then
+      warn "zsh not on PATH — default shell unchanged. Re-run after a manual install:"
+      warn "  sudo dnf install -y zsh   (or apt install zsh)"
+    else
+      # Prod has no sudo, so the dnf hint is wrong; surface that limitation
+      # plainly and tell the user what state the host is in (zshrc deployed,
+      # just dormant) so the fix path is obvious.
+      warn "zsh not on PATH — ~/.zshrc has been deployed but is dormant on this host."
+      warn "Ask the admin to install zsh (\`sudo dnf install -y zsh\`), then either"
+      warn "re-run this script or chsh manually."
+    fi
     return 0
   fi
 
@@ -415,9 +424,15 @@ set_default_shell() {
 
   if [[ "$MACHINE_TYPE" != "dev" ]]; then
     # No sudo on prod. chsh would work interactively but we can't drive it
-    # cleanly under curl|bash. Tell the user and move on.
+    # cleanly under curl|bash. Tell the user and move on. On minimal RHEL
+    # bases chsh itself ships in util-linux-user — flag the secondary
+    # install in case `command -v chsh` also fails.
     warn "Default shell is $current_shell, not zsh. Change it manually on this host:"
     warn "  chsh -s $zsh_path        (interactive — needs your account password)"
+    if ! command -v chsh &>/dev/null; then
+      warn "  chsh is missing on this host. Ask the admin for:"
+      warn "    sudo dnf install -y util-linux-user   (or shadow-utils on apt)"
+    fi
     return 0
   fi
 
@@ -549,8 +564,18 @@ fi
 
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
-echo -e "Default shell is zsh — open a new tab (or log out + back in) to land in it."
-echo -e "To use the new shell in this terminal right now: ${YELLOW}exec zsh${RESET}"
+
+# Only print the "you're on zsh" tip when the user actually is. set_default_shell
+# may have bailed out (prod with no sudo, missing zsh binary, usermod refused) and
+# already printed its own follow-up command, so we just stay quiet here. Read the
+# authoritative shell from /etc/passwd — $SHELL was set by the parent process.
+_login_shell=$(getent passwd "$USER" | cut -d: -f7)
+_zsh_path=$(command -v zsh || true)
+if [[ -n "$_zsh_path" && "$_login_shell" == "$_zsh_path" ]]; then
+  echo -e "Open a new tab (or log out + back in) to land in zsh."
+  echo -e "Or switch this terminal right now: ${YELLOW}exec zsh${RESET}"
+fi
+
 if is_wsl; then
   echo -e "Running inside WSL — opening a new WezTerm WSL tab will land you in"
   echo -e "  ${YELLOW}~${RESET} with starship + the chezmoi-tracked aliases active."
