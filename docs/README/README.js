@@ -457,4 +457,44 @@
             String(!isCollapsed),
         );
     });
+
+    // ============================================================
+    // 10. Reading-progress bar (top of viewport)
+    //
+    // Drives the --scroll-progress CSS custom property on the
+    // <div class="scroll-progress"> element (0..1 fraction of doc
+    // height scrolled). rAF-throttled so passive scroll listeners
+    // never block the main thread.
+    // ============================================================
+    const progressEl = document.getElementById("scroll-progress");
+    if (progressEl) {
+        let ticking = false;
+        function paintProgress() {
+            const max =
+                (document.documentElement.scrollHeight ||
+                    document.body.scrollHeight) -
+                window.innerHeight;
+            const ratio =
+                max > 0
+                    ? Math.min(1, Math.max(0, window.scrollY / max))
+                    : 0;
+            progressEl.style.setProperty(
+                "--scroll-progress",
+                ratio.toFixed(4),
+            );
+            ticking = false;
+        }
+        window.addEventListener(
+            "scroll",
+            () => {
+                if (!ticking) {
+                    requestAnimationFrame(paintProgress);
+                    ticking = true;
+                }
+            },
+            { passive: true },
+        );
+        window.addEventListener("resize", paintProgress);
+        paintProgress();
+    }
 })();

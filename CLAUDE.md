@@ -2,7 +2,7 @@
 
 `workstation` is a self-contained dev-environment-provisioning system (Make + chezmoi) for Linux hosts + one Windows host.
 
-**User-facing reference is `README.html`** (open in a browser from the repo root — loads `README.css` + `README.js` as siblings). This file is Claude-internal: load-bearing invariants, file-handling gotchas, verification recipes. When in doubt, point users at README.html sections rather than re-explaining them here.
+**User-facing reference is `README.html`** (open in a browser from the repo root — loads `docs/README/README.css` + `docs/README/README.js`). This file is Claude-internal: load-bearing invariants, file-handling gotchas, verification recipes. When in doubt, point users at README.html sections rather than re-explaining them here.
 
 ## Claude memory routing
 
@@ -75,7 +75,7 @@ README documents the *what*; these are the *why* and the failure modes. Each one
 - **`wezterm.lua` is chezmoi-tracked but NOT deployed to `%USERPROFILE%`.** `.chezmoiignore.tmpl` skips `dot_config/wezterm` on Windows; `bootstrap.ps1` sets `WEZTERM_CONFIG_FILE` to the chezmoi source path so WezTerm reads the repo file directly.
 - **After editing any file under `makefile/lib/` or `scripts/`** (shell side): verify with `file <path>` (must NOT say "with CRLF line terminators") and `git ls-files --stage <path>` (must show `100755` for the lib scripts). Repairs: `sed -i 's/\r$//' <path>` and `git update-index --chmod=+x <path>`.
 - **After editing `scripts/manage-hosts.ps1` or `bootstrap.ps1`**: verify they retain UTF-8 BOM. PowerShell 5.1 mis-decodes UTF-8 glyphs (`✓`, `✗`, `─`) without one and fails to parse. Restore with `[System.IO.File]::WriteAllText($path, ..., [System.Text.UTF8Encoding]::new($true))`.
-- **When changing user-facing surface, update `README.html` (and `README.css` / `README.js` if needed) in the same commit, then append a row to `CLAUDE_CHANGELOG.md`.** Decision test: "Would a user reading only `README.html` still be able to operate this repo after my change?" If no, README needs an update.
+- **When changing user-facing surface, update `README.html` (and `docs/README/README.css` / `docs/README/README.js` if needed) in the same commit, then append a row to `CLAUDE_CHANGELOG.md`.** Decision test: "Would a user reading only `README.html` still be able to operate this repo after my change?" If no, README needs an update.
 
 What does NOT need a README update: internal Makefile refactors that don't change CLI overrides or file locations; comment edits / formatting / variable renames invisible outside `makefile/`; bumping a tool version (lives in `versions.mk`); internal shell-script refactors.
 
@@ -121,4 +121,4 @@ After changes:
 - Fresh WSL tab after Windows `chezmoi apply` — `pwd` is `/home/<user>`, not `/mnt/c/...`.
 - Inside WSL tab, `CTRL+SHIFT+T` — pre-bootstrap lands in `~`; post-bootstrap (OSC 7 active) `cd /tmp` then new-tab lands in `/tmp`.
 - `bootstrap.ps1` on fresh Windows (elevated PowerShell) — choco bootstraps, tracked tools install, chezmoi applies, wezterm picks up deployed config.
-- `git diff README.html README.css README.js` — verify user-facing surface still matches reality. Open in a browser — primitives (tabs, flow chips, accordion filter) must render, not just diff cleanly. If unstyled, the three files were separated; they must travel together.
+- `git diff README.html docs/README/README.css docs/README/README.js` — verify user-facing surface still matches reality. Open in a browser — primitives (tabs, flow chips, accordion filter) must render, not just diff cleanly. If unstyled, the asset paths in `README.html` (`href="docs/README/README.css"`, `src="docs/README/README.js"`) are wrong or the files were moved out of `docs/README/`.
