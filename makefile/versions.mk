@@ -85,6 +85,7 @@ SYSZ_VERSION          := 1.4.3
 GLANCES_VERSION   := latest
 ASCIINEMA_VERSION := latest
 HARLEQUIN_VERSION := latest
+CHEZNAV_VERSION   := latest
 
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
