@@ -207,6 +207,51 @@ clean-dozzle-service:
 	@$(SUDO) systemctl daemon-reload
 	@rm -f $(STAMP)/dozzle-service-*.done
 
+# -----------------------------------------------------------------------------
+# cockpit-service — install cockpit.conf, enable cockpit.socket, open firewalld.
+#   - dev_machine only (recipe body gated on MODE=dev).
+#   - CANNOT depend on the `packages` phony (would break `make -j8`).
+#     packages.mk doesn't produce a stamp file either, so there's no stamp
+#     to order-only-depend on. Instead the recipe sanity-checks
+#     `rpm -q cockpit` and aborts with a clear message if the package
+#     isn't installed yet. Correct under both serial and -j make.
+#   - Stamp has no version suffix; Cockpit's package version comes from dnf.
+#   - firewalld step skipped (with a message) when firewalld is inactive.
+# -----------------------------------------------------------------------------
+.PHONY: cockpit-service clean-cockpit-service
+ifeq ($(MODE),dev)
+cockpit-service: $(STAMP)/cockpit-service.done
+$(STAMP)/cockpit-service.done:
+	@printf '==> cockpit-service (socket + firewall + conf)\n'
+	@if ! rpm -q cockpit >/dev/null 2>&1; then \
+	   printf '  ERROR: cockpit package not installed. Run `make MODE=dev packages` first,\n' >&2; \
+	   printf '         or `make MODE=dev provision` (which runs packages before this target).\n' >&2; \
+	   exit 1; \
+	 fi
+	@$(SUDO) install -m 0755 -d /etc/cockpit
+	@$(SUDO) install -m 0644 ../configs/cockpit/cockpit.conf /etc/cockpit/cockpit.conf
+	@$(SUDO) systemctl enable --now cockpit.socket
+	@if systemctl is-active --quiet firewalld 2>/dev/null; then \
+	   $(SUDO) firewall-cmd --permanent --add-service=cockpit >/dev/null && \
+	   $(SUDO) firewall-cmd --reload >/dev/null && \
+	   printf '  firewalld: cockpit service opened\n'; \
+	 else \
+	   printf '  firewalld inactive — skipping firewall step\n'; \
+	 fi
+	@mkdir -p $(@D) && touch $@
+else
+cockpit-service:
+	@echo "cockpit-service is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-cockpit-service:
+	@$(SUDO) systemctl disable --now cockpit.socket 2>/dev/null || true
+	@if systemctl is-active --quiet firewalld 2>/dev/null; then \
+	   $(SUDO) firewall-cmd --permanent --remove-service=cockpit >/dev/null 2>&1 || true; \
+	   $(SUDO) firewall-cmd --reload >/dev/null 2>&1 || true; \
+	 fi
+	@$(SUDO) rm -f /etc/cockpit/cockpit.conf
+	@rm -f $(STAMP)/cockpit-service.done
+
 include packages.mk
 include shell.mk
 include dotfiles.mk
