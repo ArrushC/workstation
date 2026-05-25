@@ -22,10 +22,10 @@
         "type": "context-percentage",
         "backgroundColor": "bgWhite",
         "rawValue": false,
+        "merge": true,
         "metadata": {
           "inverse": "true"
-        },
-        "merge": true
+        }
       },
       {
         "id": "06c4f9cc-50c1-4a0b-90a6-efe5f22f5c84",
@@ -39,7 +39,7 @@
   ],
   "flexMode": "full-minus-40",
   "compactThreshold": 60,
-  "colorLevel": 2,
+  "colorLevel": 3,
   "defaultPadding": " ",
   "inheritSeparatorColors": false,
   "globalBold": false,
