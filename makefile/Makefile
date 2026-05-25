@@ -124,13 +124,39 @@ clean-claude-cli:
 	@rm -f $(STAMP)/claude-*.done $(HOME)/.local/bin/claude
 
 # -----------------------------------------------------------------------------
+# node-runtime — Node.js (+ npm + npx + corepack) from the nodejs.org
+# tarball. Dev-only (the ccstatusline statusLine command runs `npx`, and
+# any future npm-based tool needs it). Pinned to NODE_VERSION in
+# versions.mk. The lib/node.sh helper extracts the tarball to
+# $(DEST)/_node-vX.Y.Z/ and symlinks the four bin entries into $(DEST).
+# Older _node-* trees are stripped on every (re-)install.
+# -----------------------------------------------------------------------------
+.PHONY: node-runtime clean-node-runtime
+node-runtime: $(STAMP)/node-$(NODE_VERSION).done
+$(STAMP)/node-$(NODE_VERSION).done:
+	@printf '==> node %s\n' "$(NODE_VERSION)"
+	@$(SUDO) $(LIB)/node.sh $(NODE_VERSION)
+	@mkdir -p $(@D) && touch $@
+clean-node-runtime:
+	@rm -f $(STAMP)/node-*.done
+	@$(SUDO) rm -f $(DEST)/node $(DEST)/npm $(DEST)/npx $(DEST)/corepack
+	@$(SUDO) rm -rf $(DEST)/_node-*
+
+# -----------------------------------------------------------------------------
 # claude-statusline — interactive ccstatusline setup prompt.
 #   - Dev-only. The recipe body conditionally compiles based on MODE.
-#   - Re-runnable any time post-bootstrap; bootstrap.sh's tail also invokes
-#     this target on --dev runs after ensure_chezmoi_initialized.
-#   - Version passed via env so versions.mk stays the single source of truth.
+#   - Depends on node-runtime (also dev-only) so the npx the script
+#     invokes is the chezmoi-managed Linux-native one, not a Windows
+#     passthrough that crashes on WSL working dirs.
+#   - Re-runnable any time post-bootstrap; bootstrap.sh's tail also
+#     invokes this target on --dev runs after ensure_chezmoi_initialized.
+#   - Version passed via env so versions.mk stays the single source of
+#     truth.
 # -----------------------------------------------------------------------------
 .PHONY: claude-statusline
+ifeq ($(MODE),dev)
+claude-statusline: node-runtime
+endif
 claude-statusline:
 ifeq ($(MODE),dev)
 	@CCSTATUSLINE_VERSION=$(CCSTATUSLINE_VERSION) ../scripts/setup-ccstatusline.sh
@@ -162,7 +188,7 @@ user-tools: $(USER_TOOLS)
 
 provision: packages tools user-tools shell dotfiles
 ifeq ($(MODE),dev)
-provision: claude-cli
+provision: claude-cli node-runtime
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
