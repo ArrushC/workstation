@@ -83,7 +83,23 @@ sentinel_remove() {
 
 # --- options (skeletons; filled in by later tasks) -------------------------
 
-option_use_tracked()  { printf '%boption 1 (use tracked) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
+option_use_tracked() {
+  local tracked_content
+  tracked_content="$(cat "$WIDGET_TRACKED_SRC")"
+  # Empty tracked widget config (the initial `{}` seed) — bail with a hint
+  # instead of applying an empty config over the user's local one.
+  if [ "$(printf '%s' "$tracked_content" | tr -d '[:space:]')" = '{}' ]; then
+    printf '%bTracked widget config is empty (just `{}`).%b Pick option 3 first to seed it from a real configuration.\n' "$YELLOW" "$RESET"
+    return 0
+  fi
+  if sentinel_contains "$HOST"; then
+    printf '%bRemoving %s from local-persist sentinel block...%b\n' "$BOLD" "$HOST" "$RESET"
+    sentinel_remove "$HOST"
+  fi
+  printf '%bApplying tracked ccstatusline + Claude Code settings...%b\n' "$GREEN" "$RESET"
+  chezmoi apply "$WIDGET_DEST" "$CLAUDE_SETTINGS_DEST"
+  printf '%bDone.%b\n' "$GREEN" "$RESET"
+}
 option_this_machine() { printf '%boption 2 (this machine) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
 option_set_global()   { printf '%boption 3 (set new global) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
 option_skip()         { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
