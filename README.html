@@ -1601,6 +1601,52 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         >.
                     </p>
 
+                    <h4>
+                        <span class="badge dev">dev</span> Claude Code
+                        statusline prompt
+                    </h4>
+                    <p>
+                        At the tail of <code>bootstrap.sh --dev</code>, after
+                        chezmoi initializes, you&rsquo;ll be prompted to
+                        configure the Claude Code statusline via
+                        <a href="https://github.com/sirmalloc/ccstatusline"
+                            >ccstatusline</a
+                        >. Four options:
+                    </p>
+                    <ol>
+                        <li>
+                            <strong>Use the chezmoi-tracked status line</strong>
+                            &mdash; apply the tracked widget config + Claude
+                            Code settings (same look as every other
+                            <code>dev_machine</code>).
+                        </li>
+                        <li>
+                            <strong>Define a new status line for this machine</strong>
+                            &mdash; launch the ccstatusline TUI; on save, choose
+                            whether to persist across future
+                            <code>chezmoi update</code> runs (a yes adds this
+                            host to a per-host opt-out block in
+                            <code>.chezmoiignore.tmpl</code>).
+                        </li>
+                        <li>
+                            <strong>Set a new global status line</strong>
+                            &mdash; launch the TUI; on save, the result is
+                            re-added to the chezmoi source, committed, and
+                            pushed so every other <code>dev_machine</code>
+                            picks it up on next sync.
+                        </li>
+                        <li><strong>Skip</strong> &mdash; no setup this run.</li>
+                    </ol>
+                    <p class="note-row">
+                        Re-runnable any time:
+                        <code>make -C makefile claude-statusline MODE=dev</code>.
+                        Requires <code>npx</code> on the host (install Node.js
+                        if missing &mdash; not managed by this repo). The
+                        ccstatusline version is pinned in
+                        <code>makefile/versions.mk</code> via
+                        <code>CCSTATUSLINE_VERSION</code>.
+                    </p>
+
                     <details>
                         <summary>
                             Reinstalling from scratch (<code>--reinstall</code>)
@@ -2177,6 +2223,28 @@ alias work='cd /opt/myproject'</code></pre>
 function work { Set-Location "D:\dev\myproject" }</code></pre>
                         </div>
                     </div>
+
+                    <h3>
+                        <span class="badge dev">dev</span> Claude Code
+                        statusline
+                    </h3>
+                    <p>
+                        Re-prompt the
+                        <a href="https://github.com/sirmalloc/ccstatusline"
+                            >ccstatusline</a
+                        >
+                        setup any time (use tracked / this machine / set new
+                        global / skip):
+                    </p>
+                    <pre><code>make -C makefile claude-statusline MODE=dev</code></pre>
+                    <p class="note-row">
+                        Same prompt that fires at the tail of
+                        <code>bootstrap.sh --dev</code>. See
+                        <a href="#setup-linux"
+                            >Setup &rarr; Claude Code statusline prompt</a
+                        >
+                        for the option semantics.
+                    </p>
 
                     <h3>
                         Make &mdash; remote (control machine &rarr; all
