@@ -36,7 +36,9 @@ LINUX_OPTIONAL_PACKAGES := \
   nmap mtr \
   parallel pv entr tree strace perf cronie time \
   rsync vim-common vim-enhanced \
-  shellcheck gdb lsof tcpdump
+  shellcheck gdb lsof tcpdump \
+  cockpit cockpit-system cockpit-storaged cockpit-networkmanager \
+  cockpit-packagekit cockpit-podman
 
 .PHONY: packages packages-core packages-epel packages-optional
 
