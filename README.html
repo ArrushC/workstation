@@ -1640,11 +1640,13 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p class="note-row">
                         Re-runnable any time:
                         <code>make -C makefile claude-statusline MODE=dev</code>.
-                        Requires <code>npx</code> on the host (install Node.js
-                        if missing &mdash; not managed by this repo). The
-                        ccstatusline version is pinned in
-                        <code>makefile/versions.mk</code> via
-                        <code>CCSTATUSLINE_VERSION</code>.
+                        Auto-installs Linux-native Node.js (pinned LTS) as a
+                        dep via <code>make -C makefile node-runtime MODE=dev</code>,
+                        so a fresh dev_machine doesn&rsquo;t need <code>npx</code>
+                        on PATH beforehand. The ccstatusline version is pinned
+                        in <code>makefile/versions.mk</code> via
+                        <code>CCSTATUSLINE_VERSION</code>; Node version via
+                        <code>NODE_VERSION</code>.
                     </p>
 
                     <details>
@@ -2244,6 +2246,30 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                             >Setup &rarr; Claude Code statusline prompt</a
                         >
                         for the option semantics.
+                    </p>
+
+                    <h3>
+                        <span class="badge dev">dev</span> Node.js runtime
+                    </h3>
+                    <p>
+                        Install or refresh the pinned Linux-native Node.js
+                        (currently <code>NODE_VERSION</code> in
+                        <code>versions.mk</code>; consumed by the
+                        ccstatusline <code>statusLine</code> command and
+                        anything else that needs <code>npx</code>):
+                    </p>
+                    <pre><code>make -C makefile node-runtime MODE=dev</code></pre>
+                    <p class="note-row">
+                        Tarball extracted to
+                        <code>$(DEST)/_node-vX.Y.Z/</code>;
+                        <code>node</code>/<code>npm</code>/<code>npx</code>/<code>corepack</code>
+                        symlinked into <code>$(DEST)/</code>. Auto-runs as a
+                        dep of <code>claude-statusline</code> on
+                        <code>dev_machine</code>, so you rarely need to call
+                        it directly. WSL note: if your <code>PATH</code>
+                        leaks a Windows-side <code>npx</code> from
+                        <code>/mnt/c/...</code>, the setup script detects it
+                        and points you at this target.
                     </p>
 
                     <h3>
