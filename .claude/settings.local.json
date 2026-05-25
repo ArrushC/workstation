@@ -66,7 +66,11 @@
       "Bash(gh --version)",
       "Bash(gh auth *)",
       "Bash(git -C /c/Users/arrush.chaturvedi/.local/share/chezmoi *)",
-      "Bash(make list *)"
+      "Bash(make list *)",
+      "Bash(chezmoi --version)",
+      "Bash(chezmoi execute-template *)",
+      "Bash(chezmoi init *)",
+      "Bash(echo \"\\(exit: $?\\)\")"
     ]
   }
 }
