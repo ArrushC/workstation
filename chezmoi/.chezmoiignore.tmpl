@@ -38,6 +38,21 @@ dot_config/wezterm
 {{ end }}
 
 {{/*
+Dev-only paths. Hosts in the prod_machine group skip Claude Code and
+ccstatusline tracked files entirely — they're inert on prod (no claude
+binary, no npx) and just add noise in $HOME.
+
+The hasKey guard makes this no-op on hosts where chezmoi.toml predates
+the `group` field (haven't re-run `chezmoi init` since 6035ee0). Those
+hosts continue to receive the files as before; once they re-init (or
+re-bootstrap), the gate engages correctly.
+*/}}
+{{ if and (hasKey . "group") (ne .group "dev_machine") }}
+private_dot_claude
+dot_config/ccstatusline
+{{ end }}
+
+{{/*
 Per-host opt-out of the chezmoi-tracked ccstatusline widget config.
 Managed by scripts/setup-ccstatusline.sh — hand-edits between markers
 get clobbered on the next prompt run. Each host that picks "this
