@@ -1,0 +1,15 @@
+[Unit]
+Description=Dozzle — real-time Docker log viewer
+Documentation=https://dozzle.dev/
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/dozzle/dozzle.env
+ExecStart=/usr/local/bin/dozzle
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
