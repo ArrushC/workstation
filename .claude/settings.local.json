@@ -65,7 +65,8 @@
       "WebFetch(domain:api.github.com)",
       "Bash(gh --version)",
       "Bash(gh auth *)",
-      "Bash(git -C /c/Users/arrush.chaturvedi/.local/share/chezmoi *)"
+      "Bash(git -C /c/Users/arrush.chaturvedi/.local/share/chezmoi *)",
+      "Bash(make list *)"
     ]
   }
 }
