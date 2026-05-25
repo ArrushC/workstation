@@ -18,14 +18,13 @@ $character\
 """
 
 [time]
-# #565f89 is Tokyo Night's "comment" palette color — designed to recede into
-# the dark background while staying legible. Swap to another hex if a host
-# uses a different scheme; ANSI names (`bright-black`, `dimmed white`) were
-# tried and render poorly under WezTerm's Tokyo Night.
+# `dimmed white` applies the ANSI dim attribute to white, so each terminal
+# theme decides the actual rendered color — more portable than a hardcoded
+# hex (the earlier #565f89 was tuned to Tokyo Night).
 disabled    = false
 time_format = "%H:%M:%S"
 format      = '[\[$time\]]($style) '
-style       = "#565f89"
+style       = "dimmed white"
 
 [os]
 # Disabled: on WSL the detection probe costs ~150-230ms per prompt render
@@ -83,13 +82,15 @@ style     = "bold cyan"
 threshold = 1
 
 [status]
+# `common_meaning` maps known codes to labels (1 → ERROR, 126 → NOPERM,
+# 127 → NOTFOUND, 2 → USAGE); `$maybe_int` falls back to the raw number
+# for everything else. `recognize_signal_code = false` is deliberate —
+# tools like ssh use exit codes >=128 for non-signal reasons (ssh: 255),
+# and enabling it would silently subtract 128 and mislabel them.
 disabled              = false
-format                = "[$symbol$status]($style) "
+recognize_signal_code = false
 symbol                = "✘"
-not_executable_symbol = "✘"
-not_found_symbol      = "✘"
-sigint_symbol         = "✘"
-signal_symbol         = "✘"
+format                = '[$symbol $common_meaning$maybe_int]($style) '
 style                 = "bold red"
 
 [character]
