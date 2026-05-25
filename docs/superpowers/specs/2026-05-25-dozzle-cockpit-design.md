@@ -1,8 +1,12 @@
 # Dozzle + Cockpit on dev_machine — design
 
-**Status:** approved
+**Status:** approved (revised 2026-05-25 — Dozzle pivoted from binary to Docker after upstream verification)
 **Date:** 2026-05-25
-**Topic:** Add Dozzle (Docker log viewer) and Cockpit (web admin console) to the dev-only provisioning path, with tracked system-scope configuration.
+**Topic:** Add Dozzle (Docker log viewer, run as a container via systemd) and Cockpit (web admin console, dnf-installed) to the dev-only provisioning path, with tracked system-scope configuration.
+
+## Revision history
+
+- **2026-05-25 v1** — original design picked "standalone binary via EGET_TOOL" for Dozzle. Verification during implementation showed Dozzle's 10.x GitHub releases publish **zero binary assets** (Docker-only distribution). Spec revised in-place; the binary-based EGET_TOOL commit `a4c99c4` was reverted (`9bd50dd`). All other design decisions (Cockpit footprint, network exposure, `configs/` pattern) carried forward unchanged.
 
 ## Motivation
 
@@ -12,7 +16,8 @@
 
 | Decision | Choice | Rejected alternatives |
 |---|---|---|
-| Dozzle install method | Standalone binary via `EGET_TOOL` + systemd unit | Docker container (adds undeclared Docker dependency); shipping both (drift risk) |
+| Dozzle install method | Docker image (`amir20/dozzle:$(DOZZLE_VERSION)`) pulled and run by a systemd unit; bind-mount `/var/run/docker.sock` read-only; bound to 127.0.0.1:8080 | Binary via `EGET_TOOL` (rejected: upstream publishes no binary release assets, verified across v10.0.5–v10.6.1); building from source (over-scope: needs Go toolchain provisioning); dropping Dozzle (rejected: `cockpit-podman` covers podman but not Docker, and the live-log UX of Dozzle is distinct) |
+| Dozzle Docker prerequisite | Assumed-present (consistent with `lazydocker` / `dive` / `ctop`, which also assume Docker); systemd unit declares `Requires=docker.service` so failure is loud and self-disabling on hosts without Docker | Provision Docker via this repo (rejected: blast radius too large for the scope of this design; can be a follow-up) |
 | Cockpit footprint | Full workstation set: `cockpit` + `cockpit-system` + `cockpit-storaged` + `cockpit-networkmanager` + `cockpit-packagekit` + `cockpit-podman` | Minimal (too thin); full + `cockpit-machines` (pulls libvirtd, only useful if libvirt is in use) |
 | Network exposure | Cockpit LAN (firewalld opened, PAM+TLS); Dozzle localhost (SSH-tunnel) | All-localhost (Cockpit already has PAM+TLS; tunneling for every admin session is friction); all-LAN (Dozzle has no auth by default) |
 | Config tracking pattern | New top-level `configs/` directory, deployed by make targets via `sudo install` | Chezmoi (doesn't manage `/etc/`); `makefile/configs/` (less discoverable); ad-hoc heredocs in recipes (not reviewable) |
@@ -21,30 +26,23 @@
 
 ### 1. Version pin — `makefile/versions.mk`
 
-New entries in a new "Service / web admin" group:
+New entry in a new "Service / web admin" group. The version is the Docker image tag (`amir20/dozzle:<tag>`), substituted into the tracked env file by the make target at install time:
 
 ```make
 # --- Service / web admin (dev_machine only) ---------------------------------
-# Cockpit comes from dnf (see packages.mk); only Dozzle is binary-installed.
-DOZZLE_VERSION := <latest stable from amir20/dozzle releases>
+# Dozzle is run as a Docker container via systemd (no native binary — upstream
+# publishes Docker images only). The value below pins the Docker image tag
+# (amir20/dozzle:$(DOZZLE_VERSION)); bumping it invalidates the
+# dozzle-service stamp so the next `make dev` re-pulls + re-installs.
+# Cockpit comes from dnf (see packages.mk) and isn't versioned here.
+DOZZLE_VERSION := 10.6.1
 ```
 
-The version literal is filled in at implementation time. Bumping invalidates the per-tool stamp and the `dozzle-service` stamp (since the latter's stamp filename encodes `$(DOZZLE_VERSION)`) so unit-file edits after a version bump pick up on the next `make dev`.
+Bumping `DOZZLE_VERSION` invalidates the `dozzle-service` stamp (its filename encodes `$(DOZZLE_VERSION)`) so the next `make dev` re-renders `/etc/dozzle/dozzle.env`, re-pulls the image, and restarts the unit.
 
-### 2. Tool registration — `makefile/tools.mk`
+### 2. Tool registration — *(none)*
 
-New `EGET_TOOL` line in a new section:
-
-```make
-# =============================================================================
-# OBSERVABILITY SERVICES (dev_machine only — paired with service targets in
-# the top-level Makefile that install systemd units + tracked configs.)
-# =============================================================================
-
-$(eval $(call EGET_TOOL,dozzle,$(DOZZLE_VERSION),amir20/dozzle))
-```
-
-Dozzle ships a single static linux_amd64 binary on GitHub releases — no asset flags needed; default `v$(version)` tag matches upstream's tag format.
+Dozzle is **not** registered in `tools.mk`. It's not a binary deposited into `$(DEST)` — it's a Docker image whose lifecycle is owned entirely by the `dozzle-service` make target plus the systemd unit. This is intentional: every other entry in `tools.mk` represents a single-file binary under `$(DEST)`, and adding a "Docker image" entry would muddy that invariant.
 
 ### 3. Package additions — `makefile/packages.mk`
 
@@ -81,15 +79,27 @@ Files are committed in the repo, deployed by make recipes via `sudo install -m 0
 
 ```ini
 [Unit]
-Description=Dozzle — real-time Docker log viewer
+Description=Dozzle — real-time Docker log viewer (containerized)
 Documentation=https://dozzle.dev/
 After=docker.service
-Wants=docker.service
+Requires=docker.service
 
 [Service]
 Type=simple
 EnvironmentFile=/etc/dozzle/dozzle.env
-ExecStart=/usr/local/bin/dozzle
+# Pre-flight: kill any leftover container from a prior unclean shutdown.
+# Leading `-` keeps systemd going if the container doesn't exist.
+ExecStartPre=-/usr/bin/docker stop dozzle
+ExecStartPre=-/usr/bin/docker rm dozzle
+ExecStartPre=/usr/bin/docker pull ${DOZZLE_IMAGE}
+# Foreground run (no -d) so systemd owns the lifecycle.
+ExecStart=/usr/bin/docker run --rm --name dozzle \
+  -p ${DOZZLE_BIND}:8080 \
+  -e DOZZLE_LEVEL=${DOZZLE_LEVEL} \
+  -e DOZZLE_NO_ANALYTICS=${DOZZLE_NO_ANALYTICS} \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  ${DOZZLE_IMAGE}
+ExecStop=/usr/bin/docker stop dozzle
 Restart=on-failure
 RestartSec=5
 
@@ -97,18 +107,24 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Runs as `root` (default) — needed for `/var/run/docker.sock` access. `After=docker.service` + `Wants=docker.service` means the unit waits for Docker but doesn't *require* it (the service stays up if Docker is later stopped; Dozzle re-connects when Docker returns).
+`Requires=docker.service` is stricter than the original `Wants=` — if Docker stops, Dozzle stops too (the container can't survive without its host daemon). The systemd unit owns the container lifecycle; the container runs in the foreground (no `-d`) so `systemctl stop dozzle` cleanly tears it down. The read-only Docker socket bind-mount is the only thing the container needs from the host (besides its own port). All tunables flow from `dozzle.env` so the unit itself never needs editing for routine config changes.
 
 #### `configs/dozzle/dozzle.env`
 
+The tracked source file uses a `@DOZZLE_VERSION@` placeholder which `dozzle-service`'s recipe substitutes from `$(DOZZLE_VERSION)` at install time (so `versions.mk` stays the single source of truth for the version):
+
 ```
-DOZZLE_ADDR=127.0.0.1:8080
+# /etc/dozzle/dozzle.env — read by dozzle.service.
+# Edit DOZZLE_VERSION in makefile/versions.mk to bump the image tag; this
+# file's @DOZZLE_VERSION@ placeholder is substituted at `make dozzle-service`
+# install time.
+DOZZLE_IMAGE=amir20/dozzle:@DOZZLE_VERSION@
+DOZZLE_BIND=127.0.0.1
 DOZZLE_LEVEL=info
 DOZZLE_NO_ANALYTICS=true
-# DOZZLE_AUTH_PROVIDER=simple   # uncomment + create /etc/dozzle/users.yml for basic auth
 ```
 
-127.0.0.1 binding implements the "Dozzle localhost only" decision. Access via SSH tunnel: `ssh -L 8080:localhost:8080 <host>` then browse `http://localhost:8080`.
+`DOZZLE_BIND=127.0.0.1` implements the "Dozzle localhost only" decision — the `-p ${DOZZLE_BIND}:8080` flag in the unit yields `-p 127.0.0.1:8080:8080` (host:container). Access from a workstation: `ssh -L 8080:localhost:8080 <host>` then `http://localhost:8080`. Flipping `DOZZLE_BIND=0.0.0.0` opens the unauthenticated log viewer on every interface — only do this after configuring Dozzle's `DOZZLE_AUTH_PROVIDER=simple` and a `users.yml` (out of scope here; opt-in by editing the unit + adding `/etc/dozzle/users.yml`).
 
 #### `configs/cockpit/cockpit.conf`
 
@@ -130,22 +146,31 @@ Two new bespoke rules (outside the `TOOL` / `EGET_TOOL` / `USER_TOOL` macros), i
 
 ```make
 # -----------------------------------------------------------------------------
-# dozzle-service — install systemd unit + env file, enable+start. dev-only.
-#   - Order-only dep on the dozzle BINARY STAMP (not the `dozzle` phony) —
-#     matches the EGET_TOOL stamp-on-stamp invariant from CLAUDE.md; depending
-#     on a phony breaks `make -j` (phonies are always-rebuild).
-#   - This rule's stamp encodes $(DOZZLE_VERSION); bumping the binary version
-#     also re-applies the unit file (in case it changed alongside).
-#   - prod_machine: no-op (recipe body gated on MODE=dev).
+# dozzle-service — install systemd unit + env file, pull image, enable + start.
+#   - dev_machine only (recipe body gated on MODE=dev).
+#   - Env file is templated: `@DOZZLE_VERSION@` in configs/dozzle/dozzle.env
+#     is substituted with $(DOZZLE_VERSION) at install time via sed. Keeps
+#     versions.mk as the single source of truth.
+#   - Stamp encodes $(DOZZLE_VERSION); bumping the pin invalidates the stamp
+#     so the next `make dev` re-renders dozzle.env, re-pulls the image, and
+#     restarts the unit.
+#   - Sanity-checks `docker --version` at the top of the recipe (since this
+#     repo doesn't install Docker; lazydocker/dive/ctop already assume it).
+#     Loud failure with a clear message if Docker is missing.
 # -----------------------------------------------------------------------------
 .PHONY: dozzle-service clean-dozzle-service
 ifeq ($(MODE),dev)
 dozzle-service: $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done
-$(STAMP)/dozzle-service-$(DOZZLE_VERSION).done: | $(STAMP)/dozzle-$(DOZZLE_VERSION).done
 $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done:
-	@printf '==> dozzle-service (systemd)\n'
+	@printf '==> dozzle-service (docker + systemd)\n'
+	@if ! command -v docker >/dev/null 2>&1; then \
+	   printf '  ERROR: docker is not installed. Dozzle runs as a container.\n' >&2; \
+	   printf '         Install Docker (or Podman with a docker shim) and retry.\n' >&2; \
+	   exit 1; \
+	 fi
 	@$(SUDO) install -m 0755 -d /etc/dozzle
-	@$(SUDO) install -m 0644 ../configs/dozzle/dozzle.env /etc/dozzle/dozzle.env
+	@sed 's|@DOZZLE_VERSION@|$(DOZZLE_VERSION)|g' ../configs/dozzle/dozzle.env \
+	   | $(SUDO) install -m 0644 /dev/stdin /etc/dozzle/dozzle.env
 	@$(SUDO) install -m 0644 ../configs/dozzle/dozzle.service /etc/systemd/system/dozzle.service
 	@$(SUDO) systemctl daemon-reload
 	@$(SUDO) systemctl enable --now dozzle.service
@@ -156,6 +181,7 @@ dozzle-service:
 endif
 clean-dozzle-service:
 	@$(SUDO) systemctl disable --now dozzle.service 2>/dev/null || true
+	@$(SUDO) docker rm -f dozzle 2>/dev/null || true
 	@$(SUDO) rm -f /etc/systemd/system/dozzle.service /etc/dozzle/dozzle.env
 	@$(SUDO) rmdir /etc/dozzle 2>/dev/null || true
 	@$(SUDO) systemctl daemon-reload
@@ -214,13 +240,13 @@ provision: claude-cli node-runtime dozzle-service cockpit-service
 endif
 ```
 
-**Ordering under `make -j8`:** the existing `provision: packages tools user-tools shell dotfiles` line already lets `packages` and `tools` run in parallel — that's safe today because tool installs are self-contained downloads. Adding `dozzle-service` and `cockpit-service` doesn't change that: `dozzle-service` declares an order-only stamp-on-stamp dep on the `dozzle` binary stamp (so the binary lands first), and `cockpit-service` does a runtime `rpm -q cockpit` check (since `packages.mk` produces no stamp to depend on). The check fails loud and clear if a user races things by hand; the normal `make dev` flow under `-j` works because `cockpit.socket` enable is a fast operation that loses any race against the multi-second `dnf install`.
+**Ordering under `make -j8`:** the existing `provision: packages tools user-tools shell dotfiles` line already lets `packages` and `tools` run in parallel — that's safe today because tool installs are self-contained downloads. The two new service rules don't change that: `dozzle-service` does a runtime `command -v docker` check (the repo doesn't own Docker provisioning, so no stamp to depend on), and `cockpit-service` does a runtime `rpm -q cockpit` check (`packages.mk` produces no stamp). Both checks fail loud and clear if invoked out of order by hand; under `make dev` (or `make -j8 dev`) the docker presence check is fine because Docker is a host-level prerequisite assumed pre-existing, and the cockpit check loses any race against the multi-second `dnf install`.
 
-**Followup (out of scope for this design):** if more services-that-need-packages get added later, the cleanest fix is to make `packages-optional` produce a stamp file — `cockpit-service` could then declare an order-only dep on that stamp instead of the rpm-q runtime check. Deferring until there's a second consumer.
+**Followup (out of scope for this design):** if more services-that-need-packages get added later, the cleanest fix is to make `packages-optional` produce a stamp file — `cockpit-service` could then declare an order-only dep on that stamp instead of the rpm-q runtime check. Similarly, if this repo ever owns Docker provisioning, `dozzle-service` should gain an order-only stamp dep on that. Defer both until there's a second consumer.
 
 ### 6. `make list` and `make help` updates
 
-`make list` already enumerates `SCOPE_TOOLS` and `USER_TOOLS`. Dozzle joins `SCOPE_TOOLS` automatically via `EGET_TOOL`. The two new service targets are bespoke, so add a parallel `services (provisioned on MODE=dev only)` block to `list`:
+`make list` already enumerates `SCOPE_TOOLS` and `USER_TOOLS`. Dozzle is **not** a SCOPE_TOOL in the revised design (it has no binary in `$(DEST)`); it shows up only in the new `services (provisioned on MODE=dev only)` block:
 
 ```make
 list:
@@ -268,18 +294,18 @@ curl -sI http://127.0.0.1:8080 | head -1                       # HTTP/1.1 200 OK
 curl -skI https://127.0.0.1:9090 | head -1                     # HTTP/1.1 200 OK
 
 # Dry-run checks (no sandbox install):
-cd makefile && make list MODE=dev                              # shows dozzle in scope-tools, services block listed
-cd makefile && make -n MODE=dev provision | grep -E '(dozzle|cockpit)'  # both fire
-cd makefile && make -n MODE=prod provision | grep -E '(dozzle|cockpit)' # neither fires
+cd makefile && make list MODE=dev                              # services block listed (no scope-tools entry for dozzle in revised design)
+cd makefile && make -n MODE=dev provision | grep -E '(dozzle-service|cockpit-service)'  # both fire
+cd makefile && make -n MODE=prod provision | grep -E '(dozzle-service|cockpit-service)' # neither fires
 ```
 
 ## Out of scope
 
-- **Docker install** — same as today; the binary works headlessly until Docker is present, then auto-connects via the socket.
+- **Docker install** — same as today: this repo doesn't provision Docker; `lazydocker` / `dive` / `ctop` already assume it's present, and `dozzle-service` now does too. The recipe's `command -v docker` check fails loud on hosts without Docker.
 - **Cockpit reverse-proxy / signed TLS cert** — self-signed default is fine for dev; users can drop a cert under `/etc/cockpit/ws-certs.d/` per-host (un-tracked, per the existing per-host override pattern).
-- **Dozzle `users.yml`** — auth is opt-in via the commented env var.
+- **Dozzle `users.yml`** — Dozzle has no auth by default; enabling `DOZZLE_AUTH_PROVIDER=simple` + adding `/etc/dozzle/users.yml` is opt-in and outside this design (only matters if `DOZZLE_BIND` is moved off `127.0.0.1`).
 - **Cockpit `cockpit-machines` / libvirt** — only useful if libvirtd is already provisioned (it isn't).
-- **Windows side** — Cockpit is Linux-only; Dozzle Windows binary exists but doesn't belong on the WezTerm GUI host.
+- **Windows side** — Cockpit is Linux-only; Dozzle is also Linux-side (the Docker image runs where Docker runs). Nothing for the WezTerm GUI host.
 - **chezmoi-template-driven config** — `cockpit.conf` and `dozzle.env` are plain INI/env, not `.tmpl`. If per-host variation becomes necessary, escalate to a chezmoi-style template in `configs/<tool>/*.tmpl` rendered by a new lib helper, but defer until a concrete need shows up.
 
 ## Open questions
