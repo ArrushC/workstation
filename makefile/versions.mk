@@ -88,3 +88,4 @@ HARLEQUIN_VERSION := latest
 
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
+CCSTATUSLINE_VERSION := 2.2.19
