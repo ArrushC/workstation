@@ -29,7 +29,16 @@
 # builtin merge prompt.
 [merge]
     command = "vimdiff"
-    args    = ["{{ .Destination }}", "{{ .Source }}", "{{ .Target }}"]
+{{/*
+    The Destination / Source / Target refs in args below are chezmoi
+    merge-time placeholders, NOT template-render data. Each open and
+    close brace pair is emitted via its own escape action because Go
+    template lexers close actions on the first close brace they hit;
+    backtick raw strings inside an action do not shield against that.
+    TOML hash comments also do not shield literal template directives
+    from evaluation. Source-only notes live in Go template comments.
+*/}}
+    args    = ["{{ "{{" }} .Destination {{ "}}" }}", "{{ "{{" }} .Source {{ "}}" }}", "{{ "{{" }} .Target {{ "}}" }}"]
 
 [git]
     autoCommit = false
