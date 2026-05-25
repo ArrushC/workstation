@@ -85,7 +85,11 @@ SYSZ_VERSION          := 1.4.3
 GLANCES_VERSION   := latest
 ASCIINEMA_VERSION := latest
 HARLEQUIN_VERSION := latest
-CHEZNAV_VERSION   := latest
+
+# --- Chezmoi TUI ------------------------------------------------------------
+# chezit (Go binary, EGET_TOOL). cheznav was tried first but its pip
+# package requires Python 3.14 which isn't in AlmaLinux 9's modules.
+CHEZIT_VERSION := 0.2.2
 
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
