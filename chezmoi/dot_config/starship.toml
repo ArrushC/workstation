@@ -3,6 +3,9 @@
 
 "$schema" = 'https://starship.rs/config-schema.json'
 
+# No blank line between consecutive prompts.
+add_newline = false
+
 format = """\
 $time\
 $username$hostname\
@@ -16,10 +19,14 @@ $character\
 """
 
 [time]
+# `bright-black` resolves through the terminal's color scheme (ANSI palette
+# index 8), so it picks up whatever WezTerm's active theme defines as a
+# readable "dim foreground" gray — closer to background-aware than a fixed
+# hex/256-color value would be.
 disabled    = false
 time_format = "%H:%M:%S"
 format      = '[\[$time\]]($style) '
-style       = "bold black"
+style       = "bright-black"
 
 [os]
 # Disabled: on WSL the detection probe costs ~150-230ms per prompt render
