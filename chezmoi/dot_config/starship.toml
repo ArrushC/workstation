@@ -9,7 +9,6 @@ add_newline = false
 format = """\
 $time\
 $username$hostname\
-$shell\
 $directory\
 $git_branch$git_status\
 $cmd_duration\
@@ -19,14 +18,14 @@ $character\
 """
 
 [time]
-# `bright-black` resolves through the terminal's color scheme (ANSI palette
-# index 8), so it picks up whatever WezTerm's active theme defines as a
-# readable "dim foreground" gray — closer to background-aware than a fixed
-# hex/256-color value would be.
+# #565f89 is Tokyo Night's "comment" palette color — designed to recede into
+# the dark background while staying legible. Swap to another hex if a host
+# uses a different scheme; ANSI names (`bright-black`, `dimmed white`) were
+# tried and render poorly under WezTerm's Tokyo Night.
 disabled    = false
 time_format = "%H:%M:%S"
 format      = '[\[$time\]]($style) '
-style       = "bright-black"
+style       = "#565f89"
 
 [os]
 # Disabled: on WSL the detection probe costs ~150-230ms per prompt render
@@ -49,16 +48,6 @@ ssh_only   = false
 ssh_symbol = " "
 format     = "[$hostname$ssh_symbol]($style) "
 style      = "bold cyan"
-
-[shell]
-disabled          = false
-bash_indicator    = "bash"
-zsh_indicator     = "zsh"
-fish_indicator    = "fish"
-powershell_indicator = "ps"
-unknown_indicator = "?"
-format            = "[$indicator]($style) "
-style             = "dimmed purple"
 
 [directory]
 truncation_length = 4
