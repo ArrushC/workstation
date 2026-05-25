@@ -276,7 +276,7 @@ user-tools: $(USER_TOOLS)
 
 provision: packages tools user-tools shell dotfiles
 ifeq ($(MODE),dev)
-provision: claude-cli node-runtime
+provision: claude-cli node-runtime dozzle-service cockpit-service
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
@@ -296,6 +296,8 @@ list:
 	@printf '  %s\n' $(sort $(SCOPE_TOOLS))
 	@printf '\nuser-tools (%d):\n' $(words $(USER_TOOLS))
 	@printf '  %s\n' $(sort $(USER_TOOLS))
+	@printf '\nservices (provisioned on MODE=dev only):\n'
+	@printf '  dozzle-service\n  cockpit-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 
 clean:
@@ -311,6 +313,8 @@ help:
 	@echo "  make all          install every scope-aware tool (use -j8 for parallelism)"
 	@echo "  make user-tools   install pip user-site tools (glances, asciinema, harlequin)"
 	@echo "  make claude-cli   install the Claude Code CLI"
+	@echo "  make dozzle-service   install dozzle systemd unit + start service (dev only)"
+	@echo "  make cockpit-service  install cockpit.conf + enable socket + open firewall (dev only)"
 	@echo "  make <tool>       install just one tool, e.g. make gitui"
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"
 	@echo "  make list         list every managed tool, grouped"
