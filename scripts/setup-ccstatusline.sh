@@ -100,7 +100,25 @@ option_use_tracked() {
   chezmoi apply "$WIDGET_DEST" "$CLAUDE_SETTINGS_DEST"
   printf '%bDone.%b\n' "$GREEN" "$RESET"
 }
-option_this_machine() { printf '%boption 2 (this machine) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
+option_this_machine() {
+  printf '%bLaunching ccstatusline TUI (v%s)...%b\n' "$BOLD" "$CCSTATUSLINE_VERSION" "$RESET"
+  if ! npx -y "ccstatusline@$CCSTATUSLINE_VERSION" </dev/tty; then
+    printf '%bTUI exited non-zero or was cancelled — no changes.%b\n' "$YELLOW" "$RESET"
+    return 0
+  fi
+  printf '%bPersist this machine-local config across chezmoi updates? (y/N): %b' "$BOLD" "$RESET"
+  local ans
+  read -r ans </dev/tty
+  case "${ans,,}" in
+    y|yes)
+      sentinel_add "$HOST"
+      printf '%bAdded %s to local-persist sentinel block — subsequent `chezmoi apply` runs will leave your local widget config alone.%b\n' "$GREEN" "$HOST" "$RESET"
+      ;;
+    *)
+      printf '%bEphemeral — next `chezmoi update` will overwrite your local widget config with the tracked version.%b\n' "$YELLOW" "$RESET"
+      ;;
+  esac
+}
 option_set_global()   { printf '%boption 3 (set new global) — not yet implemented.%b\n' "$YELLOW" "$RESET"; }
 option_skip()         { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
 
