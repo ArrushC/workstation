@@ -365,7 +365,10 @@ ensure_chezmoi_initialized() {
   fi
 
   log "First-time chezmoi setup — prompting for name/email..."
-  if "$chezmoi_bin" init --apply --source "$CHEZMOI_SOURCE" </dev/tty; then
+  # WORKSTATION_GROUP feeds the `group` field in chezmoi.toml.tmpl's [data]
+  # block — drives the dev/prod conditionals in .chezmoiignore.tmpl so prod
+  # hosts skip dev-only paths (~/.claude, ~/.config/ccstatusline, etc.).
+  if WORKSTATION_GROUP="$GROUP_NAME" "$chezmoi_bin" init --apply --source "$CHEZMOI_SOURCE" </dev/tty; then
     ok "chezmoi initialized + dotfiles applied"
   else
     warn "chezmoi init failed. Inspect with: chezmoi diff --source $CHEZMOI_SOURCE"

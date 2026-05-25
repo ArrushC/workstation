@@ -6,6 +6,11 @@
     email    = "{{ promptStringOnce . "email" "Email address" }}"
     hostname = "{{ .chezmoi.hostname }}"
     os       = "{{ .chezmoi.os }}"
+    # `group` drives dev/prod conditionals in .chezmoiignore.tmpl. bootstrap.sh
+    # exports WORKSTATION_GROUP from its `--dev`/`--prod` flag and chezmoi uses
+    # it as the no-prompt path; running `chezmoi init` outside bootstrap falls
+    # back to an interactive prompt.
+    group    = "{{ if env "WORKSTATION_GROUP" }}{{ env "WORKSTATION_GROUP" }}{{ else }}{{ promptStringOnce . "group" "Machine group (dev_machine|prod_machine)" }}{{ end }}"
 
 [edit]
     command = "hx"
