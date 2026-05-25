@@ -251,6 +251,7 @@ $(eval $(call USER_TOOL,asciinema,$(ASCIINEMA_VERSION),\
 $(eval $(call USER_TOOL,harlequin,$(HARLEQUIN_VERSION),\
   $(LIB)/pip.sh harlequin))
 
-# cheznav — dual-pane TUI for chezmoi. Launched via the `czt` alias.
-$(eval $(call USER_TOOL,cheznav,$(CHEZNAV_VERSION),\
-  $(LIB)/pip.sh cheznav))
+# chezit — TUI for chezmoi (Go single-binary). Launched via the `czt`
+# alias. cheznav (Python) was tried first but its pip package requires
+# Python 3.14, which AlmaLinux 9's base modules don't ship.
+$(eval $(call EGET_TOOL,chezit,$(CHEZIT_VERSION),daptify14/chezit,,--asset linux_amd64))
