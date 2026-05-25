@@ -123,6 +123,21 @@ $(STAMP)/claude-$(CLAUDE_VERSION).done:
 clean-claude-cli:
 	@rm -f $(STAMP)/claude-*.done $(HOME)/.local/bin/claude
 
+# -----------------------------------------------------------------------------
+# claude-statusline — interactive ccstatusline setup prompt.
+#   - Dev-only. The recipe body conditionally compiles based on MODE.
+#   - Re-runnable any time post-bootstrap; bootstrap.sh's tail also invokes
+#     this target on --dev runs after ensure_chezmoi_initialized.
+#   - Version passed via env so versions.mk stays the single source of truth.
+# -----------------------------------------------------------------------------
+.PHONY: claude-statusline
+claude-statusline:
+ifeq ($(MODE),dev)
+	@CCSTATUSLINE_VERSION=$(CCSTATUSLINE_VERSION) ../scripts/setup-ccstatusline.sh
+else
+	@echo "claude-statusline is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+
 include packages.mk
 include shell.mk
 include dotfiles.mk
