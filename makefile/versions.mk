@@ -95,3 +95,13 @@ CHEZIT_VERSION := 0.2.2
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.19
 NODE_VERSION := 24.16.0
+
+# --- Service / web admin (dev_machine only) ---------------------------------
+# Dozzle is run as a Docker container via systemd (no native binary —
+# upstream publishes Docker images only). The value below pins the Docker
+# image tag (amir20/dozzle:$(DOZZLE_VERSION)). The dozzle-service make
+# target sed-substitutes it into the deployed /etc/dozzle/dozzle.env;
+# bumping invalidates the dozzle-service stamp so the next `make dev`
+# re-renders the env file, re-pulls the image, and restarts the unit.
+# Cockpit comes from dnf (see packages.mk) and isn't versioned here.
+DOZZLE_VERSION := 10.6.1
