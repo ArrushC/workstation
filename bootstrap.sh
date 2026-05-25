@@ -481,6 +481,13 @@ run_make
 ensure_chezmoi_initialized
 push_host_changes
 
+# --- ccstatusline setup (dev only) -----------------------------------------
+# Interactive prompt for the Claude Code statusline. Re-runnable any time
+# via `make -C makefile claude-statusline MODE=dev` from the repo root.
+if [ "$MACHINE_TYPE" = "dev" ]; then
+  make -C "$(dirname "$0")/makefile" claude-statusline MODE=dev || true
+fi
+
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
 echo -e "Re-source your shell: ${YELLOW}source ~/.bashrc${RESET}"
@@ -491,4 +498,8 @@ else
   echo -e "Enable passwordless SSH from your client:"
   echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux)"
   echo -e "  ${YELLOW}.\\scripts\\manage-hosts.ps1 -CopyId -Name $(hostname -s)${RESET}  (Windows)"
+fi
+if [ "$MACHINE_TYPE" = "dev" ]; then
+  echo -e "Re-configure the Claude Code statusline any time:"
+  echo -e "  ${YELLOW}make -C makefile claude-statusline MODE=dev${RESET}"
 fi
