@@ -60,7 +60,12 @@
       "Bash(python3 /tmp/find_feedback.py)",
       "Bash(python3 /tmp/precise_extract.py)",
       "Bash(python3 /tmp/extract_clean.py)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(git check-ignore *)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(git -C /c/Users/arrush.chaturvedi/.local/share/chezmoi *)"
     ]
   }
 }
