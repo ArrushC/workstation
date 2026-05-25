@@ -1,1 +1,59 @@
-{}
+{
+  "version": 3,
+  "lines": [
+    [
+      {
+        "id": "0675d2e7-11bc-4e22-b7fd-a68f83b73554",
+        "type": "current-working-dir",
+        "backgroundColor": "bgCyan"
+      },
+      {
+        "id": "c1d26d28-2267-4dce-91b4-bcd1f006a6f1",
+        "type": "model",
+        "backgroundColor": "bgGreen"
+      },
+      {
+        "id": "70989c06-e5e1-4e58-85ca-2fb89f19f234",
+        "type": "thinking-effort",
+        "backgroundColor": "bgRed"
+      },
+      {
+        "id": "fb9e7a68-ae93-4fb0-b753-2ce1a62999fc",
+        "type": "tokens-total",
+        "backgroundColor": "bgBrightCyan"
+      },
+      {
+        "id": "d2aee19a-332c-490a-b4d6-a7a5e3365ed7",
+        "type": "total-speed",
+        "backgroundColor": "bgBrightGreen"
+      },
+      {
+        "id": "82af17c9-ca92-46c5-bc7a-14ee71e0fd0d",
+        "type": "session-usage",
+        "backgroundColor": "bgBrightMagenta"
+      }
+    ]
+  ],
+  "flexMode": "full-minus-40",
+  "compactThreshold": 60,
+  "colorLevel": 2,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "gitCacheTtlSeconds": 5,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": true,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": true,
+    "continueThemeAcrossLines": true,
+    "theme": "nord-aurora"
+  },
+  "defaultPadding": " "
+}
