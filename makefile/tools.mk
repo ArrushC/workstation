@@ -77,6 +77,12 @@ $(eval $(call EGET_TOOL,bandwhich,$(BANDWHICH_VERSION),imsnif/bandwhich,,--asset
 # usql — both regular and `usql_static` variants published per arch.
 # `--asset '^_static'` excludes the static-linked one (matches the existing
 # behavior — we install the regular dynamically-linked usql).
+# NOTE: the dynamic build requires GLIBC 2.38+ and GLIBCXX 3.4.30+
+# (≈ RHEL 9.4 / Fedora 38 / Ubuntu 24.04 baseline). On hosts with older
+# glibc (e.g. AlmaLinux 9 ships glibc 2.34) usql will install but fail
+# to run with "GLIBC_2.38 not found"; switch to the static archive
+# (--asset _static, archive contains binary `usql_static`) if you need
+# it working on those hosts.
 $(eval $(call EGET_TOOL,usql,$(USQL_VERSION),xo/usql,,--asset '^_static'))
 $(eval $(call EGET_TOOL,lazydocker,$(LAZYDOCKER_VERSION),jesseduffield/lazydocker))
 $(eval $(call EGET_TOOL,dive,$(DIVE_VERSION),wagoodman/dive))
