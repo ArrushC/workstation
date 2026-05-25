@@ -89,7 +89,16 @@
                         </ol>
                     </li>
                     <li><a href="#hosts">Host management</a></li>
-                    <li><a href="#daily">Daily workflows</a></li>
+                    <li>
+                        <a href="#daily">Daily workflows</a>
+                        <ol class="sub">
+                            <li>
+                                <a href="#daily-services"
+                                    >Web admin services</a
+                                >
+                            </li>
+                        </ol>
+                    </li>
                     <li><a href="#adding">Adding tools / hosts</a></li>
                     <li><a href="#troubleshooting">Troubleshooting</a></li>
                 </ol>
@@ -746,6 +755,36 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     data-tip="Inspect Docker image layers"
                                     >dive<span class="sr-only">
                                         — inspect Docker image layers</span
+                                    ></span
+                                >
+                            </div>
+                        </article>
+
+                        <article
+                            class="tool-card cat-containers"
+                            data-cat="containers"
+                        >
+                            <h4>Web admin (dev_machine only)</h4>
+                            <div class="chips">
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Real-time Docker log viewer (container; localhost:8080, SSH-tunnel to access)"
+                                    >dozzle<span class="sr-only">
+                                        — real-time Docker log viewer
+                                        (containerized; localhost:8080,
+                                        SSH-tunnel to access)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Web admin console — services, journal, storage, network, podman, packages (https://host:9090, PAM auth)"
+                                    >cockpit<span class="sr-only">
+                                        — web admin console: services,
+                                        journal, storage, network, podman,
+                                        packages (https://host:9090, PAM
+                                        auth)</span
                                     ></span
                                 >
                             </div>
@@ -2404,6 +2443,32 @@ make -n MODE=prod provision
 # Single tool — useful for iterating when one install is flaky
 make gitui MODE=prod
 make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
+
+                    <h3 id="daily-services">Web admin services (dev_machine)</h3>
+                    <ul>
+                        <li>
+                            <strong>Cockpit</strong> — open
+                            <code>https://&lt;host&gt;:9090</code> in a
+                            browser; log in with your Linux user account
+                            (PAM). Self-signed cert on first hit — accept
+                            the warning. Covers services, journal,
+                            storage, network, packages, podman.
+                        </li>
+                        <li>
+                            <strong>Dozzle</strong> — runs as a Docker
+                            container managed by systemd; bound to
+                            localhost. SSH-tunnel to view:
+                            <code>ssh -L 8080:localhost:8080 &lt;host&gt;</code>,
+                            then
+                            <code>http://localhost:8080</code> on your
+                            workstation. Real-time Docker container logs.
+                            Bump the pinned image tag by editing
+                            <code>DOZZLE_VERSION</code> in
+                            <code>makefile/versions.mk</code>; the next
+                            <code>make dev</code> re-pulls and restarts
+                            the unit.
+                        </li>
+                    </ul>
                 </section>
 
                 <section id="adding">
@@ -3003,6 +3068,46 @@ choco install -y &lt;id&gt;</code></pre>
                                 <code>MODE</code> for you) or pass it
                                 explicitly: <code>make MODE=prod
                                 provision</code>.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <strong>Cockpit login fails — "Permission denied"</strong>
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Cockpit auths via PAM against local user accounts
+                                — your account must have a password set. SSH-key-
+                                only accounts can't log in to the Cockpit web UI.
+                                Fix: <code>sudo passwd $USER</code> on the host,
+                                then retry. (You'll still want to keep SSH on
+                                keys; this password is only for the Cockpit
+                                login form.)
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <strong>Dozzle fails to start — "docker not found" /
+                                container won't pull</strong>
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Dozzle runs as a Docker container, so the host
+                                must have Docker (or Podman with a Docker shim).
+                                <code>make dozzle-service</code> fails loud
+                                with a "docker not installed" message when
+                                <code>command -v docker</code> returns nothing.
+                                Install Docker via your distro's instructions,
+                                then re-run <code>make dozzle-service</code>.
+                                If Docker is installed but the
+                                <code>docker pull amir20/dozzle:&lt;tag&gt;</code>
+                                step fails, check
+                                <code>journalctl -u dozzle -n 30</code> — likely
+                                a registry-rate-limit or DNS issue.
                             </p>
                         </div>
                     </details>
