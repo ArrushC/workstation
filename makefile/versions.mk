@@ -95,3 +95,8 @@ CHEZIT_VERSION := 0.2.2
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.19
 NODE_VERSION := 24.16.0
+
+# --- Service / web admin (dev_machine only) ---------------------------------
+# Cockpit comes from dnf (see packages.mk); only Dozzle is binary-installed.
+# Dozzle is a single static linux_amd64 binary on GitHub releases.
+DOZZLE_VERSION := 10.6.1

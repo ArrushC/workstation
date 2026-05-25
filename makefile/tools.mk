@@ -251,6 +251,16 @@ $(eval $(call USER_TOOL,asciinema,$(ASCIINEMA_VERSION),\
 $(eval $(call USER_TOOL,harlequin,$(HARLEQUIN_VERSION),\
   $(LIB)/pip.sh harlequin))
 
+# =============================================================================
+# OBSERVABILITY SERVICES (dev_machine only — paired with service targets in
+# the top-level Makefile that install systemd units + tracked configs from
+# configs/<tool>/. The binary alone is registered here; service wiring lives
+# in Makefile.)
+# =============================================================================
+
+# dozzle — single static linux_amd64 binary; default `v$(version)` tag.
+$(eval $(call EGET_TOOL,dozzle,$(DOZZLE_VERSION),amir20/dozzle))
+
 # chezit — TUI for chezmoi (Go single-binary). Launched via the `czt`
 # alias. cheznav (Python) was tried first but its pip package requires
 # Python 3.14, which AlmaLinux 9's base modules don't ship.
