@@ -14,12 +14,23 @@ export EDITOR="hx"
 export VISUAL="hx"
 export PAGER="less"
 export MANPAGER="less"
+
+# --- History -----------------------------------------------------------------
+# HISTSIZE = lines kept in memory; HISTFILESIZE = lines kept on disk.
 export HISTSIZE=10000
 export HISTFILESIZE=20000
-export HISTCONTROL=ignoredups:erasedups
-shopt -s histappend
-shopt -s checkwinsize
-shopt -s globstar
+export HISTCONTROL=ignoredups:erasedups   # drop dupes, including older ones
+shopt -s histappend                        # append on exit instead of clobbering
+
+# --- Shell behavior ----------------------------------------------------------
+shopt -s checkwinsize     # refresh LINES/COLUMNS after each command
+shopt -s globstar         # ** matches files/dirs recursively
+
+# --- Completion --------------------------------------------------------------
+# bash tab-completion is provided by the system-wide bash-completion package
+# (sourced via /etc/profile.d/bash_completion.sh on most distros), so there's
+# nothing to initialize here. zsh's parity file calls `compinit` explicitly
+# because zsh has no equivalent system-wide loader.
 
 # --- fzf ---------------------------------------------------------------------
 export FZF_DEFAULT_OPTS="
