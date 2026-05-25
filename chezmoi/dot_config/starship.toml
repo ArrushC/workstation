@@ -1,18 +1,32 @@
 # ~/.config/starship.toml — managed by chezmoi
-# Clean, informative prompt optimised for remote Linux dev work
+# Compact single-line prompt with leading clock, optimised for remote Linux dev work
 
 "$schema" = 'https://starship.rs/config-schema.json'
 
-format = """
-[╭─](bold green)$os$username$hostname$directory$git_branch$git_status$cmd_duration
-[╰─](bold green)$character"""
+format = """\
+$time\
+$username$hostname\
+$shell\
+$directory\
+$git_branch$git_status\
+$cmd_duration\
+$jobs\
+$status\
+$character\
+"""
+
+[time]
+disabled    = false
+time_format = "%H:%M:%S"
+format      = '[\[$time\]]($style) '
+style       = "bold black"
 
 [os]
 # Disabled: on WSL the detection probe costs ~150-230ms per prompt render
 # (vs <1ms for every other module). $os in the format string just renders
 # empty when disabled — re-enable here if a host shows the module is fast.
 disabled = true
-style = "bold blue"
+style    = "bold blue"
 
 [os.symbols]
 Linux = " "
@@ -24,15 +38,26 @@ style_user  = "bold yellow"
 style_root  = "bold red"
 
 [hostname]
-ssh_only = false
-format   = "[$hostname]($style) "
-style    = "bold cyan"
+ssh_only   = false
+ssh_symbol = " "
+format     = "[$hostname$ssh_symbol]($style) "
+style      = "bold cyan"
+
+[shell]
+disabled          = false
+bash_indicator    = "bash"
+zsh_indicator     = "zsh"
+fish_indicator    = "fish"
+powershell_indicator = "ps"
+unknown_indicator = "?"
+format            = "[$indicator]($style) "
+style             = "dimmed purple"
 
 [directory]
-truncation_length    = 4
-truncate_to_repo     = true
-style                = "bold blue"
-read_only            = " 󰌾"
+truncation_length = 4
+truncate_to_repo  = true
+style             = "bold blue"
+read_only         = " 󰌾"
 
 [git_branch]
 format = "[$symbol$branch]($style) "
@@ -40,8 +65,8 @@ symbol = " "
 style  = "bold purple"
 
 [git_status]
-format    = "([$all_status$ahead_behind]($style) )"
-style     = "bold red"
+format     = "([$all_status$ahead_behind]($style) )"
+style      = "bold red"
 conflicted = "⚡"
 ahead      = "⇡${count}"
 behind     = "⇣${count}"
@@ -54,6 +79,22 @@ staged     = "+${count}"
 min_time = 2_000
 format   = "took [$duration]($style) "
 style    = "bold yellow"
+
+[jobs]
+format    = "[$symbol$number]($style) "
+symbol    = "✦"
+style     = "bold cyan"
+threshold = 1
+
+[status]
+disabled              = false
+format                = "[$symbol$status]($style) "
+symbol                = "✘"
+not_executable_symbol = "✘"
+not_found_symbol      = "✘"
+sigint_symbol         = "✘"
+signal_symbol         = "✘"
+style                 = "bold red"
 
 [character]
 success_symbol = "[❯](bold green)"
