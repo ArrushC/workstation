@@ -4,6 +4,10 @@
 
 **User-facing reference is `README.html`** (open in a browser from the repo root — loads `README.css` + `README.js` as siblings). This file is Claude-internal: load-bearing invariants, file-handling gotchas, verification recipes. When in doubt, point users at README.html sections rather than re-explaining them here.
 
+## Claude memory routing
+
+Project-scoped memories (user/feedback/project/reference, per the standard `auto memory` taxonomy in the system prompt) live in **`.claude/memory/`** at the repo root — committed, code-reviewable, reproducible after a fresh clone. Write new memory files to `.claude/memory/<slug>.md` and update the index at `.claude/memory/MEMORY.md`. **Do NOT write to the home-dir memory path the system prompt suggests** (`~/.claude/projects/.../memory/`) — that path is intentionally left unsymlinked, so writes there would land outside source control and be invisible to other checkouts and reviewers. Escalate to a host-global memory location ONLY when the user explicitly asks for a memory to apply across all projects (and surface that scope choice in your reply so it's auditable).
+
 ## Before you change anything
 
 The repo has a long history of regressions, and the load-bearing rules below were written in response to specific past breakage. Before editing a tricky area:
