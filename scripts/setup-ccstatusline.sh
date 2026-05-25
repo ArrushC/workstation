@@ -26,11 +26,27 @@ CCSTATUSLINE_VERSION="${CCSTATUSLINE_VERSION:-2.2.19}"
 preflight() {
   if ! command -v npx >/dev/null 2>&1; then
     printf '%bnpx not found.%b ccstatusline runs via npx; install Node.js first:\n' "$YELLOW" "$RESET"
-    printf '  Fedora/RHEL: %bsudo dnf install -y nodejs%b\n' "$YELLOW" "$RESET"
-    printf '  Debian/Ubuntu: %bsudo apt install -y nodejs npm%b\n' "$YELLOW" "$RESET"
-    printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
+    printf '  Recommended: %bmake -C makefile node-runtime MODE=dev%b (this repo, pinned LTS)\n' "$YELLOW" "$RESET"
+    printf '  Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
     exit 0
   fi
+  # WSL trap: if `npx` resolves to a Windows-side install (PATH passthrough
+  # through /mnt/c/... or *.exe), the Windows node can't operate from a WSL
+  # working directory (UNC path failure — CMD.EXE refuses \\wsl.localhost\…
+  # and falls back to the Windows directory, breaking the TUI before it can
+  # render). Detect and bail with a useful install hint.
+  local npx_path
+  npx_path="$(command -v npx)"
+  case "$npx_path" in
+    /mnt/*|*/node.exe|*.exe)
+      printf '%bnpx resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$npx_path" "$RESET"
+      printf 'Windows node cannot run from a WSL working directory (UNC path failure).\n'
+      printf 'Install Linux-native Node.js inside this WSL distro:\n'
+      printf '  %bmake -C makefile node-runtime MODE=dev%b\n' "$YELLOW" "$RESET"
+      printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
+      exit 0
+      ;;
+  esac
   if [ ! -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
     printf '%bchezmoi not initialized — run ./bootstrap.sh --dev first.%b\n' "$RED" "$RESET" >&2
     exit 1
