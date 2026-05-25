@@ -104,8 +104,36 @@ alias cze='chezmoi edit'
 alias czd='chezmoi diff'
 alias czu='chezmoi update'
 alias czs='chezmoi status'
+alias czt='cheznav'
 
 # --- Functions ---------------------------------------------------------------
+
+# czh — chezmoi cheatsheet. Single source of truth for the cz* aliases +
+# the common edit→diff→apply flow + how to push tracked changes upstream.
+czh() {
+  cat <<'EOF'
+chezmoi aliases:
+  cz   chezmoi                    raw — pass any subcommand
+  cze  chezmoi edit <path>        edit a tracked file in source state
+  czd  chezmoi diff               preview pending changes to ~
+  cza  chezmoi apply              write tracked state to ~
+  czu  chezmoi update             git pull + apply (sync repo + ~)
+  czs  chezmoi status             list managed files + their state
+  czt  cheznav                    dual-pane TUI (browse / diff / apply)
+
+Common flow:
+  cze ~/.bashrc       (edit in source state)
+  czd                 (preview the change)
+  cza                 (apply to ~)
+
+Push tracked changes upstream:
+  cd ~/.local/share/chezmoi && git add -A && git commit -m '...' && git push
+
+Per-machine overrides (untracked):
+  ~/.bashrc.local                                              (Linux)
+  ...PowerShell\Microsoft.PowerShell_profile.local.ps1         (Windows)
+EOF
+}
 
 # fzf-powered history search (Ctrl+R enhanced)
 fh() {
