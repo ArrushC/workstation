@@ -2468,6 +2468,20 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <code>make dev</code> re-pulls and restarts
                             the unit.
                         </li>
+                        <li>
+                            <strong>Shell shortcuts</strong> — on any
+                            dev_machine, the chezmoi-tracked shells alias
+                            <code>dozzle-status</code>,
+                            <code>dozzle-logs</code> (follows
+                            <code>journalctl</code>),
+                            <code>dozzle-restart</code>, and
+                            <code>cockpit-status</code> for fast health
+                            checks. Defined in
+                            <code>dot_zshrc.tmpl</code> /
+                            <code>dot_bashrc.tmpl</code>; harmless no-ops
+                            on prod_machine hosts where the services
+                            aren't installed.
+                        </li>
                     </ul>
                 </section>
 
