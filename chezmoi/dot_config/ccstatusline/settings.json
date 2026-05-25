@@ -18,25 +18,29 @@
         "backgroundColor": "bgRed"
       },
       {
-        "id": "fb9e7a68-ae93-4fb0-b753-2ce1a62999fc",
-        "type": "tokens-total",
-        "backgroundColor": "bgBrightCyan"
+        "id": "a61c212e-92b1-4fee-a8d5-6f511254d031",
+        "type": "context-percentage",
+        "backgroundColor": "bgWhite",
+        "rawValue": false,
+        "metadata": {
+          "inverse": "true"
+        },
+        "merge": true
       },
       {
-        "id": "d2aee19a-332c-490a-b4d6-a7a5e3365ed7",
-        "type": "total-speed",
-        "backgroundColor": "bgBrightGreen"
-      },
-      {
-        "id": "82af17c9-ca92-46c5-bc7a-14ee71e0fd0d",
-        "type": "session-usage",
-        "backgroundColor": "bgBrightMagenta"
+        "id": "06c4f9cc-50c1-4a0b-90a6-efe5f22f5c84",
+        "type": "context-bar",
+        "backgroundColor": "bgBrightBlack",
+        "metadata": {
+          "display": "progress"
+        }
       }
     ]
   ],
   "flexMode": "full-minus-40",
   "compactThreshold": 60,
   "colorLevel": 2,
+  "defaultPadding": " ",
   "inheritSeparatorColors": false,
   "globalBold": false,
   "gitCacheTtlSeconds": 5,
@@ -51,9 +55,8 @@
     ],
     "startCaps": [],
     "endCaps": [],
+    "theme": "nord-aurora",
     "autoAlign": true,
-    "continueThemeAcrossLines": true,
-    "theme": "nord-aurora"
-  },
-  "defaultPadding": " "
+    "continueThemeAcrossLines": true
+  }
 }
