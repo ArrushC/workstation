@@ -141,10 +141,11 @@ config.font         = wezterm.font('JetBrains Mono', { weight = 'Regular' })
 config.font_size    = 10.5
 
 -- Toggle between fancy (native GUI, proportional/custom font, top only,
--- frameless Chrome-style) and retro (terminal-cell, supports bottom
--- placement, supports the format-tab-title padding trick below, keeps
--- OS title bar). Flip this single flag to switch styles end-to-end.
-local fancy_tabs                   = true
+-- frameless Chrome-style with integrated min/max/close) and retro
+-- (terminal-cell font, sits at the bottom, keeps the OS title bar, reads
+-- as one continuous strip with the active tab as the only visible tile).
+-- Flip this single flag to switch styles end-to-end.
+local fancy_tabs                   = false
 
 -- Window chrome — fancy mode uses INTEGRATED_BUTTONS|RESIZE for the Chrome
 -- look: no OS title bar, WezTerm-drawn min/max/close buttons integrated into
@@ -160,10 +161,11 @@ config.use_fancy_tab_bar           = fancy_tabs
 -- tab_bar_at_bottom is only honored by the retro bar; fancy is always top.
 config.tab_bar_at_bottom           = not fancy_tabs
 config.hide_tab_bar_if_only_one_tab = false
--- Retro needs headroom for the format-tab-title padding (raise above the
--- default 16 to avoid clipping). Fancy auto-sizes tabs so a smaller cap
--- keeps the bar compact.
-config.tab_max_width               = fancy_tabs and 32 or 100
+-- Cap tab labels at 32 cells in both modes. Retro no longer stretches tabs
+-- to fill the bar (see format-tab-title below) so the cap only matters for
+-- truncating absurdly long renames; 32 is plenty for "<idx>: <hostname>"
+-- against any name in hosts.conf without leaving a trail of dead space.
+config.tab_max_width               = 32
 
 -- Fancy-mode chrome (Tokyo Night-matched). Ignored when use_fancy_tab_bar = false.
 -- Font is JetBrains Mono Medium so the tab bar carries the terminal's identity
@@ -231,22 +233,20 @@ config.front_end = 'WebGpu'
 config.animation_fps = 60
 
 -- Cursor — blinking vertical bar (I-beam). animation_fps above smooths the
--- blink transitions; cursor_blink_rate (default 800ms) controls the period.
+-- blink transitions; cursor_blink_rate sets the period in ms (default 800).
+-- 500ms gives a brisker blink — the classic terminal "fast blink" cadence
+-- without crossing into seizure territory. Pair with animation_fps=60 above
+-- so the on→off transition still eases rather than hard-flipping.
 config.default_cursor_style = 'BlinkingBar'
+config.cursor_blink_rate    = 500
 
 -- ---------------------------------------------------------------------------
 -- Tab colors — Tokyo Night accent palette + state variants
 -- ---------------------------------------------------------------------------
--- SSH hosts get a stable accent from this curated Tokyo Night palette
--- (8-bucket hash on the host name), so you have a cheap visual guard against
--- typing into the wrong host. Active tabs use the full accent for pop; hover
--- darkens slightly to indicate interactivity; inactive desaturates + darkens
--- to a subtle tint that still hints at the color so per-host distinction is
--- preserved when not focused.
---
--- Local tabs (no SSH-domain match) use neutral Tokyo Night surfaces matched
--- to the window_frame palette: bg_highlight when active, bg_dark when
--- inactive — flush with the chrome.
+-- Each SSH host gets a stable accent from this curated Tokyo Night palette
+-- (8-bucket hash on the host name), so there's a cheap visual guard against
+-- typing into the wrong host. The per-state mapping lives in tab_colors
+-- below; this block just defines the palette + hash.
 local HOST_ACCENTS = {
   '#7aa2f7',  -- blue
   '#bb9af7',  -- magenta
@@ -266,29 +266,33 @@ local function host_hash(name)
   return h
 end
 
+-- Inactive tabs match the bar bg (#1a1b26 — see config.colors.tab_bar below)
+-- so the bar reads as one continuous strip with the active tab as the only
+-- visible tile. The host accent still shows in inactive text, just muted —
+-- enough to keep the visual guard against typing into the wrong host without
+-- adding a row of competing color blocks. Hover lifts a darkened accent
+-- block, active fills with full accent. Progression: nothing → muted → full.
 local function tab_colors(host, is_active, is_hover)
+  local BAR_BG = '#1a1b26'
   if host then
     local accent = wezterm.color.parse(HOST_ACCENTS[(host_hash(host) % #HOST_ACCENTS) + 1])
     if is_active then
       return tostring(accent),                                '#15161e'
     elseif is_hover then
-      return tostring(accent:darken(0.20)),                   '#1a1b26'
+      return tostring(accent:desaturate(0.50):darken(0.50)),  '#c0caf5'
     end
-    return   tostring(accent:desaturate(0.60):darken(0.55)),  '#a9b1d6'
+    return   BAR_BG,                                          tostring(accent:desaturate(0.40):darken(0.10))
   end
-  -- Local tab — neutral Tokyo Night surfaces aligned with window_frame.
+  -- Local tab — same progression against neutral Tokyo Night surfaces.
+  -- Active uses terminal_black (#414868) instead of bg_highlight (#292e42)
+  -- so the contrast against the now-blended inactive tabs still pops.
   if is_active then
-    return '#292e42', '#c0caf5'
+    return '#414868', '#c0caf5'
   elseif is_hover then
-    return '#1f2335', '#c0caf5'
+    return '#292e42', '#c0caf5'
   end
-  return '#16161e', '#565f89'
+  return BAR_BG, '#565f89'
 end
-
--- Forward-declared upvalue: cell width of the right-status line. Assigned
--- by update-right-status (defined further down). Keeps the tab-bar layout
--- in sync with whatever the status line is actually rendering this tick.
-local right_status_cells = 30
 
 wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, max_width)
   local pane   = tab.active_pane
@@ -362,26 +366,11 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, ma
   end
   local label = string.format(' %d: %s ', idx, title)
 
-  -- Retro mode: stretch tabs to fill the bar evenly. Fancy mode auto-sizes
-  -- tabs and uses a proportional font, so this padding only wastes space —
-  -- skip it. (fancy_tabs is the module-scope flag set near use_fancy_tab_bar.)
-  if not fancy_tabs then
-    local total_cols = 0
-    for _, p in ipairs(panes) do
-      if p.width and p.width > total_cols then total_cols = p.width end
-    end
-    if total_cols > 0 and #all_tabs > 0 then
-      local reserved = right_status_cells + 4
-      local available = math.max(8, total_cols - reserved)
-      local target = math.floor(available / #all_tabs)
-      target = math.min(target, max_width)
-      local pad = target - #label
-      if pad > 0 then
-        local left = math.floor(pad / 2)
-        label = string.rep(' ', left) .. label .. string.rep(' ', pad - left)
-      end
-    end
-  end
+  -- No stretch-to-fill padding here. Tabs stay compact, left-aligned, with
+  -- the right status (battery · time) anchored at the far right and bare
+  -- bar bg between them. That gap is the minimal-retro signature — it's
+  -- how tmux/screen status lines have looked since forever and it gives
+  -- the battery + time modules visual breathing room.
 
   -- Every tab (host or local) gets explicit bg/fg from tab_colors so active,
   -- hover, and inactive states are visually distinct. Active also gets bold.
@@ -678,13 +667,12 @@ local show_help = act.InputSelector {
 -- Right status line — domain · zellij session · battery · time
 -- ---------------------------------------------------------------------------
 -- Fires ~1×/second. Adapts to window width: drops the zellij blob, then the
--- battery, then the time icon as columns shrink. The rendered length is
--- cached in right_status_cells so format-tab-title can reserve exactly that
--- much space at the right end of the bar instead of guessing.
+-- battery, then the time icon as columns shrink. The retro bar lays this
+-- block out flush against the right edge automatically; tabs sit on the
+-- left and the gap between them is bar bg (the minimal-retro look).
 --
 -- The zellij session name mirrors the hardcoded 'main' from zellij_attach_cmd
--- above — keep both in sync if you change it. (right_status_cells is
--- forward-declared up by format-tab-title; we just assign to it here.)
+-- above — keep both in sync if you change it.
 
 local function display_width(s)
   if wezterm.column_width then return wezterm.column_width(s) end
@@ -818,8 +806,6 @@ local function render_right_status(window, pane)
   else
     window:set_right_status(wezterm.format(items))
   end
-
-  right_status_cells = normal_w
 end
 
 wezterm.on('update-right-status', render_right_status)
