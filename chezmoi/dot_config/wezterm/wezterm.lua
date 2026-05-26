@@ -479,6 +479,44 @@ local smart_new_tab = wezterm.action_callback(function(window, pane)
 end)
 
 -- ---------------------------------------------------------------------------
+-- Hyperlink clicks — route OSC 8 file:// URIs into helix in a new tab
+-- ---------------------------------------------------------------------------
+-- Triggered by clicks on OSC 8 hyperlinks emitted by `eza --hyperlink`
+-- (the l/la/ll/lt/lta/ltl aliases) and anything else that produces file://
+-- URIs. Routing depends on the SOURCE pane's domain:
+--   • SSH pane    → SpawnCommandInNewTab on the SAME ssh_domain with
+--                   `hx <path>` as args. The args override the per-domain
+--                   default_prog (zellij_attach_cmd) — the editor is a
+--                   one-shot, not a long-running session that needs Zellij's
+--                   crash-recovery wrap. The path is already a remote path
+--                   (eza ran on the remote host), so it resolves correctly
+--                   on the reconnected SSH side.
+--   • WSL pane    → SpawnCommandInNewTab on the SAME wsl_domain with
+--                   `hx <path>` args. wsl.exe runs the command inside the
+--                   distro, so the Linux path is interpreted correctly.
+--   • Local pane  → defer to OS default. On Windows that's `start <uri>`,
+--                   which opens with the file extension's default app.
+--                   helix isn't always on local Windows PATH, so leaving
+--                   this branch alone avoids spawning a broken tab.
+-- Non-file:// URIs (https://, mailto:, etc.) always defer to the default.
+-- Returning false suppresses the default; returning nil/nothing keeps it.
+wezterm.on('open-uri', function(window, pane, uri)
+  if not uri:find('^file://') then return end
+  local domain = pane:get_domain_name() or ''
+  if domain == '' or domain == 'local' then return end
+  -- Strip `file://` + optional hostname; leaves the leading / on the path.
+  local path = uri:gsub('^file://[^/]*', '')
+  window:perform_action(
+    act.SpawnCommandInNewTab {
+      domain = { DomainName = domain },
+      args   = { 'hx', path },
+    },
+    pane
+  )
+  return false
+end)
+
+-- ---------------------------------------------------------------------------
 -- WSL distro picker — used by the gui-startup handler when 2+ distros exist
 -- ---------------------------------------------------------------------------
 -- InputSelector listing every distro from wezterm.default_wsl_domains(). The
@@ -619,9 +657,13 @@ local function help_choices()
     -- Bash aliases — navigation
     { label = "alias ..               cd ..",                               id = '' },
     { label = "alias ...              cd ../..",                            id = '' },
-    { label = 'alias ll               ls -lah --color=auto',                id = '' },
-    { label = 'alias la               ls -A --color=auto',                  id = '' },
-    { label = 'alias l                ls --color=auto',                     id = '' },
+    { label = 'alias l                eza listing (dirs first, icons)',                            id = '' },
+    { label = 'alias la               eza -a (+hidden, dirs first, icons)',                        id = '' },
+    { label = 'alias ll               eza -lah --git --time-style=long-iso (long + clickable paths)', id = '' },
+    { label = 'alias lt               eza --tree --level=2 (depth-2 peek)',                        id = '' },
+    { label = 'alias lta              eza --tree --level=2 -a --git-ignore (+hidden, skip ignored)', id = '' },
+    { label = 'alias ltl              eza --tree --level=2 -lh --git (tree + long + clickable)',   id = '' },
+    { label = 'note  hyperlinks       Click a file:// in ll/ltl → opens in hx in a new tab (same domain)', id = '' },
     -- Bash aliases — tools
     { label = 'alias notes            nb',                                  id = '' },
     { label = 'alias preview          glow',                                id = '' },
