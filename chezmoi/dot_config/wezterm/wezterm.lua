@@ -892,16 +892,31 @@ config.mouse_bindings = {
       copy_and_announce,
     },
   },
-  -- Explicit CTRL+click → OpenLinkAtMouseCursor binding. WezTerm's docs say
-  -- mouse_bindings are additive over defaults, so the default
-  -- `{ event = Up Left, mods = "CTRL" } → OpenLinkAtMouseCursor` should still
-  -- fire even when we override the no-mods Up Left binding above. In WezTerm
-  -- 20240203-110809 (Windows) that's empirically not the case: once the no-mods
-  -- Up Left binding is overridden, CTRL+click on a hyperlink (OSC 8 or matched
-  -- by hyperlink_rules) becomes a no-op — link visibly highlights on CTRL+hover
-  -- but the click never dispatches `open-uri`. Restating CTRL+click explicitly
-  -- restores link-open behaviour. Without this, the open-uri handler above
-  -- registers cleanly but is never invoked.
+  -- CTRL+click hyperlink-open binding (pattern from the canonical recipe at
+  -- wezterm.org/recipes/hyperlinks.html).
+  --
+  -- Why it's needed: WezTerm's default mods=NONE Up+Left binding is the
+  -- *composite* action `CompleteSelectionOrOpenLinkAtMouseCursor` — it opens a
+  -- hyperlink under the cursor when no selection is in progress, otherwise
+  -- completes the selection. The no-mods override above replaces that composite
+  -- with plain `CompleteSelection` + copy_and_announce, which removes the
+  -- link-open fallthrough that lived inside the composite default.
+  --
+  -- There is NO default mods='CTRL' binding for OpenLinkAtMouseCursor (the
+  -- wezterm.org/config/mouse.html page incorrectly lists one — the source at
+  -- wezterm-gui/src/inputmap.rs disagrees, and the recipes page is correct).
+  -- Restating CTRL+click explicitly here restores link-open behaviour without
+  -- giving up the copy-on-release UX from the no-mods override above.
+  --
+  -- The paired CTRL+Down→Nop suppresses the click-down event when CTRL is
+  -- held, so a CTRL+click on a hyperlink doesn't start a stray selection on
+  -- press, and doesn't leak into mouse-aware TUI apps (zellij/helix/vim with
+  -- mouse-mode on inside an SSH pane).
+  {
+    event = { Down = { streak = 1, button = 'Left' } },
+    mods = 'CTRL',
+    action = act.Nop,
+  },
   {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'CTRL',
