@@ -1978,6 +1978,18 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <code>~</code>.
                     </p>
 
+                    <p class="note-row">
+                        <strong>Truecolor signaling.</strong> Every chezmoi-managed shell exports
+                        <code>COLORTERM=truecolor</code> on startup (see <code>dot_zshrc.tmpl</code> /
+                        <code>dot_bashrc.tmpl</code>), so apps like helix, zellij, starship, eza, and bat
+                        emit 24-bit RGB sequences instead of falling back to 256-color. A second signal
+                        channel (terminfo) ships via the vendored <code>wezterm.terminfo</code> at
+                        <code>chezmoi/dot_local/share/wezterm/</code>, which a chezmoi
+                        <code>run_onchange</code> script compiles into <code>~/.terminfo/</code> on every
+                        apply. Verify with <code>infocmp wezterm</code> &mdash; should exit 0 and list
+                        <code>Tc</code>, <code>Smulx</code>, <code>Setulc</code>.
+                    </p>
+
                     <h3 id="setup-wezterm">WezTerm keybinds</h3>
                     <p class="lede">
                         WezTerm auto-opens a tab per host on launch and attaches
@@ -3122,6 +3134,30 @@ choco install -y &lt;id&gt;</code></pre>
                                 step fails, check
                                 <code>journalctl -u dozzle -n 30</code> — likely
                                 a registry-rate-limit or DNS issue.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Colors look banded or 8-bit on a remote host
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                WezTerm renders 24-bit color, but the remote app
+                                needs to emit truecolor sequences &mdash; it
+                                won&rsquo;t unless
+                                <code>$COLORTERM=truecolor</code> is set in the
+                                shell (via the chezmoi-managed
+                                <code>dot_zshrc.tmpl</code> /
+                                <code>dot_bashrc.tmpl</code>) or
+                                <code>~/.terminfo/w/wezterm</code> exists. Run
+                                <code>chezmoi update &amp;&amp; chezmoi apply</code>
+                                (<code>czu &amp;&amp; cza</code>) on the affected
+                                host, then verify with
+                                <code>infocmp wezterm</code> (exit 0) and
+                                <code>echo "$COLORTERM"</code>
+                                (<code>truecolor</code> in a new shell).
                             </p>
                         </div>
                     </details>
