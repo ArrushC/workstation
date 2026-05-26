@@ -892,6 +892,21 @@ config.mouse_bindings = {
       copy_and_announce,
     },
   },
+  -- Explicit CTRL+click → OpenLinkAtMouseCursor binding. WezTerm's docs say
+  -- mouse_bindings are additive over defaults, so the default
+  -- `{ event = Up Left, mods = "CTRL" } → OpenLinkAtMouseCursor` should still
+  -- fire even when we override the no-mods Up Left binding above. In WezTerm
+  -- 20240203-110809 (Windows) that's empirically not the case: once the no-mods
+  -- Up Left binding is overridden, CTRL+click on a hyperlink (OSC 8 or matched
+  -- by hyperlink_rules) becomes a no-op — link visibly highlights on CTRL+hover
+  -- but the click never dispatches `open-uri`. Restating CTRL+click explicitly
+  -- restores link-open behaviour. Without this, the open-uri handler above
+  -- registers cleanly but is never invoked.
+  {
+    event = { Up = { streak = 1, button = 'Left' } },
+    mods = 'CTRL',
+    action = act.OpenLinkAtMouseCursor,
+  },
 }
 
 config.keys = {
