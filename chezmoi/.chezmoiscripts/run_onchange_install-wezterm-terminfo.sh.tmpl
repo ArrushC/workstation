@@ -1,0 +1,37 @@
+{{ if eq .chezmoi.os "linux" -}}
+#!/usr/bin/env bash
+# run_onchange_install-wezterm-terminfo.sh — compiles the vendored wezterm
+# terminfo (chezmoi/dot_local/share/wezterm/wezterm.terminfo) into the user's
+# ~/.terminfo/ database via `tic`, so apps querying terminfo on this host see
+# the wezterm entry advertising Tc / Smulx / Setulc (truecolor + extended
+# underline capabilities). Idempotent: re-runs only when the embedded source
+# hash differs from the previous apply (run_onchange semantics — chezmoi
+# diffs the rendered script text).
+#
+# .tmpl gate: linux only. .chezmoiignore does NOT apply to .chezmoiscripts/,
+# so the gate lives in the body; on non-linux hosts the file renders empty
+# and chezmoi skips it.
+#
+# Soft-fail on missing prerequisites — chezmoi apply (alias `cza`) is daily-
+# workflow and shouldn't gain a new failure mode just because ncurses isn't
+# installed.
+
+set -euo pipefail
+
+# Source hash — content changes here force this script to re-run.
+# {{ include (joinPath .chezmoi.sourceDir "dot_local/share/wezterm/wezterm.terminfo") | sha256sum }}
+
+SRC="$HOME/.local/share/wezterm/wezterm.terminfo"
+if [ ! -f "$SRC" ]; then
+  printf 'wezterm.terminfo missing at %s — skipping tic\n' "$SRC" >&2
+  exit 0
+fi
+if ! command -v tic >/dev/null 2>&1; then
+  printf 'tic (ncurses) not on PATH — skipping wezterm terminfo install\n' >&2
+  exit 0
+fi
+
+# -x preserves extended capabilities (Tc, Smulx, Setulc) — load-bearing.
+# -o writes to user scope; no sudo needed; ncurses auto-finds ~/.terminfo/.
+tic -x -o "$HOME/.terminfo" "$SRC" >/dev/null
+{{- end }}
