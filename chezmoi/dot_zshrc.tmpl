@@ -93,9 +93,12 @@ export NB_DIR="$HOME/notes"
 # --- Aliases — navigation ----------------------------------------------------
 alias ..='cd ..'
 alias ...='cd ../..'
-alias ll='ls -lah --color=auto'
-alias la='ls -A --color=auto'
-alias l='ls --color=auto'
+alias l='eza --group-directories-first --icons=auto'
+alias la='eza -a --group-directories-first --icons=auto'
+alias ll='eza -lah --group-directories-first --icons=auto --git --time-style=long-iso'
+alias lt='eza --tree --level=2 --group-directories-first --icons=auto'
+alias lta='eza --tree --level=2 -a --git-ignore --group-directories-first --icons=auto'
+alias ltl='eza --tree --level=2 -lh --git --group-directories-first --icons=auto --time-style=long-iso'
 alias grep='grep --color=auto'
 
 # --- Aliases — git -----------------------------------------------------------
