@@ -25,7 +25,8 @@ LINUX_PACKAGES := \
   openssl-devel \
   python3 \
   python3-pip \
-  zsh
+  zsh \
+  ncurses
 
 # Nice-to-haves — installed per-package with `|| true` so a missing package
 # in some distro variant doesn't poison the whole bootstrap. Order doesn't
