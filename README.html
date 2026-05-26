@@ -1981,13 +1981,16 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p class="note-row">
                         <strong>Truecolor signaling.</strong> Every chezmoi-managed shell exports
                         <code>COLORTERM=truecolor</code> on startup (see <code>dot_zshrc.tmpl</code> /
-                        <code>dot_bashrc.tmpl</code>), so apps like helix, zellij, starship, eza, and bat
-                        emit 24-bit RGB sequences instead of falling back to 256-color. A second signal
-                        channel (terminfo) ships via the vendored <code>wezterm.terminfo</code> at
+                        <code>dot_bashrc.tmpl</code>) and WezTerm advertises <code>TERM=wezterm</code>
+                        to every spawned PTY (<code>config.term</code> in <code>wezterm.lua</code>).
+                        Apps querying terminfo see <code>Tc</code>, <code>Smulx</code>, and
+                        <code>Setulc</code> &mdash; full 24-bit RGB plus extended underline capabilities
+                        &mdash; via the vendored <code>wezterm.terminfo</code> at
                         <code>chezmoi/dot_local/share/wezterm/</code>, which a chezmoi
-                        <code>run_onchange</code> script compiles into <code>~/.terminfo/</code> on every
-                        apply. Verify with <code>infocmp wezterm</code> &mdash; should exit 0 and list
-                        <code>Tc</code>, <code>Smulx</code>, <code>Setulc</code>.
+                        <code>run_onchange</code> script compiles into <code>~/.terminfo/</code> on
+                        every apply. Verify with <code>infocmp wezterm</code> (exit 0; lists
+                        <code>Tc</code>, <code>Smulx</code>, <code>Setulc</code>) and
+                        <code>echo $TERM</code> in a new pane (prints <code>wezterm</code>).
                     </p>
 
                     <h3 id="setup-wezterm">WezTerm keybinds</h3>

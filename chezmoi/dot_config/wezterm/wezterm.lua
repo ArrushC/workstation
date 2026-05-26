@@ -226,6 +226,21 @@ config.window_padding = {
 -- GPU rendering
 config.front_end = 'WebGpu'
 
+-- TERM advertising — pair with the chezmoi-deployed wezterm terminfo
+-- (.chezmoiscripts/run_onchange_install-wezterm-terminfo.sh.tmpl). Setting
+-- TERM=wezterm lets apps query terminfo for Tc / Smulx / Setulc instead of
+-- inferring capabilities from the looser xterm-256color entry. PTYs
+-- inheriting this TERM: local WSL panes, SSH-domain panes (default_prog
+-- zellij attach), and any manual `ssh` from a local tab.
+--
+-- Pre-req: every target host must have ~/.terminfo/w/wezterm installed,
+-- compiled from chezmoi/dot_local/share/wezterm/wezterm.terminfo by the
+-- run_onchange script above. Verify per host via `infocmp wezterm`
+-- (must exit 0) after `czu && cza`. Hosts without the entry will error
+-- on first TUI launch with `Error opening terminal: wezterm` — recover
+-- with `cza` on that host (or `TERM=xterm-256color hx file` ad hoc).
+config.term = 'wezterm'
+
 -- Animation framerate — affects blinking cursor, blinking text, and visual
 -- bell easing only (NOT scrolling — terminals scroll by row). Default is 10,
 -- which makes blinks visibly choppy on a 60 Hz+ display. Harmless to leave
