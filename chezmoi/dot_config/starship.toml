@@ -9,8 +9,8 @@ add_newline = false
 format = """\
 $time\
 $username$hostname\
+$shlvl\
 $directory\
-$git_branch$git_status\
 $cmd_duration\
 $jobs\
 $status\
@@ -36,6 +36,28 @@ style    = "bold blue"
 [os.symbols]
 Linux = " "
 
+[container]
+# Renders when inside a container/chroot — distinguishes `docker exec`
+# panes (e.g. into the dozzle container on dev_machine) from host
+# shells. Cheap (reads /run/.containerenv or /proc/1/cgroup). To
+# enable: set disabled = false AND add `$container` to the format
+# string above (e.g. between `$hostname` and `$shlvl`).
+disabled = true
+symbol   = "⬢"
+format   = "[$symbol \\[$name\\]]($style) "
+style    = "bold red"
+
+[shlvl]
+# Surfaces shell-nesting depth past the outermost layer. Useful for
+# chains like `WezTerm → zellij → ssh → zsh` where it's easy to lose
+# track of which shell a command will run in. Default threshold is 2
+# (renders when SHLVL >= 2 — i.e. you've sub-shelled at least once).
+disabled  = false
+threshold = 2
+symbol    = "↕"
+format    = "[$symbol$shlvl]($style) "
+style     = "dimmed white"
+
 [username]
 show_always = true
 format      = "[$user]($style)@"
@@ -55,11 +77,17 @@ style             = "bold blue"
 read_only         = " 󰌾"
 
 [git_branch]
+# Disabled to keep the prompt narrow; rely on `git status` /
+# `gst` (aliased) to surface branch state on demand. To re-enable,
+# flip `disabled` and add `$git_branch` back to the format string.
+disabled = true
 format = "[$symbol$branch]($style) "
 symbol = " "
 style  = "bold purple"
 
 [git_status]
+# Disabled alongside [git_branch] — see note above.
+disabled   = true
 format     = "([$all_status$ahead_behind]($style) )"
 style      = "bold red"
 conflicted = "⚡"
@@ -71,7 +99,7 @@ untracked  = "?${count}"
 staged     = "+${count}"
 
 [cmd_duration]
-min_time = 2_000
+min_time = 1_000
 format   = "took [$duration]($style) "
 style    = "bold yellow"
 
