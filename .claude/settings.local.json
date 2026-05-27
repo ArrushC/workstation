@@ -71,7 +71,9 @@
       "Bash(chezmoi execute-template *)",
       "Bash(chezmoi init *)",
       "Bash(echo \"\\(exit: $?\\)\")",
-      "Bash(chezmoi diff *)"
+      "Bash(chezmoi diff *)",
+      "Bash(chezmoi apply *)",
+      "Bash(chezmoi status *)"
     ]
   }
 }
