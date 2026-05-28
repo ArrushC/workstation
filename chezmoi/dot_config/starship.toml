@@ -52,10 +52,12 @@ style    = "bold red"
 # chains like `WezTerm → zellij → ssh → zsh` where it's easy to lose
 # track of which shell a command will run in. Default threshold is 2
 # (renders when SHLVL >= 2 — i.e. you've sub-shelled at least once).
+# Symbol is nf-md-layers-triple (U+F0F39) — visualises nested shell
+# layers more directly than the previous ↕ up-down arrow.
 disabled  = false
 threshold = 2
-symbol    = "↕"
-format    = "[$symbol$shlvl]($style) "
+symbol    = "󰼹"
+format    = "[$symbol $shlvl]($style) "
 style     = "dimmed white"
 
 [username]
@@ -104,8 +106,10 @@ format   = "took [$duration]($style) "
 style    = "bold yellow"
 
 [jobs]
-format    = "[$symbol$number]($style) "
-symbol    = "✦"
+# Symbol is nf-fa-gear ( ) — visualises background work more clearly
+# than the previous ✦ sparkle.
+format    = "[$symbol $number]($style) "
+symbol    = ""
 style     = "bold cyan"
 threshold = 1
 
@@ -115,9 +119,11 @@ threshold = 1
 # for everything else. `recognize_signal_code = false` is deliberate —
 # tools like ssh use exit codes >=128 for non-signal reasons (ssh: 255),
 # and enabling it would silently subtract 128 and mislabel them.
+# Symbol is nf-fa-times-circle ( ) — matches the visual weight of the
+# rest of the Nerd Font prompt; replaces the previous ✘ heavy ballot X.
 disabled              = false
 recognize_signal_code = false
-symbol                = "✘"
+symbol                = ""
 format                = '[$symbol $common_meaning$maybe_int]($style) '
 style                 = "bold red"
 
