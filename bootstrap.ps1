@@ -41,7 +41,12 @@
 #                         toasts instead of falling back to a MessageBox.
 #                         Idempotent; soft-fails to a warning if PSGallery
 #                         is offline or the module is unavailable.
-#   8. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
+#   8. nerd fonts       — install JetBrainsMono Nerd Font Mono per-user via
+#                         scripts/install-nerd-fonts.ps1 (file + HKCU
+#                         registration). Required for the Nerd Font glyphs
+#                         in WezTerm + Zed + VS Code + starship.
+#                         Idempotent; soft-fails registry blocks.
+#   9. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
 #
 # WHY CHOCOLATEY (not winget)
 #   winget exists on Win10 1909+ / Win11 but its PATH propagation is flaky —
@@ -95,6 +100,7 @@ param(
     [switch]$SkipToolInstall,
     [switch]$SkipChezmoi,
     [switch]$SkipBurntToast,
+    [switch]$SkipNerdFonts,
     [switch]$Reinstall,
     [switch]$Yes
 )
@@ -667,7 +673,36 @@ function Invoke-InstallBurntToast {
 }
 
 # =============================================================================
-# 8. SSH KEY (optional, prompt-driven)
+# 8. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user.
+#    Required by chezmoi-tracked configs that already assume Nerd Font glyphs
+#    (starship prompt, eza --icons=auto, lazygit, k9s, yazi, broot, helix
+#    file-tree, chezit, ccstatusline, Claude Code TUI). Invokes the standalone
+#    scripts/install-nerd-fonts.ps1 helper. Soft-fails if -SkipNerdFonts is
+#    passed or the helper script is missing (warning + continue).
+# =============================================================================
+function Invoke-InstallNerdFonts {
+    if ($SkipNerdFonts) {
+        Write-Log "Nerd Fonts install skipped (-SkipNerdFonts)"
+        return
+    }
+
+    $InstallScript = Join-Path $RepoPath 'scripts\install-nerd-fonts.ps1'
+    if (-not (Test-Path $InstallScript)) {
+        Write-Warn "Nerd Fonts installer not found at $InstallScript — skipping"
+        return
+    }
+
+    try {
+        & $InstallScript
+    } catch {
+        Write-Warn "Nerd Fonts install failed: $_"
+        Write-Warn "  Glyphs in starship / eza / lazygit / etc. will render as tofu."
+        Write-Warn "  Retry manually:  & '$InstallScript'"
+    }
+}
+
+# =============================================================================
+# 9. SSH KEY (optional, prompt-driven)
 # =============================================================================
 function Invoke-EnsureSshKey {
     if ($SkipKeyGen) {
@@ -716,6 +751,7 @@ Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
+Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
 Invoke-EnsureSshKey
 
 Write-Host ""
