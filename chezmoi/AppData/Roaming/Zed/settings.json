@@ -13,7 +13,7 @@
 // `chezmoi apply`.
 {
   "ui_font_family": ".ZedSans",
-  "buffer_font_family": "JetBrains Mono",
+  "buffer_font_family": "JetBrainsMono Nerd Font Mono",
   "diagnostics": {
     "inline": {
       "enabled": false
@@ -73,7 +73,7 @@
   "show_wrap_guides": false,
   "terminal": {
     "font_size": 13.0,
-    "font_family": "JetBrains Mono",
+    "font_family": "JetBrainsMono Nerd Font Mono",
     "toolbar": {
       "breadcrumbs": true,
     },
