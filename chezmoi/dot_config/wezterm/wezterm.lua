@@ -137,7 +137,20 @@ if wezterm.target_triple:find('windows') then
 end
 
 config.color_scheme = 'Tokyo Night'
-config.font         = wezterm.font('JetBrains Mono', { weight = 'Regular' })
+config.font         = wezterm.font('JetBrainsMono Nerd Font Mono', { weight = 'Regular' })
+
+-- Belt-and-suspenders on Windows: also point at %LOCALAPPDATA%\Microsoft\Windows\Fonts\
+-- directly. install-nerd-fonts.ps1 (invoked from bootstrap.ps1) deposits the
+-- six Mono variants there + HKCU-registers them, but config.font_dirs guards
+-- against bootstrap ordering races where wezterm reads its config before the
+-- HKCU registration completes — the .ttf files are still accessible from the
+-- font_dirs path. No-op on Linux (Linux WezTerm uses fontconfig instead).
+if wezterm.target_triple:find('windows') then
+  local localappdata = os.getenv('LOCALAPPDATA')
+  if localappdata then
+    config.font_dirs = { localappdata .. '\\Microsoft\\Windows\\Fonts' }
+  end
+end
 config.font_size    = 10.5
 
 -- Toggle between fancy (native GUI, proportional/custom font, top only,
@@ -168,12 +181,13 @@ config.hide_tab_bar_if_only_one_tab = false
 config.tab_max_width               = 32
 
 -- Fancy-mode chrome (Tokyo Night-matched). Ignored when use_fancy_tab_bar = false.
--- Font is JetBrains Mono Medium so the tab bar carries the terminal's identity
--- but stays distinct from body text (which uses Regular). The retro tab bar
--- inherits the main terminal font automatically, so JetBrains Mono is applied
--- in both modes without needing a separate retro override.
+-- Font is JetBrainsMono Nerd Font Mono (Medium weight) so the tab bar carries
+-- the terminal's identity but stays distinct from body text (which uses
+-- Regular weight of the same family). The retro tab bar inherits the main
+-- terminal font automatically, so JetBrainsMono Nerd Font Mono is applied in
+-- both modes without needing a separate retro override.
 config.window_frame = {
-  font                            = wezterm.font { family = 'JetBrains Mono', weight = 'Medium' },
+  font                            = wezterm.font { family = 'JetBrainsMono Nerd Font Mono', weight = 'Medium' },
   font_size                       = 10,
   -- Active bar sits slightly elevated above main bg (#1a1b26) for separation;
   -- inactive drops down to Tokyo Night bg_dark.
@@ -806,7 +820,7 @@ local function render_right_status(window, pane)
   end
 
   -- Tighter separator (' · ' instead of '  │  ') in a dim color so the bar
-  -- doesn't dominate visually. The fancy tab bar font (JetBrains Mono Medium)
+  -- doesn't dominate visually. The fancy tab bar font (JetBrainsMono Nerd Font Mono Medium)
   -- rendered the heavy '│' with too much weight against the lighter labels.
   local FG     = '#c0caf5'
   local FG_DIM = '#565f89'
