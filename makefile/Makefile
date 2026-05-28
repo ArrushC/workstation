@@ -143,6 +143,33 @@ clean-node-runtime:
 	@$(SUDO) rm -rf $(DEST)/_node-*
 
 # -----------------------------------------------------------------------------
+# nerd-fonts — JetBrainsMono Nerd Font Mono variants from ryanoasis/nerd-fonts.
+#   - dev_machine only (added to provision's deps only on MODE=dev, below).
+#   - Skips on WSL hosts (IS_WSL=true) because WezTerm runs on the Windows
+#     host where the Windows-side installer (scripts/install-nerd-fonts.ps1,
+#     invoked from bootstrap.ps1) handles registration. Stamp still written
+#     so `make nerd-fonts` returns fast on subsequent WSL runs.
+#   - NO $(SUDO) — deposits to $HOME/.local/share/fonts/JetBrainsMonoNerdFontMono/
+#     which is user-owned; fc-cache also runs against a user-scope dir. Other
+#     bespoke targets (node-runtime, claude-cli) use $(SUDO) because they
+#     deposit to $(DEST) (/usr/local/bin on dev) which is system-owned.
+#   - Stamp encodes $(JETBRAINSMONO_NERD_VERSION); bumping the pin in
+#     versions.mk invalidates the stamp on the next run.
+# -----------------------------------------------------------------------------
+.PHONY: nerd-fonts clean-nerd-fonts
+nerd-fonts: $(STAMP)/nerd-fonts-$(JETBRAINSMONO_NERD_VERSION).done
+$(STAMP)/nerd-fonts-$(JETBRAINSMONO_NERD_VERSION).done:
+	@if [ "$(IS_WSL)" = "true" ]; then \
+	  printf '  skipping nerd-fonts on WSL — fonts resolved by Windows-side WezTerm\n'; \
+	  mkdir -p $(@D) && touch $@; \
+	else \
+	  $(LIB)/font.sh "$$HOME/.local/share/fonts" $(JETBRAINSMONO_NERD_VERSION) $@; \
+	fi
+clean-nerd-fonts:
+	@rm -rf "$$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
+	@rm -f $(STAMP)/nerd-fonts-*.done
+
+# -----------------------------------------------------------------------------
 # claude-statusline — interactive ccstatusline setup prompt.
 #   - Dev-only. The recipe body conditionally compiles based on MODE.
 #   - Depends on node-runtime (also dev-only) so the npx the script
@@ -276,7 +303,7 @@ user-tools: $(USER_TOOLS)
 
 provision: packages tools user-tools shell dotfiles
 ifeq ($(MODE),dev)
-provision: claude-cli node-runtime dozzle-service cockpit-service
+provision: claude-cli node-runtime nerd-fonts dozzle-service cockpit-service
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
@@ -299,6 +326,7 @@ list:
 	@printf '\nservices (provisioned on MODE=dev only):\n'
 	@printf '  dozzle-service\n  cockpit-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
+	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
 
 clean:
 	@rm -rf "$(STAMP)"
