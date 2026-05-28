@@ -2,7 +2,7 @@
   // Minimal VSCode settings — chezmoi-managed.
   // Run `chezmoi add %APPDATA%\Code\User\settings.json` to overwrite with
   // your current VSCode config, or edit via `chezmoi edit` then `chezmoi apply`.
-  "editor.fontFamily": "Monaspace Neon, Consolas, 'Courier New', monospace",
+  "editor.fontFamily": "JetBrainsMono Nerd Font Mono, Monaspace Neon, Consolas, 'Courier New', monospace",
   "editor.fontSize": 14,
   "editor.fontLigatures": true,
   "editor.tabSize": 4,
@@ -21,7 +21,7 @@
   "workbench.colorTheme": "Default Dark Modern",
   "workbench.startupEditor": "none",
   "workbench.editor.enablePreview": false,
-  "terminal.integrated.fontFamily": "Monaspace Neon",
+  "terminal.integrated.fontFamily": "JetBrainsMono Nerd Font Mono",
   "terminal.integrated.fontSize": 13,
   "terminal.integrated.defaultProfile.windows": "PowerShell",
   "git.confirmSync": false,
