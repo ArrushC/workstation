@@ -1712,6 +1712,33 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <code>NODE_VERSION</code>.
                     </p>
 
+                    <h4>
+                        <span class="badge dev">dev</span> JetBrainsMono Nerd
+                        Font Mono
+                    </h4>
+                    <p>
+                        <code>make provision MODE=dev</code> runs the
+                        <code>nerd-fonts</code> target, which installs
+                        <strong>JetBrainsMono Nerd Font Mono</strong> to
+                        <code>~/.local/share/fonts/JetBrainsMonoNerdFontMono/</code>
+                        and refreshes the fontconfig cache. The font is required
+                        for Nerd Font glyphs in starship, <code>eza
+                        --icons=auto</code>, lazygit, k9s, yazi, broot, helix
+                        file-tree, chezit, ccstatusline, and the Claude Code TUI.
+                    </p>
+                    <p class="note-row">
+                        <strong>WSL hosts skip this step automatically</strong>
+                        &mdash; WSL apps render via WezTerm on the Windows host,
+                        which reads Windows-registered fonts. Run
+                        <code>bootstrap.ps1</code> on the Windows side to install
+                        the font there instead (step 8: <code>Invoke-InstallNerdFonts</code>
+                        via <code>scripts/install-nerd-fonts.ps1</code>).
+                        Re-runnable any time:
+                        <code>make -C makefile nerd-fonts MODE=dev</code>.
+                        Font version pinned in <code>makefile/versions.mk</code>
+                        via <code>JETBRAINSMONO_NERD_VERSION</code>.
+                    </p>
+
                     <details>
                         <summary>
                             Reinstalling from scratch (<code>--reinstall</code>)
@@ -1783,6 +1810,20 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         Required: chezmoi, Git. Optional ones warn-not-fail.
                         Choco rather than winget because winget&rsquo;s PATH
                         propagation is unreliable mid-session.
+                    </p>
+                    <p class="note-row">
+                        <strong>JetBrainsMono Nerd Font Mono</strong> (per-user)
+                        &mdash; installed to
+                        <code>%LOCALAPPDATA%\Microsoft\Windows\Fonts\</code> and
+                        registered under
+                        <code>HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts</code>
+                        by <code>scripts/install-nerd-fonts.ps1</code> (invoked
+                        from <code>bootstrap.ps1</code> step 8). Per-user install
+                        &mdash; no admin needed for the registry registration even
+                        though <code>bootstrap.ps1</code> itself runs elevated.
+                        Visible to WezTerm, Zed, VS Code, and any other Windows
+                        app. Font version matches <code>JETBRAINSMONO_NERD_VERSION</code>
+                        in <code>makefile/versions.mk</code>.
                     </p>
 
                     <h4>One-liner (elevated PowerShell)</h4>
@@ -3162,6 +3203,67 @@ choco install -y &lt;id&gt;</code></pre>
                                 <code>echo "$COLORTERM"</code>
                                 (<code>truecolor</code> in a new shell).
                             </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Tofu boxes / missing icons after install
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Symptom: starship prompt shows boxes instead of
+                                icons; <code>eza</code> rows show empty cells
+                                where icons should appear; lazygit / k9s / yazi
+                                look broken. JetBrainsMono Nerd Font Mono
+                                isn&rsquo;t loaded.
+                            </p>
+                            <p>Triage:</p>
+                            <ul>
+                                <li>
+                                    <strong>Linux:</strong>
+                                    <code>fc-list | grep -i 'jetbrainsmono nerd font mono'</code>
+                                    &mdash; expect 6 entries. Empty? Run
+                                    <code>cd makefile &amp;&amp; make nerd-fonts MODE=dev</code>.
+                                    Re-run starting shells to refresh.
+                                </li>
+                                <li>
+                                    <strong>Windows:</strong>
+                                    <code>Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts\JetBrainsMonoNerdFontMono-Regular.ttf"</code>
+                                    &mdash; expect <code>True</code>. False?
+                                    Re-run <code>bootstrap.ps1</code> (the
+                                    <code>Invoke-InstallNerdFonts</code> step is
+                                    idempotent; takes a stamp-based fast path on
+                                    a second run).
+                                </li>
+                                <li>
+                                    <strong>VS Code / Zed still showing tofu:</strong>
+                                    apps cache font lists at launch. Quit and
+                                    relaunch.
+                                </li>
+                                <li>
+                                    <strong>WezTerm still showing tofu:</strong>
+                                    <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>
+                                    in WezTerm reloads the config; if that
+                                    doesn&rsquo;t help, restart WezTerm. Confirm
+                                    <code>JETBRAINSMONO_NERD_VERSION</code> in
+                                    <code>makefile/versions.mk</code> matches the
+                                    <code>$Version</code> literal in
+                                    <code>scripts/install-nerd-fonts.ps1</code>
+                                    &mdash; drift between the two means Linux and
+                                    Windows hosts can end up on different font
+                                    versions.
+                                </li>
+                                <li>
+                                    <strong>WSL host running <code>make nerd-fonts</code>
+                                    says &ldquo;skipping on WSL&rdquo;:</strong>
+                                    intentional. WSL apps render via the Windows
+                                    host&rsquo;s WezTerm, which uses
+                                    Windows-registered fonts. Run
+                                    <code>bootstrap.ps1</code> on the Windows
+                                    side instead.
+                                </li>
+                            </ul>
                         </div>
                     </details>
                 </section>
