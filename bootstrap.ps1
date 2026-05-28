@@ -34,7 +34,14 @@
 #                         the repo (e.g. from manage-hosts.ps1 -Sync)
 #                         immediately. Also cleans up any legacy hardlink
 #                         left over at %USERPROFILE%\.config\wezterm\.
-#   7. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
+#   7. burnt toast     — install the BurntToast PowerShell module from
+#                         PSGallery (CurrentUser scope) so Claude Code's
+#                         WSL2 Notification hook (chezmoi/private_dot_claude/
+#                         executable_notify.sh) can emit native Windows
+#                         toasts instead of falling back to a MessageBox.
+#                         Idempotent; soft-fails to a warning if PSGallery
+#                         is offline or the module is unavailable.
+#   8. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
 #
 # WHY CHOCOLATEY (not winget)
 #   winget exists on Win10 1909+ / Win11 but its PATH propagation is flaky —
@@ -87,6 +94,7 @@ param(
     [switch]$SkipKeyGen,
     [switch]$SkipToolInstall,
     [switch]$SkipChezmoi,
+    [switch]$SkipBurntToast,
     [switch]$Reinstall,
     [switch]$Yes
 )
@@ -616,7 +624,50 @@ function Invoke-WeztermConfigEnv {
 }
 
 # =============================================================================
-# 6. SSH KEY (optional, prompt-driven)
+# 7. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
+#    surface native Windows 10/11 toasts. Used by the WSL2 branch of
+#    `chezmoi/private_dot_claude/executable_notify.sh` (deployed to
+#    ~/.claude/notify.sh on dev_machine Linux hosts), which calls into
+#    `powershell.exe` from WSL2 to ping the Windows side when Claude Code
+#    needs attention. Falls back to System.Windows.Forms.MessageBox if the
+#    module is absent — bootstrapping it here just makes the prettier path
+#    work without manual setup. CurrentUser scope is intentional: avoids
+#    needing AllUsers admin context on every -Reinstall, and matches how
+#    PSGallery modules are typically installed on dev workstations.
+# =============================================================================
+function Invoke-InstallBurntToast {
+    if ($SkipBurntToast) {
+        Write-Log "BurntToast install skipped (-SkipBurntToast)"
+        return
+    }
+
+    if (Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue) {
+        Write-Ok "BurntToast already installed"
+        return
+    }
+
+    Write-Log "Installing BurntToast PowerShell module (CurrentUser scope)..."
+
+    try {
+        # PSGallery defaults to Untrusted — Install-Module would prompt
+        # interactively. Flip to Trusted (process-wide, idempotent) so the
+        # install runs unattended. -ErrorAction SilentlyContinue covers the
+        # case where PSGallery isn't registered at all (very old PS).
+        $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        if ($repo -and $repo.InstallationPolicy -ne 'Trusted') {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+        }
+        Install-Module -Name BurntToast -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+        Write-Ok "BurntToast installed"
+    } catch {
+        Write-Warn "BurntToast install failed: $_"
+        Write-Warn "  Claude Code WSL2 notifications will fall back to a MessageBox dialog."
+        Write-Warn "  Retry manually:  Install-Module BurntToast -Scope CurrentUser"
+    }
+}
+
+# =============================================================================
+# 8. SSH KEY (optional, prompt-driven)
 # =============================================================================
 function Invoke-EnsureSshKey {
     if ($SkipKeyGen) {
@@ -664,6 +715,7 @@ Invoke-ChocoInstall       # before clone — installs git if the machine doesn't
 Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
+Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-EnsureSshKey
 
 Write-Host ""

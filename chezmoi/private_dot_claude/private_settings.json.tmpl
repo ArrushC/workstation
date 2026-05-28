@@ -12,6 +12,28 @@
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
   "inputNeededNotifEnabled": true,
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/notify.sh\" 'Claude Code' 'needs your approval' < /dev/null"
+          }
+        ]
+      },
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/notify.sh\" 'Claude Code' 'waiting for your next prompt' < /dev/null"
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
