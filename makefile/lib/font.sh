@@ -43,15 +43,15 @@ TARBALL_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/v${VERSIO
 
 printf '==> JetBrainsMono Nerd Font Mono v%s\n' "$VERSION"
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+FONT_TMPDIR=$(mktemp -d)
+trap 'rm -rf "$FONT_TMPDIR"' EXIT
 
-TARBALL="$TMPDIR/JetBrainsMono.tar.xz"
+TARBALL="$FONT_TMPDIR/JetBrainsMono.tar.xz"
 CURL_AUTH=()
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   CURL_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
 fi
-curl -fsSL "${CURL_AUTH[@]}" -o "$TARBALL" "$TARBALL_URL"
+curl -fsSL --retry 3 --retry-delay 2 "${CURL_AUTH[@]}" -o "$TARBALL" "$TARBALL_URL"
 
 ACTUAL_SHA=$(sha256sum "$TARBALL" | awk '{print $1}')
 if [ "$ACTUAL_SHA" != "$EXPECT_SHA" ]; then
