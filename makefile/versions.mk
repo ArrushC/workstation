@@ -105,3 +105,11 @@ NODE_VERSION := 24.16.0
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
 DOZZLE_VERSION := 10.6.1
+
+# --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
+# JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
+# ryanoasis/nerd-fonts release archive. Pinned alongside its SHA256 in
+# makefile/lib/font.sh (per-version case branch) and mirrored in the Windows
+# installer script (scripts/install-nerd-fonts.ps1) — bumping the pin requires
+# editing all three. See the dual-edit invariant in CLAUDE.md.
+JETBRAINSMONO_NERD_VERSION := 3.4.0
