@@ -73,7 +73,8 @@
       "Bash(echo \"\\(exit: $?\\)\")",
       "Bash(chezmoi diff *)",
       "Bash(chezmoi apply *)",
-      "Bash(chezmoi status *)"
+      "Bash(chezmoi status *)",
+      "Bash(command -v chezmoi)"
     ]
   }
 }
