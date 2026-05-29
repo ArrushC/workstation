@@ -240,6 +240,19 @@ config.window_padding = {
 -- GPU rendering
 config.front_end = 'WebGpu'
 
+-- GPU adapter selection for the WebGpu front end. Default is 'LowPower', which
+-- on dual-GPU laptops binds the integrated GPU and can bottleneck the bumped
+-- max_fps below. 'HighPerformance' asks for the discrete adapter so the higher
+-- frame rate has the headroom to land. Harmless no-op on single-GPU machines.
+config.webgpu_power_preference = 'HighPerformance'
+
+-- Redraw-rate cap — the throttle on how often the surface repaints (scrolling,
+-- TUI updates, output churn). WezTerm's default is 60; 120 lets the terminal
+-- keep up with 120 Hz+ displays so fast scrollback and busy TUIs don't visibly
+-- frame-drop. Costs more GPU/CPU per second of motion, hence pairing with the
+-- WebGpu front end above. No effect beyond the monitor's actual refresh rate.
+config.max_fps = 120
+
 -- TERM advertising — pair with the chezmoi-deployed wezterm terminfo
 -- (.chezmoiscripts/run_onchange_install-wezterm-terminfo.sh.tmpl). Setting
 -- TERM=wezterm lets apps query terminfo for Tc / Smulx / Setulc instead of
@@ -259,15 +272,23 @@ config.term = 'wezterm'
 -- bell easing only (NOT scrolling — terminals scroll by row). Default is 10,
 -- which makes blinks visibly choppy on a 60 Hz+ display. Harmless to leave
 -- high even when using a Steady* cursor; only applies when something blinks.
-config.animation_fps = 60
+-- Matched to max_fps above so eased transitions render at the same cadence.
+config.animation_fps = 120
 
 -- Cursor — blinking vertical bar (I-beam). animation_fps above smooths the
 -- blink transitions; cursor_blink_rate sets the period in ms (default 800).
 -- 500ms gives a brisker blink — the classic terminal "fast blink" cadence
--- without crossing into seizure territory. Pair with animation_fps=60 above
+-- without crossing into seizure territory. Pair with animation_fps=120 above
 -- so the on→off transition still eases rather than hard-flipping.
 config.default_cursor_style = 'BlinkingBar'
 config.cursor_blink_rate    = 500
+
+-- Blinking *text* (distinct from the cursor) has two cadences: text_blink_rate
+-- for SGR 5 (slow blink, default 500ms) and text_blink_rate_rapid for SGR 6
+-- (rapid blink, default 250ms). Set the rapid period explicitly so apps that
+-- emit SGR 6 get a defined fast blink; animation_fps=120 above eases the
+-- on→off transition. Lower toward ~150 for an even snappier blink.
+config.text_blink_rate_rapid = 250
 
 -- ---------------------------------------------------------------------------
 -- Tab colors — Tokyo Night accent palette + state variants
