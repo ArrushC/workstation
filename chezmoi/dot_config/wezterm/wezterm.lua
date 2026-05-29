@@ -223,6 +223,19 @@ config.colors = {
   scrollbar_thumb = '#414868',
 }
 
+-- Scrollback depth — how many lines WezTerm retains per pane above the
+-- viewport. Default is 3500; 1,000,000 is effectively "never lose output".
+-- Memory is per-pane and allocated LAZILY as lines actually scroll off — the
+-- value is a ceiling, not an upfront cost, so an idle pane pays nothing.
+--
+-- Scope: this governs panes WezTerm renders directly — local WSL / PowerShell
+-- tabs and raw SSH output. Inside SSH tabs, Zellij owns its own scroll buffer
+-- while drawing its UI, so its internal scrollback is bounded by Zellij's
+-- scroll_buffer_size (see chezmoi/dot_config/zellij/config.kdl — kept matched
+-- at 1,000,000), NOT this. Pairs with the CTRL+SHIFT+A "copy entire
+-- scrollback" binding below.
+config.scrollback_lines = 1000000
+
 -- Show the right-side scrollbar. It lives inside window_padding.right, so
 -- the right padding is bumped below to give it room without crowding text.
 config.enable_scroll_bar = true
