@@ -1,4 +1,4 @@
-# ~/.config/zellij/config.kdl — managed by chezmoi
+// ~/.config/zellij/config.kdl — managed by chezmoi
 
 // Start with the default layout
 default_layout "dev"
@@ -12,6 +12,14 @@ simplified_ui true
 // Mouse support
 mouse_mode true
 
+// Scrollback depth, per pane. Default is 10000; 1000000 matches WezTerm's
+// scrollback_lines (chezmoi/dot_config/wezterm/wezterm.lua) so scrollback is
+// consistent across both layers. Zellij runs on the remote SSH hosts, so this
+// buffer lives in *their* RAM — allocated lazily as lines scroll off, capped
+// at this ceiling. Read at session creation: an already-running 'main' session
+// won't pick up a change until it's recreated (zellij kill-session main).
+scroll_buffer_size 1000000
+
 // Copy to system clipboard
 copy_command "xclip -selection clipboard"
 copy_on_select false
@@ -19,11 +27,11 @@ copy_on_select false
 // Theme
 theme "tokyo-night-dark"
 
-// Keybind prefix: Ctrl+a (avoids Ctrl+b tmux clash, Ctrl+p zellij default)
-// Override if you prefer the default
+// Ctrl+s enters Session mode (session manager / detach). Overrides zellij's
+// default Ctrl+s = Scroll mode; Session mode's default key is Ctrl+o.
 keybinds {
     normal {
         // Quick session switching
-        bind "Ctrl-s" { SwitchToMode "Session"; }
+        bind "Ctrl s" { SwitchToMode "Session"; }
     }
 }
