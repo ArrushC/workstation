@@ -9,6 +9,31 @@
 # --- PATH --------------------------------------------------------------------
 export PATH="$HOME/.local/bin:$PATH"
 
+# --- WSL: re-add curated Windows PATH dirs -----------------------------------
+# WSL2 with appendWindowsPath=true tacks the whole Windows %PATH% (~90 /mnt/c
+# dirs) onto $PATH. Every exec.LookPath / `command -v` for a binary not present
+# on the Windows side then stat-walks all of them across the slow 9p/drvfs
+# mount — e.g. chezmoi probing for wl-copy/xclip/xsel at startup, which turned
+# `czt` (chezit, several chezmoi invocations) into a multi-second launch
+# (~1.6s per `chezmoi status`). Fix: appendWindowsPath=false in /etc/wsl.conf
+# drops the lot; this re-adds back ONLY the Windows dirs we still call from
+# WSL — PowerShell (notify.sh's toast hook → powershell.exe) and system32
+# (clip.exe). Each guard is a no-op if the dir is already on PATH, so this is
+# harmless on hosts still running appendWindowsPath=true. Add more Windows
+# dirs (e.g. VS Code's bin) in ~/.zshrc.local if you want them back.
+if [[ -n "$WSL_DISTRO_NAME" ]]; then
+  for _wd in \
+    "/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0" \
+    "/mnt/c/WINDOWS/system32"; do
+    case ":$PATH:" in
+      *":$_wd:"*|*":$_wd/:"*) ;;   # already present (Windows lists these with a trailing slash)
+      *) [[ -d "$_wd" ]] && PATH="$PATH:$_wd" ;;
+    esac
+  done
+  unset _wd
+  export PATH
+fi
+
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
 export VISUAL="hx"
