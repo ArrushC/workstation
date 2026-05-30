@@ -1,0 +1,207 @@
+# ~/.dircolors — Catppuccin Mocha LS_COLORS database
+#
+# Consumed via:  eval "$(dircolors -b ~/.dircolors)"  (see ~/.zshrc / ~/.bashrc)
+# Sets + exports LS_COLORS, used by: eza, GNU ls --color, fzf, and the shell's
+# tab-completion menus. Derived from the GNU coreutils `dircolors -p` default,
+# recolored to Catppuccin Mocha truecolor (38;2;R;G;B). Edit freely; re-run a
+# shell (`exec zsh`) to pick changes up.
+#
+# Catppuccin Mocha palette (hex -> R;G;B):
+#   base     #1e1e2e -> 30;30;46     surface0 #313244 -> 49;50;68
+#   text     #cdd6f4 -> 205;214;244  subtext1 #bac2de -> 186;194;222
+#   blue     #89b4fa -> 137;180;250  teal     #94e2d5 -> 148;226;213
+#   sky      #89dceb -> 137;220;235  mauve    #cba6f7 -> 203;166;247
+#   pink     #f5c2e7 -> 245;194;231  red      #f38ba8 -> 243;139;168
+#   maroon   #eba0ac -> 235;160;172  peach    #fab387 -> 250;179;135
+#   yellow   #f9e2af -> 249;226;175  green    #a6e3a1 -> 166;227;161
+#
+# Attributes: 00=none 01=bold 04=underline 07=reverse.
+# 38;2;R;G;B = foreground, 48;2;R;G;B = background.
+
+# --- Terminal capability gate ------------------------------------------------
+# `COLORTERM ?*` matches any non-empty $COLORTERM. The hosts export
+# COLORTERM=truecolor, so colors emit regardless of $TERM. `TERM wezterm` is
+# listed explicitly because config.term='wezterm' is set fleet-wide (see
+# CLAUDE.md) and would otherwise miss the GNU default TERM globs.
+COLORTERM ?*
+TERM Eterm
+TERM ansi
+TERM *color*
+TERM con[0-9]*x[0-9]*
+TERM cons25
+TERM console
+TERM cygwin
+TERM dtterm
+TERM gnome
+TERM hurd
+TERM jfbterm
+TERM konsole
+TERM kterm
+TERM linux
+TERM linux-c
+TERM mlterm
+TERM putty
+TERM rxvt*
+TERM screen*
+TERM st
+TERM terminator
+TERM tmux*
+TERM vt100
+TERM wezterm
+TERM xterm*
+
+# --- File types --------------------------------------------------------------
+#NORMAL 00          # normal text: terminal default
+#FILE 00            # regular file: no color
+RESET 0
+DIR 01;38;2;137;180;250                              # directory            blue, bold
+LINK 38;2;148;226;213                                # symlink              teal
+MULTIHARDLINK 38;2;137;220;235                       # >1 hard link         sky
+FIFO 38;2;249;226;175;48;2;49;50;68                  # named pipe           yellow on surface0
+SOCK 38;2;245;194;231                                # socket               pink
+DOOR 38;2;245;194;231                                # door (Solaris)       pink
+BLK 01;38;2;249;226;175                              # block device         yellow, bold
+CHR 01;38;2;250;179;135                              # char device          peach, bold
+ORPHAN 01;38;2;243;139;168;48;2;49;50;68             # broken symlink       red on surface0, bold
+MISSING 01;38;2;243;139;168                          # missing target       red, bold
+SETUID 01;38;2;243;139;168                           # u+s                  red, bold
+SETGID 01;38;2;235;160;172                           # g+s                  maroon, bold
+CAPABILITY 38;2;235;160;172                          # file capabilities    maroon
+STICKY_OTHER_WRITABLE 38;2;30;30;46;48;2;166;227;161 # +t,o+w dir           base on green
+OTHER_WRITABLE 38;2;137;180;250;48;2;49;50;68        # o+w dir              blue on surface0
+STICKY 38;2;30;30;46;48;2;137;180;250                # +t dir               base on blue
+EXEC 01;38;2;166;227;161                             # executable           green, bold
+
+# --- Archives / compressed (maroon, bold) ------------------------------------
+.tar 01;38;2;235;160;172
+.tgz 01;38;2;235;160;172
+.arc 01;38;2;235;160;172
+.arj 01;38;2;235;160;172
+.taz 01;38;2;235;160;172
+.lha 01;38;2;235;160;172
+.lz4 01;38;2;235;160;172
+.lzh 01;38;2;235;160;172
+.lzma 01;38;2;235;160;172
+.tlz 01;38;2;235;160;172
+.txz 01;38;2;235;160;172
+.tzo 01;38;2;235;160;172
+.t7z 01;38;2;235;160;172
+.zip 01;38;2;235;160;172
+.z 01;38;2;235;160;172
+.dz 01;38;2;235;160;172
+.gz 01;38;2;235;160;172
+.lrz 01;38;2;235;160;172
+.lz 01;38;2;235;160;172
+.lzo 01;38;2;235;160;172
+.xz 01;38;2;235;160;172
+.zst 01;38;2;235;160;172
+.tzst 01;38;2;235;160;172
+.bz2 01;38;2;235;160;172
+.bz 01;38;2;235;160;172
+.tbz 01;38;2;235;160;172
+.tbz2 01;38;2;235;160;172
+.tz 01;38;2;235;160;172
+.deb 01;38;2;235;160;172
+.rpm 01;38;2;235;160;172
+.jar 01;38;2;235;160;172
+.war 01;38;2;235;160;172
+.ear 01;38;2;235;160;172
+.sar 01;38;2;235;160;172
+.rar 01;38;2;235;160;172
+.alz 01;38;2;235;160;172
+.ace 01;38;2;235;160;172
+.zoo 01;38;2;235;160;172
+.cpio 01;38;2;235;160;172
+.7z 01;38;2;235;160;172
+.rz 01;38;2;235;160;172
+.cab 01;38;2;235;160;172
+.wim 01;38;2;235;160;172
+.swm 01;38;2;235;160;172
+.dwm 01;38;2;235;160;172
+.esd 01;38;2;235;160;172
+
+# --- Images (mauve, bold) ----------------------------------------------------
+.avif 01;38;2;203;166;247
+.jpg 01;38;2;203;166;247
+.jpeg 01;38;2;203;166;247
+.mjpg 01;38;2;203;166;247
+.mjpeg 01;38;2;203;166;247
+.gif 01;38;2;203;166;247
+.bmp 01;38;2;203;166;247
+.pbm 01;38;2;203;166;247
+.pgm 01;38;2;203;166;247
+.ppm 01;38;2;203;166;247
+.tga 01;38;2;203;166;247
+.xbm 01;38;2;203;166;247
+.xpm 01;38;2;203;166;247
+.tif 01;38;2;203;166;247
+.tiff 01;38;2;203;166;247
+.png 01;38;2;203;166;247
+.svg 01;38;2;203;166;247
+.svgz 01;38;2;203;166;247
+.mng 01;38;2;203;166;247
+.pcx 01;38;2;203;166;247
+.webp 01;38;2;203;166;247
+.xcf 01;38;2;203;166;247
+.xwd 01;38;2;203;166;247
+.yuv 01;38;2;203;166;247
+.cgm 01;38;2;203;166;247
+.emf 01;38;2;203;166;247
+
+# --- Video (pink, bold) ------------------------------------------------------
+.mov 01;38;2;245;194;231
+.mpg 01;38;2;245;194;231
+.mpeg 01;38;2;245;194;231
+.m2v 01;38;2;245;194;231
+.mkv 01;38;2;245;194;231
+.webm 01;38;2;245;194;231
+.ogm 01;38;2;245;194;231
+.mp4 01;38;2;245;194;231
+.m4v 01;38;2;245;194;231
+.mp4v 01;38;2;245;194;231
+.vob 01;38;2;245;194;231
+.qt 01;38;2;245;194;231
+.nuv 01;38;2;245;194;231
+.wmv 01;38;2;245;194;231
+.asf 01;38;2;245;194;231
+.rm 01;38;2;245;194;231
+.rmvb 01;38;2;245;194;231
+.flc 01;38;2;245;194;231
+.avi 01;38;2;245;194;231
+.fli 01;38;2;245;194;231
+.flv 01;38;2;245;194;231
+.gl 01;38;2;245;194;231
+.dl 01;38;2;245;194;231
+.ogv 01;38;2;245;194;231
+.ogx 01;38;2;245;194;231
+
+# --- Audio (sky) -------------------------------------------------------------
+.aac 38;2;137;220;235
+.au 38;2;137;220;235
+.flac 38;2;137;220;235
+.m4a 38;2;137;220;235
+.mid 38;2;137;220;235
+.midi 38;2;137;220;235
+.mka 38;2;137;220;235
+.mp3 38;2;137;220;235
+.mpc 38;2;137;220;235
+.ogg 38;2;137;220;235
+.ra 38;2;137;220;235
+.wav 38;2;137;220;235
+.oga 38;2;137;220;235
+.opus 38;2;137;220;235
+.spx 38;2;137;220;235
+.xspf 38;2;137;220;235
+
+# --- Documents (subtext1) ----------------------------------------------------
+.pdf 38;2;186;194;222
+.md 38;2;186;194;222
+.markdown 38;2;186;194;222
+.txt 38;2;186;194;222
+.tex 38;2;186;194;222
+.rst 38;2;186;194;222
+.epub 38;2;186;194;222
+.odt 38;2;186;194;222
+.doc 38;2;186;194;222
+.docx 38;2;186;194;222
+.rtf 38;2;186;194;222
