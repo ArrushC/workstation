@@ -31,6 +31,14 @@ LINUX_PACKAGES := \
 # Nice-to-haves — installed per-package with `|| true` so a missing package
 # in some distro variant doesn't poison the whole bootstrap. Order doesn't
 # matter; group comments match the old group_vars/all.yml.
+#
+# NOTE: `fswatch` is intentionally listed but is NOT packaged for EL9 — it was
+# dropped after EPEL 8, so `dnf search fswatch` returns no match on AlmaLinux 9
+# (verified 2026-05-30). The `|| true` path silently skips it on EL9 hosts; the
+# line is kept so it installs automatically on EL7/8 or a future Debian host.
+# On EL9 the file-watching need is covered by `inotify-tools` (EPEL) +
+# `watchexec` (EGET_TOOL, both scopes). To get real fswatch on EL9 you'd have
+# to build it from source (autotools) — deliberately not done here.
 LINUX_OPTIONAL_PACKAGES := \
   ripgrep bash-completion \
   htop multitail goaccess \
