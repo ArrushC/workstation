@@ -19,10 +19,12 @@
 # 38;2;R;G;B = foreground, 48;2;R;G;B = background.
 
 # --- Terminal capability gate ------------------------------------------------
-# `COLORTERM ?*` matches any non-empty $COLORTERM. The hosts export
-# COLORTERM=truecolor, so colors emit regardless of $TERM. `TERM wezterm` is
-# listed explicitly because config.term='wezterm' is set fleet-wide (see
-# CLAUDE.md) and would otherwise miss the GNU default TERM globs.
+# dircolors emits LS_COLORS only when a TERM or COLORTERM directive matches the
+# live env (it's an OR). Two independent enablers are kept — either alone works:
+#   - `COLORTERM ?*` matches any non-empty $COLORTERM; the hosts export
+#     COLORTERM=truecolor, so colors emit regardless of $TERM.
+#   - `TERM wezterm` matches the fleet's TERM (config.term='wezterm', see
+#     CLAUDE.md), which otherwise misses every GNU default TERM glob below.
 COLORTERM ?*
 TERM Eterm
 TERM ansi
