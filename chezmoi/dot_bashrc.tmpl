@@ -52,11 +52,30 @@ shopt -s histappend                        # append on exit instead of clobberin
 shopt -s checkwinsize     # refresh LINES/COLUMNS after each command
 shopt -s globstar         # ** matches files/dirs recursively
 
+# --- Colors (dircolors / LS_COLORS) ------------------------------------------
+# Theme file-type/extension colors from ~/.dircolors (Catppuccin Mocha). Sets
+# and exports LS_COLORS, consumed by eza, GNU ls --color, fzf, and the readline
+# colored-stats below. Falls back to dircolors' built-in palette if the dotfile
+# isn't applied yet. No-op if dircolors is absent. Mirrors the zsh block.
+if command -v dircolors &>/dev/null; then
+  if [[ -r "$HOME/.dircolors" ]]; then
+    eval "$(dircolors -b "$HOME/.dircolors")"
+  else
+    eval "$(dircolors -b)"
+  fi
+fi
+
 # --- Completion --------------------------------------------------------------
 # bash tab-completion is provided by the system-wide bash-completion package
 # (sourced via /etc/profile.d/bash_completion.sh on most distros), so there's
 # nothing to initialize here. zsh's parity file calls `compinit` explicitly
 # because zsh has no equivalent system-wide loader.
+
+# Color filename completion matches using LS_COLORS (readline 7+). The bashrc
+# only runs for interactive shells (the `[[ $- != *i* ]] && return` guard at
+# the top), so `bind` is always safe here.
+bind 'set colored-stats on'
+bind 'set colored-completion-prefix on'
 
 # --- fzf ---------------------------------------------------------------------
 export FZF_DEFAULT_OPTS="

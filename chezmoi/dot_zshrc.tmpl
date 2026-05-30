@@ -60,11 +60,27 @@ setopt INTERACTIVE_COMMENTS  # # comments on the interactive command line
 setopt AUTO_CD               # bare directory name = cd into it
 setopt NO_BEEP
 
+# --- Colors (dircolors / LS_COLORS) ------------------------------------------
+# Theme file-type/extension colors from ~/.dircolors (Catppuccin Mocha). Sets
+# and exports LS_COLORS, consumed by eza, GNU ls --color, fzf, and the
+# completion list-colors below. Falls back to dircolors' built-in palette if
+# the dotfile isn't applied yet. No-op if dircolors is absent.
+if command -v dircolors &>/dev/null; then
+  if [[ -r "$HOME/.dircolors" ]]; then
+    eval "$(dircolors -b "$HOME/.dircolors")"
+  else
+    eval "$(dircolors -b)"
+  fi
+fi
+
 # --- Completion --------------------------------------------------------------
 # -C skips the .zcompdump security check (faster startup). Rebuild .zcompdump
 # weekly to pick up newly installed completions:
 #   rm -f ~/.zcompdump && exec zsh
 autoload -Uz compinit && compinit -C
+
+# Color completion menus (filenames) with the same LS_COLORS palette.
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 
 # --- fzf ---------------------------------------------------------------------
 export FZF_DEFAULT_OPTS="
