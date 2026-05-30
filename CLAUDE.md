@@ -97,7 +97,7 @@ What does NOT need a README update: internal Makefile refactors that don't chang
 - **`makefile/scope.mk`** — single source for `MODE` → `DEST` / `SUDO` / `HAS_SUDO` / `INSTALL_PACKAGES`. Parse-time error on missing MODE is intentional.
 - **`makefile/{packages,shell,dotfiles}.mk`** — `packages.mk` is a no-op when `INSTALL_PACKAGES=false`. `shell.mk` branches on `HAS_SUDO`. `dotfiles.mk` is gated on `~/.config/chezmoi/chezmoi.toml` existing (first-run init is `bootstrap.sh`'s job).
 - **`makefile/versions.mk`** — single source for tool versions. `EGET_VERSION` pins the meta-installer itself; bumping it triggers a fresh eget install via `archive.sh`, which then runs every `EGET_TOOL` install.
-- **`makefile/lib/eget.sh`** — bakes in `--to $DEST --quiet` plus an asset anti-match filter (`.sbom .sig .sha .asc .zip.gpg .deb .rpm .apk .pkg .proof`). When upstream adds a new noise file type that breaks auto-detection, add it here, not per-tool.
+- **`makefile/lib/eget.sh`** — bakes in `--to $DEST --quiet` plus an asset anti-match filter (`.sbom .sig .sha .b3 .asc .zip.gpg .deb .rpm .apk .pkg .proof`). When upstream adds a new noise file type that breaks auto-detection, add it here, not per-tool. (`.b3` = cargo-dist's BLAKE3 per-asset checksum, e.g. watchexec's `…-musl.tar.xz.b3`, which otherwise collides with the real tarball under `--asset musl`.)
 - **`makefile/lib/*.sh` and `scripts/update-hosts.sh`** — must be LF-only AND mode 100755 in git. A fresh clone with mode 100644 fails with `sudo: archive.sh: command not found`. See the conventions section for repair commands.
 - **`chezmoi/.chezmoiignore.tmpl`** — wrong entries drop infra files into `$HOME` or skip intended dotfiles. Edit-then-test: `chezmoi diff` on a sandbox host or Windows machine before pushing.
 - **`scripts/manage-hosts.ps1` and `bootstrap.ps1`** — UTF-8 with BOM (PS 5.1 dependency). See conventions section for the restore one-liner.
@@ -119,7 +119,7 @@ What does NOT need a README update: internal Makefile refactors that don't chang
 
 After changes:
 - `./scripts/manage-hosts.sh --sync` — regenerates the chezmoi-tracked wezterm sentinel block, no errors.
-- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: 56 scope-tools (incl. `eget` itself), 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call …,…))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced wasn't defined in `versions.mk`.
+- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: 58 scope-tools (incl. `eget` itself), 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call …,…))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced wasn't defined in `versions.mk`.
 - `cd makefile && make -n MODE=prod provision` — dry-run prod. Should print "skipping system packages (MODE=prod, INSTALL_PACKAGES=false)" then the tool installs.
 - `cd makefile && make -n MODE=dev provision` — dry-run dev. Should print dnf lines under `sudo`, then EPEL, then optional packages, then tool installs.
 - `cd makefile && make help` — top-level targets. Help-only commands don't trigger `scope.mk`'s error-out.

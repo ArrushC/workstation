@@ -6,7 +6,7 @@
 #   EGET_TOOL  — PREFERRED for single-binary GitHub releases. Delegates
 #                to eget which figures out the right asset and layout.
 #                One line per tool: name, version, user/repo[, tag][, extras].
-#                Used by ~38 tools below. Joins $(SCOPE_TOOLS).
+#                Used by ~41 tools below. Joins $(SCOPE_TOOLS).
 #
 #   TOOL       — Direct call to a helper (archive.sh/direct.sh/pipe.sh/
 #                helix.sh). Use for: non-GitHub URLs (ncdu/broot/nb/sysz/
@@ -165,6 +165,15 @@ $(eval $(call EGET_TOOL,htmlq,$(HTMLQ_VERSION),mgdm/htmlq))
 
 # ouch — non-v tag; both musl/gnu published.
 $(eval $(call EGET_TOOL,ouch,$(OUCH_VERSION),ouch-org/ouch,$(OUCH_VERSION),--asset musl))
+
+# watchexec — runs commands on file changes. Default v-tag (v$VERSION).
+# Both x86_64 musl and gnu tarballs published, plus .deb/.rpm side-files
+# (already excluded by eget.sh's anti-match filter); --asset musl picks the
+# static build, matching the repo's musl-everywhere convention. EGET_TOOL so
+# it installs on BOTH dev (/usr/local/bin) and prod (~/.local/bin) — unlike
+# inotify-tools/fswatch, which are source-only upstream and thus dev-only
+# (dnf, see packages.mk).
+$(eval $(call EGET_TOOL,watchexec,$(WATCHEXEC_VERSION),watchexec/watchexec,,--asset musl))
 
 # bottom — non-v tag; binary inside archive is `btm`. Archive also ships
 # a zsh completion at completion/_btm which eget would otherwise treat as

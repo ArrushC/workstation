@@ -50,6 +50,7 @@ exec "$DEST/eget" "$user_repo" \
   --asset '^.sbom' \
   --asset '^.sig' \
   --asset '^.sha' \
+  --asset '^.b3' \
   --asset '^.asc' \
   --asset '^.zip.gpg' \
   --asset '^.deb' \
