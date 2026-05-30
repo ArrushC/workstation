@@ -25,7 +25,7 @@ copy_command "xclip -selection clipboard"
 copy_on_select false
 
 // Theme
-theme "tokyo-night-dark"
+theme "catppuccin-mocha"
 
 // Ctrl+s enters Session mode (session manager / detach). Overrides zellij's
 // default Ctrl+s = Scroll mode; Session mode's default key is Ctrl+o.
