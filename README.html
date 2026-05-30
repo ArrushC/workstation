@@ -1068,6 +1068,36 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
+                                    data-tip="Runs commands when watched files change (Rust)"
+                                    >watchexec<span class="sr-only">
+                                        — runs commands when watched files
+                                        change (watchexec, Rust; dev + prod)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Watch filesystem events (inotifywait/inotifywatch)"
+                                    >inotify-tools <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — inotifywait / inotifywatch; watch
+                                        filesystem events (dev_machine only via
+                                        dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Cross-platform file change monitor"
+                                    >fswatch <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — cross-platform file change monitor
+                                        (dev_machine only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
                                     data-tip="Directory tree listing"
                                     >tree <small>(dnf)</small
                                     ><span class="sr-only">
@@ -2552,7 +2582,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the normal bootstrap flow. There are three macros;
                         <strong>prefer <code>EGET_TOOL</code></strong> for
                         single-binary GitHub releases (the common case &mdash;
-                        ~38 of the current 56 tools use it).
+                        ~41 of the current 58 tools use it).
                     </p>
                     <ol>
                         <li>

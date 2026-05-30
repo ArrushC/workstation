@@ -70,10 +70,11 @@ UV_VERSION         := 0.11.14
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
-GH_VERSION    := 2.92.0
-SOPS_VERSION  := 3.13.1
-HTMLQ_VERSION := 0.4.0
-OUCH_VERSION  := 0.7.1
+GH_VERSION        := 2.92.0
+SOPS_VERSION      := 3.13.1
+HTMLQ_VERSION     := 0.4.0
+OUCH_VERSION      := 0.7.1
+WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
 BOTTOM_VERSION        := 0.12.3

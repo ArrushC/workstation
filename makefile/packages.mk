@@ -36,6 +36,7 @@ LINUX_OPTIONAL_PACKAGES := \
   htop multitail goaccess \
   nmap mtr \
   parallel pv entr tree strace perf cronie time \
+  inotify-tools fswatch \
   rsync vim-common vim-enhanced \
   shellcheck gdb lsof tcpdump \
   cockpit cockpit-system cockpit-storaged cockpit-networkmanager \
