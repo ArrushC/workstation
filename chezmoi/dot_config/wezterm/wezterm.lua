@@ -136,7 +136,31 @@ if wezterm.target_triple:find('windows') then
   end
 end
 
-config.color_scheme = 'Tokyo Night'
+-- Catppuccin Mocha palette — single source for every hardcoded chrome/tab/status
+-- color below. The 16-color ANSI palette + default bg/fg come from the built-in
+-- 'Catppuccin Mocha' color_scheme; this table only covers the surfaces WezTerm
+-- doesn't theme for us (window frame, tab bar, scrollbar, per-host tab accents,
+-- right-status text). Values are the canonical Catppuccin Mocha hexes.
+local mocha = {
+  base     = '#1e1e2e',
+  mantle   = '#181825',
+  crust    = '#11111b',
+  surface0 = '#313244',
+  surface1 = '#45475a',
+  surface2 = '#585b70',
+  overlay0 = '#6c7086',
+  text     = '#cdd6f4',
+  blue     = '#89b4fa',
+  mauve    = '#cba6f7',
+  sky      = '#89dceb',
+  green    = '#a6e3a1',
+  yellow   = '#f9e2af',
+  peach    = '#fab387',
+  red      = '#f38ba8',
+  teal     = '#94e2d5',
+}
+
+config.color_scheme = 'Catppuccin Mocha'
 config.font         = wezterm.font('JetBrainsMono Nerd Font Mono', { weight = 'Regular' })
 
 -- Belt-and-suspenders on Windows: also point at %LOCALAPPDATA%\Microsoft\Windows\Fonts\
@@ -180,7 +204,7 @@ config.hide_tab_bar_if_only_one_tab = false
 -- against any name in hosts.conf without leaving a trail of dead space.
 config.tab_max_width               = 32
 
--- Fancy-mode chrome (Tokyo Night-matched). Ignored when use_fancy_tab_bar = false.
+-- Fancy-mode chrome (Catppuccin Mocha-matched). Ignored when use_fancy_tab_bar = false.
 -- Font is JetBrainsMono Nerd Font Mono (Medium weight) so the tab bar carries
 -- the terminal's identity but stays distinct from body text (which uses
 -- Regular weight of the same family). The retro tab bar inherits the main
@@ -189,18 +213,18 @@ config.tab_max_width               = 32
 config.window_frame = {
   font                            = wezterm.font { family = 'JetBrainsMono Nerd Font Mono', weight = 'Medium' },
   font_size                       = 10,
-  -- Active bar sits slightly elevated above main bg (#1a1b26) for separation;
-  -- inactive drops down to Tokyo Night bg_dark.
-  active_titlebar_bg              = '#1f2335',
-  inactive_titlebar_bg            = '#16161e',
-  active_titlebar_fg              = '#c0caf5',
-  inactive_titlebar_fg            = '#565f89',
-  active_titlebar_border_bottom   = '#292e42',
-  inactive_titlebar_border_bottom = '#15161e',
-  button_bg                       = '#1f2335',
-  button_fg                       = '#c0caf5',
-  button_hover_bg                 = '#292e42',
-  button_hover_fg                 = '#c0caf5',
+  -- Active bar sits slightly elevated above base (surface0) for separation;
+  -- inactive drops down to mantle.
+  active_titlebar_bg              = mocha.surface0,
+  inactive_titlebar_bg            = mocha.mantle,
+  active_titlebar_fg              = mocha.text,
+  inactive_titlebar_fg            = mocha.overlay0,
+  active_titlebar_border_bottom   = mocha.surface1,
+  inactive_titlebar_border_bottom = mocha.crust,
+  button_bg                       = mocha.surface0,
+  button_fg                       = mocha.text,
+  button_hover_bg                 = mocha.surface1,
+  button_hover_fg                 = mocha.text,
 }
 
 -- Tab-bar surfaces (background behind tabs in retro mode + new-tab "+" button
@@ -210,17 +234,17 @@ config.window_frame = {
 -- share the same visual language.
 config.colors = {
   tab_bar = {
-    background        = '#1a1b26',
+    background        = mocha.base,
     -- Hide the thin tab-edge divider — the default color is a light gray that
     -- pops against the bar bg only when the adjacent surface lightens (e.g.
     -- when hovering the "+" button). Match the bar bg so it disappears in
     -- every state.
-    inactive_tab_edge = '#1a1b26',
-    new_tab           = { bg_color = '#1a1b26', fg_color = '#565f89' },
-    new_tab_hover     = { bg_color = '#292e42', fg_color = '#c0caf5' },
+    inactive_tab_edge = mocha.base,
+    new_tab           = { bg_color = mocha.base, fg_color = mocha.overlay0 },
+    new_tab_hover     = { bg_color = mocha.surface1, fg_color = mocha.text },
   },
-  -- Scrollbar thumb — visible against the Tokyo Night bg without screaming
-  scrollbar_thumb = '#414868',
+  -- Scrollbar thumb — visible against the Catppuccin Mocha bg without screaming
+  scrollbar_thumb = mocha.surface2,
 }
 
 -- Scrollback depth — how many lines WezTerm retains per pane above the
@@ -304,21 +328,21 @@ config.cursor_blink_rate    = 500
 config.text_blink_rate_rapid = 250
 
 -- ---------------------------------------------------------------------------
--- Tab colors — Tokyo Night accent palette + state variants
+-- Tab colors — Catppuccin Mocha accent palette + state variants
 -- ---------------------------------------------------------------------------
--- Each SSH host gets a stable accent from this curated Tokyo Night palette
+-- Each SSH host gets a stable accent from this curated Catppuccin Mocha palette
 -- (8-bucket hash on the host name), so there's a cheap visual guard against
 -- typing into the wrong host. The per-state mapping lives in tab_colors
 -- below; this block just defines the palette + hash.
 local HOST_ACCENTS = {
-  '#7aa2f7',  -- blue
-  '#bb9af7',  -- magenta
-  '#7dcfff',  -- cyan
-  '#9ece6a',  -- green
-  '#e0af68',  -- yellow
-  '#ff9e64',  -- orange
-  '#f7768e',  -- red
-  '#73daca',  -- teal
+  mocha.blue,    -- blue
+  mocha.mauve,   -- mauve (magenta)
+  mocha.sky,     -- sky (cyan)
+  mocha.green,   -- green
+  mocha.yellow,  -- yellow
+  mocha.peach,   -- peach (orange)
+  mocha.red,     -- red
+  mocha.teal,    -- teal
 }
 
 local function host_hash(name)
@@ -329,32 +353,32 @@ local function host_hash(name)
   return h
 end
 
--- Inactive tabs match the bar bg (#1a1b26 — see config.colors.tab_bar below)
+-- Inactive tabs match the bar bg (mocha.base — see config.colors.tab_bar below)
 -- so the bar reads as one continuous strip with the active tab as the only
 -- visible tile. The host accent still shows in inactive text, just muted —
 -- enough to keep the visual guard against typing into the wrong host without
 -- adding a row of competing color blocks. Hover lifts a darkened accent
 -- block, active fills with full accent. Progression: nothing → muted → full.
 local function tab_colors(host, is_active, is_hover)
-  local BAR_BG = '#1a1b26'
+  local BAR_BG = mocha.base
   if host then
     local accent = wezterm.color.parse(HOST_ACCENTS[(host_hash(host) % #HOST_ACCENTS) + 1])
     if is_active then
-      return tostring(accent),                                '#15161e'
+      return tostring(accent),                                mocha.crust
     elseif is_hover then
-      return tostring(accent:desaturate(0.50):darken(0.50)),  '#c0caf5'
+      return tostring(accent:desaturate(0.50):darken(0.50)),  mocha.text
     end
     return   BAR_BG,                                          tostring(accent:desaturate(0.40):darken(0.10))
   end
-  -- Local tab — same progression against neutral Tokyo Night surfaces.
-  -- Active uses terminal_black (#414868) instead of bg_highlight (#292e42)
-  -- so the contrast against the now-blended inactive tabs still pops.
+  -- Local tab — same progression against neutral Catppuccin Mocha surfaces.
+  -- Active uses surface2 instead of surface1 so the contrast against the
+  -- now-blended inactive tabs still pops.
   if is_active then
-    return '#414868', '#c0caf5'
+    return mocha.surface2, mocha.text
   elseif is_hover then
-    return '#292e42', '#c0caf5'
+    return mocha.surface1, mocha.text
   end
-  return BAR_BG, '#565f89'
+  return BAR_BG, mocha.overlay0
 end
 
 wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, max_width)
@@ -856,8 +880,8 @@ local function render_right_status(window, pane)
   -- Tighter separator (' · ' instead of '  │  ') in a dim color so the bar
   -- doesn't dominate visually. The fancy tab bar font (JetBrainsMono Nerd Font Mono Medium)
   -- rendered the heavy '│' with too much weight against the lighter labels.
-  local FG     = '#c0caf5'
-  local FG_DIM = '#565f89'
+  local FG     = mocha.text
+  local FG_DIM = mocha.overlay0
   local SEP    = ' · '
 
   local items = {}
@@ -902,7 +926,7 @@ local function render_right_status(window, pane)
     local right   = extra - left
     window:set_right_status(wezterm.format {
       { Text = string.rep(' ', left) },
-      { Foreground = { Color = '#9ece6a' } },
+      { Foreground = { Color = mocha.green } },
       { Attribute = { Intensity = 'Bold' } },
       { Text = badge },
       { Attribute = { Intensity = 'Normal' } },
