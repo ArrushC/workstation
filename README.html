@@ -3266,6 +3266,72 @@ choco install -y &lt;id&gt;</code></pre>
                             </ul>
                         </div>
                     </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>czt</code> / chezmoi feels slow on WSL
+                            (a second or two per command)
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Symptom: every <code>chezmoi</code> call stalls
+                                ~1.5&nbsp;s on a WSL host &mdash; and
+                                <code>czt</code> (the <code>chezit</code> TUI)
+                                fires several on launch and refresh, so it feels
+                                laggy. The process is mostly <em>idle</em>, not
+                                computing (low CPU, high wall-clock).
+                            </p>
+                            <p>
+                                Cause: WSL2 with
+                                <code>appendWindowsPath=true</code> tacks the
+                                entire Windows <code>%PATH%</code> (~90
+                                <code>/mnt/c</code> dirs) onto <code>$PATH</code>.
+                                chezmoi probes clipboard tools
+                                (<code>wl-copy</code>, <code>xclip</code>,
+                                <code>xsel</code>) via <code>exec.LookPath</code>
+                                at startup; none exist on the Windows side, so
+                                each probe stat-walks <em>every</em>
+                                <code>/mnt/c</code> dir over the slow 9p/drvfs
+                                mount. Hundreds of failed stats &asymp; 1.5&nbsp;s.
+                            </p>
+                            <p>Fix (two parts):</p>
+                            <ul>
+                                <li>
+                                    Set
+                                    <code>appendWindowsPath=false</code> under
+                                    <code>[interop]</code> in
+                                    <code>/etc/wsl.conf</code>, then
+                                    <code>wsl --shutdown</code> from a
+                                    <em>Windows</em> terminal (ends all WSL
+                                    sessions) and reopen.
+                                </li>
+                                <li>
+                                    The tracked <code>~/.zshrc</code> /
+                                    <code>~/.bashrc</code> re-add only the two
+                                    Windows dirs still called from WSL &mdash;
+                                    PowerShell (for
+                                    <code>~/.claude/notify.sh</code> toasts) and
+                                    <code>system32</code> (<code>clip.exe</code>).
+                                    No action needed; it&rsquo;s automatic on
+                                    shell start.
+                                </li>
+                            </ul>
+                            <p>
+                                Verify in a fresh tab:
+                                <code>echo $PATH | tr ':' '\n' | grep -c /mnt/</code>
+                                drops from ~90 to ~2;
+                                <code>time chezmoi status</code> drops from
+                                ~1.6&nbsp;s to ~0.1&nbsp;s.
+                            </p>
+                            <p>
+                                Trade-off: other Windows executables
+                                (<code>explorer.exe</code>, VS Code&rsquo;s
+                                <code>code</code>) leave the WSL
+                                <code>$PATH</code>. Re-add any you want in
+                                <code>~/.zshrc.local</code>.
+                            </p>
+                        </div>
+                    </details>
                 </section>
             </main>
         </div>
