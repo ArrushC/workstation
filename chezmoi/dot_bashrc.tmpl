@@ -38,7 +38,13 @@ fi
 export EDITOR="hx"
 export VISUAL="hx"
 export PAGER="less"
-export MANPAGER="less"
+# Colorized man pages via bat when available; plain less otherwise.
+if command -v bat &>/dev/null; then
+  export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+  export MANROFFOPT="-c"
+else
+  export MANPAGER="less"
+fi
 export COLORTERM=truecolor   # WezTerm advertises 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
 
 # --- History -----------------------------------------------------------------
