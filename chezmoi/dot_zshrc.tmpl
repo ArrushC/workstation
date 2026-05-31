@@ -37,6 +37,17 @@ fi
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
 export VISUAL="hx"
+{{ if and (hasKey . "group") (eq .group "dev_machine") }}
+# Helix runtime path — dev_machine only. `make` installs the runtime to
+# $HELIX_RUNTIME_DEST/runtime (= /usr/local/lib/helix/runtime on dev; see
+# makefile/scope.mk). Helix's only default search paths are
+# ~/.config/helix/runtime and <bin>/runtime — neither is that dir — so without
+# this export Helix finds NO runtime and silently falls back to its built-in
+# (purple) default theme, ignoring `theme =` in config.toml. prod installs the
+# runtime to ~/.config/helix/runtime (already a default search path), hence the
+# dev gate. KEEP IN SYNC with HELIX_RUNTIME_DEST in makefile/scope.mk.
+export HELIX_RUNTIME="/usr/local/lib/helix/runtime"
+{{ end }}
 export PAGER="less"
 # Colorized man pages via bat when available; plain less otherwise.
 if command -v bat &>/dev/null; then
