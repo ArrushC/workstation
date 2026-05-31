@@ -26,7 +26,8 @@ LINUX_PACKAGES := \
   python3 \
   python3-pip \
   zsh \
-  ncurses
+  ncurses \
+  pkgconf-pkg-config
 
 # Nice-to-haves — installed per-package with `|| true` so a missing package
 # in some distro variant doesn't poison the whole bootstrap. Order doesn't
@@ -45,6 +46,7 @@ LINUX_OPTIONAL_PACKAGES := \
   nmap mtr \
   parallel pv entr tree strace perf cronie time \
   inotify-tools fswatch \
+  man-db man-pages info \
   rsync vim-common vim-enhanced \
   shellcheck gdb lsof tcpdump \
   cockpit cockpit-system cockpit-storaged cockpit-networkmanager \
