@@ -1,0 +1,23 @@
+{{ if eq .chezmoi.os "linux" -}}
+#!/usr/bin/env bash
+# run_once_seed-tldr-cache.sh — populate the tealdeer (tldr) page cache once,
+# so `tldr <cmd>` works immediately on a freshly provisioned host instead of
+# erroring with "Page cache not found". Ongoing freshness is handled by
+# auto_update in ~/.config/tealdeer/config.toml.
+#
+# .tmpl gate: linux only (.chezmoiscripts/ are NOT covered by .chezmoiignore,
+# so the gate lives in the body; non-linux renders empty -> chezmoi skips it).
+# Soft-fail: `cza` is daily-workflow; a missing tldr or a network blip must not
+# turn `chezmoi apply` into a failure. auto_update is the backstop either way.
+set -euo pipefail
+
+if ! command -v tldr >/dev/null 2>&1; then
+  printf 'tldr not on PATH — skipping tealdeer cache seed\n' >&2
+  exit 0
+fi
+if [ -d "$HOME/.cache/tealdeer/tldr-pages" ]; then
+  exit 0   # already seeded; auto_update owns refresh from here
+fi
+tldr --update >/dev/null 2>&1 \
+  || printf 'tldr --update failed (offline?) — auto_update will retry on first use\n' >&2
+{{- end }}
