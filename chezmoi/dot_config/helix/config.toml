@@ -1,6 +1,6 @@
 # ~/.config/helix/config.toml — managed by chezmoi
 
-theme = "tokyo_night"
+theme = "catppuccin_mocha"
 
 [editor]
 line-number        = "relative"

@@ -245,6 +245,14 @@ config.colors = {
   },
   -- Scrollbar thumb — visible against the Catppuccin Mocha bg without screaming
   scrollbar_thumb = mocha.surface2,
+  -- Cursor — mauve identity, overriding the built-in Catppuccin Mocha scheme's
+  -- default (rosewater) cursor. cursor_bg/cursor_border color the BlinkingBar
+  -- (config.default_cursor_style below); cursor_fg only shows when the cursor
+  -- renders as a block, so it's kept dark (crust) to keep any covered glyph
+  -- legible. Pairs with the mauve active local tab in tab_colors below.
+  cursor_bg     = mocha.mauve,
+  cursor_border = mocha.mauve,
+  cursor_fg     = mocha.crust,
 }
 
 -- Scrollback depth — how many lines WezTerm retains per pane above the
@@ -370,11 +378,16 @@ local function tab_colors(host, is_active, is_hover)
     end
     return   BAR_BG,                                          tostring(accent:desaturate(0.40):darken(0.10))
   end
-  -- Local tab — same progression against neutral Catppuccin Mocha surfaces.
-  -- Active uses surface2 instead of surface1 so the contrast against the
-  -- now-blended inactive tabs still pops.
+  -- Local tab — neutral inactive/hover surfaces, but the ACTIVE local tab
+  -- fills with mauve (mocha.crust fg, mirroring the SSH active treatment at
+  -- line 367) so local panes carry the same mauve identity as the cursor.
+  -- Inactive/hover stay on neutral surfaces so the local row still reads as
+  -- "local" at rest. Note: mauve is also bucket #2 of the per-host SSH
+  -- rotation (HOST_ACCENTS), so a mauve-bucket host's active tab and a local
+  -- active tab share the mauve fill — the tab title text still distinguishes
+  -- them, and the SSH rotation is deliberately left untouched.
   if is_active then
-    return mocha.surface2, mocha.text
+    return mocha.mauve, mocha.crust
   elseif is_hover then
     return mocha.surface1, mocha.text
   end
