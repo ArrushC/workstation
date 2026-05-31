@@ -86,6 +86,9 @@
                             <li>
                                 <a href="#setup-wezterm">WezTerm keybinds</a>
                             </li>
+                            <li>
+                                <a href="#prompt-keys">Shell prompt selection</a>
+                            </li>
                         </ol>
                     </li>
                     <li><a href="#hosts">Host management</a></li>
@@ -2167,6 +2170,75 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                     >
                                 </td>
                                 <td>Reload <code>wezterm.lua</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 id="prompt-keys">Shell prompt selection</h3>
+                    <p class="lede">
+                        At the <code>zsh</code> prompt, <kbd>SHIFT</kbd>+arrow
+                        keys select text like a normal editor — extend a
+                        highlight, type to replace it, <kbd>BACKSPACE</kbd> to
+                        delete it. These bind in the shell line editor only, so
+                        any full-screen tool (helix, fzf, <code>less</code>)
+                        keeps its own <kbd>SHIFT</kbd>+arrow behaviour.
+                        <code>bash</code> maps the same keys to plain cursor
+                        movement (no highlight — a readline limitation).
+                    </p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Bind</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <kbd>SHIFT</kbd>+<kbd>&larr;</kbd> /
+                                    <kbd>SHIFT</kbd>+<kbd>&rarr;</kbd>
+                                </td>
+                                <td>Extend selection by character</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                        >&larr;</kbd
+                                    >
+                                    / <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                        >&rarr;</kbd
+                                    >
+                                </td>
+                                <td>Extend selection by word</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>SHIFT</kbd>+<kbd>HOME</kbd> /
+                                    <kbd>SHIFT</kbd>+<kbd>END</kbd>
+                                </td>
+                                <td>Extend selection to line start / end</td>
+                            </tr>
+                            <tr>
+                                <td>Type any character</td>
+                                <td>Replace the selection (zsh)</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>BACKSPACE</kbd> / <kbd>DELETE</kbd>
+                                </td>
+                                <td>Delete the selection (zsh)</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>ALT</kbd>+<kbd>W</kbd> /
+                                    <kbd>CTRL</kbd>+<kbd>W</kbd> /
+                                    <kbd>CTRL</kbd>+<kbd>Y</kbd>
+                                </td>
+                                <td>
+                                    Copy / cut / paste selection (zsh) — copy
+                                    also reaches the system clipboard via OSC 52,
+                                    including over SSH
+                                </td>
                             </tr>
                         </tbody>
                     </table>
