@@ -94,6 +94,26 @@ fi
 bind 'set colored-stats on'
 bind 'set colored-completion-prefix on'
 
+# --- Shift+Arrow movement (readline) -----------------------------------------
+# WezTerm sends ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
+# so the tail (";2D") leaks into the line. Bind them to plain movement so the
+# leak is gone and navigation is sane. PARITY NOTE: zsh gets a real, visible
+# shift-SELECT highlight (see dot_zshrc.tmpl); readline has no "active selection
+# you can type over", so bash deliberately gets movement-only. (Shift+Up/Down
+# map to history and Shift+Ctrl+Home/End to line ends — readline has no
+# multiline buffer / up-line widgets that the zsh side uses.) Keep both files
+# in sync per the parity-pair invariant.
+bind '"\e[1;2D": backward-char'      # Shift + Left
+bind '"\e[1;2C": forward-char'       # Shift + Right
+bind '"\e[1;2A": previous-history'   # Shift + Up   (same as plain Up)
+bind '"\e[1;2B": next-history'       # Shift + Down (same as plain Down)
+bind '"\e[1;2H": beginning-of-line'  # Shift + Home
+bind '"\e[1;2F": end-of-line'        # Shift + End
+bind '"\e[1;6D": backward-word'      # Shift + Ctrl + Left
+bind '"\e[1;6C": forward-word'       # Shift + Ctrl + Right
+bind '"\e[1;6H": beginning-of-line'  # Shift + Ctrl + Home
+bind '"\e[1;6F": end-of-line'        # Shift + Ctrl + End
+
 # --- fzf ---------------------------------------------------------------------
 export FZF_DEFAULT_OPTS="
   --height 40%

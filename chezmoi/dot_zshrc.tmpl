@@ -149,6 +149,56 @@ __wezterm_osc7() {
 autoload -Uz add-zsh-hook
 add-zsh-hook -Uz precmd __wezterm_osc7
 
+# --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
+# Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
+# / Shift+Home/End) extend a visible highlight; typing replaces it; Backspace/
+# Delete removes it; Alt+W copies (kill-ring + system clipboard), Ctrl+W cuts,
+# Ctrl+Y pastes. Ctrl+C is intentionally left alone (stays SIGINT).
+#
+# This lives in the line editor ON PURPOSE: ZLE only handles keys at the prompt,
+# so any full-screen CLI tool (helix, fzf, less, `git rebase -i`, …) receives the
+# raw ESC[1;2D escape and applies its OWN binding — full override, no per-tool
+# config. Engine: vendored jirutka/zsh-shift-select (~/.config/zsh/plugins/).
+# bash gets movement-only parity (no highlight — readline limitation); the two
+# rc files are a parity pair, so the bash side lives in dot_bashrc.tmpl.
+zmodload zsh/parameter zsh/zleparameter 2>/dev/null
+if [[ -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/zsh-shift-select.zsh"
+
+  # Supplement 1 — replace-on-type. The vendored plugin's deselect-and-input
+  # only collapses the selection then re-inputs the key (leaving the selected
+  # text in place). Override it so a single printable key first excises the
+  # selected text via direct $BUFFER slicing (no kill-ring pollution), then the
+  # re-pushed key self-inserts at the collapsed point — i.e. type-to-replace.
+  if (( ${+functions[shift-select::deselect-and-input]} )); then
+    function shift-select::deselect-and-input() {
+      if (( REGION_ACTIVE )) && [[ ${#KEYS} -eq 1 && $KEYS == [[:print:]] ]]; then
+        local from=$MARK to=$CURSOR
+        (( from > to )) && { from=$CURSOR; to=$MARK; }
+        BUFFER="${BUFFER[1,from]}${BUFFER[to+1,-1]}"
+        CURSOR=$from
+      fi
+      zle deactivate-region -w
+      zle -K main
+      zle -U "$KEYS"
+    }
+  fi
+
+  # Supplement 2 — Alt+W (copy-region-as-kill) also copies the selection to the
+  # SYSTEM clipboard via OSC 52, so it works outside the shell and over SSH (the
+  # terminal performs the write). Kill-ring behavior is preserved. No-op without
+  # base64. The OSC 52 bytes are non-printing, so the line display is undisturbed.
+  if (( ${+widgets[copy-region-as-kill]} )) && command -v base64 >/dev/null 2>&1; then
+    function shift-select::copy-osc52() {
+      zle .copy-region-as-kill -w
+      local b64
+      b64=$(printf '%s' "$CUTBUFFER" | base64 | tr -d '\n')
+      print -rn -- $'\e]52;c;'"$b64"$'\a' >/dev/tty 2>/dev/null
+    }
+    zle -N copy-region-as-kill shift-select::copy-osc52
+  fi
+fi
+
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
 export NB_DIR="$HOME/notes"
