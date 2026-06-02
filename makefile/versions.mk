@@ -114,3 +114,11 @@ DOZZLE_VERSION := 10.6.1
 # installer script (scripts/install-nerd-fonts.ps1) — bumping the pin requires
 # editing all three. See the triple-edit invariant in CLAUDE.md.
 JETBRAINSMONO_NERD_VERSION := 3.4.0
+
+# --- Cheatsheets (cheat + cht.sh) -------------------------------------------
+# cheat — offline cheatsheet CLI (cheat/cheat). Non-v tag; release assets are
+# gzipped single binaries (cheat-linux-amd64.gz) which eget decompresses.
+# cht.sh — client for the cheat.sh online service; a rolling raw script (no
+# release), so it has no real version (direct.sh always fetches latest).
+CHEAT_VERSION := 5.1.0
+CHTSH_VERSION := latest

@@ -264,3 +264,20 @@ $(eval $(call USER_TOOL,harlequin,$(HARLEQUIN_VERSION),\
 # alias. cheznav (Python) was tried first but its pip package requires
 # Python 3.14, which AlmaLinux 9's base modules don't ship.
 $(eval $(call EGET_TOOL,chezit,$(CHEZIT_VERSION),daptify14/chezit,,--asset linux_amd64))
+
+# =============================================================================
+# CHEATSHEETS  (cheat — offline CLI; cht.sh — online cheat.sh client)
+# Both join $(SCOPE_TOOLS) → installed on dev AND prod.
+# =============================================================================
+
+# cheat — non-v tag (5.1.0); assets are gzipped single binaries
+# (cheat-linux-amd64.gz). Verified: eget 1.3.4 decompresses the .gz and installs
+# a binary named `cheat` (not the asset name). --asset amd64 excludes the
+# arm5/6/7/arm64 Linux variants published in the same release.
+$(eval $(call EGET_TOOL,cheat,$(CHEAT_VERSION),cheat/cheat,$(CHEAT_VERSION),--asset amd64))
+
+# cht.sh — rolling bash script served at cht.sh/:cht.sh (not a GitHub release),
+# so direct.sh fetches the raw URL and installs it 0755 as `cht.sh`. On an
+# offline host it simply errors at query time; cheat + tldr stay offline-capable.
+$(eval $(call TOOL,cht.sh,$(CHTSH_VERSION),\
+  $(LIB)/direct.sh cht.sh https://cht.sh/:cht.sh))
