@@ -45,6 +45,7 @@ LINUX_OPTIONAL_PACKAGES := \
   htop multitail goaccess \
   nmap mtr \
   parallel pv entr tree strace perf cronie time \
+  rlwrap \
   inotify-tools fswatch \
   man-db man-pages info \
   rsync vim-common vim-enhanced \
