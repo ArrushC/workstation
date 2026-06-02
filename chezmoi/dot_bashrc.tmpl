@@ -88,6 +88,11 @@ fi
 # nothing to initialize here. zsh's parity file calls `compinit` explicitly
 # because zsh has no equivalent system-wide loader.
 
+# PARITY NOTE (cht.sh): cht.sh ships completions for zsh/fish/emacs but NOT bash
+# (upstream has no :bash endpoint), so there is deliberately no cht.sh
+# tab-completion here. zsh gets it via ~/.config/zsh/completions/_cht.sh (see
+# dot_zshrc.tmpl). Same shape as the Shift+Arrow asymmetry below.
+
 # Color filename completion matches using LS_COLORS (readline 7+). The bashrc
 # only runs for interactive shells (the `[[ $- != *i* ]] && return` guard at
 # the top), so `bind` is always safe here.
