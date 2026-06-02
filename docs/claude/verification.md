@@ -5,7 +5,7 @@
 
 After changes:
 - `./scripts/manage-hosts.sh --sync` — regenerates the chezmoi-tracked wezterm sentinel block, no errors.
-- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: 58 scope-tools (incl. `eget` itself), 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call …,…))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced wasn't defined in `versions.mk`.
+- `cd makefile && make list MODE=dev` — should show every managed tool grouped by target: 60 scope-tools (incl. `eget` itself), 3 user-tools, plus claude-cli. If a tool isn't listed, its `$(eval $(call …,…))` line in `tools.mk` didn't expand — usually because the `<NAME>_VERSION` variable referenced wasn't defined in `versions.mk`.
 - `cd makefile && make -n MODE=prod provision` — dry-run prod. Should print "skipping system packages (MODE=prod, INSTALL_PACKAGES=false)" then the tool installs.
 - `cd makefile && make -n MODE=dev provision` — dry-run dev. Should print dnf lines under `sudo`, then EPEL, then optional packages, then tool installs.
 - `cd makefile && make help` — top-level targets. Help-only commands don't trigger `scope.mk`'s error-out.
