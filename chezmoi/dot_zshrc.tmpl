@@ -94,6 +94,11 @@ fi
 # -C skips the .zcompdump security check (faster startup). Rebuild .zcompdump
 # weekly to pick up newly installed completions:
 #   rm -f ~/.zcompdump && exec zsh
+
+# cht.sh ships a zsh completion (#compdef cht.sh) installed to
+# ~/.config/zsh/completions/_cht.sh; add that dir to fpath so compinit
+# autoloads it. MUST precede the compinit call below.
+fpath=("$HOME/.config/zsh/completions" $fpath)
 autoload -Uz compinit && compinit -C
 
 # Color completion menus (filenames) with the same LS_COLORS palette.
