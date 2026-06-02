@@ -6,7 +6,7 @@
 #   EGET_TOOL  — PREFERRED for single-binary GitHub releases. Delegates
 #                to eget which figures out the right asset and layout.
 #                One line per tool: name, version, user/repo[, tag][, extras].
-#                Used by ~41 tools below. Joins $(SCOPE_TOOLS).
+#                Used by ~42 tools below. Joins $(SCOPE_TOOLS).
 #
 #   TOOL       — Direct call to a helper (archive.sh/direct.sh/pipe.sh/
 #                helix.sh). Use for: non-GitHub URLs (ncdu/broot/nb/sysz/
