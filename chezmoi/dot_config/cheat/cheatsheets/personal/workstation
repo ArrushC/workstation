@@ -1,0 +1,27 @@
+# workstation — quick reference for this dev environment.
+# Synced via chezmoi. Edit with:  cheat -e workstation
+
+# --- chezmoi (dotfiles) ---
+cza          # apply tracked dotfiles
+cze <file>   # edit a tracked file in source state
+czd          # diff pending changes
+czu          # update: pull repo + apply
+czs          # status
+czt          # chezit (chezmoi TUI)
+
+# --- zellij (multiplexer) ---
+zj           # zellij
+zjl          # list-sessions
+zja          # attach
+
+# --- cheatsheets ---
+cheat -l                  # list all sheets (personal + community)
+cheat <topic>             # view a sheet (e.g. cheat tar)
+cheat -e <topic>          # create/edit a personal sheet in $EDITOR
+cheat -s <keyword>        # search across sheets
+cht.sh <lang> <query>     # online answer (e.g. cht.sh python 'reverse a list')
+cht.sh --shell            # interactive cheat.sh REPL (rlwrap on dev)
+
+# --- provisioning ---
+make MODE=dev provision   # full provisioning (dev: system-wide, sudo)
+make MODE=prod provision  # per-user provisioning (prod: ~/.local)
