@@ -204,6 +204,76 @@ if [[ -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
   fi
 fi
 
+# --- zsh plugins (load order matters) ----------------------------------------
+# Three vendored, pinned plugins under ~/.config/zsh/plugins/ (see each dir's
+# .vendor for provenance). The order below is LOAD-BEARING:
+#   1. fzf-tab                — after compinit (above) + before widget-wrappers.
+#   2. zsh-autosuggestions    — after fzf-tab.
+#   3. zsh-syntax-highlighting — MUST be sourced LAST: it wraps ZLE widgets and
+#      has to see every widget defined above (incl. the shift-select ones).
+# Each source is [[ -r ]]-guarded so a not-yet-applied host degrades silently.
+# NOTE: these load before ~/.zshrc.local (sourced at the very bottom), so custom
+# ZLE widgets defined in a local override are not picked up by highlighting.
+
+# fzf-tab — replace zsh's default completion menu with an fzf picker. fzf-tab
+# does NOT read $FZF_DEFAULT_OPTS by default, so `use-fzf-default-opts yes` makes
+# the picker inherit the Catppuccin theme set above. `menu no` stops zsh's own
+# menu from racing fzf-tab; the descriptions `format` turns on completion groups
+# that `<` / `>` switch between.
+zstyle ':completion:*' menu no
+zstyle ':completion:*:descriptions' format '[%d]'
+if [[ -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh"
+  zstyle ':fzf-tab:*' use-fzf-default-opts yes
+  zstyle ':fzf-tab:*' switch-group '<' '>'
+fi
+
+# zsh-autosuggestions — fish-style inline history hints. Accept the whole
+# suggestion with → (forward-char) or End. Suggestion color = Catppuccin Mocha
+# overlay0 (a muted grey-blue) so it reads as a hint, not real input.
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#6c7086'
+[[ -r "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] \
+  && source "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+
+# zsh-syntax-highlighting — live command-line coloring. MUST be the last
+# ZLE-touching source. Theme the token styles (Catppuccin Mocha) BEFORE sourcing
+# so they apply on the first prompt; enable the brackets highlighter too.
+ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
+typeset -gA ZSH_HIGHLIGHT_STYLES
+ZSH_HIGHLIGHT_STYLES[default]='fg=#cdd6f4'
+ZSH_HIGHLIGHT_STYLES[unknown-token]='fg=#f38ba8,bold'
+ZSH_HIGHLIGHT_STYLES[reserved-word]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[alias]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[suffix-alias]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[global-alias]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[builtin]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[function]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[command]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[precommand]='fg=#a6e3a1,underline'
+ZSH_HIGHLIGHT_STYLES[commandseparator]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[hashed-command]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[path]='fg=#cdd6f4,underline'
+ZSH_HIGHLIGHT_STYLES[globbing]='fg=#89b4fa'
+ZSH_HIGHLIGHT_STYLES[history-expansion]='fg=#cba6f7'
+ZSH_HIGHLIGHT_STYLES[single-hyphen-option]='fg=#fab387'
+ZSH_HIGHLIGHT_STYLES[double-hyphen-option]='fg=#fab387'
+ZSH_HIGHLIGHT_STYLES[single-quoted-argument]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[double-quoted-argument]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[dollar-quoted-argument]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[command-substitution]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[process-substitution]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[back-quoted-argument]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[comment]='fg=#6c7086,italic'
+ZSH_HIGHLIGHT_STYLES[redirection]='fg=#89dceb'
+ZSH_HIGHLIGHT_STYLES[named-fd]='fg=#89dceb'
+ZSH_HIGHLIGHT_STYLES[arg0]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[bracket-error]='fg=#f38ba8,bold'
+ZSH_HIGHLIGHT_STYLES[bracket-level-1]='fg=#89b4fa,bold'
+ZSH_HIGHLIGHT_STYLES[bracket-level-2]='fg=#a6e3a1,bold'
+ZSH_HIGHLIGHT_STYLES[bracket-level-3]='fg=#f9e2af,bold'
+[[ -r "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] \
+  && source "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
 export NB_DIR="$HOME/notes"

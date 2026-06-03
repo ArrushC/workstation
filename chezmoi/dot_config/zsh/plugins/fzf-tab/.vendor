@@ -10,6 +10,7 @@ files:          fzf-tab.zsh + lib/  (modules/ deliberately omitted — optional 
                 fzf-tab.zsh for completion colorizing; its demo + README.md were dropped
                 (docs only, no runtime references).
 note:           Leading-dot .vendor → chezmoi-ignored; provenance only, never deployed.
-                Sourcing fzf-tab.zsh auto-calls enable-fzf-tab. Inherits FZF_DEFAULT_OPTS theme.
+                Sourcing fzf-tab.zsh auto-calls enable-fzf-tab. Picker theming needs the rc's
+                `use-fzf-default-opts yes` zstyle (fzf-tab ignores FZF_DEFAULT_OPTS by default).
                 Bump: re-run the ls-remote tag check, re-download, refresh tag + tarball sha256
                 here; re-drop lib/zsh-ls-colors/{demo,README.md} (docs only).
