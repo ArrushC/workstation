@@ -1,0 +1,12 @@
+plugin:         zsh-syntax-highlighting
+upstream:       https://github.com/zsh-users/zsh-syntax-highlighting
+tag:            0.8.0
+tarball:        https://github.com/zsh-users/zsh-syntax-highlighting/archive/refs/tags/0.8.0.tar.gz
+tarball-sha256: 5981c19ebaab027e356fe1ee5284f7a021b89d4405cc53dc84b476c3aee9cc32
+license:        BSD-3-Clause
+vendored:       2026-06-03
+files:          zsh-syntax-highlighting.zsh + highlighters/{main,brackets,pattern,cursor,line,regexp,root}/
+                dot_version (deploys as .version → populates $ZSH_HIGHLIGHT_VERSION), if present upstream
+note:           Leading-dot .vendor → chezmoi-ignored; provenance only, never deployed.
+                Entry uses ${0:A:h} to find highlighters/ — keep the tree intact.
+                Bump: re-download the new tag tarball, replace files, refresh tag + tarball sha256 here.
