@@ -6,7 +6,12 @@ tarball-sha256: 5981c19ebaab027e356fe1ee5284f7a021b89d4405cc53dc84b476c3aee9cc32
 license:        BSD-3-Clause
 vendored:       2026-06-03
 files:          zsh-syntax-highlighting.zsh + highlighters/{main,brackets,pattern,cursor,line,regexp,root}/
-                dot_version (deploys as .version → populates $ZSH_HIGHLIGHT_VERSION), if present upstream
+                dot_version + dot_revision-hash (deploy as .version / .revision-hash → populate
+                $ZSH_HIGHLIGHT_VERSION / _REVISION). The entry reads BOTH at load (no 2>/dev/null on
+                the .revision-hash read), so a missing .revision-hash prints to stderr every startup —
+                keep both vendored.
 note:           Leading-dot .vendor → chezmoi-ignored; provenance only, never deployed.
                 Entry uses ${0:A:h} to find highlighters/ — keep the tree intact.
-                Bump: re-download the new tag tarball, replace files, refresh tag + tarball sha256 here.
+                Bump: re-download the new tag tarball, replace files (incl. dot_version +
+                dot_revision-hash from upstream .version / .revision-hash), refresh tag + tarball
+                sha256 here.
