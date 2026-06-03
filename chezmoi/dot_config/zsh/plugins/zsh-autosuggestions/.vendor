@@ -1,0 +1,10 @@
+plugin:         zsh-autosuggestions
+upstream:       https://github.com/zsh-users/zsh-autosuggestions
+tag:            v0.7.1
+tarball:        https://github.com/zsh-users/zsh-autosuggestions/archive/refs/tags/v0.7.1.tar.gz
+tarball-sha256: 0df7affff21cd87ed298e6a3970ed08a1dd66a6efa676454ee5b091ad503badf
+license:        MIT
+vendored:       2026-06-03
+files:          zsh-autosuggestions.zsh  (single combined upstream distributable, verbatim)
+note:           Leading-dot filename → chezmoi-ignored; provenance only, never deployed.
+                Bump: re-download the new tag, replace the .zsh, refresh tag + sha256 here.
