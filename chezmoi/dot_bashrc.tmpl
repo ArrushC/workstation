@@ -93,6 +93,15 @@ fi
 # tab-completion here. zsh gets it via ~/.config/zsh/completions/_cht.sh (see
 # dot_zshrc.tmpl). Same shape as the Shift+Arrow asymmetry below.
 
+# PARITY NOTE (zsh plugins): zsh additionally loads three interactive prompt
+# plugins — fzf-tab (fzf-driven Tab completion menu), zsh-autosuggestions
+# (fish-style inline history hints) and zsh-syntax-highlighting (live command
+# coloring); see dot_zshrc.tmpl. All three require zsh's ZLE; bash's readline has
+# no equivalent without a heavy third-party layer (ble.sh), so there is
+# deliberately no bash counterpart. Same shape as the cht.sh asymmetry above and
+# the Shift+Arrow asymmetry below. bash keeps colored completion via the
+# colored-stats binding just below + the system bash-completion package.
+
 # Color filename completion matches using LS_COLORS (readline 7+). The bashrc
 # only runs for interactive shells (the `[[ $- != *i* ]] && return` guard at
 # the top), so `bind` is always safe here.
