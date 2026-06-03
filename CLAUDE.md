@@ -80,6 +80,7 @@ README documents the *what*; these are the *why* and the failure modes. Each exi
 - **`configs/` is sudo-installed to `/etc/`, NOT chezmoi-managed** — deployed by paired `<tool>-service` make targets (`dozzle-service`, `cockpit-service`). Chezmoi owns `$HOME` only.
 - **`config.term='wezterm'` ↔ wezterm-terminfo install chain** — four artifacts move together (`ncurses` package, vendored `.terminfo`, `run_onchange` script, `config.term` flip), or TUIs error on stale hosts.
 - **SSH multiplexing is gated out on Windows** — the `ControlMaster`/`ControlPersist`/`ControlPath` block in `private_config.tmpl` sits under `{{ if ne .chezmoi.os "windows" }}`. Windows OpenSSH can't multiplex (breaks every ssh incl. git). Linux/macOS keep it.
+- **zsh interactive plugin load order** — in `dot_zshrc.tmpl`: fzf-tab sourced after `compinit`; **zsh-syntax-highlighting sourced LAST** (it wraps ZLE widgets, must see all prior ones incl. shift-select); zsh-autosuggestions between. Reorder → highlighting/suggestions silently break. fzf-tab needs `use-fzf-default-opts yes` to inherit the Catppuccin `FZF_DEFAULT_OPTS`. These are zsh-only — `dot_bashrc.tmpl` carries a PARITY NOTE.
 
 ## Conventions and rules of thumb
 
@@ -101,7 +102,7 @@ Per-file gotchas live in **`docs/claude/file-care.md`** — read a file's entry 
 
 - **LF-only + mode 100755 in git:** `makefile/lib/*.sh`, `scripts/update-hosts.sh`, `scripts/manage-hosts.sh`, `scripts/setup-ccstatusline.sh`. CRLF or mode 100644 breaks fresh clones (`sudo: archive.sh: command not found`). Repair one-liners in Conventions above.
 - **UTF-8 with BOM (PowerShell 5.1):** `scripts/manage-hosts.ps1`, `bootstrap.ps1`, `scripts/install-nerd-fonts.ps1`. Restore one-liner in Conventions above.
-- **Vendored — don't hand-edit; re-download at the pinned tag + refresh sha256:** `chezmoi/dot_local/share/wezterm/wezterm.terminfo`, `chezmoi/dot_config/zsh/plugins/zsh-shift-select.zsh`, `chezmoi/dot_config/zsh/completions/_cht.sh` (rolling — no upstream tag; bump by snapshot date + sha256, `#compdef cht.sh` stays line 1).
+- **Vendored — don't hand-edit; re-download at the pinned tag + refresh sha256:** `chezmoi/dot_local/share/wezterm/wezterm.terminfo`, `chezmoi/dot_config/zsh/plugins/zsh-shift-select.zsh`, `chezmoi/dot_config/zsh/completions/_cht.sh` (rolling — no upstream tag; bump by snapshot date + sha256, `#compdef cht.sh` stays line 1). Also the three pinned zsh plugin dirs `chezmoi/dot_config/zsh/plugins/{zsh-autosuggestions,zsh-syntax-highlighting,fzf-tab}/` — verbatim upstream, provenance in each dir's chezmoi-ignored `.vendor` sidecar; bump = re-download the pinned tag + refresh sha256 in `.vendor`.
 - **Sentinel blocks (auto-generated; never edit inside):** `wezterm.lua` (`-- HOSTS:START/END`), `chezmoi/.chezmoiignore.tmpl` (`# CCSTATUSLINE:START/END`).
 - **Parity pairs (change both in the same commit):** `dot_zshrc.tmpl` ↔ `dot_bashrc.tmpl`; `manage-hosts.sh` ↔ `manage-hosts.ps1`.
 - **Version-pin dual/triple-edits:** `CCSTATUSLINE_VERSION` (`versions.mk` + `private_settings.json.tmpl`); `JETBRAINSMONO_NERD_VERSION` (`versions.mk` + `lib/font.sh` + `install-nerd-fonts.ps1`); `HELIX_RUNTIME` rc literal ↔ `HELIX_RUNTIME_DEST` in `scope.mk`.

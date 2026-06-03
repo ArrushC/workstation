@@ -89,6 +89,9 @@
                             <li>
                                 <a href="#prompt-keys">Shell prompt selection</a>
                             </li>
+                            <li>
+                                <a href="#completion">Completion &amp; suggestions</a>
+                            </li>
                         </ol>
                     </li>
                     <li><a href="#hosts">Host management</a></li>
@@ -2256,6 +2259,63 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                     Copy / cut / paste selection (zsh) — copy
                                     also reaches the system clipboard via OSC 52,
                                     including over SSH
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 id="completion">Completion &amp; suggestions</h3>
+                    <p class="lede">
+                        The <code>zsh</code> prompt loads three vendored,
+                        pinned plugins from
+                        <code>~/.config/zsh/plugins/</code> — zsh-only (bash
+                        keeps system completion); deploy on both dev and prod;
+                        Windows-ignored.
+                    </p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Plugin</th>
+                                <th>What it does</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <strong>zsh-autosuggestions</strong>
+                                    v0.7.1
+                                </td>
+                                <td>
+                                    A greyed-out suggestion from history
+                                    appears as you type — press
+                                    <kbd>&rarr;</kbd> or <kbd>End</kbd> to
+                                    accept it. Themed Catppuccin overlay0
+                                    (<code>#6c7086</code>).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>zsh-syntax-highlighting</strong>
+                                    0.8.0
+                                </td>
+                                <td>
+                                    Live command-line coloring as you type —
+                                    unknown commands in red, valid ones in
+                                    green, quoted strings and paths
+                                    distinguished. Themed Catppuccin Mocha.
+                                    Sourced last (it wraps ZLE widgets).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>fzf-tab</strong> v1.3.0
+                                </td>
+                                <td>
+                                    <kbd>Tab</kbd> becomes an fzf picker that
+                                    reuses the same Catppuccin theme as
+                                    <kbd>Ctrl-R</kbd> / <kbd>Ctrl-T</kbd>.
+                                    <kbd>&lt;</kbd> / <kbd>&gt;</kbd> switch
+                                    between completion groups.
                                 </td>
                             </tr>
                         </tbody>
