@@ -219,13 +219,40 @@ fi
 # does NOT read $FZF_DEFAULT_OPTS by default, so `use-fzf-default-opts yes` makes
 # the picker inherit the Catppuccin theme set above. `menu no` stops zsh's own
 # menu from racing fzf-tab; the descriptions `format` turns on completion groups
-# that `<` / `>` switch between.
+# that `<` / `>` switch between. `special-dirs ..` surfaces the `..` entry so it
+# can be used to walk UP a directory (see continuous-trigger below).
 zstyle ':completion:*' menu no
 zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*' special-dirs '..'
 if [[ -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
   source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh"
   zstyle ':fzf-tab:*' use-fzf-default-opts yes
   zstyle ':fzf-tab:*' switch-group '<' '>'
+
+  # Preview the highlighted candidate: directory → eza listing, file → bat.
+  # $realpath is exported by fzf-tab for file/dir completions (empty for others,
+  # so non-path completions just show a blank preview — harmless). Ctrl-/ toggles
+  # the preview window (bound via FZF_DEFAULT_OPTS); --preview-window sizes it.
+  zstyle ':fzf-tab:complete:*:*' fzf-preview '
+    if   [[ -d $realpath ]]; then eza -1 --color=always --icons=auto -- "$realpath"
+    elif [[ -f $realpath ]]; then bat --color=always --style=numbers --line-range=:200 -- "$realpath"
+    else echo "$realpath"; fi'
+  zstyle ':fzf-tab:*' fzf-min-height 15
+  zstyle ':fzf-tab:*' fzf-flags --preview-window='right:55%:wrap'
+
+  # Continuous completion on Tab: pressing Tab on a highlighted directory accepts
+  # it and re-opens completion for its children in the SAME window (descend);
+  # Enter accepts and stops. To walk UP a level, highlight the `..` entry (added
+  # by `special-dirs` above) and press Tab. Move within the list with ↑/↓.
+  #
+  # fzf resolves a key bound via --bind BEFORE --expect, and fzf-tab's default
+  # binds include `tab:down`; so for `--expect=tab` (the continuous trigger) to
+  # actually fire we must replace fzf-bindings-default with the v1.3.0 default
+  # set MINUS `tab:down`. (Pinned to fzf-tab v1.3.0 — re-check on a version bump.)
+  zstyle ':fzf-tab:*' continuous-trigger 'tab'
+  zstyle ':fzf-tab:*' fzf-bindings-default \
+    'btab:up' 'change:top' 'ctrl-space:toggle' \
+    'bspace:backward-delete-char/eof' 'ctrl-h:backward-delete-char/eof'
 fi
 
 # zsh-autosuggestions — fish-style inline history hints. Accept the whole
