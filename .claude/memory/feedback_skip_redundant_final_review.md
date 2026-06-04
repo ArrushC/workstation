@@ -15,4 +15,6 @@ When executing a plan via [[using-superpowers]] + subagent-driven-development, t
 
 This applies specifically when per-task reviews were already done; the rule does NOT relax review rigor for tasks where reviewers weren't dispatched.
 
+**Also skip the per-task _code-quality_ (second) stage for pure documentation changes.** Confirmed in-session (2026-06-03, the zsh prompt-plugin work): on a docs-only task (README + CLAUDE.md + file-care + changelog), the spec-compliance reviewer already verifies markup validity, structure-matching, factual accuracy, and "only-intended-files-changed" — the user interrupted the follow-up code-quality agent as redundant. So for tasks that only touch prose/docs (no code, no shell logic, no templates with behavior), run the spec-compliance review and then stop; do not dispatch the code-quality stage. Code/logic/template tasks still get BOTH stages — and the code-quality stage earned its keep this session by catching a real bug (fzf-tab not inheriting `FZF_DEFAULT_OPTS` without `use-fzf-default-opts yes`), so keep it for anything executable.
+
 Also consider [[also auto-commit-everything-routinely]] — already in MEMORY.md — same general "less ceremony" philosophy.
