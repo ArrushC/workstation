@@ -219,14 +219,9 @@ fi
 # does NOT read $FZF_DEFAULT_OPTS by default, so `use-fzf-default-opts yes` makes
 # the picker inherit the Catppuccin theme set above. `menu no` stops zsh's own
 # menu from racing fzf-tab; the descriptions `format` turns on completion groups
-# that `<` / `>` switch between. The cd-scoped `fake-files` line injects a `../`
-# entry into `cd` completion so it can be used to walk UP a directory (see
-# continuous-trigger below). NOTE: the more obvious `special-dirs ..` does NOT
-# surface `..` for an empty-prefix `cd ` on zsh 5.8 (verified) — fake-files does,
-# and renders it as `../` (a real dir, so Tab descends into it = ascend).
+# that `<` / `>` switch between.
 zstyle ':completion:*' menu no
 zstyle ':completion:*:descriptions' format '[%d]'
-zstyle ':completion:*:cd:*' fake-files '*:..'
 if [[ -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
   source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh"
   zstyle ':fzf-tab:*' use-fzf-default-opts yes
@@ -245,8 +240,10 @@ if [[ -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
 
   # Continuous completion on Tab: pressing Tab on a highlighted directory accepts
   # it and re-opens completion for its children in the SAME window (descend);
-  # Enter accepts and stops. To walk UP a level, highlight the `../` entry (added
-  # by the cd fake-files line above) and press Tab. Move within the list with ↑/↓.
+  # Enter accepts and stops. Move within the list with ↑/↓. (Going UP a level is
+  # deliberately not offered here: fzf-tab's trigger only ever APPENDS, so a `..`
+  # entry accretes an ugly `../../` chain instead of navigating cleanly — use
+  # `cd ..`, `cd -`, or zoxide `zi` to go up.)
   #
   # fzf resolves a key bound via --bind BEFORE --expect, and fzf-tab's default
   # binds include `tab:down`; so for `--expect=tab` (the continuous trigger) to
