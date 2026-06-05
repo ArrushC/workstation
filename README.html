@@ -2266,11 +2266,14 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 
                     <h3 id="completion">Completion &amp; suggestions</h3>
                     <p class="lede">
-                        The <code>zsh</code> prompt loads three vendored,
+                        The <code>zsh</code> prompt loads five vendored,
                         pinned plugins from
                         <code>~/.config/zsh/plugins/</code> — zsh-only (bash
-                        keeps system completion); deploy on both dev and prod;
-                        Windows-ignored.
+                        keeps system completion + readline history search);
+                        deploy on both dev and prod; Windows-ignored. Three
+                        wired tools — <strong>atuin</strong>,
+                        <strong>broot</strong>, <strong>yazi</strong> — round
+                        out history search and directory navigation.
                     </p>
                     <table>
                         <thead>
@@ -2315,11 +2318,49 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                     reuses the same Catppuccin theme as
                                     <kbd>Ctrl-R</kbd> / <kbd>Ctrl-T</kbd>.
                                     <kbd>&lt;</kbd> / <kbd>&gt;</kbd> switch
-                                    between completion groups.
+                                    between completion groups, and <kbd>Tab</kbd>
+                                    on a directory descends into it. Files
+                                    preview with <code>bat</code>, directories
+                                    with <code>eza</code>.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>zsh-history-substring-search</strong>
+                                    v1.1.0
+                                </td>
+                                <td>
+                                    Type part of a past command, then
+                                    <kbd>&uarr;</kbd> / <kbd>&darr;</kbd> walk
+                                    through the history entries containing it.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>zsh-you-should-use</strong> 1.11.1
+                                </td>
+                                <td>
+                                    After you run a command that has an alias
+                                    defined, prints a reminder to use the alias
+                                    (e.g. <code>💡 gs</code>) — soft mode, it
+                                    never blocks.
                                 </td>
                             </tr>
                         </tbody>
                     </table>
+                    <p>
+                        Resulting prompt key map:
+                        <kbd>Ctrl-R</kbd> atuin history search ·
+                        <kbd>&uarr;</kbd>/<kbd>&darr;</kbd> substring history ·
+                        <kbd>&rarr;</kbd> accept suggestion ·
+                        <kbd>Tab</kbd> fzf completion ·
+                        <kbd>Shift</kbd>+arrows select. For directory
+                        navigation: <code>z</code>/<code>zi</code> (zoxide),
+                        <code>br</code> (broot fuzzy tree &rarr; cd),
+                        <code>y</code> (yazi file manager &rarr; cd). atuin and
+                        the five plugins are zsh-only;
+                        <code>br</code>/<code>y</code> work in bash too.
+                    </p>
                 </section>
 
                 <section id="hosts">
