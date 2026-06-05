@@ -44,9 +44,10 @@ function .. { Set-Location .. }
 function ... { Set-Location ../.. }
 
 # --- workstation helpers ----------------------------------------------------
-# Quick path to the workstation repo. Override in $PROFILE.local if cloned
-# somewhere other than C:\Git\workstation.
-$env:WORKSTATION_REPO = "C:\Git\workstation"
+# Quick path to the workstation repo. Defaults to bootstrap.ps1's default
+# clone path; override in $PROFILE.local if you cloned somewhere else
+# (e.g. via bootstrap.ps1 -RepoPath).
+$env:WORKSTATION_REPO = Join-Path $env:USERPROFILE ".local\share\chezmoi"
 
 function Edit-Hosts {
     & "$env:WORKSTATION_REPO\scripts\manage-hosts.ps1"
