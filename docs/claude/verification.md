@@ -20,7 +20,7 @@ After changes:
 - `bootstrap.sh --dev` *inside WSL* — no `hosts.conf` changes, prints "Detected WSL — skipping hosts.conf self-registration", final tip is WSL-specific.
 - Fresh WSL tab after Windows `chezmoi apply` — `pwd` is `/home/<user>`, not `/mnt/c/...`.
 - Inside WSL tab, `CTRL+SHIFT+T` — pre-bootstrap lands in `~`; post-bootstrap (OSC 7 active) `cd /tmp` then new-tab lands in `/tmp`.
-- `bootstrap.ps1` on fresh Windows (elevated PowerShell) — choco bootstraps, tracked tools install, chezmoi applies, wezterm picks up deployed config.
+- `bootstrap.ps1` on fresh Windows (no admin) — git prerequisite check (hard-fail with install link if absent), chezmoi (official `get.chezmoi.io` installer) + WezTerm + Starship install admin-free under `%LOCALAPPDATA%\workstation\` and join the User PATH, chezmoi applies, wezterm picks up deployed config. PS syntax-parse: `powershell -NoProfile -Command "[void][System.Management.Automation.Language.Parser]::ParseFile('bootstrap.ps1',[ref]$null,[ref]$null);'ok'"`.
 - `git diff README.html docs/README/README.css docs/README/README.js` — verify user-facing surface still matches reality. Open in a browser — primitives (tabs, flow chips, accordion filter) must render, not just diff cleanly. If unstyled, the asset paths in `README.html` (`href="docs/README/README.css"`, `src="docs/README/README.js"`) are wrong or the files were moved out of `docs/README/`.
 - `cd makefile && make list MODE=dev` — `services` block lists `dozzle-service` + `cockpit-service`. Dozzle is NOT in scope-tools (no EGET_TOOL).
 - `cd makefile && make -n MODE=dev provision | grep -E '(dozzle-service|cockpit-service)'` — both targets fire (2+ matched lines).
