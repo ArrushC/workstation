@@ -128,6 +128,18 @@ bind '"\e[1;6C": forward-word'       # Shift + Ctrl + Right
 bind '"\e[1;6H": beginning-of-line'  # Shift + Ctrl + Home
 bind '"\e[1;6F": end-of-line'        # Shift + Ctrl + End
 
+# PARITY NOTE (history search / you-should-use): zsh loads
+# zsh-history-substring-search (↑/↓ walk history entries matching the typed text)
+# and zsh-you-should-use (alias-usage nudge) — both zsh-only (ZLE / preexec; see
+# dot_zshrc.tmpl). readline has a built-in near-equivalent of the first: bind ↑/↓
+# to history-search-backward/forward so a typed prefix filters history (an empty
+# line falls back to plain previous/next — a strict superset of the default;
+# bash does PREFIX search vs zsh's SUBSTRING). you-should-use has no bash analog.
+bind '"\e[A": history-search-backward'   # Up   — prefix-filtered history
+bind '"\e[B": history-search-forward'    # Down — prefix-filtered history
+bind '"\eOA": history-search-backward'   # Up   (application cursor mode)
+bind '"\eOB": history-search-forward'    # Down (application cursor mode)
+
 # --- fzf ---------------------------------------------------------------------
 export FZF_DEFAULT_OPTS="
   --height 40%
