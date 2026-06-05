@@ -332,6 +332,12 @@ export YSU_MESSAGE_POSITION="after"
 # (`^[[A`) and application-mode (`^[OA`) forms, plus the terminfo variants; atuin
 # left ↑/↓ free via --disable-up-arrow above.
 if [[ -r "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]]; then
+  # Themed match highlight (Catppuccin Mocha). The plugin's defaults are a harsh
+  # magenta/red background that clashes with the WezTerm theme; set these BEFORE
+  # sourcing (the plugin uses `: ${VAR=default}`, so a pre-set value wins).
+  # surface1 bg + green/red fg signal found / not-found.
+  typeset -g HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND='bg=#45475a,fg=#a6e3a1,bold'
+  typeset -g HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND='bg=#45475a,fg=#f38ba8,bold'
   source "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh"
   zmodload zsh/terminfo 2>/dev/null
   bindkey '^[[A' history-substring-search-up
