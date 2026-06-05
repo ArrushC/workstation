@@ -6,43 +6,45 @@
 // To see all of Zed's default settings without changing your
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
-// 
+//
 // Chezmoi-managed:
 // Run `chezmoi add %APPDATA%\Zed\settings.json` to overwrite with your
 // current Zed config, or edit this file via `chezmoi edit` and then
 // `chezmoi apply`.
 {
-  "ui_font_family": ".ZedSans",
+  "buffer_font_weight": 400.0,
+  "ui_font_family": "JetBrains Mono",
   "buffer_font_family": "JetBrainsMono Nerd Font Mono",
   "diagnostics": {
     "inline": {
-      "enabled": false
-    }
+      "enabled": false,
+    },
   },
   "scrollbar": {
-    "diagnostics": "all"
+    "diagnostics": "all",
   },
   "auto_signature_help": true,
   "sticky_scroll": {
-    "enabled": true
+    "enabled": true,
   },
   "which_key": {
-    "enabled": false
+    "enabled": false,
   },
   "inlay_hints": {
     "show_parameter_hints": false,
     "show_background": false,
-    "enabled": true
+    "enabled": true,
   },
   "code_lens": "on",
   "proxy": "",
   "toolbar": {
     "code_actions": true,
-    "breadcrumbs": true
+    "breadcrumbs": true,
   },
   "cli_default_open_behavior": "existing_window",
   "outline_panel": {
-    "dock": "left"
+    "button": false,
+    "dock": "left",
   },
   "diff_view_style": "split",
   "gutter": {
@@ -81,9 +83,9 @@
     "detect_venv": {
       "on": {
         "directories": [".venv", "venv", "env", ".env"],
-        "activate_script": "default"
-      }
-    }
+        "activate_script": "default",
+      },
+    },
   },
   "debugger": {
     "button": false,
@@ -128,6 +130,7 @@
     },
   },
   "agent": {
+    "sidebar_side": "right",
     "dock": "left",
     "play_sound_when_agent_done": "always",
     "model_parameters": [],
@@ -148,6 +151,7 @@
     "git_status": true,
   },
   "project_panel": {
+    "bold_folder_labels": false,
     "hide_root": false,
     "git_status": true,
     "git_status_indicator": true,
@@ -181,7 +185,7 @@
   "theme": {
     "mode": "dark",
     "light": "Gruvbox Light",
-    "dark": "Ayu Dark",
+    "dark": "Catppuccin Mocha",
   },
   "lsp": {
     "clangd": {
