@@ -57,7 +57,10 @@ preflight() {
 # Manages per-host opt-out lines between # CCSTATUSLINE:START / END markers
 # inside chezmoi/.chezmoiignore.tmpl. Each opted-out host contributes one
 # line of the form:
-#   {{ if eq .chezmoi.hostname "<host>" }}dot_config/ccstatusline/settings.json{{ end }}
+#   {{ if eq .chezmoi.hostname "<host>" }}.config/ccstatusline/settings.json{{ end }}
+# NOTE: the path is the TARGET path (.config/ccstatusline/...), not the
+# source-state name (dot_config/...) — chezmoi matches .chezmoiignore against
+# target paths, so the dot_ form would silently match nothing.
 
 sentinel_contains() {
   local host="$1"
@@ -73,7 +76,7 @@ sentinel_add() {
   local host="$1"
   if sentinel_contains "$host"; then return 0; fi
   local stanza
-  stanza="$(printf '{{ if eq .chezmoi.hostname "%s" }}dot_config/ccstatusline/settings.json{{ end }}' "$host")"
+  stanza="$(printf '{{ if eq .chezmoi.hostname "%s" }}.config/ccstatusline/settings.json{{ end }}' "$host")"
   local tmp
   tmp="$(mktemp)"
   awk -v end="$SENTINEL_END" -v stanza="$stanza" '

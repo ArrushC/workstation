@@ -1,28 +1,38 @@
 {{/*
 .chezmoiignore — files chezmoi skips when applying to the target machine.
 Templated so Linux- and Windows-only files are scoped to their OS.
-Paths are relative to the chezmoi source state root (this directory),
-which is configured via .chezmoiroot at the repo root.
+Paths are relative to the target $HOME (the destination), NOT the source dir.
+
+IMPORTANT: chezmoi matches these patterns against the TARGET path (e.g.
+`.bashrc`, `.config/zsh`, `.claude`), NOT the source-state name
+(`dot_bashrc.tmpl`, `dot_config/zsh`, `private_dot_claude`). Writing the
+source-state form is a SILENT no-op — chezmoi matches nothing and deploys the
+file anyway. Always use the target path here (strip the `dot_`/`private_dot_`
+prefix → `.`, drop the `.tmpl` suffix). See CLAUDE.md's ".chezmoiignore.tmpl
+patterns are target paths" tripwire.
 */}}
 
 # --- Local machine overrides — never tracked --------------------------------
-dot_bashrc.local
-dot_config/workstation.local.ps1
+.bashrc.local
+.config/workstation.local.ps1
 Documents/PowerShell/Microsoft.PowerShell_profile.local.ps1
 Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 
 {{ if eq .chezmoi.os "windows" }}
 # --- On Windows, ignore Linux-only dotfiles ---------------------------------
-dot_bashrc.tmpl
-dot_nbrc
-dot_dircolors
-dot_config/cheat
-dot_config/helix
-dot_config/zellij
-dot_config/zsh
-# dot_local/bin holds the vendored batpipe bash script (bat-highlighted less),
-# useless on Windows — don't deposit it in %USERPROFILE%.
-dot_local/bin
+.bashrc
+.zshrc
+.nbrc
+.dircolors
+.config/cheat
+.config/helix
+.config/tealdeer
+.config/zellij
+.config/zsh
+# ~/.local holds the vendored batpipe bash script (.local/bin) and the Linux
+# wezterm terminfo (.local/share/wezterm) — both useless on Windows, so skip
+# all of ~/.local rather than depositing it in %USERPROFILE%.
+.local
 # .chezmoiscripts/ entries cannot be ignored via .chezmoiignore — chezmoi
 # treats scripts specially (no destination path). The Linux-only init script
 # is gated inside the file via .tmpl with an OS-conditional that renders
@@ -32,7 +42,7 @@ dot_local/bin
 # without chezmoi needing to deploy a copy to %USERPROFILE%\.config\wezterm\.
 # This eliminates the pre-v2 hardlink dance (which broke on chezmoi
 # atomic-writes). See "WEZTERM_CONFIG_FILE" notes in CLAUDE.md + README.html.
-dot_config/wezterm
+.config/wezterm
 {{ else }}
 # --- On Linux/macOS, ignore Windows-only paths ------------------------------
 AppData
@@ -40,7 +50,7 @@ Documents
 # wezterm.lua is the Windows client's terminal config; the Linux hosts run no
 # GUI / WezTerm, so we don't apply it there. Remove this line if you ever
 # want WezTerm config on a Linux desktop.
-dot_config/wezterm
+.config/wezterm
 {{ end }}
 
 {{/*
@@ -54,8 +64,8 @@ hosts continue to receive the files as before; once they re-init (or
 re-bootstrap), the gate engages correctly.
 */}}
 {{ if and (hasKey . "group") (ne .group "dev_machine") }}
-private_dot_claude
-dot_config/ccstatusline
+.claude
+.config/ccstatusline
 {{ end }}
 
 {{/*
@@ -63,7 +73,7 @@ Per-host opt-out of the chezmoi-tracked ccstatusline widget config.
 Managed by scripts/setup-ccstatusline.sh — hand-edits between markers
 get clobbered on the next prompt run. Each host that picks "this
 machine + persist=y" gets a single-line entry of the form:
-  {{ "{{" }} if eq .chezmoi.hostname "name" {{ "}}" }}dot_config/ccstatusline/settings.json{{ "{{" }} end {{ "}}" }}
+  {{ "{{" }} if eq .chezmoi.hostname "name" {{ "}}" }}.config/ccstatusline/settings.json{{ "{{" }} end {{ "}}" }}
 */}}
 # CCSTATUSLINE:START
 # CCSTATUSLINE:END
