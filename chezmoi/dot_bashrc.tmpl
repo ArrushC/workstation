@@ -153,10 +153,24 @@ else
   export FZF_DEFAULT_COMMAND='find . -type f -not -path "*/.git/*"'
 fi
 
+# PARITY NOTE (atuin): atuin's searchable Ctrl-R history is wired for zsh only
+# (see dot_zshrc.tmpl). atuin's bash integration needs bash-preexec or ble.sh to
+# record commands reliably (its preexec backend reports "none" without one), so
+# it's deliberately left out of this fallback shell rather than vendoring that
+# dependency. To opt in per-host: install bash-preexec, then add
+# `eval "$(atuin init bash)"` to ~/.bashrc.local.
+
 # --- zoxide (smarter cd) -----------------------------------------------------
 if command -v zoxide &>/dev/null; then
   eval "$(zoxide init bash)"
   # z = jump, zi = interactive fuzzy jump
+fi
+
+# --- broot (fuzzy directory tree → cd) ---------------------------------------
+# `br` opens broot; filter/navigate the tree and Enter cd's to the chosen dir.
+# First run creates ~/.config/broot. (Parity with dot_zshrc.tmpl.)
+if command -v broot &>/dev/null; then
+  eval "$(broot --print-shell-function bash)"
 fi
 
 # --- starship prompt ---------------------------------------------------------
@@ -301,6 +315,17 @@ nf() {
   local file
   file=$(find "$NB_DIR" -name "*.md" 2>/dev/null | fzf --preview 'glow {}')
   [[ -n "$file" ]] && glow "$file"
+}
+
+# yazi file manager — `y` opens it; on quit, cd to wherever you ended up.
+y() {
+  local tmp cwd
+  tmp="$(mktemp -t yazi-cwd.XXXXXX)"
+  yazi "$@" --cwd-file="$tmp"
+  if cwd="$(command cat -- "$tmp")" && [[ -n "$cwd" && "$cwd" != "$PWD" ]]; then
+    builtin cd -- "$cwd"
+  fi
+  command rm -f -- "$tmp"
 }
 
 # --- Machine-specific overrides ----------------------------------------------

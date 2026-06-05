@@ -129,10 +129,27 @@ else
   export FZF_DEFAULT_COMMAND='find . -type f -not -path "*/.git/*"'
 fi
 
+# --- atuin (searchable shell history) ----------------------------------------
+# SQLite-backed history with a fuzzy Ctrl-R UI (filter by dir/host/exit code).
+# Sourced AFTER fzf above so atuin owns Ctrl-R; `--disable-up-arrow` leaves ↑/↓
+# free for zsh-history-substring-search (plugins block below). Local-only by
+# default — no account/sync unless you run `atuin login`. First run on a host
+# imports existing history via `atuin import auto`.
+if command -v atuin &>/dev/null; then
+  eval "$(atuin init zsh --disable-up-arrow)"
+fi
+
 # --- zoxide (smarter cd) -----------------------------------------------------
 if command -v zoxide &>/dev/null; then
   eval "$(zoxide init zsh)"
   # z = jump, zi = interactive fuzzy jump
+fi
+
+# --- broot (fuzzy directory tree → cd) ---------------------------------------
+# `br` opens broot; filter/navigate the tree and Enter cd's to the chosen dir
+# (the function captures broot's --outcmd). First run creates ~/.config/broot.
+if command -v broot &>/dev/null; then
+  eval "$(broot --print-shell-function zsh)"
 fi
 
 # --- starship prompt ---------------------------------------------------------
@@ -424,6 +441,17 @@ nf() {
   local file
   file=$(find "$NB_DIR" -name "*.md" 2>/dev/null | fzf --preview 'glow {}')
   [[ -n "$file" ]] && glow "$file"
+}
+
+# yazi file manager — `y` opens it; on quit, cd to wherever you ended up.
+y() {
+  local tmp cwd
+  tmp="$(mktemp -t yazi-cwd.XXXXXX)"
+  yazi "$@" --cwd-file="$tmp"
+  if cwd="$(command cat -- "$tmp")" && [[ -n "$cwd" && "$cwd" != "$PWD" ]]; then
+    builtin cd -- "$cwd"
+  fi
+  command rm -f -- "$tmp"
 }
 
 # --- Machine-specific overrides ----------------------------------------------
