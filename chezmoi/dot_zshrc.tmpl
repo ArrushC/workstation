@@ -56,6 +56,14 @@ if command -v bat &>/dev/null; then
 else
   export MANPAGER="less"
 fi
+# bat-highlighted `less`: batpipe (eth-p/bat-extras) as the LESSOPEN preprocessor.
+# `eval "$(batpipe)"` sets LESSOPEN->batpipe, appends -R to LESS, and sets
+# BATPIPE=color so source files are syntax-highlighted and dirs/tar/zip/gz/xz
+# get a readable preview in `less`. Guarded so a host without bat/batpipe falls
+# back to the system /usr/bin/lesspipe.sh (left installed, untouched).
+if command -v batpipe &>/dev/null && command -v bat &>/dev/null; then
+  eval "$(batpipe)"
+fi
 export COLORTERM=truecolor   # WezTerm advertises 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
 
 # --- History -----------------------------------------------------------------
