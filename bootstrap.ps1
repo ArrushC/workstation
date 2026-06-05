@@ -1,71 +1,51 @@
 ﻿# =============================================================================
 # bootstrap.ps1 — workstation setup (Windows client side)
 #
-# The Windows host is a CLIENT — Ansible runs on Linux hosts only. On Windows
-# this script handles its slice of the same workflow: install dev tools via
-# Chocolatey, then hand off to chezmoi to deploy the dotfiles tracked in this
-# repo (Zed, VSCode, PowerShell profile, WezTerm config, Starship, Git).
+# The Windows host is a CLIENT — Ansible/Make run on Linux hosts only. On
+# Windows this script provisions its slice with NO package manager and NO admin
+# rights: it installs a small set of first-party binaries into a per-user
+# location, then hands off to chezmoi to deploy the tracked dotfiles.
+#
+# Install model (everything under %LOCALAPPDATA%\workstation, added to User PATH):
+#   - chezmoi   — official get.chezmoi.io binary installer  → workstation\bin
+#   - Starship  — pinned portable .zip (sha256-verified)    → workstation\bin
+#   - WezTerm   — pinned portable .zip (sha256-verified)    → workstation\wezterm
+#
+#   Git is a PREREQUISITE you install yourself — the script HARD-FAILS if git
+#   isn't on PATH (https://git-scm.com/download/win or `winget install Git.Git`).
+#   Zed + VSCode are also installed by hand; the script soft-warns if they're
+#   missing but their chezmoi configs still deploy. zoxide is no longer
+#   installed (the PowerShell profile no-ops without it).
 #
 # Flow:
-#   1. legacy detect    — if a clone exists at C:\Git\workstation (the
-#                         pre-v2 default) and -RepoPath was not explicitly
-#                         passed, offer to move it to the new home-dir
-#                         location. Skip with -Yes (auto-move) or
-#                         -RepoPath C:\Git\workstation (keep legacy).
-#   2. preflight        — must run as admin (choco needs it); OpenSSH client
-#                         warned-not-failed
-#   3. choco install    — bootstrap Chocolatey itself if missing, then
-#                         install chezmoi, Git, Starship, zoxide, WezTerm,
-#                         Zed, VSCode
-#   4. clone repo       — into -RepoPath (default
-#                         %USERPROFILE%\.local\share\chezmoi, matching
-#                         bootstrap.sh's $HOME/.local/share/chezmoi and
-#                         chezmoi's own default source dir). Done after
-#                         choco so the freshly-installed git is used if
-#                         the machine didn't have one already.
-#   5. chezmoi apply    — applies chezmoi/ to %USERPROFILE% (Zed, VSCode,
-#                         PowerShell profile, etc.). wezterm.lua is
-#                         ignored on Windows (see .chezmoiignore.tmpl);
-#                         WezTerm reads it directly via the env var below.
-#   6. wezterm env var  — set User-scope WEZTERM_CONFIG_FILE pointing at
-#                         the chezmoi source. WezTerm then reads the repo
-#                         file directly — no hardlink to maintain, and
-#                         automatically_reload_config picks up edits to
-#                         the repo (e.g. from manage-hosts.ps1 -Sync)
-#                         immediately. Also cleans up any legacy hardlink
-#                         left over at %USERPROFILE%\.config\wezterm\.
-#   7. burnt toast     — install the BurntToast PowerShell module from
-#                         PSGallery (CurrentUser scope) so Claude Code's
-#                         WSL2 Notification hook (chezmoi/private_dot_claude/
-#                         executable_notify.sh) can emit native Windows
-#                         toasts instead of falling back to a MessageBox.
-#                         Idempotent; soft-fails to a warning if PSGallery
-#                         is offline or the module is unavailable.
-#   8. nerd fonts       — install JetBrainsMono Nerd Font Mono per-user via
-#                         scripts/install-nerd-fonts.ps1 (file + HKCU
-#                         registration). Required for the Nerd Font glyphs
-#                         in WezTerm + Zed + VS Code + starship.
-#                         Idempotent; soft-fails registry blocks.
-#   9. ssh key          — generate %USERPROFILE%\.ssh\id_ed25519 if missing
+#   1. preflight    — require git on PATH (hard-fail w/ install link); warn if
+#                     ssh-keygen / Zed / VSCode are missing.
+#   2. tool install — chezmoi (official installer) + WezTerm/Starship (pinned
+#                     portable downloads), all into %LOCALAPPDATA%\workstation.
+#   3. clone repo   — into -RepoPath (default %USERPROFILE%\.local\share\chezmoi,
+#                     matching bootstrap.sh's $HOME/.local/share/chezmoi and
+#                     chezmoi's own default source dir).
+#   4. chezmoi apply— applies chezmoi/ to %USERPROFILE% (PowerShell profile,
+#                     Zed/VSCode settings, etc.). wezterm.lua is ignored on
+#                     Windows; WezTerm reads it via the env var in step 5.
+#   5. wezterm env  — set User-scope WEZTERM_CONFIG_FILE at the chezmoi source.
+#   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
+#   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
+#   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
 #
-# WHY CHOCOLATEY (not winget)
-#   winget exists on Win10 1909+ / Win11 but its PATH propagation is flaky —
-#   tools install but don't always become resolvable in the current shell
-#   session, leaving chezmoi unable to find git in step 3. Choco's installs
-#   write to a predictable PATH location and the refresh is reliable.
+# NO ADMIN REQUIRED: every step writes to per-user locations (workstation\ on
+# the User PATH, CurrentUser PSGallery, HKCU fonts, ~/.ssh).
 #
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME,
-# GIT_USER_EMAIL before running. The token authenticates the bootstrap.ps1
-# fetch AND the script's internal git clone/pull, then is persisted into the
-# cloned repo's .git/config (http.https://github.com/.extraheader, scoped to
-# github.com) so subsequent push/pull and manage-hosts.ps1 ops work without
-# re-passing the env var.
+# GIT_USER_EMAIL before running. The token authenticates the bootstrap.ps1 fetch
+# AND the internal git clone/pull, then is persisted into the cloned repo's
+# .git/config (http.https://github.com/.extraheader, scoped to github.com) so
+# subsequent push/pull and manage-hosts.ps1 ops work without re-passing it.
 #
-# One-liner from a fresh Windows machine (RUN FROM AN ELEVATED PowerShell —
-# Right-click PowerShell → "Run as administrator"):
+# One-liner from a fresh Windows machine (NO elevation needed):
 #
-#   $env:GITHUB_TOKEN  = '<your-PAT>'
-#   $env:GIT_USER_NAME = 'Arrush Chaturvedi'
+#   $env:GITHUB_TOKEN   = '<your-PAT>'
+#   $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
 #   $env:GIT_USER_EMAIL = 'contact@arrushc.com'
 #   irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 #     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex
@@ -81,16 +61,16 @@
 #   -RepoPath <path>    override clone target
 #                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the choco step entirely (assume tools installed;
-#                       admin not required in this case)
+#   -SkipToolInstall    skip the chezmoi/WezTerm/Starship auto-installs
+#                       (assume they're already on PATH)
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
-#   -Reinstall          wipe the cloned repo and chezmoi config first, then
-#                       run the normal flow. Does NOT remove installed tools
-#                       or deployed dotfiles — the bootstrap is idempotent
-#                       over those. Prompts for confirmation unless -Yes
-#                       is also passed.
-#   -Yes                skip confirmation prompts (Reinstall + legacy-path
-#                       auto-move when one is detected).
+#   -SkipBurntToast     skip the BurntToast PSGallery module install
+#   -SkipNerdFonts      skip the Nerd Font install
+#   -Reinstall          wipe the cloned repo + chezmoi config first, then run the
+#                       normal flow. Does NOT remove installed tools or deployed
+#                       dotfiles — the bootstrap is idempotent over those.
+#                       Prompts unless -Yes is also passed.
+#   -Yes                skip confirmation prompts (Reinstall).
 # =============================================================================
 
 [CmdletBinding()]
@@ -129,96 +109,46 @@ $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 # it never leaks to other remotes.
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
-# Choco package IDs for everything chezmoi manages on Windows. The `Cmd`
-# field is the binary we expect on PATH after install — most match the
-# package name; vscode's binary is `code`. Required tools fail the whole
-# bootstrap if their install errors out; optional ones warn-not-fail.
-$ChocoTools = @(
-    @{ Id = "chezmoi";  Cmd = "chezmoi";  Name = "chezmoi";  Required = $true  },
-    @{ Id = "git";      Cmd = "git";      Name = "Git";      Required = $true  },
-    @{ Id = "starship"; Cmd = "starship"; Name = "Starship"; Required = $false },
-    @{ Id = "zoxide";   Cmd = "zoxide";   Name = "zoxide";   Required = $false },
-    @{ Id = "wezterm";  Cmd = "wezterm";  Name = "WezTerm";  Required = $false },
-    @{ Id = "zed";      Cmd = "zed";      Name = "Zed";      Required = $false },
-    @{ Id = "vscode";   Cmd = "code";     Name = "VSCode";   Required = $false }
+# Per-user install root for every binary this script provisions. Admin-free:
+#   workstation\bin      — single-exe tools (chezmoi, starship)  → on User PATH
+#   workstation\wezterm  — the multi-file WezTerm portable tree  → on User PATH
+#   workstation\stamps   — "<exe>.<version>.stamp" idempotency markers
+$WsRoot    = Join-Path $env:LOCALAPPDATA "workstation"
+$WsBin     = Join-Path $WsRoot "bin"
+$WsWezterm = Join-Path $WsRoot "wezterm"
+$WsStamps  = Join-Path $WsRoot "stamps"
+
+# Pinned portable tools. version + sha256 live HERE (same self-contained pattern
+# as scripts\install-nerd-fonts.ps1) — NOT makefile/versions.mk, because Make
+# never runs on Windows. Bump = update Version + refresh Sha256 (compute over the
+# downloaded .zip). Layout 'single' copies <Exe>.exe into Dest; 'tree' extracts
+# the whole archive into Dest. WezTerm is pinned to the same tag as the vendored
+# terminfo (see CLAUDE.md's wezterm-terminfo invariant).
+$PortableTools = @(
+    @{
+        Name    = "Starship"
+        Exe     = "starship"
+        Version = "1.21.1"
+        Url     = "https://github.com/starship/starship/releases/download/v1.21.1/starship-x86_64-pc-windows-msvc.zip"
+        Sha256  = "19ce36e44825289d56e9af10c5d5f30310073b233f64b8a99dd21402b6c2f007"
+        Layout  = "single"
+        Dest    = $WsBin
+    },
+    @{
+        Name    = "WezTerm"
+        Exe     = "wezterm"
+        Version = "20240203-110809-5046fc22"
+        Url     = "https://github.com/wez/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
+        Sha256  = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
+        Layout  = "tree"
+        Dest    = $WsWezterm
+    }
 )
 
 # =============================================================================
-# 0a. LEGACY PATH MIGRATION — pre-v2 bootstrap.ps1 defaulted -RepoPath to
-#     C:\Git\workstation. The current default is %USERPROFILE%\.local\share
-#     \chezmoi to match bootstrap.sh's $HOME/.local/share/chezmoi (chezmoi's
-#     own default source dir). If a legacy clone exists at the old path AND
-#     the user didn't explicitly pass -RepoPath, offer to move it.
-#
-#     -Yes auto-moves without prompting. -RepoPath C:\Git\workstation opts
-#     out entirely (keeps the legacy location). Bypassed when -RepoPath is
-#     explicitly passed via $PSBoundParameters.
-# =============================================================================
-function Invoke-LegacyPathMigrate {
-    $legacy = "C:\Git\workstation"
-
-    # User explicitly passed -RepoPath — they know what they want, don't meddle.
-    if ($PSBoundParameters.ContainsKey('RepoPath')) { return }
-    if ($RepoPath -eq $legacy)                     { return }
-    if (-not (Test-Path "$legacy\.git"))           { return }
-
-    if (Test-Path "$RepoPath\.git") {
-        Write-Warn "Both clones exist:"
-        Write-Warn "  legacy: $legacy"
-        Write-Warn "  new:    $RepoPath"
-        Write-Warn "Bootstrap will use $RepoPath. Remove the legacy clone manually"
-        Write-Warn "when you've confirmed everything still works:"
-        Write-Warn "  Remove-Item -Recurse -Force '$legacy'"
-        return
-    }
-
-    Write-Warn "Found legacy clone at $legacy"
-    Write-Host "  The default clone path is now $RepoPath"
-    Write-Host "  (matches bootstrap.sh's `$HOME/.local/share/chezmoi)."
-    Write-Host ""
-    Write-Host "  Options:"
-    Write-Host "    1. Move it now to the new location (recommended)"
-    Write-Host "    2. Keep the legacy location — re-run with:"
-    Write-Host "         .\bootstrap.ps1 -RepoPath '$legacy'"
-    Write-Host ""
-
-    if (-not $Yes) {
-        $ans = Read-Host "  Move it now? [Y/n]"
-        if ($ans -and $ans -notmatch '^[Yy]') {
-            Write-Warn "Keeping legacy location not chosen — re-run with -RepoPath '$legacy' to use it."
-            exit 0
-        }
-    }
-
-    $parent = Split-Path $RepoPath -Parent
-    if (-not (Test-Path $parent)) {
-        New-Item -ItemType Directory -Force -Path $parent | Out-Null
-    }
-
-    Write-Log "Moving $legacy → $RepoPath..."
-    try {
-        Move-Item -Path $legacy -Destination $RepoPath -Force -ErrorAction Stop
-        Write-Ok "Moved"
-    } catch {
-        Write-Fail @"
-Move-Item failed: $($_.Exception.Message)
-
-Likely cause: a file inside $legacy is locked by another process
-(WezTerm reading wezterm.lua, an editor holding a file open, etc.). Close
-those and re-run, OR do the move manually:
-  Move-Item '$legacy' '$RepoPath'
-
-Or keep the legacy path explicitly:
-  .\bootstrap.ps1 -RepoPath '$legacy'
-"@
-    }
-}
-
-# =============================================================================
-# 0b. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
-#    the rest of the script re-bootstrap fresh. Installed tools and deployed
-#    dotfiles are left alone — re-running the bootstrap is idempotent on
-#    those, so the net effect is a fresh repo + fresh chezmoi init prompt.
+# 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let the
+#    rest of the script re-bootstrap fresh. Installed tools and deployed
+#    dotfiles are left alone — re-running is idempotent over those.
 # =============================================================================
 function Invoke-Reinstall {
     $chezmoiCfg = Join-Path $env:USERPROFILE ".config\chezmoi"
@@ -230,19 +160,18 @@ function Invoke-Reinstall {
     Write-Host "    - $chezmoiCfg  (chezmoi config + cached init data)"
     Write-Host ""
     Write-Host "  Will NOT remove (leaving for re-bootstrap to no-op over):"
-    Write-Host "    - Chocolatey-installed tools (re-bootstrap will detect them and skip)"
+    Write-Host "    - Binary tools under $WsRoot (re-bootstrap detects + skips them)"
     Write-Host "    - Deployed dotfiles in `$HOME / `$env:APPDATA (chezmoi will re-apply)"
     Write-Host "    - SSH keys"
     Write-Host ""
-    Write-Host "  For a deeper uninstall (remove tools too), do that manually first:"
-    Write-Host "    choco uninstall -y chezmoi zoxide vscode wezterm zed starship"
+    Write-Host "  For a deeper uninstall (remove the portable tools too), do that manually first:"
+    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # chezmoi/starship/wezterm re-download next run"
     Write-Host ""
 
-    # Self-deletion guard: if this script is being run from inside the path
-    # we're about to delete, refuse. Use the curl|iex one-liner instead, which
-    # runs from memory and isn't backed by a file on disk. $PSCommandPath is
-    # the standard automatic variable for the running script's full path; it
-    # is $null when the script is being executed from a string (iex/irm-pipe).
+    # Self-deletion guard: if this script is being run from inside the path we're
+    # about to delete, refuse. Use the curl|iex one-liner instead, which runs
+    # from memory and isn't backed by a file on disk. $PSCommandPath is $null
+    # when the script is executed from a string (iex/irm-pipe).
     if ($PSCommandPath -and $PSCommandPath.StartsWith($RepoPath, [StringComparison]::OrdinalIgnoreCase)) {
         Write-Fail @"
 Refusing to reinstall — the running script is inside $RepoPath, which would
@@ -288,104 +217,37 @@ be deleted, leaving this invocation orphaned. Either:
 }
 
 # =============================================================================
-# 1. PREFLIGHT — admin check (unless -SkipToolInstall), then soft checks
+# 1. PREFLIGHT — Git is a hard prerequisite; chezmoi presence only matters when
+#    -SkipToolInstall is set and the apply step will run; ssh-keygen soft-warn.
+#    No admin check (nothing in this script needs elevation).
 # =============================================================================
-function Test-IsAdmin {
-    $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-    $pr = [System.Security.Principal.WindowsPrincipal]::new($id)
-    return $pr.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-# Is a tool installed and actually usable? `Get-Command $Cmd` is the only
-# reliable signal — it confirms the binary exists AND is on PATH (which is
-# what every subsequent step of the bootstrap actually needs).
-#
-# We deliberately don't fall back to `choco list`: it can report a package
-# as installed when its binary is missing on disk (broken/orphaned entries
-# from a previous install that was interrupted or had its files removed),
-# which would cause the bootstrap to skip a reinstall that the user actually
-# needs. If `choco list` says yes but Get-Command says no, the right
-# behaviour is to treat it as missing and let `choco install` either fix it
-# or no-op cleanly (already-installed packages exit 0 silently).
-function Test-ToolInstalled {
-    param([hashtable]$Tool)
-    return [bool](Get-Command $Tool.Cmd -ErrorAction SilentlyContinue)
-}
-
-# Set by Invoke-Preflight; consumed by Invoke-ChocoInstall to skip work when
-# everything's already in place.
-$script:NeedsChocoInstall = $false
-
 function Invoke-Preflight {
     Write-Log "Checking prerequisites..."
 
-    if ($SkipToolInstall) {
-        # User vouches everything's installed. git is needed for the clone
-        # step; chezmoi only matters if the chezmoi-apply step will run.
-        $missing = @()
-        if (-not (Get-Command git -ErrorAction SilentlyContinue)) { $missing += "git" }
-        if (-not $SkipChezmoi -and -not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
-            $missing += "chezmoi"
-        }
-        if ($missing.Count -gt 0) {
-            Write-Fail @"
--SkipToolInstall was passed but these required tools aren't on PATH: $($missing -join ', ')
-Either drop -SkipToolInstall and re-run from an elevated shell, or install
-them yourself first: choco install -y $($missing -join ' ')
+    # Git is a hard prerequisite — you install it yourself. Needed for the clone
+    # and for chezmoi's git operations. This script does NOT install Git.
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Fail @"
+Git is required but isn't on PATH.
+
+Install Git for Windows (an admin-free per-user install is available), then
+re-run this script:
+  https://git-scm.com/download/win
+or:  winget install Git.Git
+
+This script does NOT install Git for you.
 "@
-        }
-    } else {
-        # Smart detection: only require admin if there's actually something
-        # for choco to install. Three buckets:
-        #
-        #   - choco itself missing       → need admin to bootstrap it
-        #   - $missingReq non-empty      → need admin to install required tools
-        #   - only $missingOpt non-empty → installs would help but aren't
-        #     critical; if non-admin, skip the install step with a note rather
-        #     than failing the whole bootstrap.
-        # Classify each tool as installed / missing-required / missing-optional.
-        # Primary detection: Get-Command $Cmd works regardless of installer
-        # (choco / MSI / scoop / manual). Fallback to `choco list` covers GUI
-        # apps that don't put a binary on PATH.
-        $needsBootstrap = -not (Get-Command choco -ErrorAction SilentlyContinue)
-        $missingReqNames = @()
-        $missingReqIds  = @()
-        $missingOptNames = @()
-        foreach ($tool in $ChocoTools) {
-            if (Test-ToolInstalled -Tool $tool) { continue }
-            if ($tool.Required) {
-                $missingReqNames += $tool.Name
-                $missingReqIds   += $tool.Id
-            } else {
-                $missingOptNames += $tool.Name
-            }
-        }
+    }
+    Write-Ok "git found ($((Get-Command git).Source))"
 
-        $needsAdminWork = $needsBootstrap -or ($missingReqNames.Count -gt 0)
-
-        if ($needsAdminWork) {
-            if (-not (Test-IsAdmin)) {
-                $reqList = if ($needsBootstrap) { "Chocolatey itself" } else { $missingReqNames -join ', ' }
-                $idList  = if ($needsBootstrap) { "" } else { $missingReqIds -join ' ' }
-                Write-Fail @"
-Admin required to install: $reqList
-Open PowerShell as administrator and re-run.
-
-If you'd rather install $reqList yourself first (admin one-shot:
-  choco install -y $idList
-), you can then re-run this script non-elevated with:
-  .\bootstrap.ps1 -SkipToolInstall
+    # chezmoi is installed by the tool step unless skipped. If -SkipToolInstall
+    # is set and the chezmoi-apply step will run, chezmoi must already be present.
+    if ($SkipToolInstall -and -not $SkipChezmoi -and -not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
+        Write-Fail @"
+-SkipToolInstall was passed but chezmoi isn't on PATH and the chezmoi-apply step
+will run. Either drop -SkipToolInstall (so the script installs chezmoi), pass
+-SkipChezmoi (skip the apply), or install chezmoi yourself first.
 "@
-            }
-            $script:NeedsChocoInstall = $true
-        } elseif ($missingOptNames.Count -gt 0) {
-            $optList = $missingOptNames -join ', '
-            Write-Warn "Optional tools not installed: $optList"
-            Write-Warn "Re-run from an elevated shell to install them, or skip — they aren't required."
-            # NeedsChocoInstall stays false; we'll skip the install step.
-        } else {
-            Write-Ok "All Chocolatey-managed tools already installed"
-        }
     }
 
     if (-not (Get-Command ssh-keygen -ErrorAction SilentlyContinue)) {
@@ -397,14 +259,197 @@ If you'd rather install $reqList yourself first (admin one-shot:
 }
 
 # =============================================================================
-# 2. CLONE REPO (with $env:GITHUB_TOKEN support for private repo)
+# 2. TOOL INSTALL — admin-free binary/portable installs under %LOCALAPPDATA%\
+#    workstation. chezmoi via its official installer; WezTerm + Starship via
+#    pinned, sha256-verified portable archives. Zed/VSCode are hand-installed
+#    (soft-warn). zoxide is intentionally not installed.
+# =============================================================================
+function Update-SessionPath {
+    # New PATH entries are written to the User registry scope; the current
+    # session keeps its own copy. Rebuild $env:PATH from Machine + User so
+    # freshly-installed tools resolve right away.
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH", "User")
+}
+
+function Add-ToUserPath {
+    param([string]$Dir)
+
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (-not $userPath) { $userPath = "" }
+
+    # Idempotent: append to the User PATH only if not already present
+    # (case-insensitive, trailing-slash-insensitive).
+    $present = $userPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
+        Where-Object { $_.TrimEnd('\') -ieq $Dir.TrimEnd('\') }
+    if (-not $present) {
+        $base = $userPath.TrimEnd(';')
+        $newPath = if ($base) { "$base;$Dir" } else { $Dir }
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Write-Ok "Added $Dir to User PATH"
+    }
+
+    # Always refresh the in-session PATH so later steps + spawned procs resolve.
+    $inSession = ($env:PATH).Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
+        Where-Object { $_.TrimEnd('\') -ieq $Dir.TrimEnd('\') }
+    if (-not $inSession) {
+        $env:PATH = "$(($env:PATH).TrimEnd(';'));$Dir"
+    }
+}
+
+function Install-Chezmoi {
+    if (Get-Command chezmoi -ErrorAction SilentlyContinue) {
+        Write-Ok "chezmoi already installed"
+        return
+    }
+
+    if (-not (Test-Path $WsBin)) { New-Item -ItemType Directory -Force -Path $WsBin | Out-Null }
+
+    Write-Log "Installing chezmoi (official get.chezmoi.io binary installer → $WsBin)..."
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = `
+            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        $installer = Invoke-RestMethod -UseBasicParsing -Uri 'https://get.chezmoi.io/ps1'
+        & ([scriptblock]::Create($installer)) -BinDir $WsBin
+    } catch {
+        if ($SkipChezmoi) {
+            Write-Warn "chezmoi install failed ($($_.Exception.Message)) — continuing because -SkipChezmoi was passed."
+            return
+        }
+        Write-Fail @"
+chezmoi install failed: $($_.Exception.Message)
+Install it manually (admin-free) and re-run, e.g.:
+  winget install twpayne.chezmoi
+or drop the chezmoi.exe binary from
+  https://github.com/twpayne/chezmoi/releases
+into $WsBin and re-run.
+"@
+    }
+
+    Add-ToUserPath $WsBin
+
+    if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
+        if ($SkipChezmoi) {
+            Write-Warn "chezmoi installed to $WsBin but isn't resolving on PATH yet (continuing — -SkipChezmoi)."
+            return
+        }
+        Write-Fail "chezmoi installed to $WsBin but isn't resolving on PATH. Open a new shell and re-run."
+    }
+    Write-Ok "chezmoi installed to $WsBin"
+}
+
+function Install-PortableTool {
+    param([hashtable]$Tool)
+
+    $stamp = Join-Path $WsStamps "$($Tool.Exe).$($Tool.Version).stamp"
+
+    # Idempotency: stamp present AND command resolves → already done. A version
+    # bump changes the stamp name, so the old stamp won't match → reinstall.
+    if ((Test-Path $stamp) -and (Get-Command $Tool.Exe -ErrorAction SilentlyContinue)) {
+        Write-Ok "$($Tool.Name) $($Tool.Version) already installed"
+        return
+    }
+
+    if ($Tool.Sha256 -like "*PIN-ME*") {
+        Write-Fail "$($Tool.Name) has an unfilled sha256 pin ($($Tool.Sha256)). Fill it in `$PortableTools before running."
+    }
+
+    Write-Log "Installing $($Tool.Name) $($Tool.Version) (portable)..."
+
+    $tmpZip = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version).zip"
+    $tmpDir = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version)"
+
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = `
+            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
+    } catch {
+        Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
+        Write-Warn "  Skipping — install it manually or re-run later."
+        return
+    }
+
+    # sha256 verify — the ONE hard-fail inside this helper (tamper/corruption).
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpZip).Hash.ToLower()
+    if ($actual -ne $Tool.Sha256.ToLower()) {
+        Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
+        Write-Fail @"
+$($Tool.Name) sha256 mismatch — refusing to install.
+  expected: $($Tool.Sha256.ToLower())
+  actual:   $actual
+The pinned hash in `$PortableTools is stale, or the download was corrupted/tampered.
+"@
+    }
+
+    try {
+        if (Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }
+        Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
+
+        if ($Tool.Layout -eq "single") {
+            if (-not (Test-Path $Tool.Dest)) { New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null }
+            $exe = Get-ChildItem -Path $tmpDir -Recurse -Filter "$($Tool.Exe).exe" | Select-Object -First 1
+            if (-not $exe) {
+                Write-Warn "$($Tool.Name): $($Tool.Exe).exe not found in archive — skipping"
+                return
+            }
+            Copy-Item $exe.FullName -Destination (Join-Path $Tool.Dest "$($Tool.Exe).exe") -Force
+            Add-ToUserPath $Tool.Dest
+        } else {
+            # 'tree' — the archive may wrap everything in a single top-level
+            # folder; flatten that so wezterm-gui.exe lands directly in Dest.
+            $top = @(Get-ChildItem -Path $tmpDir)
+            $src = if (($top.Count -eq 1) -and $top[0].PSIsContainer) { $top[0].FullName } else { $tmpDir }
+            # NOTE: a WezTerm running from $Dest locks its exe/dlls — this wipe then throws and the outer try/catch warn-not-fails. Close WezTerm before re-running to refresh it.
+            if (Test-Path $Tool.Dest) { Remove-Item -Recurse -Force $Tool.Dest }
+            New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null
+            Copy-Item -Path (Join-Path $src '*') -Destination $Tool.Dest -Recurse -Force
+            Add-ToUserPath $Tool.Dest
+        }
+
+        if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
+        New-Item -ItemType File -Force -Path $stamp | Out-Null
+        Write-Ok "$($Tool.Name) $($Tool.Version) installed to $($Tool.Dest)"
+    } catch {
+        Write-Warn "$($Tool.Name) install failed during extract/place: $($_.Exception.Message)"
+    } finally {
+        Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
+        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-ToolInstall {
+    if ($SkipToolInstall) {
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship are on PATH"
+        return
+    }
+
+    foreach ($d in @($WsRoot, $WsBin, $WsStamps)) {
+        if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
+    }
+
+    Install-Chezmoi
+    foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
+
+    Update-SessionPath
+
+    # Soft-warn for the hand-installed editors. Their chezmoi configs deploy
+    # regardless; the script never installs or fails on them.
+    foreach ($app in @(@{ Cmd = 'zed'; Name = 'Zed' }, @{ Cmd = 'code'; Name = 'VSCode' })) {
+        if (-not (Get-Command $app.Cmd -ErrorAction SilentlyContinue)) {
+            Write-Warn "$($app.Name) not on PATH — install it yourself when you want it; its chezmoi config still deploys."
+        }
+    }
+}
+
+# =============================================================================
+# 3. CLONE REPO (with $env:GITHUB_TOKEN support for private repo)
 # =============================================================================
 function Invoke-CloneRepo {
     # HTTP Basic with base64-encoded "x-access-token:<PAT>" — same scheme
-    # actions/checkout uses. "Authorization: bearer" works for the REST/raw
-    # API (and that's how irm fetches bootstrap.ps1) but is NOT accepted by
-    # git's smart-HTTP endpoint on github.com — git silently falls through to
-    # credential prompting, which breaks any non-interactive clone.
+    # actions/checkout uses. "Authorization: bearer" works for the REST/raw API
+    # (how irm fetches bootstrap.ps1) but is NOT accepted by git's smart-HTTP
+    # endpoint on github.com — git silently falls through to credential
+    # prompting, breaking any non-interactive clone.
     $headerVal = ""
     if ($env:GITHUB_TOKEN) {
         $b64 = [Convert]::ToBase64String(
@@ -447,106 +492,6 @@ function Invoke-CloneRepo {
 }
 
 # =============================================================================
-# 2. CHOCOLATEY + DEV TOOLS
-# =============================================================================
-function Update-SessionPath {
-    # Choco installs append to the Machine and User PATH entries in the
-    # registry, but the current PowerShell session keeps its own copy. Rebuild
-    # $env:PATH from the registry so freshly-installed tools resolve right away.
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("PATH", "User")
-}
-
-function Install-Chocolatey {
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Ok "Chocolatey already installed"
-        return
-    }
-
-    Write-Log "Installing Chocolatey (official bootstrap script from community.chocolatey.org)..."
-
-    # Mirrors the install snippet at https://chocolatey.org/install — we need
-    # the TLS-1.2 bump for older default .NET configs and Bypass scope so the
-    # script runs even if the user has a restrictive ExecutionPolicy.
-    Set-ExecutionPolicy Bypass -Scope Process -Force
-    [System.Net.ServicePointManager]::SecurityProtocol = `
-        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
-        'https://community.chocolatey.org/install.ps1'))
-
-    Update-SessionPath
-
-    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-        Write-Fail @"
-Chocolatey install completed but `choco` is not on PATH in this session.
-Open a new elevated PowerShell and re-run this script — the new shell
-will inherit the updated PATH.
-"@
-    }
-    Write-Ok "Chocolatey installed"
-}
-
-function Invoke-ChocoInstall {
-    if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall)"
-        return
-    }
-    if (-not $script:NeedsChocoInstall) {
-        # Preflight already determined there's nothing to install (or only
-        # optional packages are missing in a non-elevated session). Nothing
-        # to do here.
-        Write-Log "No Chocolatey packages to install"
-        return
-    }
-
-    Install-Chocolatey
-
-    Write-Log "Installing tools via Chocolatey..."
-
-    foreach ($tool in $ChocoTools) {
-        # Skip ones that are already installed by any means — keeps the log
-        # scannable on partially-installed machines.
-        if (Test-ToolInstalled -Tool $tool) {
-            Write-Ok "$($tool.Name) already installed"
-            continue
-        }
-
-        # Orphan detection: choco's local DB might still list this package
-        # even though the binary's gone (interrupted install, manual delete,
-        # etc.). Plain `choco install` would say "already installed" and
-        # skip, leaving us broken. Detect this state and reinstall with -f.
-        $forceFlag = $null
-        $listOut = choco list --exact $tool.Id --limit-output 2>$null
-        if ($listOut -and ($listOut -match "^$([regex]::Escape($tool.Id))\|")) {
-            Write-Warn "$($tool.Name) is registered with choco but its binary isn't on PATH — re-installing with --force"
-            $forceFlag = "--force"
-        }
-
-        Write-Log "Installing $($tool.Name) ($($tool.Id))..."
-
-        # -y / --no-progress / --limit-output: scriptable, scannable output.
-        # --force only used when orphan was detected above.
-        if ($forceFlag) {
-            choco install $tool.Id -y --no-progress --limit-output $forceFlag
-        } else {
-            choco install $tool.Id -y --no-progress --limit-output
-        }
-
-        if ($LASTEXITCODE -ne 0) {
-            if ($tool.Required) {
-                Write-Fail "$($tool.Name) install failed — required tool, cannot continue."
-            } else {
-                Write-Warn "$($tool.Name) install failed (choco exit $LASTEXITCODE) — skipping; install manually if needed."
-            }
-            continue
-        }
-        Write-Ok "$($tool.Name) installed"
-    }
-
-    Update-SessionPath
-}
-
-# =============================================================================
 # 4. CHEZMOI INIT + APPLY — deploys dotfiles tracked in chezmoi/
 # =============================================================================
 function Invoke-Chezmoi {
@@ -556,8 +501,8 @@ function Invoke-Chezmoi {
     }
 
     if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
-        Write-Warn "chezmoi not on PATH after install. Open a new elevated shell and re-run, or install manually:"
-        Write-Warn "  choco install -y chezmoi"
+        Write-Warn "chezmoi not on PATH after install. Open a new shell and re-run, or install manually:"
+        Write-Warn "  winget install twpayne.chezmoi"
         return
     }
 
@@ -575,18 +520,13 @@ function Invoke-Chezmoi {
 
 # =============================================================================
 # 5. WEZTERM_CONFIG_FILE — point WezTerm directly at the chezmoi source.
-#    Replaces the pre-v2 hardlink mechanism: WezTerm reads its config from
-#    whatever path $env:WEZTERM_CONFIG_FILE resolves to, and the chezmoi
-#    source path is reachable as a normal file. automatically_reload_config
-#    still picks up edits live (e.g. from manage-hosts.ps1 -Sync), and
-#    chezmoi atomic-writes are no longer a footgun — the home path isn't
-#    touched at all because dot_config/wezterm is in .chezmoiignore.tmpl on
-#    Windows.
+#    WezTerm reads its config from whatever $env:WEZTERM_CONFIG_FILE resolves
+#    to, and the chezmoi source path is a normal file. automatically_reload_config
+#    picks up edits live (e.g. from manage-hosts.ps1 -Sync), and there's no
+#    home-path copy to maintain — dot_config/wezterm is in .chezmoiignore.tmpl
+#    on Windows, so chezmoi never writes %USERPROFILE%\.config\wezterm\.
 #
-#    Idempotent: re-running the bootstrap with the same RepoPath is a no-op.
-#    Also cleans up any legacy hardlink/regular file left from pre-v2 layouts
-#    at %USERPROFILE%\.config\wezterm\wezterm.lua so it doesn't accidentally
-#    win if a user later unsets the env var.
+#    Idempotent: re-running with the same RepoPath is a no-op.
 # =============================================================================
 function Invoke-WeztermConfigEnv {
     $envName  = 'WEZTERM_CONFIG_FILE'
@@ -614,32 +554,16 @@ function Invoke-WeztermConfigEnv {
         }
         Write-Warn "Restart any running WezTerm instances to pick up the new config location."
     }
-
-    # Clean up legacy hardlink/regular-file at the old home path. With
-    # dot_config/wezterm now in .chezmoiignore.tmpl on Windows, chezmoi
-    # neither writes nor manages this path anymore — but the file may exist
-    # from a previous bootstrap that DID hardlink it. Leaving it would let
-    # WezTerm fall back to it if the user ever unset WEZTERM_CONFIG_FILE,
-    # silently surfacing stale config.
-    $legacyTarget = "$env:USERPROFILE\.config\wezterm\wezterm.lua"
-    if (Test-Path $legacyTarget) {
-        Write-Log "Removing legacy home-path wezterm.lua (no longer used)..."
-        Remove-Item $legacyTarget -Force
-        Write-Ok "Removed $legacyTarget"
-    }
 }
 
 # =============================================================================
-# 7. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
+# 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
-#    `chezmoi/private_dot_claude/executable_notify.sh` (deployed to
-#    ~/.claude/notify.sh on dev_machine Linux hosts), which calls into
-#    `powershell.exe` from WSL2 to ping the Windows side when Claude Code
-#    needs attention. Falls back to System.Windows.Forms.MessageBox if the
-#    module is absent — bootstrapping it here just makes the prettier path
-#    work without manual setup. CurrentUser scope is intentional: avoids
-#    needing AllUsers admin context on every -Reinstall, and matches how
-#    PSGallery modules are typically installed on dev workstations.
+#    chezmoi/private_dot_claude/executable_notify.sh (deployed to
+#    ~/.claude/notify.sh on dev_machine Linux hosts), which calls powershell.exe
+#    from WSL2 to ping the Windows side when Claude Code needs attention. Falls
+#    back to System.Windows.Forms.MessageBox if the module is absent.
+#    CurrentUser scope — no admin, idempotent, soft-fails to a warning.
 # =============================================================================
 function Invoke-InstallBurntToast {
     if ($SkipBurntToast) {
@@ -673,12 +597,11 @@ function Invoke-InstallBurntToast {
 }
 
 # =============================================================================
-# 8. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user.
-#    Required by chezmoi-tracked configs that already assume Nerd Font glyphs
-#    (starship prompt, eza --icons=auto, lazygit, k9s, yazi, broot, helix
-#    file-tree, chezit, ccstatusline, Claude Code TUI). Invokes the standalone
-#    scripts/install-nerd-fonts.ps1 helper. Soft-fails if -SkipNerdFonts is
-#    passed or the helper script is missing (warning + continue).
+# 7. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user. Required by
+#    chezmoi-tracked configs that assume Nerd Font glyphs (starship, eza --icons,
+#    lazygit, k9s, yazi, broot, helix, ccstatusline, Claude Code TUI). Invokes
+#    scripts/install-nerd-fonts.ps1. Soft-fails if -SkipNerdFonts or the helper
+#    is missing.
 # =============================================================================
 function Invoke-InstallNerdFonts {
     if ($SkipNerdFonts) {
@@ -702,7 +625,7 @@ function Invoke-InstallNerdFonts {
 }
 
 # =============================================================================
-# 9. SSH KEY (optional, prompt-driven)
+# 8. SSH KEY (optional, prompt-driven)
 # =============================================================================
 function Invoke-EnsureSshKey {
     if ($SkipKeyGen) {
@@ -743,10 +666,9 @@ function Invoke-EnsureSshKey {
 # =============================================================================
 # MAIN
 # =============================================================================
-Invoke-LegacyPathMigrate  # before everything else — may move the clone, update $RepoPath context
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
-Invoke-ChocoInstall       # before clone — installs git if the machine doesn't have one
+Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
@@ -757,10 +679,14 @@ Invoke-EnsureSshKey
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
-Write-Host "Restart your shell (or open a new PowerShell tab) so the chezmoi-applied"
-Write-Host "`$PROFILE picks up — starship prompt, chezmoi/git aliases, etc."
+Write-Host "Open a NEW PowerShell tab so the updated User PATH (${Bold}$WsBin${Reset} +"
+Write-Host "${Bold}$WsWezterm${Reset}) and the chezmoi-applied `$PROFILE pick up — starship"
+Write-Host "prompt, chezmoi/git aliases, etc."
 Write-Host "Restart WezTerm too if any instances were running — they need a fresh process"
 Write-Host "to see the new ${Bold}WEZTERM_CONFIG_FILE${Reset} env var."
+Write-Host ""
+Write-Host "Not installed by this script (install yourself if you want them):"
+Write-Host "  Zed, VSCode  — their chezmoi configs are already deployed."
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Add a host to hosts.conf:"
