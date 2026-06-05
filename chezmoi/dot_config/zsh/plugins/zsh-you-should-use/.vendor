@@ -1,0 +1,11 @@
+plugin:         zsh-you-should-use
+upstream:       https://github.com/MichaelAquilina/zsh-you-should-use
+tag:            1.11.1
+tarball:        https://github.com/MichaelAquilina/zsh-you-should-use/archive/refs/tags/1.11.1.tar.gz
+tarball-sha256: 4d884aed12f1301f4620888e322c406c215b719e49385aa3088dc84c8ed383ed
+license:        GPL-3.0
+vendored:       2026-06-05
+files:          you-should-use.plugin.zsh  (single self-contained plugin file)
+note:           Leading-dot .vendor -> chezmoi-ignored; provenance only, never deployed.
+                Adds a preexec hook that nudges you toward defined aliases; no ZLE binding.
+                GPL-3.0 -- vendored verbatim for personal use. Bump: re-download tag, refresh sha256.
