@@ -1,0 +1,15 @@
+script:         batpipe (eth-p/bat-extras)
+upstream:       https://github.com/eth-p/bat-extras
+release:        v2024.08.24
+asset:          https://github.com/eth-p/bat-extras/releases/download/v2024.08.24/bat-extras-2024.08.24.zip
+asset-sha256:   d79c085b9d0af7f56c3f69d766a83fe26405faac999c4ed7cdfc27417d2c736f
+file-sha256:    fe085dc3f83f3e97b541210375b5cef46e3abc35e220175290e2a280e8ff8f27
+license:        MIT
+vendored:       2026-06-05
+files:          executable_batpipe  (prebuilt standalone `bin/batpipe` from the release zip; bat-modules bundled inline, verbatim)
+note:           Leading-dot filename → chezmoi-ignored; provenance only, never deployed.
+                Deploys 0755 to ~/.local/bin/batpipe (executable_ prefix); wired as the
+                less LESSOPEN preprocessor via `eval "$(batpipe)"` in dot_zshrc.tmpl + dot_bashrc.tmpl.
+                No versions.mk entry — pinned only here (not coupled to BAT_VERSION).
+                Bump: re-download the release zip, replace executable_batpipe with bin/batpipe,
+                refresh release + asset-sha256 + file-sha256 above.
