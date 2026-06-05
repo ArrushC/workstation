@@ -318,6 +318,30 @@ ZSH_HIGHLIGHT_STYLES[bracket-level-3]='fg=#f9e2af,bold'
 [[ -r "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] \
   && source "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 
+# zsh-you-should-use — after you run a command that has an alias defined, nudges
+# you to use the alias (e.g. `💡 gs`). Pure preexec hook (no ZLE binding), so
+# load order is loose. `after` shows the hint below the output (least intrusive);
+# left in soft mode (it reminds, never blocks — that'd be YSU_HARDCORE=1).
+export YSU_MESSAGE_POSITION="after"
+[[ -r "$HOME/.config/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh" ]] \
+  && source "$HOME/.config/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh"
+
+# zsh-history-substring-search — type a prefix, then ↑/↓ walk through past
+# commands containing it. MUST be sourced LAST (after zsh-syntax-highlighting,
+# per upstream) so its widgets highlight correctly. Bind ↑/↓ in both xterm
+# (`^[[A`) and application-mode (`^[OA`) forms, plus the terminfo variants; atuin
+# left ↑/↓ free via --disable-up-arrow above.
+if [[ -r "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh"
+  zmodload zsh/terminfo 2>/dev/null
+  bindkey '^[[A' history-substring-search-up
+  bindkey '^[[B' history-substring-search-down
+  bindkey '^[OA' history-substring-search-up
+  bindkey '^[OB' history-substring-search-down
+  [[ -n "${terminfo[kcuu1]}" ]] && bindkey "${terminfo[kcuu1]}" history-substring-search-up
+  [[ -n "${terminfo[kcud1]}" ]] && bindkey "${terminfo[kcud1]}" history-substring-search-down
+fi
+
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
 export NB_DIR="$HOME/notes"
