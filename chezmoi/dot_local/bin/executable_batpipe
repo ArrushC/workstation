@@ -120,7 +120,7 @@ echo "$file"
 # --- BEGIN LIBRARY FILE: proc.sh ---
 parent_executable(){
 local target_pid="${1:-$PPID}"
-ps -f -p "$target_pid"|tail -n 1|awk '{for(i=8;i<=NF;i++) printf $i" "; printf "\n"}'
+ps -f -p "$target_pid"|tail -n 1|awk '{for(i=8;i<=NF;i++) printf "%s ", $i; printf "\n"}'
 }
 parent_executable_pid(){
 local target_pid="${1:-$PPID}"
@@ -146,7 +146,7 @@ target_name="$SHELL"
 break
 fi
 } < <({
-ps -f -p "$target_pid"|tail -n 1|awk '{print $3; for(i=8;i<=NF;i++) printf $i" "; printf "\n"}'
+ps -f -p "$target_pid"|tail -n 1|awk '{print $3; for(i=8;i<=NF;i++) printf "%s ", $i; printf "\n"}'
 })
 done
 if [[ -f $target_name ]];then
