@@ -150,10 +150,10 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 on Windows
                             </h3>
                             <p class="qs-sub">
-                                Run from an
-                                <strong>elevated</strong> PowerShell. Installs
-                                choco + tools, applies dotfiles, hard-links the
-                                wezterm config.
+                                <strong>No admin needed.</strong> Install Git
+                                first, then this installs chezmoi + WezTerm +
+                                Starship under your user profile, applies
+                                dotfiles, and points WezTerm at the repo config.
                             </p>
                             <pre><code>$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
 $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
@@ -1268,8 +1268,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     <li>
                                         bootstrap.ps1
                                         <span class="note"
-                                            >&mdash; Windows entry point (choco
-                                            + chezmoi apply, elevated)</span
+                                            >&mdash; Windows entry point
+                                            (binary installs + chezmoi apply,
+                                            no admin)</span
                                         >
                                     </li>
                                     <li>
@@ -1793,7 +1794,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         &mdash; WSL apps render via WezTerm on the Windows host,
                         which reads Windows-registered fonts. Run
                         <code>bootstrap.ps1</code> on the Windows side to install
-                        the font there instead (step 8: <code>Invoke-InstallNerdFonts</code>
+                        the font there instead (step 7: <code>Invoke-InstallNerdFonts</code>
                         via <code>scripts/install-nerd-fonts.ps1</code>).
                         Re-runnable any time:
                         <code>make -C makefile nerd-fonts MODE=dev</code>.
@@ -1829,7 +1830,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <strong>Wipes:</strong> the cloned repo (<code
                                 >~/.local/share/chezmoi</code
                             >
-                            / <code>C:\Git\workstation</code>) and
+                            / <code>%USERPROFILE%\.local\share\chezmoi</code>) and
                             chezmoi&rsquo;s config dir
                             (<code>~/.config/chezmoi/</code>).
                         </p>
@@ -1859,19 +1860,46 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         parallel of <code>bootstrap.sh</code>.
                     </p>
                     <div class="callout">
-                        <strong>Run from elevated PowerShell.</strong>
-                        Chocolatey needs admin to install, as do most package
-                        installs. Right-click PowerShell &rarr; &ldquo;Run as
-                        administrator&rdquo;. With
-                        <code>-SkipToolInstall</code>, elevation is not
-                        required.
+                        <strong>No admin required.</strong> Everything installs
+                        into your user profile (<code>%LOCALAPPDATA%\workstation</code>,
+                        the User <code>PATH</code>, CurrentUser PSGallery, HKCU
+                        fonts). <strong>Git is a prerequisite you install
+                        yourself</strong> &mdash; the script hard-fails with an
+                        install link if <code>git</code> isn&rsquo;t on PATH.
                     </div>
                     <p>
-                        <strong>Tools installed (via Chocolatey):</strong>
-                        chezmoi, Git, Starship, zoxide, WezTerm, Zed, VSCode.
-                        Required: chezmoi, Git. Optional ones warn-not-fail.
-                        Choco rather than winget because winget&rsquo;s PATH
-                        propagation is unreliable mid-session.
+                        <strong>What the script installs (no package manager,
+                        no admin):</strong>
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>chezmoi</strong> &mdash; official
+                            <code>get.chezmoi.io</code> binary installer into
+                            <code>%LOCALAPPDATA%\workstation\bin</code>.
+                        </li>
+                        <li>
+                            <strong>WezTerm</strong> &mdash; pinned, sha256-verified
+                            portable <code>.zip</code> into
+                            <code>%LOCALAPPDATA%\workstation\wezterm</code>.
+                        </li>
+                        <li>
+                            <strong>Starship</strong> &mdash; pinned,
+                            sha256-verified portable <code>.zip</code> into
+                            <code>%LOCALAPPDATA%\workstation\bin</code>.
+                        </li>
+                    </ul>
+                    <p>
+                        <strong>Git</strong> is a prerequisite you install
+                        yourself (hard-fail if missing).
+                        <strong>Zed</strong> and <strong>VSCode</strong> are
+                        installed by hand too &mdash; the script soft-warns if
+                        they&rsquo;re missing, but their chezmoi configs deploy
+                        regardless. <strong>zoxide</strong> is no longer
+                        installed (the PowerShell profile no-ops without it).
+                        WezTerm/Starship versions are pinned in
+                        <code>bootstrap.ps1</code> (<code>$PortableTools</code>),
+                        the same self-contained pattern as
+                        <code>install-nerd-fonts.ps1</code>.
                     </p>
                     <p class="note-row">
                         <strong>JetBrainsMono Nerd Font Mono</strong> (per-user)
@@ -1880,15 +1908,16 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         registered under
                         <code>HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts</code>
                         by <code>scripts/install-nerd-fonts.ps1</code> (invoked
-                        from <code>bootstrap.ps1</code> step 8). Per-user install
-                        &mdash; no admin needed for the registry registration even
-                        though <code>bootstrap.ps1</code> itself runs elevated.
+                        from <code>bootstrap.ps1</code> step 7). Per-user install
+                        &mdash; no admin needed for the registry registration
+                        (nothing in <code>bootstrap.ps1</code> requires
+                        elevation).
                         Visible to WezTerm, Zed, VS Code, and any other Windows
                         app. Font version matches <code>JETBRAINSMONO_NERD_VERSION</code>
                         in <code>makefile/versions.mk</code>.
                     </p>
 
-                    <h4>One-liner (elevated PowerShell)</h4>
+                    <h4>One-liner (no elevation needed)</h4>
                     <pre><code># === Bootstrap: Windows client ===
 $env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
 $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
@@ -1900,9 +1929,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                     <pre><code>git clone https://github.com/ArrushC/workstation.git `
   "$env:USERPROFILE\.local\share\chezmoi"
 cd "$env:USERPROFILE\.local\share\chezmoi"
-.\bootstrap.ps1                                  # default flow (must be elevated)
+.\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
-.\bootstrap.ps1 -SkipToolInstall                 # tools already installed; non-elevated OK
+.\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt</code></pre>
                     <p class="note-row">
@@ -1910,13 +1939,8 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <code>%USERPROFILE%\.local\share\chezmoi</code>, which
                         matches <code>bootstrap.sh</code>&rsquo;s
                         <code>$HOME/.local/share/chezmoi</code> and chezmoi&rsquo;s
-                        own default source directory. If you previously cloned to
-                        the pre-v2 default <code>C:\Git\workstation</code>,
-                        <code>bootstrap.ps1</code> detects it and offers to
-                        move the clone to the new location. Pass
-                        <code>-RepoPath C:\Git\workstation</code> to keep the
-                        legacy path, or <code>-Yes</code> to auto-move without
-                        prompting.
+                        own default source directory. Override it with
+                        <code>-RepoPath</code> if you keep the repo elsewhere.
                     </p>
 
                     <h4>What <code>bootstrap.ps1</code> does</h4>
@@ -1924,12 +1948,13 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="step">
                             <span class="num">1</span
                             ><span class="lbl">Preflight</span
-                            ><span class="note">admin check</span>
+                            ><span class="note">require git</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Bootstrap Choco + tools</span>
+                            ><span class="lbl">Install chezmoi + WezTerm + Starship</span
+                            ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -1956,10 +1981,14 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         </div>
                     </div>
                     <p class="note-row">
-                        Admin is required <strong>only if</strong> there are
-                        required tools to install. If everything&rsquo;s on
-                        PATH, no admin needed and the install step
-                        short-circuits. <code>GITHUB_TOKEN</code> persists into
+                        <strong>No elevation anywhere in this flow.</strong>
+                        Pass <code>-SkipToolInstall</code> to skip the
+                        chezmoi/WezTerm/Starship installs entirely (assumes
+                        they&rsquo;re already on PATH). The diagram is a
+                        simplified view &mdash; the script also runs BurntToast
+                        and the Nerd Font install (its step 7) between
+                        <code>Set WEZTERM_CONFIG_FILE</code> and the SSH-key step.
+                        <code>GITHUB_TOKEN</code> persists into
                         <code>.git/config</code> (github.com-scoped) so
                         subsequent <code>git push</code>,
                         <code>chezmoi update</code>, and
@@ -1983,10 +2012,6 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <code>automatically_reload_config</code>. This replaces
                         the pre-v2 hardlink mechanism, which broke whenever
                         chezmoi atomic-wrote the target on a content mismatch.
-                        Bootstrap also cleans up any legacy
-                        <code>%USERPROFILE%\.config\wezterm\wezterm.lua</code>
-                        left from prior hardlinked installs, so a stale fallback
-                        can&rsquo;t silently win if you ever unset the env var.
                     </p>
                     <p class="note-row">
                         After bootstrap, restart your shell so the
@@ -2905,7 +2930,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         <input
                             id="ts-filter"
                             type="search"
-                            placeholder="Filter entries (e.g. &lsquo;choco&rsquo;, &lsquo;PATH&rsquo;, &lsquo;wezterm&rsquo;)…"
+                            placeholder="Filter entries (e.g. &lsquo;chezmoi&rsquo;, &lsquo;PATH&rsquo;, &lsquo;wezterm&rsquo;)…"
                             autocomplete="off"
                         />
                         <div class="filter-meta" id="ts-count"></div>
@@ -3157,129 +3182,51 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                     running WezTerm instances</strong> after
                                 &mdash; the env var is read at process start.
                             </p>
-                            <p>
-                                <strong>Migrated from a pre-v2 install?</strong>
-                                The old layout hardlinked
-                                <code
-                                    >%USERPROFILE%\.config\wezterm\wezterm.lua</code
-                                >
-                                to the chezmoi source. The new bootstrap
-                                deletes that file as a hygiene step &mdash; if
-                                <code>WEZTERM_CONFIG_FILE</code> is ever
-                                unset, WezTerm falls back to its default
-                                search path and would find the stale legacy
-                                hardlink. If you ever see WezTerm picking up
-                                stale content after switching bootstraps,
-                                re-run <code>bootstrap.ps1</code> to clear it.
-                            </p>
                         </div>
                     </details>
 
                     <details data-ts>
                         <summary>
                             <code>bootstrap.ps1</code> aborts with
-                            <em
-                                >&ldquo;Admin required to install:
-                                &hellip;&rdquo;</em
-                            >
+                            <em>&ldquo;Git is required but isn&rsquo;t on
+                                PATH&rdquo;</em>
                         </summary>
                         <div class="ts-body">
                             <p>
-                                The preflight names exactly which tools are
-                                missing and require elevation. Two paths:
+                                Git is a prerequisite &mdash; the script does
+                                not install it. Install Git for Windows (an
+                                admin-free per-user install is offered by the
+                                installer), reopen PowerShell, and re-run:
                             </p>
-                            <p>
-                                <strong>(a)</strong> Close the shell,
-                                right-click PowerShell &rarr; &ldquo;Run as
-                                administrator&rdquo;, re-run.
-                            </p>
-                            <p>
-                                <strong>(b)</strong>
-                                <code>choco install -y</code> the named packages
-                                yourself in an admin one-shot, then re-run
-                                non-elevated with <code>-SkipToolInstall</code>.
-                            </p>
-                            <p>
-                                If every tool is already installed and on PATH,
-                                the script just notes &ldquo;All
-                                Chocolatey-managed tools already
-                                installed&rdquo; and proceeds without asking for
-                                admin.
-                            </p>
+                            <pre><code>winget install Git.Git
+# or download: https://git-scm.com/download/win</code></pre>
                         </div>
                     </details>
 
                     <details data-ts>
                         <summary>
-                            <code>bootstrap.ps1</code> says
-                            <em
-                                >&ldquo;&lt;Tool&gt; is registered with choco
-                                but its binary isn&rsquo;t on PATH &mdash;
-                                re-installing with --force&rdquo;</em
-                            >
+                            <code>bootstrap.ps1</code> aborts with
+                            <em>&ldquo;&lt;Tool&gt; sha256 mismatch &mdash;
+                                refusing to install&rdquo;</em>
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Recoverable warning &mdash; choco&rsquo;s local
-                                database lists the package as installed but the
-                                binary&rsquo;s missing (usually from an
-                                interrupted install or someone removing files).
+                                WezTerm/Starship are pinned to a specific version
+                                <em>and</em> sha256 in
+                                <code>$PortableTools</code> inside
+                                <code>bootstrap.ps1</code>. A mismatch means the
+                                pinned hash is stale (upstream re-published the
+                                asset) or the download was corrupted/tampered.
+                                The script refuses to install an unverified
+                                binary.
                             </p>
                             <p>
-                                The script automatically passes
-                                <code>--force</code> to reinstall it. If
-                                <code>choco install --force</code> itself fails:
+                                Fix: re-download the pinned asset, recompute its
+                                hash, and update the <code>Sha256</code> field
+                                for that tool (then re-run). On a trusted network
+                                you can verify the upstream asset:
                             </p>
-                            <pre><code>choco uninstall &lt;id&gt; -y
-choco install -y &lt;id&gt;</code></pre>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            <code>bootstrap.ps1</code> reports
-                            <em
-                                >&ldquo;Chocolatey install completed but `choco`
-                                is not on PATH&rdquo;</em
-                            >
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                The choco installer succeeded but the current
-                                shell&rsquo;s PATH wasn&rsquo;t refreshed in
-                                time.
-                            </p>
-                            <p>
-                                Close the elevated PowerShell, open a new
-                                elevated PowerShell, and re-run &mdash; the new
-                                session inherits the updated machine PATH and
-                                picks up <code>choco</code> correctly.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            A <code>choco install</code> step says
-                            <em>&ldquo;package not found&rdquo;</em> or
-                            <em>&ldquo;deprecated&rdquo;</em>
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Choco package IDs occasionally get
-                                renamed/retired upstream.
-                            </p>
-                            <p>
-                                Edit <code>$ChocoTools</code> in
-                                <code>bootstrap.ps1</code> to point at the
-                                current ID (search at
-                                <a
-                                    href="https://community.chocolatey.org/packages"
-                                    >community.chocolatey.org/packages</a
-                                >), or set the tool as
-                                <code>Required = $false</code> so the rest of
-                                the install proceeds and install it manually.
-                            </p>
+                            <pre><code>(Get-FileHash -Algorithm SHA256 .\&lt;asset&gt;.zip).Hash.ToLower()</code></pre>
                         </div>
                     </details>
 
