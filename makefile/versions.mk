@@ -23,7 +23,7 @@ STARSHIP_VERSION := 1.19.0
 ZELLIJ_VERSION   := 0.40.1
 GLOW_VERSION     := 2.1.2
 NB_VERSION       := latest
-HELIX_VERSION    := 24.03
+HELIX_VERSION    := 25.07.1
 CHEZMOI_VERSION  := latest
 
 # --- Tier-1: static-binary toolbelt ------------------------------------------
