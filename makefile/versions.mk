@@ -19,7 +19,7 @@ EGET_VERSION := 1.3.4
 # --- Tier-0: original toolbelt -----------------------------------------------
 FZF_VERSION      := 0.54.0
 ZOXIDE_VERSION   := 0.9.4
-STARSHIP_VERSION := 1.19.0
+STARSHIP_VERSION := 1.25.1
 ZELLIJ_VERSION   := 0.40.1
 GLOW_VERSION     := 2.1.2
 NB_VERSION       := latest
