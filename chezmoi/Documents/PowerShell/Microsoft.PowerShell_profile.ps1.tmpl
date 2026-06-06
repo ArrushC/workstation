@@ -111,10 +111,16 @@ Set-Alias -Name adminpw -Value Get-AdminPassword
 
 # --- PSReadLine: better history + tab completion ----------------------------
 if (Get-Module -ListAvailable -Name PSReadLine) {
-    Set-PSReadLineOption -PredictionSource History
-    Set-PSReadLineOption -PredictionViewStyle ListView
+    Import-Module PSReadLine
     Set-PSReadLineOption -EditMode Windows
     Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+    # Predictive IntelliSense needs PSReadLine 2.2+. Windows PowerShell 5.1 ships
+    # 2.0 (no -PredictionSource/-PredictionViewStyle), so version-guard these or
+    # 5.1 throws on every startup. Upgrade with: Install-Module PSReadLine -Force
+    if ((Get-Module PSReadLine).Version -ge [version]"2.2.0") {
+        Set-PSReadLineOption -PredictionSource History
+        Set-PSReadLineOption -PredictionViewStyle ListView
+    }
 }
 
 # --- Per-machine override (untracked) ---------------------------------------
