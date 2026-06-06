@@ -132,9 +132,9 @@ $PortableTools = @(
     @{
         Name    = "Starship"
         Exe     = "starship"
-        Version = "1.21.1"
-        Url     = "https://github.com/starship/starship/releases/download/v1.21.1/starship-x86_64-pc-windows-msvc.zip"
-        Sha256  = "19ce36e44825289d56e9af10c5d5f30310073b233f64b8a99dd21402b6c2f007"
+        Version = "1.25.1"
+        Url     = "https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-pc-windows-msvc.zip"
+        Sha256  = "a07cf3e428afab09324e510fb786041ebcc491a68b1ca6fba044c5a461f9b017"
         Layout  = "single"
         Dest    = $WsBin
     },
