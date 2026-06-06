@@ -22,7 +22,7 @@
 # Flow:
 #   1. preflight    — require git on PATH (hard-fail w/ install link); warn if
 #                     ssh-keygen / Zed / VSCode are missing.
-#   2. tool install — chezmoi (official installer) + WezTerm/Starship (pinned
+#   2. tool install — chezmoi (official installer) + WezTerm/Starship/Helix (pinned
 #                     portable downloads), all into %LOCALAPPDATA%\workstation.
 #   3. clone repo   — into -RepoPath (default %USERPROFILE%\.local\share\chezmoi,
 #                     matching bootstrap.sh's $HOME/.local/share/chezmoi and
@@ -63,7 +63,7 @@
 #   -RepoPath <path>    override clone target
 #                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the chezmoi/WezTerm/Starship auto-installs
+#   -SkipToolInstall    skip the chezmoi/WezTerm/Starship/Helix auto-installs
 #                       (assume they're already on PATH)
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
@@ -273,7 +273,7 @@ will run. Either drop -SkipToolInstall (so the script installs chezmoi), pass
 
 # =============================================================================
 # 2. TOOL INSTALL — admin-free binary/portable installs under %LOCALAPPDATA%\
-#    workstation. chezmoi via its official installer; WezTerm + Starship via
+#    workstation. chezmoi via its official installer; WezTerm + Starship + Helix via
 #    pinned, sha256-verified portable archives. Zed/VSCode are hand-installed
 #    (soft-warn). zoxide is intentionally not installed.
 # =============================================================================
