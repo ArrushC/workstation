@@ -3242,6 +3242,45 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
 
                     <details data-ts>
                         <summary>
+                            PowerShell aliases / <code>adminpw</code> /
+                            <code>cz*</code> don&rsquo;t load (the profile seems
+                            ignored)
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Almost always <strong>Documents folder
+                                redirection</strong> (OneDrive / corporate folder
+                                redirection). PowerShell loads
+                                <code>$PROFILE</code> from the redirected location
+                                (e.g.
+                                <code>%USERPROFILE%\OneDrive - &lt;Org&gt;\Documents\</code>),
+                                but chezmoi deploys the managed profile to the
+                                <em>literal</em>
+                                <code>%USERPROFILE%\Documents\PowerShell\</code>
+                                &mdash; so your shell never loads it.
+                            </p>
+                            <p>
+                                <code>bootstrap.ps1</code> handles this
+                                automatically (step 5b drops a one-line loader at
+                                the real <code>$PROFILE</code> that dot-sources the
+                                managed canonical). If you hit it before re-running
+                                bootstrap, confirm the mismatch and create the
+                                loader yourself:
+                            </p>
+                            <pre><code># differ? -> Documents is redirected
+$PROFILE.CurrentUserCurrentHost
+"$env:USERPROFILE\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+
+# point the real $PROFILE at the managed canonical
+$dir = Split-Path $PROFILE.CurrentUserCurrentHost
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+'. "$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"' |
+  Set-Content $PROFILE.CurrentUserCurrentHost</code></pre>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
                             <code>hosts.ini</code> is out of sync with
                             <code>hosts.conf</code>
                         </summary>

@@ -31,6 +31,8 @@
 #                     Zed/VSCode settings, etc.). wezterm.lua is ignored on
 #                     Windows; WezTerm reads it via the env var in step 5.
 #   5. wezterm env  — set User-scope WEZTERM_CONFIG_FILE at the chezmoi source.
+#   5b. profile shim— if Documents is redirected (OneDrive), drop a loader at the
+#                     real $PROFILE that sources the chezmoi canonical profile.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -570,6 +572,53 @@ function Invoke-WeztermConfigEnv {
 }
 
 # =============================================================================
+# 5b. POWERSHELL PROFILE SHIM (Documents redirection) — when Documents is
+#    redirected (OneDrive / corporate folder redirection), $PROFILE resolves to
+#    the redirected dir, but chezmoi deploys the canonical profile to the LITERAL
+#    %USERPROFILE%\Documents\PowerShell — so PowerShell never loads the managed
+#    profile. Drop a tiny loader at the real $PROFILE dir(s) that dot-sources the
+#    chezmoi canonical. No-op when Documents isn't redirected (chezmoi's normal
+#    deploy already lands in the right place). The literal-path canonical stays
+#    the single source of truth; this only bridges the redirect.
+# =============================================================================
+function Invoke-ProfileShim {
+    $canonical = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+    if (-not (Test-Path $canonical)) {
+        Write-Warn "Canonical PowerShell profile not at $canonical — skipping profile shim."
+        return
+    }
+    $realDocs    = [Environment]::GetFolderPath("MyDocuments")
+    $literalDocs = Join-Path $env:USERPROFILE "Documents"
+    if ([string]::IsNullOrEmpty($realDocs) -or ($realDocs -eq $literalDocs)) {
+        Write-Ok "Documents not redirected — PowerShell loads the managed profile directly."
+        return
+    }
+
+    Write-Log "Documents redirected to $realDocs — installing profile loader(s)..."
+    $loader = @'
+# Loader (managed by bootstrap.ps1) — Documents is redirected (OneDrive / folder
+# redirection), so PowerShell loads $PROFILE from here. Source the chezmoi-managed
+# canonical profile at the literal %USERPROFILE%\Documents.
+$canonical = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+if (Test-Path $canonical) { . $canonical }
+'@
+    foreach ($sub in @("WindowsPowerShell", "PowerShell")) {
+        $dir    = Join-Path $realDocs $sub
+        $target = Join-Path $dir "Microsoft.PowerShell_profile.ps1"
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        # Back up a pre-existing non-loader profile once, so we never silently
+        # clobber a hand-written one.
+        if ((Test-Path $target) -and -not (Select-String -Path $target -Pattern "managed by bootstrap.ps1" -Quiet)) {
+            $bak = "$target.pre-chezmoi.bak"
+            if (-not (Test-Path $bak)) { Copy-Item $target $bak -Force; Write-Warn "Backed up existing $sub profile to $bak" }
+        }
+        Set-Content -Path $target -Value $loader -Encoding UTF8
+        Write-Ok "Profile loader installed: $target"
+    }
+    Write-Warn "Restart PowerShell to pick up the managed profile."
+}
+
+# =============================================================================
 # 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
 #    chezmoi/private_dot_claude/executable_notify.sh (deployed to
@@ -685,6 +734,7 @@ Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPD
 Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
+Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
 Invoke-EnsureSshKey
