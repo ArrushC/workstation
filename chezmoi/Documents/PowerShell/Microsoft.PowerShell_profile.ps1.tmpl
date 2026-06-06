@@ -39,6 +39,30 @@ function gd  { git diff @args }
 function gco { git checkout @args }
 function gbr { git branch @args }
 
+# --- ssh helpers ------------------------------------------------------------
+# Windows OpenSSH has no ssh-copy-id; this mirrors it. Picks a ~/.ssh/*.pub
+# (prompts if several), confirms, then appends it to the target's
+# authorized_keys over ssh.
+function ssh-copy-id {
+    param([Parameter(Mandatory = $true)][string]$Target)
+    $pubKeys = Get-ChildItem "$HOME\.ssh\*.pub" -ErrorAction Stop
+    if (-not $pubKeys) { Write-Error "No public keys found in $HOME\.ssh"; return }
+    if ($pubKeys.Count -eq 1) {
+        $key = $pubKeys[0]
+    } else {
+        Write-Host "Available public keys:"
+        for ($i = 0; $i -lt $pubKeys.Count; $i++) { Write-Host "[$($i + 1)] $($pubKeys[$i].Name)" }
+        $choice = Read-Host "Select key number [1]"
+        if ([string]::IsNullOrWhiteSpace($choice)) { $choice = 1 }
+        if (($choice -as [int]) -lt 1 -or ($choice -as [int]) -gt $pubKeys.Count) { Write-Error "Invalid selection"; return }
+        $key = $pubKeys[[int]$choice - 1]
+    }
+    Write-Host "Using key: $($key.FullName)"
+    $confirm = Read-Host "Copy this key to $Target? [Y/n]"
+    if ($confirm -match "^[Nn]") { Write-Host "Cancelled."; return }
+    Get-Content $key.FullName | ssh $Target "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+}
+
 # --- Navigation -------------------------------------------------------------
 function .. { Set-Location .. }
 function ... { Set-Location ../.. }
