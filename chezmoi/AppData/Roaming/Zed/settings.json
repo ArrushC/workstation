@@ -184,8 +184,8 @@
   "buffer_font_size": 13.0,
   "theme": {
     "mode": "dark",
-    "light": "Gruvbox Light",
-    "dark": "Catppuccin Mocha",
+    "light": "Catppuccin Mocha",
+    "dark": "Vesper Blur",
   },
   "lsp": {
     "clangd": {
