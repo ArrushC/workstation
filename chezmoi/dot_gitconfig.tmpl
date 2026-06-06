@@ -4,7 +4,10 @@
     email = {{ .email }}
 
 [core]
-    editor     = hx
+    # hx (helix) is the Linux editor; it isn't installed on Windows, so fall
+    # back to Zed there. `zed --wait` blocks until the buffer is closed, which
+    # git requires to read the commit message / rebase todo.
+    editor     = {{ if eq .chezmoi.os "windows" }}zed --wait{{ else }}hx{{ end }}
     autocrlf   = input
     # `delta` is a Linux-only tool (installed via makefile/tools.mk); it is NOT
     # present on Windows, so spawning it as the pager aborts every paging git

@@ -13,7 +13,12 @@
     group    = "{{ if env "WORKSTATION_GROUP" }}{{ env "WORKSTATION_GROUP" }}{{ else }}{{ promptStringOnce . "group" "Machine group (dev_machine|prod_machine)" }}{{ end }}"
 
 [edit]
-    command = "hx"
+    # hx isn't on Windows — use Zed there (--wait so chezmoi blocks until the
+    # buffer is closed). Linux keeps helix.
+    command = "{{ if eq .chezmoi.os "windows" }}zed{{ else }}hx{{ end }}"
+{{- if eq .chezmoi.os "windows" }}
+    args    = ["--wait"]
+{{- end }}
 
 # When the interactive apply prompt offers `diff/overwrite/skip/quit` and you
 # press `d`, chezmoi pipes its unified diff into this pager. `delta` (installed
@@ -26,16 +31,17 @@
     pager = "{{ if eq .chezmoi.os "windows" }}{{ else }}delta{{ end }}"
 
 # When the interactive apply prompt offers `m` (or you run `chezmoi merge`),
-# this command opens a 3-way merge view. vimdiff arg order is the chezmoi
-# standard: Destination = your local file, Source = chezmoi's pre-apply
-# source state, Target = the new state chezmoi wants to write. Edit any
-# pane, `:wqa`, and chezmoi takes the final Destination as the resolution.
-#
-# Requires vim-enhanced (packages.mk LINUX_OPTIONAL_PACKAGES on Linux dev
-# hosts). On prod hosts without vim-enhanced, chezmoi falls back to its
-# builtin merge prompt.
+# this opens a 3-way merge. Arg order is the chezmoi standard: Destination =
+# your local file, Source = chezmoi's pre-apply source state, Target = the new
+# state chezmoi wants to write; chezmoi takes the final Destination as the
+# resolution.
+#   Linux:   vimdiff (vim-enhanced, packages.mk LINUX_OPTIONAL_PACKAGES). Edit a
+#            pane, `:wqa`. Without vim-enhanced chezmoi falls back to its builtin.
+#   Windows: vimdiff is unavailable (git's bundled vim isn't on the PATH chezmoi
+#            sees), so use Zed — it opens the three files as tabs; reconcile into
+#            Destination, save, and close them (`--wait` blocks until then).
 [merge]
-    command = "vimdiff"
+    command = "{{ if eq .chezmoi.os "windows" }}zed{{ else }}vimdiff{{ end }}"
 {{/*
     The Destination / Source / Target refs in args below are chezmoi
     merge-time placeholders, NOT template-render data. Each open and
@@ -45,7 +51,7 @@
     TOML hash comments also do not shield literal template directives
     from evaluation. Source-only notes live in Go template comments.
 */}}
-    args    = ["{{ "{{" }} .Destination {{ "}}" }}", "{{ "{{" }} .Source {{ "}}" }}", "{{ "{{" }} .Target {{ "}}" }}"]
+    args    = [{{ if eq .chezmoi.os "windows" }}"--wait", {{ end }}"{{ "{{" }} .Destination {{ "}}" }}", "{{ "{{" }} .Source {{ "}}" }}", "{{ "{{" }} .Target {{ "}}" }}"]
 
 [git]
     autoCommit = false
