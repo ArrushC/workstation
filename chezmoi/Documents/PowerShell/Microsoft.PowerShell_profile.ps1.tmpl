@@ -54,6 +54,37 @@ function Edit-Hosts {
 }
 Set-Alias -Name hosts -Value Edit-Hosts
 
+# --- LAPS: copy this machine's local-admin password to the clipboard --------
+# Wraps Microsoft LAPS (AdmPwd.PS). Does NOT print the password — copies it to
+# the clipboard and shows only the computer name + expiry. Needs the AdmPwd.PS
+# module + AD read rights on ms-Mcs-AdmPwd. Guarded so it's a harmless no-op
+# (warning only when called) on machines without LAPS.
+#   adminpw                       # this machine -> clipboard
+#   adminpw -ComputerName OTHER   # another machine
+function Get-AdminPassword {
+    [CmdletBinding()]
+    param([string]$ComputerName = (hostname))
+
+    if (-not (Get-Command Get-AdmPwdPassword -ErrorAction SilentlyContinue)) {
+        Write-Warning "AdmPwd.PS (LAPS) not available on this machine."
+        return
+    }
+    try {
+        $r = Get-AdmPwdPassword -ComputerName $ComputerName -ErrorAction Stop
+    } catch {
+        Write-Warning "LAPS lookup failed for ${ComputerName}: $($_.Exception.Message)"
+        return
+    }
+    if (-not $r -or -not $r.Password) {
+        Write-Warning "No LAPS password returned for $ComputerName (no rights, or not LAPS-managed)."
+        return
+    }
+    $r.Password | Set-Clipboard
+    Write-Host ("admin password for {0} copied to clipboard" -f $r.ComputerName) -ForegroundColor Green
+    Write-Host ("  expires: {0}" -f $r.ExpirationTimestamp) -ForegroundColor DarkGray
+}
+Set-Alias -Name adminpw -Value Get-AdminPassword
+
 # --- PSReadLine: better history + tab completion ----------------------------
 if (Get-Module -ListAvailable -Name PSReadLine) {
     Set-PSReadLineOption -PredictionSource History
