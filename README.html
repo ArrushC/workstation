@@ -1887,6 +1887,12 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             sha256-verified portable <code>.zip</code> into
                             <code>%LOCALAPPDATA%\workstation\bin</code>.
                         </li>
+                        <li>
+                            <strong>Helix</strong> (<code>hx</code>) &mdash;
+                            pinned, sha256-verified portable <code>.zip</code>
+                            into <code>%LOCALAPPDATA%\workstation\helix</code>
+                            (binary + bundled runtime). The git/chezmoi editor.
+                        </li>
                     </ul>
                     <p>
                         <strong>Git</strong> is a prerequisite you install
@@ -1896,10 +1902,14 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         they&rsquo;re missing, but their chezmoi configs deploy
                         regardless. <strong>zoxide</strong> is no longer
                         installed (the PowerShell profile no-ops without it).
-                        WezTerm/Starship versions are pinned in
+                        WezTerm/Starship/Helix versions are pinned in
                         <code>bootstrap.ps1</code> (<code>$PortableTools</code>),
                         the same self-contained pattern as
-                        <code>install-nerd-fonts.ps1</code>.
+                        <code>install-nerd-fonts.ps1</code>; the Helix pin tracks
+                        <code>HELIX_VERSION</code> in <code>makefile/versions.mk</code>.
+                        Your helix config deploys to
+                        <code>%APPDATA%\helix\config.toml</code> on Windows
+                        (Helix&rsquo;s Windows config dir).
                     </p>
                     <p class="note-row">
                         <strong>JetBrainsMono Nerd Font Mono</strong> (per-user)
@@ -1931,7 +1941,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
-.\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship already on PATH
+.\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt</code></pre>
                     <p class="note-row">
@@ -1953,7 +1963,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Install chezmoi + WezTerm + Starship</span
+                            ><span class="lbl">Install chezmoi + WezTerm + Starship + Helix</span
                             ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -1983,7 +1993,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                     <p class="note-row">
                         <strong>No elevation anywhere in this flow.</strong>
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship installs entirely (assumes
+                        chezmoi/WezTerm/Starship/Helix installs entirely (assumes
                         they&rsquo;re already on PATH). The diagram is a
                         simplified view &mdash; the script also runs BurntToast
                         and the Nerd Font install (its step 7) between
@@ -3211,7 +3221,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         </summary>
                         <div class="ts-body">
                             <p>
-                                WezTerm/Starship are pinned to a specific version
+                                WezTerm/Starship/Helix are pinned to a specific version
                                 <em>and</em> sha256 in
                                 <code>$PortableTools</code> inside
                                 <code>bootstrap.ps1</code>. A mismatch means the
