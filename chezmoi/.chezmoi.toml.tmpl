@@ -13,12 +13,7 @@
     group    = "{{ if env "WORKSTATION_GROUP" }}{{ env "WORKSTATION_GROUP" }}{{ else }}{{ promptStringOnce . "group" "Machine group (dev_machine|prod_machine)" }}{{ end }}"
 
 [edit]
-    # hx isn't on Windows — use Zed there (--wait so chezmoi blocks until the
-    # buffer is closed). Linux keeps helix.
-    command = "{{ if eq .chezmoi.os "windows" }}zed{{ else }}hx{{ end }}"
-{{- if eq .chezmoi.os "windows" }}
-    args    = ["--wait"]
-{{- end }}
+    command = "hx"
 
 # When the interactive apply prompt offers `diff/overwrite/skip/quit` and you
 # press `d`, chezmoi pipes its unified diff into this pager. `delta` (installed
