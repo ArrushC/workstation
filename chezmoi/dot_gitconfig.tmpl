@@ -6,7 +6,13 @@
 [core]
     editor     = hx
     autocrlf   = input
-    pager      = delta
+    # `delta` is a Linux-only tool (installed via makefile/tools.mk); it is NOT
+    # present on Windows, so spawning it as the pager aborts every paging git
+    # command (log/diff/show/blame). Fall back to Git-for-Windows' bundled
+    # `less` there (git finds it in its own libexec even when it's not on the
+    # PowerShell PATH). The [delta] sections below stay — git ignores unknown
+    # sections, so they're harmless/inert on Windows.
+    pager      = {{ if eq .chezmoi.os "windows" }}less{{ else }}delta{{ end }}
 
 [init]
     defaultBranch = main
