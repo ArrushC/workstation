@@ -10,6 +10,8 @@
 #   - chezmoi   — official get.chezmoi.io binary installer  → workstation\bin
 #   - Starship  — pinned portable .zip (sha256-verified)    → workstation\bin
 #   - WezTerm   — pinned portable .zip (sha256-verified)    → workstation\wezterm
+#   - Helix     — pinned portable .zip (sha256-verified)    → workstation\helix
+#                 (hx.exe + bundled runtime/; no HELIX_RUNTIME env var needed)
 #
 #   Git is a PREREQUISITE you install yourself — the script HARD-FAILS if git
 #   isn't on PATH (https://git-scm.com/download/win or `winget install Git.Git`).
@@ -112,10 +114,12 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 # Per-user install root for every binary this script provisions. Admin-free:
 #   workstation\bin      — single-exe tools (chezmoi, starship)  → on User PATH
 #   workstation\wezterm  — the multi-file WezTerm portable tree  → on User PATH
+#   workstation\helix    — the multi-file Helix portable tree    → on User PATH
 #   workstation\stamps   — "<exe>.<version>.stamp" idempotency markers
 $WsRoot    = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin     = Join-Path $WsRoot "bin"
 $WsWezterm = Join-Path $WsRoot "wezterm"
+$WsHelix   = Join-Path $WsRoot "helix"
 $WsStamps  = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
@@ -142,6 +146,15 @@ $PortableTools = @(
         Sha256  = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
         Layout  = "tree"
         Dest    = $WsWezterm
+    },
+    @{
+        Name    = "Helix"
+        Exe     = "hx"
+        Version = "25.07.1"
+        Url     = "https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-windows.zip"
+        Sha256  = "5c8325ced8bacd8418d62706f669e96d9c3578a9237526e34d546900cbc049b6"
+        Layout  = "tree"
+        Dest    = $WsHelix
     }
 )
 
@@ -165,7 +178,7 @@ function Invoke-Reinstall {
     Write-Host "    - SSH keys"
     Write-Host ""
     Write-Host "  For a deeper uninstall (remove the portable tools too), do that manually first:"
-    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # chezmoi/starship/wezterm re-download next run"
+    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # chezmoi/starship/wezterm/helix re-download next run"
     Write-Host ""
 
     # Self-deletion guard: if this script is being run from inside the path we're
@@ -399,7 +412,7 @@ The pinned hash in `$PortableTools is stale, or the download was corrupted/tampe
             # folder; flatten that so wezterm-gui.exe lands directly in Dest.
             $top = @(Get-ChildItem -Path $tmpDir)
             $src = if (($top.Count -eq 1) -and $top[0].PSIsContainer) { $top[0].FullName } else { $tmpDir }
-            # NOTE: a WezTerm running from $Dest locks its exe/dlls — this wipe then throws and the outer try/catch warn-not-fails. Close WezTerm before re-running to refresh it.
+            # NOTE: if the tool is running from $Dest its files are locked — this wipe then throws and the outer try/catch warn-not-fails. Close the app (WezTerm/Helix) before re-running to refresh it.
             if (Test-Path $Tool.Dest) { Remove-Item -Recurse -Force $Tool.Dest }
             New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null
             Copy-Item -Path (Join-Path $src '*') -Destination $Tool.Dest -Recurse -Force
@@ -419,11 +432,11 @@ The pinned hash in `$PortableTools is stale, or the download was corrupted/tampe
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship are on PATH"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix are on PATH"
         return
     }
 
-    foreach ($d in @($WsRoot, $WsBin, $WsStamps)) {
+    foreach ($d in @($WsRoot, $WsBin, $WsHelix, $WsStamps)) {
         if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
     }
 
@@ -679,8 +692,8 @@ Invoke-EnsureSshKey
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
-Write-Host "Open a NEW PowerShell tab so the updated User PATH (${Bold}$WsBin${Reset} +"
-Write-Host "${Bold}$WsWezterm${Reset}) and the chezmoi-applied `$PROFILE pick up — starship"
+Write-Host "Open a NEW PowerShell tab so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsWezterm${Reset},"
+Write-Host "${Bold}$WsHelix${Reset}) and the chezmoi-applied `$PROFILE pick up — starship"
 Write-Host "prompt, chezmoi/git aliases, etc."
 Write-Host "Restart WezTerm too if any instances were running — they need a fresh process"
 Write-Host "to see the new ${Bold}WEZTERM_CONFIG_FILE${Reset} env var."
