@@ -751,6 +751,17 @@ Write-Host ""
 Write-Host "Not installed by this script (install yourself if you want them):"
 Write-Host "  Zed, VSCode  — their chezmoi configs are already deployed."
 Write-Host ""
+
+# Print the curated hand-install shopping list (docs/windows/application_list.md).
+# Personal preference order — terminals, file managers, search, editors, etc.
+# Soft-skip if the file is missing (partial clone, older repo snapshot).
+$appList = Join-Path $RepoPath "docs\windows\application_list.md"
+if (Test-Path $appList) {
+    Write-Host "${Bold}Hand-install shopping list${Reset} (docs\windows\application_list.md):"
+    Get-Content $appList | ForEach-Object { Write-Host "  $_" }
+    Write-Host ""
+}
+
 Write-Host "Next steps:"
 Write-Host "  1. Add a host to hosts.conf:"
 Write-Host "       cd $RepoPath"

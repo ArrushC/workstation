@@ -1,0 +1,18 @@
+Items with groups slashed in order of preference (leftmost = most preferred, rightmost = least):
+- Ghostty / WezTerm / Alacritty / MobaXterm / Tabby / PuTTY
+- WinSCP / FileZilla
+- Everything
+- Obsidian / Notion / Typora
+- Git / SVN
+- Move Mouse
+- Zed / VSCode / JetBrains / Notepad++
+- WizTree
+- WinMerge
+- Edge
+- Claude Code
+- OneCommander / Directory Opus
+- ShareX
+- C, C++, Go, Python, Bun
+- Nilesoft Shell
+- Starship
+- WSL - AlmaLinux
