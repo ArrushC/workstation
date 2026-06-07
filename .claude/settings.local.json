@@ -74,7 +74,8 @@
       "Bash(chezmoi diff *)",
       "Bash(chezmoi apply *)",
       "Bash(chezmoi status *)",
-      "Bash(command -v chezmoi)"
+      "Bash(command -v chezmoi)",
+      "Bash(Select-Object Name)"
     ]
   }
 }
