@@ -2,7 +2,7 @@ Items with groups slashed in order of preference (leftmost = most preferred, rig
 - Ghostty / WezTerm / Alacritty / MobaXterm / Tabby / PuTTY
 - WinSCP / FileZilla
 - Everything
-- Obsidian / Notion / Typora
+- Obsidian *(auto-installed by `bootstrap.ps1`)* / Notion / Typora
 - Git / SVN
 - Move Mouse
 - Zed / VSCode / JetBrains / Notepad++
