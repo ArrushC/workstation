@@ -466,7 +466,7 @@ function Test-InstallerPresent {
     )
     foreach ($root in $roots) {
         $hit = Get-ItemProperty -Path $root -ErrorAction SilentlyContinue |
-               Where-Object { $_.DisplayName -like $DisplayName }
+               Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $DisplayName }
         if ($hit) { return $true }
     }
     return $false
@@ -520,6 +520,7 @@ function Install-InstallerTool {
     try {
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpExe -UseBasicParsing
     } catch {
+        Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
         Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
         Write-Warn "  Skipping — install it manually or re-run later."
         return
@@ -528,10 +529,14 @@ function Install-InstallerTool {
     try {
         # Verify against the API-reported sha256 digest. Mismatch is a HARD fail
         # (corruption/tamper); a missing digest warns but proceeds (HTTPS + GitHub).
-        # NOTE: Write-Fail calls exit 1, so the temp file is removed BEFORE it (a
-        # finally block would NOT run on exit) — mirrors Install-PortableTool.
-        if ($asset.digest -and $asset.digest.StartsWith("sha256:")) {
-            $expected = $asset.digest.Substring(7).ToLower()
+        # NOTE: Write-Fail calls exit 1; remove the temp file BEFORE it so cleanup
+        # is guaranteed regardless of whether finally runs on exit — mirrors
+        # Install-PortableTool. Under Set-StrictMode -Version Latest an absent
+        # 'digest' property THROWS on access, so probe it via PSObject.Properties
+        # (not $asset.digest directly) to keep the warn-and-proceed path working.
+        $digest = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
+        if ($digest -and $digest.StartsWith("sha256:")) {
+            $expected = $digest.Substring(7).ToLower()
             $actual   = (Get-FileHash -Algorithm SHA256 -Path $tmpExe).Hash.ToLower()
             if ($actual -ne $expected) {
                 Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
