@@ -164,6 +164,24 @@ $PortableTools = @(
     }
 )
 
+# Installer-layout tools — apps that publish a silent, admin-free installer (.exe)
+# instead of a portable zip. Unlike $PortableTools these are NOT version-pinned:
+# we resolve the LATEST GitHub release at run time (the app self-updates after),
+# verify the download against the GitHub API's per-asset sha256 'digest', run the
+# installer silently PER-USER (no admin), and add NOTHING to PATH (GUI apps create
+# their own Start-menu shortcut). Presence is detected via the Uninstall registry
+# (DisplayName), so a manual uninstall makes the next bootstrap reinstall. Force a
+# reinstall with -ForceInstaller.
+$InstallerTools = @(
+    @{
+        Name       = "Obsidian"
+        Repo       = "obsidianmd/obsidian-releases"  # GitHub owner/repo for LATEST
+        AssetMatch = "Obsidian-*.exe"                # selects the Windows installer asset
+        SilentArgs = "/S"                            # NSIS per-user silent (NO /allusers -> no admin)
+        DetectName = "Obsidian*"                      # HKCU/HKLM Uninstall DisplayName glob
+    }
+)
+
 # =============================================================================
 # 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let the
 #    rest of the script re-bootstrap fresh. Installed tools and deployed
@@ -433,6 +451,111 @@ The pinned hash in `$PortableTools is stale, or the download was corrupted/tampe
     } finally {
         Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
         Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# True if an app with a matching Uninstall-registry DisplayName is installed —
+# per-user (HKCU) or machine-wide (HKLM / WOW6432Node). Path-independent presence
+# check; a Control-Panel uninstall removes the key, so the next bootstrap reinstalls.
+function Test-InstallerPresent {
+    param([string]$DisplayName)
+    $roots = @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($root in $roots) {
+        $hit = Get-ItemProperty -Path $root -ErrorAction SilentlyContinue |
+               Where-Object { $_.DisplayName -like $DisplayName }
+        if ($hit) { return $true }
+    }
+    return $false
+}
+
+# Install a silent, admin-free .exe installer at its LATEST GitHub release. NOT
+# version-pinned (app self-updates after); verified against the API 'digest'.
+function Install-InstallerTool {
+    param([hashtable]$Tool)
+
+    # Idempotency: skip if already installed, unless -ForceInstaller. Detection is by
+    # Uninstall-registry DisplayName (not a version stamp) — these are LATEST/
+    # self-updating, so there is no version to stamp.
+    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $Tool.DetectName)) {
+        Write-Ok "$($Tool.Name) already installed (use -ForceInstaller to reinstall)"
+        return
+    }
+
+    Write-Log "Installing $($Tool.Name) (latest, installer)..."
+
+    [System.Net.ServicePointManager]::SecurityProtocol = `
+        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+    # Resolve the latest release. $env:GITHUB_TOKEN (already used for the private-repo
+    # clone) lifts the 60-req/hr anonymous API rate limit. A User-Agent is required
+    # by the GitHub API.
+    $headers = @{ "User-Agent" = "workstation-bootstrap" }
+    if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
+
+    try {
+        $release = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
+            -Headers $headers -UseBasicParsing
+    } catch {
+        Write-Warn "$($Tool.Name): GitHub API lookup failed: $($_.Exception.Message)"
+        Write-Warn "  Skipping — install it manually or re-run later."
+        return
+    }
+
+    $assets = @($release.assets | Where-Object { $_.name -like $Tool.AssetMatch })
+    if ($assets.Count -eq 0) {
+        Write-Warn "$($Tool.Name): no asset matching '$($Tool.AssetMatch)' in $($release.tag_name) — skipping"
+        return
+    }
+    if ($assets.Count -gt 1) {
+        Write-Warn "$($Tool.Name): $($assets.Count) assets match '$($Tool.AssetMatch)' — using $($assets[0].name)"
+    }
+    $asset  = $assets[0]
+    $tmpExe = Join-Path $env:TEMP "ws-$($Tool.Name)-installer.exe"
+
+    try {
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpExe -UseBasicParsing
+    } catch {
+        Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
+        Write-Warn "  Skipping — install it manually or re-run later."
+        return
+    }
+
+    try {
+        # Verify against the API-reported sha256 digest. Mismatch is a HARD fail
+        # (corruption/tamper); a missing digest warns but proceeds (HTTPS + GitHub).
+        # NOTE: Write-Fail calls exit 1, so the temp file is removed BEFORE it (a
+        # finally block would NOT run on exit) — mirrors Install-PortableTool.
+        if ($asset.digest -and $asset.digest.StartsWith("sha256:")) {
+            $expected = $asset.digest.Substring(7).ToLower()
+            $actual   = (Get-FileHash -Algorithm SHA256 -Path $tmpExe).Hash.ToLower()
+            if ($actual -ne $expected) {
+                Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
+                Write-Fail @"
+$($Tool.Name) sha256 mismatch — refusing to install.
+  expected: $expected
+  actual:   $actual
+The GitHub-reported digest doesn't match the download (corrupted or tampered).
+"@
+            }
+        } else {
+            Write-Warn "$($Tool.Name): GitHub published no sha256 digest for $($asset.name) — skipping hash verification."
+        }
+
+        # Silent, per-user install. No Add-ToUserPath — GUI apps make their own
+        # Start-menu shortcut and self-update from here.
+        $proc = Start-Process -FilePath $tmpExe -ArgumentList $Tool.SilentArgs -Wait -PassThru
+        if ($proc.ExitCode -ne 0) {
+            Write-Warn "$($Tool.Name) installer exited with code $($proc.ExitCode) — verify it installed."
+        } else {
+            Write-Ok "$($Tool.Name) installed ($($release.tag_name))"
+        }
+    } finally {
+        Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
     }
 }
 
