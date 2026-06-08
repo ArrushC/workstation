@@ -348,6 +348,16 @@ y() {
   command rm -f -- "$tmp"
 }
 
+# nnn file manager — `nn` opens it; on quit, cd to wherever you ended up.
+nn() {
+  local tmp
+  tmp="$(mktemp -t nnn-cwd.XXXXXX)"
+  # NNN_TMPFILE scoped to this call only (no env leak into a later bare `nnn`).
+  NNN_TMPFILE="$tmp" command nnn "$@"
+  [[ -s "$tmp" ]] && source "$tmp"
+  command rm -f -- "$tmp"
+}
+
 # --- Machine-specific overrides ----------------------------------------------
 # Sourced last so they can override anything above
 {{ if eq .chezmoi.hostname "rhel-dev-01" }}
