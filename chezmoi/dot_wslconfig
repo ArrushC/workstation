@@ -1,9 +1,9 @@
-# .wslconfig — global WSL2 settings shared by every distro on this Windows
+# .wslconfig -- global WSL2 settings shared by every distro on this Windows
 # host. chezmoi deploys this to %USERPROFILE%\.wslconfig (Windows only).
 # Changes take effect only after `wsl --shutdown` from a Windows terminal.
 # Reference: https://learn.microsoft.com/windows/wsl/wsl-config
 #
-# All keys are commented out — deploying this file is a safe no-op until you
+# All keys are commented out -- deploying this file is a safe no-op until you
 # uncomment and tune values for this machine.
 [wsl2]
 # memory=8GB           # cap VM memory (default: 50% of host RAM)
