@@ -2210,6 +2210,24 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <code>Tc</code>, <code>Smulx</code>, <code>Setulc</code>) and
                         <code>echo $TERM</code> in a new pane (prints <code>wezterm</code>).
                     </p>
+                    <p class="note-row">
+                        <strong>WSL config is tracked &amp; deployed.</strong>
+                        Two files configure WSL, and the repo owns both.
+                        <code>/etc/wsl.conf</code> (per-distro: systemd,
+                        automount, interop, default user) is deployed on WSL
+                        hosts by <code>make wsl-config</code> &mdash; part of
+                        <code>make dev</code> / <code>provision</code>, gated to
+                        WSL hosts with sudo, from the tracked
+                        <code>configs/wsl/wsl.conf</code>. The global
+                        <code>%USERPROFILE%\.wslconfig</code> (WSL2 VM memory /
+                        CPU / networking, all distros) is deployed by chezmoi on
+                        the Windows host from <code>chezmoi/dot_wslconfig</code>.
+                        <strong>Both need <code>wsl --shutdown</code></strong>
+                        from a Windows terminal to take effect;
+                        <code>wsl-config</code> prints the reminder, and a
+                        chezmoi <code>run_onchange</code> script prints it on
+                        Windows when <code>.wslconfig</code> changes.
+                    </p>
 
                     <h3 id="setup-wezterm">WezTerm keybinds</h3>
                     <p class="lede">
@@ -3612,8 +3630,11 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     Set
                                     <code>appendWindowsPath=false</code> under
                                     <code>[interop]</code> in
-                                    <code>/etc/wsl.conf</code>, then
-                                    <code>wsl --shutdown</code> from a
+                                    <code>/etc/wsl.conf</code> &mdash; now
+                                    deployed for you by
+                                    <code>make wsl-config</code> (tracked at
+                                    <code>configs/wsl/wsl.conf</code>) &mdash;
+                                    then <code>wsl --shutdown</code> from a
                                     <em>Windows</em> terminal (ends all WSL
                                     sessions) and reopen.
                                 </li>
