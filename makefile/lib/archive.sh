@@ -10,9 +10,10 @@
 #   archive.sh <binary_spec> <url>
 #
 #   binary_spec  Single name, or colon-separated for multi-binary archives:
-#                  'gitui'           install just gitui
-#                  'yazi:ya'         install BOTH yazi AND ya from one archive
-#                  'sg:ast-grep'     install BOTH sg AND ast-grep
+#                  'gitui'                   install just gitui
+#                  'yazi:ya'                 install BOTH yazi AND ya from one archive
+#                  'sg:ast-grep'             install BOTH sg AND ast-grep
+#                  'nnn-musl-static=nnn'     find `nnn-musl-static`, install as `nnn`
 #
 #   url          Direct URL to the archive. Format inferred from extension.
 #
@@ -56,11 +57,13 @@ rm -f "$archive"
 
 IFS=':' read -ra names <<<"$bin_spec"
 for name in "${names[@]}"; do
+  src="${name%%=*}"   # part before '=' (whole string if no '=')
+  dst="${name##*=}"   # part after  '=' (whole string if no '=')
   # -print -quit stops the walk on first match (faster than | head -1)
-  found=$(find "$tmp" -type f -name "$name" -print -quit)
+  found=$(find "$tmp" -type f -name "$src" -print -quit)
   if [[ -z "$found" ]]; then
-    printf "archive.sh: binary '%s' not found inside %s\n" "$name" "$url" >&2
+    printf "archive.sh: binary '%s' not found inside %s\n" "$src" "$url" >&2
     exit 1
   fi
-  install -D -m 0755 "$found" "$DEST/$name"
+  install -D -m 0755 "$found" "$DEST/$dst"
 done
