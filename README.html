@@ -1504,6 +1504,23 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     </details>
                                     <details>
                                         <summary>
+                                            AppData/Local/
+                                            <span class="note"
+                                                >&mdash; Windows</span
+                                            >
+                                        </summary>
+                                        <ul>
+                                            <li>
+                                                Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
+                                                <span class="note"
+                                                    >&mdash; Windows Terminal
+                                                    (Catppuccin Mocha)</span
+                                                >
+                                            </li>
+                                        </ul>
+                                    </details>
+                                    <details>
+                                        <summary>
                                             Documents/
                                             <span class="note"
                                                 >&mdash; Windows</span
@@ -1856,7 +1873,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         provisioning Makefile (that's Linux-only), but chezmoi
                         runs here too to deploy
                         <code>wezterm.lua</code>, the PowerShell profile,
-                        Zed/VSCode settings. <code>bootstrap.ps1</code> is the
+                        Zed/VSCode settings, and the Windows Terminal
+                        <code>settings.json</code> (themed Catppuccin Mocha).
+                        <code>bootstrap.ps1</code> is the
                         parallel of <code>bootstrap.sh</code>.
                     </p>
                     <div class="callout">
@@ -1920,6 +1939,17 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         <code>bootstrap.ps1</code> prints it verbatim at the end
                         of every successful run as a fresh-machine setup
                         checklist.
+                    </p>
+                    <p>
+                        <strong>Windows Terminal</strong> is themed
+                        <strong>Catppuccin Mocha</strong> (color scheme + app
+                        theme, applied to all profiles). Its
+                        <code>settings.json</code> is chezmoi-tracked at
+                        <code>%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json</code>,
+                        the same sync-from-host pattern as the Zed/VSCode
+                        configs. Windows Terminal owns and rewrites that file
+                        on its own, so expect it to drift &mdash; re-capture
+                        with <code>chezmoi re-add</code> (like Zed) when it does.
                     </p>
                     <p class="note-row">
                         <strong>JetBrainsMono Nerd Font Mono</strong> (per-user)
