@@ -279,6 +279,36 @@ clean-cockpit-service:
 	@$(SUDO) rm -f /etc/cockpit/cockpit.conf
 	@rm -f $(STAMP)/cockpit-service.done
 
+# -----------------------------------------------------------------------------
+# wsl-config — install the tracked /etc/wsl.conf on WSL hosts.
+#   - Runs only when IS_WSL=true AND HAS_SUDO=true. Writing /etc/ needs root,
+#     so a non-WSL host or a sudo-less prod scope skips with a message.
+#   - Verbatim copy from configs/wsl/wsl.conf (no templating — values are
+#     hardcoded for this single-host setup).
+#   - Stamp is content-hashed (WSL_CONF_SHA) so editing the tracked file
+#     auto-redeploys; an unchanged re-run is a no-op. wsl.conf has no version,
+#     so the content hash is the re-run trigger (cf. version-baked stamps).
+#   - Changes only take effect after `wsl --shutdown` from a Windows terminal,
+#     so the recipe prints that reminder.
+# -----------------------------------------------------------------------------
+.PHONY: wsl-config clean-wsl-config
+ifeq ($(IS_WSL):$(HAS_SUDO),true:true)
+WSL_CONF_SHA := $(shell sha256sum ../configs/wsl/wsl.conf 2>/dev/null | cut -c1-12)
+wsl-config: $(STAMP)/wsl-config-$(WSL_CONF_SHA).done
+$(STAMP)/wsl-config-$(WSL_CONF_SHA).done:
+	@printf '==> wsl-config (/etc/wsl.conf)\n'
+	@$(SUDO) install -m 0644 ../configs/wsl/wsl.conf /etc/wsl.conf
+	@printf '  installed /etc/wsl.conf — run `wsl --shutdown` from a Windows\n'
+	@printf '  terminal for changes to take effect (restarts all WSL distros).\n'
+	@mkdir -p $(@D) && touch $@
+else
+wsl-config:
+	@echo "wsl-config: skipping (IS_WSL=$(IS_WSL), HAS_SUDO=$(HAS_SUDO); needs both true)"
+endif
+clean-wsl-config:
+	@$(SUDO) rm -f /etc/wsl.conf
+	@rm -f $(STAMP)/wsl-config-*.done
+
 include packages.mk
 include shell.mk
 include dotfiles.mk
@@ -301,7 +331,7 @@ include dotfiles.mk
 tools: $(SCOPE_TOOLS)
 user-tools: $(USER_TOOLS)
 
-provision: packages tools user-tools shell dotfiles
+provision: packages tools user-tools shell dotfiles wsl-config
 ifeq ($(MODE),dev)
 provision: claude-cli node-runtime nerd-fonts dozzle-service cockpit-service
 endif
@@ -327,6 +357,7 @@ list:
 	@printf '  dozzle-service\n  cockpit-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
+	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
 
 clean:
 	@rm -rf "$(STAMP)"
@@ -343,6 +374,7 @@ help:
 	@echo "  make claude-cli   install the Claude Code CLI"
 	@echo "  make dozzle-service   install dozzle systemd unit + start service (dev only)"
 	@echo "  make cockpit-service  install cockpit.conf + enable socket + open firewall (dev only)"
+	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"
 	@echo "  make <tool>       install just one tool, e.g. make gitui"
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"
 	@echo "  make list         list every managed tool, grouped"
