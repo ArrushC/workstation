@@ -47,6 +47,8 @@ Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 # --- On Linux/macOS, ignore Windows-only paths ------------------------------
 AppData
 Documents
+# .wslconfig is the Windows host's global WSL2 config; meaningless on Linux.
+.wslconfig
 # wezterm.lua is the Windows client's terminal config; the Linux hosts run no
 # GUI / WezTerm, so we don't apply it there. Remove this line if you ever
 # want WezTerm config on a Linux desktop.
