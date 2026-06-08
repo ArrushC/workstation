@@ -1,8 +1,13 @@
 # Design: add `nnn`, `fx`, `gitlogue` to the toolset
 
 - **Date:** 2026-06-08
-- **Status:** Approved (ready for implementation plan)
+- **Status:** Implemented (commits in `feat(tools)` + `feat(shell)`); see as-built deltas below.
 - **Scope:** dev_machine + prod_machine (Linux). No `MODE` gating — universal, like yazi/lnav/fzf.
+
+> **As-built deltas (this spec describes the original design; three things changed during implementation):**
+> 1. **nnn is installed via `TOOL` + `archive.sh`, not `EGET_TOOL`.** The musl-static tarball's internal binary is named `nnn-musl-static` (not `nnn`), and eget preserves archive-internal names (its repo-name rename only applies to *raw-binary* assets like fx). So `archive.sh` gained a backward-compatible `src=dst` rename spec, and nnn registers as `TOOL,nnn,…,$(LIB)/archive.sh nnn-musl-static=nnn <url>`.
+> 2. **The wrapper is named `nn()`, not `n()`.** `n()` was already a pre-existing `nb` quick-note shortcut in both shells; `nn` was chosen to avoid clobbering it.
+> 3. **`NNN_TMPFILE` is scoped to the call, not exported.** The body uses `NNN_TMPFILE="$tmp" command nnn "$@"` (prefix assignment, no shell-env leak) and `[[ -s "$tmp" ]]` (source only if non-empty) instead of the `export …` / `-f` shown in §Design details below.
 
 ## Summary
 

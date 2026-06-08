@@ -10,6 +10,8 @@
 
 **Reference spec:** `docs/superpowers/specs/2026-06-08-add-nnn-fx-gitlogue-design.md`
 
+> **As-built deltas (discovered during execution):** (1) **nnn** uses `TOOL` + `$(LIB)/archive.sh` with a new backward-compatible `src=dst` rename, NOT `EGET_TOOL` — its musl-static tarball's internal binary is `nnn-musl-static` and eget preserves archive-internal names. (2) The wrapper is **`nn()`**, not `n()` (`n` was already an `nb` note shortcut). (3) The wrapper scopes `NNN_TMPFILE="$tmp" command nnn "$@"` (no env leak) and guards with `[[ -s "$tmp" ]]`. fx + gitlogue are `EGET_TOOL` as planned.
+
 **Testing note (host-specific):** This host is **dev_machine** scope (tools are root-owned in `/usr/local/bin`) and **sudo requires a password**, so the live system install can't run non-interactively. Tasks 1–2 are fully validated **without sudo** via the documented sandbox pattern (`MODE=prod DEST=/tmp/... STAMP=/tmp/...`) and a no-sudo `chezmoi apply` to `$HOME`. Task 3 is the real system install, run by the user with sudo.
 
 ---
