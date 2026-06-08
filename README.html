@@ -1936,6 +1936,17 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             into <code>%LOCALAPPDATA%\workstation\helix</code>
                             (binary + bundled runtime). The git/chezmoi editor.
                         </li>
+                        <li>
+                            <strong>Obsidian</strong> &mdash; silent, per-user
+                            install of its <code>.exe</code> (no portable
+                            <code>.zip</code> exists). Unlike the pinned tools
+                            above it installs the <strong>latest</strong> GitHub
+                            release (Obsidian self-updates after) and is verified
+                            against the GitHub API&rsquo;s sha256 digest. Detected
+                            via the Uninstall registry; re-run with
+                            <code>-ForceInstaller</code>. Not added to
+                            <code>PATH</code> (it&rsquo;s a GUI app).
+                        </li>
                     </ul>
                     <p>
                         <strong>Git</strong> is a prerequisite you install
@@ -2007,7 +2018,8 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
 .\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
-.\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt</code></pre>
+.\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
+.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian) even if present</code></pre>
                     <p class="note-row">
                         <strong>Default clone path</strong> is
                         <code>%USERPROFILE%\.local\share\chezmoi</code>, which
@@ -2057,8 +2069,12 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                     <p class="note-row">
                         <strong>No elevation anywhere in this flow.</strong>
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship/Helix installs entirely (assumes
-                        they&rsquo;re already on PATH). The diagram is a
+                        chezmoi/WezTerm/Starship/Helix installs <em>and</em> the
+                        installer-class apps (Obsidian) entirely (assumes
+                        they&rsquo;re already present). Obsidian installs silently
+                        per-user via its own <code>.exe</code> at the latest
+                        release; pass <code>-ForceInstaller</code> to reinstall it
+                        even when already present. The diagram is a
                         simplified view &mdash; the script also runs BurntToast
                         and the Nerd Font install (its step 7) between
                         <code>Set WEZTERM_CONFIG_FILE</code> and the SSH-key step.
@@ -3294,7 +3310,12 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 pinned hash is stale (upstream re-published the
                                 asset) or the download was corrupted/tampered.
                                 The script refuses to install an unverified
-                                binary.
+                                binary. Installer-class tools
+                                (<code>$InstallerTools</code>, e.g. Obsidian) are
+                                <em>not</em> pinned &mdash; they verify against the
+                                GitHub API&rsquo;s sha256 <code>digest</code> for
+                                the latest asset, and the same hard-fail applies on
+                                a mismatch.
                             </p>
                             <p>
                                 Fix: re-download the pinned asset, recompute its
