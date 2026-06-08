@@ -30,6 +30,12 @@ local ssh_domains = {
     multiplexing   = 'None',
   },
   {
+    name           = 'SLO-LT-4CWHKL3',
+    remote_address = '***REMOVED-IP***',
+    username       = 'arrush.chaturvedi',
+    multiplexing   = 'None',
+  },
+  {
     name           = 'cache-apl',
     remote_address = '***REMOVED-IP***',
     username       = 'arrush.chaturvedi',
