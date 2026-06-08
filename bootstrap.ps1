@@ -70,6 +70,9 @@
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
+#   -ForceInstaller     re-run installer-layout tool installs (e.g. Obsidian) even
+#                       if already present. Portable tools (WezTerm/Starship/Helix)
+#                       are unaffected — they reinstall on a version-pin bump.
 #   -Reinstall          wipe the cloned repo + chezmoi config first, then run the
 #                       normal flow. Does NOT remove installed tools or deployed
 #                       dotfiles — the bootstrap is idempotent over those.
@@ -85,6 +88,7 @@ param(
     [switch]$SkipChezmoi,
     [switch]$SkipBurntToast,
     [switch]$SkipNerdFonts,
+    [switch]$ForceInstaller,
     [switch]$Reinstall,
     [switch]$Yes
 )
