@@ -561,7 +561,7 @@ The GitHub-reported digest doesn't match the download (corrupted or tampered).
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix are on PATH"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix on PATH; Obsidian not installed"
         return
     }
 
@@ -571,6 +571,7 @@ function Invoke-ToolInstall {
 
     Install-Chezmoi
     foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
+    foreach ($tool in $InstallerTools) { Install-InstallerTool -Tool $tool }
 
     Update-SessionPath
 
