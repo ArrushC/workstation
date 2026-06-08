@@ -19,7 +19,7 @@
 #
 # Library helpers (lib/):
 #   eget.sh     <user/repo> <tag> [extra eget args]    (called by EGET_TOOL)
-#   archive.sh  <binary[:other:...]> <url>             tar.gz/tar.bz2/tar.xz/zip
+#   archive.sh  <name[=dest][:name[=dest]...]> <url>   tar.gz/tar.bz2/tar.xz/zip
 #   direct.sh   <name> <url>                           raw binary URL (no archive)
 #   pip.sh      <pkg>                                  Python user-site
 #   helix.sh    <version>                              multi-file special case
@@ -117,6 +117,23 @@ $(eval $(call EGET_TOOL,ast-grep,$(AST_GREP_VERSION),ast-grep/ast-grep,$(AST_GRE
 # published. eget extracts `tv` to $(DEST); the EGET_TOOL macro's stamp
 # uses the registered name (`television`).
 $(eval $(call EGET_TOOL,television,$(TELEVISION_VERSION),alexpasmantier/television,$(TELEVISION_VERSION),--asset musl))
+
+# --- (2026-06) interactive explorers + git replay ---------------------------
+# nnn — the musl-static tarball's internal binary is named `nnn-musl-static`,
+# not `nnn`; archive.sh's `src=dst` spec renames it on install. eget can't do
+# this cleanly for archive members (its repo-name rename only applies to
+# raw-binary assets), so nnn uses TOOL+archive.sh like yazi/ncdu — no eget dep.
+$(eval $(call TOOL,nnn,$(NNN_VERSION),\
+  $(LIB)/archive.sh nnn-musl-static=nnn https://github.com/jarun/nnn/releases/download/v$(NNN_VERSION)/nnn-musl-static-$(NNN_VERSION).x86_64.tar.gz))
+
+# fx — interactive JSON viewer. Non-v tag (like television), so pass it as the
+# explicit 4th arg. Assets are raw binaries; eget auto-detects linux/amd64 and
+# installs it as `fx`.
+$(eval $(call EGET_TOOL,fx,$(FX_VERSION),antonmedv/fx,$(FX_VERSION)))
+
+# gitlogue — cinematic git-log replay. Single linux asset (gnu-glibc only; no
+# musl build), so no --asset filter. Tag defaults to v$(GITLOGUE_VERSION).
+$(eval $(call EGET_TOOL,gitlogue,$(GITLOGUE_VERSION),unhappychoice/gitlogue))
 
 $(eval $(call EGET_TOOL,xh,$(XH_VERSION),ducaale/xh,,--asset musl))
 

@@ -122,3 +122,13 @@ JETBRAINSMONO_NERD_VERSION := 3.4.0
 # release), so it has no real version (direct.sh always fetches latest).
 CHEAT_VERSION := 5.1.0
 CHTSH_VERSION := latest
+
+# --- (2026-06) interactive explorers + git replay ---------------------------
+# nnn — ncurses file manager (jarun/nnn). tools.mk installs the plain musl-static
+# tarball via archive.sh, renaming its internal `nnn-musl-static` binary to `nnn`.
+# fx — interactive JSON viewer (antonmedv/fx). Non-v tag; raw-binary assets.
+# gitlogue — cinematic git commit-replay TUI (unhappychoice/gitlogue).
+# gnu-glibc only (no musl build) — fine on this glibc fleet.
+NNN_VERSION      := 5.2
+FX_VERSION       := 39.2.0
+GITLOGUE_VERSION := 0.9.0
