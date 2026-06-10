@@ -1934,6 +1934,15 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <strong>WezTerm</strong> &mdash; pinned, sha256-verified
                             portable <code>.zip</code> into
                             <code>%LOCALAPPDATA%\workstation\wezterm</code>.
+                            A per-user <strong>Start Menu shortcut</strong>
+                            (<code>WezTerm.lnk</code> &rarr;
+                            <code>wezterm-gui.exe</code>) is created on every run
+                            &mdash; the portable <code>.zip</code> ships none, so
+                            without it the Start menu has nothing to launch.
+                            Idempotent and duplicate-proof: the fixed filename
+                            means a re-run overwrites in place rather than adding a
+                            second copy, and a deleted shortcut is re-created on
+                            the next bootstrap.
                         </li>
                         <li>
                             <strong>Starship</strong> &mdash; pinned,
@@ -2085,8 +2094,9 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         per-user via its own <code>.exe</code> at the latest
                         release; pass <code>-ForceInstaller</code> to reinstall it
                         even when already present. The diagram is a
-                        simplified view &mdash; the script also runs BurntToast
-                        and the Nerd Font install (its step 7) between
+                        simplified view &mdash; the script also creates the
+                        WezTerm Start Menu shortcut and runs BurntToast and the
+                        Nerd Font install (its step 7) between
                         <code>Set WEZTERM_CONFIG_FILE</code> and the SSH-key step.
                         <code>GITHUB_TOKEN</code> persists into
                         <code>.git/config</code> (github.com-scoped) so
