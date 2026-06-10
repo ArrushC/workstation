@@ -33,6 +33,8 @@
 #   5. wezterm env  — set User-scope WEZTERM_CONFIG_FILE at the chezmoi source.
 #   5b. profile shim— if Documents is redirected (OneDrive), drop a loader at the
 #                     real $PROFILE that sources the chezmoi canonical profile.
+#   5c. wezterm lnk — drop a per-user Start Menu shortcut for the portable WezTerm
+#                     (the .zip ships none); idempotent + duplicate-proof.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -752,6 +754,65 @@ if (Test-Path $canonical) { . $canonical }
 }
 
 # =============================================================================
+# 5c. WEZTERM START MENU SHORTCUT — the portable WezTerm .zip ships no shortcut
+#    (unlike the installer-class apps, whose own installers create one), so the
+#    Start menu has nothing to launch and the GUI hides behind the PATH'd exe.
+#    Drop a per-user Start Menu .lnk pointing at wezterm-gui.exe (the GUI binary,
+#    NOT the wezterm.exe CLI/mux).
+#
+#    Idempotent + duplicate-proof: a fixed filename (WezTerm.lnk) means a re-run
+#    overwrites the same path in place — a second copy can never appear. Runs on
+#    EVERY bootstrap, independent of the install stamp, so deleting the shortcut
+#    and re-running restores it (self-healing). Soft-fails to a warning; never
+#    blocks the rest of the bootstrap.
+# =============================================================================
+function Invoke-WeztermShortcut {
+    # Resolve the GUI launcher. Prefer the portable install dir; fall back to PATH
+    # (e.g. -SkipToolInstall with WezTerm already installed somewhere else).
+    $exe = Join-Path $WsWezterm "wezterm-gui.exe"
+    if (-not (Test-Path $exe)) {
+        $cmd = Get-Command "wezterm-gui" -ErrorAction SilentlyContinue
+        if ($cmd) {
+            $exe = $cmd.Source
+        } else {
+            Write-Warn "Skipping WezTerm Start Menu shortcut — wezterm-gui.exe not found at $WsWezterm or on PATH."
+            return
+        }
+    }
+
+    # Fixed filename in the per-user Start Menu Programs folder (no admin). The
+    # deterministic path is what makes this duplicate-proof: .Save() overwrites.
+    $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "WezTerm.lnk"
+
+    try {
+        $existed = Test-Path $lnk
+        $wsh = New-Object -ComObject WScript.Shell
+        try {
+            # CreateShortcut loads the existing .lnk when present, so its current
+            # TargetPath is readable — skip the rewrite when it already matches.
+            $sc = $wsh.CreateShortcut($lnk)
+            if ($existed -and ($sc.TargetPath -eq $exe)) {
+                Write-Ok "WezTerm Start Menu shortcut already present"
+                return
+            }
+            $sc.TargetPath       = $exe
+            $sc.WorkingDirectory = $env:USERPROFILE
+            $sc.Description       = "WezTerm terminal emulator"
+            $sc.Save()
+            if ($existed) {
+                Write-Ok "WezTerm Start Menu shortcut updated (target: $exe)"
+            } else {
+                Write-Ok "WezTerm Start Menu shortcut created at $lnk"
+            }
+        } finally {
+            [void][Runtime.InteropServices.Marshal]::ReleaseComObject($wsh)
+        }
+    } catch {
+        Write-Warn "Could not create the WezTerm Start Menu shortcut: $($_.Exception.Message)"
+    }
+}
+
+# =============================================================================
 # 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
 #    chezmoi/private_dot_claude/executable_notify.sh (deployed to
@@ -867,6 +928,7 @@ Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPD
 Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
+Invoke-WeztermShortcut    # drop a per-user Start Menu .lnk for the portable WezTerm GUI
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
