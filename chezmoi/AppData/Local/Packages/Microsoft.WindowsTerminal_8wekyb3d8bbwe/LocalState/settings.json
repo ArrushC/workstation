@@ -16,6 +16,10 @@
             "id": "User.paste"
         },
         {
+            "command": "find",
+            "id": "User.find"
+        },
+        {
             "command": 
             {
                 "action": "splitPane",
@@ -23,17 +27,12 @@
                 "splitMode": "duplicate"
             },
             "id": "User.splitPane.A6751878"
-        },
-        {
-            "command": "find",
-            "id": "User.find"
         }
     ],
     "alwaysOnTop": false,
     "copyFormatting": "none",
     "copyOnSelect": true,
     "defaultProfile": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
-    "theme": "Catppuccin Mocha",
     "keybindings": 
     [
         {
@@ -41,12 +40,12 @@
             "keys": "ctrl+c"
         },
         {
-            "id": "User.paste",
-            "keys": "ctrl+v"
-        },
-        {
             "id": "User.find",
             "keys": "ctrl+shift+f"
+        },
+        {
+            "id": "User.paste",
+            "keys": "ctrl+v"
         },
         {
             "id": "User.splitPane.A6751878",
@@ -162,35 +161,42 @@
                 "hidden": false,
                 "name": "AlmaLinux-9",
                 "source": "Microsoft.WSL"
+            },
+            {
+                "guid": "{3995e1ac-6c0a-575c-9104-2c93ac523e22}",
+                "hidden": false,
+                "name": "AlmaLinux-9",
+                "source": "Microsoft.WSL"
             }
         ]
     },
     "schemes": 
     [
         {
-            "name": "Catppuccin Mocha",
-            "cursorColor": "#F5E0DC",
-            "selectionBackground": "#585B70",
             "background": "#1E1E2E",
-            "foreground": "#CDD6F4",
             "black": "#45475A",
-            "red": "#F38BA8",
-            "green": "#A6E3A1",
-            "yellow": "#F9E2AF",
             "blue": "#89B4FA",
-            "purple": "#F5C2E7",
-            "cyan": "#94E2D5",
-            "white": "#BAC2DE",
             "brightBlack": "#585B70",
-            "brightRed": "#F38BA8",
-            "brightGreen": "#A6E3A1",
-            "brightYellow": "#F9E2AF",
             "brightBlue": "#89B4FA",
-            "brightPurple": "#F5C2E7",
             "brightCyan": "#94E2D5",
-            "brightWhite": "#A6ADC8"
+            "brightGreen": "#A6E3A1",
+            "brightPurple": "#F5C2E7",
+            "brightRed": "#F38BA8",
+            "brightWhite": "#A6ADC8",
+            "brightYellow": "#F9E2AF",
+            "cursorColor": "#F5E0DC",
+            "cyan": "#94E2D5",
+            "foreground": "#CDD6F4",
+            "green": "#A6E3A1",
+            "name": "Catppuccin Mocha",
+            "purple": "#F5C2E7",
+            "red": "#F38BA8",
+            "selectionBackground": "#585B70",
+            "white": "#BAC2DE",
+            "yellow": "#F9E2AF"
         }
     ],
+    "theme": "Catppuccin Mocha",
     "themes": 
     [
         {
@@ -198,6 +204,7 @@
             "tab": 
             {
                 "background": "#1E1E2EFF",
+                "iconStyle": "default",
                 "showCloseButton": "always",
                 "unfocusedBackground": null
             },
@@ -208,7 +215,11 @@
             },
             "window": 
             {
-                "applicationTheme": "dark"
+                "applicationTheme": "dark",
+                "experimental.rainbowFrame": false,
+                "frame": null,
+                "unfocusedFrame": null,
+                "useMica": false
             }
         }
     ]
