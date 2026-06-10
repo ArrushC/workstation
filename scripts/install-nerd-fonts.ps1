@@ -7,12 +7,18 @@
 # extracts the six Mono variants, copies them to %LOCALAPPDATA%\Microsoft\Windows\Fonts\,
 # and registers them in HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts
 # (per-user — no admin needed for the registration even though bootstrap.ps1
-# runs elevated). Honours $env:GITHUB_TOKEN (Authorization: Bearer header) to
-# avoid the 60-req/hour unauthenticated GitHub rate limit.
+# runs elevated), then ACTIVATES them in the current logon session via
+# AddFontResourceW + a WM_FONTCHANGE broadcast (Invoke-FontActivation) so the
+# font is usable immediately — without it, HKCU registration is honoured only at
+# the next logon and the font stays invisible to every app until then. Honours
+# $env:GITHUB_TOKEN (Authorization: Bearer header) to avoid the 60-req/hour
+# unauthenticated GitHub rate limit.
 #
 # Idempotency: a no-op fast path returns early if a stamp file exists at
 #   %LOCALAPPDATA%\workstation\nerd-fonts.<VERSION>.stamp
-# AND all six TTFs are present AND all six HKCU registrations exist. Otherwise
+# AND all six TTFs are present AND all six HKCU registrations exist (it still
+# re-runs the cheap session activation first, so a host provisioned by an older
+# build — registered but never activated — goes live without a logout). Otherwise
 # stale installs are swept (file + registry) before depositing the new set.
 #
 # Hard-fails on download or SHA256 issues (bootstrap.ps1 aborts). Soft-fails
@@ -57,7 +63,40 @@ function Test-Installed {
     return $true
 }
 
+# Activate the installed fonts in the CURRENT logon session. HKCU registration
+# alone is honoured only at the NEXT logon, so without this the font stays
+# invisible to every app (Zed, VS Code, terminals) until the user logs out and
+# back in. AddFontResourceW loads each face into the session font table; the
+# WM_FONTCHANGE broadcast tells already-running apps to refresh. Idempotent
+# (AddFontResourceW just bumps a refcount if a face is already loaded) and
+# soft-fail — a failure here only costs the user one logout, since the persistent
+# HKCU entry still activates the font at the next logon, so it must never abort.
+function Invoke-FontActivation {
+    try {
+        if (-not ([System.Management.Automation.PSTypeName]'Workstation.FontActivator').Type) {
+            Add-Type -Namespace Workstation -Name FontActivator -MemberDefinition @'
+[DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+public static extern int AddFontResourceW(string lpszFilename);
+[DllImport("user32.dll")]
+public static extern int SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+'@
+        }
+        foreach ($f in $FontFiles) {
+            $p = Join-Path $FontDir $f
+            if (Test-Path $p) { [Workstation.FontActivator]::AddFontResourceW($p) | Out-Null }
+        }
+        # HWND_BROADCAST = 0xffff, WM_FONTCHANGE = 0x001D, SMTO_ABORTIFHUNG = 0x0002
+        $res = [IntPtr]::Zero
+        [Workstation.FontActivator]::SendMessageTimeout(
+            [IntPtr]0xffff, 0x001D, [IntPtr]::Zero, [IntPtr]::Zero, 0x0002, 1000, [ref]$res) | Out-Null
+    } catch {
+        Write-Warning ("Font session-activation failed ($_). The font will still " +
+            "activate at your next logon (HKCU registration is in place).")
+    }
+}
+
 if (Test-Installed) {
+    Invoke-FontActivation
     Write-Host "  nerd-fonts already installed (v$Version)"
     return
 }
@@ -139,10 +178,14 @@ Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
 # Stamp.
 Set-Content -Path $StampFile -Value $Version -Encoding ASCII
 
+# Activate the new faces in the current session (no logout needed — see the
+# Invoke-FontActivation definition above).
+Invoke-FontActivation
+
 if ($RegistrationFailed) {
     Write-Warning ("Some HKCU registrations failed — WezTerm will work via " +
         "config.font_dirs, but Zed/VS Code may not see the font until manual " +
         "registration (Settings → Personalization → Fonts).")
 } else {
-    Write-Host "  installed 6 Mono variants to $FontDir + HKCU registrations"
+    Write-Host "  installed + activated 6 Mono variants ($FontDir + HKCU)"
 }
