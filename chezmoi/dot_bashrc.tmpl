@@ -91,10 +91,16 @@ if command -v dircolors &>/dev/null; then
 fi
 
 # --- Completion --------------------------------------------------------------
-# bash tab-completion is provided by the system-wide bash-completion package
-# (sourced via /etc/profile.d/bash_completion.sh on most distros), so there's
-# nothing to initialize here. zsh's parity file calls `compinit` explicitly
-# because zsh has no equivalent system-wide loader.
+# bash tab-completion is provided by the system-wide bash-completion package.
+# For LOGIN shells it's auto-loaded via /etc/profile.d/bash_completion.sh, but
+# NON-login interactive shells (a bare `bash` subshell, `bash -i`, some terminal
+# spawns) never source profile.d, so completion would silently be missing there.
+# Explicitly source the package's compat entrypoint to cover that case: it's
+# guarded (no-op where the file is absent) and idempotent (the file guards its
+# own re-entry, so re-sourcing on a login shell is harmless). zsh's parity file
+# calls `compinit` directly for the same reason — neither shell can rely on a
+# login-only loader.
+[[ -f /etc/bash_completion ]] && source /etc/bash_completion
 
 # PARITY NOTE (cht.sh): cht.sh ships completions for zsh/fish/emacs but NOT bash
 # (upstream has no :bash endpoint), so there is deliberately no cht.sh
