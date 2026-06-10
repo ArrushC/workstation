@@ -192,11 +192,76 @@ else
 endif
 
 # -----------------------------------------------------------------------------
+# docker-engine — Docker CE from Docker's official dnf repo, enabled via systemd.
+#   - dev_machine only; skipped on WSL (the engine belongs to Docker Desktop on
+#     the Windows host — same gating rationale as dozzle-/cockpit-service).
+#   - Fast-path: if `docker` is already on PATH (manual install, podman shim),
+#     the repo + package steps are skipped — never fight an existing engine.
+#   - Repo file is curl'd straight into /etc/yum.repos.d/ (avoids a
+#     dnf-plugins-core/config-manager dependency). RHEL proper gets
+#     linux/rhel; Alma/Rocky/CentOS get linux/centos, per Docker's docs.
+#   - No versions.mk pin and no version in the stamp — Docker CE versions
+#     come from dnf, same precedent as cockpit.
+#   - Adds $USER to the docker group so the user-run container TUIs
+#     (lazydocker, dive, ctop) work without sudo; takes effect on next login.
+#   - The enable + group steps are guarded (unit/group may not exist when the
+#     fast-path found a podman shim instead of real Docker CE).
+#   - dozzle-service's stamp order-only-depends on THIS stamp file (not the
+#     phony — see the EGET_TOOL invariant) so `make -j` can't fire dozzle
+#     before the engine exists.
+#   - clean-docker-engine deliberately does NOT `dnf remove` docker-ce or
+#     touch images/containers — too destructive for a clean target. It only
+#     disables the service and drops the stamp.
+# -----------------------------------------------------------------------------
+.PHONY: docker-engine clean-docker-engine
+ifeq ($(MODE),dev)
+ifeq ($(IS_WSL),true)
+docker-engine:
+	@echo "docker-engine: skipping on WSL — Docker Desktop on the Windows host owns the engine"
+else
+docker-engine: $(STAMP)/docker-engine.done
+$(STAMP)/docker-engine.done:
+	@printf '==> docker-engine (Docker CE via dnf + systemd)\n'
+	@if command -v docker >/dev/null 2>&1; then \
+	   printf '  docker already on PATH — skipping repo + package install\n'; \
+	 else \
+	   . /etc/os-release; \
+	   case "$$ID" in rhel) repo_os=rhel ;; *) repo_os=centos ;; esac; \
+	   printf '  adding docker-ce repo (linux/%s)\n' "$$repo_os"; \
+	   curl -fsSL "https://download.docker.com/linux/$$repo_os/docker-ce.repo" \
+	     | $(SUDO) install -m 0644 /dev/stdin /etc/yum.repos.d/docker-ce.repo; \
+	   $(SUDO) dnf install -y docker-ce docker-ce-cli containerd.io \
+	     docker-buildx-plugin docker-compose-plugin; \
+	 fi
+	@if systemctl cat docker.service >/dev/null 2>&1; then \
+	   $(SUDO) systemctl enable --now docker; \
+	 else \
+	   printf '  no docker.service unit (podman shim?) — skipping enable\n'; \
+	 fi
+	@if ! getent group docker >/dev/null 2>&1; then \
+	   printf '  no docker group on this host — skipping group membership\n'; \
+	 elif id -nG "$$USER" | grep -qw docker; then \
+	   printf '  %s already in the docker group\n' "$$USER"; \
+	 else \
+	   $(SUDO) usermod -aG docker "$$USER"; \
+	   printf '  added %s to the docker group — takes effect on next login (or run: newgrp docker)\n' "$$USER"; \
+	 fi
+	@mkdir -p $(@D) && touch $@
+endif
+else
+docker-engine:
+	@echo "docker-engine is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-docker-engine:
+	@$(SUDO) systemctl disable --now docker 2>/dev/null || true
+	@rm -f $(STAMP)/docker-engine.done
+
+# -----------------------------------------------------------------------------
 # dozzle-service — install systemd unit + env file, pull image, enable + start.
 #   - dev_machine only (recipe body gated on MODE=dev).
 #   - Skips on WSL (IS_WSL=true) — same rationale as nerd-fonts: the web-admin
-#     stack (Dozzle + Cockpit) is for a standalone Linux dev box, and this repo
-#     never installs Docker, which WSL guests typically lack. Prints a skip
+#     stack (Dozzle + Cockpit) is for a standalone Linux dev box, and Docker
+#     on WSL lives in Docker Desktop on the Windows host. Prints a skip
 #     message; no stamp is written (the WSL branch is a bare phony, not a
 #     stamped target).
 #   - Env file is templated: `@DOZZLE_VERSION@` in configs/dozzle/dozzle.env
@@ -205,9 +270,10 @@ endif
 #   - Stamp encodes $(DOZZLE_VERSION); bumping the pin invalidates the
 #     stamp so the next `make dev` re-renders dozzle.env, re-pulls the
 #     image, and restarts the unit.
-#   - Sanity-checks `command -v docker` at the top of the recipe (this
-#     repo doesn't install Docker; lazydocker/dive/ctop already assume
-#     it). Loud failure with a clear message if Docker is missing.
+#   - Stamp order-only-depends on docker-engine's stamp FILE (not the
+#     phony — EGET_TOOL invariant) so the engine exists first even under
+#     `make -j`. The `command -v docker` sanity check stays as a safety
+#     net for direct invocation or a failed/skipped engine install.
 # -----------------------------------------------------------------------------
 .PHONY: dozzle-service clean-dozzle-service
 ifeq ($(MODE),dev)
@@ -216,11 +282,11 @@ dozzle-service:
 	@echo "dozzle-service: skipping on WSL — Docker + web-admin stack live on the Windows host, not the WSL guest"
 else
 dozzle-service: $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done
-$(STAMP)/dozzle-service-$(DOZZLE_VERSION).done:
+$(STAMP)/dozzle-service-$(DOZZLE_VERSION).done: | $(STAMP)/docker-engine.done
 	@printf '==> dozzle-service (docker + systemd)\n'
 	@if ! command -v docker >/dev/null 2>&1; then \
 	   printf '  ERROR: docker is not installed. Dozzle runs as a container.\n' >&2; \
-	   printf '         Install Docker (or Podman with a docker shim) and retry.\n' >&2; \
+	   printf '         Run `make MODE=dev docker-engine` (normally part of provision) and retry.\n' >&2; \
 	   exit 1; \
 	 fi
 	@$(SUDO) install -m 0755 -d /etc/dozzle
@@ -351,7 +417,7 @@ user-tools: $(USER_TOOLS)
 
 provision: packages tools user-tools shell dotfiles wsl-config
 ifeq ($(MODE),dev)
-provision: claude-cli node-runtime nerd-fonts dozzle-service cockpit-service
+provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
@@ -372,7 +438,7 @@ list:
 	@printf '\nuser-tools (%d):\n' $(words $(USER_TOOLS))
 	@printf '  %s\n' $(sort $(USER_TOOLS))
 	@printf '\nservices (provisioned on MODE=dev only; no-op on WSL):\n'
-	@printf '  dozzle-service\n  cockpit-service\n'
+	@printf '  docker-engine\n  dozzle-service\n  cockpit-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
@@ -390,6 +456,7 @@ help:
 	@echo "  make all          install every scope-aware tool (use -j8 for parallelism)"
 	@echo "  make user-tools   install pip user-site tools (glances, asciinema, harlequin)"
 	@echo "  make claude-cli   install the Claude Code CLI"
+	@echo "  make docker-engine    install Docker CE + enable the service (dev only, non-WSL)"
 	@echo "  make dozzle-service   install dozzle systemd unit + start service (dev only)"
 	@echo "  make cockpit-service  install cockpit.conf + enable socket + open firewall (dev only)"
 	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"

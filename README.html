@@ -758,6 +758,16 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
+                                    data-tip="Container engine — Docker CE, auto-installed on non-WSL dev machines"
+                                    >docker<span class="sr-only">
+                                        — container engine (Docker CE,
+                                        auto-installed on non-WSL dev
+                                        machines)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
                                     data-tip="Docker TUI"
                                     >lazydocker<span class="sr-only">
                                         — Docker TUI</span
@@ -2867,6 +2877,20 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                     <h3 id="daily-services">Web admin services (dev_machine, non-WSL)</h3>
                     <ul>
                         <li>
+                            <strong>Docker engine</strong> — installed
+                            automatically by <code>make provision</code>
+                            (the <code>docker-engine</code> target):
+                            Docker CE from Docker&rsquo;s official dnf
+                            repo, service enabled, and your user added
+                            to the <code>docker</code> group (log out/in
+                            once for sudo-less <code>docker</code> /
+                            <code>lazydocker</code>). If Docker is
+                            already present from a manual install, the
+                            target leaves it alone. Versions come from
+                            dnf — there is no pin in
+                            <code>versions.mk</code>.
+                        </li>
+                        <li>
                             <strong>Cockpit</strong> — open
                             <code>https://&lt;host&gt;:9090</code> in a
                             browser; log in with your Linux user account
@@ -2903,13 +2927,15 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             aren't installed.
                         </li>
                         <li>
-                            <strong>WSL note</strong> — both services are
-                            skipped automatically on WSL dev_machines (like
-                            nerd-fonts). The web-admin stack targets a
-                            standalone Linux dev box, and this repo never
-                            installs Docker (which WSL guests typically
-                            lack), so <code>make provision</code> prints a
+                            <strong>WSL note</strong> — the engine install
+                            and both services are skipped automatically on
+                            WSL dev_machines (like nerd-fonts). The
+                            web-admin stack targets a standalone Linux dev
+                            box, and on WSL the engine belongs to Docker
+                            Desktop on the Windows host, so
+                            <code>make provision</code> prints a
                             &ldquo;skipping on WSL&rdquo; line for
+                            <code>docker-engine</code> /
                             <code>dozzle-service</code> /
                             <code>cockpit-service</code> instead of failing.
                         </li>
@@ -3507,14 +3533,20 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Dozzle runs as a Docker container, so the host
-                                must have Docker (or Podman with a Docker shim).
+                                Dozzle runs as a Docker container. On
+                                non-WSL dev_machines the engine is installed
+                                automatically by the
+                                <code>docker-engine</code> target (part of
+                                <code>make provision</code>), so this mostly
+                                bites when that step was skipped or failed:
                                 <code>make dozzle-service</code> fails loud
                                 with a "docker not installed" message when
                                 <code>command -v docker</code> returns nothing.
-                                Install Docker via your distro's instructions,
+                                Run <code>make MODE=dev docker-engine</code>,
                                 then re-run <code>make dozzle-service</code>.
-                                If Docker is installed but the
+                                (A pre-existing manual Docker or Podman-shim
+                                install is left untouched and also satisfies
+                                the check.) If Docker is installed but the
                                 <code>docker pull amir20/dozzle:&lt;tag&gt;</code>
                                 step fails, check
                                 <code>journalctl -u dozzle -n 30</code> — likely
