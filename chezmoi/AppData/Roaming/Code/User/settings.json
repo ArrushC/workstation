@@ -87,7 +87,7 @@
 	"editor.linkedEditing": true,
 	"editor.bracketPairColorization.enabled": false,
 	"editor.guides.bracketPairs": true,
-	"editor.fontFamily": "Jetbrains Mono",
+	"editor.fontFamily": "JetBrainsMono NFM, monospace",
 	"editor.fontSize": 13,
 	"editor.letterSpacing": -0.35,
 	"editor.fontLigatures": true,

@@ -3607,12 +3607,27 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     Re-run <code>bootstrap.ps1</code> (the
                                     <code>Invoke-InstallNerdFonts</code> step is
                                     idempotent; takes a stamp-based fast path on
-                                    a second run).
+                                    a second run). The installer activates the
+                                    font in the current session
+                                    (<code>AddFontResourceW</code> +
+                                    <code>WM_FONTCHANGE</code>), so no logout is
+                                    needed &mdash; but a host last provisioned by
+                                    an older build registered the font without
+                                    activating it; one re-run of
+                                    <code>bootstrap.ps1</code> (or a single logout)
+                                    makes it live.
                                 </li>
                                 <li>
                                     <strong>VS Code / Zed still showing tofu:</strong>
-                                    apps cache font lists at launch. Quit and
-                                    relaunch.
+                                    apps cache font lists at launch &mdash; quit and
+                                    relaunch. Also check the font-family name in the
+                                    app config: on Windows it must be
+                                    <code>JetBrainsMono NFM</code>, not
+                                    <code>JetBrainsMono Nerd Font Mono</code>. Nerd
+                                    Fonts abbreviates the GDI family name to fit
+                                    Windows&rsquo; 31-char limit; the full
+                                    &ldquo;Nerd Font Mono&rdquo; name only resolves
+                                    in apps that read the typographic name.
                                 </li>
                                 <li>
                                     <strong>WezTerm still showing tofu:</strong>

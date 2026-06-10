@@ -13,8 +13,8 @@
 // `chezmoi apply`.
 {
   "buffer_font_weight": 400.0,
-  "ui_font_family": "JetBrains Mono",
-  "buffer_font_family": "JetBrainsMono Nerd Font Mono",
+  "ui_font_family": "JetBrainsMono NFM",
+  "buffer_font_family": "JetBrainsMono NFM",
   "diagnostics": {
     "inline": {
       "enabled": false,
@@ -75,7 +75,7 @@
   "show_wrap_guides": false,
   "terminal": {
     "font_size": 13.0,
-    "font_family": "JetBrainsMono Nerd Font Mono",
+    "font_family": "JetBrainsMono NFM",
     "toolbar": {
       "breadcrumbs": true,
     },
