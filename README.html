@@ -2864,7 +2864,7 @@ make -n MODE=prod provision
 make gitui MODE=prod
 make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
 
-                    <h3 id="daily-services">Web admin services (dev_machine)</h3>
+                    <h3 id="daily-services">Web admin services (dev_machine, non-WSL)</h3>
                     <ul>
                         <li>
                             <strong>Cockpit</strong> — open
@@ -2901,6 +2901,17 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <code>dot_bashrc.tmpl</code>; harmless no-ops
                             on prod_machine hosts where the services
                             aren't installed.
+                        </li>
+                        <li>
+                            <strong>WSL note</strong> — both services are
+                            skipped automatically on WSL dev_machines (like
+                            nerd-fonts). The web-admin stack targets a
+                            standalone Linux dev box, and this repo never
+                            installs Docker (which WSL guests typically
+                            lack), so <code>make provision</code> prints a
+                            &ldquo;skipping on WSL&rdquo; line for
+                            <code>dozzle-service</code> /
+                            <code>cockpit-service</code> instead of failing.
                         </li>
                     </ul>
                 </section>

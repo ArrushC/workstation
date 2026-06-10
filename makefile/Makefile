@@ -194,6 +194,11 @@ endif
 # -----------------------------------------------------------------------------
 # dozzle-service — install systemd unit + env file, pull image, enable + start.
 #   - dev_machine only (recipe body gated on MODE=dev).
+#   - Skips on WSL (IS_WSL=true) — same rationale as nerd-fonts: the web-admin
+#     stack (Dozzle + Cockpit) is for a standalone Linux dev box, and this repo
+#     never installs Docker, which WSL guests typically lack. Prints a skip
+#     message; no stamp is written (the WSL branch is a bare phony, not a
+#     stamped target).
 #   - Env file is templated: `@DOZZLE_VERSION@` in configs/dozzle/dozzle.env
 #     is substituted with $(DOZZLE_VERSION) at install time via sed. Keeps
 #     versions.mk as the single source of truth for the image tag.
@@ -206,6 +211,10 @@ endif
 # -----------------------------------------------------------------------------
 .PHONY: dozzle-service clean-dozzle-service
 ifeq ($(MODE),dev)
+ifeq ($(IS_WSL),true)
+dozzle-service:
+	@echo "dozzle-service: skipping on WSL — Docker + web-admin stack live on the Windows host, not the WSL guest"
+else
 dozzle-service: $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done
 $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done:
 	@printf '==> dozzle-service (docker + systemd)\n'
@@ -221,6 +230,7 @@ $(STAMP)/dozzle-service-$(DOZZLE_VERSION).done:
 	@$(SUDO) systemctl daemon-reload
 	@$(SUDO) systemctl enable --now dozzle.service
 	@mkdir -p $(@D) && touch $@
+endif
 else
 dozzle-service:
 	@echo "dozzle-service is a dev_machine target — skipping (MODE=$(MODE))"
@@ -237,6 +247,9 @@ clean-dozzle-service:
 # -----------------------------------------------------------------------------
 # cockpit-service — install cockpit.conf, enable cockpit.socket, open firewalld.
 #   - dev_machine only (recipe body gated on MODE=dev).
+#   - Skips on WSL (IS_WSL=true) — Cockpit is a host/network/storage management
+#     UI for a standalone dev box; it makes no sense for a WSL guest you reach
+#     from the Windows host. Skipped alongside dozzle-service (see above).
 #   - CANNOT depend on the `packages` phony (would break `make -j8`).
 #     packages.mk doesn't produce a stamp file either, so there's no stamp
 #     to order-only-depend on. Instead the recipe sanity-checks
@@ -247,6 +260,10 @@ clean-dozzle-service:
 # -----------------------------------------------------------------------------
 .PHONY: cockpit-service clean-cockpit-service
 ifeq ($(MODE),dev)
+ifeq ($(IS_WSL),true)
+cockpit-service:
+	@echo "cockpit-service: skipping on WSL — host management UI is for standalone dev boxes, not the WSL guest"
+else
 cockpit-service: $(STAMP)/cockpit-service.done
 $(STAMP)/cockpit-service.done:
 	@printf '==> cockpit-service (socket + firewall + conf)\n'
@@ -266,6 +283,7 @@ $(STAMP)/cockpit-service.done:
 	   printf '  firewalld inactive — skipping firewall step\n'; \
 	 fi
 	@mkdir -p $(@D) && touch $@
+endif
 else
 cockpit-service:
 	@echo "cockpit-service is a dev_machine target — skipping (MODE=$(MODE))"
@@ -353,7 +371,7 @@ list:
 	@printf '  %s\n' $(sort $(SCOPE_TOOLS))
 	@printf '\nuser-tools (%d):\n' $(words $(USER_TOOLS))
 	@printf '  %s\n' $(sort $(USER_TOOLS))
-	@printf '\nservices (provisioned on MODE=dev only):\n'
+	@printf '\nservices (provisioned on MODE=dev only; no-op on WSL):\n'
 	@printf '  dozzle-service\n  cockpit-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
