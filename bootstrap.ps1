@@ -181,6 +181,13 @@ $InstallerTools = @(
         AssetMatch = "Obsidian-*.exe"                # selects the Windows installer asset
         SilentArgs = "/S"                            # NSIS per-user silent (NO /allusers -> no admin)
         DetectName = "Obsidian*"                      # HKCU/HKLM Uninstall DisplayName glob
+    },
+    @{
+        Name       = "Zed"
+        Repo       = "zed-industries/zed"             # GitHub owner/repo for LATEST (stable; /releases/latest skips -pre)
+        AssetMatch = "Zed-x86_64.exe"                 # x64 Windows installer asset (NOT Zed-aarch64.exe)
+        SilentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno Setup silent; PrivilegesRequired=lowest -> per-user, no admin (NOT NSIS /S)
+        DetectName = "Zed"                            # exact HKCU Uninstall DisplayName (avoids "Zed Preview"/"Zed Nightly")
     }
 )
 
@@ -568,7 +575,7 @@ The GitHub-reported digest doesn't match the download (corrupted or tampered).
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix on PATH; Obsidian not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix on PATH; Obsidian/Zed not installed"
         return
     }
 
@@ -582,9 +589,10 @@ function Invoke-ToolInstall {
 
     Update-SessionPath
 
-    # Soft-warn for the hand-installed editors. Their chezmoi configs deploy
-    # regardless; the script never installs or fails on them.
-    foreach ($app in @(@{ Cmd = 'zed'; Name = 'Zed' }, @{ Cmd = 'code'; Name = 'VSCode' })) {
+    # Soft-warn for the hand-installed editor (VSCode). Zed is auto-installed via
+    # $InstallerTools above; VSCode's chezmoi config deploys regardless, and the
+    # script never installs or fails on it.
+    foreach ($app in @(@{ Cmd = 'code'; Name = 'VSCode' })) {
         if (-not (Get-Command $app.Cmd -ErrorAction SilentlyContinue)) {
             Write-Warn "$($app.Name) not on PATH — install it yourself when you want it; its chezmoi config still deploys."
         }

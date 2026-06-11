@@ -1,11 +1,12 @@
-Items with groups slashed in order of preference (leftmost = most preferred, rightmost = least):
-- Ghostty / WezTerm / Alacritty / MobaXterm / Tabby / PuTTY
+Items with groups slashed in order of preference (leftmost = most preferred, rightmost = least).
+Apps auto-installed by bootstrap.ps1 (WezTerm, Starship, Obsidian, Zed — plus chezmoi, Helix, and the JetBrainsMono Nerd Font, which were never listed here) are omitted; where they had in-row alternatives, those alternatives are kept.
+- Ghostty / Alacritty / MobaXterm / Tabby / PuTTY
 - WinSCP / FileZilla
 - Everything
-- Obsidian (auto-installed by bootstrap.ps1) / Notion / Typora
+- Notion / Typora
 - Git / SVN
 - Move Mouse
-- Zed / VSCode / JetBrains / Notepad++
+- VSCode / JetBrains / Notepad++
 - WizTree
 - WinMerge
 - Edge
@@ -14,5 +15,4 @@ Items with groups slashed in order of preference (leftmost = most preferred, rig
 - ShareX
 - C, C++, Go, Python, Bun
 - Nilesoft Shell
-- Starship
 - WSL - AlmaLinux

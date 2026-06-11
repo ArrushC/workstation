@@ -1966,13 +1966,25 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <code>-ForceInstaller</code>. Not added to
                             <code>PATH</code> (it&rsquo;s a GUI app).
                         </li>
+                        <li>
+                            <strong>Zed</strong> &mdash; same installer-class
+                            path as Obsidian: silent, per-user install of its
+                            <strong>latest</strong> GitHub release
+                            <code>.exe</code> (Inno Setup, no portable
+                            <code>.zip</code>; Zed self-updates after), verified
+                            against the GitHub API&rsquo;s sha256 digest and
+                            detected via the Uninstall registry
+                            (<code>-ForceInstaller</code> to reinstall). Not
+                            added to <code>PATH</code> (GUI app, makes its own
+                            shortcut).
+                        </li>
                     </ul>
                     <p>
                         <strong>Git</strong> is a prerequisite you install
                         yourself (hard-fail if missing).
-                        <strong>Zed</strong> and <strong>VSCode</strong> are
+                        <strong>VSCode</strong> is
                         installed by hand too &mdash; the script soft-warns if
-                        they&rsquo;re missing, but their chezmoi configs deploy
+                        it&rsquo;s missing, but its chezmoi config deploys
                         regardless. <strong>zoxide</strong> is no longer
                         installed (the PowerShell profile no-ops without it).
                         WezTerm/Starship/Helix versions are pinned in
@@ -2038,7 +2050,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
-.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian) even if present</code></pre>
+.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed) even if present</code></pre>
                     <p class="note-row">
                         <strong>Default clone path</strong> is
                         <code>%USERPROFILE%\.local\share\chezmoi</code>, which
@@ -2089,11 +2101,11 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <strong>No elevation anywhere in this flow.</strong>
                         Pass <code>-SkipToolInstall</code> to skip the
                         chezmoi/WezTerm/Starship/Helix installs <em>and</em> the
-                        installer-class apps (Obsidian) entirely (assumes
-                        they&rsquo;re already present). Obsidian installs silently
-                        per-user via its own <code>.exe</code> at the latest
-                        release; pass <code>-ForceInstaller</code> to reinstall it
-                        even when already present. The diagram is a
+                        installer-class apps (Obsidian, Zed) entirely (assumes
+                        they&rsquo;re already present). Obsidian and Zed install
+                        silently per-user via their own <code>.exe</code> at the
+                        latest release; pass <code>-ForceInstaller</code> to
+                        reinstall them even when already present. The diagram is a
                         simplified view &mdash; the script also creates the
                         WezTerm Start Menu shortcut and runs BurntToast and the
                         Nerd Font install (its step 7) between
@@ -3376,7 +3388,8 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 asset) or the download was corrupted/tampered.
                                 The script refuses to install an unverified
                                 binary. Installer-class tools
-                                (<code>$InstallerTools</code>, e.g. Obsidian) are
+                                (<code>$InstallerTools</code>, e.g. Obsidian,
+                                Zed) are
                                 <em>not</em> pinned &mdash; they verify against the
                                 GitHub API&rsquo;s sha256 <code>digest</code> for
                                 the latest asset, and the same hard-fail applies on
