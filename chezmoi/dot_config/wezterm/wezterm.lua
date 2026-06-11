@@ -185,25 +185,41 @@ config.font_size    = 10.5
 
 -- Toggle between fancy (native GUI, proportional/custom font, top only,
 -- frameless Chrome-style with integrated min/max/close) and retro
--- (terminal-cell font, sits at the bottom, keeps the OS title bar, reads
+-- (terminal-cell font, sits at the bottom, title-bar-less, reads
 -- as one continuous strip with the active tab as the only visible tile).
 -- Flip this single flag to switch styles end-to-end.
 local fancy_tabs                   = false
 
--- Window chrome — fancy mode uses INTEGRATED_BUTTONS|RESIZE for the Chrome
--- look: no OS title bar, WezTerm-drawn min/max/close buttons integrated into
--- the tab bar (colors via button_* in window_frame), resize border preserved.
--- (Pure 'RESIZE' alone leaves a more obvious gap where the OS title used to
--- be on Windows. 'NONE' eliminates the resize border too but breaks Win+Arrow
--- snap and minimize.) Retro keeps the OS title bar since the retro tab bar
--- sits at the bottom and there's no top chrome to host the buttons.
-config.window_decorations          = fancy_tabs and 'INTEGRATED_BUTTONS|RESIZE' or 'TITLE | RESIZE'
-config.window_background_opacity   = 1.0 -- 0.95
+-- Window chrome — no OS title bar in either mode. Fancy uses
+-- INTEGRATED_BUTTONS|RESIZE for the Chrome look: WezTerm-drawn min/max/close
+-- buttons integrated into the tab bar (colors via button_* in window_frame).
+-- Retro uses bare RESIZE: no title bar, no buttons, just the invisible thin
+-- resize frame — Win+Arrow snap, drag-to-edge snap, mouse resize, and
+-- Win+Down minimize all still work because the window is still a normal
+-- resizable window. Move it with CTRL+SHIFT+drag or WIN+drag (StartWindowDrag
+-- mouse bindings below) — there's no title bar to grab and the bottom retro
+-- tab bar is NOT a drag area. ('NONE' was considered for "completely
+-- borderless" and rejected: it drops the resize frame too, which breaks
+-- Win+Arrow snap, minimize, AND mouse resizing.)
+config.window_decorations          = fancy_tabs and 'INTEGRATED_BUTTONS|RESIZE' or 'RESIZE'
+
+-- Acrylic frosted-glass: the Windows system backdrop shows through wherever
+-- the terminal background is translucent, so opacity must be < 1.0 for the
+-- effect to be visible at all (1.0 = backdrop fully hidden). 0.92 keeps text
+-- contrast high while letting the blur read. Win11 renders Acrylic well; on
+-- Win10 it can lag while dragging the window. Both knobs are silently
+-- ignored off Windows (and this file only deploys to the Windows host).
+config.window_background_opacity   = 0.92
+config.win32_system_backdrop       = 'Acrylic'
 config.enable_tab_bar              = true
 config.use_fancy_tab_bar           = fancy_tabs
 -- tab_bar_at_bottom is only honored by the retro bar; fancy is always top.
 config.tab_bar_at_bottom           = not fancy_tabs
 config.hide_tab_bar_if_only_one_tab = false
+-- Closing a tab returns to the LAST-ACTIVE tab instead of the adjacent one —
+-- with a row of host tabs open, "check something, close it" lands back on
+-- the tab you were actually working in.
+config.switch_to_last_active_tab_when_closing_tab = true
 -- Cap tab labels at 32 cells in both modes. Retro no longer stretches tabs
 -- to fill the bar (see format-tab-title below) so the cap only matters for
 -- truncating absurdly long renames; 32 is plenty for "<idx>: <hostname>"
@@ -259,7 +275,20 @@ config.colors = {
   cursor_bg     = mocha.mauve,
   cursor_border = mocha.mauve,
   cursor_fg     = mocha.crust,
+  -- Visual-bell flash color — peach: warm, attention-adjacent, and clearly
+  -- distinct from the mauve cursor it momentarily replaces (config.visual_bell
+  -- below targets CursorColor).
+  visual_bell   = mocha.peach,
 }
+
+-- Fuzzy-overlay chrome — the command palette (CTRL+SHIFT+P) AND every
+-- InputSelector overlay (host picker CTRL+SHIFT+J, tab switcher CTRL+SHIFT+S,
+-- help CTRL+SHIFT+H, WSL distro picker) render with these colors. Without
+-- them the overlays use WezTerm's stock dark-gray — the one surface that
+-- didn't match the Mocha chrome.
+config.command_palette_bg_color  = mocha.crust
+config.command_palette_fg_color  = mocha.text
+config.command_palette_font_size = 12.0
 
 -- Scrollback depth — how many lines WezTerm retains per pane above the
 -- viewport. Default is 3500; 1,000,000 is effectively "never lose output".
@@ -287,6 +316,13 @@ config.window_padding = {
   top    = 6,
   bottom = 6,
 }
+
+-- Initial window size in terminal cells. WezTerm's default is 80x24 —
+-- cramped on a modern display and below the 130-col threshold where the
+-- right status starts showing the zellij blob. 140x38 is a comfortable
+-- working size; snap/maximize from there as needed.
+config.initial_cols = 140
+config.initial_rows = 38
 
 -- GPU rendering
 config.front_end = 'WebGpu'
@@ -340,6 +376,20 @@ config.cursor_blink_rate    = 500
 -- emit SGR 6 get a defined fast blink; animation_fps=120 above eases the
 -- on→off transition. Lower toward ~150 for an even snappier blink.
 config.text_blink_rate_rapid = 250
+
+-- Visual bell — a brief cursor-color flash (mocha.peach via colors.visual_bell
+-- above) on BEL. Complements ~/.claude/notify.sh, which rings the terminal
+-- bell for Claude Code notifications: the flash gives a visible cue even with
+-- audio muted. The audible bell is deliberately left at its default — this is
+-- an ADDITION, not a replacement (notify.sh depends on BEL staying audible).
+-- Transitions are eased at animation_fps (120) like the cursor blink.
+config.visual_bell = {
+  fade_in_function     = 'EaseIn',
+  fade_in_duration_ms  = 75,
+  fade_out_function    = 'EaseOut',
+  fade_out_duration_ms = 150,
+  target               = 'CursorColor',
+}
 
 -- ---------------------------------------------------------------------------
 -- Tab colors — Catppuccin Mocha accent palette + state variants
@@ -727,6 +777,9 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+S     Tab switcher (fuzzy list)',           id = '' },
     -- Wezterm: window
     { label = 'key   CTRL+SHIFT+N     New window',                          id = '' },
+    { label = 'key   CTRL+SHIFT+drag  Move window (no title bar to grab)',  id = '' },
+    { label = 'key   WIN+drag         Move window (same as CTRL+SHIFT+drag)', id = '' },
+    { label = 'key   F11              Toggle fullscreen',                   id = '' },
     -- Wezterm: hosts
     { label = 'key   CTRL+SHIFT+J     Open SSH host picker',                id = '' },
     { label = 'key   CTRL+SHIFT+F5    Reconnect current SSH pane (new tab, Zellij reattaches)', id = '' },
@@ -737,6 +790,11 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+C     Copy selection',                      id = '' },
     { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
     { label = 'key   CTRL+SHIFT+A     Copy entire scrollback to clipboard', id = '' },
+    -- Built-in WezTerm defaults (not bound in config.keys) surfaced here
+    -- for discoverability:
+    { label = 'key   CTRL+SHIFT+F     Search scrollback',                   id = '' },
+    { label = 'key   CTRL+SHIFT+Space Quick-select URLs/paths/hashes',      id = '' },
+    { label = 'key   CTRL+SHIFT+P     Command palette',                     id = '' },
     -- Wezterm: font
     { label = 'key   CTRL+=           Increase font size',                  id = '' },
     { label = 'key   CTRL+-           Decrease font size',                  id = '' },
@@ -1027,6 +1085,21 @@ config.mouse_bindings = {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'CTRL',
     action = act.OpenLinkAtMouseCursor,
+  },
+  -- Window drag-to-move — required since window_decorations='RESIZE' removed
+  -- the OS title bar (and the bottom retro tab bar is not a drag area). The
+  -- two bindings are the canonical pair from wezterm.org's window_decorations
+  -- docs; SUPER is the Windows key. StartWindowDrag hands off to the OS move
+  -- loop, so drag-to-screen-edge snapping keeps working.
+  {
+    event = { Drag = { streak = 1, button = 'Left' } },
+    mods = 'CTRL|SHIFT',
+    action = act.StartWindowDrag,
+  },
+  {
+    event = { Drag = { streak = 1, button = 'Left' } },
+    mods = 'SUPER',
+    action = act.StartWindowDrag,
   },
 }
 
