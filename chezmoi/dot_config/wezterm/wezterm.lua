@@ -408,6 +408,28 @@ local function host_hash(name)
   return h
 end
 
+-- This machine's hostname, lowercased. WSL distros share the Windows
+-- computer name by default (no hostname override in configs/wsl/wsl.conf),
+-- so a WSL pane's OWN shell reports this value in its OSC 7 — anything else
+-- showing up there means an ssh session is running inside the pane.
+local LOCAL_HOSTNAME = (wezterm.hostname() or ''):lower()
+
+-- Map a detected hostname (short or FQDN, any case) onto the matching
+-- ssh_domain name, so an ssh session running INSIDE a WSL/local pane hashes
+-- into the SAME HOST_ACCENTS bucket as a real SSH-domain tab to that host.
+-- Unmatched hosts pass through as-is — they still get a stable accent of
+-- their own, it just isn't shared with any domain tab.
+local function canonical_host(h)
+  local short = (h:match('^([^%.]+)') or h):lower()
+  for _, d in ipairs(ssh_domains) do
+    local name = d.name:lower()
+    if name == h:lower() or name == short then
+      return d.name
+    end
+  end
+  return h
+end
+
 -- Inactive tabs match the bar bg (mocha.base — see config.colors.tab_bar below)
 -- so the bar reads as one continuous strip with the active tab as the only
 -- visible tile. The host accent still shows in inactive text, just muted —
@@ -450,20 +472,50 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, ma
   for _, d in ipairs(ssh_domains) do
     if d.name == domain then host = d.name break end
   end
-  -- WSL: derive host from the distro segment so the HOST_ACCENTS hash is
-  -- deterministic across renders. Without this, host was only set later via
-  -- the user@host fallback once the shell got around to emitting its OSC
-  -- title, which made coloring race with shell startup.
+  -- WSL: detect ssh sessions running INSIDE the pane, else fall back to the
+  -- distro segment so the HOST_ACCENTS hash is deterministic across renders.
+  --
+  -- Detection: every chezmoi-managed host's rc emits OSC 7
+  -- (file://<hostname><cwd>) on each prompt — see __wezterm_osc7 in
+  -- dot_zshrc.tmpl / dot_bashrc.tmpl — so while an `ssh <managed-host>` is
+  -- live inside a WSL pane, the pane's tracked cwd carries the REMOTE
+  -- hostname. When that hostname is neither this machine (WSL shares the
+  -- Windows computer name) nor the distro, the tab is colored + titled as
+  -- the remote host, canonicalized via canonical_host so it lands in the
+  -- same accent bucket as a real SSH-domain tab. Secondary signal: a
+  -- shell-set "user@host" title (distro-default PROMPT_COMMANDs emit these
+  -- even where OSC 7 isn't deployed). Self-reverting: after `exit`, the
+  -- local shell's next prompt re-emits a local OSC 7 / local title.
+  local wsl_remote_host
   if not host and is_wsl then
-    host = domain:gsub('^WSL:', '')  -- e.g. "AlmaLinux-9"
+    local distro = domain:gsub('^WSL:', '')  -- e.g. "AlmaLinux-9"
+    local detected
+    local cwd = pane.current_working_dir
+    if cwd then
+      -- tostring() handles both the Url object (20240203+) and plain-string
+      -- forms of current_working_dir.
+      detected = tostring(cwd):match('^file://([^/]+)/')
+    end
+    if not detected then
+      detected = (pane.title or ''):match('^[%w%._%-]+@([%w%._%-]+)')
+    end
+    if detected then
+      local short = (detected:match('^([^%.]+)') or detected):lower()
+      if detected:lower() ~= LOCAL_HOSTNAME
+        and short ~= LOCAL_HOSTNAME
+        and short ~= distro:lower() then
+        wsl_remote_host = canonical_host(detected)
+      end
+    end
+    host = wsl_remote_host or distro
   end
   -- Fallback: if not a WezTerm SSH-domain tab and not WSL, but the shell-set
   -- title is in "user@host[:cwd]" form (typical for manual `ssh <host>` from
   -- a local tab), extract the host so the tab still picks up the per-host
-  -- accent.
+  -- accent (canonicalized into the domain's bucket when it's a managed host).
   if not host then
     local detected = (pane.title or ''):match('^[%w%._%-]+@([%w%._%-]+)')
-    if detected and #detected > 0 then host = detected end
+    if detected and #detected > 0 then host = canonical_host(detected) end
   end
 
   -- Heuristic: a tab_title in "user@host[:cwd]" form was almost certainly set
@@ -477,12 +529,13 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, ma
 
   local title = tab.tab_title
   if is_wsl then
-    -- Always show "WSL:<distro>" unless the user has renamed the tab.
-    -- Without this branch the title flickered between the domain (first
-    -- render, tab_title empty) and the shell-set "user@<distro>:<cwd>"
+    -- Show "WSL:<distro>" — or the remote host name while an embedded ssh
+    -- session is live (wsl_remote_host above) — unless the user has renamed
+    -- the tab. Without this branch the title flickered between the domain
+    -- (first render, tab_title empty) and the shell-set "user@<distro>:<cwd>"
     -- (later renders, after PROMPT_COMMAND fired).
     if title == nil or #title == 0 or looks_shell_set(title) then
-      title = domain
+      title = wsl_remote_host or domain
     end
   elseif title == nil or #title == 0 then
     if host then
@@ -760,7 +813,7 @@ local function help_choices()
   local rows = {
     -- Wezterm: tabs
     { label = 'key   CTRL+SHIFT+T     New local tab',                       id = '' },
-    { label = 'key   CTRL+SHIFT+W     Close current tab (with confirm)',    id = '' },
+    { label = 'key   CTRL+SHIFT+W     Close current tab (no confirm)',      id = '' },
     { label = 'key   CTRL+SHIFT+E     Rename current tab',                  id = '' },
     { label = 'key   CTRL+TAB         Next tab',                            id = '' },
     { label = 'key   CTRL+SHIFT+TAB   Previous tab',                        id = '' },
@@ -1114,8 +1167,10 @@ config.keys = {
   -- Show keybind + host cheatsheet
   { key = 'h', mods = 'CTRL|SHIFT', action = show_help },
 
-  -- Close tab
-  { key = 'w', mods = 'CTRL|SHIFT', action = act.CloseCurrentTab { confirm = true } },
+  -- Close tab — no confirmation prompt (user preference). Low-risk: SSH-domain
+  -- tabs run inside a remote Zellij session that survives the tab and
+  -- reattaches via the host picker / CTRL+SHIFT+F5.
+  { key = 'w', mods = 'CTRL|SHIFT', action = act.CloseCurrentTab { confirm = false } },
 
   -- Switch tabs
   { key = 'Tab',       mods = 'CTRL',       action = act.ActivateTabRelative(1) },
