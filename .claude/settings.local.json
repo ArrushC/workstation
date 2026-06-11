@@ -75,7 +75,10 @@
       "Bash(chezmoi apply *)",
       "Bash(chezmoi status *)",
       "Bash(command -v chezmoi)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(awk '{print $1}')",
+      "Bash(chezmoi state *)",
+      "Bash(grep -iA2 -E 'wezterm|terminfo')"
     ]
   }
 }
