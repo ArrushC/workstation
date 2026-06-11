@@ -2267,7 +2267,11 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         to a persistent Zellij session. Press
                         <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>H</kbd> inside
                         WezTerm for a cheatsheet of keybinds, aliases, and
-                        hosts.
+                        hosts. The window draws <strong>no OS title bar</strong>
+                        &mdash; move it with
+                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+drag (or
+                        <kbd>WIN</kbd>+drag); <kbd>WIN</kbd>+arrow snapping and
+                        edge resizing still work as usual.
                     </p>
                     <table>
                         <thead>
@@ -2364,6 +2368,21 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                     >
                                 </td>
                                 <td>Reload <code>wezterm.lua</code></td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+drag /
+                                    <kbd>WIN</kbd>+drag
+                                </td>
+                                <td>
+                                    Move the window. There is no OS title bar
+                                    to grab (and the bottom tab bar is not a
+                                    drag area), so hold the modifier and drag
+                                    anywhere in the terminal.
+                                    Drag-to-screen-edge snapping,
+                                    <kbd>WIN</kbd>+arrow snap, and edge
+                                    resizing all still work.
+                                </td>
                             </tr>
                         </tbody>
                     </table>
