@@ -202,15 +202,6 @@ local fancy_tabs                   = false
 -- borderless" and rejected: it drops the resize frame too, which breaks
 -- Win+Arrow snap, minimize, AND mouse resizing.)
 config.window_decorations          = fancy_tabs and 'INTEGRATED_BUTTONS|RESIZE' or 'RESIZE'
-
--- Acrylic frosted-glass: the Windows system backdrop shows through wherever
--- the terminal background is translucent, so opacity must be < 1.0 for the
--- effect to be visible at all (1.0 = backdrop fully hidden). 0.92 keeps text
--- contrast high while letting the blur read. Win11 renders Acrylic well; on
--- Win10 it can lag while dragging the window. Both knobs are silently
--- ignored off Windows (and this file only deploys to the Windows host).
-config.window_background_opacity   = 0.92
-config.win32_system_backdrop       = 'Acrylic'
 config.enable_tab_bar              = true
 config.use_fancy_tab_bar           = fancy_tabs
 -- tab_bar_at_bottom is only honored by the retro bar; fancy is always top.
