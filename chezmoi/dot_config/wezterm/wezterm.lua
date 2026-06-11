@@ -305,7 +305,7 @@ config.webgpu_power_preference = 'HighPerformance'
 config.max_fps = 120
 
 -- TERM advertising — pair with the chezmoi-deployed wezterm terminfo
--- (.chezmoiscripts/run_onchange_install-wezterm-terminfo.sh.tmpl). Setting
+-- (.chezmoiscripts/run_install-wezterm-terminfo.sh.tmpl). Setting
 -- TERM=wezterm lets apps query terminfo for Tc / Smulx / Setulc instead of
 -- inferring capabilities from the looser xterm-256color entry. PTYs
 -- inheriting this TERM: local WSL panes, SSH-domain panes (default_prog
