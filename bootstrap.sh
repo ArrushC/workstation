@@ -24,6 +24,16 @@
 #     ./bootstrap.sh --prod --reinstall          # prod-scope wipe + rebuild, prompts
 #     ./bootstrap.sh --dev --reinstall --yes
 #
+# DOCTOR / CHECK-FOR-UPDATES — read-only report modes that exit before any
+# provisioning happens (nothing is cloned, installed, registered, or pushed):
+#
+#     ./bootstrap.sh --dev --doctor              # health: tools, services, repo, chezmoi
+#     ./bootstrap.sh --dev --check-for-updates   # repo first, then pins vs upstream tags
+#
+# Per the thin-seed rule, all per-tool knowledge stays in makefile/ — these
+# modes front `make doctor` / `make check-updates` with the repo-level checks
+# (prereqs, git branch/ahead/behind/dirty, chezmoi init + drift, login shell).
+#
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME, and
 # GIT_USER_EMAIL before running. The token is used for both the bootstrap.sh
 # fetch AND the script's internal git clone/pull/push; the name/email drive
@@ -98,10 +108,12 @@ BIN="$HOME/.local/bin"
 GH_HEADER_KEY="http.https://github.com/.extraheader"
 
 # --- Argument parsing -------------------------------------------------------
-# Accepts in any order: --dev | --prod (exactly one required), --reinstall, --yes/-y
+# Accepts in any order: --dev | --prod (exactly one required), --reinstall,
+# --yes/-y, --doctor | --check-for-updates (read-only report modes).
 MACHINE_TYPE=""
 REINSTALL=false
 YES=false
+ACTION=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dev)
@@ -110,6 +122,12 @@ while [[ $# -gt 0 ]]; do
     --prod)
       [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
       MACHINE_TYPE="prod"; shift ;;
+    --doctor)
+      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
+      ACTION="doctor"; shift ;;
+    --check-for-updates|--checkforupdates)
+      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
+      ACTION="check-updates"; shift ;;
     --full)
       fail "--full was removed.
 
@@ -137,6 +155,16 @@ Optional flags:
                 fresh. Does NOT remove installed tools or deployed
                 dotfiles (those are no-op idempotent on re-bootstrap).
   --yes, -y     Skip the --reinstall confirmation prompt.
+  --doctor      Read-only health report, then exit (provisions nothing):
+                prereqs, repo git state (branch, ahead/behind, dirty),
+                chezmoi init + drift, login shell, then every managed
+                tool/service/stamp via 'make doctor'.
+  --check-for-updates
+                Read-only update scan, then exit: the workstation repo
+                first (fetch + commits-behind), then every pinned tool
+                against its upstream release tags via 'make check-updates'
+                (git ls-remote — no GitHub API, no rate limits).
+                --checkforupdates is accepted as an alias.
   -h, --help    Show this message.
 EOF
       exit 0
@@ -161,6 +189,12 @@ fi
 
 # Derived value used by self_register (hosts.conf group column).
 GROUP_NAME="${MACHINE_TYPE}_machine"
+
+# The report modes are read-only — combining them with the wipe flag is
+# almost certainly a mistake, so refuse rather than surprise.
+if [[ -n "$ACTION" && "$REINSTALL" == true ]]; then
+  fail "--reinstall can't be combined with --doctor/--check-for-updates (they are read-only and exit early)"
+fi
 
 # =============================================================================
 # 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let
@@ -494,8 +528,142 @@ push_host_changes() {
 }
 
 # =============================================================================
+# DOCTOR / CHECK-FOR-UPDATES — read-only report modes (--doctor /
+# --check-for-updates). Both exit before the provisioning flow starts:
+# nothing is cloned, installed, registered, or pushed. This script owns only
+# the repo-level checks (prereqs, git state, chezmoi init + drift, login
+# shell) and delegates ALL per-tool knowledge to `make doctor` /
+# `make check-updates` in makefile/ — the thin-seed invariant holds.
+# =============================================================================
+require_repo() {
+  if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
+    fail "No workstation repo at $CHEZMOI_SOURCE — bootstrap this host first:
+  ./bootstrap.sh --${MACHINE_TYPE}"
+  fi
+}
+
+# Shared by both modes: fetch (best-effort), then report branch, ahead/behind
+# the upstream, and working-tree cleanliness. Never aborts — report-only.
+report_repo_state() {
+  cd "$CHEZMOI_SOURCE"
+  log "Workstation repo ($CHEZMOI_SOURCE)"
+  if git fetch --quiet 2>/dev/null; then
+    ok "fetched origin"
+  else
+    warn "git fetch failed (offline or stale credentials) — using last-known remote state"
+  fi
+
+  local branch dirty upstream
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
+  dirty=$(git status --porcelain 2>/dev/null | wc -l)
+
+  if upstream=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null); then
+    local behind ahead
+    behind=$(git rev-list --count "HEAD..@{upstream}" 2>/dev/null || echo 0)
+    ahead=$(git rev-list --count "@{upstream}..HEAD" 2>/dev/null || echo 0)
+    if (( behind > 0 )); then
+      warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $CHEZMOI_SOURCE pull --ff-only"
+    else
+      ok "branch $branch is up to date with $upstream"
+    fi
+    if (( ahead > 0 )); then
+      warn "$ahead local commit(s) not pushed — push with: git -C $CHEZMOI_SOURCE push"
+    fi
+  else
+    warn "branch $branch has no upstream — behind/ahead unknown"
+  fi
+
+  if (( dirty > 0 )); then
+    warn "$dirty uncommitted change(s) — review with: git -C $CHEZMOI_SOURCE status"
+  else
+    ok "working tree clean"
+  fi
+}
+
+do_doctor() {
+  require_repo
+  log "Doctor — read-only health report (MODE=${MACHINE_TYPE}); nothing is installed or changed"
+  echo ""
+
+  # Same prereq list as preflight, but report-all instead of hard-fail.
+  log "Prerequisites"
+  local cmd
+  for cmd in curl git make tar unzip ip; do
+    if command -v "$cmd" &>/dev/null; then
+      ok "$cmd"
+    else
+      warn "$cmd missing — install via your distro's package manager (see ./bootstrap.sh --help)"
+    fi
+  done
+  echo ""
+
+  report_repo_state
+  echo ""
+
+  log "chezmoi / dotfiles"
+  local chezmoi_bin
+  chezmoi_bin=$(command -v chezmoi || true)
+  if [[ -n "$chezmoi_bin" ]]; then
+    ok "chezmoi on PATH ($chezmoi_bin)"
+    if [[ -f "$HOME/.config/chezmoi/chezmoi.toml" ]]; then
+      ok "initialized (~/.config/chezmoi/chezmoi.toml)"
+      local pending
+      pending=$("$chezmoi_bin" status --source "$CHEZMOI_SOURCE" 2>/dev/null | wc -l)
+      if (( pending > 0 )); then
+        warn "$pending path(s) differ from the source — review: czd (chezmoi diff) · apply: cza"
+      else
+        ok "deployed dotfiles in sync with the source"
+      fi
+    else
+      warn "not initialized — re-run ./bootstrap.sh --${MACHINE_TYPE} (runs chezmoi init --apply)"
+    fi
+  else
+    warn "chezmoi not on PATH — install: make -C $CHEZMOI_SOURCE/makefile chezmoi MODE=${MACHINE_TYPE}"
+  fi
+  echo ""
+
+  log "Login shell"
+  local login_shell zsh_path
+  login_shell=$(getent passwd "$USER" | cut -d: -f7)
+  zsh_path=$(command -v zsh || true)
+  if [[ -n "$zsh_path" && "$login_shell" == "$zsh_path" ]]; then
+    ok "login shell is zsh ($zsh_path)"
+  elif [[ -z "$zsh_path" ]]; then
+    warn "zsh not installed — login shell is $login_shell"
+  else
+    warn "login shell is $login_shell, not zsh — fix: sudo usermod -s $zsh_path $USER (dev) / chsh -s $zsh_path (prod)"
+  fi
+  echo ""
+
+  log "Tools, services, stamps — make doctor MODE=${MACHINE_TYPE}"
+  make -C "$CHEZMOI_SOURCE/makefile" --no-print-directory MODE="$MACHINE_TYPE" doctor
+}
+
+do_check_updates() {
+  require_repo
+  log "Check for updates (MODE=${MACHINE_TYPE}) — workstation repo first, then tool pins vs upstream"
+  echo ""
+
+  report_repo_state
+  echo "    (tool pins live in makefile/versions.mk of THIS clone — if the repo is behind,"
+  echo "     pull first so the pins you're comparing are current)"
+  echo ""
+
+  make -C "$CHEZMOI_SOURCE/makefile" --no-print-directory MODE="$MACHINE_TYPE" check-updates
+}
+
+# =============================================================================
 # MAIN
 # =============================================================================
+# Read-only report modes exit here, before any provisioning state changes.
+if [[ -n "$ACTION" ]]; then
+  case "$ACTION" in
+    doctor)        do_doctor ;;
+    check-updates) do_check_updates ;;
+  esac
+  exit 0
+fi
+
 if [[ "$REINSTALL" == true ]]; then
   do_reinstall
 fi

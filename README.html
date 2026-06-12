@@ -1901,6 +1901,73 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         </div>
                     </details>
 
+                    <details>
+                        <summary>
+                            Health check &amp; update scan
+                            (<code>--doctor</code> /
+                            <code>--check-for-updates</code>)
+                        </summary>
+                        <div class="grid-2">
+                            <div class="os-card linux">
+                                <span class="os-label">Linux</span>
+                                <pre><code>./bootstrap.sh --dev --doctor              # health report (read-only)
+./bootstrap.sh --dev --check-for-updates   # update scan (read-only)
+
+# Same engines, invoked directly:
+make -C makefile doctor MODE=dev           # or MODE=prod
+make -C makefile check-updates MODE=dev</code></pre>
+                            </div>
+                            <div class="os-card windows">
+                                <span class="os-label">Windows</span>
+                                <pre><code>.\bootstrap.ps1 -Doctor              # health report (read-only)
+.\bootstrap.ps1 -CheckForUpdates     # update scan (read-only)</code></pre>
+                            </div>
+                        </div>
+                        <p>
+                            Both modes are <strong>read-only</strong> &mdash;
+                            they exit before the provisioning flow starts and
+                            never install, register, or push anything. Use
+                            the same <code>--dev</code>/<code>--prod</code>
+                            flag the host was bootstrapped with (it picks the
+                            install scope being inspected).
+                        </p>
+                        <p>
+                            <strong><code>--doctor</code></strong> reports
+                            what is installed, missing, stale, or broken:
+                            prerequisites, the repo&rsquo;s git state (branch,
+                            commits ahead/behind upstream after a fetch,
+                            uncommitted changes), chezmoi init state + dotfile
+                            drift, the login shell, then every managed tool
+                            (binary + version stamp, one
+                            <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
+                            line each, with the exact <code>make</code> repair
+                            command), the dev-only services
+                            (docker/dozzle/cockpit &mdash; active or
+                            inactive), <code>wsl-config</code>, and the dnf
+                            package lists. On Windows it covers the portable
+                            and installer-class tools, Nerd Fonts, BurntToast,
+                            <code>WEZTERM_CONFIG_FILE</code>, the Start Menu
+                            shortcut, the profile shim, and the SSH key.
+                        </p>
+                        <p>
+                            <strong><code>--check-for-updates</code></strong>
+                            checks the <strong>workstation repo first</strong>
+                            (fetch + commits-behind &mdash; pull before
+                            trusting the pin comparison), then compares every
+                            pinned tool version against the newest upstream
+                            release tag via <code>git ls-remote</code> (no
+                            GitHub API, no rate limits).
+                            <code>latest</code>-tracking tools (broot, nb,
+                            chezmoi, the pip tools, &hellip;) are reported as
+                            rolling. The scan is <strong>report-only</strong>:
+                            updating a pin is still the manual edit in
+                            <code>makefile/versions.mk</code> (Linux) or
+                            <code>$PortableTools</code> in
+                            <code>bootstrap.ps1</code> (Windows), followed by
+                            a re-provision.
+                        </p>
+                    </details>
+
                     <h3 id="setup-windows">3. On Windows</h3>
                     <p class="lede">
                         The Windows host is a <strong>client</strong> &mdash; no
@@ -2050,7 +2117,9 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
-.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed) even if present</code></pre>
+.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed) even if present
+.\bootstrap.ps1 -Doctor                          # read-only health report, then exit
+.\bootstrap.ps1 -CheckForUpdates                 # read-only update scan (repo first), then exit</code></pre>
                     <p class="note-row">
                         <strong>Default clone path</strong> is
                         <code>%USERPROFILE%\.local\share\chezmoi</code>, which
