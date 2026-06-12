@@ -111,7 +111,7 @@ Per-file gotchas live in **`docs/claude/file-care.md`** — read a file's entry 
 - **Parity pairs (change both in the same commit):** `dot_zshrc.tmpl` ↔ `dot_bashrc.tmpl`; `manage-hosts.sh` ↔ `manage-hosts.ps1`.
 - **Version-pin dual/triple-edits:** `CCSTATUSLINE_VERSION` (`versions.mk` + `private_settings.json.tmpl`); `JETBRAINSMONO_NERD_VERSION` (`versions.mk` + `lib/font.sh` + `install-nerd-fonts.ps1`); `HELIX_RUNTIME` rc literal ↔ `HELIX_RUNTIME_DEST` in `scope.mk`.
 - **Don't hand-edit (regenerated / placeholder-substituted):** `hosts.conf` (manage-hosts re-pads/sorts), `.chezmoiroot` (one line `chezmoi`), `configs/dozzle/dozzle.env` (`@DOZZLE_VERSION@` is sed-substituted), any `/etc/`-deployed `configs/*` copy (overwritten by its `<tool>-service` target).
-- **Single-source-of-truth files:** `makefile/scope.mk` (MODE→DEST/SUDO/…), `makefile/versions.mk` (tool versions + `EGET_VERSION`), `makefile/lib/eget.sh` (the asset anti-match filter), `private_settings.json.tmpl` (tracked `~/.claude/settings.json`, 12 keys + Notification hooks → `~/.claude/notify.sh`).
+- **Single-source-of-truth files:** `makefile/scope.mk` (MODE→DEST/SUDO/…), `makefile/versions.mk` (tool versions + `EGET_VERSION`), `makefile/lib/eget.sh` (the asset anti-match filter), `private_settings.json.tmpl` (tracked `~/.claude/settings.json`, 13 keys + Notification hooks → `~/.claude/notify.sh`).
 
 ## Quick verification
 
