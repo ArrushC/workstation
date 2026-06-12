@@ -80,6 +80,16 @@
 #                       dotfiles — the bootstrap is idempotent over those.
 #                       Prompts unless -Yes is also passed.
 #   -Yes                skip confirmation prompts (Reinstall).
+#   -Doctor             read-only health report, then exit (installs nothing):
+#                       prereqs, repo git state (branch, ahead/behind, dirty),
+#                       chezmoi init + drift, portable/installer tools, fonts,
+#                       BurntToast, WEZTERM_CONFIG_FILE, Start-menu shortcut,
+#                       profile shim, SSH key.
+#   -CheckForUpdates    read-only update scan, then exit: the workstation repo
+#                       first (fetch + commits-behind), then every pinned tool
+#                       against its upstream release tags via git ls-remote
+#                       (no GitHub API, no rate limits). Report-only — a pin
+#                       bump is still the manual $PortableTools edit.
 # =============================================================================
 
 [CmdletBinding()]
@@ -92,7 +102,9 @@ param(
     [switch]$SkipNerdFonts,
     [switch]$ForceInstaller,
     [switch]$Reinstall,
-    [switch]$Yes
+    [switch]$Yes,
+    [switch]$Doctor,
+    [switch]$CheckForUpdates
 )
 
 Set-StrictMode -Version Latest
@@ -111,6 +123,7 @@ function Write-Log    { param($msg) Write-Host "${Blue}==>${Reset} ${Bold}$msg${
 function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
+function Write-Bad    { param($msg) Write-Host "${Red} ✗${Reset} $msg" }  # Write-Fail minus the exit — -Doctor reports, never aborts
 
 $DotfilesRepo = "https://github.com/ArrushC/workstation.git"
 $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
@@ -136,33 +149,50 @@ $WsStamps  = Join-Path $WsRoot "stamps"
 # downloaded .zip). Layout 'single' copies <Exe>.exe into Dest; 'tree' extracts
 # the whole archive into Dest. WezTerm is pinned to the same tag as the vendored
 # terminfo (see CLAUDE.md's wezterm-terminfo invariant).
+#
+# The Repo/Tag* keys feed -CheckForUpdates only (latest upstream tag via
+# `git ls-remote`): TagPrefix is what precedes the version in the tag,
+# TagFilter accepts version shapes after the prefix is stripped, TagSort
+# 'string' is for WezTerm's date-style tags ([version] can't parse them),
+# and UpdateHint is appended to the "update available" line.
 $PortableTools = @(
     @{
-        Name    = "Starship"
-        Exe     = "starship"
-        Version = "1.25.1"
-        Url     = "https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-pc-windows-msvc.zip"
-        Sha256  = "a07cf3e428afab09324e510fb786041ebcc491a68b1ca6fba044c5a461f9b017"
-        Layout  = "single"
-        Dest    = $WsBin
+        Name       = "Starship"
+        Exe        = "starship"
+        Version    = "1.25.1"
+        Url        = "https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-pc-windows-msvc.zip"
+        Sha256     = "a07cf3e428afab09324e510fb786041ebcc491a68b1ca6fba044c5a461f9b017"
+        Layout     = "single"
+        Dest       = $WsBin
+        Repo       = "starship/starship"
+        TagPrefix  = "v"
+        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
     },
     @{
-        Name    = "WezTerm"
-        Exe     = "wezterm"
-        Version = "20240203-110809-5046fc22"
-        Url     = "https://github.com/wez/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
-        Sha256  = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
-        Layout  = "tree"
-        Dest    = $WsWezterm
+        Name       = "WezTerm"
+        Exe        = "wezterm"
+        Version    = "20240203-110809-5046fc22"
+        Url        = "https://github.com/wez/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
+        Sha256     = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
+        Layout     = "tree"
+        Dest       = $WsWezterm
+        Repo       = "wez/wezterm"
+        TagPrefix  = ""
+        TagFilter  = '^\d{8}-\d{6}-[0-9a-f]+$'   # date-stamped release tags; excludes 'nightly'
+        TagSort    = "string"
+        UpdateHint = "pin tracks the vendored wezterm.terminfo tag — bump both together (see CLAUDE.md)"
     },
     @{
-        Name    = "Helix"
-        Exe     = "hx"
-        Version = "25.07.1"
-        Url     = "https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-windows.zip"
-        Sha256  = "5c8325ced8bacd8418d62706f669e96d9c3578a9237526e34d546900cbc049b6"
-        Layout  = "tree"
-        Dest    = $WsHelix
+        Name       = "Helix"
+        Exe        = "hx"
+        Version    = "25.07.1"
+        Url        = "https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-windows.zip"
+        Sha256     = "5c8325ced8bacd8418d62706f669e96d9c3578a9237526e34d546900cbc049b6"
+        Layout     = "tree"
+        Dest       = $WsHelix
+        Repo       = "helix-editor/helix"
+        TagPrefix  = ""
+        UpdateHint = "dual-edit: `$PortableTools here AND HELIX_VERSION in makefile/versions.mk"
     }
 )
 
@@ -928,8 +958,336 @@ function Invoke-EnsureSshKey {
 }
 
 # =============================================================================
+# DOCTOR / CHECK-FOR-UPDATES — read-only report modes (-Doctor /
+# -CheckForUpdates). Both exit before the provisioning flow starts: nothing
+# is installed, cloned, applied, or written. The Windows counterpart of
+# bootstrap.sh --doctor / --check-for-updates (whose tool knowledge lives in
+# makefile/; here the manifests in THIS script are the source of truth).
+# =============================================================================
+
+# Shared by both modes: fetch (best-effort), then report branch, ahead/behind
+# the upstream, and working-tree cleanliness. Returns $true when a repo exists.
+function Show-RepoState {
+    Write-Log "Workstation repo ($RepoPath)"
+    if (-not (Test-Path "$RepoPath\.git")) {
+        Write-Bad "no repo at $RepoPath — run .\bootstrap.ps1 first (or pass -RepoPath)"
+        return $false
+    }
+
+    # PS 5.1: native stderr + 2>$null under $ErrorActionPreference=Stop throws
+    # NativeCommandError — relax EAP around every git call in this function.
+    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try {
+        $null = git -C $RepoPath fetch --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "git fetch failed (offline or stale credentials) — using last-known remote state"
+        } else {
+            Write-Ok "fetched origin"
+        }
+
+        $branch   = git -C $RepoPath rev-parse --abbrev-ref HEAD 2>$null
+        $dirty    = @(git -C $RepoPath status --porcelain 2>$null).Count
+        $upstream = git -C $RepoPath rev-parse --abbrev-ref '@{upstream}' 2>$null
+        if ($LASTEXITCODE -eq 0 -and $upstream) {
+            $behind = [int](git -C $RepoPath rev-list --count "HEAD..@{upstream}" 2>$null)
+            $ahead  = [int](git -C $RepoPath rev-list --count "@{upstream}..HEAD" 2>$null)
+            if ($behind -gt 0) {
+                Write-Warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $RepoPath pull --ff-only"
+            } else {
+                Write-Ok "branch $branch is up to date with $upstream"
+            }
+            if ($ahead -gt 0) { Write-Warn "$ahead local commit(s) not pushed — push with: git -C $RepoPath push" }
+        } else {
+            Write-Warn "branch $branch has no upstream — behind/ahead unknown"
+        }
+
+        if ($dirty -gt 0) {
+            Write-Warn "$dirty uncommitted change(s) — review with: git -C $RepoPath status"
+        } else {
+            Write-Ok "working tree clean"
+        }
+    } finally {
+        $ErrorActionPreference = $oldEap
+    }
+    return $true
+}
+
+# Newest upstream tag via `git ls-remote --tags` — plain git, no GitHub API,
+# no rate limits. $Repo is owner/repo or a full git URL; $TagPrefix is what
+# precedes the version in the tag name; $Filter accepts version shapes after
+# the prefix strip (default: clean dotted numerics — drops -rc/-pre tags);
+# -StringSort for tags [version] can't parse (WezTerm's date stamps).
+# Returns $null when nothing matches (offline, renamed tag scheme).
+function Get-LatestGitTag {
+    param(
+        [string]$Repo,
+        [string]$TagPrefix = "v",
+        [string]$Filter = '^\d+(\.\d+)*$',
+        [switch]$StringSort
+    )
+    $url = if ($Repo -match '://') { $Repo } else { "https://github.com/$Repo.git" }
+
+    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $env:GIT_TERMINAL_PROMPT = '0'
+    $refs = git ls-remote --tags --refs $url "refs/tags/$TagPrefix*" 2>$null
+    $ErrorActionPreference = $oldEap
+    if ($LASTEXITCODE -ne 0 -or -not $refs) { return $null }
+
+    $vers = @(foreach ($line in @($refs)) {
+        $tag = ($line -split "`t")[-1] -replace '^refs/tags/', ''
+        if ($TagPrefix -and -not $tag.StartsWith($TagPrefix)) { continue }
+        $v = $tag.Substring($TagPrefix.Length)
+        if ($v -match $Filter) { $v }
+    })
+    if ($vers.Count -eq 0) { return $null }
+    if ($StringSort) { return ($vers | Sort-Object -Descending | Select-Object -First 1) }
+    return ($vers | Sort-Object { [version]$_ } -Descending | Select-Object -First 1)
+}
+
+# DisplayVersion from the Uninstall registry (same three roots as
+# Test-InstallerPresent). $null when not installed or no version recorded.
+function Get-InstalledAppVersion {
+    param([string]$DisplayName)
+    $roots = @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($root in $roots) {
+        $hit = Get-ItemProperty -Path $root -ErrorAction SilentlyContinue |
+               Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $DisplayName } |
+               Select-Object -First 1
+        if ($hit -and $hit.PSObject.Properties['DisplayVersion']) { return $hit.DisplayVersion }
+    }
+    return $null
+}
+
+# One report line comparing a pinned/installed version against the upstream
+# latest. -StringSort for date-style tags; otherwise [version] comparison with
+# a string-inequality fallback.
+function Write-UpdateStatus {
+    param([string]$Name, [string]$Pinned, [string]$Latest, [string]$Hint = "", [switch]$StringSort)
+    if (-not $Latest) {
+        Write-Warn "${Name}: couldn't resolve the latest release (offline? upstream tag scheme changed?)"
+        return
+    }
+    if ($Latest -eq $Pinned) {
+        Write-Ok "$Name $Pinned is up to date"
+        return
+    }
+    $newer = $false
+    if ($StringSort) {
+        $newer = ($Latest -gt $Pinned)
+    } else {
+        try   { $newer = ([version]$Latest -gt [version]$Pinned) }
+        catch { $newer = $true }   # unparseable mismatch — surface it as an update
+    }
+    if ($newer) {
+        $suffix = if ($Hint) { " — $Hint" } else { "" }
+        Write-Warn "$Name $Pinned -> $Latest available$suffix"
+    } else {
+        Write-Ok "$Name $Pinned (newest upstream tag: $Latest)"
+    }
+}
+
+function Invoke-Doctor {
+    Write-Log "Doctor — read-only health report; nothing is installed or changed"
+    Write-Host ""
+
+    Write-Log "Prerequisites"
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($gitCmd) { Write-Ok "git ($($gitCmd.Source))" }
+    else         { Write-Bad "git missing (hard prerequisite) — https://git-scm.com/download/win or: winget install Git.Git" }
+    if (Get-Command ssh-keygen -ErrorAction SilentlyContinue) { Write-Ok "ssh-keygen" }
+    else { Write-Warn "ssh-keygen not on PATH — Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0" }
+    Write-Host ""
+
+    if ($gitCmd) { $null = Show-RepoState; Write-Host "" }
+
+    Write-Log "chezmoi / dotfiles"
+    $chezmoiCmd = Get-Command chezmoi -ErrorAction SilentlyContinue
+    if ($chezmoiCmd) {
+        Write-Ok "chezmoi on PATH ($($chezmoiCmd.Source))"
+        $cfg = Join-Path $env:USERPROFILE ".config\chezmoi\chezmoi.toml"
+        if (Test-Path $cfg) {
+            Write-Ok "initialized ($cfg)"
+            $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            $pending = @(chezmoi status 2>$null)
+            $statusRc = $LASTEXITCODE
+            $ErrorActionPreference = $oldEap
+            if ($statusRc -ne 0) {
+                Write-Warn "chezmoi status failed — inspect with: chezmoi doctor"
+            } elseif ($pending.Count -gt 0) {
+                Write-Warn "$($pending.Count) path(s) differ from the source — review: chezmoi diff · apply: chezmoi apply"
+            } else {
+                Write-Ok "deployed dotfiles in sync with the source"
+            }
+        } else {
+            Write-Warn "not initialized — re-run .\bootstrap.ps1 (runs chezmoi init --apply)"
+        }
+    } else {
+        Write-Warn "chezmoi not on PATH — re-run .\bootstrap.ps1 (or open a NEW shell if it just installed)"
+    }
+    Write-Host ""
+
+    Write-Log "Portable tools ($WsRoot)"
+    foreach ($tool in $PortableTools) {
+        $stamp = Join-Path $WsStamps "$($tool.Exe).$($tool.Version).stamp"
+        $cmd   = Get-Command $tool.Exe -ErrorAction SilentlyContinue
+        if ($cmd -and (Test-Path $stamp)) {
+            Write-Ok "$($tool.Name) $($tool.Version) installed ($($cmd.Source))"
+        } elseif ($cmd) {
+            Write-Warn "$($tool.Name) on PATH but no $($tool.Version) stamp — pin moved? next bootstrap reinstalls"
+        } elseif (Test-Path $stamp) {
+            Write-Bad "$($tool.Name) stamped but $($tool.Exe).exe doesn't resolve — open a NEW shell, or re-run .\bootstrap.ps1"
+        } else {
+            Write-Bad "$($tool.Name) missing — re-run .\bootstrap.ps1"
+        }
+    }
+    Write-Host ""
+
+    Write-Log "Installer apps + extras"
+    foreach ($tool in $InstallerTools) {
+        if (Test-InstallerPresent -DisplayName $tool.DetectName) {
+            $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
+            $verText = if ($ver) { " $ver" } else { "" }
+            Write-Ok "$($tool.Name)$verText installed (self-updates; -ForceInstaller to reseed)"
+        } else {
+            Write-Bad "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
+        }
+    }
+    if (Get-Command code -ErrorAction SilentlyContinue) { Write-Ok "VSCode on PATH (hand-installed)" }
+    else { Write-Warn "VSCode not on PATH — hand-install when wanted; its chezmoi config deploys regardless" }
+    $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
+          Sort-Object Version -Descending | Select-Object -First 1
+    if ($bt) { Write-Ok "BurntToast $($bt.Version) module available (WSL2 toast notifications)" }
+    else { Write-Warn "BurntToast module missing — Claude Code WSL2 toasts fall back to a MessageBox; re-run .\bootstrap.ps1" }
+    $fontStamps = @(Get-ChildItem -Path $WsRoot -Filter "nerd-fonts.*.stamp" -ErrorAction SilentlyContinue)
+    if ($fontStamps.Count -gt 0) {
+        $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
+        Write-Ok "Nerd Fonts (JetBrainsMono) $fontVer installed (per-user)"
+    } else {
+        Write-Warn "Nerd Fonts not stamped — glyphs may render as tofu; re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
+    }
+    Write-Host ""
+
+    Write-Log "Environment"
+    $expectedCfg = Join-Path $RepoPath "chezmoi\dot_config\wezterm\wezterm.lua"
+    $currentCfg  = [Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')
+    if ($currentCfg -eq $expectedCfg) {
+        Write-Ok "WEZTERM_CONFIG_FILE points at the chezmoi source"
+    } elseif ($currentCfg) {
+        Write-Warn "WEZTERM_CONFIG_FILE points at $currentCfg (expected $expectedCfg) — re-run .\bootstrap.ps1"
+    } else {
+        Write-Bad "WEZTERM_CONFIG_FILE not set (User scope) — WezTerm won't find the tracked config; re-run .\bootstrap.ps1"
+    }
+    $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "WezTerm.lnk"
+    if (Test-Path $lnk) { Write-Ok "WezTerm Start Menu shortcut present" }
+    else { Write-Warn "WezTerm Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
+
+    $realDocs    = [Environment]::GetFolderPath("MyDocuments")
+    $literalDocs = Join-Path $env:USERPROFILE "Documents"
+    if ([string]::IsNullOrEmpty($realDocs) -or ($realDocs -eq $literalDocs)) {
+        Write-Ok "Documents not redirected — PowerShell loads the managed profile directly"
+    } else {
+        $loaderOk = $true
+        foreach ($sub in @("WindowsPowerShell", "PowerShell")) {
+            if (-not (Test-Path (Join-Path (Join-Path $realDocs $sub) "Microsoft.PowerShell_profile.ps1"))) { $loaderOk = $false }
+        }
+        if ($loaderOk) { Write-Ok "Documents redirected ($realDocs) — profile loaders in place" }
+        else { Write-Warn "Documents redirected ($realDocs) but profile loader(s) missing — re-run .\bootstrap.ps1" }
+    }
+
+    if (Test-Path "$SshKey.pub") { Write-Ok "SSH key present ($SshKey)" }
+    else { Write-Warn "no SSH key at $SshKey — generate with: ssh-keygen -t ed25519 (or re-run .\bootstrap.ps1)" }
+}
+
+function Invoke-CheckForUpdates {
+    Write-Log "Check for updates — workstation repo first, then tool pins vs upstream (read-only)"
+    Write-Host ""
+
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Fail "git is required for -CheckForUpdates (repo state + ls-remote tag lookups)."
+    }
+
+    $repoOk = Show-RepoState
+    if ($repoOk) {
+        Write-Host "    (tool pins live in `$PortableTools of THIS clone's bootstrap.ps1 — if the repo"
+        Write-Host "     is behind, pull first so the pins you're comparing are current)"
+    }
+    Write-Host ""
+
+    Write-Log "Pinned portable tools"
+    foreach ($tool in $PortableTools) {
+        $filter    = if ($tool.ContainsKey('TagFilter')) { $tool.TagFilter } else { '^\d+(\.\d+)*$' }
+        $useString = ($tool.ContainsKey('TagSort') -and $tool.TagSort -eq 'string')
+        $hint      = if ($tool.ContainsKey('UpdateHint')) { $tool.UpdateHint } else { "" }
+        $latest    = Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tool.TagPrefix -Filter $filter -StringSort:$useString
+        Write-UpdateStatus -Name $tool.Name -Pinned $tool.Version -Latest $latest -Hint $hint -StringSort:$useString
+    }
+    # chezmoi is installed unpinned via the official installer — compare the
+    # installed binary against upstream instead of a pin.
+    $chezmoiCmd = Get-Command chezmoi -ErrorAction SilentlyContinue
+    if ($chezmoiCmd) {
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $verOut = chezmoi --version 2>$null
+        $ErrorActionPreference = $oldEap
+        $installed = if ("$verOut" -match 'v(\d+\.\d+\.\d+)') { $Matches[1] } else { $null }
+        if ($installed) {
+            $latest = Get-LatestGitTag -Repo 'twpayne/chezmoi'
+            Write-UpdateStatus -Name 'chezmoi' -Pinned $installed -Latest $latest -Hint 'not pinned — re-run the official installer (or winget upgrade twpayne.chezmoi)'
+        } else {
+            Write-Warn "chezmoi: couldn't parse the installed version from 'chezmoi --version'"
+        }
+    } else {
+        Write-Warn "chezmoi not on PATH — re-run .\bootstrap.ps1"
+    }
+    Write-Host ""
+
+    Write-Log "Installer apps (install LATEST + self-update — nothing to pin)"
+    foreach ($tool in $InstallerTools) {
+        $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
+        $latest    = Get-LatestGitTag -Repo $tool.Repo
+        if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
+            Write-Warn "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
+        } elseif ($installed -and $latest) {
+            Write-UpdateStatus -Name $tool.Name -Pinned $installed -Latest $latest -Hint 'self-updates in-app; -ForceInstaller reseeds'
+        } elseif ($latest) {
+            Write-Ok "$($tool.Name) installed (latest upstream: $latest; self-updates in-app)"
+        } else {
+            Write-Ok "$($tool.Name) installed (self-updates in-app)"
+        }
+    }
+    Write-Host ""
+
+    Write-Log "Other components"
+    $fontStamps = @(Get-ChildItem -Path $WsRoot -Filter "nerd-fonts.*.stamp" -ErrorAction SilentlyContinue)
+    if ($fontStamps.Count -gt 0) {
+        $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
+        $latest  = Get-LatestGitTag -Repo 'ryanoasis/nerd-fonts'
+        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'triple-edit: versions.mk + lib/font.sh + install-nerd-fonts.ps1 (see CLAUDE.md)'
+    } else {
+        Write-Warn "Nerd Fonts not stamped — re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
+    }
+    $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
+          Sort-Object Version -Descending | Select-Object -First 1
+    if ($bt) { Write-Ok "BurntToast $($bt.Version) installed — update via: Update-Module BurntToast" }
+    else { Write-Warn "BurntToast module missing — re-run .\bootstrap.ps1" }
+}
+
+# =============================================================================
 # MAIN
 # =============================================================================
+# Read-only report modes exit here, before any provisioning state changes.
+if ($Doctor -and $CheckForUpdates) {
+    Write-Fail "-Doctor and -CheckForUpdates are mutually exclusive (run them one at a time)."
+}
+if (($Doctor -or $CheckForUpdates) -and $Reinstall) {
+    Write-Fail "-Reinstall can't be combined with -Doctor/-CheckForUpdates (they are read-only and exit early)."
+}
+if ($Doctor)          { Invoke-Doctor;          exit 0 }
+if ($CheckForUpdates) { Invoke-CheckForUpdates; exit 0 }
+
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
 Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation

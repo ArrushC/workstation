@@ -30,7 +30,9 @@ STAMP ?= $(HOME)/.local/share/workstation-install
 LIB   := $(CURDIR)/lib
 
 # Export so library scripts (lib/*.sh) and any sub-makes inherit these.
-export DEST HELIX_RUNTIME_DEST LIB STAMP SUDO
+# MODE + HAS_SUDO are read by lib/doctor.sh (scope-aware report text + the
+# wsl-config gating); IS_WSL is exported from scope.mk.
+export DEST HELIX_RUNTIME_DEST LIB STAMP SUDO MODE HAS_SUDO
 
 # -----------------------------------------------------------------------------
 # Macros — used by tools.mk to register one tool per call.
@@ -59,6 +61,7 @@ endef
 
 define TOOL
 SCOPE_TOOLS += $(1)
+DOCTOR_ROWS += scope|$(1)|$(2)
 $(call _RULE_BODY,$(1),$(2),$(SUDO) $(3))
 clean-$(1):
 	@rm -f $$(STAMP)/$(1)-*.done
@@ -67,6 +70,7 @@ endef
 
 define USER_TOOL
 USER_TOOLS += $(1)
+DOCTOR_ROWS += user|$(1)|$(2)
 $(call _RULE_BODY,$(1),$(2),$(3))
 clean-$(1):
 	@rm -f $$(STAMP)/$(1)-*.done
@@ -96,6 +100,8 @@ endef
 # -----------------------------------------------------------------------------
 define EGET_TOOL
 SCOPE_TOOLS += $(1)
+DOCTOR_ROWS += scope|$(1)|$(2)
+UPDATE_SPECS += $(1)|$(2)|$(3)|$(if $(4),$(4),v$(2))
 $(call _RULE_BODY,$(1),$(2),$(SUDO) $(LIB)/eget.sh $(3) $(if $(4),$(4),v$(2)) $(5))
 $$(STAMP)/$(1)-$(2).done: | $$(STAMP)/eget-$$(EGET_VERSION).done
 clean-$(1):
@@ -103,8 +109,19 @@ clean-$(1):
 	@$(SUDO) rm -f $$(DEST)/$(1)
 endef
 
-SCOPE_TOOLS :=
-USER_TOOLS  :=
+# DOCTOR_ROWS  — one `kind|name|version` row per managed component, consumed
+#                by `make doctor` (lib/doctor.sh). TOOL/EGET_TOOL register as
+#                `scope`, USER_TOOL as `user`; the bespoke targets are added
+#                by hand next to the doctor target below.
+# UPDATE_SPECS — one `name|version|repo|tag` spec per pinned tool, consumed
+#                by `make check-updates` (lib/check-updates.sh). EGET_TOOL
+#                registers automatically (it knows repo + tag); everything
+#                else is hand-registered in the UPDATE-CHECK REGISTRY block
+#                at the bottom of tools.mk.
+SCOPE_TOOLS  :=
+USER_TOOLS   :=
+DOCTOR_ROWS  :=
+UPDATE_SPECS :=
 include tools.mk
 
 # -----------------------------------------------------------------------------
@@ -410,7 +427,7 @@ include dotfiles.mk
 #   shell.yml     → shell
 #   dotfiles.yml  → dotfiles
 # -----------------------------------------------------------------------------
-.PHONY: provision dev prod all tools user-tools list clean help
+.PHONY: provision dev prod all tools user-tools list clean help doctor check-updates
 
 tools: $(SCOPE_TOOLS)
 user-tools: $(USER_TOOLS)
@@ -431,6 +448,39 @@ prod:
 # `make all` — synonym for `make tools` (scope-aware bulk install).
 # Predates the provision target; preserved so existing muscle memory works.
 all: tools
+
+# -----------------------------------------------------------------------------
+# doctor / check-updates — read-only reports; neither installs anything.
+#
+#   make doctor MODE=dev|prod         what's installed / missing / stale /
+#                                     active, per tool + service + stamp
+#   make check-updates MODE=dev|prod  every versions.mk pin vs the newest
+#                                     upstream release tag (git ls-remote)
+#
+# The macro-registered DOCTOR_ROWS / UPDATE_SPECS (see the macro block above)
+# carry the per-tool knowledge; the rows below add the bespoke targets that
+# live outside the macros. bootstrap.sh's --doctor / --check-for-updates
+# flags front these targets with the repo/chezmoi-level checks.
+# -----------------------------------------------------------------------------
+DOCTOR_ROWS += bespoke|claude-cli|$(CLAUDE_VERSION)
+DOCTOR_ROWS += bespoke|node-runtime|$(NODE_VERSION)
+DOCTOR_ROWS += bespoke|nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)
+DOCTOR_ROWS += bespoke|docker-engine|-
+DOCTOR_ROWS += bespoke|dozzle-service|$(DOZZLE_VERSION)
+DOCTOR_ROWS += bespoke|cockpit-service|-
+DOCTOR_ROWS += bespoke|wsl-config|-
+
+# NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe
+# (via $(foreach …,'…')) or the shell parses every row as a pipeline and
+# executes the tool names.
+doctor:
+	@printf '%s\n' $(foreach r,$(DOCTOR_ROWS),'$(r)') | \
+	  LINUX_PACKAGES="$(LINUX_PACKAGES)" \
+	  LINUX_OPTIONAL_PACKAGES="$(LINUX_OPTIONAL_PACKAGES)" \
+	  $(LIB)/doctor.sh
+
+check-updates:
+	@printf '%s\n' $(foreach s,$(UPDATE_SPECS),'$(s)') | $(LIB)/check-updates.sh
 
 list:
 	@printf 'scope-tools (%d):\n' $(words $(SCOPE_TOOLS))
@@ -464,6 +514,10 @@ help:
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"
 	@echo "  make list         list every managed tool, grouped"
 	@echo "  make clean        wipe all stamps (forces full reinstall next run)"
+	@echo ""
+	@echo "Health / updates (read-only — nothing is installed or changed):"
+	@echo "  make doctor MODE=dev|prod         report installed/missing/stale tools, services, stamps"
+	@echo "  make check-updates MODE=dev|prod  compare versions.mk pins against upstream release tags"
 	@echo ""
 	@echo "Sub-targets (rarely invoked directly):"
 	@echo "  make packages     dnf core + EPEL + optional (MODE=dev only)"

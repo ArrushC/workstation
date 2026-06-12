@@ -298,3 +298,51 @@ $(eval $(call EGET_TOOL,cheat,$(CHEAT_VERSION),cheat/cheat,$(CHEAT_VERSION),--as
 # offline host it simply errors at query time; cheat + tldr stay offline-capable.
 $(eval $(call TOOL,cht.sh,$(CHTSH_VERSION),\
   $(LIB)/direct.sh cht.sh https://cht.sh/:cht.sh))
+
+# =============================================================================
+# UPDATE-CHECK REGISTRY (make check-updates) — hand-registered specs for every
+# pin that is NOT an EGET_TOOL line (those self-register via the EGET_TOOL
+# macro in the Makefile). Format: `name|version|repo-or-git-url|tag`, where
+# tag is the exact upstream tag the pin installs and MUST end with the version
+# (its leading remainder becomes the ls-remote glob prefix — see
+# lib/check-updates.sh). "latest" pins are reported as rolling; repo `-`
+# means "no upstream tag source to compare against".
+#
+# When you add a TOOL/USER_TOOL entry above (or a new versions.mk pin outside
+# the macros), add its spec line here too. EGET_TOOL entries need nothing.
+# =============================================================================
+
+# TOOL-installed (archive.sh / direct.sh / helix.sh) with real version pins:
+UPDATE_SPECS += eget|$(EGET_VERSION)|zyedidia/eget|v$(EGET_VERSION)
+UPDATE_SPECS += ncdu|$(NCDU_VERSION)|https://code.blicky.net/yorhel/ncdu.git|v$(NCDU_VERSION)
+UPDATE_SPECS += yazi|$(YAZI_VERSION)|sxyazi/yazi|v$(YAZI_VERSION)
+UPDATE_SPECS += nnn|$(NNN_VERSION)|jarun/nnn|v$(NNN_VERSION)
+UPDATE_SPECS += age|$(AGE_VERSION)|FiloSottile/age|v$(AGE_VERSION)
+UPDATE_SPECS += jq|$(JQ_VERSION)|jqlang/jq|jq-$(JQ_VERSION)
+UPDATE_SPECS += yq|$(YQ_VERSION)|mikefarah/yq|v$(YQ_VERSION)
+UPDATE_SPECS += tldr|$(TEALDEER_VERSION)|tealdeer-rs/tealdeer|v$(TEALDEER_VERSION)
+UPDATE_SPECS += witr|$(WITR_VERSION)|pranshuparmar/witr|v$(WITR_VERSION)
+UPDATE_SPECS += ctop|$(CTOP_VERSION)|bcicen/ctop|v$(CTOP_VERSION)
+UPDATE_SPECS += sops|$(SOPS_VERSION)|getsops/sops|v$(SOPS_VERSION)
+UPDATE_SPECS += lazyjournal|$(LAZYJOURNAL_VERSION)|Lifailon/lazyjournal|$(LAZYJOURNAL_VERSION)
+UPDATE_SPECS += sysz|$(SYSZ_VERSION)|joehillen/sysz|$(SYSZ_VERSION)
+UPDATE_SPECS += helix|$(HELIX_VERSION)|helix-editor/helix|$(HELIX_VERSION)
+
+# Rolling pins — reported as such (no upstream comparison possible/needed):
+# nb/broot/cht.sh/ssh-copy-id/chezmoi/claude track latest; the pip user-tools
+# upgrade through pip itself.
+UPDATE_SPECS += nb|$(NB_VERSION)|-|-
+UPDATE_SPECS += broot|$(BROOT_VERSION)|-|-
+UPDATE_SPECS += cht.sh|$(CHTSH_VERSION)|-|-
+UPDATE_SPECS += ssh-copy-id|$(SSH_COPY_ID_VERSION)|-|-
+UPDATE_SPECS += chezmoi|$(CHEZMOI_VERSION)|-|-
+UPDATE_SPECS += claude-cli|$(CLAUDE_VERSION)|-|-
+UPDATE_SPECS += glances|$(GLANCES_VERSION)|-|-
+UPDATE_SPECS += asciinema|$(ASCIINEMA_VERSION)|-|-
+UPDATE_SPECS += harlequin|$(HARLEQUIN_VERSION)|-|-
+
+# Bespoke / non-tool pins from versions.mk:
+UPDATE_SPECS += node|$(NODE_VERSION)|nodejs/node|v$(NODE_VERSION)
+UPDATE_SPECS += ccstatusline|$(CCSTATUSLINE_VERSION)|sirmalloc/ccstatusline|v$(CCSTATUSLINE_VERSION)
+UPDATE_SPECS += dozzle|$(DOZZLE_VERSION)|amir20/dozzle|v$(DOZZLE_VERSION)
+UPDATE_SPECS += nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)|ryanoasis/nerd-fonts|v$(JETBRAINSMONO_NERD_VERSION)
