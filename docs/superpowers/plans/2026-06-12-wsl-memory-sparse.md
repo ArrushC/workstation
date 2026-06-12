@@ -169,13 +169,15 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                     </details>
 ```
 
-- [ ] **Step 2: Verify the entry count went 17 → 18**
+- [ ] **Step 2: Verify the entry count went 19 → 20**
+
+> **Plan correction (found during execution):** the pre-change baseline was **19** entries, not 17 — CLAUDE.md's "(17 entries)" was already stale by two before this change. Count expectations in Tasks 2/4/5 updated accordingly.
 
 Run:
 ```bash
 grep -c '<details data-ts>' README.html
 ```
-Expected: `18`. (No `README.js` change needed — the filter bar's `ts-count` counts `[data-ts]` nodes dynamically, `docs/README/README.js:402`.)
+Expected: `20`. (No `README.js` change needed — the filter bar's `ts-count` counts `[data-ts]` nodes dynamically, `docs/README/README.js:402`.)
 
 ---
 
@@ -249,8 +251,9 @@ In `CLAUDE.md`, change:
 ```
 to:
 ```
-| Troubleshooting (18 entries) | `README.html` §troubleshooting |
+| Troubleshooting (20 entries) | `README.html` §troubleshooting |
 ```
+(20, not 18: the "17" was stale — the section already had 19 entries before this change.)
 
 - [ ] **Step 2: Extend the file-care entry**
 
@@ -268,7 +271,7 @@ Append this sentence to the same bullet (same line or a continuation of it):
 Append this single row to the end of the table in `CLAUDE_CHANGELOG.md`:
 
 ```markdown
-| Annotated `chezmoi/dot_wslconfig` after a request to "add dynamic memory + sparse VHD": investigation showed BOTH keys already tracked under `[experimental]` (the correct section — current MS docs list `autoMemoryReclaim`/`sparseVhd` only there, NOT `[wsl2]` as commonly pasted), and sparse VHD upstream-disabled on WSL >= 2.5 over data-corruption reports (microsoft/WSL#13075; `--set-sparse` refuses without `--allow-unsafe`; this host's ext4.vhdx verified not-sparse). User-approved decision: **document, don't automate** — values unchanged (only `Gradual` → `gradual` casing), comments explain why each key exists, why `sparseVhd` is deliberately kept though inert (self-activates if re-enabled), and where manual reclaim lives. No bootstrap/make changes. Editing the file makes the Windows `run_onchange` `wsl --shutdown` reminder fire on next Windows apply (expected). Spec: `docs/superpowers/specs/2026-06-12-wsl-memory-sparse-design.md`. | **Yes** | New §troubleshooting entry "WSL disk (`ext4.vhdx`) keeps growing — freed space never returns to Windows": why VHDs never shrink, the upstream sparse disablement, find-the-VHD registry one-liner, safe `Optimize-VHD` + diskpart reclaim recipes (admin, manual maintenance), clearly-flagged `--allow-unsafe` opt-in with `wsl --export` backup first, and a note that RAM reclaim is already handled. §setup-wsl "WSL config is tracked & deployed" paragraph gains a cross-ref sentence (memory opt-in + sparse pre-opt-in → troubleshooting pointer). CLAUDE.md troubleshooting count 17 → 18; file-care.md `dot_wslconfig` entry marks both keys deliberate (don't clean up / don't move to `[wsl2]`). |
+| Annotated `chezmoi/dot_wslconfig` after a request to "add dynamic memory + sparse VHD": investigation showed BOTH keys already tracked under `[experimental]` (the correct section — current MS docs list `autoMemoryReclaim`/`sparseVhd` only there, NOT `[wsl2]` as commonly pasted), and sparse VHD upstream-disabled on WSL >= 2.5 over data-corruption reports (microsoft/WSL#13075; `--set-sparse` refuses without `--allow-unsafe`; this host's ext4.vhdx verified not-sparse). User-approved decision: **document, don't automate** — values unchanged (only `Gradual` → `gradual` casing), comments explain why each key exists, why `sparseVhd` is deliberately kept though inert (self-activates if re-enabled), and where manual reclaim lives. No bootstrap/make changes. Editing the file makes the Windows `run_onchange` `wsl --shutdown` reminder fire on next Windows apply (expected). Spec: `docs/superpowers/specs/2026-06-12-wsl-memory-sparse-design.md`. | **Yes** | New §troubleshooting entry "WSL disk (`ext4.vhdx`) keeps growing — freed space never returns to Windows": why VHDs never shrink, the upstream sparse disablement, find-the-VHD registry one-liner, safe `Optimize-VHD` + diskpart reclaim recipes (admin, manual maintenance), clearly-flagged `--allow-unsafe` opt-in with `wsl --export` backup first, and a note that RAM reclaim is already handled. §setup-wsl "WSL config is tracked & deployed" paragraph gains a cross-ref sentence (memory opt-in + sparse pre-opt-in → troubleshooting pointer). CLAUDE.md troubleshooting count corrected 17 → 20 (the stale 17 predated this change — the section already held 19); file-care.md `dot_wslconfig` entry marks both keys deliberate (don't clean up / don't move to `[wsl2]`). |
 ```
 
 ---
@@ -281,7 +284,7 @@ Append this single row to the end of the table in `CLAUDE_CHANGELOG.md`:
 
 ```bash
 file chezmoi/dot_wslconfig                                  # ASCII text, no CRLF
-grep -c '<details data-ts>' README.html                     # 18
+grep -c '<details data-ts>' README.html                     # 20
 chezmoi ignored | grep -Fx '.wslconfig'                     # prints .wslconfig
 git diff --stat                                             # exactly 5 files:
 # chezmoi/dot_wslconfig, README.html, CLAUDE.md,
