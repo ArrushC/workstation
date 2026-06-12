@@ -2327,7 +2327,16 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         from a Windows terminal to take effect;
                         <code>wsl-config</code> prints the reminder, and a
                         chezmoi <code>run_onchange</code> script prints it on
-                        Windows when <code>.wslconfig</code> changes.
+                        Windows when <code>.wslconfig</code> changes. The
+                        tracked <code>.wslconfig</code> already opts into
+                        dynamic memory
+                        (<code>autoMemoryReclaim=gradual</code> returns cached
+                        RAM to Windows) and pre-opts into sparse VHDs
+                        (<code>sparseVhd=true</code> &mdash; currently disabled
+                        upstream; see
+                        <a href="#troubleshooting">Troubleshooting</a>
+                        &ldquo;WSL disk keeps growing&rdquo; for manual disk
+                        reclaim).
                     </p>
 
                     <h3 id="setup-wezterm">WezTerm keybinds</h3>
@@ -3835,6 +3844,72 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                 <code>code</code>) leave the WSL
                                 <code>$PATH</code>. Re-add any you want in
                                 <code>~/.zshrc.local</code>.
+                            </p>
+                        </div>
+                    </details>
+                    <details data-ts>
+                        <summary>
+                            WSL disk (<code>ext4.vhdx</code>) keeps growing
+                            &mdash; freed space never returns to Windows
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Symptom: deleting files <em>inside</em> the
+                                distro never shrinks the virtual disk on the
+                                Windows side. That part is expected: WSL2 VHDs
+                                grow on demand but never shrink on their own.
+                            </p>
+                            <p>
+                                The auto-shrink feature (sparse VHD) is
+                                <strong>disabled upstream</strong> on WSL
+                                &ge;&nbsp;2.5 after data-corruption reports
+                                (microsoft/WSL #13075) &mdash; so the tracked
+                                <code>sparseVhd=true</code> in
+                                <code>chezmoi/dot_wslconfig</code> is currently
+                                inert (it self-activates for newly created
+                                VHDs if Microsoft re-enables the feature), and
+                                <code>wsl --manage &lt;Distro&gt; --set-sparse
+                                true</code> refuses unless forced.
+                            </p>
+                            <p>Find the VHD first (regular PowerShell):</p>
+                            <pre><code>Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss |
+  ForEach-Object { Get-ItemProperty $_.PSPath } |
+  Select-Object DistributionName, BasePath</code></pre>
+                            <p>
+                                <strong>Safe one-time reclaim</strong> (admin
+                                PowerShell; manual maintenance &mdash; the repo
+                                deliberately does not automate this):
+                            </p>
+                            <pre><code>wsl --shutdown
+Optimize-VHD -Path "&lt;BasePath&gt;\ext4.vhdx" -Mode Full</code></pre>
+                            <p>
+                                No Hyper-V module
+                                (<code>Optimize-VHD</code> missing)? Use the
+                                always-available diskpart route (still admin):
+                            </p>
+                            <pre><code>wsl --shutdown
+diskpart
+# inside diskpart:
+select vdisk file="&lt;BasePath&gt;\ext4.vhdx"
+attach vdisk readonly
+compact vdisk
+detach vdisk
+exit</code></pre>
+                            <p>
+                                <strong>Unsafe opt-in</strong> &mdash; only if
+                                you accept the corruption risk Microsoft
+                                disabled this over (read-only filesystems, lost
+                                files). Back up first, then force sparse mode
+                                so the disk auto-returns freed space:
+                            </p>
+                            <pre><code>wsl --export &lt;Distro&gt; D:\backup\&lt;Distro&gt;.tar
+wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
+                            <p>
+                                RAM is the separate, already-solved half:
+                                <code>autoMemoryReclaim=gradual</code> in the
+                                tracked <code>.wslconfig</code> returns cached
+                                VM memory to Windows automatically &mdash; no
+                                action needed.
                             </p>
                         </div>
                     </details>
