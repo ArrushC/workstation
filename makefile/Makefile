@@ -28,6 +28,9 @@ include versions.mk
 
 STAMP ?= $(HOME)/.local/share/workstation-install
 LIB   := $(CURDIR)/lib
+# REPO_ROOT — make runs with CWD = makefile/, so the repo root is one dir up.
+# Used by the `lint` / `install-hooks` targets to reach repo-root scripts.
+REPO_ROOT := $(abspath $(CURDIR)/..)
 
 # Export so library scripts (lib/*.sh) and any sub-makes inherit these.
 # MODE + HAS_SUDO are read by lib/doctor.sh (scope-aware report text + the
@@ -481,6 +484,22 @@ doctor:
 
 check-updates:
 	@printf '%s\n' $(foreach s,$(UPDATE_SPECS),'$(s)') | $(LIB)/check-updates.sh
+
+.PHONY: lint install-hooks
+
+# lint — run the mechanical invariant checks (version pins, line-endings/mode,
+# BOM, sentinels, chezmoiignore target-paths, shellcheck). Same script the
+# pre-commit hook and CI run. Like every target it inherits scope.mk's MODE
+# requirement: invoke as `make lint MODE=prod`.
+lint:
+	@$(REPO_ROOT)/scripts/check-invariants.sh
+
+# install-hooks — point git at the tracked .githooks/ dir so the pre-commit
+# invariant check runs before every commit. Idempotent.
+install-hooks:
+	@git -C $(REPO_ROOT) config core.hooksPath .githooks
+	@printf 'installed: git hooks now run from .githooks/ (pre-commit -> check-invariants.sh)\n'
+	@printf 'bypass one commit with: git commit --no-verify\n'
 
 list:
 	@printf 'scope-tools (%d):\n' $(words $(SCOPE_TOOLS))
