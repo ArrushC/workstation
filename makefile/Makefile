@@ -501,6 +501,18 @@ install-hooks:
 	@printf 'installed: git hooks now run from .githooks/ (pre-commit -> check-invariants.sh)\n'
 	@printf 'bypass one commit with: git commit --no-verify\n'
 
+.PHONY: ps-lint
+
+# ps-lint — PSScriptAnalyzer over the .ps1 scripts (same check CI runs). Soft-skips
+# where pwsh is absent (the whole Linux fleet); mainly for Windows-host local use.
+# Invoked `make ps-lint MODE=prod` (inherits scope.mk's MODE requirement).
+ps-lint:
+	@if command -v pwsh >/dev/null 2>&1; then \
+	   pwsh $(REPO_ROOT)/scripts/check-ps.ps1; \
+	 else \
+	   printf 'pwsh not installed — skipped (CI enforces PowerShell lint)\n'; \
+	 fi
+
 list:
 	@printf 'scope-tools (%d):\n' $(words $(SCOPE_TOOLS))
 	@printf '  %s\n' $(sort $(SCOPE_TOOLS))
