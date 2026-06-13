@@ -125,6 +125,21 @@ function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
 function Write-Bad    { param($msg) Write-Host "${Red} ✗${Reset} $msg" }  # Write-Fail minus the exit — -Doctor reports, never aborts
 
+function Test-AgeIdentity {
+    if (-not $env:WORKSTATION_AGE_RECIPIENT) { return }
+    Write-Log "age encryption: recipient configured ($env:WORKSTATION_AGE_RECIPIENT)"
+    $key = Join-Path $HOME ".config/chezmoi/key.txt"
+    $haveAge = [bool](Get-Command age -ErrorAction SilentlyContinue)
+    if ((Test-Path $key) -and $haveAge) {
+        Write-Ok "age identity present ($key)"
+    } else {
+        if (-not (Test-Path $key)) { Write-Warn "age identity missing: $key" }
+        if (-not $haveAge) { Write-Warn "age not on PATH - install it to use encrypted dotfiles on Windows (not bundled by this repo)" }
+        Write-Warn "  encrypted dotfiles won't decrypt until both are present. Create a key: age-keygen -o `"$key`""
+        Write-Warn "  or copy key.txt from another host / your password store."
+    }
+}
+
 $DotfilesRepo = "https://github.com/ArrushC/workstation.git"
 $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 
@@ -1294,6 +1309,7 @@ Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPD
 Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
+Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
 Invoke-WeztermShortcut    # drop a per-user Start Menu .lnk for the portable WezTerm GUI
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
