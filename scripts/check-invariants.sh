@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# check-invariants.sh — mechanically enforce the load-bearing repo invariants
+# documented in CLAUDE.md + docs/claude/file-care.md.
+#
+# Single source of truth for the checks; invoked three ways:
+#   - make lint                  (makefile/Makefile -> $REPO_ROOT/scripts/check-invariants.sh)
+#   - .githooks/pre-commit       (installed via `make install-hooks`)
+#   - .github/workflows/lint.yml (CI backstop)
+#
+# Runs from anywhere — it cd's to the repo root. Exits 0 if all checks pass,
+# non-zero otherwise. Deliberately NOT `set -e`: a checker must run EVERY check
+# and tally failures, not abort on the first non-zero grep. We keep -u and
+# pipefail and guard with explicit conditionals.
+
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit
+
+GREEN=$'\033[0;32m'; RED=$'\033[0;31m'; YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+
+fails=0
+hdr()  { printf '%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"; }
+ok()   { printf '   %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
+bad()  { printf '   %s✗%s %s\n' "$RED" "$RESET" "$*"; fails=$((fails + 1)); }
+note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
+
+# Extract a `NAME := value` value from makefile/versions.mk.
+mkval() {
+  grep -E "^$1[[:space:]]*:=" makefile/versions.mk \
+    | head -1 \
+    | sed -E 's/^[^:=]*:=[[:space:]]*//; s/[[:space:]]*(#.*)?$//'
+}
+
+check_version_pins() {
+  hdr "version-pin dual/triple-edits"
+  local v ref font_v ps_v scope_dest expect rc_z rc_b
+
+  v=$(mkval CCSTATUSLINE_VERSION)
+  ref=$(grep -oE 'ccstatusline@[0-9][0-9.]*' \
+        chezmoi/private_dot_claude/private_settings.json.tmpl | head -1 | sed 's/.*@//')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "ccstatusline @ $v  (versions.mk == settings.json.tmpl)"
+  else
+    bad "ccstatusline drift: versions.mk='$v' settings.json.tmpl='$ref'"
+  fi
+
+  v=$(mkval JETBRAINSMONO_NERD_VERSION)
+  font_v=$(grep -E '\)[[:space:]]*EXPECT_SHA' makefile/lib/font.sh \
+           | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 \
+         | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  if [ -n "$v" ] && [ "$v" = "$font_v" ] && [ "$v" = "$ps_v" ]; then
+    ok "jetbrains-mono nerd @ $v  (versions.mk == font.sh == install-nerd-fonts.ps1)"
+  else
+    bad "jetbrains-mono nerd drift: versions.mk='$v' font.sh='$font_v' ps1='$ps_v'"
+  fi
+
+  v=$(mkval HELIX_VERSION)
+  ref=$(grep -oE 'helix-editor/helix/releases/download/[0-9][0-9.]+' bootstrap.ps1 \
+        | head -1 | sed 's#.*/##')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "helix @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "helix drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
+  scope_dest=$(grep -E '^[[:space:]]*HELIX_RUNTIME_DEST[[:space:]]*:=[[:space:]]*/usr' \
+               makefile/scope.mk | head -1 | sed -E 's#.*:=[[:space:]]*##; s/[[:space:]]*$//')
+  expect="${scope_dest}/runtime"
+  rc_z=$(grep -oE 'HELIX_RUNTIME="[^"]*"' chezmoi/dot_zshrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  rc_b=$(grep -oE 'HELIX_RUNTIME="[^"]*"' chezmoi/dot_bashrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  if [ -n "$scope_dest" ] && [ "$rc_z" = "$expect" ] && [ "$rc_b" = "$expect" ]; then
+    ok "helix-runtime @ $expect  (scope.mk == zshrc == bashrc)"
+  else
+    bad "helix-runtime drift: expect='$expect' zshrc='$rc_z' bashrc='$rc_b'"
+  fi
+}
+
+check_line_endings_and_mode() {
+  hdr "line-endings (LF) + git mode (100755)"
+  local f mode crlf=0 modebad=0 missing=0
+  local -a files=( makefile/lib/*.sh scripts/*.sh chezmoi/dot_local/bin/executable_batpipe )
+  [ -e .githooks/pre-commit ] && files+=( .githooks/pre-commit )
+  for f in "${files[@]}"; do
+    if [ ! -e "$f" ]; then bad "missing: $f"; missing=$((missing + 1)); continue; fi
+    if LC_ALL=C grep -q $'\r' "$f"; then bad "CRLF: $f"; crlf=$((crlf + 1)); fi
+    mode=$(git ls-files --stage -- "$f" | awk '{print $1}')
+    if [ -z "$mode" ]; then
+      note "untracked (commit it so the mode is recorded): $f"
+    elif [ "$mode" != "100755" ]; then
+      bad "git mode $mode, want 100755: $f"; modebad=$((modebad + 1))
+    fi
+  done
+  if [ "$crlf" -eq 0 ] && [ "$modebad" -eq 0 ] && [ "$missing" -eq 0 ]; then
+    ok "${#files[@]} files: LF + 100755"
+  fi
+}
+
+check_bom() {
+  hdr "UTF-8 BOM on PowerShell files"
+  local f b allgood=1
+  local -a files=( scripts/manage-hosts.ps1 bootstrap.ps1 scripts/install-nerd-fonts.ps1 )
+  for f in "${files[@]}"; do
+    if [ ! -e "$f" ]; then bad "missing: $f"; allgood=0; continue; fi
+    b=$(head -c3 "$f" | od -An -tx1 | tr -d ' \n')
+    if [ "$b" != "efbbbf" ]; then bad "no BOM (first bytes: $b): $f"; allgood=0; fi
+  done
+  [ "$allgood" -eq 1 ] && ok "${#files[@]} .ps1 files carry EF BB BF"
+}
+
+check_sentinels() {
+  hdr "sentinel blocks matched"
+  local s e
+  # Anchor to a whole marker line — prose that merely mentions the token
+  # (e.g. wezterm.lua's "between HOSTS:START / HOSTS:END" comment) must not count.
+  s=$(grep -cE '^[[:space:]]*# CCSTATUSLINE:START[[:space:]]*$' chezmoi/.chezmoiignore.tmpl)
+  e=$(grep -cE '^[[:space:]]*# CCSTATUSLINE:END[[:space:]]*$' chezmoi/.chezmoiignore.tmpl)
+  if [ "$s" = "1" ] && [ "$e" = "1" ]; then
+    ok "chezmoiignore  CCSTATUSLINE:START/END (1/1)"
+  else
+    bad "chezmoiignore CCSTATUSLINE sentinels START=$s END=$e (want 1/1)"
+  fi
+  s=$(grep -cE '^[[:space:]]*-- HOSTS:START[[:space:]]*$' chezmoi/dot_config/wezterm/wezterm.lua)
+  e=$(grep -cE '^[[:space:]]*-- HOSTS:END[[:space:]]*$' chezmoi/dot_config/wezterm/wezterm.lua)
+  if [ "$s" = "1" ] && [ "$e" = "1" ]; then
+    ok "wezterm.lua    HOSTS:START/END (1/1)"
+  else
+    bad "wezterm.lua HOSTS sentinels START=$s END=$e (want 1/1)"
+  fi
+}
+
+check_chezmoiignore_targets() {
+  hdr "chezmoiignore uses target paths (not source-state names)"
+  local offenders
+  # Strip {{/* ... */}} Go-template comment blocks (their prose documents the
+  # dot_/private_dot_/.tmpl naming, which would false-positive), then keep only
+  # real pattern lines (a single token — not a # comment, {{ }} directive, or
+  # prose), then flag any that use a source-state name instead of a target path.
+  offenders=$(awk '
+    /\{\{\/\*/ { inblk=1 }
+    inblk { if ($0 ~ /\*\/\}\}/) inblk=0; next }
+    { print }
+  ' chezmoi/.chezmoiignore.tmpl \
+    | grep -vE '^[[:space:]]*(#|\{\{|$)' \
+    | grep -E '^[[:space:]]*[^[:space:]]+$' \
+    | grep -E '(^|/)(dot_|private_dot_)|\.tmpl$')
+  if [ -z "$offenders" ]; then
+    ok "no dot_/private_dot_/*.tmpl source-state patterns"
+  else
+    bad "source-state-style ignore patterns (silent no-op — use target paths):"
+    printf '%s\n' "$offenders" | sed 's/^/       /'
+  fi
+}
+
+check_shellcheck() {
+  hdr "shellcheck (warning and above)"
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    note "shellcheck not installed — skipped locally (CI enforces; 'dnf install shellcheck' to run here)"
+    return 0
+  fi
+  local -a targets=( bootstrap.sh makefile/lib/*.sh scripts/*.sh )
+  if shellcheck -x -S warning "${targets[@]}"; then
+    ok "clean at warning+ over ${#targets[@]} shell files"
+  else
+    bad "shellcheck reported warning+ findings (listed above)"
+  fi
+}
+
+printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
+check_version_pins
+check_line_endings_and_mode
+check_bom
+check_sentinels
+check_chezmoiignore_targets
+check_shellcheck
+echo
+if [ "$fails" -eq 0 ]; then
+  printf '%s✓ all invariant checks passed%s\n' "$GREEN" "$RESET"
+  exit 0
+else
+  printf '%s✗ %d invariant check(s) failed%s\n' "$RED" "$fails" "$RESET"
+  exit 1
+fi
