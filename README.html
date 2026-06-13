@@ -2013,8 +2013,9 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>scripts/bump-versions.sh</code> and opens a
                             PR bumping any drifted single-location
                             <code>versions.mk</code> pins (the dual/triple-edit
-                            pins are listed for manual bumping); every such PR
-                            is validated by the invariant checker.
+                            pins are listed for manual bumping). The workflow runs
+                            the invariant checker on the bumped tree before opening
+                            the PR.
                         </p>
                     </details>
 

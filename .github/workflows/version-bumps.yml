@@ -17,8 +17,13 @@ jobs:
         run: bash scripts/bump-versions.sh
         env:
           BUMP_SUMMARY_FILE: bump-summary.md
+      # Validate the bumped tree here: a PR opened by GITHUB_TOKEN does NOT
+      # trigger lint.yml (GitHub's recursion guard), so the invariant checker
+      # must run in THIS workflow before the PR is created.
+      - name: Verify invariants on the bumped tree
+        run: bash scripts/check-invariants.sh
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           branch: automation/version-bumps
           delete-branch: true
