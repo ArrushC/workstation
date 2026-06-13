@@ -56,6 +56,8 @@ Deep detail split out of this file to keep it lean. Read the matching doc when i
 
 README documents the *what*; these are the *why* and the failure modes. Each exists because the opposite was tried and broke. **One-line index below — full detail (failure stories, verify commands) in `docs/claude/invariants.md`. Read that file before acting on any entry you're about to touch.**
 
+**Mechanical enforcement:** `scripts/check-invariants.sh` checks the mechanically-checkable subset of the invariants below (version-pin dual/triple-edits, the LF+0755 set, `.ps1` BOMs, sentinel-block matching, chezmoiignore target-paths) and runs shellcheck at warning+. Run it via `make lint MODE=prod`, install it as a pre-commit hook via `make install-hooks`, or let CI (`.github/workflows/lint.yml`) run it. **When you add a new invariant of one of these shapes, add a check there too.**
+
 - **`bootstrap.sh` is a thin seed** — no `*_VERSION`/install logic; everything in `makefile/`. If it and `scope.mk` disagree on scope, fix `scope.mk`.
 - **Tool versions only in `makefile/versions.mk`** — baked into stamp filenames so bumps auto-reinstall. Never per-tool versions in `bootstrap.sh`/scripts/playbooks.
 - **`$(SUDO)` thread** — macros (`TOOL`, `EGET_TOOL`) use `$(SUDO)` (= `sudo --preserve-env=DEST,HELIX_RUNTIME_DEST` on dev, empty on prod), never literal `sudo`. New scope-aware env vars join the `--preserve-env` list.
