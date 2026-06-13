@@ -429,6 +429,24 @@ ensure_chezmoi_initialized() {
 # fallback on dev hosts where usermod fails (most often: $SUDO_ASKPASS missing
 # under curl|bash from a remote machine).
 # =============================================================================
+# check_age_identity — soft preflight for the age private identity when encryption
+# is configured. If WORKSTATION_AGE_RECIPIENT is set but ~/.config/chezmoi/key.txt
+# is absent, warn (encrypted dotfiles won't decrypt) but never fail — encryption is
+# opt-in and the identity is provisioned out-of-band, never stored in the repo.
+check_age_identity() {
+  [ -n "${WORKSTATION_AGE_RECIPIENT:-}" ] || return 0
+  log "age encryption: recipient configured (${WORKSTATION_AGE_RECIPIENT})"
+  local key="$HOME/.config/chezmoi/key.txt"
+  if [ -f "$key" ]; then
+    ok "age identity present ($key)"
+  else
+    warn "age identity missing: $key"
+    warn "  encrypted dotfiles won't decrypt until you place it. Create a new key:"
+    warn "    age-keygen -o \"$key\"   # then export its public key as WORKSTATION_AGE_RECIPIENT"
+    warn "  or copy key.txt from another host / your password store."
+  fi
+}
+
 set_default_shell() {
   local zsh_path
   zsh_path=$(command -v zsh || true)
@@ -720,6 +738,7 @@ fi
 self_register
 run_make
 ensure_chezmoi_initialized
+check_age_identity
 set_default_shell
 push_host_changes
 
