@@ -1990,6 +1990,12 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>.chezmoiignore</code> target-path patterns.
                             It also runs <strong>shellcheck</strong> at
                             warning+ on the repo's maintained shell scripts.
+                            PowerShell scripts (<code>bootstrap.ps1</code>,
+                            <code>manage-hosts.ps1</code>,
+                            <code>install-nerd-fonts.ps1</code>) are linted by
+                            <strong>PSScriptAnalyzer</strong> at warning+ in
+                            the same CI workflow; <code>make ps-lint</code>
+                            runs it locally on a host with <code>pwsh</code>.
                         </p>
                         <p>
                             <code>make install-hooks</code> sets
