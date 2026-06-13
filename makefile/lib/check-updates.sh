@@ -94,10 +94,17 @@ BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 
-printf '%s==>%s %schecking pinned versions against upstream tags (git ls-remote, %s jobs)%s\n' \
-  "$BLUE" "$RESET" "$BOLD" "$JOBS" "$RESET"
+if [[ -z "${CHECK_UPDATES_PORCELAIN:-}" ]]; then
+  printf '%s==>%s %schecking pinned versions against upstream tags (git ls-remote, %s jobs)%s\n' \
+    "$BLUE" "$RESET" "$BOLD" "$JOBS" "$RESET"
+fi
 
 xargs -r -P "$JOBS" -n 1 "$0" >"$tmp" || true
+
+if [[ -n "${CHECK_UPDATES_PORCELAIN:-}" ]]; then
+  cat "$tmp"
+  exit 0
+fi
 
 sort -t'|' -k2,2 -f "$tmp" | while IFS='|' read -r status name detail; do
   case "$status" in
