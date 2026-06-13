@@ -498,3 +498,62 @@
         paintProgress();
     }
 })();
+
+// ============================================================
+// 11. Hero terminal typed animation (progressive enhancement)
+//
+// The terminal's full content lives in the HTML, so no-JS and
+// reduced-motion users see the finished output. When motion is
+// allowed, we blank the command, hide the output lines (via
+// visibility — their space is reserved, so zero layout shift),
+// "type" the command with a temporary caret, then reveal each
+// ✓ line on a short stagger. The final blinking caret (in the
+// markup) takes over once everything is shown.
+// ============================================================
+(function () {
+    "use strict";
+    const term = document.querySelector(".term[data-typed]");
+    if (!term) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const lines = Array.from(term.querySelectorAll(".body .ln"));
+    if (!lines.length) return;
+    const cmdEl = lines[0].querySelector(".cmd");
+    if (!cmdEl) return;
+
+    const full = cmdEl.textContent;
+    cmdEl.textContent = "";
+
+    // Temporary typing caret on the command line.
+    const tcaret = document.createElement("span");
+    tcaret.className = "caret";
+    tcaret.setAttribute("aria-hidden", "true");
+    lines[0].appendChild(tcaret);
+
+    // Hide the output lines without collapsing their layout.
+    for (let k = 1; k < lines.length; k++) {
+        lines[k].style.visibility = "hidden";
+    }
+
+    let i = 0;
+    function type() {
+        cmdEl.textContent = full.slice(0, ++i);
+        if (i < full.length) {
+            setTimeout(type, 26);
+        } else {
+            tcaret.remove();
+            setTimeout(reveal, 220);
+        }
+    }
+
+    let j = 1;
+    function reveal() {
+        if (j < lines.length) {
+            lines[j].style.visibility = "";
+            j++;
+            setTimeout(reveal, 150);
+        }
+    }
+
+    requestAnimationFrame(() => setTimeout(type, 260));
+})();
