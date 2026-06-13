@@ -559,10 +559,7 @@ h4:hover .heading-anchor {
     color: var(--accent);
 }
 
-/* ---------- Eyebrow + hero ---------- */
-.eyebrow,
-#intro::before {
-}
+/* ---------- Hero ---------- */
 header#intro {
     padding-top: 18px;
 }
