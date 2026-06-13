@@ -442,7 +442,7 @@ check_age_identity() {
   else
     warn "age identity missing: $key"
     warn "  encrypted dotfiles won't decrypt until you place it. Create a new key:"
-    warn "    age-keygen -o \"$key\"   # then export its public key as WORKSTATION_AGE_RECIPIENT"
+    warn "    mkdir -p \"$(dirname "$key")\" && age-keygen -o \"$key\"   # then export its public key as WORKSTATION_AGE_RECIPIENT"
     warn "  or copy key.txt from another host / your password store."
   fi
 }

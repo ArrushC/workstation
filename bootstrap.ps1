@@ -135,7 +135,7 @@ function Test-AgeIdentity {
     } else {
         if (-not (Test-Path $key)) { Write-Warn "age identity missing: $key" }
         if (-not $haveAge) { Write-Warn "age not on PATH - install it to use encrypted dotfiles on Windows (not bundled by this repo)" }
-        Write-Warn "  encrypted dotfiles won't decrypt until both are present. Create a key: age-keygen -o `"$key`""
+        Write-Warn "  encrypted dotfiles won't decrypt until both are present. Create a key: New-Item -ItemType Directory -Force (Split-Path `"$key`") | Out-Null; age-keygen -o `"$key`""
         Write-Warn "  or copy key.txt from another host / your password store."
     }
 }
