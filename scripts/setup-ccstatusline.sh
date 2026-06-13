@@ -11,12 +11,14 @@ CHEZMOI_SRC="$REPO_ROOT/chezmoi"
 IGNORE_TMPL="$CHEZMOI_SRC/.chezmoiignore.tmpl"
 WIDGET_TRACKED_SRC="$CHEZMOI_SRC/dot_config/ccstatusline/settings.json"
 WIDGET_DEST="$HOME/.config/ccstatusline/settings.json"
+# shellcheck disable=SC2034  # documents the tracked settings source; pairs with CLAUDE_SETTINGS_DEST
 CLAUDE_SETTINGS_TRACKED_SRC="$CHEZMOI_SRC/private_dot_claude/private_settings.json.tmpl"
 CLAUDE_SETTINGS_DEST="$HOME/.claude/settings.json"
 
 BOLD=$'\033[1m'; YELLOW=$'\033[33m'; GREEN=$'\033[32m'; RED=$'\033[31m'; RESET=$'\033[0m'
 
 HOST="$(hostname -s)"
+# shellcheck disable=SC2034  # symmetry with SENTINEL_END; awk patterns below match the literal string
 SENTINEL_START='# CCSTATUSLINE:START'
 SENTINEL_END='# CCSTATUSLINE:END'
 CCSTATUSLINE_VERSION="${CCSTATUSLINE_VERSION:-2.2.19}"
