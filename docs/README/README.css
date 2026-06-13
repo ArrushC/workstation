@@ -651,12 +651,10 @@ header#intro > p {
     font-family: var(--mono);
     font-size: 12px;
     color: var(--muted);
-    display: flex;
-    gap: 8px;
-    align-items: center;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    min-width: 0;
 }
 .term .bar .title .who {
     color: var(--text-soft);
