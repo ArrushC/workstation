@@ -184,7 +184,7 @@ packages_section() {
 }
 
 main() {
-  local scope_rows=() user_rows=() bespoke_rows=() row kind name version
+  local scope_rows=() user_rows=() bespoke_rows=() row name version
 
   while IFS= read -r row; do
     case "$row" in
@@ -201,20 +201,20 @@ main() {
   echo ""
 
   hdr "scope tools (${#scope_rows[@]}) → $DEST"
-  while IFS='|' read -r kind name version; do
+  while IFS='|' read -r _ name version; do
     check_component "$name" "$name" "$(bin_for "$name")" "$DEST" "$version"
   done < <(printf '%s\n' "${scope_rows[@]}" | sort -t'|' -k2,2)
   echo ""
 
   hdr "user tools (${#user_rows[@]}) → $HOME/.local/bin (pip user-site)"
-  while IFS='|' read -r kind name version; do
+  while IFS='|' read -r _ name version; do
     check_component "$name" "$name" "$name" "$HOME/.local/bin" "$version"
   done < <(printf '%s\n' "${user_rows[@]}" | sort -t'|' -k2,2)
   echo ""
 
   hdr "dev-only components & services"
   for row in "${bespoke_rows[@]}"; do
-    IFS='|' read -r kind name version <<<"$row"
+    IFS='|' read -r _ name version <<<"$row"
     check_bespoke "$name" "$version"
   done
 

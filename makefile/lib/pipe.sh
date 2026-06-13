@@ -26,7 +26,7 @@ if (( $# < 2 )); then
   exit 2
 fi
 
-name="$1"; shift
+shift   # positional <name> arg — label only, currently unused
 url="$1"; shift
 if [[ "${1:-}" == '--' ]]; then shift; fi
 # Remaining "$@" are installer args.

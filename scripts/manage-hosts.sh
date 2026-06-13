@@ -398,8 +398,8 @@ edit_host() {
   # Get current values
   local current
   current=$(read_hosts | grep "^${name}[[:space:]]")
-  local cur_name cur_ip cur_user cur_group
-  read -r cur_name cur_ip cur_user cur_group <<< "$current"
+  local cur_ip cur_user cur_group
+  read -r _ cur_ip cur_user cur_group <<< "$current"
 
   echo ""
   echo -e "  Current values (press Enter to keep):"
