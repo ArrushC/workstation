@@ -1968,6 +1968,41 @@ make -C makefile check-updates MODE=dev</code></pre>
                         </p>
                     </details>
 
+                    <details>
+                        <summary>
+                            Enforcement / CI
+                            (<code>make lint</code> /
+                            <code>make install-hooks</code>)
+                        </summary>
+                        <div class="os-card linux">
+                            <span class="os-label">Linux</span>
+                            <pre><code>make -C makefile lint MODE=dev     # or MODE=prod — runs check-invariants.sh
+make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-commit hook)</code></pre>
+                        </div>
+                        <p>
+                            <code>make lint</code> runs
+                            <code>scripts/check-invariants.sh</code>, which
+                            verifies the mechanically-checkable subset of the
+                            load-bearing invariants: version-pin
+                            dual/triple-edits, line-endings + executable bits
+                            on the tracked shell-script set, PowerShell BOM
+                            presence, sentinel-block open/close matching, and
+                            <code>.chezmoiignore</code> target-path patterns.
+                            It also runs <strong>shellcheck</strong> at
+                            warning+ on all tracked shell scripts.
+                        </p>
+                        <p>
+                            <code>make install-hooks</code> sets
+                            <code>git config core.hooksPath .githooks</code>
+                            so the same checks run automatically as a
+                            pre-commit hook. Bypass a single commit with
+                            <code>git commit --no-verify</code>. The same
+                            checks run in <strong>GitHub Actions</strong> on
+                            every push and pull request
+                            (<code>.github/workflows/lint.yml</code>).
+                        </p>
+                    </details>
+
                     <h3 id="setup-windows">3. On Windows</h3>
                     <p class="lede">
                         The Windows host is a <strong>client</strong> &mdash; no
