@@ -579,7 +579,7 @@ test_host() {
     while IFS= read -r line; do
       read -r hname hip huser _ <<< "$line"
       echo -ne "  Testing ${BOLD}$hname${RESET} ($huser@$hip)... "
-      if ssh -o ConnectTimeout=5 -o BatchMode=yes "$huser@$hip" exit 2>/dev/null; then
+      if ssh -n -o ConnectTimeout=5 -o BatchMode=yes "$huser@$hip" exit 2>/dev/null; then
         echo -e "${GREEN}✓ OK${RESET}"
       else
         echo -e "${RED}✗ Failed${RESET}"
