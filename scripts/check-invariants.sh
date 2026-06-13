@@ -35,7 +35,7 @@ mkval() {
 
 check_version_pins() {
   hdr "version-pin dual/triple-edits"
-  local v ref font_v ps_v scope_dest expect rc_z rc_b
+  local v ref ps_v scope_dest expect rc_z rc_b font_re font_has
 
   v=$(mkval CCSTATUSLINE_VERSION)
   ref=$(grep -oE 'ccstatusline@[0-9][0-9.]*' \
@@ -47,14 +47,17 @@ check_version_pins() {
   fi
 
   v=$(mkval JETBRAINSMONO_NERD_VERSION)
-  font_v=$(grep -E '\)[[:space:]]*EXPECT_SHA' makefile/lib/font.sh \
-           | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 \
          | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [ -n "$v" ] && [ "$v" = "$font_v" ] && [ "$v" = "$ps_v" ]; then
-    ok "jetbrains-mono nerd @ $v  (versions.mk == font.sh == install-nerd-fonts.ps1)"
+  # font.sh pins the SHA per version in a `case "$VERSION"` block; the runtime
+  # looks it up BY VALUE, so verify an arm for $v EXISTS (position-independent)
+  # — appending a new arm on a bump (as font.sh instructs) must still pass.
+  font_re="^[[:space:]]*${v//./\\.}\\)[[:space:]]*EXPECT_SHA"
+  if grep -qE "$font_re" makefile/lib/font.sh; then font_has=yes; else font_has=no; fi
+  if [ -n "$v" ] && [ "$v" = "$ps_v" ] && [ "$font_has" = yes ]; then
+    ok "jetbrains-mono nerd @ $v  (versions.mk == install-nerd-fonts.ps1; font.sh SHA arm present)"
   else
-    bad "jetbrains-mono nerd drift: versions.mk='$v' font.sh='$font_v' ps1='$ps_v'"
+    bad "jetbrains-mono nerd drift: versions.mk='$v' install-nerd-fonts.ps1='$ps_v' font.sh-SHA-arm=$font_has"
   fi
 
   v=$(mkval HELIX_VERSION)
@@ -143,8 +146,9 @@ check_chezmoiignore_targets() {
     inblk { if ($0 ~ /\*\/\}\}/) inblk=0; next }
     { print }
   ' chezmoi/.chezmoiignore.tmpl \
-    | grep -vE '^[[:space:]]*(#|\{\{|$)' \
-    | grep -E '^[[:space:]]*[^[:space:]]+$' \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | grep -vE '^(#|\{\{|$)' \
+    | grep -E '^[^[:space:]]+$' \
     | grep -E '(^|/)(dot_|private_dot_)|\.tmpl$')
   if [ -z "$offenders" ]; then
     ok "no dot_/private_dot_/*.tmpl source-state patterns"
@@ -160,7 +164,8 @@ check_shellcheck() {
     note "shellcheck not installed — skipped locally (CI enforces; 'dnf install shellcheck' to run here)"
     return 0
   fi
-  local -a targets=( bootstrap.sh makefile/lib/*.sh scripts/*.sh )
+  local -a targets=( bootstrap.sh makefile/lib/*.sh scripts/*.sh \
+                     chezmoi/private_dot_claude/executable_notify.sh )
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else

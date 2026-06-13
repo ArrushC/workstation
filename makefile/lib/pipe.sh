@@ -4,7 +4,8 @@
 # Usage:
 #   pipe.sh <name> <url> [-- <installer args>...]
 #
-#   name  Display label for the tool (e.g. chezmoi). Used in errors only.
+#   name  Display label for the tool (e.g. chezmoi). Accepted for CLI shape;
+#         currently unused (shifted off, not referenced).
 #   url   URL of the installer script.
 #   --    Optional separator before installer-specific arguments.
 #
