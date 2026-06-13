@@ -1,6 +1,7 @@
 # chezmoi.toml.tmpl — runs on `chezmoi init` to generate ~/.config/chezmoi/chezmoi.toml
 # Prompts are only asked once; answers stored in chezmoi's config.
 
+{{- $ageRecipient := env "WORKSTATION_AGE_RECIPIENT" -}}
 [data]
     name     = "{{ promptStringOnce . "name" "Full name" }}"
     email    = "{{ promptStringOnce . "email" "Email address" }}"
@@ -11,6 +12,7 @@
     # it as the no-prompt path; running `chezmoi init` outside bootstrap falls
     # back to an interactive prompt.
     group    = "{{ if env "WORKSTATION_GROUP" }}{{ env "WORKSTATION_GROUP" }}{{ else }}{{ promptStringOnce . "group" "Machine group (dev_machine|prod_machine)" }}{{ end }}"
+    age_recipient = "{{ $ageRecipient }}"
 
 [edit]
     command = "hx"
@@ -51,3 +53,10 @@
 [git]
     autoCommit = false
     autoPush   = false
+
+{{ if $ageRecipient }}
+encryption = "age"
+[age]
+    identity  = {{ (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt") | quote }}
+    recipient = {{ $ageRecipient | quote }}
+{{ end }}
