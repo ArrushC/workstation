@@ -1,0 +1,27 @@
+name: version-bumps
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Propose version bumps
+        run: bash scripts/bump-versions.sh
+        env:
+          BUMP_SUMMARY_FILE: bump-summary.md
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/version-bumps
+          delete-branch: true
+          title: 'chore(versions): weekly pin bumps'
+          commit-message: 'chore(versions): weekly pin bumps'
+          body-path: bump-summary.md
