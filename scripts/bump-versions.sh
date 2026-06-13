@@ -19,6 +19,16 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 # Dual/triple-edit pins — reported, never auto-edited.
 EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION"
 
+# Tool names whose versions.mk variable does NOT follow the default
+# uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
+# from the pin variable). Without these, tldr would never auto-bump and the
+# nerd-fonts EXCLUDE guard would be unreachable.
+declare -A ALIAS=(
+  [tldr]=TEALDEER_VERSION
+  [jj]=JUJUTSU_VERSION
+  [nerd-fonts]=JETBRAINSMONO_NERD_VERSION
+)
+
 bumped=""; manual=""; skipped=""
 
 updates=$(CHECK_UPDATES_PORCELAIN=1 \
@@ -29,7 +39,7 @@ while IFS='|' read -r _ name detail; do
   [ -n "${name:-}" ] || continue
   old="${detail%% *}"          # "old → new" -> "old"
   new="${detail##* }"          # "old → new" -> "new"
-  var="$(printf '%s' "$name" | tr '[:lower:]-' '[:upper:]_')_VERSION"
+  var="${ALIAS[$name]:-$(printf '%s' "$name" | tr '[:lower:]-' '[:upper:]_')_VERSION}"
   old_re="${old//./\\.}"
 
   case " $EXCLUDE " in
