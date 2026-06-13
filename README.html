@@ -2018,6 +2018,53 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         </p>
                     </details>
 
+                    <details>
+                        <summary>
+                            Encrypted secrets (age)
+                        </summary>
+                        <p>
+                            chezmoi can keep real secrets encrypted in the repo
+                            using <strong>age</strong>. Without configuration,
+                            encryption is dormant &mdash; nothing changes.
+                        </p>
+                        <p><strong>One-time setup (per identity):</strong></p>
+                        <pre><code>age-keygen -o ~/.config/chezmoi/key.txt   # prints your public key (recipient)</code></pre>
+                        <p>
+                            Set the printed public key as
+                            <code>WORKSTATION_AGE_RECIPIENT</code> (export it
+                            before running <code>bootstrap.sh</code>, or re-run
+                            <code>chezmoi init</code>) to activate encryption.
+                            <code>bootstrap.sh</code> and
+                            <code>bootstrap.ps1</code> will warn (soft) if the
+                            recipient is set but the identity file is missing.
+                        </p>
+                        <p><strong>Adding a secret:</strong></p>
+                        <pre><code>chezmoi add --encrypt ~/.netrc   # an encrypted_*.age file appears in the source</code></pre>
+                        <p>
+                            The resulting <code>encrypted_*.age</code> file is
+                            safe to commit &mdash; it decrypts only where the
+                            identity (<code>~/.config/chezmoi/key.txt</code>) is
+                            present. The identity itself is
+                            <strong>never committed</strong>; the recipient
+                            public key is fine to commit.
+                        </p>
+                        <p><strong>New host:</strong></p>
+                        <p>
+                            Copy <code>key.txt</code> to
+                            <code>~/.config/chezmoi/</code> before running
+                            <code>chezmoi apply</code>. Without it, any
+                            <code>encrypted_*.age</code> files will fail to
+                            decrypt.
+                        </p>
+                        <p class="note-row">
+                            <strong>Back up the identity.</strong>
+                            <code>key.txt</code> is the master secret &mdash;
+                            losing it loses every encrypted file in the repo.
+                            Store it in a password manager alongside your
+                            <code>GITHUB_TOKEN</code>.
+                        </p>
+                    </details>
+
                     <h3 id="setup-windows">3. On Windows</h3>
                     <p class="lede">
                         The Windows host is a <strong>client</strong> &mdash; no
