@@ -605,7 +605,7 @@
             tx += (px - tx) * 0.06; ty += (py - ty) * 0.06;
             root.style.setProperty("--p-x", tx.toFixed(4));
             root.style.setProperty("--p-y", ty.toFixed(4));
-            if(term) term.style.transform = "rotateY(" + (tx*5) + "deg) rotateX(" + (-ty*5) + "deg)";
+            if(term) term.style.transform = "rotateY(" + (tx*8) + "deg) rotateX(" + (-ty*8) + "deg)";
         }
         function enable(){ if(active || !pointerFx()) return; active=true; window.addEventListener("pointermove", onMove, {passive:true}); Scheduler.add(tick); }
         function disable(){ if(!active) return; active=false; window.removeEventListener("pointermove", onMove);
@@ -640,14 +640,14 @@
     (function initTrail(){
         if(!FX) return;
         var trail=[], rx=-1, ry=-1, active=false;
-        function onMove(e){ rx=e.clientX; ry=e.clientY; trail.push({x:rx,y:ry}); if(trail.length>24) trail.shift(); Scheduler.add(fxLoop); }
+        function onMove(e){ rx=e.clientX; ry=e.clientY; trail.push({x:rx,y:ry}); if(trail.length>34) trail.shift(); Scheduler.add(fxLoop); }
         function onLeave(){ rx=-1; ry=-1; }
         function draw(ctx){
             var alive = false;
             if(trail.length>1){
                 ctx.lineCap="round"; ctx.shadowColor="#67f0ff";
                 for(var i=1;i<trail.length;i++){ var a=i/trail.length;
-                    ctx.strokeStyle="rgba(103,240,255,"+(a*0.85)+")"; ctx.shadowBlur=14; ctx.lineWidth=a*4+0.5;
+                    ctx.strokeStyle="rgba(103,240,255,"+(a*0.95)+")"; ctx.shadowBlur=20; ctx.lineWidth=a*7+1;
                     ctx.beginPath(); ctx.moveTo(trail[i-1].x,trail[i-1].y); ctx.lineTo(trail[i].x,trail[i].y); ctx.stroke(); }
                 alive = true;
             }
@@ -681,15 +681,15 @@
         var ripples=[], sparks=[], active=false, MAX_RIPPLES=6, MAX_SPARKS=120;
         function onDown(e){
             if(!fxEnabled()) return;
-            if(ripples.length < MAX_RIPPLES) ripples.push({ x:e.clientX, y:e.clientY, rad:4, life:1 });
-            for(var i=0;i<10;i++){ var a=Math.PI*2*i/10; sparks.push({ x:e.clientX, y:e.clientY, vx:Math.cos(a)*(2+i%3), vy:Math.sin(a)*(2+i%3), life:1 }); }
+            if(ripples.length < MAX_RIPPLES) ripples.push({ x:e.clientX, y:e.clientY, rad:6, life:1 });
+            for(var i=0;i<16;i++){ var a=Math.PI*2*i/16; sparks.push({ x:e.clientX, y:e.clientY, vx:Math.cos(a)*(2.6+i%4), vy:Math.sin(a)*(2.6+i%4), life:1 }); }
             if(sparks.length > MAX_SPARKS) sparks.splice(0, sparks.length - MAX_SPARKS);
             Scheduler.add(fxLoop);
         }
         function draw(ctx){
             var alive = false;
             ctx.shadowBlur = 12;
-            for(var j=ripples.length-1;j>=0;j--){ var rp=ripples[j]; rp.rad += 6; rp.life -= 0.025;
+            for(var j=ripples.length-1;j>=0;j--){ var rp=ripples[j]; rp.rad += 9; rp.life -= 0.022;
                 ctx.shadowColor="#ffa24d"; ctx.strokeStyle="rgba(255,162,77,"+Math.max(0,rp.life)+")"; ctx.lineWidth=2;
                 ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.rad, 0, Math.PI*2); ctx.stroke();
                 ctx.strokeStyle="rgba(103,240,255,"+Math.max(0,rp.life*0.7)+")"; ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.rad*0.6, 0, Math.PI*2); ctx.stroke();
@@ -723,7 +723,7 @@
             var px=(e.clientX-r.left)/r.width-0.5, py=(e.clientY-r.top)/r.height-0.5;
             el.style.setProperty("--gx",(e.clientX-r.left)+"px");
             el.style.setProperty("--gy",(e.clientY-r.top)+"px");
-            if(pointerFx()) el.style.transform="perspective(700px) rotateY("+(px*8)+"deg) rotateX("+(-py*8)+"deg) translateZ(6px)";
+            if(pointerFx()) el.style.transform="perspective(700px) rotateY("+(px*12)+"deg) rotateX("+(-py*12)+"deg) translateZ(12px)";
         }
         function onLeave(e){ e.currentTarget.style.transform=""; }
         els.forEach(function(el){ el.addEventListener("pointermove", onMove, {passive:true}); el.addEventListener("pointerleave", onLeave); });
@@ -746,16 +746,16 @@
 
     /* 18 — section boot-on-scroll (de-rez in) — SEPARATE observer from scroll-spy */
     (function initSectionBoot(){
+      // Sections are ALWAYS visible (CSS base). The de-rez is a one-shot ENTRANCE
+      // animation added as each section scrolls into view — it can never strand
+      // content hidden, so a missed/failed IntersectionObserver just means "no
+      // entrance flourish", never a blank chapter.
       var secs = Array.prototype.slice.call(document.querySelectorAll("main > section"));
-      if(!secs.length) return;
-      if(!fxEnabled()){ secs.forEach(function(s){ s.classList.add("booted"); }); return; } // motion off / reduced → show all immediately
-      if(!('IntersectionObserver' in window)){ secs.forEach(function(s){ s.classList.add("booted"); }); return; }
+      if(!secs.length || !('IntersectionObserver' in window)) return;
       var io = new IntersectionObserver(function(entries){
-        entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add("booted"); io.unobserve(en.target); } });
-      }, { rootMargin:"0px 0px -12% 0px", threshold:0.08 });
+        entries.forEach(function(en){ if(en.isIntersecting){ if(fxEnabled()) en.target.classList.add("derez-in"); io.unobserve(en.target); } });
+      }, { rootMargin:"0px 0px -8% 0px", threshold:0.04 });
       secs.forEach(function(s){ io.observe(s); });
-      // if motion is toggled OFF mid-session, reveal everything immediately
-      window.addEventListener("readme:fxchange", function(){ if(!fxEnabled()){ secs.forEach(function(s){ s.classList.add("booted"); }); } });
     })();
 
     /* 12 — boot / "system online" intro (subsumes typed hero, behavior 11)
