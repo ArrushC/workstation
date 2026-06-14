@@ -2,6 +2,39 @@
     "use strict";
 
     // ============================================================
+    // F1. Capability gates + Prefs (foundation for all FX tasks)
+    // ============================================================
+    var reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var fineQuery   = window.matchMedia("(pointer: fine)");
+    function loadPref(k, d){ try{ var v=localStorage.getItem(k); return v===null?d:v==="1"; }catch(e){ return d; } }
+    function savePref(k, v){ try{ localStorage.setItem(k, v?"1":"0"); }catch(e){} }
+    var Prefs = {
+        motion: loadPref("readme-motion", !reduceQuery.matches), // default ON unless OS reduced-motion
+        sound:  loadPref("readme-sound", false)                  // default OFF
+    };
+    function fxEnabled(){ return Prefs.motion && !reduceQuery.matches; }
+    function pointerFx(){ return fxEnabled() && fineQuery.matches; } // eslint-disable-line no-unused-vars
+
+    // ============================================================
+    // F2. Shared rAF Scheduler (single loop for ALL FX subsystems)
+    // ============================================================
+    var Scheduler = (function(){
+        var subs = []; var running = false;
+        function frame(t){ running = false;
+            if(document.hidden) return;
+            var snap = subs.slice();
+            for(var i=0;i<snap.length;i++){ try{ snap[i](t); }catch(e){} }
+            if(subs.length){ running = true; requestAnimationFrame(frame); }
+        }
+        return {
+            add:function(fn){ if(subs.indexOf(fn)<0) subs.push(fn); this.kick(); },
+            remove:function(fn){ var i=subs.indexOf(fn); if(i>=0) subs.splice(i,1); },
+            kick:function(){ if(!running && subs.length && !document.hidden){ running=true; requestAnimationFrame(frame); } }
+        };
+    })();
+    document.addEventListener("visibilitychange", function(){ if(!document.hidden) Scheduler.kick(); });
+
+    // ============================================================
     // 1. Theme toggle (auto / light / dark) with localStorage
     // ============================================================
     const themeToggle = document.getElementById("theme-toggle");
@@ -497,6 +530,25 @@
         window.addEventListener("resize", paintProgress);
         paintProgress();
     }
+
+    // ============================================================
+    // F3. Motion + sound toggle wiring
+    // ============================================================
+    var motionBtn = document.getElementById("motion-toggle");
+    var soundBtn  = document.getElementById("sound-toggle");
+    function reflectMotion(){
+        if(motionBtn){ motionBtn.setAttribute("aria-pressed", String(Prefs.motion)); motionBtn.textContent = Prefs.motion ? "◉" : "○"; }
+        document.documentElement.classList.toggle("fx-off", !fxEnabled());
+        document.documentElement.classList.toggle("fx-on", fxEnabled());
+        // readme:fxchange is dispatched on window — consumers must use window.addEventListener("readme:fxchange", ...)
+        window.dispatchEvent(new CustomEvent("readme:fxchange"));
+    }
+    function reflectSound(){ if(soundBtn){ soundBtn.setAttribute("aria-pressed", String(Prefs.sound)); soundBtn.textContent = Prefs.sound ? "♪" : "♪̶"; } }
+    if(motionBtn) motionBtn.addEventListener("click", function(){ Prefs.motion=!Prefs.motion; savePref("readme-motion",Prefs.motion); reflectMotion(); });
+    if(soundBtn)  soundBtn.addEventListener("click",  function(){ Prefs.sound=!Prefs.sound;  savePref("readme-sound",Prefs.sound);  reflectSound(); });
+    if(reduceQuery.addEventListener) reduceQuery.addEventListener("change", reflectMotion);
+    else if(reduceQuery.addListener) reduceQuery.addListener(reflectMotion);
+    reflectMotion(); reflectSound();
 })();
 
 // ============================================================
