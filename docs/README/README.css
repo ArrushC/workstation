@@ -1838,7 +1838,7 @@ summary:focus-visible {
   mask-image:linear-gradient(transparent 44%,#000 72%); animation:gwFloor 5.5s linear infinite; }
 @keyframes gwFloor{ from{background-position:0 0;} to{background-position:0 48px;} }
 .gw-horizon{ position:absolute; left:0; right:0; bottom:46vh; height:2px; background:var(--c1);
-  box-shadow:0 0 26px 7px var(--c1-glow); opacity:calc(.85*var(--glow-on)); animation:gwHz 4.5s ease-in-out infinite; transform:translateX(calc(var(--p-x,0) * -10px)); }
+  box-shadow:0 0 26px 7px var(--c1-glow); opacity:calc(.85*var(--glow-on)); animation:gwHz 4.5s ease-in-out infinite; transform:translateX(calc(var(--p-x,0) * -10px)) translateY(var(--cam-y,0px)); }
 .gw-horizon::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:120px;
   background:radial-gradient(60% 100% at 50% 100%, var(--c1-glow), transparent 70%); opacity:.5; }
 @keyframes gwHz{ 0%,100%{opacity:calc(.7*var(--glow-on));} 50%{opacity:calc(1*var(--glow-on));} }
