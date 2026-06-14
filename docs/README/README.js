@@ -572,6 +572,65 @@
         window.addEventListener("readme:fxchange", function(){ pointerFx() ? enable() : disable(); });
         enable();
     })();
+
+    /* ============================================================
+     * FX canvas singleton (shared by trail + click ripples)
+     * ============================================================ */
+    var FX = (function(){
+        var cv = document.getElementById("fx-canvas"); if(!cv) return null;
+        var ctx = cv.getContext("2d"), W=0, H=0, DPR=1;
+        function size(){ DPR=Math.min(2, window.devicePixelRatio||1); W=window.innerWidth; H=window.innerHeight;
+            cv.width=W*DPR; cv.height=H*DPR; cv.style.width=W+"px"; cv.style.height=H+"px"; ctx.setTransform(DPR,0,0,DPR,0,0); }
+        window.addEventListener("resize", size); size();
+        return { get ctx(){ return ctx; }, get W(){ return W; }, get H(){ return H; }, clear:function(){ ctx.clearRect(0,0,W,H); } };
+    })();
+    var fxDrawers = [];
+    function fxLoop(){
+        if(!FX) return;
+        FX.clear();
+        var anyActive = false;
+        for(var i=0;i<fxDrawers.length;i++){ try{ if(fxDrawers[i](FX.ctx)) anyActive = true; }catch(e){} }
+        if(!anyActive){ Scheduler.remove(fxLoop); FX.clear(); }   // self-quiesce when idle
+    }
+
+    /* ============================================================
+     * 14 — cursor light-trail + reticle (the trail head is the reticle)
+     * ============================================================ */
+    (function initTrail(){
+        if(!FX) return;
+        var trail=[], rx=-1, ry=-1, active=false;
+        function onMove(e){ rx=e.clientX; ry=e.clientY; trail.push({x:rx,y:ry}); if(trail.length>24) trail.shift(); Scheduler.add(fxLoop); }
+        function onLeave(){ rx=-1; ry=-1; }
+        function draw(ctx){
+            var alive = false;
+            if(trail.length>1){
+                ctx.lineCap="round"; ctx.shadowColor="#67f0ff";
+                for(var i=1;i<trail.length;i++){ var a=i/trail.length;
+                    ctx.strokeStyle="rgba(103,240,255,"+(a*0.85)+")"; ctx.shadowBlur=14; ctx.lineWidth=a*4+0.5;
+                    ctx.beginPath(); ctx.moveTo(trail[i-1].x,trail[i-1].y); ctx.lineTo(trail[i].x,trail[i].y); ctx.stroke(); }
+                alive = true;
+            }
+            if(rx>=0 && trail.length){ // reticle ring at the head
+                ctx.shadowBlur=10; ctx.shadowColor="#67f0ff"; ctx.strokeStyle="rgba(103,240,255,.85)"; ctx.lineWidth=1.5;
+                ctx.beginPath(); ctx.arc(rx,ry,8,0,7); ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(rx-13,ry); ctx.lineTo(rx-5,ry); ctx.moveTo(rx+5,ry); ctx.lineTo(rx+13,ry);
+                ctx.moveTo(rx,ry-13); ctx.lineTo(rx,ry-5); ctx.moveTo(rx,ry+5); ctx.lineTo(rx,ry+13); ctx.stroke();
+                alive = true;
+            }
+            if(trail.length) trail.shift(); // decay one point per frame when idle
+            ctx.shadowBlur=0;
+            return alive;
+        }
+        function enable(){ if(active||!pointerFx()) return; active=true;
+            window.addEventListener("pointermove", onMove, {passive:true}); window.addEventListener("pointerleave", onLeave);
+            if(fxDrawers.indexOf(draw)<0) fxDrawers.push(draw); }
+        function disable(){ if(!active) return; active=false;
+            window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerleave", onLeave);
+            var i=fxDrawers.indexOf(draw); if(i>=0) fxDrawers.splice(i,1); trail.length=0; rx=-1; if(FX) FX.clear(); }
+        window.addEventListener("readme:fxchange", function(){ pointerFx()?enable():disable(); });
+        enable();
+    })();
 })();
 
 // ============================================================
