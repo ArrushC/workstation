@@ -1750,25 +1750,26 @@ label:focus-visible,
     html {
         scroll-behavior: auto;
     }
-    *,
-    *::before,
-    *::after {
+    html:not(.fx-on) *,
+    html:not(.fx-on) *::before,
+    html:not(.fx-on) *::after {
         animation-duration: 0.001ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
     }
-    .hero-title .cursor,
-    .term .caret {
+    html:not(.fx-on) .hero-title .cursor,
+    html:not(.fx-on) .term .caret {
         animation: none;
         opacity: 1;
     }
 }
 
 /* ---------- FX-off class guard (runtime motion toggle) ----------
-   Mirrors the reduced-motion media query above but responds to the
-   JS Prefs.motion toggle so users can disable FX without an OS setting.
-   The @media block above stays: OS reduced-motion is respected always.
-   This class block is toggled by reflectMotion() in README.js.       */
+   Motion is ON by default; the ◉ toggle (Prefs.motion) is a true override.
+   The reduced-motion @media block above is gated behind html:not(.fx-on),
+   so OS reduced-motion only suppresses animation when motion is OFF
+   (no .fx-on) or JS is absent — i.e. it's the static fallback, not a hard
+   gate. .fx-on is set by reflectMotion() in README.js whenever fxEnabled(). */
 .fx-off *, .fx-off *::before, .fx-off *::after{ animation:none !important; transition-duration:0.001ms !important; }
 .fx-off .fx-canvas{ display:none; }
 

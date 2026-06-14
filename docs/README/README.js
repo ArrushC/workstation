@@ -9,10 +9,10 @@
     function loadPref(k, d){ try{ var v=localStorage.getItem(k); return v===null?d:v==="1"; }catch(e){ return d; } }
     function savePref(k, v){ try{ localStorage.setItem(k, v?"1":"0"); }catch(e){} }
     var Prefs = {
-        motion: loadPref("readme-motion", !reduceQuery.matches), // default ON unless OS reduced-motion
+        motion: loadPref("readme-motion", true), // default ON for everyone; the ◉ toggle is a true override (OS reduced-motion no longer hard-disables — toggle off or no-JS gives the full static fallback)
         sound:  loadPref("readme-sound", false)                  // default OFF
     };
-    function fxEnabled(){ return Prefs.motion && !reduceQuery.matches; }
+    function fxEnabled(){ return Prefs.motion; } // OS reduced-motion sets no hard gate now; it's honored via CSS only when motion is OFF (no .fx-on)
     function pointerFx(){ return fxEnabled() && fineQuery.matches; }
 
     // ============================================================
