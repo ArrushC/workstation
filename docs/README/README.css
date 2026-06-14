@@ -608,6 +608,8 @@ header#intro {
     font-size: 13.5px;
     line-height: 1.85;
     overflow-x: auto;
+    /* Reserve height for 5 terminal lines so streaming never shifts layout */
+    min-height: 9.25em;
 }
 .term .ln {
     white-space: pre;
@@ -1852,6 +1854,13 @@ main > section{ opacity:1; }
 .gw-horizon::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:120px;
   background:radial-gradient(60% 100% at 50% 100%, var(--c1-glow), transparent 70%); opacity:.5; }
 @keyframes gwHz{ 0%,100%{opacity:calc(.7*var(--glow-on));} 50%{opacity:calc(1*var(--glow-on));} }
+
+/* 12 — boot / "system online" power-on animations (.booting added by initBoot) */
+.booting .gw-floor{ animation: gwBootFloor 0.7s ease-out, gwFloor 5.5s linear 0.7s infinite; }
+@keyframes gwBootFloor{ from{ opacity:0; filter:brightness(3); } to{ opacity:1; filter:brightness(1); } }
+.booting .gw-horizon{ animation: gwBootHz 0.7s ease-out; }
+@keyframes gwBootHz{ from{ transform:scaleX(0); opacity:1; } to{ transform:scaleX(1); } }
+
 .gw-glow{ position:absolute; inset:0;
   background:radial-gradient(40% 30% at 18% 22%, var(--glow-a), transparent 70%),
              radial-gradient(36% 28% at 86% 70%, var(--glow-b), transparent 70%); }

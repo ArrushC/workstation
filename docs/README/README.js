@@ -716,63 +716,95 @@
       // if motion is toggled OFF mid-session, reveal everything immediately
       window.addEventListener("readme:fxchange", function(){ if(!fxEnabled()){ secs.forEach(function(s){ s.classList.add("booted"); }); } });
     })();
-})();
 
-// ============================================================
-// 11. Hero terminal typed animation (progressive enhancement)
-//
-// The terminal's full content lives in the HTML, so no-JS and
-// reduced-motion users see the finished output. When motion is
-// allowed, we blank the command, hide the output lines (via
-// visibility — their space is reserved, so zero layout shift),
-// "type" the command with a temporary caret, then reveal each
-// ✓ line on a short stagger. The final blinking caret (in the
-// markup) takes over once everything is shown.
-// ============================================================
-(function () {
-    "use strict";
-    const term = document.querySelector(".term[data-typed]");
-    if (!term) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    /* 12 — boot / "system online" intro (subsumes typed hero, behavior 11)
+     *
+     * The terminal's full content lives in the HTML, so no-JS and reduced-motion
+     * users see the finished output immediately. When motion is allowed, the grid
+     * "powers on" (0.7 s), then the terminal types itself (the former behavior 11,
+     * now the finale). Skippable by any user interaction. Runs once per page load.
+     *
+     * revealHeroStatic() — shows the terminal's final state instantly (all .ln
+     *   lines visible + final caret). Equivalent to the old reduced-motion branch.
+     * typeHero(done)     — the old typing routine ported verbatim; calls done()
+     *   when finished.
+     */
+    (function initBoot(){
+      var htmlEl = document.documentElement;
+      var term = document.querySelector(".term[data-typed]");
+      if(!term) return;
 
-    const lines = Array.from(term.querySelectorAll(".body .ln"));
-    if (!lines.length) return;
-    const cmdEl = lines[0].querySelector(".cmd");
-    if (!cmdEl) return;
+      function revealHeroStatic(){
+        // Show all .ln lines (unhide any that typeHero may have hidden)
+        // and ensure the command text is fully visible — covers the case
+        // where typeHero started then skip() fired mid-type.
+        var lines = Array.prototype.slice.call(term.querySelectorAll(".body .ln"));
+        var cmdEl = lines.length ? lines[0].querySelector(".cmd") : null;
+        if(cmdEl && cmdEl._typeFull !== undefined){ cmdEl.textContent = cmdEl._typeFull; }
+        // Remove temporary typing caret if present
+        var tc = lines.length ? lines[0].querySelector(".caret._tcaret") : null;
+        if(tc) tc.parentNode.removeChild(tc);
+        for(var k=0; k<lines.length; k++){ lines[k].style.visibility = ""; }
+      }
 
-    const full = cmdEl.textContent;
-    cmdEl.textContent = "";
+      function typeHero(done){
+        var lines = Array.prototype.slice.call(term.querySelectorAll(".body .ln"));
+        if(!lines.length){ done(); return; }
+        var cmdEl = lines[0].querySelector(".cmd");
+        if(!cmdEl){ done(); return; }
 
-    // Temporary typing caret on the command line.
-    const tcaret = document.createElement("span");
-    tcaret.className = "caret";
-    tcaret.setAttribute("aria-hidden", "true");
-    lines[0].appendChild(tcaret);
+        var full = cmdEl.textContent;
+        cmdEl._typeFull = full;   // stash so revealHeroStatic can restore
+        cmdEl.textContent = "";
 
-    // Hide the output lines without collapsing their layout.
-    for (let k = 1; k < lines.length; k++) {
-        lines[k].style.visibility = "hidden";
-    }
+        // Temporary typing caret on the command line (marked so revealHeroStatic can find it)
+        var tcaret = document.createElement("span");
+        tcaret.className = "caret _tcaret";
+        tcaret.setAttribute("aria-hidden", "true");
+        lines[0].appendChild(tcaret);
 
-    let i = 0;
-    function type() {
-        cmdEl.textContent = full.slice(0, ++i);
-        if (i < full.length) {
+        // Hide the output lines without collapsing their layout.
+        for(var k=1; k<lines.length; k++){ lines[k].style.visibility = "hidden"; }
+
+        var i = 0;
+        function type(){
+          cmdEl.textContent = full.slice(0, ++i);
+          if(i < full.length){
             setTimeout(type, 26);
-        } else {
-            tcaret.remove();
+          } else {
+            if(tcaret.parentNode) tcaret.parentNode.removeChild(tcaret);
             setTimeout(reveal, 220);
+          }
         }
-    }
 
-    let j = 1;
-    function reveal() {
-        if (j < lines.length) {
+        var j = 1;
+        function reveal(){
+          if(j < lines.length){
             lines[j].style.visibility = "";
             j++;
             setTimeout(reveal, 150);
+          } else {
+            done();
+          }
         }
-    }
 
-    requestAnimationFrame(() => setTimeout(type, 260));
+        requestAnimationFrame(function(){ setTimeout(type, 260); });
+      }
+
+      if(!fxEnabled()){ revealHeroStatic(); return; } // motion off / reduced-motion → static hero, no intro
+
+      htmlEl.classList.add("booting");
+      var skipped = false;
+
+      function finish(){ htmlEl.classList.remove("booting"); htmlEl.classList.add("booted-done"); }
+      function cleanup(){ ["click","keydown","wheel","touchstart"].forEach(function(ev){ window.removeEventListener(ev, skip); }); }
+      function skip(){ if(skipped) return; skipped = true; cleanup(); revealHeroStatic(); finish(); }
+
+      ["click","keydown","wheel","touchstart"].forEach(function(ev){ window.addEventListener(ev, skip, {passive:true, once:true}); });
+
+      setTimeout(function(){
+        if(skipped) return;
+        typeHero(function(){ cleanup(); finish(); });
+      }, 700);
+    })();
 })();
