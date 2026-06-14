@@ -69,6 +69,15 @@ check_version_pins() {
     bad "helix drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
+  v=$(mkval JQ_VERSION)
+  ref=$(grep -oE 'jqlang/jq/releases/download/jq-[0-9][0-9.]+' bootstrap.ps1 \
+        | head -1 | sed 's#.*/jq-##')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "jq @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "jq drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
   scope_dest=$(grep -E '^[[:space:]]*HELIX_RUNTIME_DEST[[:space:]]*:=[[:space:]]*/usr' \
                makefile/scope.mk | head -1 | sed -E 's#.*:=[[:space:]]*##; s/[[:space:]]*$//')
   expect="${scope_dest}/runtime"
@@ -84,7 +93,7 @@ check_version_pins() {
 check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
-  local -a files=( makefile/lib/*.sh scripts/*.sh chezmoi/dot_local/bin/executable_batpipe )
+  local -a files=( makefile/lib/*.sh scripts/*.sh .claude/hooks/*.sh chezmoi/dot_local/bin/executable_batpipe )
   [ -e .githooks/pre-commit ] && files+=( .githooks/pre-commit )
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then bad "missing: $f"; missing=$((missing + 1)); continue; fi
@@ -165,6 +174,7 @@ check_shellcheck() {
     return 0
   fi
   local -a targets=( bootstrap.sh makefile/lib/*.sh scripts/*.sh \
+                     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh \
                      chezmoi/private_dot_claude/executable_notify.sh )
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"

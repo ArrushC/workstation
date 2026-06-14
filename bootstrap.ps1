@@ -208,6 +208,18 @@ $PortableTools = @(
         Repo       = "helix-editor/helix"
         TagPrefix  = ""
         UpdateHint = "dual-edit: `$PortableTools here AND HELIX_VERSION in makefile/versions.mk"
+    },
+    @{
+        Name       = "jq"
+        Exe        = "jq"
+        Version    = "1.8.1"
+        Url        = "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-amd64.exe"
+        Sha256     = "23cb60a1354eed6bcc8d9b9735e8c7b388cd1fdcb75726b93bc299ef22dd9334"
+        Layout     = "exe"
+        Dest       = $WsBin
+        Repo       = "jqlang/jq"
+        TagPrefix  = "jq-"
+        UpdateHint = "dual-edit: `$PortableTools here AND JQ_VERSION in makefile/versions.mk (jq powers the Claude Code hooks' JSON parsing on Windows)"
     }
 )
 
@@ -473,6 +485,18 @@ The pinned hash in `$PortableTools is stale, or the download was corrupted/tampe
     }
 
     try {
+        if ($Tool.Layout -eq "exe") {
+            # Bare single-binary release (jq ships jq-windows-amd64.exe, not a
+            # .zip) — the sha256-verified download IS the binary; place it under
+            # Dest as <Exe>.exe, no Expand-Archive. ($tmpZip holds the raw .exe.)
+            if (-not (Test-Path $Tool.Dest)) { New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null }
+            Copy-Item $tmpZip -Destination (Join-Path $Tool.Dest "$($Tool.Exe).exe") -Force
+            Add-ToUserPath $Tool.Dest
+            if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
+            New-Item -ItemType File -Force -Path $stamp | Out-Null
+            Write-Ok "$($Tool.Name) $($Tool.Version) installed to $($Tool.Dest)"
+            return
+        }
         if (Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }
         Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
 
