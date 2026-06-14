@@ -549,6 +549,29 @@
     if(reduceQuery.addEventListener) reduceQuery.addEventListener("change", reflectMotion);
     else if(reduceQuery.addListener) reduceQuery.addListener(reflectMotion);
     reflectMotion(); reflectSound();
+
+    /* 13 — mouse-parallax world + hero terminal tilt */
+    (function initParallax(){
+        var stars = document.querySelector(".gw-stars");
+        var floor = document.querySelector(".gw-floorwrap");
+        var disc  = document.querySelector(".hero-disc");
+        var term  = document.querySelector(".term[data-typed]");
+        var root  = document.documentElement;
+        if(!stars && !floor && !term && !disc) return;
+        var px=0, py=0, tx=0, ty=0, active=false;
+        function onMove(e){ px = e.clientX/window.innerWidth - 0.5; py = e.clientY/window.innerHeight - 0.5; }
+        function tick(){
+            tx += (px - tx) * 0.06; ty += (py - ty) * 0.06;
+            root.style.setProperty("--p-x", tx.toFixed(4));
+            root.style.setProperty("--p-y", ty.toFixed(4));
+            if(term) term.style.transform = "rotateY(" + (tx*5) + "deg) rotateX(" + (-ty*5) + "deg)";
+        }
+        function enable(){ if(active || !pointerFx()) return; active=true; window.addEventListener("pointermove", onMove, {passive:true}); Scheduler.add(tick); }
+        function disable(){ if(!active) return; active=false; window.removeEventListener("pointermove", onMove);
+            Scheduler.remove(tick); root.style.setProperty("--p-x","0"); root.style.setProperty("--p-y","0"); if(term) term.style.transform=""; }
+        window.addEventListener("readme:fxchange", function(){ pointerFx() ? enable() : disable(); });
+        enable();
+    })();
 })();
 
 // ============================================================
