@@ -807,4 +807,16 @@
         typeHero(function(){ cleanup(); finish(); });
       }, 700);
     })();
+
+    // ============================================================
+    // 19 — Konami "derez" easter egg
+    // ============================================================
+    (function initKonami(){
+      var seq=[38,38,40,40,37,39,37,39,66,65], pos=0;
+      document.addEventListener("keydown", function(e){
+        pos = (e.keyCode===seq[pos]) ? pos+1 : (e.keyCode===seq[0]?1:0);
+        if(pos===seq.length){ pos=0; derez(); }
+      });
+      function derez(){ if(!fxEnabled()) return; var b=document.body; if(b.classList.contains("derez")) return; b.classList.add("derez"); setTimeout(function(){ b.classList.remove("derez"); }, 1400); }
+    })();
 })();

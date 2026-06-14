@@ -1866,6 +1866,16 @@ main > section{ opacity:1; }
              radial-gradient(36% 28% at 86% 70%, var(--glow-b), transparent 70%); }
 .fx-canvas{ position:fixed; inset:0; z-index:20; pointer-events:none; }
 
+/* 19 — Konami "derez" easter egg */
+@keyframes derez{
+  0%{ filter:none; transform:none; }
+  20%{ filter:hue-rotate(40deg) contrast(1.4); transform:skewX(2deg) translateX(3px); }
+  40%{ filter:invert(0.1) brightness(1.3); transform:skewX(-3deg) translateX(-4px); }
+  60%{ filter:none; transform:translateY(2px); }
+  100%{ filter:none; transform:none; }
+}
+.derez{ animation:derez 1.4s steps(20) 1; }
+
 /* 16 — 3D pointer-tilt + tracking glare on .tilt panels */
 .tilt{ position:relative; }
 .tilt > .glare{ position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .2s; border-radius:inherit;
