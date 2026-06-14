@@ -15,6 +15,7 @@
           <div class="gw-horizon"></div>
           <div class="gw-glow"></div>
         </div>
+        <canvas class="gl-grid" id="gl-grid" aria-hidden="true"></canvas>
         <canvas class="fx-canvas" id="fx-canvas" aria-hidden="true"></canvas>
 
         <noscript>
@@ -4072,6 +4073,15 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
             </main>
         </div>
 
+        <!-- Vendored Three.js (r137 classic build) + bloom postprocessing — file://-safe global THREE.* (provenance: docs/README/vendor/three/.vendor) -->
+        <script src="docs/README/vendor/three/three.min.js"></script>
+        <script src="docs/README/vendor/three/CopyShader.js"></script>
+        <script src="docs/README/vendor/three/LuminosityHighPassShader.js"></script>
+        <script src="docs/README/vendor/three/EffectComposer.js"></script>
+        <script src="docs/README/vendor/three/RenderPass.js"></script>
+        <script src="docs/README/vendor/three/MaskPass.js"></script>
+        <script src="docs/README/vendor/three/ShaderPass.js"></script>
+        <script src="docs/README/vendor/three/UnrealBloomPass.js"></script>
         <script src="docs/README/README.js"></script>
     </body>
 </html>
