@@ -123,57 +123,60 @@
 
             <main id="main">
                 <header id="intro">
-                    <h1>workstation<span
-                            class="cursor"
-                            aria-hidden="true"
-                        ></span><span class="tag">dev env</span></h1>
-                    <p class="lede">
-                        Dev-environment provisioning for Linux hosts, plus the
-                        WezTerm config that connects to them from Windows.
-                        A single <code>Makefile</code> under
-                        <code>makefile/</code> drives everything &mdash;
-                        system packages, PATH, tool installs, and the chezmoi
-                        handoff for dotfiles. <code>bootstrap.sh</code> is a
-                        thin seed that runs <code>make MODE=dev|prod
-                        provision</code>. Adding a tool is a two-line edit.
-                    </p>
+                    <div class="hero-scene">
+                        <div class="hero-disc" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+                        <h1 class="hero-title">workstation<span
+                                class="cursor"
+                                aria-hidden="true"
+                            ></span><span class="tag">dev env</span></h1>
+                        <p class="lede">
+                            Dev-environment provisioning for Linux hosts, plus the
+                            WezTerm config that connects to them from Windows.
+                            A single <code>Makefile</code> under
+                            <code>makefile/</code> drives everything &mdash;
+                            system packages, PATH, tool installs, and the chezmoi
+                            handoff for dotfiles. <code>bootstrap.sh</code> is a
+                            thin seed that runs <code>make MODE=dev|prod
+                            provision</code>. Adding a tool is a two-line edit.
+                        </p>
 
-                    <div class="term" data-typed>
-                        <div class="bar">
-                            <span class="dot r" aria-hidden="true"></span>
-                            <span class="dot y" aria-hidden="true"></span>
-                            <span class="dot g" aria-hidden="true"></span>
-                            <span class="title"
-                                ><span class="who">arrush@workstation</span>:
-                                ~/.local/share/chezmoi</span
-                            >
-                            <span class="badge-dev">DEV ENV</span>
-                        </div>
-                        <div class="body">
-                            <!-- prettier-ignore -->
-                            <div class="ln"><span class="pr">&#10095;</span> <span class="cmd">make MODE=dev provision</span></div>
-                            <!-- prettier-ignore -->
-                            <div class="ln"><span class="ok">&#10003;</span> system packages &amp; PATH <span class="mut">&middot;&middot;&middot;&middot;&middot;&middot;</span> done</div>
-                            <!-- prettier-ignore -->
-                            <div class="ln"><span class="ok">&#10003;</span> 90+ CLI tools (static bins) <span class="mut">&middot;&middot;&middot;</span> done</div>
-                            <!-- prettier-ignore -->
-                            <div class="ln"><span class="ok">&#10003;</span> chezmoi handoff &rarr; dotfiles <span class="mut">&middot;&middot;&middot;&middot;</span> done</div>
-                            <!-- prettier-ignore -->
-                            <div class="ln"><span class="mut"># adding a tool is a two-line edit in</span> <span class="acc">makefile/</span><span class="caret" aria-hidden="true"></span></div>
-                            <div class="cta">
-                                <a class="btn primary lin" href="#setup-linux"
-                                    >&#9656; Linux quickstart</a
+                        <div class="term" data-typed>
+                            <div class="bar">
+                                <span class="dot r" aria-hidden="true"></span>
+                                <span class="dot y" aria-hidden="true"></span>
+                                <span class="dot g" aria-hidden="true"></span>
+                                <span class="title"
+                                    ><span class="who">arrush@workstation</span>:
+                                    ~/.local/share/chezmoi</span
                                 >
-                                <a class="btn win" href="#setup-windows"
-                                    >&#129443; Windows quickstart</a
-                                >
-                                <a
-                                    class="btn"
-                                    href="https://github.com/ArrushC/workstation"
-                                    target="_blank"
-                                    rel="noopener"
-                                    >&#8599; View on GitHub</a
-                                >
+                                <span class="badge-dev">DEV ENV</span>
+                            </div>
+                            <div class="body">
+                                <!-- prettier-ignore -->
+                                <div class="ln"><span class="pr">&#10095;</span> <span class="cmd">make MODE=dev provision</span></div>
+                                <!-- prettier-ignore -->
+                                <div class="ln"><span class="ok">&#10003;</span> system packages &amp; PATH <span class="mut">&middot;&middot;&middot;&middot;&middot;&middot;</span> done</div>
+                                <!-- prettier-ignore -->
+                                <div class="ln"><span class="ok">&#10003;</span> 90+ CLI tools (static bins) <span class="mut">&middot;&middot;&middot;</span> done</div>
+                                <!-- prettier-ignore -->
+                                <div class="ln"><span class="ok">&#10003;</span> chezmoi handoff &rarr; dotfiles <span class="mut">&middot;&middot;&middot;&middot;</span> done</div>
+                                <!-- prettier-ignore -->
+                                <div class="ln"><span class="mut"># adding a tool is a two-line edit in</span> <span class="acc">makefile/</span><span class="caret" aria-hidden="true"></span></div>
+                                <div class="cta">
+                                    <a class="btn primary lin" href="#setup-linux"
+                                        >&#9656; Linux quickstart</a
+                                    >
+                                    <a class="btn win" href="#setup-windows"
+                                        >&#129443; Windows quickstart</a
+                                    >
+                                    <a
+                                        class="btn"
+                                        href="https://github.com/ArrushC/workstation"
+                                        target="_blank"
+                                        rel="noopener"
+                                        >&#8599; View on GitHub</a
+                                    >
+                                </div>
                             </div>
                         </div>
                     </div>
