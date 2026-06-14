@@ -603,14 +603,14 @@
           var o=actx.createOscillator(); o.type="sawtooth"; o.frequency.value=mtof(root+p[0])*p[1]; o.connect(f); o.start(t); o.stop(t+dur+0.05);
         });
         f.connect(g); g.connect(musicGain); if(revSend) g.connect(revSend);
-        g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.17,t+dur*0.3); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+        g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.3,t+dur*0.35); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
       }
       function padChord(midis,t,dur){
         midis.forEach(function(m){
           var o=actx.createOscillator(), o2=actx.createOscillator(), f=actx.createBiquadFilter(), g=actx.createGain();
           o.type="sawtooth"; o2.type="sawtooth"; o.frequency.value=mtof(m); o2.frequency.value=mtof(m)*1.007;
-          f.type="lowpass"; f.frequency.value=760; o.connect(f); o2.connect(f); f.connect(g); g.connect(musicGain); if(revSend) g.connect(revSend);
-          g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.035,t+dur*0.4); g.gain.linearRampToValueAtTime(0.0001,t+dur);
+          f.type="lowpass"; f.frequency.value=1050; o.connect(f); o2.connect(f); f.connect(g); g.connect(musicGain); if(revSend) g.connect(revSend);
+          g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.06,t+dur*0.45); g.gain.linearRampToValueAtTime(0.0001,t+dur);
           o.start(t); o2.start(t); o.stop(t+dur+0.05); o2.stop(t+dur+0.05);
         });
       }
@@ -626,12 +626,13 @@
       function scheduleStep(i,t){
         var ci=Math.floor(i/SPC)%CH.length, si=i%SPC, c=CH[ci];
         voice("sawtooth", mtof(c.arp[ARP[si]%c.arp.length]+12), t, STEP*0.9, 0.07, 1700, true);   // arpeggio ostinato → reverb
-        if(si===0||si===2||si===4||si===6||si===7) voice("triangle", mtof(c.bass), t, STEP*1.4, 0.5, 0); // driving sub-bass
-        if(si===0){                                          // chord change: brass swell + pad + bell + hit
+        if(si===0||si===2||si===4||si===6||si===7) voice("triangle", mtof(c.bass), t, STEP*1.4, 0.58, 0); // driving sub-bass
+        if(si===0){                                          // chord change: brass swell + pad + deep sub + bell + hit
           brass(c.bass+12, t, STEP*SPC*0.95);
           padChord(c.pad, t, STEP*SPC*0.98);
-          voice("sine", mtof(c.arp[0]+24), t, 1.6, 0.035, 0, true);
-          noiseHit(t, 0.18, 0.06);
+          voice("sine", mtof(c.bass-12), t, STEP*SPC*0.92, 0.5, 0);   // deep cinematic sub
+          voice("sine", mtof(c.arp[0]+24), t, 1.8, 0.04, 0, true);    // bell → reverb
+          noiseHit(t, 0.2, 0.07);
         }
         if(si===4) noiseHit(t, 0.09, 0.03);
       }
@@ -648,14 +649,16 @@
         if(!Prefs.sound) return; prime(); if(!actx || musicOn) return;
         if(actx.state==="suspended") actx.resume();
         if(!musicGain){
-          musicGain=actx.createGain(); musicGain.connect(actx.destination);
-          var conv=actx.createConvolver(); conv.buffer=makeImpulse(2.8,2.6);
-          revSend=actx.createGain(); revSend.gain.value=0.5; revSend.connect(conv);
-          var wet=actx.createGain(); wet.gain.value=0.5; conv.connect(wet); wet.connect(musicGain);
+          var comp=actx.createDynamicsCompressor();                                    // cinematic glue + clip guard
+          comp.threshold.value=-16; comp.ratio.value=3; comp.attack.value=0.008; comp.release.value=0.25; comp.connect(actx.destination);
+          musicGain=actx.createGain(); musicGain.connect(comp);
+          var conv=actx.createConvolver(); conv.buffer=makeImpulse(3.6,2.3);            // longer, grander tail
+          revSend=actx.createGain(); revSend.gain.value=0.72; revSend.connect(conv);
+          var wet=actx.createGain(); wet.gain.value=0.66; conv.connect(wet); wet.connect(musicGain);
         }
         musicGain.gain.cancelScheduledValues(actx.currentTime);
         musicGain.gain.setValueAtTime(0.0001, actx.currentTime);
-        musicGain.gain.linearRampToValueAtTime(0.22, actx.currentTime+2.2);   // cinematic fade-in
+        musicGain.gain.linearRampToValueAtTime(0.42, actx.currentTime+2.4);   // louder, cinematic swell-in
         musicOn=true; nextT=actx.currentTime+0.2; stepIdx=0; schedTimer=setInterval(scheduler, 30);
       }
       function stopMusic(){
