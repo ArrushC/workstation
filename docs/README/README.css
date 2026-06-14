@@ -19,6 +19,8 @@
 [data-theme="dark"] {
     /* surfaces / void */
     --void: #04070d; --void-2: #070c14;
+    /* scrim (content overlay — dims the grid behind prose without hiding it) */
+    --scrim-top: rgba(4,7,13,.18); --scrim-bot: rgba(4,7,13,.66);
     --bg: var(--void); --bg-soft: var(--void-2);
     --surface: #0a121b; --surface-2: #0e1822; --surface-3: #122231;
     /* seeded for later Tron tasks: glass panels, grid highlight, glow states */
@@ -50,6 +52,8 @@
     [data-theme="auto"] {
         /* daylight grid — restrained, AA-safe, glow suppressed */
         --void: #eef2f6; --void-2: #e7ecf1; --bg: var(--void); --bg-soft: var(--void-2);
+        /* scrim */
+        --scrim-top: rgba(238,242,246,.35); --scrim-bot: rgba(238,242,246,.78);
         --surface: #ffffff; --surface-2: #f4f7fa; --surface-3: #e9eef3;
         --glass: rgba(255,255,255,.82); --glass-2: rgba(255,255,255,.9);
         --border: #cdd8e2; --border-soft: #e2e8ee;
@@ -71,6 +75,8 @@
 [data-theme="light"] {
     /* daylight grid — restrained, AA-safe, glow suppressed */
     --void: #eef2f6; --void-2: #e7ecf1; --bg: var(--void); --bg-soft: var(--void-2);
+    /* scrim */
+    --scrim-top: rgba(238,242,246,.35); --scrim-bot: rgba(238,242,246,.78);
     --surface: #ffffff; --surface-2: #f4f7fa; --surface-3: #e9eef3;
     --glass: rgba(255,255,255,.82); --glass-2: rgba(255,255,255,.9);
     --border: #cdd8e2; --border-soft: #e2e8ee;
@@ -394,7 +400,27 @@ main {
     position: relative;
     z-index: 1;
 }
+/* T5c — content scrim: a fixed gradient that dims the Tron grid behind the prose
+   without hiding it (grid stays faintly visible) and without reducing text contrast.
+   Layering: main has z-index:1 (stacking context); ::before at z-index:-1 paints
+   WITHIN that context — above body-level .grid-world (z-index:-2) but behind main's
+   own content boxes. position:fixed so the wash spans the full viewport. */
+main::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, var(--scrim-top), var(--scrim-bot));
+}
 main > * {
+    max-width: var(--maxw);
+}
+/* Prose measure: cap line-length on direct-child paragraphs and list items only,
+   so nested p/li inside cards, tables, and grids are NOT constrained. */
+main > p,
+main > ul > li,
+main > ol > li {
     max-width: var(--maxw);
 }
 main section {
