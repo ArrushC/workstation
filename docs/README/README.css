@@ -1763,6 +1763,16 @@ summary:focus-visible {
 .fx-off *, .fx-off *::before, .fx-off *::after{ animation:none !important; transition-duration:0.001ms !important; }
 .fx-off .fx-canvas{ display:none; }
 
+/* ---------- 18 — section boot-on-scroll (de-rez reveal) ----------
+   Safety: base rule keeps sections visible by default (no JS / motion off).
+   ONLY .fx-on (set by JS when fxEnabled()) hides unbooted sections.
+   JS adds .booted on IntersectionObserver hit (or immediately when fx is off).
+   The .fx-on guard means: JS-off → no .fx-on → visible. Motion-off → no .fx-on
+   (+ JS adds .booted anyway) → visible. No path strands content hidden. */
+main > section{ opacity:1; }
+.fx-on main > section:not(.booted){ opacity:0; transform:translateY(14px); clip-path:inset(0 0 100% 0); }
+.fx-on main > section.booted{ opacity:1; transform:none; clip-path:inset(0 0 0 0); transition:opacity .5s ease, transform .5s ease, clip-path .6s ease; }
+
 /* ---------- Print ---------- */
 @media print {
     body {

@@ -702,6 +702,20 @@
       window.addEventListener("readme:fxchange", paint);
       paint();
     })();
+
+    /* 18 — section boot-on-scroll (de-rez in) — SEPARATE observer from scroll-spy */
+    (function initSectionBoot(){
+      var secs = Array.prototype.slice.call(document.querySelectorAll("main > section"));
+      if(!secs.length) return;
+      if(!fxEnabled()){ secs.forEach(function(s){ s.classList.add("booted"); }); return; } // motion off / reduced → show all immediately
+      if(!('IntersectionObserver' in window)){ secs.forEach(function(s){ s.classList.add("booted"); }); return; }
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add("booted"); io.unobserve(en.target); } });
+      }, { rootMargin:"0px 0px -12% 0px", threshold:0.08 });
+      secs.forEach(function(s){ io.observe(s); });
+      // if motion is toggled OFF mid-session, reveal everything immediately
+      window.addEventListener("readme:fxchange", function(){ if(!fxEnabled()){ secs.forEach(function(s){ s.classList.add("booted"); }); } });
+    })();
 })();
 
 // ============================================================
