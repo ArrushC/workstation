@@ -1755,6 +1755,14 @@ summary:focus-visible {
     }
 }
 
+/* ---------- FX-off class guard (runtime motion toggle) ----------
+   Mirrors the reduced-motion media query above but responds to the
+   JS Prefs.motion toggle so users can disable FX without an OS setting.
+   The @media block above stays: OS reduced-motion is respected always.
+   This class block is toggled by reflectMotion() in README.js.       */
+.fx-off *, .fx-off *::before, .fx-off *::after{ animation:none !important; transition-duration:0.001ms !important; }
+.fx-off .fx-canvas{ display:none; }
+
 /* ---------- Print ---------- */
 @media print {
     body {
