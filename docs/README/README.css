@@ -1796,3 +1796,31 @@ summary:focus-visible {
         color: #000;
     }
 }
+
+/* ============================================================
+   T2 — Fixed Tron atmosphere (grid floor, horizon, starfield, FX canvas)
+   .layout already has position:relative; z-index:1 above — no duplicate needed.
+   ============================================================ */
+.grid-world{ position:fixed; inset:0; z-index:-2; pointer-events:none; overflow:hidden; background:var(--void); }
+.gw-void{ position:absolute; inset:0; background:radial-gradient(125% 90% at 50% 8%, #0a1622 0%, var(--void) 60%); }
+.gw-stars{ position:absolute; inset:-5%; opacity:.7;
+  background-image:radial-gradient(1px 1px at 20% 30%,#cfeffd99,transparent),radial-gradient(1px 1px at 70% 20%,#ffffff66,transparent),
+    radial-gradient(1px 1px at 85% 60%,#bfe9ff55,transparent),radial-gradient(1px 1px at 40% 70%,#ffffff44,transparent),
+    radial-gradient(1px 1px at 55% 45%,#cfeffd55,transparent),radial-gradient(1px 1px at 12% 80%,#ffffff44,transparent),
+    radial-gradient(1px 1px at 90% 35%,#cfeffd55,transparent); }
+.gw-floorwrap{ position:absolute; left:-30%; right:-30%; bottom:0; height:46vh; }
+.gw-floor{ position:absolute; inset:0;
+  background-image:linear-gradient(var(--grid-hot) 1px,transparent 1px),linear-gradient(90deg,var(--grid-hot) 1px,transparent 1px);
+  background-size:48px 48px; transform:perspective(440px) rotateX(76deg); transform-origin:bottom center;
+  -webkit-mask-image:linear-gradient(transparent 44%,#000 72%);
+  mask-image:linear-gradient(transparent 44%,#000 72%); animation:gwFloor 5.5s linear infinite; }
+@keyframes gwFloor{ from{background-position:0 0;} to{background-position:0 48px;} }
+.gw-horizon{ position:absolute; left:0; right:0; bottom:46vh; height:2px; background:var(--c1);
+  box-shadow:0 0 26px 7px var(--c1-glow); opacity:calc(.85*var(--glow-on)); animation:gwHz 4.5s ease-in-out infinite; }
+.gw-horizon::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:120px;
+  background:radial-gradient(60% 100% at 50% 100%, var(--c1-glow), transparent 70%); opacity:.5; }
+@keyframes gwHz{ 0%,100%{opacity:calc(.7*var(--glow-on));} 50%{opacity:calc(1*var(--glow-on));} }
+.gw-glow{ position:absolute; inset:0;
+  background:radial-gradient(40% 30% at 18% 22%, var(--glow-a), transparent 70%),
+             radial-gradient(36% 28% at 86% 70%, var(--glow-b), transparent 70%); }
+.fx-canvas{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
