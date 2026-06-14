@@ -1845,4 +1845,4 @@ summary:focus-visible {
 .gw-glow{ position:absolute; inset:0;
   background:radial-gradient(40% 30% at 18% 22%, var(--glow-a), transparent 70%),
              radial-gradient(36% 28% at 86% 70%, var(--glow-b), transparent 70%); }
-.fx-canvas{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
+.fx-canvas{ position:fixed; inset:0; z-index:20; pointer-events:none; }
