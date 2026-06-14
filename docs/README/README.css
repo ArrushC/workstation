@@ -26,11 +26,11 @@
     /* seeded for later Tron tasks: glass panels, grid highlight, glow states */
     --glass: rgba(8,15,24,.62); --glass-2: rgba(10,19,28,.8);
     --border: #1d3140; --border-soft: #15242f;
-    --grid-line: rgba(103,240,255,.16); --grid-hot: rgba(103,240,255,.44);
+    --grid-line: rgba(103,240,255,.16); --grid-hot: rgba(103,240,255,.62);
     /* text */
     --text: #dbeefb; --text-soft: #b8cadb; --muted: #7f93a6; --muted-2: #5f7488;
     /* accents */
-    --c1: #67f0ff; --c1-deep: #0bb6d6; --c1-glow: rgba(103,240,255,.5);
+    --c1: #67f0ff; --c1-deep: #0bb6d6; --c1-glow: rgba(103,240,255,.62);
     --c2: #ffa24d; --c2-deep: #ff7a18; --c2-glow: rgba(255,150,60,.5); /* glow intentionally warmer than --c2 */
     --accent: var(--c1); --accent-hover: #9af6ff; --accent-soft: rgba(103,240,255,.14); --accent-deep: var(--c1-deep);
     --hot: var(--c2); --hot-soft: rgba(255,162,77,.16);
@@ -38,7 +38,7 @@
     --ok: #5fe39a; --warn: #ffd166; --bad: #ff6b6b;
     --linux: #5ec8ff; --windows: #c79bff; --teal: #62e0d8; --pink: #ff9485;
     /* depth */
-    --glow-sm: 0 0 10px var(--c1-glow); --glow-md: 0 0 20px -2px var(--c1-glow); --glow-lg: 0 0 34px -4px var(--c1-glow);
+    --glow-sm: 0 0 13px var(--c1-glow); --glow-md: 0 0 28px -2px var(--c1-glow); --glow-lg: 0 0 48px -4px var(--c1-glow);
     --shadow: 0 1px 0 rgba(103,240,255,.05), 0 24px 50px -22px rgba(0,0,0,.85);
     --shadow-soft: 0 10px 28px -14px rgba(0,0,0,.6);
     --mark-bg: rgba(255,162,77,.22); --mark-fg: #ffe7c4;
@@ -523,13 +523,13 @@ header#intro {
 /* .hero-title: large monospace glow title */
 .hero-title{ font-family:var(--mono); font-size:clamp(34px,6vw,52px); font-weight:700; line-height:1; margin:0 0 14px;
   color:var(--text); display:flex; align-items:center; gap:14px;
-  text-shadow:0 0 calc(9px*var(--glow-on)) var(--c1-glow),0 0 calc(26px*var(--glow-on)) var(--c1-glow);
-  animation:heroBreathe 5s ease-in-out infinite; }
-@keyframes heroBreathe{ 0%,100%{text-shadow:0 0 calc(9px*var(--glow-on)) var(--c1-glow),0 0 calc(22px*var(--glow-on)) var(--c1-glow);}
-  50%{text-shadow:0 0 calc(13px*var(--glow-on)) var(--c1-glow),0 0 calc(42px*var(--glow-on)) var(--c1-glow);} }
+  text-shadow:0 0 calc(14px*var(--glow-on)) var(--c1-glow),0 0 calc(40px*var(--glow-on)) var(--c1-glow);
+  animation:heroBreathe 4.2s ease-in-out infinite; }
+@keyframes heroBreathe{ 0%,100%{text-shadow:0 0 calc(13px*var(--glow-on)) var(--c1-glow),0 0 calc(34px*var(--glow-on)) var(--c1-glow);}
+  50%{text-shadow:0 0 calc(20px*var(--glow-on)) var(--c1-glow),0 0 calc(64px*var(--glow-on)) var(--c1-glow),0 0 calc(96px*var(--glow-on)) var(--c1-glow);} }
 .hero-title .cursor{ width:12px; height:.9em; background:var(--c2); box-shadow:var(--glow-sm); animation:blink 1.1s step-end infinite; display:inline-block; }
 /* .hero-disc: spinning identity disc (decorative, top-right of .hero-scene) */
-.hero-disc{ position:absolute; top:6px; right:18px; width:128px; height:128px; transform:rotateX(64deg) translate(calc(var(--p-x,0) * -30px), calc(var(--p-y,0) * -30px)); transform-style:preserve-3d; pointer-events:none; opacity:var(--glow-on); }
+.hero-disc{ position:absolute; top:6px; right:18px; width:140px; height:140px; transform:rotateX(64deg) translate(calc(var(--p-x,0) * -48px), calc(var(--p-y,0) * -48px)); transform-style:preserve-3d; pointer-events:none; opacity:var(--glow-on); }
 .hero-disc span{ position:absolute; inset:0; border:2px solid var(--c1); border-radius:50%; box-shadow:0 0 13px var(--c1-glow),inset 0 0 13px var(--c1-glow); opacity:.85; }
 .hero-disc span:nth-child(2){ inset:18px; border-color:var(--c2); box-shadow:0 0 11px var(--c2-glow),inset 0 0 11px var(--c2-glow); }
 .hero-disc span:nth-child(3){ inset:36px; opacity:.55; }
@@ -1773,15 +1773,18 @@ label:focus-visible,
 .fx-off *, .fx-off *::before, .fx-off *::after{ animation:none !important; transition-duration:0.001ms !important; }
 .fx-off .fx-canvas{ display:none; }
 
-/* ---------- 18 — section boot-on-scroll (de-rez reveal) ----------
-   Safety: base rule keeps sections visible by default (no JS / motion off).
-   ONLY .fx-on (set by JS when fxEnabled()) hides unbooted sections.
-   JS adds .booted on IntersectionObserver hit (or immediately when fx is off).
-   The .fx-on guard means: JS-off → no .fx-on → visible. Motion-off → no .fx-on
-   (+ JS adds .booted anyway) → visible. No path strands content hidden. */
+/* ---------- 18 — section boot-on-scroll (de-rez ENTRANCE) ----------
+   Sections are ALWAYS visible (opacity:1 base) — content is never persistently
+   hidden. The de-rez is a one-shot ENTRANCE keyframe added by JS (.derez-in) as
+   each section scrolls into view (only when motion is on). If the IO never fires
+   / motion is off / JS is off, sections are simply visible — never blank. */
 main > section{ opacity:1; }
-.fx-on main > section:not(.booted){ opacity:0; transform:translateY(14px); clip-path:inset(0 0 100% 0); }
-.fx-on main > section.booted{ opacity:1; transform:none; clip-path:inset(0 0 0 0); transition:opacity .5s ease, transform .5s ease, clip-path .6s ease; }
+.fx-on main > section.derez-in{ animation: sectionDerez 0.6s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes sectionDerez{
+    0%{ opacity:0; transform:translateY(22px) scale(.985); clip-path:inset(0 0 100% 0); filter:brightness(1.7); }
+    60%{ filter:brightness(1.15); }
+    100%{ opacity:1; transform:none; clip-path:inset(0 0 0 0); filter:none; }
+}
 
 /* ---------- Print ---------- */
 @media print {
@@ -1845,19 +1848,19 @@ main > section{ opacity:1; }
    ============================================================ */
 .grid-world{ position:fixed; inset:0; z-index:-2; pointer-events:none; overflow:hidden; background:var(--void); }
 .gw-void{ position:absolute; inset:0; background:radial-gradient(125% 90% at 50% 8%, #0a1622 0%, var(--void) 60%); }
-.gw-stars{ position:absolute; inset:-5%; opacity:.7; transform:translate(calc(var(--p-x,0) * -14px), calc(var(--p-y,0) * -14px)) translateY(calc(var(--cam-y,0px) * 0.4));
+.gw-stars{ position:absolute; inset:-5%; opacity:.8; transform:translate(calc(var(--p-x,0) * -24px), calc(var(--p-y,0) * -24px)) translateY(calc(var(--cam-y,0px) * 0.4));
   background-image:radial-gradient(1px 1px at 20% 30%,#cfeffd99,transparent),radial-gradient(1px 1px at 70% 20%,#ffffff66,transparent),
     radial-gradient(1px 1px at 85% 60%,#bfe9ff55,transparent),radial-gradient(1px 1px at 40% 70%,#ffffff44,transparent),
     radial-gradient(1px 1px at 55% 45%,#cfeffd55,transparent),radial-gradient(1px 1px at 12% 80%,#ffffff44,transparent),
     radial-gradient(1px 1px at 90% 35%,#cfeffd55,transparent); }
-.gw-floorwrap{ position:absolute; left:-30%; right:-30%; bottom:0; height:52vh; transform:translateX(calc(var(--p-x,0) * -26px)) translateY(var(--cam-y,0px)); }
+.gw-floorwrap{ position:absolute; left:-30%; right:-30%; bottom:0; height:62vh; transform:translateX(calc(var(--p-x,0) * -44px)) translateY(var(--cam-y,0px)); }
 .gw-floor{ position:absolute; inset:0;
   background-image:linear-gradient(var(--grid-hot) 1px,transparent 1px),linear-gradient(90deg,var(--grid-hot) 1px,transparent 1px);
   background-size:48px 48px; transform:perspective(440px) rotateX(76deg); transform-origin:bottom center;
-  -webkit-mask-image:linear-gradient(transparent 36%,#000 66%);
-  mask-image:linear-gradient(transparent 36%,#000 66%); animation:gwFloor 5.5s linear infinite; }
+  -webkit-mask-image:linear-gradient(transparent 24%,#000 56%);
+  mask-image:linear-gradient(transparent 24%,#000 56%); animation:gwFloor 3.6s linear infinite; }
 @keyframes gwFloor{ from{background-position:0 0;} to{background-position:0 48px;} }
-.gw-horizon{ position:absolute; left:0; right:0; bottom:52vh; height:2px; background:var(--c1);
+.gw-horizon{ position:absolute; left:0; right:0; bottom:62vh; height:3px; background:var(--c1);
   box-shadow:0 0 26px 7px var(--c1-glow); opacity:calc(.85*var(--glow-on)); animation:gwHz 4.5s ease-in-out infinite; transform:translateX(calc(var(--p-x,0) * -10px)) translateY(var(--cam-y,0px)); }
 .gw-horizon::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:120px;
   background:radial-gradient(60% 100% at 50% 100%, var(--c1-glow), transparent 70%); opacity:.5; }
@@ -1867,7 +1870,7 @@ main > section{ opacity:1; }
 @media (prefers-color-scheme: light) { [data-theme="auto"] .gw-horizon { animation: none; } }
 
 /* 12 — boot / "system online" power-on animations (.booting added by initBoot) */
-.booting .gw-floor{ animation: gwBootFloor 0.7s ease-out, gwFloor 5.5s linear 0.7s infinite; }
+.booting .gw-floor{ animation: gwBootFloor 0.7s ease-out, gwFloor 3.6s linear 0.7s infinite; }
 @keyframes gwBootFloor{ from{ opacity:0; filter:brightness(3); } to{ opacity:1; filter:brightness(1); } }
 .booting .gw-horizon{ animation: gwBootHz 0.7s ease-out; }
 @keyframes gwBootHz{ from{ transform:scaleX(0); opacity:1; } to{ transform:scaleX(1); } }
