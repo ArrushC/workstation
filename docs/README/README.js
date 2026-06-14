@@ -545,7 +545,7 @@
     }
     function reflectSound(){ if(soundBtn){ soundBtn.setAttribute("aria-pressed", String(Prefs.sound)); soundBtn.textContent = Prefs.sound ? "♪" : "♪̶"; } }
     if(motionBtn) motionBtn.addEventListener("click", function(){ Prefs.motion=!Prefs.motion; savePref("readme-motion",Prefs.motion); reflectMotion(); });
-    if(soundBtn)  soundBtn.addEventListener("click",  function(){ Prefs.sound=!Prefs.sound;  savePref("readme-sound",Prefs.sound);  reflectSound(); });
+    if(soundBtn)  soundBtn.addEventListener("click",  function(){ Prefs.sound=!Prefs.sound;  savePref("readme-sound",Prefs.sound);  reflectSound(); if(Prefs.sound){ SFX.startMusic(); } else { SFX.stopMusic(); } });
     if(reduceQuery.addEventListener) reduceQuery.addEventListener("change", reflectMotion);
     else if(reduceQuery.addListener) reduceQuery.addListener(reflectMotion);
     reflectMotion(); reflectSound();
@@ -569,8 +569,68 @@
         g.gain.exponentialRampToValueAtTime(0.0001, t0+(dur||0.12));
         o.connect(g); g.connect(master); o.start(t0); o.stop(t0+(dur||0.12)+0.02);
       }
+      /* --- background "Grid" ambient loop (synthesized original; routed through its own gain) --- */
+      var musicGain=null, musicOn=false, schedTimer=null, nextT=0, stepIdx=0;
+      var STEP=0.19, SPC=8;                                  // step length (s) · steps per chord
+      function mtof(m){ return 440*Math.pow(2,(m-69)/12); }
+      var CH=[                                               // dark cycle: Em C G D Em Am C Bm
+        { bass:40, arp:[52,55,59,64], pad:[52,55,59] },
+        { bass:36, arp:[48,52,55,60], pad:[48,52,55] },
+        { bass:43, arp:[55,59,62,67], pad:[55,59,62] },
+        { bass:38, arp:[50,54,57,62], pad:[50,54,57] },
+        { bass:40, arp:[52,55,59,64], pad:[52,55,59] },
+        { bass:45, arp:[57,60,64,69], pad:[57,60,64] },
+        { bass:36, arp:[48,52,55,60], pad:[48,52,55] },
+        { bass:47, arp:[59,62,66,71], pad:[59,62,66] }
+      ];
+      var ARP=[0,2,1,3,2,3,1,2];
+      function voice(type,freq,t,dur,peak,cutoff){
+        var o=actx.createOscillator(), g=actx.createGain();
+        o.type=type; o.frequency.value=freq;
+        if(cutoff){ var f=actx.createBiquadFilter(); f.type="lowpass"; f.frequency.value=cutoff; o.connect(f); f.connect(g); }
+        else { o.connect(g); }
+        g.connect(musicGain);
+        g.gain.setValueAtTime(0.0001,t);
+        g.gain.exponentialRampToValueAtTime(peak,t+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+        o.start(t); o.stop(t+dur+0.05);
+      }
+      function padChord(midis,t,dur){
+        midis.forEach(function(m){
+          var o=actx.createOscillator(), o2=actx.createOscillator(), f=actx.createBiquadFilter(), g=actx.createGain();
+          o.type="sawtooth"; o2.type="sawtooth"; o.frequency.value=mtof(m); o2.frequency.value=mtof(m)*1.006;
+          f.type="lowpass"; f.frequency.value=820; o.connect(f); o2.connect(f); f.connect(g); g.connect(musicGain);
+          g.gain.setValueAtTime(0.0001,t);
+          g.gain.linearRampToValueAtTime(0.05,t+dur*0.45);
+          g.gain.linearRampToValueAtTime(0.0001,t+dur);
+          o.start(t); o2.start(t); o.stop(t+dur+0.05); o2.stop(t+dur+0.05);
+        });
+      }
+      function scheduleStep(i,t){
+        var c=CH[Math.floor(i/SPC)%CH.length], si=i%SPC;
+        voice("sawtooth", mtof(c.arp[ARP[si]%c.arp.length]+12), t, STEP*1.1, 0.10, 1500);   // arpeggio (octave up)
+        if(si%2===0) voice("triangle", mtof(c.bass), t, STEP*1.7, 0.45);                      // pulsing sub-bass
+        if(si===0){ padChord(c.pad, t, STEP*SPC*0.98); voice("sine", mtof(c.arp[0]+24), t, 1.4, 0.05); } // pad swell + bell
+      }
+      function scheduler(){
+        if(!actx) return;
+        while(nextT < actx.currentTime + 0.25){ scheduleStep(stepIdx, nextT); nextT += STEP; stepIdx = (stepIdx+1) % (SPC*CH.length); }
+      }
+      function startMusic(){
+        if(!Prefs.sound) return; prime(); if(!actx || musicOn) return;
+        if(actx.state==="suspended") actx.resume();
+        if(!musicGain){ musicGain=actx.createGain(); musicGain.connect(actx.destination); }
+        musicGain.gain.cancelScheduledValues(actx.currentTime);
+        musicGain.gain.setValueAtTime(0.0001, actx.currentTime);
+        musicGain.gain.linearRampToValueAtTime(0.2, actx.currentTime+1.6);   // gentle fade-in
+        musicOn=true; nextT=actx.currentTime+0.15; stepIdx=0; schedTimer=setInterval(scheduler, 30);
+      }
+      function stopMusic(){
+        musicOn=false; if(schedTimer){ clearInterval(schedTimer); schedTimer=null; }
+        if(musicGain && actx){ musicGain.gain.cancelScheduledValues(actx.currentTime); musicGain.gain.setTargetAtTime(0.0001, actx.currentTime, 0.4); }
+      }
       return {
-        prime: prime,
+        prime: prime, startMusic: startMusic, stopMusic: stopMusic,
         hover: function(){ blip(880, 0.06, "sine"); },
         click: function(){ blip(420, 0.14, "triangle"); },
         boot:  function(){ blip(180, 0.5,  "sawtooth"); }
@@ -578,7 +638,7 @@
     })();
     // prime the AudioContext on the FIRST real user gesture (so creation happens in a gesture context → no autoplay warning)
     (function(){
-      function primeOnce(){ SFX.prime(); window.removeEventListener("pointerdown", primeOnce, true); window.removeEventListener("keydown", primeOnce, true); }
+      function primeOnce(){ SFX.prime(); if(Prefs.sound) SFX.startMusic(); window.removeEventListener("pointerdown", primeOnce, true); window.removeEventListener("keydown", primeOnce, true); }
       window.addEventListener("pointerdown", primeOnce, true);
       window.addEventListener("keydown", primeOnce, true);
     })();
