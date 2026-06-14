@@ -847,39 +847,49 @@ header#intro {
     color: var(--windows);
 }
 
-/* ---------- Tables ---------- */
+/* ---------- Tables (HUD readout) ---------- */
 table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     margin: 16px 0;
-    background: var(--surface);
-    border: 1px solid var(--border-soft);
+    background: var(--glass-2);
+    border: 1px solid var(--border);
     border-radius: var(--r);
     overflow: hidden;
     font-size: 0.9rem;
 }
-th,
-td {
+thead th {
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--c2);
     text-align: left;
-    padding: 10px 14px;
+    padding: 11px 13px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,162,77,calc(.05*var(--glow-on)));
+}
+tbody td {
+    font-family: var(--mono);
+    padding: 11px 13px;
     border-bottom: 1px solid var(--border-soft);
+    color: var(--text-soft);
+    text-align: left;
     vertical-align: top;
 }
-th {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    background: var(--surface-2);
-    font-weight: 600;
+tbody tr {
+    transition: background .15s, color .15s, box-shadow .15s;
+}
+tbody tr:hover td {
+    background: rgba(103,240,255,calc(.06*var(--glow-on)));
+    color: var(--text);
+}
+tbody tr:hover td:first-child {
+    box-shadow: inset 3px 0 0 var(--c1);
 }
 tbody tr:last-child td {
     border-bottom: none;
-}
-tbody tr:hover td {
-    background: var(--surface-2);
 }
 
 /* ---------- Toolbelt: filter, cards, chips ---------- */
@@ -1122,13 +1132,14 @@ tbody tr:hover td {
     place-items: center;
     width: 1.5rem;
     height: 1.5rem;
-    border-radius: 6px;
-    background: var(--accent-soft);
-    color: var(--accent);
+    border-radius: 5px;
+    background: var(--c1);
+    color: var(--on-c1);
     font-family: var(--mono);
     font-size: 0.8rem;
     font-weight: 600;
     flex-shrink: 0;
+    box-shadow: var(--glow-sm);
 }
 .flow .step .lbl {
     font-family: var(--mono);
@@ -1144,8 +1155,9 @@ tbody tr:hover td {
 .flow .arrow {
     display: flex;
     align-items: center;
-    color: var(--muted-2);
+    color: var(--c1);
     font-family: var(--mono);
+    text-shadow: var(--glow-sm);
 }
 
 /* ---------- Tabs (CSS-only radio) ---------- */
@@ -1170,7 +1182,7 @@ tbody tr:hover td {
     gap: 8px;
     cursor: pointer;
     padding: 8px 14px;
-    border: 1px solid transparent;
+    border: 1px solid var(--border);
     border-bottom: 2px solid transparent;
     border-radius: var(--r) var(--r) 0 0;
     font-family: var(--mono);
@@ -1179,7 +1191,8 @@ tbody tr:hover td {
     transition:
         color var(--t-fast),
         background var(--t-fast),
-        border-color var(--t-fast);
+        border-color var(--t-fast),
+        box-shadow var(--t-fast);
 }
 .tab-labels label:hover {
     color: var(--text);
@@ -1199,27 +1212,31 @@ tbody tr:hover td {
     font-size: 0.82rem;
     margin: 0 0 0.6rem;
 }
-/* dev/prod tabset */
+/* dev/prod tabset — active tab neon */
 #pprod:checked ~ .tab-labels label[for="pprod"],
 #pdev:checked ~ .tab-labels label[for="pdev"] {
-    color: var(--text);
-    border-color: var(--border-soft);
-    border-bottom-color: var(--accent);
+    color: var(--c1);
+    border-color: var(--c1);
+    border-bottom-color: var(--c1);
     background: var(--surface);
+    box-shadow: var(--glow-sm);
+    font-weight: 600;
 }
 #pprod:checked ~ .tab-panels .panel-prod,
 #pdev:checked ~ .tab-panels .panel-dev {
     display: block;
 }
-/* adding-a-tool tabset */
+/* adding-a-tool tabset — active tab neon */
 #ar-all:checked ~ .tab-labels label[for="ar-all"],
 #ar-group:checked ~ .tab-labels label[for="ar-group"],
 #ar-host:checked ~ .tab-labels label[for="ar-host"],
 #ar-check:checked ~ .tab-labels label[for="ar-check"] {
-    color: var(--text);
-    border-color: var(--border-soft);
-    border-bottom-color: var(--accent);
+    color: var(--c1);
+    border-color: var(--c1);
+    border-bottom-color: var(--c1);
     background: var(--surface);
+    box-shadow: var(--glow-sm);
+    font-weight: 600;
 }
 #ar-all:checked ~ .tab-panels .ar-panel-all,
 #ar-group:checked ~ .tab-panels .ar-panel-group,
@@ -1369,6 +1386,50 @@ details summary .tag-sym {
     letter-spacing: 0.08em;
 }
 
+/* ---------- Troubleshooting details[data-ts] — neon HUD rows ---------- */
+details[data-ts] {
+    background: var(--glass-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    margin: 10px 0;
+    overflow: hidden;
+    /* override generic details colors */
+}
+details[data-ts][open] {
+    border-color: var(--c1);
+}
+details[data-ts] summary {
+    list-style: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    color: var(--text-soft);
+    padding: 12px 14px;
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+details[data-ts] summary:hover {
+    background: rgba(103,240,255,calc(.04*var(--glow-on)));
+    color: var(--text);
+}
+details[data-ts] summary::-webkit-details-marker {
+    display: none;
+}
+/* Override the generic ▸ caret with a neon ❯ caret for troubleshooting rows */
+details[data-ts] summary::before {
+    content: "❯";
+    color: var(--c1);
+    text-shadow: var(--glow-sm);
+    transition: transform .2s;
+    font-size: 0.8em;
+    flex-shrink: 0;
+}
+details[data-ts][open] summary::before {
+    transform: rotate(90deg);
+}
+
 /* Nested tree using details */
 .tree {
     padding: 16px 18px;
@@ -1386,10 +1447,11 @@ details summary .tag-sym {
     padding: 0.18rem 0;
     font-family: var(--mono);
     font-size: 0.85rem;
+    cursor: pointer;
 }
 .tree details > summary::before {
     content: "▸";
-    color: var(--muted);
+    color: var(--c1);
     font-size: 0.85em;
 }
 .tree details[open] > summary::before {
@@ -1430,7 +1492,7 @@ details summary .tag-sym {
 }
 .checklist li::before {
     content: "▸";
-    color: var(--accent);
+    color: var(--c1);
     position: absolute;
     left: 0.4rem;
     font-size: 0.9em;
