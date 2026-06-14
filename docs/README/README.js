@@ -569,61 +569,94 @@
         g.gain.exponentialRampToValueAtTime(0.0001, t0+(dur||0.12));
         o.connect(g); g.connect(master); o.start(t0); o.stop(t0+(dur||0.12)+0.02);
       }
-      /* --- background "Grid" ambient loop (synthesized original; routed through its own gain) --- */
-      var musicGain=null, musicOn=false, schedTimer=null, nextT=0, stepIdx=0;
-      var STEP=0.19, SPC=8;                                  // step length (s) · steps per chord
+      /* --- background "Grid" loop (synthesized original; Tron Legacy/Ares flavour:
+         C# minor, detuned-saw brass swells, driving sub-bass, arpeggio, convolver
+         reverb for cinematic space, industrial noise hits) --- */
+      var musicGain=null, revSend=null, musicOn=false, schedTimer=null, nextT=0, stepIdx=0;
+      var STEP=0.15, SPC=8;                                  // ~102 BPM feel; 8 steps per chord (≈9.6s loop)
       function mtof(m){ return 440*Math.pow(2,(m-69)/12); }
-      var CH=[                                               // dark cycle: Em C G D Em Am C Bm
-        { bass:40, arp:[52,55,59,64], pad:[52,55,59] },
-        { bass:36, arp:[48,52,55,60], pad:[48,52,55] },
-        { bass:43, arp:[55,59,62,67], pad:[55,59,62] },
-        { bass:38, arp:[50,54,57,62], pad:[50,54,57] },
-        { bass:40, arp:[52,55,59,64], pad:[52,55,59] },
-        { bass:45, arp:[57,60,64,69], pad:[57,60,64] },
-        { bass:36, arp:[48,52,55,60], pad:[48,52,55] },
-        { bass:47, arp:[59,62,66,71], pad:[59,62,66] }
+      var CH=[                                               // C# minor cycle: C#m A E B  C#m A F#m G#
+        { bass:37, arp:[49,52,56,61], pad:[49,52,56] },
+        { bass:33, arp:[45,49,52,57], pad:[45,49,52] },
+        { bass:40, arp:[52,56,59,64], pad:[52,56,59] },
+        { bass:35, arp:[47,51,54,59], pad:[47,51,54] },
+        { bass:37, arp:[49,52,56,61], pad:[49,52,56] },
+        { bass:33, arp:[45,49,52,57], pad:[45,49,52] },
+        { bass:42, arp:[54,57,61,66], pad:[54,57,61] },
+        { bass:44, arp:[56,60,63,68], pad:[56,60,63] }
       ];
-      var ARP=[0,2,1,3,2,3,1,2];
-      function voice(type,freq,t,dur,peak,cutoff){
+      var ARP=[0,2,1,3,2,3,1,0];
+      function voice(type,freq,t,dur,peak,cutoff,send){
         var o=actx.createOscillator(), g=actx.createGain();
         o.type=type; o.frequency.value=freq;
         if(cutoff){ var f=actx.createBiquadFilter(); f.type="lowpass"; f.frequency.value=cutoff; o.connect(f); f.connect(g); }
         else { o.connect(g); }
-        g.connect(musicGain);
-        g.gain.setValueAtTime(0.0001,t);
-        g.gain.exponentialRampToValueAtTime(peak,t+0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+        g.connect(musicGain); if(send && revSend) g.connect(revSend);
+        g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(peak,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
         o.start(t); o.stop(t+dur+0.05);
+      }
+      function brass(root,t,dur){                            // the "Tron horn": detuned saw stack + filter swell
+        var f=actx.createBiquadFilter(), g=actx.createGain();
+        f.type="lowpass"; f.Q.value=5;
+        f.frequency.setValueAtTime(260,t); f.frequency.linearRampToValueAtTime(1500,t+dur*0.35); f.frequency.exponentialRampToValueAtTime(360,t+dur);
+        [[0,1],[0,1.006],[7,1],[7,0.994],[12,1]].forEach(function(p){
+          var o=actx.createOscillator(); o.type="sawtooth"; o.frequency.value=mtof(root+p[0])*p[1]; o.connect(f); o.start(t); o.stop(t+dur+0.05);
+        });
+        f.connect(g); g.connect(musicGain); if(revSend) g.connect(revSend);
+        g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.17,t+dur*0.3); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
       }
       function padChord(midis,t,dur){
         midis.forEach(function(m){
           var o=actx.createOscillator(), o2=actx.createOscillator(), f=actx.createBiquadFilter(), g=actx.createGain();
-          o.type="sawtooth"; o2.type="sawtooth"; o.frequency.value=mtof(m); o2.frequency.value=mtof(m)*1.006;
-          f.type="lowpass"; f.frequency.value=820; o.connect(f); o2.connect(f); f.connect(g); g.connect(musicGain);
-          g.gain.setValueAtTime(0.0001,t);
-          g.gain.linearRampToValueAtTime(0.05,t+dur*0.45);
-          g.gain.linearRampToValueAtTime(0.0001,t+dur);
+          o.type="sawtooth"; o2.type="sawtooth"; o.frequency.value=mtof(m); o2.frequency.value=mtof(m)*1.007;
+          f.type="lowpass"; f.frequency.value=760; o.connect(f); o2.connect(f); f.connect(g); g.connect(musicGain); if(revSend) g.connect(revSend);
+          g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.035,t+dur*0.4); g.gain.linearRampToValueAtTime(0.0001,t+dur);
           o.start(t); o2.start(t); o.stop(t+dur+0.05); o2.stop(t+dur+0.05);
         });
       }
+      function noiseHit(t,dur,peak){                         // industrial percussion (Ares grit)
+        var len=Math.floor(actx.sampleRate*dur), buf=actx.createBuffer(1,len,actx.sampleRate), d=buf.getChannelData(0);
+        for(var i=0;i<len;i++){ d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2); }
+        var n=actx.createBufferSource(); n.buffer=buf;
+        var f=actx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=2300; f.Q.value=0.6;
+        var g=actx.createGain(); n.connect(f); f.connect(g); g.connect(musicGain); if(revSend) g.connect(revSend);
+        g.gain.setValueAtTime(peak,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+        n.start(t); n.stop(t+dur+0.02);
+      }
       function scheduleStep(i,t){
-        var c=CH[Math.floor(i/SPC)%CH.length], si=i%SPC;
-        voice("sawtooth", mtof(c.arp[ARP[si]%c.arp.length]+12), t, STEP*1.1, 0.10, 1500);   // arpeggio (octave up)
-        if(si%2===0) voice("triangle", mtof(c.bass), t, STEP*1.7, 0.45);                      // pulsing sub-bass
-        if(si===0){ padChord(c.pad, t, STEP*SPC*0.98); voice("sine", mtof(c.arp[0]+24), t, 1.4, 0.05); } // pad swell + bell
+        var ci=Math.floor(i/SPC)%CH.length, si=i%SPC, c=CH[ci];
+        voice("sawtooth", mtof(c.arp[ARP[si]%c.arp.length]+12), t, STEP*0.9, 0.07, 1700, true);   // arpeggio ostinato → reverb
+        if(si===0||si===2||si===4||si===6||si===7) voice("triangle", mtof(c.bass), t, STEP*1.4, 0.5, 0); // driving sub-bass
+        if(si===0){                                          // chord change: brass swell + pad + bell + hit
+          brass(c.bass+12, t, STEP*SPC*0.95);
+          padChord(c.pad, t, STEP*SPC*0.98);
+          voice("sine", mtof(c.arp[0]+24), t, 1.6, 0.035, 0, true);
+          noiseHit(t, 0.18, 0.06);
+        }
+        if(si===4) noiseHit(t, 0.09, 0.03);
       }
       function scheduler(){
         if(!actx) return;
         while(nextT < actx.currentTime + 0.25){ scheduleStep(stepIdx, nextT); nextT += STEP; stepIdx = (stepIdx+1) % (SPC*CH.length); }
       }
+      function makeImpulse(sec,decay){
+        var len=Math.floor(actx.sampleRate*sec), buf=actx.createBuffer(2,len,actx.sampleRate);
+        for(var ch=0;ch<2;ch++){ var d=buf.getChannelData(ch); for(var i=0;i<len;i++){ d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay); } }
+        return buf;
+      }
       function startMusic(){
         if(!Prefs.sound) return; prime(); if(!actx || musicOn) return;
         if(actx.state==="suspended") actx.resume();
-        if(!musicGain){ musicGain=actx.createGain(); musicGain.connect(actx.destination); }
+        if(!musicGain){
+          musicGain=actx.createGain(); musicGain.connect(actx.destination);
+          var conv=actx.createConvolver(); conv.buffer=makeImpulse(2.8,2.6);
+          revSend=actx.createGain(); revSend.gain.value=0.5; revSend.connect(conv);
+          var wet=actx.createGain(); wet.gain.value=0.5; conv.connect(wet); wet.connect(musicGain);
+        }
         musicGain.gain.cancelScheduledValues(actx.currentTime);
         musicGain.gain.setValueAtTime(0.0001, actx.currentTime);
-        musicGain.gain.linearRampToValueAtTime(0.2, actx.currentTime+1.6);   // gentle fade-in
-        musicOn=true; nextT=actx.currentTime+0.15; stepIdx=0; schedTimer=setInterval(scheduler, 30);
+        musicGain.gain.linearRampToValueAtTime(0.22, actx.currentTime+2.2);   // cinematic fade-in
+        musicOn=true; nextT=actx.currentTime+0.2; stepIdx=0; schedTimer=setInterval(scheduler, 30);
       }
       function stopMusic(){
         musicOn=false; if(schedTimer){ clearInterval(schedTimer); schedTimer=null; }
@@ -922,5 +955,102 @@
         if(pos===seq.length){ pos=0; derez(); }
       });
       function derez(){ if(!fxEnabled()) return; var b=document.body; if(b.classList.contains("derez")) return; b.classList.add("derez"); setTimeout(function(){ b.classList.remove("derez"); }, 1400); }
+    })();
+
+    /* 22 — WebGL Tron grid world (Three.js, vendored). Replaces the CSS atmosphere when
+       motion is ON + dark theme + WebGL available (desktop); else the CSS .grid-world stays. */
+    (function initGrid3D(){
+      var THREE = window.THREE;
+      var canvas = document.getElementById("gl-grid");
+      var cssWorld = document.querySelector(".grid-world");
+      if(!THREE || !canvas) return;                               // no Three.js → CSS atmosphere
+      var renderer, scene, camera, composer, bloom, gridMat, disc, ico, stars, clock;
+      var running=false, built=false, broken=false, mx=0, my=0, tmx=0, tmy=0, sY=0, tsY=0;
+      function isDark(){ return getComputedStyle(document.documentElement).getPropertyValue('--glow-on').trim()==='1'; }
+      function canRun(){ return fxEnabled() && isDark() && !broken && window.innerWidth>720; }
+      var GV = "varying vec3 vWorld; void main(){ vec4 wp=modelMatrix*vec4(position,1.0); vWorld=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp; }";
+      var GF = [
+        "precision highp float;",
+        "uniform float uTime; uniform vec3 uColor; uniform vec3 uColor2; varying vec3 vWorld;",
+        "float gf(vec2 p){ vec2 g=abs(fract(p-0.5)-0.5)/fwidth(p); return 1.0-min(min(g.x,g.y),1.0); }",
+        "void main(){",
+        "  vec2 c=vWorld.xz*0.5; c.y+=uTime*1.25;",
+        "  float g=gf(c); float d=length(vWorld.xz);",
+        "  float fade=smoothstep(120.0,5.0,d);",
+        "  vec3 col=mix(uColor,uColor2,smoothstep(3.0,30.0,abs(vWorld.x)));",
+        "  float a=g*fade; if(a<0.02) discard;",
+        "  gl_FragColor=vec4(col*(0.55+g*2.2), a);",
+        "}"
+      ].join("\n");
+      function build(){
+        if(built) return; built=true;
+        try{
+          renderer = new THREE.WebGLRenderer({ canvas:canvas, antialias:true, alpha:false, powerPreference:"high-performance" });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.75));
+          renderer.setClearColor(0x04070d, 1);
+          scene = new THREE.Scene();
+          scene.fog = new THREE.FogExp2(0x04070d, 0.036);
+          camera = new THREE.PerspectiveCamera(64, 1, 0.1, 260);
+          camera.position.set(0, 3.4, 13);
+          var fGeo = new THREE.PlaneGeometry(620, 620, 1, 1);
+          gridMat = new THREE.ShaderMaterial({ uniforms:{ uTime:{value:0}, uColor:{value:new THREE.Color(0x67f0ff)}, uColor2:{value:new THREE.Color(0xffa24d)} }, vertexShader:GV, fragmentShader:GF, transparent:true, depthWrite:false });
+          gridMat.extensions.derivatives = true;
+          var floor = new THREE.Mesh(fGeo, gridMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
+          var ceil = new THREE.Mesh(fGeo, gridMat); ceil.rotation.x = Math.PI/2; ceil.position.y = 18; scene.add(ceil);
+          disc = new THREE.Group();
+          disc.add(new THREE.Mesh(new THREE.TorusGeometry(2.3,0.05,16,90), new THREE.MeshBasicMaterial({color:0x9af6ff})));
+          disc.add(new THREE.Mesh(new THREE.TorusGeometry(1.7,0.045,16,80), new THREE.MeshBasicMaterial({color:0xffb066})));
+          disc.add(new THREE.Mesh(new THREE.TorusGeometry(1.05,0.04,16,64), new THREE.MeshBasicMaterial({color:0x67f0ff})));
+          disc.position.set(6.5, 5.4, -11); disc.rotation.x = 1.05; scene.add(disc);
+          ico = new THREE.Mesh(new THREE.IcosahedronGeometry(1.7,0), new THREE.MeshBasicMaterial({color:0x67f0ff, wireframe:true}));
+          ico.position.set(-7.5, 5.8, -17); scene.add(ico);
+          var sGeo = new THREE.BufferGeometry(), pos=[];
+          for(var i=0;i<700;i++){ pos.push((Math.random()-0.5)*190, Math.random()*64-4, -Math.random()*210); }
+          sGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+          stars = new THREE.Points(sGeo, new THREE.PointsMaterial({color:0xcfeffd, size:0.16, transparent:true, opacity:0.85, fog:true}));
+          scene.add(stars);
+          composer = new THREE.EffectComposer(renderer);
+          composer.addPass(new THREE.RenderPass(scene, camera));
+          bloom = new THREE.UnrealBloomPass(new THREE.Vector2(1,1), 1.05, 0.6, 0.02);
+          composer.addPass(bloom);
+          clock = new THREE.Clock();
+          resize();
+        }catch(e){ broken=true; renderer=null; }
+      }
+      function resize(){
+        if(!renderer) return;
+        var w=window.innerWidth, h=window.innerHeight;
+        renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); composer.setSize(w,h);
+      }
+      function frame(){
+        if(!running || !renderer) return;
+        var t = clock.getElapsedTime();
+        gridMat.uniforms.uTime.value = t;
+        tmx += (mx-tmx)*0.045; tmy += (my-tmy)*0.045; tsY += (sY-tsY)*0.06;
+        camera.position.x = tmx*4.5;
+        camera.position.y = 3.4 - tmy*2.2;
+        camera.position.z = 13 - tsY*0.004;
+        camera.lookAt(tmx*2.5, 2.2 - tmy*1.5, -14);
+        disc.rotation.z += 0.0045; disc.rotation.y = Math.sin(t*0.25)*0.35;
+        ico.rotation.x += 0.0035; ico.rotation.y += 0.0042;
+        stars.rotation.y = t*0.008;
+        composer.render();
+      }
+      function start(){ if(running) return; build(); if(broken||!renderer) return; running=true;
+        canvas.style.display="block"; if(cssWorld) cssWorld.style.display="none";
+        document.querySelectorAll(".hero-disc").forEach(function(d){ d.style.display="none"; });
+        try{ frame(); }catch(e){}   // paint one frame synchronously so the backdrop is never blank if rAF is slow
+        Scheduler.add(frame); }
+      function stop(){ if(!running) return; running=false; Scheduler.remove(frame);
+        canvas.style.display="none"; if(cssWorld) cssWorld.style.display="";
+        document.querySelectorAll(".hero-disc").forEach(function(d){ d.style.display=""; }); }
+      function update(){ canRun() ? start() : stop(); }
+      window.addEventListener("pointermove", function(e){ mx=e.clientX/window.innerWidth-0.5; my=e.clientY/window.innerHeight-0.5; }, {passive:true});
+      window.addEventListener("scroll", function(){ sY=window.scrollY||window.pageYOffset||0; }, {passive:true});
+      window.addEventListener("resize", function(){ if(running) resize(); });
+      window.addEventListener("readme:fxchange", update);
+      var tBtn=document.getElementById("theme-toggle"); if(tBtn) tBtn.addEventListener("click", function(){ setTimeout(update, 40); });
+      var mq=window.matchMedia("(prefers-color-scheme: dark)"); if(mq.addEventListener) mq.addEventListener("change", update);
+      update();
     })();
 })();

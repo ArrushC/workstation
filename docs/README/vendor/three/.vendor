@@ -1,0 +1,18 @@
+three.js — pinned vendored build for the README WebGL grid (works over file://)
+Version: r137 (three@0.137.0)
+Source:  https://unpkg.com/three@0.137.0/
+Files:
+  three.min.js                    build/three.min.js                          (UMD global THREE)
+  CopyShader.js                   examples/js/shaders/CopyShader.js
+  LuminosityHighPassShader.js     examples/js/shaders/LuminosityHighPassShader.js
+  EffectComposer.js               examples/js/postprocessing/EffectComposer.js   (defines THREE.Pass + THREE.EffectComposer)
+  RenderPass.js                   examples/js/postprocessing/RenderPass.js
+  MaskPass.js                     examples/js/postprocessing/MaskPass.js
+  ShaderPass.js                   examples/js/postprocessing/ShaderPass.js
+  UnrealBloomPass.js              examples/js/postprocessing/UnrealBloomPass.js
+Why r137 (not latest): r148 removed the classic examples/js/ scripts and the UMD
+build moved to ESM-only; ESM imports are blocked over file:// (CORS), so the
+README — which opens from disk — needs these classic (global THREE.*) scripts.
+Load order: three.min.js, CopyShader, LuminosityHighPassShader, EffectComposer,
+RenderPass, MaskPass, ShaderPass, UnrealBloomPass.
+Bump: re-download the same 8 files at a new (<=0.147) version + refresh this file.
