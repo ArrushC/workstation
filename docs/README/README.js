@@ -13,7 +13,7 @@
         sound:  loadPref("readme-sound", false)                  // default OFF
     };
     function fxEnabled(){ return Prefs.motion && !reduceQuery.matches; }
-    function pointerFx(){ return fxEnabled() && fineQuery.matches; } // eslint-disable-line no-unused-vars
+    function pointerFx(){ return fxEnabled() && fineQuery.matches; }
 
     // ============================================================
     // F2. Shared rAF Scheduler (single loop for ALL FX subsystems)
@@ -653,7 +653,7 @@
             }
             if(rx>=0 && trail.length){ // reticle ring at the head
                 ctx.shadowBlur=10; ctx.shadowColor="#67f0ff"; ctx.strokeStyle="rgba(103,240,255,.85)"; ctx.lineWidth=1.5;
-                ctx.beginPath(); ctx.arc(rx,ry,8,0,7); ctx.stroke();
+                ctx.beginPath(); ctx.arc(rx,ry,8,0,Math.PI*2); ctx.stroke();
                 ctx.beginPath();
                 ctx.moveTo(rx-13,ry); ctx.lineTo(rx-5,ry); ctx.moveTo(rx+5,ry); ctx.lineTo(rx+13,ry);
                 ctx.moveTo(rx,ry-13); ctx.lineTo(rx,ry-5); ctx.moveTo(rx,ry+5); ctx.lineTo(rx,ry+13); ctx.stroke();
@@ -854,9 +854,11 @@
     // 19 — Konami "derez" easter egg
     // ============================================================
     (function initKonami(){
-      var seq=[38,38,40,40,37,39,37,39,66,65], pos=0;
+      var seq=["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"], pos=0;
       document.addEventListener("keydown", function(e){
-        pos = (e.keyCode===seq[pos]) ? pos+1 : (e.keyCode===seq[0]?1:0);
+        if(/^(input|textarea)$/i.test(e.target.tagName)) return;
+        var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        pos = (k===seq[pos]) ? pos+1 : (k===seq[0]?1:0);
         if(pos===seq.length){ pos=0; derez(); }
       });
       function derez(){ if(!fxEnabled()) return; var b=document.body; if(b.classList.contains("derez")) return; b.classList.add("derez"); setTimeout(function(){ b.classList.remove("derez"); }, 1400); }
