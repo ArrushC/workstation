@@ -667,6 +667,27 @@
         window.addEventListener("readme:fxchange", function(){ fxEnabled()?enable():disable(); });
         enable();
     })();
+
+    /* ============================================================
+     * 16 — 3D pointer-tilt + tracking glare on .tilt panels
+     * ============================================================ */
+    (function initTilt(){
+        var els = Array.prototype.slice.call(document.querySelectorAll(".tilt"));
+        if(!els.length) return;
+        els.forEach(function(el){
+            if(!el.dataset.glare){ el.dataset.glare="1"; var g=document.createElement("span"); g.className="glare"; g.setAttribute("aria-hidden","true"); el.appendChild(g); }
+        });
+        function onMove(e){
+            var el=e.currentTarget, r=el.getBoundingClientRect();
+            var px=(e.clientX-r.left)/r.width-0.5, py=(e.clientY-r.top)/r.height-0.5;
+            el.style.setProperty("--gx",(e.clientX-r.left)+"px");
+            el.style.setProperty("--gy",(e.clientY-r.top)+"px");
+            if(pointerFx()) el.style.transform="perspective(700px) rotateY("+(px*8)+"deg) rotateX("+(-py*8)+"deg) translateZ(6px)";
+        }
+        function onLeave(e){ e.currentTarget.style.transform=""; }
+        els.forEach(function(el){ el.addEventListener("pointermove", onMove, {passive:true}); el.addEventListener("pointerleave", onLeave); });
+        window.addEventListener("readme:fxchange", function(){ if(!pointerFx()){ els.forEach(function(el){ el.style.transform=""; }); } });
+    })();
 })();
 
 // ============================================================

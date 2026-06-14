@@ -1846,3 +1846,9 @@ summary:focus-visible {
   background:radial-gradient(40% 30% at 18% 22%, var(--glow-a), transparent 70%),
              radial-gradient(36% 28% at 86% 70%, var(--glow-b), transparent 70%); }
 .fx-canvas{ position:fixed; inset:0; z-index:20; pointer-events:none; }
+
+/* 16 — 3D pointer-tilt + tracking glare on .tilt panels */
+.tilt{ position:relative; }
+.tilt > .glare{ position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .2s; border-radius:inherit;
+  background:radial-gradient(220px circle at var(--gx,50%) var(--gy,50%), rgba(103,240,255,calc(0.22*var(--glow-on))), transparent 60%); }
+.tilt:hover > .glare{ opacity:1; }
