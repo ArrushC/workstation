@@ -41,14 +41,11 @@
 
         <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
 
-        <button
-            class="theme-toggle"
-            id="theme-toggle"
-            aria-label="Toggle theme (auto / light / dark)"
-            title="Toggle theme"
-        >
-            <span id="theme-icon">◐</span>
-        </button>
+        <div class="controls">
+          <button class="ctl" id="theme-toggle" aria-label="Toggle theme (auto / light / dark)" title="Theme"><span id="theme-icon">◐</span></button>
+          <button class="ctl" id="motion-toggle" aria-label="Toggle motion &amp; effects" aria-pressed="true" title="Motion / FX">◉</button>
+          <button class="ctl" id="sound-toggle" aria-label="Toggle ambient sound" aria-pressed="false" title="Sound">♪</button>
+        </div>
 
         <div class="layout">
             <nav class="toc" aria-label="Table of contents" id="toc">
