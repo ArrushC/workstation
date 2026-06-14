@@ -550,6 +550,47 @@
     else if(reduceQuery.addListener) reduceQuery.addListener(reflectMotion);
     reflectMotion(); reflectSound();
 
+    /* 20 — ambient SFX (opt-in, synthesized; primed on first user gesture so it never autoplays) */
+    var SFX = (function(){
+      var actx=null, master=null, primed=false;
+      function prime(){
+        if(primed) return;
+        var AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+        try{ actx=new AC(); master=actx.createGain(); master.gain.value=0.05; master.connect(actx.destination); primed=true; }catch(e){ actx=null; }
+      }
+      function blip(freq, dur, type){
+        if(!Prefs.sound || !actx) return;             // silent unless enabled AND primed by a gesture
+        if(actx.state==="suspended"){ actx.resume(); }
+        var o=actx.createOscillator(), g=actx.createGain();
+        o.type=type||"sine"; o.frequency.value=freq;
+        var t0=actx.currentTime;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.6, t0+0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0+(dur||0.12));
+        o.connect(g); g.connect(master); o.start(t0); o.stop(t0+(dur||0.12)+0.02);
+      }
+      return {
+        prime: prime,
+        hover: function(){ blip(880, 0.06, "sine"); },
+        click: function(){ blip(420, 0.14, "triangle"); },
+        boot:  function(){ blip(180, 0.5,  "sawtooth"); }
+      };
+    })();
+    // prime the AudioContext on the FIRST real user gesture (so creation happens in a gesture context → no autoplay warning)
+    (function(){
+      function primeOnce(){ SFX.prime(); window.removeEventListener("pointerdown", primeOnce, true); window.removeEventListener("keydown", primeOnce, true); }
+      window.addEventListener("pointerdown", primeOnce, true);
+      window.addEventListener("keydown", primeOnce, true);
+    })();
+    // click + (throttled) hover blips — gated inside blip() on Prefs.sound
+    document.addEventListener("pointerdown", function(){ SFX.click(); });
+    var _lastHover=0;
+    document.addEventListener("pointerover", function(e){
+      if(!Prefs.sound) return;
+      if(!e.target || !e.target.closest || !e.target.closest("a,button,.chip,.tool-card,summary")) return;
+      var t=Date.now(); if(t-_lastHover>70){ _lastHover=t; SFX.hover(); }
+    });
+
     /* 13 — mouse-parallax world + hero terminal tilt */
     (function initParallax(){
         var stars = document.querySelector(".gw-stars");
@@ -748,6 +789,7 @@
       }
 
       function typeHero(done){
+        SFX.boot(); // no-ops unless Prefs.sound && context primed by a prior gesture
         var lines = Array.prototype.slice.call(term.querySelectorAll(".body .ln"));
         if(!lines.length){ done(); return; }
         var cmdEl = lines[0].querySelector(".cmd");
