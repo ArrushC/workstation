@@ -26,7 +26,7 @@
     /* seeded for later Tron tasks: glass panels, grid highlight, glow states */
     --glass: rgba(8,15,24,.62); --glass-2: rgba(10,19,28,.8);
     --border: #1d3140; --border-soft: #15242f;
-    --grid-line: rgba(103,240,255,.16); --grid-hot: rgba(103,240,255,.34);
+    --grid-line: rgba(103,240,255,.16); --grid-hot: rgba(103,240,255,.44);
     /* text */
     --text: #dbeefb; --text-soft: #b8cadb; --muted: #7f93a6; --muted-2: #5f7488;
     /* accents */
@@ -416,13 +416,6 @@ main::before {
 main > * {
     max-width: var(--maxw);
 }
-/* Prose measure: cap line-length on direct-child paragraphs and list items only,
-   so nested p/li inside cards, tables, and grids are NOT constrained. */
-main > p,
-main > ul > li,
-main > ol > li {
-    max-width: var(--maxw);
-}
 main section {
     padding-top: 46px;
 }
@@ -464,8 +457,14 @@ main > section > h2::after {
     content: "";
     flex: 1;
     height: 1px;
-    background: linear-gradient(90deg, var(--c1-glow), transparent);
+    /* Dark: neon cyan glow trail; Light: visible structural rule via --border */
+    background: linear-gradient(90deg, var(--h2-sep, var(--c1-glow)), transparent);
 }
+/* h2 separator — neon in dark, structural rule in light */
+:root,
+[data-theme="dark"] { --h2-sep: var(--c1-glow); }
+[data-theme="light"] { --h2-sep: var(--border); }
+@media (prefers-color-scheme: light) { [data-theme="auto"] { --h2-sep: var(--border); } }
 h3 {
     font-size: 1.16rem;
     font-weight: 600;
@@ -810,7 +809,7 @@ header#intro {
 .stack-card:nth-child(8n + 7){ --cat: var(--warn); }
 .stack-card:nth-child(8n){ --cat: var(--linux); }
 .stack-card:hover {
-    border-color: var(--c1);
+    border-color: var(--cat, var(--c1));
     box-shadow: var(--glow-md);
 }
 .stack-card .layer-label {
@@ -1019,7 +1018,7 @@ tbody tr:last-child td {
     box-shadow: 0 0 12px var(--cat, var(--c1-glow));
 }
 .tool-card:hover {
-    border-color: var(--c1);
+    border-color: var(--cat, var(--c1));
     box-shadow: var(--glow-md);
 }
 /* Category color mapping via --cat custom property */
@@ -1082,8 +1081,9 @@ tbody tr:last-child td {
     border-color: var(--c1);
     box-shadow: var(--glow-md);
     transform: translateY(-2px);
-    outline: none;
 }
+/* pointer hover suppresses outline (redundant when mouse is in use) */
+.chip:hover:not(:focus-visible) { outline: none; }
 .chip small {
     color: var(--muted-2);
     font-size: 9.5px;
@@ -1644,16 +1644,23 @@ section.dimmed {
     animation-delay: 350ms;
 }
 
-/* ---------- Focus-visible ---------- */
+/* ---------- Focus-visible — comprehensive neon ring ----------
+   Single source of truth. Covers: TOC links, control buttons (.ctl),
+   search inputs, chips, <details> summaries, CTA buttons, heading anchors,
+   all <a>, <button>, <input>, <label>, and [tabindex] elements.
+   .copy-btn:focus-visible keeps its own border/shadow override below (additive). */
 a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+label:focus-visible,
+[tabindex]:focus-visible,
+.chip:focus-visible,
 .btn:focus-visible,
-.ctl:focus-visible,
-nav.toc a:focus-visible,
-.heading-anchor:focus-visible,
-summary:focus-visible {
-    outline: 2px solid var(--accent);
+.ctl:focus-visible {
+    outline: 2px solid var(--c1);
     outline-offset: 2px;
-    border-radius: var(--r-sm);
+    border-radius: 4px;
 }
 
 /* ---------- Responsive ---------- */
@@ -1842,18 +1849,21 @@ main > section{ opacity:1; }
     radial-gradient(1px 1px at 85% 60%,#bfe9ff55,transparent),radial-gradient(1px 1px at 40% 70%,#ffffff44,transparent),
     radial-gradient(1px 1px at 55% 45%,#cfeffd55,transparent),radial-gradient(1px 1px at 12% 80%,#ffffff44,transparent),
     radial-gradient(1px 1px at 90% 35%,#cfeffd55,transparent); }
-.gw-floorwrap{ position:absolute; left:-30%; right:-30%; bottom:0; height:46vh; transform:translateX(calc(var(--p-x,0) * -26px)) translateY(var(--cam-y,0px)); }
+.gw-floorwrap{ position:absolute; left:-30%; right:-30%; bottom:0; height:52vh; transform:translateX(calc(var(--p-x,0) * -26px)) translateY(var(--cam-y,0px)); }
 .gw-floor{ position:absolute; inset:0;
   background-image:linear-gradient(var(--grid-hot) 1px,transparent 1px),linear-gradient(90deg,var(--grid-hot) 1px,transparent 1px);
   background-size:48px 48px; transform:perspective(440px) rotateX(76deg); transform-origin:bottom center;
-  -webkit-mask-image:linear-gradient(transparent 44%,#000 72%);
-  mask-image:linear-gradient(transparent 44%,#000 72%); animation:gwFloor 5.5s linear infinite; }
+  -webkit-mask-image:linear-gradient(transparent 36%,#000 66%);
+  mask-image:linear-gradient(transparent 36%,#000 66%); animation:gwFloor 5.5s linear infinite; }
 @keyframes gwFloor{ from{background-position:0 0;} to{background-position:0 48px;} }
-.gw-horizon{ position:absolute; left:0; right:0; bottom:46vh; height:2px; background:var(--c1);
+.gw-horizon{ position:absolute; left:0; right:0; bottom:52vh; height:2px; background:var(--c1);
   box-shadow:0 0 26px 7px var(--c1-glow); opacity:calc(.85*var(--glow-on)); animation:gwHz 4.5s ease-in-out infinite; transform:translateX(calc(var(--p-x,0) * -10px)) translateY(var(--cam-y,0px)); }
 .gw-horizon::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:120px;
   background:radial-gradient(60% 100% at 50% 100%, var(--c1-glow), transparent 70%); opacity:.5; }
 @keyframes gwHz{ 0%,100%{opacity:calc(.7*var(--glow-on));} 50%{opacity:calc(1*var(--glow-on));} }
+/* Light-mode: horizon animation is a no-op (opacity stays 0) — stop wasting a 4.5s loop */
+[data-theme="light"] .gw-horizon { animation: none; }
+@media (prefers-color-scheme: light) { [data-theme="auto"] .gw-horizon { animation: none; } }
 
 /* 12 — boot / "system online" power-on animations (.booting added by initBoot) */
 .booting .gw-floor{ animation: gwBootFloor 0.7s ease-out, gwFloor 5.5s linear 0.7s infinite; }
