@@ -631,6 +631,42 @@
         window.addEventListener("readme:fxchange", function(){ pointerFx()?enable():disable(); });
         enable();
     })();
+
+    /* ============================================================
+     * 15 — click energy pulses + grid ripples
+     * ============================================================ */
+    (function initPulses(){
+        if(!FX) return;
+        var ripples=[], sparks=[], active=false, MAX_RIPPLES=6, MAX_SPARKS=120;
+        function onDown(e){
+            if(!fxEnabled()) return;
+            if(ripples.length < MAX_RIPPLES) ripples.push({ x:e.clientX, y:e.clientY, rad:4, life:1 });
+            for(var i=0;i<10;i++){ var a=Math.PI*2*i/10; sparks.push({ x:e.clientX, y:e.clientY, vx:Math.cos(a)*(2+i%3), vy:Math.sin(a)*(2+i%3), life:1 }); }
+            if(sparks.length > MAX_SPARKS) sparks.splice(0, sparks.length - MAX_SPARKS);
+            Scheduler.add(fxLoop);
+        }
+        function draw(ctx){
+            var alive = false;
+            ctx.shadowBlur = 12;
+            for(var j=ripples.length-1;j>=0;j--){ var rp=ripples[j]; rp.rad += 6; rp.life -= 0.025;
+                ctx.shadowColor="#ffa24d"; ctx.strokeStyle="rgba(255,162,77,"+Math.max(0,rp.life)+")"; ctx.lineWidth=2;
+                ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.rad, 0, Math.PI*2); ctx.stroke();
+                ctx.strokeStyle="rgba(103,240,255,"+Math.max(0,rp.life*0.7)+")"; ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.rad*0.6, 0, Math.PI*2); ctx.stroke();
+                if(rp.life<=0) ripples.splice(j,1); else alive=true;
+            }
+            for(var k=sparks.length-1;k>=0;k--){ var s=sparks[k]; s.x+=s.vx; s.y+=s.vy; s.vy+=0.05; s.life-=0.03;
+                ctx.shadowColor="#ffa24d"; ctx.fillStyle="rgba(255,162,77,"+Math.max(0,s.life)+")";
+                ctx.beginPath(); ctx.arc(s.x, s.y, 1.6, 0, Math.PI*2); ctx.fill();
+                if(s.life<=0) sparks.splice(k,1); else alive=true;
+            }
+            ctx.shadowBlur = 0;
+            return alive;
+        }
+        function enable(){ if(active||!fxEnabled()) return; active=true; window.addEventListener("pointerdown", onDown, {passive:true}); if(fxDrawers.indexOf(draw)<0) fxDrawers.push(draw); }
+        function disable(){ if(!active) return; active=false; window.removeEventListener("pointerdown", onDown); var i=fxDrawers.indexOf(draw); if(i>=0) fxDrawers.splice(i,1); ripples.length=0; sparks.length=0; }
+        window.addEventListener("readme:fxchange", function(){ fxEnabled()?enable():disable(); });
+        enable();
+    })();
 })();
 
 // ============================================================
