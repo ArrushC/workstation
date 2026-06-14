@@ -688,6 +688,20 @@
         els.forEach(function(el){ el.addEventListener("pointermove", onMove, {passive:true}); el.addEventListener("pointerleave", onLeave); });
         window.addEventListener("readme:fxchange", function(){ if(!pointerFx()){ els.forEach(function(el){ el.style.transform=""; }); } });
     })();
+
+    /* 17 — scroll-as-camera: drift the fixed grid/horizon as you scroll */
+    (function initScrollCam(){
+      var root = document.documentElement, pending = false;
+      function paint(){ pending = false;
+        if(!fxEnabled()){ root.style.setProperty("--cam-y","0px"); return; }
+        var y = window.scrollY || window.pageYOffset || 0;
+        root.style.setProperty("--cam-y", (Math.min(y * 0.06, 80)) + "px");
+      }
+      function onScroll(){ if(!pending){ pending = true; requestAnimationFrame(paint); } }
+      window.addEventListener("scroll", onScroll, {passive:true});
+      window.addEventListener("readme:fxchange", paint);
+      paint();
+    })();
 })();
 
 // ============================================================
