@@ -1,14 +1,15 @@
 /* ============================================================
-   workstation docs — "Terminal, Elevated" stylesheet
+   workstation docs — "Tron / digital frontier" stylesheet
    ------------------------------------------------------------
    Loaded by README.html as docs/README/README.css.
-   Visual direction: a dark-first, terminal-inspired developer
-   doc — IBM Plex Mono display + Plex Sans body, a living
-   command-line hero, numbered section markers, layered surfaces,
-   and subtle motion. Preserves every selector touched by
-   README.js: .copy-btn .copied .heading-anchor nav.toc a.active
-   .dimmed .hidden .mobile-collapsed #toc-collapse-ctrl .chip
-   .match-hit .no-match mark [data-ts] .tool-card .term[data-typed].
+   Visual direction: a dark-first, neon-grid Tron-inspired
+   developer doc — IBM Plex Mono display + Plex Sans body, a
+   cyan (#67f0ff) + orange (#ffa24d) neon grid on near-void
+   backgrounds, layered surfaces, and subtle motion.
+   Preserves every selector touched by README.js: .copy-btn
+   .copied .heading-anchor nav.toc a.active .dimmed .hidden
+   .mobile-collapsed #toc-collapse-ctrl .chip .match-hit
+   .no-match mark [data-ts] .tool-card .term[data-typed].
    ============================================================ */
 
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
@@ -16,132 +17,77 @@
 /* ---------- Theme tokens (dark-first) ---------- */
 :root,
 [data-theme="dark"] {
-    --bg: #0a0d12;
-    --bg-soft: #0d1117;
-    --surface: #11161e;
-    --surface-2: #161c25;
-    --surface-3: #1d2530;
-    --border: #2a323e;
-    --border-soft: #1c2330;
-    --text: #e8eef5;
-    --text-soft: #c4cdd9;
-    --muted: #8893a4;
-    --muted-2: #6b7585;
-    --accent: #6bb6ff;
-    --accent-hover: #93cbff;
-    --accent-soft: rgba(107, 182, 255, 0.14);
-    --accent-deep: #2d6fc4;
-    --hot: #d4ff5a;
-    --hot-soft: rgba(212, 255, 90, 0.15);
-    --linux: #5aa9ff;
-    --windows: #b88dff;
-    --warn: #f1bf65;
-    --ok: #5fd87a;
-    --bad: #ff7676;
-    --pink: #ff9485;
-    --teal: #62e0d8;
-    --shadow:
-        0 1px 0 rgba(255, 255, 255, 0.04),
-        0 18px 50px -18px rgba(0, 0, 0, 0.75);
-    --shadow-soft:
-        0 1px 0 rgba(255, 255, 255, 0.03),
-        0 8px 24px -10px rgba(0, 0, 0, 0.5);
-    --mark-bg: rgba(212, 255, 90, 0.22);
-    --mark-fg: #e8ffae;
-    --grid-line: rgba(168, 184, 207, 0.05);
-    --glow-a: rgba(107, 182, 255, 0.1);
-    --glow-b: rgba(212, 255, 90, 0.05);
+    /* surfaces / void */
+    --void: #04070d; --void-2: #070c14;
+    --bg: var(--void); --bg-soft: var(--void-2);
+    --surface: #0a121b; --surface-2: #0e1822; --surface-3: #122231;
+    /* seeded for later Tron tasks: glass panels, grid highlight, glow states */
+    --glass: rgba(8,15,24,.62); --glass-2: rgba(10,19,28,.8);
+    --border: #1d3140; --border-soft: #15242f;
+    --grid-line: rgba(103,240,255,.16); --grid-hot: rgba(103,240,255,.34);
+    /* text */
+    --text: #dbeefb; --text-soft: #b8cadb; --muted: #7f93a6; --muted-2: #5f7488;
+    /* accents */
+    --c1: #67f0ff; --c1-deep: #0bb6d6; --c1-glow: rgba(103,240,255,.5);
+    --c2: #ffa24d; --c2-deep: #ff7a18; --c2-glow: rgba(255,150,60,.5); /* glow intentionally warmer than --c2 */
+    --accent: var(--c1); --accent-hover: #9af6ff; --accent-soft: rgba(103,240,255,.14); --accent-deep: var(--c1-deep);
+    --hot: var(--c2); --hot-soft: rgba(255,162,77,.16);
+    /* semantics (kept for category coding + states) */
+    --ok: #5fe39a; --warn: #ffd166; --bad: #ff6b6b;
+    --linux: #5ec8ff; --windows: #c79bff; --teal: #62e0d8; --pink: #ff9485;
+    /* depth */
+    --glow-sm: 0 0 10px var(--c1-glow); --glow-md: 0 0 20px -2px var(--c1-glow); --glow-lg: 0 0 34px -4px var(--c1-glow);
+    --shadow: 0 1px 0 rgba(103,240,255,.05), 0 24px 50px -22px rgba(0,0,0,.85);
+    --shadow-soft: 0 10px 28px -14px rgba(0,0,0,.6);
+    --mark-bg: rgba(255,162,77,.22); --mark-fg: #ffe7c4;
+    --glow-a: rgba(103,240,255,.12); --glow-b: rgba(255,162,77,.07);
+    --r-sm: 6px; --r: 10px; --r-lg: 14px; --maxw: 64rem;
+    --mono: "IBM Plex Mono", ui-monospace, monospace; --sans: "IBM Plex Sans", system-ui, sans-serif; --display: var(--mono);
+    --glow-on: 1; /* multiplier hook: 1 in dark, 0 in light to suppress blooms */
 }
 @media (prefers-color-scheme: light) {
     [data-theme="auto"] {
-        --bg: #fbfaf6;
-        --bg-soft: #f3f1ea;
-        --surface: #ffffff;
-        --surface-2: #f6f3ec;
-        --surface-3: #ece8de;
-        --border: #d8d2c4;
-        --border-soft: #e7e2d4;
-        --text: #161a1f;
-        --text-soft: #3a4049;
-        --muted: #5b6471;
-        --muted-2: #7d8694;
-        --accent: #1d5fc7;
-        --accent-hover: #0e4ca6;
-        --accent-soft: rgba(29, 95, 199, 0.1);
-        --accent-deep: #103a85;
-        --hot: #3f7d12;
-        --hot-soft: rgba(63, 125, 18, 0.12);
-        --linux: #1d5fc7;
-        --windows: #7c3ed0;
-        --warn: #9a6700;
-        --ok: #1f883d;
-        --bad: #cf222e;
-        --pink: #c92a6c;
-        --teal: #006d77;
-        --shadow:
-            0 1px 0 rgba(0, 0, 0, 0.03),
-            0 14px 40px -16px rgba(13, 17, 23, 0.18);
-        --shadow-soft:
-            0 1px 0 rgba(0, 0, 0, 0.02),
-            0 4px 14px -6px rgba(13, 17, 23, 0.12);
-        --mark-bg: #fff3a8;
-        --mark-fg: #2a1f00;
-        --grid-line: rgba(20, 28, 42, 0.045);
-        --glow-a: rgba(29, 95, 199, 0.07);
-        --glow-b: rgba(63, 125, 18, 0.05);
+        /* daylight grid — restrained, AA-safe, glow suppressed */
+        --void: #eef2f6; --void-2: #e7ecf1; --bg: var(--void); --bg-soft: var(--void-2);
+        --surface: #ffffff; --surface-2: #f4f7fa; --surface-3: #e9eef3;
+        --glass: rgba(255,255,255,.82); --glass-2: rgba(255,255,255,.9);
+        --border: #cdd8e2; --border-soft: #e2e8ee;
+        --grid-line: rgba(20,40,60,.06); --grid-hot: rgba(20,40,60,.1);
+        --text: #10202b; --text-soft: #33424e; --muted: #5a6b78; --muted-2: #7c8b97;
+        --c1: #097899; --c1-deep: #06637f; --c1-glow: rgba(10,134,171,.18);
+        --c2: #c2410c; --c2-deep: #9a3412; --c2-glow: rgba(194,65,12,.16);
+        --accent: var(--c1); --accent-hover: var(--c1-deep); --accent-soft: rgba(10,134,171,.1); --accent-deep: var(--c1-deep);
+        --hot: var(--c2); --hot-soft: rgba(194,65,12,.1);
+        --ok: #1f883d; --warn: #9a6700; --bad: #cf222e; --linux: #1d5fc7; --windows: #7c3ed0; --teal: #006d77; --pink: #c92a6c;
+        --glow-sm: none; --glow-md: none; --glow-lg: none;
+        --shadow: 0 1px 0 rgba(0,0,0,.03), 0 14px 40px -18px rgba(13,17,23,.18);
+        --shadow-soft: 0 4px 14px -6px rgba(13,17,23,.12);
+        --mark-bg: #ffe2b0; --mark-fg: #3a1d00; --glow-a: rgba(10,134,171,.06); --glow-b: rgba(194,65,12,.05);
+        --glow-on: 0;
     }
 }
 [data-theme="light"] {
-    --bg: #fbfaf6;
-    --bg-soft: #f3f1ea;
-    --surface: #ffffff;
-    --surface-2: #f6f3ec;
-    --surface-3: #ece8de;
-    --border: #d8d2c4;
-    --border-soft: #e7e2d4;
-    --text: #161a1f;
-    --text-soft: #3a4049;
-    --muted: #5b6471;
-    --muted-2: #7d8694;
-    --accent: #1d5fc7;
-    --accent-hover: #0e4ca6;
-    --accent-soft: rgba(29, 95, 199, 0.1);
-    --accent-deep: #103a85;
-    --hot: #3f7d12;
-    --hot-soft: rgba(63, 125, 18, 0.12);
-    --linux: #1d5fc7;
-    --windows: #7c3ed0;
-    --warn: #9a6700;
-    --ok: #1f883d;
-    --bad: #cf222e;
-    --pink: #c92a6c;
-    --teal: #006d77;
-    --shadow:
-        0 1px 0 rgba(0, 0, 0, 0.03),
-        0 14px 40px -16px rgba(13, 17, 23, 0.18);
-    --shadow-soft:
-        0 1px 0 rgba(0, 0, 0, 0.02),
-        0 4px 14px -6px rgba(13, 17, 23, 0.12);
-    --mark-bg: #fff3a8;
-    --mark-fg: #2a1f00;
-    --grid-line: rgba(20, 28, 42, 0.045);
-    --glow-a: rgba(29, 95, 199, 0.07);
-    --glow-b: rgba(63, 125, 18, 0.05);
+    /* daylight grid — restrained, AA-safe, glow suppressed */
+    --void: #eef2f6; --void-2: #e7ecf1; --bg: var(--void); --bg-soft: var(--void-2);
+    --surface: #ffffff; --surface-2: #f4f7fa; --surface-3: #e9eef3;
+    --glass: rgba(255,255,255,.82); --glass-2: rgba(255,255,255,.9);
+    --border: #cdd8e2; --border-soft: #e2e8ee;
+    --grid-line: rgba(20,40,60,.06); --grid-hot: rgba(20,40,60,.1);
+    --text: #10202b; --text-soft: #33424e; --muted: #5a6b78; --muted-2: #7c8b97;
+    --c1: #097899; --c1-deep: #06637f; --c1-glow: rgba(10,134,171,.18);
+    --c2: #c2410c; --c2-deep: #9a3412; --c2-glow: rgba(194,65,12,.16);
+    --accent: var(--c1); --accent-hover: var(--c1-deep); --accent-soft: rgba(10,134,171,.1); --accent-deep: var(--c1-deep);
+    --hot: var(--c2); --hot-soft: rgba(194,65,12,.1);
+    --ok: #1f883d; --warn: #9a6700; --bad: #cf222e; --linux: #1d5fc7; --windows: #7c3ed0; --teal: #006d77; --pink: #c92a6c;
+    --glow-sm: none; --glow-md: none; --glow-lg: none;
+    --shadow: 0 1px 0 rgba(0,0,0,.03), 0 14px 40px -18px rgba(13,17,23,.18);
+    --shadow-soft: 0 4px 14px -6px rgba(13,17,23,.12);
+    --mark-bg: #ffe2b0; --mark-fg: #3a1d00; --glow-a: rgba(10,134,171,.06); --glow-b: rgba(194,65,12,.05);
+    --glow-on: 0;
 }
 
-/* ---------- Fonts, radii, motion ---------- */
+/* ---------- Motion + scroll (non-theme) ---------- */
 :root {
-    --mono:
-        "IBM Plex Mono", ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo,
-        Consolas, monospace;
-    --sans:
-        "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
-        sans-serif;
-    --display: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
-    --r-sm: 5px;
-    --r: 9px;
-    --r-lg: 14px;
-    --maxw: 62rem;
     --t-fast: 120ms cubic-bezier(0.2, 0.7, 0.3, 1);
     --t-med: 200ms cubic-bezier(0.2, 0.7, 0.3, 1);
     --scroll-progress: 0;
