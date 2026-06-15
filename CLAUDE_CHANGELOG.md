@@ -6,6 +6,7 @@ When you ship a change that affects user-facing surface, append a row here in th
 
 | Change | README update? | What to add |
 |---|---|---|
+| Added `winterop` — WSL→Windows interop helper (`chezmoi/dot_local/bin/executable_winterop` → `~/.local/bin`) | **Yes** | New `§daily` h3 "Windows interop from WSL / a Linux VM (`winterop`)" — one paragraph (detects WSL2 vs VM; VM → SSH/shared-folder/RDP pointer) + a small command table (`winterop`, `run`, `path`, `clip`, `open`, `host`) + a "`winterop help` for the rest" line. No TOC change (the other `§daily` h3s aren't individually linked). |
 | Added `MODE=dev|prod` support | **Yes** | Scope-mapping table + `make MODE=...` examples under Daily make workflow |
 | Renamed `manage-hosts.sh --sync` to `--regen` | **Yes** | Replace every command example, add a one-line "renamed from `--sync`" note for one release |
 | Added `direnv` (one line in `tools.mk` + `DIRENV_VERSION` in `versions.mk`) | **Yes** | Add `direnv` to Stack table; show how `MODE` controls its destination |

@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+# winterop — talk to the Windows host from a Linux-on-Windows shell.
+#
+# Primary target is WSL2, which has rich interop (run .exe directly, /mnt/c,
+# wslpath, clipboard, …). It ALSO detects a plain Linux VM on a Windows host
+# (Hyper-V / VMware / VirtualBox) and points you at the channels that actually
+# work there (SSH / shared folders / RDP) instead of pretending WSL interop
+# exists. With no Windows host at all it says so.
+#
+# Deployed by chezmoi to ~/.local/bin/winterop (Linux/WSL only — ~/.local is
+# ignored on Windows). LF + 0755; shellcheck-clean. See `winterop help`.
+
+set -euo pipefail
+
+PROG=winterop
+
+# --------------------------------------------------------------------------
+# helpers
+# --------------------------------------------------------------------------
+have() { command -v "$1" >/dev/null 2>&1; }
+err()  { printf '%s: %s\n' "$PROG" "$*" >&2; }
+die()  { err "$*"; exit 1; }
+
+# is_wsl — mirror the detection in bootstrap.sh / scope.mk.
+is_wsl() {
+  [ -n "${WSL_DISTRO_NAME:-}" ] && return 0
+  grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null && return 0
+  [ -e /proc/sys/fs/binfmt_misc/WSLInterop ] && return 0
+  return 1
+}
+
+# detect_env — echo one of: wsl2 wsl1 hyperv vmware virtualbox kvm baremetal
+detect_env() {
+  if is_wsl; then
+    if grep -qi 'wsl2' /proc/version 2>/dev/null; then echo wsl2; else echo wsl1; fi
+    return
+  fi
+  local virt=none
+  if have systemd-detect-virt; then
+    virt=$(systemd-detect-virt 2>/dev/null) || virt=none
+  fi
+  case "$virt" in
+    microsoft) echo hyperv ;;
+    vmware)    echo vmware ;;
+    oracle)    echo virtualbox ;;
+    kvm|qemu)  echo kvm ;;
+    wsl)       echo wsl2 ;;
+    none|"")   echo baremetal ;;
+    *)         echo "$virt" ;;
+  esac
+}
+
+# preferred PowerShell on the Windows side (pwsh 7 if present, else 5.1)
+ps_exe() {
+  if   have pwsh.exe;       then echo pwsh.exe
+  elif have powershell.exe; then echo powershell.exe
+  else return 1; fi
+}
+
+# ps_run <single-command-string> — run it on the Windows side, strip CR on read.
+ps_run() {
+  local ps
+  ps=$(ps_exe) || die "no PowerShell (pwsh.exe / powershell.exe) on PATH — is interop enabled?"
+  "$ps" -NoProfile -NonInteractive -Command "$*"
+}
+
+require_wsl() {
+  is_wsl || die "needs WSL interop; this is a '$(detect_env)'. Run '$PROG' for the channels that work here."
+}
+
+# --------------------------------------------------------------------------
+# report (default action)
+# --------------------------------------------------------------------------
+row() {  # row <label> <test-cmd...>
+  local label=$1; shift
+  if "$@" >/dev/null 2>&1; then printf '  [ok] %s\n' "$label"; else printf '  [--] %s\n' "$label"; fi
+}
+
+report_wsl() {
+  printf 'environment : %s' "$(detect_env)"
+  [ -n "${WSL_DISTRO_NAME:-}" ] && printf '  (distro: %s)' "$WSL_DISTRO_NAME"
+  printf '\nwindows side: reachable via interop\n\ninterop channels:\n'
+  row 'powershell.exe   run Windows commands'  command -v powershell.exe
+  row 'pwsh.exe         PowerShell 7'          command -v pwsh.exe
+  row 'cmd.exe          legacy commands'       command -v cmd.exe
+  row '.exe interop     run Windows binaries'  test -e /proc/sys/fs/binfmt_misc/WSLInterop
+  row '/mnt/c (drvfs)   Windows filesystem'    test -d /mnt/c
+  row 'wslpath          path conversion'       command -v wslpath
+  row 'clip.exe         clipboard write'       command -v clip.exe
+  row 'open (Start-Process) files/dirs/URLs'   ps_exe
+  row 'wsl.exe          manage WSL'            command -v wsl.exe
+  printf '\nsubcommands : run exe path clip open notify ps reg env host selftest\n'
+  printf "use '%s host' for resolved Windows paths, '%s help' for usage.\n" "$PROG" "$PROG"
+}
+
+report_vm() {
+  local env=$1 shares
+  printf 'environment : %s (a Linux VM on a Windows host — no WSL interop)\n\n' "$env"
+  printf 'WSL-style interop (powershell.exe, /mnt/c, wslpath) is NOT available in a\n'
+  printf 'plain VM. Reach the Windows host through:\n\n'
+  printf '  SSH        ssh <user>@<windows-host-ip>\n'
+  printf '             (enable on Windows: Settings > Optional features > OpenSSH Server)\n'
+  printf '  RDP        xfreerdp /v:<windows-host-ip>   (or any RDP client)\n'
+  shares=$(grep -E '9p|virtiofs|vboxsf|vmhgfs' /proc/mounts 2>/dev/null | awk '{print $2}' | paste -sd' ' -)
+  if [ -n "$shares" ]; then
+    printf '  Shared dir %s  (mounted host folder)\n' "$shares"
+  else
+    printf '  Shared dir none mounted — add one in the hypervisor settings\n'
+  fi
+  case "$env" in
+    hyperv)     printf '  Clipboard  Hyper-V Enhanced Session, or over RDP\n' ;;
+    vmware)     printf '  Clipboard  install open-vm-tools (vmtoolsd)\n' ;;
+    virtualbox) printf '  Clipboard  VBoxClient --clipboard (Guest Additions)\n' ;;
+    *)          printf '  Clipboard  via your hypervisor guest tools\n' ;;
+  esac
+}
+
+cmd_report() {
+  local env; env=$(detect_env)
+  printf '== %s ==\n' "$PROG"
+  case "$env" in
+    wsl1|wsl2) report_wsl ;;
+    baremetal) printf 'environment : %s\n\nNo Windows host detected (not WSL, not a VM on Windows).\n' "$env" ;;
+    *)         report_vm "$env" ;;
+  esac
+}
+
+# --------------------------------------------------------------------------
+# subcommands (WSL)
+# --------------------------------------------------------------------------
+cmd_run() {
+  require_wsl
+  [ "$#" -gt 0 ] || die "usage: $PROG run <command...>"
+  ps_run "$*"
+}
+
+cmd_exe() {
+  require_wsl
+  [ "$#" -gt 0 ] || die "usage: $PROG exe <program.exe> [args...]"
+  have "$1" || [ -e "$1" ] || die "not found on the interop PATH: $1"
+  "$@"
+}
+
+cmd_path() {
+  require_wsl
+  have wslpath || die "wslpath not available"
+  local dir=auto p
+  case "${1:-}" in
+    -w) dir=win;  shift ;;
+    -u) dir=unix; shift ;;
+  esac
+  p=${1:-}; [ -n "$p" ] || die "usage: $PROG path [-w|-u] <path>"
+  if [ "$dir" = auto ]; then
+    if [[ "$p" == *\\* || "$p" =~ ^[A-Za-z]: ]]; then dir=unix; else dir=win; fi
+  fi
+  if [ "$dir" = win ]; then wslpath -w "$p"; else wslpath -u "$p"; fi
+}
+
+cmd_clip() {
+  require_wsl
+  local action=${1:-get}
+  [ "$#" -gt 0 ] && shift || true
+  case "$action" in
+    get) ps_run 'Get-Clipboard' | sed 's/\r$//' ;;
+    set)
+      have clip.exe || die "clip.exe not available"
+      if [ "$#" -gt 0 ]; then printf '%s' "$*" | clip.exe; else clip.exe; fi
+      ;;
+    *) die "usage: $PROG clip [get|set]   (set reads stdin or args)" ;;
+  esac
+}
+
+cmd_open() {
+  require_wsl
+  [ -n "${1:-}" ] || die "usage: $PROG open <path|url>"
+  local target=$1
+  if [[ "$target" != *://* ]] && { [ -e "$target" ] || [[ "$target" == /* ]]; }; then
+    target=$(wslpath -w "$target")
+  fi
+  # Start-Process picks the default handler (Explorer for dirs, the registered
+  # app for files, the browser for URLs) and works even when explorer.exe isn't
+  # on PATH — e.g. with appendWindowsPath=false, which trims C:\Windows.
+  local esc=${target//\'/\'\'}
+  ps_run "Start-Process '$esc'"
+}
+
+cmd_notify() {
+  require_wsl
+  [ -n "${1:-}" ] || die "usage: $PROG notify <message>"
+  local msg=$*
+  msg=${msg//\'/\'\'}   # double single-quotes for the PowerShell single-quoted string
+  ps_run "
+    Add-Type -AssemblyName System.Windows.Forms
+    \$n = New-Object System.Windows.Forms.NotifyIcon
+    \$n.Icon = [System.Drawing.SystemIcons]::Information
+    \$n.Visible = \$true
+    \$n.ShowBalloonTip(5000, '$PROG', '$msg', [System.Windows.Forms.ToolTipIcon]::Info)
+    Start-Sleep -Seconds 5
+    \$n.Dispose()
+  "
+}
+
+cmd_ps() {
+  require_wsl
+  local filter=${1:-}
+  if [ -n "$filter" ]; then
+    ps_run "Get-Process | Where-Object { \$_.Name -match '$filter' } | Select-Object Id,Name,CPU | Format-Table -Auto"
+  else
+    ps_run "Get-Process | Sort-Object CPU -Descending | Select-Object -First 25 Id,Name,CPU | Format-Table -Auto"
+  fi
+}
+
+cmd_reg() {
+  require_wsl
+  [ -n "${1:-}" ] || die "usage: $PROG reg <key>   e.g. 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion'"
+  have reg.exe || die "reg.exe not available"
+  reg.exe query "$1"
+}
+
+cmd_env() {
+  require_wsl
+  [ -n "${1:-}" ] || die "usage: $PROG env <VARNAME>"
+  [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "invalid variable name: $1"
+  ps_run "\$env:$1" | sed 's/\r$//'
+}
+
+cmd_host() {
+  require_wsl
+  ps_run "
+    [PSCustomObject]@{
+      User         = \$env:USERNAME
+      Host         = \$env:COMPUTERNAME
+      Windows      = (Get-CimInstance Win32_OperatingSystem).Caption
+      Version      = [System.Environment]::OSVersion.Version.ToString()
+      UserProfile  = \$env:USERPROFILE
+      LocalAppData = \$env:LOCALAPPDATA
+    } | Format-List
+  " | sed 's/\r$//'
+}
+
+cmd_selftest() {
+  local fails=0 out
+  printf '== %s selftest ==\n' "$PROG"
+  printf '  env detected: %s ... ok\n' "$(detect_env)"
+  if is_wsl; then
+    if out=$(ps_run 'Write-Output OK' 2>/dev/null | sed 's/\r$//') && [ "$out" = OK ]; then
+      printf '  powershell run ... ok\n'
+    else printf '  powershell run ... FAIL\n'; fails=$((fails + 1)); fi
+    if cmd_path / >/dev/null 2>&1; then printf '  path convert ... ok\n'; else printf '  path convert ... FAIL\n'; fails=$((fails + 1)); fi
+    if cmd_env USERNAME >/dev/null 2>&1; then printf '  env read ... ok\n'; else printf '  env read ... FAIL\n'; fails=$((fails + 1)); fi
+  else
+    printf '  not WSL — live subcommands report guidance only (by design)\n'
+  fi
+  if [ "$fails" -eq 0 ]; then printf 'selftest: PASS\n'; else printf 'selftest: %d FAILED\n' "$fails"; return 1; fi
+}
+
+usage() {
+  cat <<EOF
+$PROG — talk to the Windows host from a Linux-on-Windows shell.
+
+usage:
+  $PROG                     show detected environment + interop channels
+  $PROG run <cmd...>        run a command on the Windows side (PowerShell)
+  $PROG exe <prog> [args]   run a Windows .exe directly (binfmt interop)
+  $PROG path [-w|-u] <p>    convert a path WSL<->Windows (auto by default)
+  $PROG clip [get|set]      read / write the Windows clipboard (set: stdin or args)
+  $PROG open <path|url>     open a file/dir/URL on the Windows side
+  $PROG notify <msg>        best-effort Windows notification
+  $PROG ps [filter]         list Windows processes
+  $PROG reg <key>           query a Windows registry key
+  $PROG env <VAR>           print a Windows environment variable
+  $PROG host                Windows version / user / host / profile dirs
+  $PROG selftest            run read-only probes and assert they work
+  $PROG help                this help
+EOF
+}
+
+main() {
+  local sub=${1:-report}
+  if [ "$#" -gt 0 ]; then shift; fi
+  case "$sub" in
+    report|list|methods) cmd_report ;;
+    run)      cmd_run "$@" ;;
+    exe)      cmd_exe "$@" ;;
+    path)     cmd_path "$@" ;;
+    clip)     cmd_clip "$@" ;;
+    open)     cmd_open "$@" ;;
+    notify)   cmd_notify "$@" ;;
+    ps)       cmd_ps "$@" ;;
+    reg)      cmd_reg "$@" ;;
+    env)      cmd_env "$@" ;;
+    host)     cmd_host "$@" ;;
+    selftest) cmd_selftest ;;
+    help|-h|--help) usage ;;
+    *) err "unknown subcommand: $sub"; usage; exit 2 ;;
+  esac
+}
+
+main "$@"

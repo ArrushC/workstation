@@ -3219,6 +3219,72 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <code>cockpit-service</code> instead of failing.
                         </li>
                     </ul>
+
+                    <h3>
+                        Windows interop from WSL / a Linux VM
+                        (<code>winterop</code>)
+                    </h3>
+                    <p>
+                        <code>winterop</code> (deployed to
+                        <code>~/.local/bin</code> on Linux/WSL hosts) talks to
+                        the Windows host when you&rsquo;re in a
+                        Linux-on-Windows shell. Run it with no arguments to see
+                        the detected environment (WSL2 vs a Hyper-V / VMware /
+                        VirtualBox VM) and which interop channels are live; in a
+                        plain VM it points you at SSH / shared-folder / RDP
+                        instead of pretending WSL interop exists.
+                    </p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Command</th>
+                                <th>What it does</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>winterop</code></td>
+                                <td>
+                                    List the detected environment + interop
+                                    channels
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>winterop run &lt;cmd&gt;</code></td>
+                                <td>
+                                    Run a command on the Windows side
+                                    (PowerShell)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>winterop path &lt;p&gt;</code></td>
+                                <td>Convert a path WSL&harr;Windows</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <code>winterop clip [get|set]</code>
+                                </td>
+                                <td>Read / write the Windows clipboard</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <code>winterop open &lt;path|url&gt;</code>
+                                </td>
+                                <td>Open a file / dir / URL on Windows</td>
+                            </tr>
+                            <tr>
+                                <td><code>winterop host</code></td>
+                                <td>Windows version / user / profile dirs</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p>
+                        Full subcommand list: <code>winterop help</code> (also
+                        <code>exe</code>, <code>notify</code>,
+                        <code>ps</code>, <code>reg</code>, <code>env</code>,
+                        <code>selftest</code>). WSL-only &mdash;
+                        <code>~/.local</code> is ignored on Windows itself.
+                    </p>
                 </section>
 
                 <section id="adding">
