@@ -12,8 +12,8 @@ After every `git commit` I make, immediately push to the matching upstream branc
 **Why:** Stated by the user as a durable working preference on 2026-05-25 in the chezmoi repo. No further reason given, but the natural read is they want commits visible on the remote immediately — no stale local-only state, no second prompt per commit.
 
 **How to apply:**
-- After ANY commit I create (single, sequence, fix-up commits, doc-only commits — all of them): run `git push` to the tracked upstream right after, in the same response if possible.
+- After ANY commit I create (single, sequence, fix-up commits, doc-only commits — all of them): run `git push` to the tracked upstream right after, in the same response if possible. Under the current PR-review workflow ([[feedback-use-pr-review-workflow]]) that upstream is the **feature branch**, never `main` directly.
 - For a sequence of commits in one task, push once at the end (no need to push between each individual commit unless the user has indicated otherwise).
-- Edge cases that still require asking first: force-pushes, pushes to `main`/`master` that aren't trivial fast-forwards (e.g. rebases that rewrite shared history), pushes from a detached HEAD, pushes to a branch that has divergent remote commits. These hit the "never push --force to main/master" guardrail which still stands.
+- `main` is off-limits for direct pushes now — the harness blocks them and it advances only via the user merging a PR; don't try to push `main` even for a fast-forward. Other edge cases that still require asking first: force-pushes, pushes from a detached HEAD, pushes to a branch that has divergent remote commits. The "never `--force` to main/master / rewrite shared history" guardrail still stands.
 - If `git push` fails (auth, branch protection, hook rejection), surface the error to the user and let them decide next steps — don't try to bypass.
 - Reverse: the user can override per-task with "don't push" or "hold the push" — respect that for the current task without forgetting the standing rule.
