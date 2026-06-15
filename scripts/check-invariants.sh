@@ -93,7 +93,7 @@ check_version_pins() {
 check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
-  local -a files=( makefile/lib/*.sh scripts/*.sh .claude/hooks/*.sh chezmoi/dot_local/bin/executable_batpipe )
+  local -a files=( makefile/lib/*.sh scripts/*.sh .claude/hooks/*.sh chezmoi/dot_local/bin/executable_* )
   [ -e .githooks/pre-commit ] && files+=( .githooks/pre-commit )
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then bad "missing: $f"; missing=$((missing + 1)); continue; fi
@@ -173,9 +173,12 @@ check_shellcheck() {
     note "shellcheck not installed — skipped locally (CI enforces; 'dnf install shellcheck' to run here)"
     return 0
   fi
+  # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
+  # vendored (eth-p/bat-extras) and deliberately excluded.
   local -a targets=( bootstrap.sh makefile/lib/*.sh scripts/*.sh \
                      .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh \
-                     chezmoi/private_dot_claude/executable_notify.sh )
+                     chezmoi/private_dot_claude/executable_notify.sh \
+                     chezmoi/dot_local/bin/executable_winterop )
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else
