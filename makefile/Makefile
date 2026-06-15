@@ -71,6 +71,30 @@ clean-$(1):
 	@$(SUDO) rm -f $$(DEST)/$(1)
 endef
 
+# _SOFT_RULE_BODY — like _RULE_BODY, but a FAILING install command warns and is
+# skipped instead of aborting the build, and the stamp is left ABSENT so the
+# next run retries. (A naive `cmd || true` in _RULE_BODY would be wrong: the
+# trailing `touch` would still fire, marking the tool installed-when-it-isn't
+# and never retrying.) For rolling tools fetched live from a third-party
+# service whose transient outage shouldn't fail a whole `make dev` (cht.sh).
+define _SOFT_RULE_BODY
+$(1): $$(STAMP)/$(1)-$(2).done
+$$(STAMP)/$(1)-$(2).done:
+	@printf '==> %s %s\n' "$(1)" "$(2)"
+	@if $(3); then mkdir -p $$(@D) && touch $$@; else printf '  ! %s install failed (service unreachable?) — skipping; will retry next run\n' "$(1)"; fi
+.PHONY: $(1) clean-$(1)
+endef
+
+# SOFT_TOOL — TOOL whose install failure is non-fatal (see _SOFT_RULE_BODY).
+define SOFT_TOOL
+SCOPE_TOOLS += $(1)
+DOCTOR_ROWS += scope|$(1)|$(2)
+$(call _SOFT_RULE_BODY,$(1),$(2),$(SUDO) $(3))
+clean-$(1):
+	@rm -f $$(STAMP)/$(1)-*.done
+	@$(SUDO) rm -f $$(DEST)/$(1)
+endef
+
 define USER_TOOL
 USER_TOOLS += $(1)
 DOCTOR_ROWS += user|$(1)|$(2)
