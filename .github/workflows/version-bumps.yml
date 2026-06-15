@@ -16,7 +16,10 @@ jobs:
       - name: Propose version bumps
         run: bash scripts/bump-versions.sh
         env:
-          BUMP_SUMMARY_FILE: bump-summary.md
+          # Write the summary OUTSIDE the working tree — peter-evans does
+          # `git add -A`, so a repo-relative path would get committed into
+          # the PR (and land in the repo on merge). runner.temp is ephemeral.
+          BUMP_SUMMARY_FILE: ${{ runner.temp }}/bump-summary.md
       # Validate the bumped tree here: a PR opened by GITHUB_TOKEN does NOT
       # trigger lint.yml (GitHub's recursion guard), so the invariant checker
       # must run in THIS workflow before the PR is created.
@@ -29,4 +32,4 @@ jobs:
           delete-branch: true
           title: 'chore(versions): weekly pin bumps'
           commit-message: 'chore(versions): weekly pin bumps'
-          body-path: bump-summary.md
+          body-path: ${{ runner.temp }}/bump-summary.md
