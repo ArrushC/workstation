@@ -16,10 +16,15 @@ cd "$ROOT" || exit
 VERSIONS="makefile/versions.mk"
 SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 
-# Dual/triple-edit pins — reported, never auto-edited. JQ_VERSION is a dual-edit
-# with bootstrap.ps1's $PortableTools (check-invariants.sh guards the pair); if it
-# were auto-bumped here, that in-workflow invariant check would then fail the run.
-EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION"
+# Pins the bumper must NOT auto-edit (reported as manual instead). Two reasons:
+#  (1) dual/triple-edit pins — HELIX/JETBRAINSMONO_NERD/CCSTATUSLINE/JQ need a SHA
+#      recompute or a paired file (bootstrap.ps1, font.sh, settings.json) edited in
+#      lockstep; JQ is guarded by check-invariants.sh, so an auto-bump here would
+#      then fail the workflow's own invariant step.
+#  (2) NCDU — its linux-x86_64 binary is published at dev.yorhel.nl for only SOME
+#      releases (2.9.1 has one; 2.9.2 returns 404), so a bump must be verified by
+#      hand against the download URL before landing or it 404s the install.
+EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION NCDU_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
