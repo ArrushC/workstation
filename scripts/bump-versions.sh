@@ -2,7 +2,7 @@
 # bump-versions.sh — propose version-pin bumps for makefile/versions.mk.
 # Runs check-updates (porcelain) and, for each SIMPLE single-location pin that has
 # drifted, bumps it in versions.mk. The dual/triple-edit pins (helix, jetbrains-
-# mono, ccstatusline) are reported, never auto-edited (they need a SHA recompute /
+# mono, ccstatusline, jq) are reported, never auto-edited (they need a SHA recompute /
 # multi-file edits, and check-invariants.sh guards their consistency).
 #
 # Used by .github/workflows/version-bumps.yml (weekly) and runnable locally.
@@ -16,8 +16,10 @@ cd "$ROOT" || exit
 VERSIONS="makefile/versions.mk"
 SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 
-# Dual/triple-edit pins — reported, never auto-edited.
-EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION"
+# Dual/triple-edit pins — reported, never auto-edited. JQ_VERSION is a dual-edit
+# with bootstrap.ps1's $PortableTools (check-invariants.sh guards the pair); if it
+# were auto-bumped here, that in-workflow invariant check would then fail the run.
+EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
