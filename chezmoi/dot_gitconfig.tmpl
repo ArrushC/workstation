@@ -61,3 +61,16 @@
     plus-style = syntax "#394545"
     map-styles = bold purple => syntax "#5b4e74", bold blue => syntax "#445375", bold cyan => syntax "#446170", bold yellow => syntax "#6b635b"
     syntax-theme = "Catppuccin Mocha"
+
+{{ if ne .chezmoi.os "windows" }}
+# gh as the git credential helper (github.com + gists). `gh auth setup-git`
+# writes these per-machine with gh's absolute path + an empty "reset" line, so
+# ~/.gitconfig always drifted from this source. Track them here in PATH-relative
+# form so `chezmoi status` stays clean while gh auth keeps working. gh is on
+# every Linux/WSL host (makefile/tools.mk); on Windows git uses its bundled Git
+# Credential Manager, so this block is Linux-only (matches the OS-gated pager).
+[credential "https://github.com"]
+    helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+    helper = !gh auth git-credential
+{{ end }}
