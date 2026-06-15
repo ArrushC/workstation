@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# node.sh — install Node.js (+ npm + npx + corepack) from the official
-# nodejs.org tarball.
+# node.sh — install Node.js (+ npm + npx, and corepack on Node <25) from the
+# official nodejs.org tarball.
 #
 # Usage:
 #   node.sh <version>
@@ -13,12 +13,14 @@
 # Behavior:
 #   1. Detect arch (x86_64 -> x64, aarch64/arm64 -> arm64).
 #   2. Download https://nodejs.org/dist/v<VER>/node-v<VER>-linux-<ARCH>.tar.xz.
-#   3. Extract to $DEST/_node-v<VER>/  (full tree — node + npm + npx +
-#      corepack all use relative symlinks into ../lib/node_modules/, so we
-#      can't just pluck out the binaries).
+#   3. Extract to $DEST/_node-v<VER>/  (full tree — node + npm + npx use
+#      relative symlinks into ../lib/node_modules/, so we can't just pluck
+#      out the binaries).
 #   4. Strip any older $DEST/_node-* trees first (idempotent re-install,
 #      no orphan version dirs after bumps).
-#   5. Symlink $DEST/{node,npm,npx,corepack} -> _node-v<VER>/bin/<binary>.
+#   5. Symlink $DEST/{node,npm,npx} (+ corepack on Node <25) ->
+#      _node-v<VER>/bin/<binary>, dropping any stale symlink the new tarball
+#      no longer ships (corepack was unbundled in Node 25).
 #
 # Sudo is the Makefile's job (SUDO wrapper from scope.mk); this script
 # assumes it can write to $DEST and read DEST from env.
@@ -66,8 +68,16 @@ printf '  ↪ extracting to %s\n' "$install_dir"
 tar -xJf "$tmp/$tarball" -C "$tmp"
 mv "$tmp/node-v${version}-linux-${node_arch}" "$install_dir"
 
+# corepack was removed from the Node release tarballs in v25, so only link the
+# binaries this tarball actually ships; clear any stale symlink the tarball no
+# longer provides (e.g. a corepack left over from a pre-25 install) so nothing
+# dangling remains in $DEST.
 for bin in node npm npx corepack; do
-  ln -sfn "${install_dir}/bin/${bin}" "${DEST}/${bin}"
+  if [ -e "${install_dir}/bin/${bin}" ]; then
+    ln -sfn "${install_dir}/bin/${bin}" "${DEST}/${bin}"
+  else
+    rm -f "${DEST}/${bin}"
+  fi
 done
 
 printf '  ✓ node-v%s ready at %s/node\n' "$version" "$DEST"
