@@ -299,7 +299,10 @@ $(eval $(call EGET_TOOL,cheat,$(CHEAT_VERSION),cheat/cheat,$(CHEAT_VERSION),--as
 # cht.sh — rolling bash script served at cht.sh/:cht.sh (not a GitHub release),
 # so direct.sh fetches the raw URL and installs it 0755 as `cht.sh`. On an
 # offline host it simply errors at query time; cheat + tldr stay offline-capable.
-$(eval $(call TOOL,cht.sh,$(CHTSH_VERSION),\
+# SOFT_TOOL (not TOOL): the cht.sh service has transient outages (5xx), and it's
+# the only tool fetched live from a third party at provision time — a blip there
+# must not abort the whole `make dev`. Failure warns + skips + retries next run.
+$(eval $(call SOFT_TOOL,cht.sh,$(CHTSH_VERSION),\
   $(LIB)/direct.sh cht.sh https://cht.sh/:cht.sh))
 
 # =============================================================================
