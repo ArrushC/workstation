@@ -58,7 +58,10 @@ $(eval $(call TOOL,eget,$(EGET_VERSION),\
 $(eval $(call EGET_TOOL,fzf,$(FZF_VERSION),junegunn/fzf))
 $(eval $(call EGET_TOOL,zoxide,$(ZOXIDE_VERSION),ajeetdsouza/zoxide,,--asset musl))
 $(eval $(call EGET_TOOL,starship,$(STARSHIP_VERSION),starship/starship,,--asset musl))
-$(eval $(call EGET_TOOL,zellij,$(ZELLIJ_VERSION),zellij-org/zellij,,--asset musl))
+# zellij 0.44 added a second musl asset (zellij-no-web-*), so --asset musl
+# alone now matches two tarballs and eget aborts asking to pick. Exclude the
+# no-web build to keep auto-selecting the full zellij-<arch>-*-musl.tar.gz.
+$(eval $(call EGET_TOOL,zellij,$(ZELLIJ_VERSION),zellij-org/zellij,,--asset musl --asset '^no-web'))
 
 # glow — wrapper-dir tarball; default v-tag; default asset filters
 # exclude the .sbom.json side-file.
