@@ -62,7 +62,7 @@ Hooks complement `check-invariants.sh` by moving enforcement to **edit time** an
   - `memory-routing-guard.sh` — PreToolUse; **denies** writes to `~/.claude/projects/*/memory/` (the base prompt's suggestion), redirecting to `.claude/memory/`.
 - **Global** (`chezmoi/private_dot_claude/hooks/executable_*.sh` → `~/.claude/hooks/`, wired in `private_settings.json.tmpl`, all dev machines):
   - `secret-guard.sh` — PreToolUse; **denies** edit/read of the age identity (`~/.config/chezmoi/key.txt`), SSH private keys, `*.pem`/`*.key`; **asks** on Bash naming them.
-  - `dangerous-command-guard.sh` — PreToolUse; **denies** catastrophic Bash (`rm -rf /`|`~`|`$HOME`, fork bomb, `dd`/`>` raw device, `mkfs`, `chmod -R 777 /`); **asks** on `curl|bash`, force-push, recursive `chmod 777`.
+  - `dangerous-command-guard.sh` — PreToolUse; **denies** truly-never-legit Bash (fork bomb, `dd`/`>` raw device, `mkfs`, `chmod -R 777 /`); **asks** on recursive `rm -rf` of `/`|`~`|`$HOME`, `curl|bash`, force-push, recursive `chmod 777`. It matches command **text**, so a command that merely *mentions* a pattern (e.g. a commit message describing it) is screened too — reword or approve the prompt; that mention-matching is why the `rm -rf` tier is *ask*, not *deny*.
 
 ## Load-bearing invariants
 

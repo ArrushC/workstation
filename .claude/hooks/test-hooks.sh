@@ -76,10 +76,10 @@ ok "allow normal bash" empty
 
 echo "== dangerous-command-guard (G2) =="
 g() { run "$GH/executable_dangerous-command-guard.sh" "$(j --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}')"; }
-g 'rm -rf /';                              ok "deny rm -rf /"            has '"permissionDecision":"deny"'
+g 'rm -rf /';                              ok "ask rm -rf /"            has '"permissionDecision":"ask"'
 g 'rm -rf /tmp/build';                     ok "allow rm -rf /tmp/build" empty
-g 'sudo rm -rf --no-preserve-root /';      ok "deny no-preserve-root"   has '"permissionDecision":"deny"'
-g 'rm -rf ~';                              ok "deny rm -rf ~"           has '"permissionDecision":"deny"'
+g 'sudo rm -rf --no-preserve-root /';      ok "ask no-preserve-root"    has '"permissionDecision":"ask"'
+g 'rm -rf ~';                              ok "ask rm -rf ~"            has '"permissionDecision":"ask"'
 g 'rm -rf ~/Downloads/old';               ok "allow rm -rf ~/sub"      empty
 g ':(){ :|:& };:';                         ok "deny fork bomb"          has '"permissionDecision":"deny"'
 g 'dd if=/dev/zero of=/dev/sda bs=1M';     ok "deny dd to disk"         has '"permissionDecision":"deny"'

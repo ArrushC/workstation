@@ -3,10 +3,14 @@
 #
 # GLOBAL (deployed to ~/.claude/hooks/ by chezmoi; active in every repo). A
 # safety net over Bash commands:
-#   - DENY catastrophic, never-legitimate-from-an-agent commands
-#   - ASK before risky-but-sometimes-legitimate ones (the user confirms)
-# It is a tripwire, not airtight security: exotic obfuscation can slip past. Keep
-# the patterns conservative to avoid false positives on normal work.
+#   - DENY truly-never-legit commands (fork bomb, mkfs, raw-device writes)
+#   - ASK before catastrophic-but-conceivable ones (recursive force-deletes of
+#     / ~ $HOME) and risky-but-sometimes-legit ones (force push, pipe-to-shell)
+# It matches command TEXT, so a command that merely MENTIONS a pattern (e.g. a
+# git commit message describing such a delete) is screened too — reword it or
+# approve the prompt. That mention-matching is exactly why the recursive-delete
+# tier is ASK, not DENY. It is a tripwire, not airtight security: exotic
+# obfuscation can slip past; keep the patterns conservative to limit false hits.
 #
 # Contract: hook JSON on stdin -> PreToolUse JSON on stdout. Fails OPEN.
 set -u
@@ -41,14 +45,7 @@ match() { printf '%s' "$c" | grep -Eq "$1"; }
 c="$(hookfield '.tool_input.command')"
 [ -n "$c" ] || exit 0
 
-# ---------- HARD DENY: catastrophic ----------
-# rm with combined -r and -f flags ...
-if match 'rm[[:space:]]+-([a-zA-Z]*[rR][a-zA-Z]*[fF]|[a-zA-Z]*[fF][a-zA-Z]*[rR])[a-zA-Z]*([[:space:]]|$)'; then
-  # ... targeting / , /* , ~ , $HOME , or with --no-preserve-root
-  if match '(--no-preserve-root|[[:space:]]/([[:space:]]|\*|$)|[[:space:]]~([[:space:]]|$)|[[:space:]]\$HOME([[:space:]]|$))'; then
-    emit deny "Refusing 'rm -rf' targeting / , ~ , or \$HOME (irreversible, wipes the system or home). Narrow the path, or run it yourself if you really mean it."
-  fi
-fi
+# ---------- HARD DENY: truly never legitimate ----------
 # fork bomb
 if match ':[[:space:]]*\(\)[[:space:]]*\{[[:space:]]*:[[:space:]]*\|[[:space:]]*:'; then
   emit deny "Refusing a fork bomb. This would hang the machine."
@@ -67,7 +64,14 @@ if match 'chmod[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-?R[a-zA-Z]*[[:space:]]+0?77
   emit deny "Refusing 'chmod -R 777 /' — recursively world-writable from root breaks the system."
 fi
 
-# ---------- ASK: risky but sometimes legitimate ----------
+# ---------- ASK: catastrophic-but-conceivable, or risky-but-legit ----------
+# rm with combined -r and -f flags targeting / , /* , ~ , $HOME , or
+# --no-preserve-root. ASK (not DENY) so a genuine need can be approved, and a
+# bare mention (e.g. a commit message — see header) isn't hard-blocked.
+if match 'rm[[:space:]]+-([a-zA-Z]*[rR][a-zA-Z]*[fF]|[a-zA-Z]*[fF][a-zA-Z]*[rR])[a-zA-Z]*([[:space:]]|$)' \
+   && match '(--no-preserve-root|[[:space:]]/([[:space:]]|\*|$)|[[:space:]]~([[:space:]]|$)|[[:space:]]\$HOME([[:space:]]|$))'; then
+  emit ask "This looks like 'rm -rf' targeting / , ~ , or \$HOME — irreversible if real. Approve only if you truly intend it. (It also fires when a command merely mentions the pattern, e.g. a commit message describing it.)"
+fi
 if match '(curl|wget)[[:space:]].*\|[[:space:]]*(sudo[[:space:]]+)?(ba)?sh([[:space:]]|$)'; then
   emit ask "This pipes a network download straight into a shell (curl|bash). Confirm the source is trusted. (The repo's own bootstrap does this intentionally; ad-hoc ones deserve a look.)"
 fi
