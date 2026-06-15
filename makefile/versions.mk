@@ -17,10 +17,10 @@
 EGET_VERSION := 1.3.4
 
 # --- Tier-0: original toolbelt -----------------------------------------------
-FZF_VERSION      := 0.54.0
-ZOXIDE_VERSION   := 0.9.4
+FZF_VERSION      := 0.73.1
+ZOXIDE_VERSION   := 0.9.9
 STARSHIP_VERSION := 1.25.1
-ZELLIJ_VERSION   := 0.40.1
+ZELLIJ_VERSION   := 0.44.3
 GLOW_VERSION     := 2.1.2
 NB_VERSION       := latest
 HELIX_VERSION    := 25.07.1
@@ -30,10 +30,10 @@ CHEZMOI_VERSION  := latest
 FD_VERSION         := 10.4.2
 BAT_VERSION        := 0.26.1
 BTOP_VERSION       := 1.4.7
-NCDU_VERSION       := 2.9.1
+NCDU_VERSION       := 2.9.2
 BANDWHICH_VERSION  := 0.23.1
 JQ_VERSION         := 1.8.1
-YQ_VERSION         := 4.53.2
+YQ_VERSION         := 4.53.3
 TEALDEER_VERSION   := 1.8.1
 WITR_VERSION       := 0.3.2
 BROOT_VERSION      := latest
@@ -43,37 +43,37 @@ DIVE_VERSION       := 0.13.1
 LNAV_VERSION       := 0.14.0
 GOPASS_VERSION     := 1.16.1
 AGE_VERSION        := 1.3.1
-FASTFETCH_VERSION  := 2.63.1
+FASTFETCH_VERSION  := 2.64.2
 SSH_COPY_ID_VERSION := latest
 
 # --- Second-wave expansion (2026-05) -----------------------------------------
 GITUI_VERSION      := 0.28.1
-LAZYGIT_VERSION    := 0.61.1
-JUJUTSU_VERSION    := 0.41.0
+LAZYGIT_VERSION    := 0.62.2
+JUJUTSU_VERSION    := 0.42.0
 YAZI_VERSION       := 26.5.6
-AST_GREP_VERSION   := 0.42.2
-TELEVISION_VERSION := 0.15.7
+AST_GREP_VERSION   := 0.43.0
+TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.25.3
-GPING_VERSION      := 1.20.1
+GPING_VERSION      := 1.20.2
 ATUIN_VERSION      := 18.16.1
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
 EZA_VERSION        := 0.23.4
 SD_VERSION         := 1.1.0
 CTOP_VERSION       := 0.7.7
-K9S_VERSION        := 0.50.18
-RCLONE_VERSION     := 1.74.1
-CROC_VERSION       := 10.4.3
+K9S_VERSION        := 0.51.0
+RCLONE_VERSION     := 1.74.3
+CROC_VERSION       := 10.4.4
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.5.10
-UV_VERSION         := 0.11.14
+MISE_VERSION       := 2026.6.10
+UV_VERSION         := 0.11.21
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
-GH_VERSION        := 2.92.0
+GH_VERSION        := 2.94.0
 SOPS_VERSION      := 3.13.1
 HTMLQ_VERSION     := 0.4.0
-OUCH_VERSION      := 0.7.1
+OUCH_VERSION      := 0.8.0
 WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
@@ -90,12 +90,12 @@ HARLEQUIN_VERSION := latest
 # --- Chezmoi TUI ------------------------------------------------------------
 # chezit (Go binary, EGET_TOOL). cheznav was tried first but its pip
 # package requires Python 3.14 which isn't in AlmaLinux 9's modules.
-CHEZIT_VERSION := 0.2.2
+CHEZIT_VERSION := 0.3.0
 
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.19
-NODE_VERSION := 24.16.0
+NODE_VERSION := 26.3.0
 
 # --- Service / web admin (dev_machine only) ---------------------------------
 # Dozzle is run as a Docker container via systemd (no native binary —
@@ -105,7 +105,7 @@ NODE_VERSION := 24.16.0
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.6.1
+DOZZLE_VERSION := 10.6.5
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
