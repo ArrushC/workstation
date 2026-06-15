@@ -1,7 +1,7 @@
 # chezmoi.toml.tmpl — runs on `chezmoi init` to generate ~/.config/chezmoi/chezmoi.toml
 # Prompts are only asked once; answers stored in chezmoi's config.
 
-{{- $ageRecipient := env "WORKSTATION_AGE_RECIPIENT" -}}
+{{- $ageRecipient := env "WORKSTATION_AGE_RECIPIENT" }}
 [data]
     name     = "{{ promptStringOnce . "name" "Full name" }}"
     email    = "{{ promptStringOnce . "email" "Email address" }}"
