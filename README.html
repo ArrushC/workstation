@@ -701,6 +701,24 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         (dev_machine only via dnf)</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Combined traceroute + ping TUI (trippy)"
+                                    >trip<span class="sr-only">
+                                        — combined traceroute + ping TUI
+                                        (trippy; static, dev + prod)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Modern dig — DNS client (DoH/DoT/DoQ)"
+                                    >doggo<span class="sr-only">
+                                        — modern dig; DNS client with
+                                        DoH/DoT/DoQ</span
+                                    ></span
+                                >
                             </div>
                         </article>
 
@@ -736,6 +754,14 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         — efficient file/dir sync (dev_machine
                                         only via dnf; usually pre-installed on
                                         prod)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Zero-config HTTP file server"
+                                    >miniserve<span class="sr-only">
+                                        — zero-config HTTP file server</span
                                     ></span
                                 >
                             </div>
@@ -802,6 +828,24 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     data-tip="Cinematic Git commit replay"
                                     >gitlogue<span class="sr-only">
                                         — cinematic Git commit replay</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Structural, syntax-aware diff (difftastic)"
+                                    >difft<span class="sr-only">
+                                        — structural, syntax-aware diff
+                                        (difftastic)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Auto-fixup staged hunks into past commits"
+                                    >git-absorb<span class="sr-only">
+                                        — auto-route staged hunks into fixup!
+                                        commits (git-absorb)</span
                                     ></span
                                 >
                             </div>
@@ -948,6 +992,40 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     ><span class="sr-only">
                                         — TUI SQL IDE (installed via pip
                                         --user)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="awk/sed/cut/join for CSV/TSV/JSON (Miller)"
+                                    >mlr<span class="sr-only">
+                                        — awk/sed/cut/join for CSV/TSV/tabular-JSON
+                                        (Miller)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="less, but for CSV"
+                                    >csvlens<span class="sr-only">
+                                        — interactive CSV viewer (less for
+                                        CSV)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Fast CSV data-wrangling toolkit"
+                                    >qsv<span class="sr-only">
+                                        — fast CSV data-wrangling toolkit</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Interactive JSON / YAML pager"
+                                    >jless<span class="sr-only">
+                                        — interactive JSON / YAML pager</span
                                     ></span
                                 >
                             </div>
@@ -1259,6 +1337,42 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         — hex dump utility, provided by
                                         vim-common (dev_machine only via
                                         dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Fast code-line counter (LoC / complexity)"
+                                    >scc<span class="sr-only">
+                                        — fast code-line counter; LoC /
+                                        complexity / COCOMO</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Calculator with first-class units (numbat)"
+                                    >numbat<span class="sr-only">
+                                        — scientific calculator with first-class
+                                        units</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Generate a regex from examples"
+                                    >grex<span class="sr-only">
+                                        — generate a regex from example
+                                        strings</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="TUI clipboard manager (needs a graphical session)"
+                                    >clipse<span class="sr-only">
+                                        — TUI clipboard manager; needs a
+                                        graphical session (X11 build)</span
                                     ></span
                                 >
                             </div>
@@ -3298,7 +3412,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the normal bootstrap flow. There are three macros;
                         <strong>prefer <code>EGET_TOOL</code></strong> for
                         single-binary GitHub releases (the common case &mdash;
-                        ~42 of the current 60 tools use it).
+                        58 of the current 77 tools use it).
                     </p>
                     <ol>
                         <li>

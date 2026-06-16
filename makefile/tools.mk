@@ -214,6 +214,87 @@ $(eval $(call EGET_TOOL,systemctl-tui,$(SYSTEMCTL_TUI_VERSION),rgwood/systemctl-
 $(eval $(call TOOL,age,$(AGE_VERSION),\
   $(LIB)/archive.sh age:age-keygen https://github.com/FiloSottile/age/releases/download/v$(AGE_VERSION)/age-v$(AGE_VERSION)-linux-amd64.tar.gz))
 
+# --- (2026-06) gap-fillers ---------------------------------------------------
+# search / data-wrangling / structural-diff / network-diag / git-extras / util.
+# Added after a deep-research sweep over the toolbelt's remaining gaps; all are
+# eget single-binary installs. Versions in versions.mk.
+
+# ripgrep — the recursive content-search (rg) the set was actually missing (fd
+# is find, bat is cat, ast-grep is structural — none do literal/regex grep).
+# Non-v tag; musl-static. Archive also ships completions/man, but those aren't
+# executable so eget unambiguously picks the `rg` binary (same as fd/bat).
+$(eval $(call EGET_TOOL,rg,$(RIPGREP_VERSION),BurntSushi/ripgrep,$(RIPGREP_VERSION),--asset musl))
+
+# miller — awk/sed/cut/join/sort for CSV/TSV/tabular-JSON; binary is `mlr`.
+# Pure-Go static. amd64 publishes .deb/.rpm/.tar.gz; the .deb/.rpm are dropped
+# by eget.sh's anti-match, leaving the single tarball. Default v-tag.
+$(eval $(call EGET_TOOL,mlr,$(MILLER_VERSION),johnkerl/miller))
+
+# csvlens — `less` for CSV. tar.xz; both gnu and musl published, prefer musl.
+$(eval $(call EGET_TOOL,csvlens,$(CSVLENS_VERSION),YS-L/csvlens,,--asset musl))
+
+# difftastic — structural, syntax-aware (tree-sitter) diff; binary is `difft`.
+# Complements rather than replaces the line-based delta. Non-v tag; musl.
+$(eval $(call EGET_TOOL,difft,$(DIFFTASTIC_VERSION),Wilfred/difftastic,$(DIFFTASTIC_VERSION),--asset musl))
+
+# trippy — combined traceroute+ping TUI (the mtr gap); binary is `trip`.
+# Non-v tag; musl. RUNTIME: ICMP needs CAP_NET_RAW — `sudo trip`, or
+# `sudo setcap cap_net_raw+ep $(command -v trip)` once.
+$(eval $(call EGET_TOOL,trip,$(TRIPPY_VERSION),fujiapple852/trippy,$(TRIPPY_VERSION),--asset musl))
+
+# doggo — modern `dig` (DoH/DoT/DoQ/DNSCrypt). goreleaser publishes BOTH
+# doggo_<v>_Linux_x86_64 and a doggo_web_<v>_linux_amd64 build; both satisfy
+# arch+os so eget aborts asking to choose. `--asset ^web` excludes the web one.
+$(eval $(call EGET_TOOL,doggo,$(DOGGO_VERSION),mr-karan/doggo,,--asset '^web'))
+
+# scc — fast code-line counter (LoC / complexity / COCOMO); pure-Go single
+# binary, one linux x86_64 asset. Default v-tag.
+$(eval $(call EGET_TOOL,scc,$(SCC_VERSION),boyter/scc))
+
+# git-absorb — auto-routes staged hunks into fixup! commits (--and-rebase to
+# fold). Non-v tag; the only x86_64 linux asset is musl (static libgit2).
+$(eval $(call EGET_TOOL,git-absorb,$(GIT_ABSORB_VERSION),tummychow/git-absorb,$(GIT_ABSORB_VERSION),--asset musl))
+
+# miniserve — zero-config HTTP file server. Assets are BARE binaries (no
+# archive, like fx), so eget renames the raw binary to the repo name
+# `miniserve`. musl and gnu both published → --asset musl.
+$(eval $(call EGET_TOOL,miniserve,$(MINISERVE_VERSION),svenstaro/miniserve,,--asset musl))
+
+# numbat — scientific calculator with first-class units (sharkdp). The tarball
+# ships an optional modules/ tree + assets/, but the standard library is
+# compiled INTO the binary (verified: `echo '2 km + 3 m' | numbat` => 2003 m
+# binary-only), so eget's single-executable install is sufficient. musl-static.
+$(eval $(call EGET_TOOL,numbat,$(NUMBAT_VERSION),sharkdp/numbat,,--asset musl))
+
+# qsv — high-performance CSV data-wrangling toolkit. The musl .zip ships SIX
+# binaries (qsv, qsvdp, qsvlite, qsvp, qsvpdp, qsvplite) — eget would abort on
+# the ambiguity, so `--file qsv` extracts only the full-feature `qsv`. Non-v
+# tag. (clean-qsv removes only qsv; the other five are never installed.)
+$(eval $(call EGET_TOOL,qsv,$(QSV_VERSION),dathere/qsv,$(QSV_VERSION),--asset musl --file qsv))
+
+# grex — generate a regex from example strings/files. musl-static.
+$(eval $(call EGET_TOOL,grex,$(GREX_VERSION),pemistahl/grex,,--asset musl))
+
+# jless — interactive read-only JSON/YAML pager. NOTE: upstream is dormant
+# (last release v0.9.0, 2023) and ships ONLY a glibc build, linked against an
+# old glibc (runs on the AlmaLinux 9 fleet, glibc 2.34). RUNTIME: it also
+# dynamically links libxcb (clipboard support), so it needs libX11/libxcb at
+# run time — a no-op on headless prod / bare WSL (installs, fails to start
+# without an X stack), fine on GUI hosts. Overlaps fx (which is static and
+# works headless); kept as a dedicated pager. .zip, one binary.
+$(eval $(call EGET_TOOL,jless,$(JLESS_VERSION),PaulJuliusMartinez/jless))
+
+# clipse — TUI clipboard manager. Publishes TWO linux builds (x11 + wayland);
+# we install the x11 one for broadest reach — native X11 and under XWayland/
+# WSLg. For a pure-Wayland session, swap the asset to *_linux_wayland_amd64*.
+# The tarball's lone binary is named `clipse-linux-x11-amd64`, not `clipse`, and
+# eget can't rename archive members — so this uses TOOL+archive.sh with a
+# `src=dst` rename (same pattern as nnn), NOT EGET_TOOL. (UPDATE_SPECS below.)
+# RUNTIME: needs a graphical clipboard + a background `clipse -listen` daemon;
+# harmless no-op on headless prod hosts (installs, just never runs).
+$(eval $(call TOOL,clipse,$(CLIPSE_VERSION),\
+  $(LIB)/archive.sh clipse-linux-x11-amd64=clipse https://github.com/savedra1/clipse/releases/download/v$(CLIPSE_VERSION)/clipse_v$(CLIPSE_VERSION)_linux_x11_amd64.tar.gz))
+
 # =============================================================================
 # DIRECT  (raw binary URL, no archive)
 # =============================================================================
@@ -323,6 +404,7 @@ UPDATE_SPECS += eget|$(EGET_VERSION)|zyedidia/eget|v$(EGET_VERSION)
 UPDATE_SPECS += ncdu|$(NCDU_VERSION)|https://code.blicky.net/yorhel/ncdu.git|v$(NCDU_VERSION)
 UPDATE_SPECS += yazi|$(YAZI_VERSION)|sxyazi/yazi|v$(YAZI_VERSION)
 UPDATE_SPECS += nnn|$(NNN_VERSION)|jarun/nnn|v$(NNN_VERSION)
+UPDATE_SPECS += clipse|$(CLIPSE_VERSION)|savedra1/clipse|v$(CLIPSE_VERSION)
 UPDATE_SPECS += age|$(AGE_VERSION)|FiloSottile/age|v$(AGE_VERSION)
 UPDATE_SPECS += jq|$(JQ_VERSION)|jqlang/jq|jq-$(JQ_VERSION)
 UPDATE_SPECS += yq|$(YQ_VERSION)|mikefarah/yq|v$(YQ_VERSION)

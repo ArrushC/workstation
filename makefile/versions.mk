@@ -132,3 +132,21 @@ CHTSH_VERSION := latest
 NNN_VERSION      := 5.2
 FX_VERSION       := 39.2.0
 GITLOGUE_VERSION := 0.9.0
+
+# --- (2026-06) gap-fillers: search / data / diff / network / git-extras / util
+# Added after a deep-research sweep over the toolbelt's remaining gaps. All are
+# plain EGET_TOOL single-binary installs — per-tool asset/tag notes in tools.mk.
+RIPGREP_VERSION    := 15.1.0
+MILLER_VERSION     := 6.18.1
+CSVLENS_VERSION    := 0.15.1
+DIFFTASTIC_VERSION := 0.69.0
+TRIPPY_VERSION     := 0.13.0
+DOGGO_VERSION      := 1.1.7
+SCC_VERSION        := 3.7.0
+GIT_ABSORB_VERSION := 0.9.0
+MINISERVE_VERSION  := 0.35.0
+NUMBAT_VERSION     := 1.23.0
+QSV_VERSION        := 21.1.0
+GREX_VERSION       := 1.4.6
+JLESS_VERSION      := 0.9.0
+CLIPSE_VERSION     := 1.2.1
