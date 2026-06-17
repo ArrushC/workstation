@@ -23,7 +23,7 @@ set -euo pipefail
 : "${DEST:?helix.sh: DEST not set}"
 : "${HELIX_RUNTIME_DEST:?helix.sh: HELIX_RUNTIME_DEST not set}"
 
-if (( $# != 1 )); then
+if (($# != 1)); then
   printf 'helix.sh: usage: %s <version>\n' "$0" >&2
   exit 2
 fi

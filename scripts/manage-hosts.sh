@@ -40,14 +40,25 @@ WEZTERM_LUA="$REPO_ROOT/chezmoi/dot_config/wezterm/wezterm.lua"
 VALID_GROUPS=("dev_machine" "prod_machine")
 
 # --- Colours -----------------------------------------------------------------
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+RESET='\033[0m'
 
-log()     { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
-ok()      { echo -e "${GREEN} ✓${RESET} $*"; }
-warn()    { echo -e "${YELLOW} !${RESET} $*"; }
-fail()    { echo -e "${RED} ✗${RESET} $*"; exit 1; }
-header()  { echo -e "\n${BOLD}${CYAN}$*${RESET}"; echo -e "${CYAN}$(printf '─%.0s' {1..50})${RESET}"; }
+log() { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
+ok() { echo -e "${GREEN} ✓${RESET} $*"; }
+warn() { echo -e "${YELLOW} !${RESET} $*"; }
+fail() {
+  echo -e "${RED} ✗${RESET} $*"
+  exit 1
+}
+header() {
+  echo -e "\n${BOLD}${CYAN}$*${RESET}"
+  echo -e "${CYAN}$(printf '─%.0s' {1..50})${RESET}"
+}
 
 # =============================================================================
 # PARSING
@@ -72,29 +83,29 @@ print_hosts() {
   local w_name=4 w_ip=2 w_user=4 w_group=5
   local name ip user group
   while IFS= read -r line; do
-    read -r name ip user group <<< "$line"
-    (( ${#name}  > w_name  )) && w_name=${#name}
-    (( ${#ip}    > w_ip    )) && w_ip=${#ip}
-    (( ${#user}  > w_user  )) && w_user=${#user}
-    (( ${#group} > w_group )) && w_group=${#group}
-  done <<< "$hosts"
+    read -r name ip user group <<<"$line"
+    ((${#name} > w_name)) && w_name=${#name}
+    ((${#ip} > w_ip)) && w_ip=${#ip}
+    ((${#user} > w_user)) && w_user=${#user}
+    ((${#group} > w_group)) && w_group=${#group}
+  done <<<"$hosts"
 
   printf "\n${BOLD}%-${w_name}s  %-${w_ip}s  %-${w_user}s  %-${w_group}s${RESET}\n" \
     "NAME" "IP" "USER" "GROUP"
 
   # ASCII separator with byte-exact widths (Unicode dashes break printf width math).
   local sep_name sep_ip sep_user sep_group
-  sep_name=$(printf  '%*s' "$w_name"  '' | tr ' ' '-')
-  sep_ip=$(printf    '%*s' "$w_ip"    '' | tr ' ' '-')
-  sep_user=$(printf  '%*s' "$w_user"  '' | tr ' ' '-')
+  sep_name=$(printf '%*s' "$w_name" '' | tr ' ' '-')
+  sep_ip=$(printf '%*s' "$w_ip" '' | tr ' ' '-')
+  sep_user=$(printf '%*s' "$w_user" '' | tr ' ' '-')
   sep_group=$(printf '%*s' "$w_group" '' | tr ' ' '-')
   printf "%s  %s  %s  %s\n" "$sep_name" "$sep_ip" "$sep_user" "$sep_group"
 
   while IFS= read -r line; do
-    read -r name ip user group <<< "$line"
+    read -r name ip user group <<<"$line"
     printf "%-${w_name}s  %-${w_ip}s  %-${w_user}s  %-${w_group}s\n" \
       "$name" "$ip" "$user" "$group"
-  done <<< "$hosts"
+  done <<<"$hosts"
   echo ""
 }
 
@@ -127,14 +138,14 @@ generate_wezterm_domains() {
   domains_block="local ssh_domains = {"$'\n'
 
   while IFS= read -r line; do
-    read -r name ip user group <<< "$line"
+    read -r name ip user group <<<"$line"
     domains_block+="  {"$'\n'
     domains_block+="    name           = '${name}',"$'\n'
     domains_block+="    remote_address = '${ip}',"$'\n'
     domains_block+="    username       = '${user}',"$'\n'
     domains_block+="    multiplexing   = 'None',"$'\n'
     domains_block+="  },"$'\n'
-  done <<< "$(read_hosts)"
+  done <<<"$(read_hosts)"
 
   domains_block+="}"
 
@@ -146,7 +157,7 @@ generate_wezterm_domains() {
     /^-- HOSTS:START/ { print; print block; skip=1; next }
     /^-- HOSTS:END/   { skip=0 }
     !skip             { print }
-  ' "$WEZTERM_LUA" > "$tmp"
+  ' "$WEZTERM_LUA" >"$tmp"
 
   mv "$tmp" "$WEZTERM_LUA"
   ok "wezterm.lua SSH domains updated ($(read_hosts | wc -l | tr -d ' ') hosts)"
@@ -174,15 +185,18 @@ save_hosts() {
   local names=() ips=() users=() groups=()
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    read -r n i u g <<< "$line"
-    names+=("$n"); ips+=("$i"); users+=("$u"); groups+=("$g")
-  done <<< "$sorted_lines"
+    read -r n i u g <<<"$line"
+    names+=("$n")
+    ips+=("$i")
+    users+=("$u")
+    groups+=("$g")
+  done <<<"$sorted_lines"
 
   # Calculate column widths (minimum widths enforced)
   local w_name=16 w_ip=14 w_user=10
-  for n in "${names[@]}";  do (( ${#n} > w_name  )) && w_name=${#n};  done
-  for i in "${ips[@]}";    do (( ${#i} > w_ip    )) && w_ip=${#i};    done
-  for u in "${users[@]}";  do (( ${#u} > w_user  )) && w_user=${#u};  done
+  for n in "${names[@]}"; do ((${#n} > w_name)) && w_name=${#n}; done
+  for i in "${ips[@]}"; do ((${#i} > w_ip)) && w_ip=${#i}; done
+  for u in "${users[@]}"; do ((${#u} > w_user)) && w_user=${#u}; done
 
   local tmp
   tmp=$(mktemp)
@@ -192,22 +206,22 @@ save_hosts() {
   local had_comments=false
   while IFS= read -r line; do
     if [[ "$line" =~ ^[[:space:]]*# ]]; then
-      echo "$line" >> "$tmp"
+      echo "$line" >>"$tmp"
       had_comments=true
     elif [[ -z "$line" ]]; then
       continue
     else
       break
     fi
-  done < "$HOSTS_CONF"
+  done <"$HOSTS_CONF"
 
   # One blank separator between comment header and data, only if comments exist.
-  [[ "$had_comments" == true ]] && echo "" >> "$tmp"
+  [[ "$had_comments" == true ]] && echo "" >>"$tmp"
 
   # Write data rows with recalculated padding
   for idx in "${!names[@]}"; do
     printf "%-${w_name}s  %-${w_ip}s  %-${w_user}s  %s
-"       "${names[$idx]}" "${ips[$idx]}" "${users[$idx]}" "${groups[$idx]}" >> "$tmp"
+" "${names[$idx]}" "${ips[$idx]}" "${users[$idx]}" "${groups[$idx]}" >>"$tmp"
   done
 
   mv "$tmp" "$HOSTS_CONF"
@@ -216,7 +230,10 @@ save_hosts() {
 format_hosts() {
   local count
   count=$(read_hosts | wc -l | tr -d ' ')
-  [[ "$count" -eq 0 ]] && { warn "No hosts to format."; return; }
+  [[ "$count" -eq 0 ]] && {
+    warn "No hosts to format."
+    return
+  }
   save_hosts
   ok "hosts.conf reformatted ($count hosts)"
 }
@@ -240,12 +257,30 @@ add_host() {
   # Parse named flags if any were passed
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --name)         name="$2";         shift 2 ;;
-      --ip)           ip="$2";           shift 2 ;;
-      --user)         user="$2";         shift 2 ;;
-      --group)        group="$2";        shift 2 ;;
-      --skip-confirm) skip_confirm=true; shift   ;;
-      *) warn "Unknown flag: $1"; shift ;;
+    --name)
+      name="$2"
+      shift 2
+      ;;
+    --ip)
+      ip="$2"
+      shift 2
+      ;;
+    --user)
+      user="$2"
+      shift 2
+      ;;
+    --group)
+      group="$2"
+      shift 2
+      ;;
+    --skip-confirm)
+      skip_confirm=true
+      shift
+      ;;
+    *)
+      warn "Unknown flag: $1"
+      shift
+      ;;
     esac
   done
 
@@ -282,13 +317,17 @@ add_host() {
     choice="${choice:-1}"
 
     case "$choice" in
-      1) user="$current_user" ;;
-      2) user="$lower_user" ;;
-      3) user="$upper_user" ;;
-      4) read -rp "  Custom username: " custom_user
-         user="${custom_user:-$current_user}" ;;
-      *) warn "Unknown choice — using as-is"
-         user="$current_user" ;;
+    1) user="$current_user" ;;
+    2) user="$lower_user" ;;
+    3) user="$upper_user" ;;
+    4)
+      read -rp "  Custom username: " custom_user
+      user="${custom_user:-$current_user}"
+      ;;
+    *)
+      warn "Unknown choice — using as-is"
+      user="$current_user"
+      ;;
     esac
   fi
 
@@ -302,9 +341,9 @@ add_host() {
     group_choice="${group_choice:-1}"
 
     case "$group_choice" in
-      1) group="prod_machine" ;;
-      2) group="dev_machine" ;;
-      *) fail "Invalid choice '$group_choice'. Pick 1 or 2." ;;
+    1) group="prod_machine" ;;
+    2) group="dev_machine" ;;
+    *) fail "Invalid choice '$group_choice'. Pick 1 or 2." ;;
     esac
   fi
 
@@ -318,11 +357,14 @@ add_host() {
   if [[ "$skip_confirm" == false ]]; then
     read -rp "  Confirm? [Y/n]: " confirm
     confirm="${confirm:-Y}"
-    [[ ! "$confirm" =~ ^[Yy]$ ]] && { warn "Aborted."; return 0; }
+    [[ ! "$confirm" =~ ^[Yy]$ ]] && {
+      warn "Aborted."
+      return 0
+    }
   fi
 
   # Append raw entry then reformat the whole file for consistent alignment
-  printf "%s  %s  %s  %s\n" "$name" "$ip" "$user" "$group" >> "$HOSTS_CONF"
+  printf "%s  %s  %s  %s\n" "$name" "$ip" "$user" "$group" >>"$HOSTS_CONF"
   save_hosts
   ok "Host '$name' added to hosts.conf"
 
@@ -369,7 +411,7 @@ remove_host() {
     # Remove matching data line then reformat
     local tmp
     tmp=$(mktemp)
-    grep -v "^${name}[[:space:]]" "$HOSTS_CONF" > "$tmp"
+    grep -v "^${name}[[:space:]]" "$HOSTS_CONF" >"$tmp"
     mv "$tmp" "$HOSTS_CONF"
     save_hosts
     ok "Host '$name' removed from hosts.conf"
@@ -399,7 +441,7 @@ edit_host() {
   local current
   current=$(read_hosts | grep "^${name}[[:space:]]")
   local cur_ip cur_user cur_group
-  read -r _ cur_ip cur_user cur_group <<< "$current"
+  read -r _ cur_ip cur_user cur_group <<<"$current"
 
   echo ""
   echo -e "  Current values (press Enter to keep):"
@@ -432,7 +474,7 @@ edit_host() {
       else
         echo "$line"
       fi
-    done < "$HOSTS_CONF" > "$tmp"
+    done <"$HOSTS_CONF" >"$tmp"
     mv "$tmp" "$HOSTS_CONF"
     save_hosts
     ok "Host '$name' updated"
@@ -455,8 +497,8 @@ ensure_ssh_key() {
   read -rp "  Generate one now? [y/N]: " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
-    ssh-keygen -t ed25519 -f "$privkey" -N "" -C "$(whoami)@$(hostname -s)" \
-      || fail "ssh-keygen failed"
+    ssh-keygen -t ed25519 -f "$privkey" -N "" -C "$(whoami)@$(hostname -s)" ||
+      fail "ssh-keygen failed"
     ok "Generated $privkey"
   else
     fail "Cannot copy without a key. Generate with: ssh-keygen -t ed25519"
@@ -492,7 +534,10 @@ copy_ssh_id() {
     header "Copy SSH key to a host"
     print_hosts
     read -rp "  Host name: " target
-    [[ -z "$target" ]] && { warn "Cancelled."; return; }
+    [[ -z "$target" ]] && {
+      warn "Cancelled."
+      return
+    }
   fi
 
   if ! host_exists "$target"; then
@@ -501,7 +546,7 @@ copy_ssh_id() {
 
   local line user ip
   line=$(read_hosts | awk -v n="$target" '$1==n {print; exit}')
-  read -r _ ip user _ <<< "$line"
+  read -r _ ip user _ <<<"$line"
 
   ensure_ssh_key
 
@@ -536,7 +581,10 @@ copy_ssh_id_all() {
   if [[ "$skip_confirm" != "true" ]]; then
     read -rp "  Copy SSH key to all $count hosts? [Y/n]: " confirm
     confirm="${confirm:-Y}"
-    [[ ! "$confirm" =~ ^[Yy]$ ]] && { warn "Aborted."; return; }
+    [[ ! "$confirm" =~ ^[Yy]$ ]] && {
+      warn "Aborted."
+      return
+    }
   fi
 
   ensure_ssh_key
@@ -546,7 +594,7 @@ copy_ssh_id_all() {
   local failed=()
   local name ip user
   while IFS= read -r line; do
-    read -r name ip user _ <<< "$line"
+    read -r name ip user _ <<<"$line"
     echo -ne "  ${BOLD}${name}${RESET} (${user}@${ip})... "
     if do_copy_ssh_id "$user" "$ip" >/dev/null 2>&1; then
       echo -e "${GREEN}✓${RESET}"
@@ -556,11 +604,11 @@ copy_ssh_id_all() {
       failed+=("$name")
       ((fail_count++)) || true
     fi
-  done <<< "$hosts"
+  done <<<"$hosts"
 
   echo ""
   ok "$ok_count host(s) successful"
-  if (( fail_count > 0 )); then
+  if ((fail_count > 0)); then
     warn "$fail_count host(s) failed: ${failed[*]}"
   fi
 }
@@ -577,14 +625,14 @@ test_host() {
 
   if [[ "$name" == "all" ]]; then
     while IFS= read -r line; do
-      read -r hname hip huser _ <<< "$line"
+      read -r hname hip huser _ <<<"$line"
       echo -ne "  Testing ${BOLD}$hname${RESET} ($huser@$hip)... "
       if ssh -n -o ConnectTimeout=5 -o BatchMode=yes "$huser@$hip" exit 2>/dev/null; then
         echo -e "${GREEN}✓ OK${RESET}"
       else
         echo -e "${RED}✗ Failed${RESET}"
       fi
-    done <<< "$hosts"
+    done <<<"$hosts"
   else
     if ! host_exists "$name"; then
       warn "Host '$name' not found."
@@ -592,7 +640,7 @@ test_host() {
     fi
     local line
     line=$(read_hosts | grep "^${name}[[:space:]]")
-    read -r hname hip huser _ <<< "$line"
+    read -r hname hip huser _ <<<"$line"
     echo -ne "  Testing ${BOLD}$hname${RESET} ($huser@$hip)... "
     if ssh -o ConnectTimeout=5 -o BatchMode=yes "$huser@$hip" exit 2>/dev/null; then
       echo -e "${GREEN}✓ Connected successfully${RESET}"
@@ -625,17 +673,20 @@ show_menu() {
   echo ""
 
   case "$choice" in
-    1) add_host ;;
-    2) remove_host ;;
-    3) edit_host ;;
-    4) test_host ;;
-    5) copy_ssh_id ;;
-    6) copy_ssh_id_all ;;
-    7) sync_all ;;
-    8) cat "$HOSTS_CONF" ;;
-    9) format_hosts ;;
-    q|Q) echo "Bye."; exit 0 ;;
-    *) warn "Unknown option: $choice" ;;
+  1) add_host ;;
+  2) remove_host ;;
+  3) edit_host ;;
+  4) test_host ;;
+  5) copy_ssh_id ;;
+  6) copy_ssh_id_all ;;
+  7) sync_all ;;
+  8) cat "$HOSTS_CONF" ;;
+  9) format_hosts ;;
+  q | Q)
+    echo "Bye."
+    exit 0
+    ;;
+  *) warn "Unknown option: $choice" ;;
   esac
 }
 
@@ -647,41 +698,66 @@ show_menu() {
 [[ -f "$HOSTS_CONF" ]] || fail "hosts.conf not found at $HOSTS_CONF"
 
 case "${1:-}" in
-  --sync)    sync_all; exit 0 ;;
-  --list)    print_hosts; exit 0 ;;
-  --format)  format_hosts; exit 0 ;;
-  --add)     shift; add_host "$@"; exit 0 ;;
-  --remove)  remove_host; exit 0 ;;
-  --copy-id)
-    shift
-    cid_name=""
-    cid_all=false
-    cid_skip_confirm=false
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --name)         cid_name="$2";       shift 2 ;;
-        --all)          cid_all=true;        shift   ;;
-        --skip-confirm) cid_skip_confirm=true; shift ;;
-        *)              shift ;;
-      esac
-    done
-    if [[ "$cid_all" == true ]]; then
-      # --all wins over --name if both are passed
-      copy_ssh_id_all "$cid_skip_confirm"
-    else
-      copy_ssh_id "$cid_name"
-    fi
-    exit 0
-    ;;
-  "")
-    while true; do
-      show_menu
-    done
-    ;;
-  *)
-    echo "Usage: $0 [--sync | --list | --format | --remove"
-    echo "          | --add [--name N --ip I --user U --group G --skip-confirm]"
-    echo "          | --copy-id [--name N | --all [--skip-confirm]]]"
-    exit 1
-    ;;
+--sync)
+  sync_all
+  exit 0
+  ;;
+--list)
+  print_hosts
+  exit 0
+  ;;
+--format)
+  format_hosts
+  exit 0
+  ;;
+--add)
+  shift
+  add_host "$@"
+  exit 0
+  ;;
+--remove)
+  remove_host
+  exit 0
+  ;;
+--copy-id)
+  shift
+  cid_name=""
+  cid_all=false
+  cid_skip_confirm=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --name)
+      cid_name="$2"
+      shift 2
+      ;;
+    --all)
+      cid_all=true
+      shift
+      ;;
+    --skip-confirm)
+      cid_skip_confirm=true
+      shift
+      ;;
+    *) shift ;;
+    esac
+  done
+  if [[ "$cid_all" == true ]]; then
+    # --all wins over --name if both are passed
+    copy_ssh_id_all "$cid_skip_confirm"
+  else
+    copy_ssh_id "$cid_name"
+  fi
+  exit 0
+  ;;
+"")
+  while true; do
+    show_menu
+  done
+  ;;
+*)
+  echo "Usage: $0 [--sync | --list | --format | --remove"
+  echo "          | --add [--name N --ip I --user U --group G --skip-confirm]"
+  echo "          | --copy-id [--name N | --all [--skip-confirm]]]"
+  exit 1
+  ;;
 esac

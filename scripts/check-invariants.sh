@@ -17,20 +17,27 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit
 
-GREEN=$'\033[0;32m'; RED=$'\033[0;31m'; YELLOW=$'\033[1;33m'
-BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+GREEN=$'\033[0;32m'
+RED=$'\033[0;31m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
 
 fails=0
-hdr()  { printf '%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"; }
-ok()   { printf '   %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
-bad()  { printf '   %s✗%s %s\n' "$RED" "$RESET" "$*"; fails=$((fails + 1)); }
+hdr() { printf '%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"; }
+ok() { printf '   %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
+bad() {
+  printf '   %s✗%s %s\n' "$RED" "$RESET" "$*"
+  fails=$((fails + 1))
+}
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
 
 # Extract a `NAME := value` value from makefile/versions.mk.
 mkval() {
-  grep -E "^$1[[:space:]]*:=" makefile/versions.mk \
-    | head -1 \
-    | sed -E 's/^[^:=]*:=[[:space:]]*//; s/[[:space:]]*(#.*)?$//'
+  grep -E "^$1[[:space:]]*:=" makefile/versions.mk |
+    head -1 |
+    sed -E 's/^[^:=]*:=[[:space:]]*//; s/[[:space:]]*(#.*)?$//'
 }
 
 check_version_pins() {
@@ -39,7 +46,7 @@ check_version_pins() {
 
   v=$(mkval CCSTATUSLINE_VERSION)
   ref=$(grep -oE 'ccstatusline@[0-9][0-9.]*' \
-        chezmoi/private_dot_claude/private_settings.json.tmpl | head -1 | sed 's/.*@//')
+    chezmoi/private_dot_claude/private_settings.json.tmpl | head -1 | sed 's/.*@//')
   if [ -n "$v" ] && [ "$v" = "$ref" ]; then
     ok "ccstatusline @ $v  (versions.mk == settings.json.tmpl)"
   else
@@ -47,8 +54,8 @@ check_version_pins() {
   fi
 
   v=$(mkval JETBRAINSMONO_NERD_VERSION)
-  ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 \
-         | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
+    grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   # font.sh pins the SHA per version in a `case "$VERSION"` block; the runtime
   # looks it up BY VALUE, so verify an arm for $v EXISTS (position-independent)
   # — appending a new arm on a bump (as font.sh instructs) must still pass.
@@ -61,8 +68,8 @@ check_version_pins() {
   fi
 
   v=$(mkval HELIX_VERSION)
-  ref=$(grep -oE 'helix-editor/helix/releases/download/[0-9][0-9.]+' bootstrap.ps1 \
-        | head -1 | sed 's#.*/##')
+  ref=$(grep -oE 'helix-editor/helix/releases/download/[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/##')
   if [ -n "$v" ] && [ "$v" = "$ref" ]; then
     ok "helix @ $v  (versions.mk == bootstrap.ps1)"
   else
@@ -70,16 +77,35 @@ check_version_pins() {
   fi
 
   v=$(mkval JQ_VERSION)
-  ref=$(grep -oE 'jqlang/jq/releases/download/jq-[0-9][0-9.]+' bootstrap.ps1 \
-        | head -1 | sed 's#.*/jq-##')
+  ref=$(grep -oE 'jqlang/jq/releases/download/jq-[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/jq-##')
   if [ -n "$v" ] && [ "$v" = "$ref" ]; then
     ok "jq @ $v  (versions.mk == bootstrap.ps1)"
   else
     bad "jq drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
+  # shfmt + gitleaks are enforced below (check_shfmt / check_gitleaks). CI
+  # (.github/workflows/lint.yml) installs these exact versions so the checks
+  # actually run there, so the pins dual-edit with lint.yml's `SHFMT=`/`GITLEAKS=`.
+  v=$(mkval SHFMT_VERSION)
+  ref=$(grep -oE 'SHFMT=[0-9][0-9.]+' .github/workflows/lint.yml | head -1 | sed 's/SHFMT=//')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "shfmt @ $v  (versions.mk == lint.yml)"
+  else
+    bad "shfmt drift: versions.mk='$v' lint.yml='$ref'"
+  fi
+
+  v=$(mkval GITLEAKS_VERSION)
+  ref=$(grep -oE 'GITLEAKS=[0-9][0-9.]+' .github/workflows/lint.yml | head -1 | sed 's/GITLEAKS=//')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "gitleaks @ $v  (versions.mk == lint.yml)"
+  else
+    bad "gitleaks drift: versions.mk='$v' lint.yml='$ref'"
+  fi
+
   scope_dest=$(grep -E '^[[:space:]]*HELIX_RUNTIME_DEST[[:space:]]*:=[[:space:]]*/usr' \
-               makefile/scope.mk | head -1 | sed -E 's#.*:=[[:space:]]*##; s/[[:space:]]*$//')
+    makefile/scope.mk | head -1 | sed -E 's#.*:=[[:space:]]*##; s/[[:space:]]*$//')
   expect="${scope_dest}/runtime"
   rc_z=$(grep -oE 'HELIX_RUNTIME="[^"]*"' chezmoi/dot_zshrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
   rc_b=$(grep -oE 'HELIX_RUNTIME="[^"]*"' chezmoi/dot_bashrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
@@ -93,16 +119,24 @@ check_version_pins() {
 check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
-  local -a files=( makefile/lib/*.sh scripts/*.sh .claude/hooks/*.sh chezmoi/dot_local/bin/executable_* )
-  [ -e .githooks/pre-commit ] && files+=( .githooks/pre-commit )
+  local -a files=(makefile/lib/*.sh scripts/*.sh .claude/hooks/*.sh chezmoi/dot_local/bin/executable_*)
+  [ -e .githooks/pre-commit ] && files+=(.githooks/pre-commit)
   for f in "${files[@]}"; do
-    if [ ! -e "$f" ]; then bad "missing: $f"; missing=$((missing + 1)); continue; fi
-    if LC_ALL=C grep -q $'\r' "$f"; then bad "CRLF: $f"; crlf=$((crlf + 1)); fi
+    if [ ! -e "$f" ]; then
+      bad "missing: $f"
+      missing=$((missing + 1))
+      continue
+    fi
+    if LC_ALL=C grep -q $'\r' "$f"; then
+      bad "CRLF: $f"
+      crlf=$((crlf + 1))
+    fi
     mode=$(git ls-files --stage -- "$f" | awk '{print $1}')
     if [ -z "$mode" ]; then
       note "untracked (commit it so the mode is recorded): $f"
     elif [ "$mode" != "100755" ]; then
-      bad "git mode $mode, want 100755: $f"; modebad=$((modebad + 1))
+      bad "git mode $mode, want 100755: $f"
+      modebad=$((modebad + 1))
     fi
   done
   if [ "$crlf" -eq 0 ] && [ "$modebad" -eq 0 ] && [ "$missing" -eq 0 ]; then
@@ -113,11 +147,18 @@ check_line_endings_and_mode() {
 check_bom() {
   hdr "UTF-8 BOM on PowerShell files"
   local f b allgood=1
-  local -a files=( scripts/manage-hosts.ps1 bootstrap.ps1 scripts/install-nerd-fonts.ps1 )
+  local -a files=(scripts/manage-hosts.ps1 bootstrap.ps1 scripts/install-nerd-fonts.ps1)
   for f in "${files[@]}"; do
-    if [ ! -e "$f" ]; then bad "missing: $f"; allgood=0; continue; fi
+    if [ ! -e "$f" ]; then
+      bad "missing: $f"
+      allgood=0
+      continue
+    fi
     b=$(head -c3 "$f" | od -An -tx1 | tr -d ' \n')
-    if [ "$b" != "efbbbf" ]; then bad "no BOM (first bytes: $b): $f"; allgood=0; fi
+    if [ "$b" != "efbbbf" ]; then
+      bad "no BOM (first bytes: $b): $f"
+      allgood=0
+    fi
   done
   [ "$allgood" -eq 1 ] && ok "${#files[@]} .ps1 files carry EF BB BF"
 }
@@ -154,11 +195,11 @@ check_chezmoiignore_targets() {
     /\{\{\/\*/ { inblk=1 }
     inblk { if ($0 ~ /\*\/\}\}/) inblk=0; next }
     { print }
-  ' chezmoi/.chezmoiignore.tmpl \
-    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
-    | grep -vE '^(#|\{\{|$)' \
-    | grep -E '^[^[:space:]]+$' \
-    | grep -E '(^|/)(dot_|private_dot_)|\.tmpl$')
+  ' chezmoi/.chezmoiignore.tmpl |
+    sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' |
+    grep -vE '^(#|\{\{|$)' |
+    grep -E '^[^[:space:]]+$' |
+    grep -E '(^|/)(dot_|private_dot_)|\.tmpl$')
   if [ -z "$offenders" ]; then
     ok "no dot_/private_dot_/*.tmpl source-state patterns"
   else
@@ -175,14 +216,49 @@ check_shellcheck() {
   fi
   # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
   # vendored (eth-p/bat-extras) and deliberately excluded.
-  local -a targets=( bootstrap.sh makefile/lib/*.sh scripts/*.sh \
-                     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh \
-                     chezmoi/private_dot_claude/executable_notify.sh \
-                     chezmoi/dot_local/bin/executable_winterop )
+  local -a targets=(bootstrap.sh makefile/lib/*.sh scripts/*.sh
+    .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
+    chezmoi/private_dot_claude/executable_notify.sh
+    chezmoi/dot_local/bin/executable_winterop)
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else
     bad "shellcheck reported warning+ findings (listed above)"
+  fi
+}
+
+check_shfmt() {
+  hdr "shfmt (shell formatting, -i 2)"
+  if ! command -v shfmt >/dev/null 2>&1; then
+    note "shfmt not installed — skipped locally (CI enforces; 'make fmt MODE=prod' to format here)"
+    return 0
+  fi
+  # Same first-party set as shellcheck (vendored _cht.sh / batpipe excluded).
+  local -a targets=(bootstrap.sh makefile/lib/*.sh scripts/*.sh
+    .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
+    chezmoi/private_dot_claude/executable_notify.sh
+    chezmoi/dot_local/bin/executable_winterop)
+  local out
+  if out=$(shfmt -d -i 2 "${targets[@]}" 2>&1); then
+    ok "clean over ${#targets[@]} shell files (shfmt -i 2)"
+  else
+    bad "shfmt formatting diffs (fix: make fmt MODE=prod):"
+    printf '%s\n' "$out" | sed 's/^/       /' | head -40
+  fi
+}
+
+check_gitleaks() {
+  hdr "gitleaks (committed-secret scan)"
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    note "gitleaks not installed — skipped locally (CI enforces; 'make secrets MODE=prod' to scan here)"
+    return 0
+  fi
+  local out
+  if out=$(gitleaks dir --no-banner --redact -c .gitleaks.toml . 2>&1); then
+    ok "no secrets detected (gitleaks dir)"
+  else
+    bad "gitleaks flagged potential secret(s) (values redacted):"
+    printf '%s\n' "$out" | sed 's/^/       /' | head -40
   fi
 }
 
@@ -193,6 +269,8 @@ check_bom
 check_sentinels
 check_chezmoiignore_targets
 check_shellcheck
+check_shfmt
+check_gitleaks
 echo
 if [ "$fails" -eq 0 ]; then
   printf '%s✓ all invariant checks passed%s\n' "$GREEN" "$RESET"

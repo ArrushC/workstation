@@ -17,7 +17,7 @@ set -euo pipefail
 
 : "${DEST:?direct.sh: DEST not set}"
 
-if (( $# != 2 )); then
+if (($# != 2)); then
   printf 'direct.sh: usage: %s <name> <url>\n' "$0" >&2
   exit 2
 fi

@@ -29,7 +29,7 @@ set -euo pipefail
 
 : "${DEST:?archive.sh: DEST not set}"
 
-if (( $# != 2 )); then
+if (($# != 2)); then
   printf 'archive.sh: usage: %s <binary_spec> <url>\n' "$0" >&2
   exit 2
 fi
@@ -44,21 +44,21 @@ archive="$tmp/archive"
 curl -fsSL --retry 3 --retry-delay 2 -o "$archive" "$url"
 
 case "$url" in
-  *.tar.gz|*.tgz)   tar -xzf "$archive" -C "$tmp" ;;
-  *.tar.bz2|*.tbz2) tar -xjf "$archive" -C "$tmp" ;;
-  *.tar.xz|*.txz)   tar -xJf "$archive" -C "$tmp" ;;
-  *.zip)            unzip -q "$archive" -d "$tmp" ;;
-  *)
-    printf 'archive.sh: unrecognised archive extension in %s\n' "$url" >&2
-    exit 1
-    ;;
+*.tar.gz | *.tgz) tar -xzf "$archive" -C "$tmp" ;;
+*.tar.bz2 | *.tbz2) tar -xjf "$archive" -C "$tmp" ;;
+*.tar.xz | *.txz) tar -xJf "$archive" -C "$tmp" ;;
+*.zip) unzip -q "$archive" -d "$tmp" ;;
+*)
+  printf 'archive.sh: unrecognised archive extension in %s\n' "$url" >&2
+  exit 1
+  ;;
 esac
 rm -f "$archive"
 
 IFS=':' read -ra names <<<"$bin_spec"
 for name in "${names[@]}"; do
-  src="${name%%=*}"   # part before '=' (whole string if no '=')
-  dst="${name##*=}"   # part after  '=' (whole string if no '=')
+  src="${name%%=*}" # part before '=' (whole string if no '=')
+  dst="${name##*=}" # part after  '=' (whole string if no '=')
   # -print -quit stops the walk on first match (faster than | head -1)
   found=$(find "$tmp" -type f -name "$src" -print -quit)
   if [[ -z "$found" ]]; then

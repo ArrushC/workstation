@@ -79,13 +79,20 @@
 
 set -euo pipefail
 
-RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
-BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
 
-log()  { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
-ok()   { echo -e "${GREEN} ✓${RESET} $*"; }
+log() { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
+ok() { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
-fail() { echo -e "${RED} ✗${RESET} $*"; exit 1; }
+fail() {
+  echo -e "${RED} ✗${RESET} $*"
+  exit 1
+}
 
 # WSL detection — used to skip hosts.conf self-registration and the SSH
 # copy-id tip. WSL distros are accessed via wezterm WSL domains (not SSH),
@@ -116,30 +123,45 @@ YES=false
 ACTION=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dev)
-      [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
-      MACHINE_TYPE="dev"; shift ;;
-    --prod)
-      [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
-      MACHINE_TYPE="prod"; shift ;;
-    --doctor)
-      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
-      ACTION="doctor"; shift ;;
-    --check-for-updates|--checkforupdates)
-      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
-      ACTION="check-updates"; shift ;;
-    --full)
-      fail "--full was removed.
+  --dev)
+    [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
+    MACHINE_TYPE="dev"
+    shift
+    ;;
+  --prod)
+    [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
+    MACHINE_TYPE="prod"
+    shift
+    ;;
+  --doctor)
+    [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
+    ACTION="doctor"
+    shift
+    ;;
+  --check-for-updates | --checkforupdates)
+    [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
+    ACTION="check-updates"
+    shift
+    ;;
+  --full)
+    fail "--full was removed.
 
 Use one of the new mutually-exclusive flags:
   ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + system packages
   ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
 
-Run ./bootstrap.sh --help for the full flag list." ;;
-    --reinstall) REINSTALL=true; shift ;;
-    --yes|-y)    YES=true;       shift ;;
-    -h|--help)
-      cat <<'EOF'
+Run ./bootstrap.sh --help for the full flag list."
+    ;;
+  --reinstall)
+    REINSTALL=true
+    shift
+    ;;
+  --yes | -y)
+    YES=true
+    shift
+    ;;
+  -h | --help)
+    cat <<'EOF'
 Usage: ./bootstrap.sh (--dev | --prod) [flags]
 
 Required (exactly one):
@@ -167,9 +189,9 @@ Optional flags:
                 --checkforupdates is accepted as an alias.
   -h, --help    Show this message.
 EOF
-      exit 0
-      ;;
-    *) fail "Unknown argument: $1 (try --help)" ;;
+    exit 0
+    ;;
+  *) fail "Unknown argument: $1 (try --help)" ;;
   esac
 done
 
@@ -273,14 +295,14 @@ preflight() {
   log "Checking prerequisites..."
 
   local missing=()
-  command -v curl  &>/dev/null || missing+=("curl")
-  command -v git   &>/dev/null || missing+=("git")
-  command -v make  &>/dev/null || missing+=("make (drives makefile/Makefile)")
-  command -v tar   &>/dev/null || missing+=("tar (for archive extraction)")
+  command -v curl &>/dev/null || missing+=("curl")
+  command -v git &>/dev/null || missing+=("git")
+  command -v make &>/dev/null || missing+=("make (drives makefile/Makefile)")
+  command -v tar &>/dev/null || missing+=("tar (for archive extraction)")
   command -v unzip &>/dev/null || missing+=("unzip (for .zip releases like lnav/yazi/rclone)")
-  command -v ip    &>/dev/null || missing+=("iproute (for self-registration)")
+  command -v ip &>/dev/null || missing+=("iproute (for self-registration)")
 
-  if (( ${#missing[@]} > 0 )); then
+  if ((${#missing[@]} > 0)); then
     fail "Missing required prerequisites: ${missing[*]}
 Install via your distro's package manager, e.g.
   RHEL/Fedora:   sudo dnf install curl git make tar unzip iproute
@@ -318,12 +340,12 @@ self_register() {
   host_name=$(hostname -s 2>/dev/null || hostname)
   host_user=$(whoami)
 
-  host_ip=$(ip route get 1.1.1.1 2>/dev/null \
-    | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  host_ip=$(ip route get 1.1.1.1 2>/dev/null |
+    awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
 
   if [[ -z "$host_ip" ]]; then
-    host_ip=$(ip addr show 2>/dev/null \
-      | awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}' | head -1)
+    host_ip=$(ip addr show 2>/dev/null |
+      awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}' | head -1)
   fi
 
   if [[ -z "$host_ip" ]]; then
@@ -336,9 +358,9 @@ self_register() {
   # any make/chezmoi step that reads hosts.conf downstream sees the
   # current inventory + wezterm block from the single --add pass.
   bash "$manage_script" --add \
-    --name  "$host_name" \
-    --ip    "$host_ip" \
-    --user  "$host_user" \
+    --name "$host_name" \
+    --ip "$host_ip" \
+    --user "$host_user" \
     --group "$GROUP_NAME" \
     --skip-confirm
 }
@@ -506,8 +528,8 @@ push_host_changes() {
   cd "$CHEZMOI_SOURCE"
 
   # Anything to commit (working tree OR already-staged)?
-  if git diff --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null \
-     && git diff --cached --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null; then
+  if git diff --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null &&
+    git diff --cached --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null; then
     log "No host-list changes to commit"
     return 0
   fi
@@ -579,19 +601,19 @@ report_repo_state() {
     local behind ahead
     behind=$(git rev-list --count "HEAD..@{upstream}" 2>/dev/null || echo 0)
     ahead=$(git rev-list --count "@{upstream}..HEAD" 2>/dev/null || echo 0)
-    if (( behind > 0 )); then
+    if ((behind > 0)); then
       warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $CHEZMOI_SOURCE pull --ff-only"
     else
       ok "branch $branch is up to date with $upstream"
     fi
-    if (( ahead > 0 )); then
+    if ((ahead > 0)); then
       warn "$ahead local commit(s) not pushed — push with: git -C $CHEZMOI_SOURCE push"
     fi
   else
     warn "branch $branch has no upstream — behind/ahead unknown"
   fi
 
-  if (( dirty > 0 )); then
+  if ((dirty > 0)); then
     warn "$dirty uncommitted change(s) — review with: git -C $CHEZMOI_SOURCE status"
   else
     ok "working tree clean"
@@ -627,7 +649,7 @@ do_doctor() {
       ok "initialized (~/.config/chezmoi/chezmoi.toml)"
       local pending
       pending=$("$chezmoi_bin" status --source "$CHEZMOI_SOURCE" 2>/dev/null | wc -l)
-      if (( pending > 0 )); then
+      if ((pending > 0)); then
         warn "$pending path(s) differ from the source — review: czd (chezmoi diff) · apply: cza"
       else
         ok "deployed dotfiles in sync with the source"
@@ -676,8 +698,8 @@ do_check_updates() {
 # Read-only report modes exit here, before any provisioning state changes.
 if [[ -n "$ACTION" ]]; then
   case "$ACTION" in
-    doctor)        do_doctor ;;
-    check-updates) do_check_updates ;;
+  doctor) do_doctor ;;
+  check-updates) do_check_updates ;;
   esac
   exit 0
 fi
@@ -708,12 +730,12 @@ fi
 if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
   log "Cloning workstation repo into $CHEZMOI_SOURCE..."
   if [[ -n "$GH_HEADER_VAL" ]]; then
-    git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" \
-      || fail "Clone failed. For a private repo, set GITHUB_TOKEN to a PAT with repo read access."
+    git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" ||
+      fail "Clone failed. For a private repo, set GITHUB_TOKEN to a PAT with repo read access."
     git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   else
-    git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" \
-      || fail "Clone failed. If the repo is private, set GITHUB_TOKEN and re-run."
+    git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" ||
+      fail "Clone failed. If the repo is private, set GITHUB_TOKEN and re-run."
   fi
   ok "Repo cloned"
 else

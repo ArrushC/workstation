@@ -32,14 +32,15 @@ f="$(hookfield '.tool_input.file_path')"
 norm="${f//\\//}"
 
 case "$norm" in
-  */.claude/projects/*/memory/*)
-    reason="Blocked by memory-routing-guard: this repo routes project memories to <repo>/.claude/memory/ (committed + code-reviewed), NOT the home-dir path ($norm). Per CLAUDE.md 'Claude memory routing': write the file to .claude/memory/<slug>.md and add a one-line pointer to .claude/memory/MEMORY.md. Only use a home/host-global path if the user EXPLICITLY asked for cross-project scope (and say so)."
-    if command -v jq >/dev/null 2>&1; then
-      jq -nc --arg r "$reason" \
-        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
-    else
-      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$reason"
-    fi
-    exit 0 ;;
+*/.claude/projects/*/memory/*)
+  reason="Blocked by memory-routing-guard: this repo routes project memories to <repo>/.claude/memory/ (committed + code-reviewed), NOT the home-dir path ($norm). Per CLAUDE.md 'Claude memory routing': write the file to .claude/memory/<slug>.md and add a one-line pointer to .claude/memory/MEMORY.md. Only use a home/host-global path if the user EXPLICITLY asked for cross-project scope (and say so)."
+  if command -v jq >/dev/null 2>&1; then
+    jq -nc --arg r "$reason" \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  else
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$reason"
+  fi
+  exit 0
+  ;;
 esac
 exit 0

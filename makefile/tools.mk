@@ -295,6 +295,32 @@ $(eval $(call EGET_TOOL,jless,$(JLESS_VERSION),PaulJuliusMartinez/jless))
 $(eval $(call TOOL,clipse,$(CLIPSE_VERSION),\
   $(LIB)/archive.sh clipse-linux-x11-amd64=clipse https://github.com/savedra1/clipse/releases/download/v$(CLIPSE_VERSION)/clipse_v$(CLIPSE_VERSION)_linux_x11_amd64.tar.gz))
 
+# --- (2026-06) tier-1 lint/security + system/util gap-fillers ----------------
+# gitleaks/procs/dust/hexyl/gum are eget single-binary installs (below);
+# shfmt + pueue/pueued are raw-binary direct.sh installs (DIRECT section).
+# shfmt + gitleaks are ALSO enforced by scripts/check-invariants.sh.
+
+# gitleaks — secret scanner; ALSO enforced in check-invariants.sh (pre-commit +
+# make lint + CI). The goreleaser tarball uses the arch token `linux_x64` (not
+# x86_64/amd64), which eget won't auto-map to this host — pin it explicitly.
+$(eval $(call EGET_TOOL,gitleaks,$(GITLEAKS_VERSION),gitleaks/gitleaks,,--asset linux_x64))
+
+# procs — modern `ps` (process tree / search / colored). Upstream publishes NO
+# musl build; the gnu zip runs fine on the glibc-2.34 fleet (verified). --asset
+# linux picks the x86_64-linux zip (aarch64 excluded by arch, .rpm by anti-match).
+$(eval $(call EGET_TOOL,procs,$(PROCS_VERSION),dalance/procs,,--asset linux))
+
+# dust — intuitive `du` (instant disk-usage tree); complements ncdu. musl-static.
+$(eval $(call EGET_TOOL,dust,$(DUST_VERSION),bootandy/dust,,--asset musl))
+
+# hexyl — colored hex viewer (sharkdp). musl-static. Upgrades the dnf-only xxd.
+$(eval $(call EGET_TOOL,hexyl,$(HEXYL_VERSION),sharkdp/hexyl,,--asset musl))
+
+# gum — charmbracelet shell-script UI toolkit (choose/input/spin/confirm). The
+# tarball ships a .sbom.json side-file (dropped by eget.sh's anti-match), leaving
+# the single Linux_x86_64 tarball. Default v-tag.
+$(eval $(call EGET_TOOL,gum,$(GUM_VERSION),charmbracelet/gum))
+
 # =============================================================================
 # DIRECT  (raw binary URL, no archive)
 # =============================================================================
@@ -333,6 +359,23 @@ $(eval $(call TOOL,sysz,$(SYSZ_VERSION),\
 
 $(eval $(call TOOL,ssh-copy-id,$(SSH_COPY_ID_VERSION),\
   $(LIB)/direct.sh ssh-copy-id https://raw.githubusercontent.com/openssh/openssh-portable/master/contrib/ssh-copy-id))
+
+# shfmt — shell formatter (mvdan/sh); ALSO enforced in check-invariants.sh
+# (pre-commit + make lint + CI). The asset is a RAW binary named
+# shfmt_v<V>_linux_amd64 — eget would install it under the repo name (`sh`), so
+# direct.sh fetches the raw URL and names it `shfmt`. Go-static (glibc-free).
+$(eval $(call TOOL,shfmt,$(SHFMT_VERSION),\
+  $(LIB)/direct.sh shfmt https://github.com/mvdan/sh/releases/download/v$(SHFMT_VERSION)/shfmt_v$(SHFMT_VERSION)_linux_amd64))
+
+# pueue — background job queue: daemon (pueued) + client (pueue), shipped as TWO
+# separate raw-binary assets. eget renames any raw binary to the repo name
+# (`pueue`), so the daemon would also land as `pueue` — direct.sh fetches each
+# under its correct name. musl-static. No systemd unit is installed; start the
+# daemon manually (`pueued -d`).
+$(eval $(call TOOL,pueue,$(PUEUE_VERSION),\
+  $(LIB)/direct.sh pueue https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueue-x86_64-unknown-linux-musl))
+$(eval $(call TOOL,pueued,$(PUEUE_VERSION),\
+  $(LIB)/direct.sh pueued https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueued-x86_64-unknown-linux-musl))
 
 # =============================================================================
 # HELIX  (special-cased — binary + runtime tree)
@@ -409,6 +452,9 @@ UPDATE_SPECS += age|$(AGE_VERSION)|FiloSottile/age|v$(AGE_VERSION)
 UPDATE_SPECS += jq|$(JQ_VERSION)|jqlang/jq|jq-$(JQ_VERSION)
 UPDATE_SPECS += yq|$(YQ_VERSION)|mikefarah/yq|v$(YQ_VERSION)
 UPDATE_SPECS += tldr|$(TEALDEER_VERSION)|tealdeer-rs/tealdeer|v$(TEALDEER_VERSION)
+UPDATE_SPECS += shfmt|$(SHFMT_VERSION)|mvdan/sh|v$(SHFMT_VERSION)
+UPDATE_SPECS += pueue|$(PUEUE_VERSION)|Nukesor/pueue|v$(PUEUE_VERSION)
+UPDATE_SPECS += pueued|$(PUEUE_VERSION)|Nukesor/pueue|v$(PUEUE_VERSION)
 UPDATE_SPECS += witr|$(WITR_VERSION)|pranshuparmar/witr|v$(WITR_VERSION)
 UPDATE_SPECS += ctop|$(CTOP_VERSION)|bcicen/ctop|v$(CTOP_VERSION)
 UPDATE_SPECS += sops|$(SOPS_VERSION)|getsops/sops|v$(SOPS_VERSION)

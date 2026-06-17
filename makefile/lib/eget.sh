@@ -34,7 +34,7 @@
 set -euo pipefail
 : "${DEST:?eget.sh: DEST not set}"
 
-if (( $# < 2 )); then
+if (($# < 2)); then
   echo "eget.sh: usage: $0 <user/repo> <tag> [eget args...]" >&2
   exit 2
 fi
