@@ -630,6 +630,17 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
+                                    data-tip="Managed rsyslog drop-in (dev_machine, non-WSL) — routes local0..local7 into /var/log/workstation.log; emit via `logger -p local0.info`. Enable with: make rsyslog-service"
+                                    >rsyslog<span class="sr-only">
+                                        — managed rsyslog drop-in (dev_machine,
+                                        non-WSL) routing local0..local7 into
+                                        /var/log/workstation.log; emit via logger
+                                        -p local0.info (make rsyslog-service)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
                                     data-tip="Cgroup tree from systemd (built-in)"
                                     >systemd-cgls <small>(built-in)</small
                                     ><span class="sr-only">
@@ -2176,7 +2187,7 @@ make -C makefile check-updates MODE=dev</code></pre>
                             <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
                             line each, with the exact <code>make</code> repair
                             command), the dev-only services
-                            (docker/dozzle/cockpit &mdash; active or
+                            (docker/dozzle/cockpit/rsyslog &mdash; active or
                             inactive), <code>wsl-config</code>, and the dnf
                             package lists. On Windows it covers the portable
                             and installer-class tools, Nerd Fonts, BurntToast,
