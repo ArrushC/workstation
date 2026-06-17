@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-if (( $# < 1 )); then
+if (($# < 1)); then
   printf 'pip.sh: usage: %s <package> [<package>...]\n' "$0" >&2
   exit 2
 fi

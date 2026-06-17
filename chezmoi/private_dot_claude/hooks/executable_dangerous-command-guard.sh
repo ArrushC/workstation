@@ -31,7 +31,7 @@ for k in p:
 print(v if isinstance(v,str) else "")' 2>/dev/null
   fi
 }
-emit() {  # emit <deny|ask> <reason>
+emit() { # emit <deny|ask> <reason>
   if command -v jq >/dev/null 2>&1; then
     jq -nc --arg d "$1" --arg r "$2" \
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:$d,permissionDecisionReason:$r}}'
@@ -68,8 +68,8 @@ fi
 # rm with combined -r and -f flags targeting / , /* , ~ , $HOME , or
 # --no-preserve-root. ASK (not DENY) so a genuine need can be approved, and a
 # bare mention (e.g. a commit message — see header) isn't hard-blocked.
-if match 'rm[[:space:]]+-([a-zA-Z]*[rR][a-zA-Z]*[fF]|[a-zA-Z]*[fF][a-zA-Z]*[rR])[a-zA-Z]*([[:space:]]|$)' \
-   && match '(--no-preserve-root|[[:space:]]/([[:space:]]|\*|$)|[[:space:]]~([[:space:]]|$)|[[:space:]]\$HOME([[:space:]]|$))'; then
+if match 'rm[[:space:]]+-([a-zA-Z]*[rR][a-zA-Z]*[fF]|[a-zA-Z]*[fF][a-zA-Z]*[rR])[a-zA-Z]*([[:space:]]|$)' &&
+  match '(--no-preserve-root|[[:space:]]/([[:space:]]|\*|$)|[[:space:]]~([[:space:]]|$)|[[:space:]]\$HOME([[:space:]]|$))'; then
   emit ask "This looks like 'rm -rf' targeting / , ~ , or \$HOME — irreversible if real. Approve only if you truly intend it. (It also fires when a command merely mentions the pattern, e.g. a commit message describing it.)"
 fi
 if match '(curl|wget)[[:space:]].*\|[[:space:]]*(sudo[[:space:]]+)?(ba)?sh([[:space:]]|$)'; then

@@ -36,7 +36,7 @@ JOBS="${CHECK_UPDATES_JOBS:-8}"
 # ---------------------------------------------------------------------------
 # Worker mode: $1 = one spec. Prints exactly one `status|name|detail` line.
 # ---------------------------------------------------------------------------
-if (( $# == 1 )); then
+if (($# == 1)); then
   IFS='|' read -r name version repo tag <<<"$1"
 
   if [[ "$version" == "latest" ]]; then
@@ -58,7 +58,7 @@ if (( $# == 1 )); then
   prefix="${tag%"$version"}"
 
   refs=$(GIT_TERMINAL_PROMPT=0 timeout 30 \
-           git ls-remote --tags --refs "$url" "refs/tags/${prefix}*" 2>/dev/null) || refs=""
+    git ls-remote --tags --refs "$url" "refs/tags/${prefix}*" 2>/dev/null) || refs=""
 
   latest=""
   if [[ -n "$refs" ]]; then
@@ -68,9 +68,10 @@ if (( $# == 1 )); then
     # the regex, the && form makes the while segment exit 1, and under
     # `set -eo pipefail` that kills the worker with no output at all.
     latest=$(while IFS=$'\t' read -r _sha ref; do
-               v="${ref#refs/tags/}"; v="${v#"$prefix"}"
-               if [[ "$v" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then printf '%s\n' "$v"; fi
-             done <<<"$refs" | sort -V | tail -1)
+      v="${ref#refs/tags/}"
+      v="${v#"$prefix"}"
+      if [[ "$v" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then printf '%s\n' "$v"; fi
+    done <<<"$refs" | sort -V | tail -1)
   fi
 
   if [[ -z "$latest" ]]; then
@@ -88,8 +89,12 @@ fi
 # ---------------------------------------------------------------------------
 # Driver mode: specs on stdin → parallel workers → sorted report + summary.
 # ---------------------------------------------------------------------------
-GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; RED=$'\033[0;31m'
-BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+RED=$'\033[0;31m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
@@ -108,11 +113,11 @@ fi
 
 sort -t'|' -k2,2 -f "$tmp" | while IFS='|' read -r status name detail; do
   case "$status" in
-    update)  printf ' %s↑%s %-16s %s\n' "$YELLOW" "$RESET" "$name" "$detail" ;;
-    ok)      printf ' %s✓%s %-16s up to date (%s)\n' "$GREEN" "$RESET" "$name" "$detail" ;;
-    rolling) printf ' · %-16s %s\n' "$name" "$detail" ;;
-    ahead)   printf ' %s!%s %-16s %s\n' "$YELLOW" "$RESET" "$name" "$detail" ;;
-    unknown) printf ' %s?%s %-16s %s\n' "$RED" "$RESET" "$name" "$detail" ;;
+  update) printf ' %s↑%s %-16s %s\n' "$YELLOW" "$RESET" "$name" "$detail" ;;
+  ok) printf ' %s✓%s %-16s up to date (%s)\n' "$GREEN" "$RESET" "$name" "$detail" ;;
+  rolling) printf ' · %-16s %s\n' "$name" "$detail" ;;
+  ahead) printf ' %s!%s %-16s %s\n' "$YELLOW" "$RESET" "$name" "$detail" ;;
+  unknown) printf ' %s?%s %-16s %s\n' "$RED" "$RESET" "$name" "$detail" ;;
   esac
 done
 
@@ -124,7 +129,7 @@ n_unk=$(grep -c -E '^(unknown|ahead)\|' "$tmp" || true)
 echo ""
 printf '   %s update(s) available · %s up to date · %s rolling · %s unchecked\n' \
   "$n_update" "$n_ok" "$n_roll" "$n_unk"
-if (( n_update > 0 )); then
+if ((n_update > 0)); then
   printf '   to update: edit the pin in makefile/versions.mk, then make provision MODE=%s\n' "${MODE:-dev|prod}"
   printf '   (mind the dual/triple-edit pins — CCSTATUSLINE, JETBRAINSMONO, HELIX; see CLAUDE.md)\n'
 fi

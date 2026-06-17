@@ -8,6 +8,18 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
+      # shfmt + gitleaks pins are a DUAL-EDIT with makefile/versions.mk
+      # (SHFMT_VERSION / GITLEAKS_VERSION); check-invariants.sh verifies they
+      # match. They're installed here so the format/secret checks actually
+      # enforce in CI (check-invariants soft-skips a missing tool).
+      - name: Install shfmt + gitleaks (pinned)
+        run: |
+          SHFMT=3.13.1
+          GITLEAKS=8.30.1
+          sudo curl -fsSL "https://github.com/mvdan/sh/releases/download/v${SHFMT}/shfmt_v${SHFMT}_linux_amd64" -o /usr/local/bin/shfmt
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS}/gitleaks_${GITLEAKS}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
+          sudo chmod +x /usr/local/bin/shfmt /usr/local/bin/gitleaks
+          shfmt --version && gitleaks version
       - name: Run invariant checks
         run: bash scripts/check-invariants.sh
   powershell:

@@ -29,7 +29,7 @@ set -euo pipefail
 
 : "${DEST:?node.sh: DEST not set}"
 
-if (( $# != 1 )); then
+if (($# != 1)); then
   printf 'node.sh: usage: %s <version>\n' "$0" >&2
   exit 2
 fi
@@ -38,12 +38,12 @@ version="$1"
 
 arch="$(uname -m)"
 case "$arch" in
-  x86_64)        node_arch="x64"   ;;
-  aarch64|arm64) node_arch="arm64" ;;
-  *)
-    printf 'node.sh: unsupported arch %s\n' "$arch" >&2
-    exit 1
-    ;;
+x86_64) node_arch="x64" ;;
+aarch64 | arm64) node_arch="arm64" ;;
+*)
+  printf 'node.sh: unsupported arch %s\n' "$arch" >&2
+  exit 1
+  ;;
 esac
 
 tarball="node-v${version}-linux-${node_arch}.tar.xz"
@@ -54,7 +54,7 @@ mkdir -p "$DEST"
 
 # Strip any older _node-* trees so re-installs don't accumulate.
 for old in "$DEST"/_node-*; do
-  [ -e "$old" ] || continue   # no matches → glob stays literal, skip
+  [ -e "$old" ] || continue # no matches → glob stays literal, skip
   rm -rf "$old"
 done
 

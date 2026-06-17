@@ -18,8 +18,11 @@ PROG=winterop
 # helpers
 # --------------------------------------------------------------------------
 have() { command -v "$1" >/dev/null 2>&1; }
-err()  { printf '%s: %s\n' "$PROG" "$*" >&2; }
-die()  { err "$*"; exit 1; }
+err() { printf '%s: %s\n' "$PROG" "$*" >&2; }
+die() {
+  err "$*"
+  exit 1
+}
 
 # is_wsl — mirror the detection in bootstrap.sh / scope.mk.
 is_wsl() {
@@ -40,20 +43,22 @@ detect_env() {
     virt=$(systemd-detect-virt 2>/dev/null) || virt=none
   fi
   case "$virt" in
-    microsoft) echo hyperv ;;
-    vmware)    echo vmware ;;
-    oracle)    echo virtualbox ;;
-    kvm|qemu)  echo kvm ;;
-    wsl)       echo wsl2 ;;
-    none|"")   echo baremetal ;;
-    *)         echo "$virt" ;;
+  microsoft) echo hyperv ;;
+  vmware) echo vmware ;;
+  oracle) echo virtualbox ;;
+  kvm | qemu) echo kvm ;;
+  wsl) echo wsl2 ;;
+  none | "") echo baremetal ;;
+  *) echo "$virt" ;;
   esac
 }
 
 # preferred PowerShell on the Windows side (pwsh 7 if present, else 5.1)
 ps_exe() {
-  if   have pwsh.exe;       then echo pwsh.exe
-  elif have powershell.exe; then echo powershell.exe
+  if have pwsh.exe; then
+    echo pwsh.exe
+  elif have powershell.exe; then
+    echo powershell.exe
   else return 1; fi
 }
 
@@ -71,8 +76,9 @@ require_wsl() {
 # --------------------------------------------------------------------------
 # report (default action)
 # --------------------------------------------------------------------------
-row() {  # row <label> <test-cmd...>
-  local label=$1; shift
+row() { # row <label> <test-cmd...>
+  local label=$1
+  shift
   if "$@" >/dev/null 2>&1; then printf '  [ok] %s\n' "$label"; else printf '  [--] %s\n' "$label"; fi
 }
 
@@ -80,15 +86,15 @@ report_wsl() {
   printf 'environment : %s' "$(detect_env)"
   [ -n "${WSL_DISTRO_NAME:-}" ] && printf '  (distro: %s)' "$WSL_DISTRO_NAME"
   printf '\nwindows side: reachable via interop\n\ninterop channels:\n'
-  row 'powershell.exe   run Windows commands'  command -v powershell.exe
-  row 'pwsh.exe         PowerShell 7'          command -v pwsh.exe
-  row 'cmd.exe          legacy commands'       command -v cmd.exe
-  row '.exe interop     run Windows binaries'  test -e /proc/sys/fs/binfmt_misc/WSLInterop
-  row '/mnt/c (drvfs)   Windows filesystem'    test -d /mnt/c
-  row 'wslpath          path conversion'       command -v wslpath
-  row 'clip.exe         clipboard write'       command -v clip.exe
-  row 'open (Start-Process) files/dirs/URLs'   ps_exe
-  row 'wsl.exe          manage WSL'            command -v wsl.exe
+  row 'powershell.exe   run Windows commands' command -v powershell.exe
+  row 'pwsh.exe         PowerShell 7' command -v pwsh.exe
+  row 'cmd.exe          legacy commands' command -v cmd.exe
+  row '.exe interop     run Windows binaries' test -e /proc/sys/fs/binfmt_misc/WSLInterop
+  row '/mnt/c (drvfs)   Windows filesystem' test -d /mnt/c
+  row 'wslpath          path conversion' command -v wslpath
+  row 'clip.exe         clipboard write' command -v clip.exe
+  row 'open (Start-Process) files/dirs/URLs' ps_exe
+  row 'wsl.exe          manage WSL' command -v wsl.exe
   printf '\nsubcommands : run exe path clip open notify ps reg env host selftest\n'
   printf "use '%s host' for resolved Windows paths, '%s help' for usage.\n" "$PROG" "$PROG"
 }
@@ -108,20 +114,21 @@ report_vm() {
     printf '  Shared dir none mounted — add one in the hypervisor settings\n'
   fi
   case "$env" in
-    hyperv)     printf '  Clipboard  Hyper-V Enhanced Session, or over RDP\n' ;;
-    vmware)     printf '  Clipboard  install open-vm-tools (vmtoolsd)\n' ;;
-    virtualbox) printf '  Clipboard  VBoxClient --clipboard (Guest Additions)\n' ;;
-    *)          printf '  Clipboard  via your hypervisor guest tools\n' ;;
+  hyperv) printf '  Clipboard  Hyper-V Enhanced Session, or over RDP\n' ;;
+  vmware) printf '  Clipboard  install open-vm-tools (vmtoolsd)\n' ;;
+  virtualbox) printf '  Clipboard  VBoxClient --clipboard (Guest Additions)\n' ;;
+  *) printf '  Clipboard  via your hypervisor guest tools\n' ;;
   esac
 }
 
 cmd_report() {
-  local env; env=$(detect_env)
+  local env
+  env=$(detect_env)
   printf '== %s ==\n' "$PROG"
   case "$env" in
-    wsl1|wsl2) report_wsl ;;
-    baremetal) printf 'environment : %s\n\nNo Windows host detected (not WSL, not a VM on Windows).\n' "$env" ;;
-    *)         report_vm "$env" ;;
+  wsl1 | wsl2) report_wsl ;;
+  baremetal) printf 'environment : %s\n\nNo Windows host detected (not WSL, not a VM on Windows).\n' "$env" ;;
+  *) report_vm "$env" ;;
   esac
 }
 
@@ -146,10 +153,17 @@ cmd_path() {
   have wslpath || die "wslpath not available"
   local dir=auto p
   case "${1:-}" in
-    -w) dir=win;  shift ;;
-    -u) dir=unix; shift ;;
+  -w)
+    dir=win
+    shift
+    ;;
+  -u)
+    dir=unix
+    shift
+    ;;
   esac
-  p=${1:-}; [ -n "$p" ] || die "usage: $PROG path [-w|-u] <path>"
+  p=${1:-}
+  [ -n "$p" ] || die "usage: $PROG path [-w|-u] <path>"
   if [ "$dir" = auto ]; then
     if [[ "$p" == *\\* || "$p" =~ ^[A-Za-z]: ]]; then dir=unix; else dir=win; fi
   fi
@@ -161,12 +175,12 @@ cmd_clip() {
   local action=${1:-get}
   [ "$#" -gt 0 ] && shift || true
   case "$action" in
-    get) ps_run 'Get-Clipboard' | sed 's/\r$//' ;;
-    set)
-      have clip.exe || die "clip.exe not available"
-      if [ "$#" -gt 0 ]; then printf '%s' "$*" | clip.exe; else clip.exe; fi
-      ;;
-    *) die "usage: $PROG clip [get|set]   (set reads stdin or args)" ;;
+  get) ps_run 'Get-Clipboard' | sed 's/\r$//' ;;
+  set)
+    have clip.exe || die "clip.exe not available"
+    if [ "$#" -gt 0 ]; then printf '%s' "$*" | clip.exe; else clip.exe; fi
+    ;;
+  *) die "usage: $PROG clip [get|set]   (set reads stdin or args)" ;;
   esac
 }
 
@@ -188,7 +202,7 @@ cmd_notify() {
   require_wsl
   [ -n "${1:-}" ] || die "usage: $PROG notify <message>"
   local msg=$*
-  msg=${msg//\'/\'\'}   # double single-quotes for the PowerShell single-quoted string
+  msg=${msg//\'/\'\'} # double single-quotes for the PowerShell single-quoted string
   ps_run "
     Add-Type -AssemblyName System.Windows.Forms
     \$n = New-Object System.Windows.Forms.NotifyIcon
@@ -245,13 +259,25 @@ cmd_selftest() {
   if is_wsl; then
     if out=$(ps_run 'Write-Output OK' 2>/dev/null | sed 's/\r$//') && [ "$out" = OK ]; then
       printf '  powershell run ... ok\n'
-    else printf '  powershell run ... FAIL\n'; fails=$((fails + 1)); fi
-    if cmd_path / >/dev/null 2>&1; then printf '  path convert ... ok\n'; else printf '  path convert ... FAIL\n'; fails=$((fails + 1)); fi
-    if cmd_env USERNAME >/dev/null 2>&1; then printf '  env read ... ok\n'; else printf '  env read ... FAIL\n'; fails=$((fails + 1)); fi
+    else
+      printf '  powershell run ... FAIL\n'
+      fails=$((fails + 1))
+    fi
+    if cmd_path / >/dev/null 2>&1; then printf '  path convert ... ok\n'; else
+      printf '  path convert ... FAIL\n'
+      fails=$((fails + 1))
+    fi
+    if cmd_env USERNAME >/dev/null 2>&1; then printf '  env read ... ok\n'; else
+      printf '  env read ... FAIL\n'
+      fails=$((fails + 1))
+    fi
   else
     printf '  not WSL — live subcommands report guidance only (by design)\n'
   fi
-  if [ "$fails" -eq 0 ]; then printf 'selftest: PASS\n'; else printf 'selftest: %d FAILED\n' "$fails"; return 1; fi
+  if [ "$fails" -eq 0 ]; then printf 'selftest: PASS\n'; else
+    printf 'selftest: %d FAILED\n' "$fails"
+    return 1
+  fi
 }
 
 usage() {
@@ -279,20 +305,24 @@ main() {
   local sub=${1:-report}
   if [ "$#" -gt 0 ]; then shift; fi
   case "$sub" in
-    report|list|methods) cmd_report ;;
-    run)      cmd_run "$@" ;;
-    exe)      cmd_exe "$@" ;;
-    path)     cmd_path "$@" ;;
-    clip)     cmd_clip "$@" ;;
-    open)     cmd_open "$@" ;;
-    notify)   cmd_notify "$@" ;;
-    ps)       cmd_ps "$@" ;;
-    reg)      cmd_reg "$@" ;;
-    env)      cmd_env "$@" ;;
-    host)     cmd_host "$@" ;;
-    selftest) cmd_selftest ;;
-    help|-h|--help) usage ;;
-    *) err "unknown subcommand: $sub"; usage; exit 2 ;;
+  report | list | methods) cmd_report ;;
+  run) cmd_run "$@" ;;
+  exe) cmd_exe "$@" ;;
+  path) cmd_path "$@" ;;
+  clip) cmd_clip "$@" ;;
+  open) cmd_open "$@" ;;
+  notify) cmd_notify "$@" ;;
+  ps) cmd_ps "$@" ;;
+  reg) cmd_reg "$@" ;;
+  env) cmd_env "$@" ;;
+  host) cmd_host "$@" ;;
+  selftest) cmd_selftest ;;
+  help | -h | --help) usage ;;
+  *)
+    err "unknown subcommand: $sub"
+    usage
+    exit 2
+    ;;
   esac
 }
 

@@ -150,3 +150,18 @@ QSV_VERSION        := 21.1.0
 GREX_VERSION       := 1.4.6
 JLESS_VERSION      := 0.9.0
 CLIPSE_VERSION     := 1.2.1
+
+# --- (2026-06) tier-1 lint/security + system/util gap-fillers -----------------
+# shfmt + gitleaks are ALSO enforced by scripts/check-invariants.sh (so they run
+# in pre-commit + `make lint` + CI). Their pins are a DUAL-EDIT with
+# .github/workflows/lint.yml, whose CI step installs these exact versions so the
+# check actually enforces there (check-invariants soft-skips a missing tool).
+# check-invariants.sh verifies the two stay in sync. procs is gnu-only (upstream
+# publishes no musl build) but runs fine on the glibc-2.34 fleet.
+SHFMT_VERSION    := 3.13.1
+GITLEAKS_VERSION := 8.30.1
+PROCS_VERSION    := 0.14.11
+DUST_VERSION     := 1.2.4
+HEXYL_VERSION    := 0.17.0
+PUEUE_VERSION    := 4.0.4
+GUM_VERSION      := 0.17.0

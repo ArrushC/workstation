@@ -574,6 +574,24 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         (top-like)</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Modern ps — process tree / search / colored"
+                                    >procs<span class="sr-only">
+                                        — modern ps; process tree, search,
+                                        colored</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Intuitive du — instant disk-usage tree"
+                                    >dust<span class="sr-only">
+                                        — intuitive du; instant disk-usage
+                                        tree</span
+                                    ></span
+                                >
                             </div>
                         </article>
 
@@ -1063,6 +1081,15 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         store)</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Scan for committed secrets (enforced in pre-commit + CI)"
+                                    >gitleaks<span class="sr-only">
+                                        — scan for committed secrets; enforced in
+                                        pre-commit + CI</span
+                                    ></span
+                                >
                             </div>
                         </article>
 
@@ -1373,6 +1400,41 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     >clipse<span class="sr-only">
                                         — TUI clipboard manager; needs a
                                         graphical session (X11 build)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Colored hex viewer (sharkdp)"
+                                    >hexyl<span class="sr-only">
+                                        — colored hex viewer</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Shell formatter (enforced in pre-commit + CI)"
+                                    >shfmt<span class="sr-only">
+                                        — shell formatter; enforced in pre-commit
+                                        + CI</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Glamorous shell-script UI toolkit (charm)"
+                                    >gum<span class="sr-only">
+                                        — glamorous shell-script UI toolkit
+                                        (choose / input / spin / confirm)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Background job queue + daemon"
+                                    >pueue<span class="sr-only">
+                                        — background job queue; pueue client +
+                                        pueued daemon</span
                                     ></span
                                 >
                             </div>
@@ -3412,7 +3474,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the normal bootstrap flow. There are three macros;
                         <strong>prefer <code>EGET_TOOL</code></strong> for
                         single-binary GitHub releases (the common case &mdash;
-                        58 of the current 77 tools use it).
+                        63 of the current 85 tools use it).
                     </p>
                     <ol>
                         <li>

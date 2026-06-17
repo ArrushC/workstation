@@ -36,13 +36,20 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 HOSTS_CONF="$REPO_ROOT/hosts.conf"
 
 # --- Colours -----------------------------------------------------------------
-RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
-BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
 
-log()  { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
-ok()   { echo -e "${GREEN} ✓${RESET} $*"; }
+log() { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
+ok() { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
-fail() { echo -e "${RED} ✗${RESET} $*"; exit 1; }
+fail() {
+  echo -e "${RED} ✗${RESET} $*"
+  exit 1
+}
 
 # --- Argument parsing --------------------------------------------------------
 GROUP_FILTER=""
@@ -50,19 +57,31 @@ NAME_FILTER=""
 CHECK=false
 PARALLEL=4
 
-while (( $# > 0 )); do
+while (($# > 0)); do
   case "$1" in
-    --group)    GROUP_FILTER="$2"; shift 2 ;;
-    --name)     NAME_FILTER="$2"; shift 2 ;;
-    --check)    CHECK=true; shift ;;
-    --parallel) PARALLEL="$2"; shift 2 ;;
-    -h|--help)
-      sed -n '3,/^# ====/p' "$0" | sed -n '1,/^# ===/p' | sed 's/^# \{0,1\}//'
-      exit 0
-      ;;
-    *)
-      fail "Unknown argument: $1 — try --help"
-      ;;
+  --group)
+    GROUP_FILTER="$2"
+    shift 2
+    ;;
+  --name)
+    NAME_FILTER="$2"
+    shift 2
+    ;;
+  --check)
+    CHECK=true
+    shift
+    ;;
+  --parallel)
+    PARALLEL="$2"
+    shift 2
+    ;;
+  -h | --help)
+    sed -n '3,/^# ====/p' "$0" | sed -n '1,/^# ===/p' | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  *)
+    fail "Unknown argument: $1 — try --help"
+    ;;
   esac
 done
 
@@ -72,8 +91,8 @@ done
 # Read hosts.conf, strip comments / blank lines, optionally filter.
 # Each row → "name|ip|user|group" (pipe-separated for xargs-friendly parsing).
 hosts_iter() {
-  grep -Ev '^\s*(#|$)' "$HOSTS_CONF" \
-    | awk -v g="$GROUP_FILTER" -v n="$NAME_FILTER" '
+  grep -Ev '^\s*(#|$)' "$HOSTS_CONF" |
+    awk -v g="$GROUP_FILTER" -v n="$NAME_FILTER" '
         { name=$1; ip=$2; user=$3; group=$4 }
         g != "" && group != g { next }
         n != "" && name  != n { next }
@@ -83,7 +102,7 @@ hosts_iter() {
 
 mapfile -t HOSTS < <(hosts_iter)
 
-if (( ${#HOSTS[@]} == 0 )); then
+if ((${#HOSTS[@]} == 0)); then
   if [[ -n "$GROUP_FILTER" || -n "$NAME_FILTER" ]]; then
     fail "No hosts matched the filter (group='$GROUP_FILTER' name='$NAME_FILTER')."
   else
@@ -101,12 +120,12 @@ update_one() {
   IFS='|' read -r name ip user group <<<"$spec"
 
   case "$group" in
-    dev_machine)  mode=dev ;;
-    prod_machine) mode=prod ;;
-    *)
-      printf "${RED} ✗${RESET} %-24s unknown group '%s' — skipping\n" "$name" "$group"
-      return 1
-      ;;
+  dev_machine) mode=dev ;;
+  prod_machine) mode=prod ;;
+  *)
+    printf "${RED} ✗${RESET} %-24s unknown group '%s' — skipping\n" "$name" "$group"
+    return 1
+    ;;
   esac
 
   local remote_cmd
@@ -123,7 +142,7 @@ make MODE=$mode provision"
   fi
 
   if ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-         "$user@$ip" "$remote_cmd" >/tmp/update-hosts-$$-"$name".log 2>&1; then
+    "$user@$ip" "$remote_cmd" >/tmp/update-hosts-$$-"$name".log 2>&1; then
     printf " ${GREEN}✓${RESET} %-24s updated (MODE=%s)\n" "$name" "$mode"
     rm -f /tmp/update-hosts-$$-"$name".log
     return 0
@@ -144,10 +163,10 @@ else
   log "Updating ${#HOSTS[@]} host(s) in parallel (-P $PARALLEL)..."
 fi
 
-printf '%s\n' "${HOSTS[@]}" \
-  | xargs -I{} -P "$PARALLEL" bash -c 'update_one "$@"' _ {} \
-  || true   # don't let xargs's exit code (non-zero on any failure) kill us;
-            # per-host status was already printed inside update_one.
+printf '%s\n' "${HOSTS[@]}" |
+  xargs -I{} -P "$PARALLEL" bash -c 'update_one "$@"' _ {} ||
+  true # don't let xargs's exit code (non-zero on any failure) kill us;
+# per-host status was already printed inside update_one.
 
 # --- Summary -----------------------------------------------------------------
 # Count log files left behind in /tmp — one per failed host.
@@ -160,7 +179,7 @@ n_ok=$((n_total - n_failed))
 echo ""
 if $CHECK; then
   ok "Dry run complete ($n_total host(s) would be updated)"
-elif (( n_failed == 0 )); then
+elif ((n_failed == 0)); then
   ok "All $n_total hosts updated successfully"
 else
   warn "$n_ok of $n_total hosts updated; $n_failed failed. Logs:"

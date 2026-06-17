@@ -38,17 +38,19 @@ f="$(hookfield '.tool_input.file_path')"
 [ -n "$f" ] || exit 0
 [ -e "$f" ] || exit 0
 
-norm="${f//\\//}"   # normalise Windows backslashes for matching only
+norm="${f//\\//}" # normalise Windows backslashes for matching only
 
 is_lf_exec=0
 case "$norm" in
-  */makefile/lib/*.sh|*/scripts/*.sh|*/.claude/hooks/*.sh|*/.githooks/*|*/chezmoi/dot_local/bin/executable_batpipe)
-    is_lf_exec=1 ;;
+*/makefile/lib/*.sh | */scripts/*.sh | */.claude/hooks/*.sh | */.githooks/* | */chezmoi/dot_local/bin/executable_batpipe)
+  is_lf_exec=1
+  ;;
 esac
 is_ps1_bom=0
 case "$norm" in
-  */scripts/manage-hosts.ps1|*/bootstrap.ps1|*/scripts/install-nerd-fonts.ps1)
-    is_ps1_bom=1 ;;
+*/scripts/manage-hosts.ps1 | */bootstrap.ps1 | */scripts/install-nerd-fonts.ps1)
+  is_ps1_bom=1
+  ;;
 esac
 [ "$is_lf_exec" = 1 ] || [ "$is_ps1_bom" = 1 ] || exit 0
 
@@ -57,7 +59,7 @@ gitdir="$(dirname "$f")"
 
 if [ "$is_lf_exec" = 1 ]; then
   if LC_ALL=C grep -q $'\r' "$f" 2>/dev/null; then
-    tmp="$(mktemp)" && tr -d '\r' < "$f" > "$tmp" && cat "$tmp" > "$f" && rm -f "$tmp"
+    tmp="$(mktemp)" && tr -d '\r' <"$f" >"$tmp" && cat "$tmp" >"$f" && rm -f "$tmp"
     actions="${actions}stripped CRLF; "
   fi
   if [ ! -x "$f" ]; then
@@ -66,8 +68,8 @@ if [ "$is_lf_exec" = 1 ]; then
   if git -C "$gitdir" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
     mode="$(git -C "$gitdir" ls-files --stage -- "$f" 2>/dev/null | awk '{print $1}')"
     if [ -n "$mode" ] && [ "$mode" != "100755" ]; then
-      git -C "$gitdir" update-index --chmod=+x -- "$f" 2>/dev/null \
-        && actions="${actions}staged git mode 100755; "
+      git -C "$gitdir" update-index --chmod=+x -- "$f" 2>/dev/null &&
+        actions="${actions}staged git mode 100755; "
     fi
   fi
 fi
@@ -75,7 +77,10 @@ fi
 if [ "$is_ps1_bom" = 1 ]; then
   b="$(head -c3 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
   if [ "$b" != "efbbbf" ]; then
-    tmp="$(mktemp)" && { printf '\xef\xbb\xbf'; cat "$f"; } > "$tmp" && cat "$tmp" > "$f" && rm -f "$tmp"
+    tmp="$(mktemp)" && {
+      printf '\xef\xbb\xbf'
+      cat "$f"
+    } >"$tmp" && cat "$tmp" >"$f" && rm -f "$tmp"
     actions="${actions}restored UTF-8 BOM; "
   fi
 fi

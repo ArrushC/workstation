@@ -22,13 +22,14 @@ set -euo pipefail
 
 : "${DEST:?pipe.sh: DEST not set}"
 
-if (( $# < 2 )); then
+if (($# < 2)); then
   printf 'pipe.sh: usage: %s <name> <url> [-- args...]\n' "$0" >&2
   exit 2
 fi
 
-shift   # positional <name> arg — label only, currently unused
-url="$1"; shift
+shift # positional <name> arg — label only, currently unused
+url="$1"
+shift
 if [[ "${1:-}" == '--' ]]; then shift; fi
 # Remaining "$@" are installer args.
 

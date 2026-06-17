@@ -15,7 +15,11 @@ WIDGET_DEST="$HOME/.config/ccstatusline/settings.json"
 CLAUDE_SETTINGS_TRACKED_SRC="$CHEZMOI_SRC/private_dot_claude/private_settings.json.tmpl"
 CLAUDE_SETTINGS_DEST="$HOME/.claude/settings.json"
 
-BOLD=$'\033[1m'; YELLOW=$'\033[33m'; GREEN=$'\033[32m'; RED=$'\033[31m'; RESET=$'\033[0m'
+BOLD=$'\033[1m'
+YELLOW=$'\033[33m'
+GREEN=$'\033[32m'
+RED=$'\033[31m'
+RESET=$'\033[0m'
 
 HOST="$(hostname -s)"
 # shellcheck disable=SC2034  # symmetry with SENTINEL_END; awk patterns below match the literal string
@@ -40,14 +44,14 @@ preflight() {
   local npx_path
   npx_path="$(command -v npx)"
   case "$npx_path" in
-    /mnt/*|*/node.exe|*.exe)
-      printf '%bnpx resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$npx_path" "$RESET"
-      printf 'Windows node cannot run from a WSL working directory (UNC path failure).\n'
-      printf 'Install Linux-native Node.js inside this WSL distro:\n'
-      printf '  %bmake -C makefile node-runtime MODE=dev%b\n' "$YELLOW" "$RESET"
-      printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
-      exit 0
-      ;;
+  /mnt/* | */node.exe | *.exe)
+    printf '%bnpx resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$npx_path" "$RESET"
+    printf 'Windows node cannot run from a WSL working directory (UNC path failure).\n'
+    printf 'Install Linux-native Node.js inside this WSL distro:\n'
+    printf '  %bmake -C makefile node-runtime MODE=dev%b\n' "$YELLOW" "$RESET"
+    printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
+    exit 0
+    ;;
   esac
   if [ ! -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
     printf '%bchezmoi not initialized — run ./bootstrap.sh --dev first.%b\n' "$RED" "$RESET" >&2
@@ -84,7 +88,7 @@ sentinel_add() {
   awk -v end="$SENTINEL_END" -v stanza="$stanza" '
     $0 == end { print stanza; print; next }
     { print }
-  ' "$IGNORE_TMPL" > "$tmp"
+  ' "$IGNORE_TMPL" >"$tmp"
   mv "$tmp" "$IGNORE_TMPL"
 }
 
@@ -98,7 +102,7 @@ sentinel_remove() {
     /^# CCSTATUSLINE:END$/   { inblock=0; print; next }
     inblock && index($0, "\"" host "\"") > 0 { next }
     { print }
-  ' "$IGNORE_TMPL" > "$tmp"
+  ' "$IGNORE_TMPL" >"$tmp"
   mv "$tmp" "$IGNORE_TMPL"
 }
 
@@ -131,13 +135,13 @@ option_this_machine() {
   local ans
   read -r ans </dev/tty
   case "${ans,,}" in
-    y|yes)
-      sentinel_add "$HOST"
-      printf '%bAdded %s to local-persist sentinel block — subsequent `chezmoi apply` runs will leave your local widget config alone.%b\n' "$GREEN" "$HOST" "$RESET"
-      ;;
-    *)
-      printf '%bEphemeral — next `chezmoi update` will overwrite your local widget config with the tracked version.%b\n' "$YELLOW" "$RESET"
-      ;;
+  y | yes)
+    sentinel_add "$HOST"
+    printf '%bAdded %s to local-persist sentinel block — subsequent `chezmoi apply` runs will leave your local widget config alone.%b\n' "$GREEN" "$HOST" "$RESET"
+    ;;
+  *)
+    printf '%bEphemeral — next `chezmoi update` will overwrite your local widget config with the tracked version.%b\n' "$YELLOW" "$RESET"
+    ;;
   esac
 }
 option_set_global() {
@@ -172,7 +176,7 @@ option_set_global() {
   git push origin "$(git symbolic-ref --short HEAD)"
   printf '%bDone.%b\n' "$GREEN" "$RESET"
 }
-option_skip()         { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
+option_skip() { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
 
 # --- menu -------------------------------------------------------------------
 
@@ -194,11 +198,14 @@ main() {
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    1)        option_use_tracked  ;;
-    2)        option_this_machine ;;
-    3)        option_set_global   ;;
-    4|"")     option_skip         ;;
-    *)        printf '%bInvalid choice.%b\n' "$RED" "$RESET" >&2; exit 1 ;;
+  1) option_use_tracked ;;
+  2) option_this_machine ;;
+  3) option_set_global ;;
+  4 | "") option_skip ;;
+  *)
+    printf '%bInvalid choice.%b\n' "$RED" "$RESET" >&2
+    exit 1
+    ;;
   esac
 }
 

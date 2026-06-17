@@ -537,6 +537,31 @@ ps-lint:
 	   printf 'pwsh not installed — skipped (CI enforces PowerShell lint)\n'; \
 	 fi
 
+.PHONY: fmt secrets
+
+# fmt — format the first-party shell scripts in place with shfmt -i 2 (same files
+# + style check-invariants.sh enforces). Fix target for the `make lint` shfmt
+# check. Soft-skips if shfmt is absent. Invoke `make fmt MODE=prod`.
+fmt:
+	@if command -v shfmt >/dev/null 2>&1; then \
+	   cd $(REPO_ROOT) && shfmt -w -i 2 bootstrap.sh makefile/lib/*.sh scripts/*.sh \
+	     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh \
+	     chezmoi/private_dot_claude/executable_notify.sh \
+	     chezmoi/dot_local/bin/executable_winterop \
+	   && printf 'shfmt -i 2: formatted the first-party shell scripts\n'; \
+	 else \
+	   printf 'shfmt not installed — `make shfmt MODE=<...>` first\n'; \
+	 fi
+
+# secrets — scan the working tree for committed secrets with gitleaks (same scan
+# check-invariants.sh runs). Soft-skips if gitleaks is absent. `make secrets MODE=prod`.
+secrets:
+	@if command -v gitleaks >/dev/null 2>&1; then \
+	   cd $(REPO_ROOT) && gitleaks dir --no-banner --redact -c .gitleaks.toml .; \
+	 else \
+	   printf 'gitleaks not installed — `make gitleaks MODE=<...>` first\n'; \
+	 fi
+
 list:
 	@printf 'scope-tools (%d):\n' $(words $(SCOPE_TOOLS))
 	@printf '  %s\n' $(sort $(SCOPE_TOOLS))
