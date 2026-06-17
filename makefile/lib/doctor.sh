@@ -8,7 +8,8 @@
 #   user|<name>|<version>      USER_TOOL registrations       → ~/.local/bin (pip)
 #   bespoke|<name>|<version>   bespoke Makefile targets (claude-cli,
 #                              node-runtime, nerd-fonts, docker-engine,
-#                              dozzle-service, cockpit-service, wsl-config)
+#                              dozzle-service, cockpit-service, rsyslog-service,
+#                              wsl-config)
 #
 # Env (exported by the Makefile/scope.mk): DEST, STAMP, MODE, IS_WSL, HAS_SUDO.
 # Recipe-passed: LINUX_PACKAGES, LINUX_OPTIONAL_PACKAGES.
@@ -177,6 +178,23 @@ check_bespoke() {
         row_warn "$name" "tracked configs/wsl/wsl.conf changed (or stamp missing) — make wsl-config MODE=dev redeploys"
       else
         row_bad "$name" "/etc/wsl.conf not deployed — install: make wsl-config MODE=dev"
+      fi
+    fi
+    ;;
+  rsyslog-service)
+    if [[ "${IS_WSL:-false}" == true ]]; then
+      row_skip "$name" "WSL — host logging is handled on the Windows side"
+    elif ! rpm -q rsyslog >/dev/null 2>&1; then
+      row_bad "$name" "rsyslog missing — install: make packages rsyslog-service MODE=dev"
+    else
+      local sha=""
+      [[ -f ../configs/rsyslog/30-workstation.conf ]] && sha=$(sha256sum ../configs/rsyslog/30-workstation.conf | cut -c1-12)
+      if [[ -n "$sha" && -f "$STAMP/rsyslog-service-$sha.done" && -f /etc/rsyslog.d/30-workstation.conf ]] && svc_active rsyslog; then
+        row_ok "$name" "active, drop-in current (content $sha)"
+      elif [[ -f /etc/rsyslog.d/30-workstation.conf ]]; then
+        row_warn "$name" "drop-in changed or service inactive — make rsyslog-service MODE=dev redeploys + restarts"
+      else
+        row_bad "$name" "drop-in not deployed — install: make rsyslog-service MODE=dev"
       fi
     fi
     ;;

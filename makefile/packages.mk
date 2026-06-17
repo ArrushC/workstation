@@ -51,7 +51,7 @@ LINUX_PACKAGES := \
 # to build it from source (autotools) — deliberately not done here.
 LINUX_OPTIONAL_PACKAGES := \
   ripgrep bash-completion \
-  htop multitail goaccess \
+  htop multitail goaccess rsyslog \
   nmap mtr \
   parallel pv entr tree strace perf cronie time \
   rlwrap \

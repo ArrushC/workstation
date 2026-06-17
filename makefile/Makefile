@@ -408,6 +408,52 @@ clean-cockpit-service:
 	@rm -f $(STAMP)/cockpit-service.done
 
 # -----------------------------------------------------------------------------
+# rsyslog-service — install a tracked local-routing drop-in + enable the daemon.
+#   - dev_machine only (recipe gated on MODE=dev). prod has no sudo and
+#     INSTALL_PACKAGES=false, so a root-owned logging daemon can't live there.
+#   - Skips on WSL (IS_WSL=true) — host logging is handled on the Windows side;
+#     matches docker-/dozzle-/cockpit-service.
+#   - rsyslog comes from dnf (it's in LINUX_OPTIONAL_PACKAGES). Like
+#     cockpit-service this target does NOT install the package itself (can't
+#     depend on the `packages` phony without breaking `make -j`); it sanity-
+#     checks `rpm -q rsyslog` and aborts with a clear message if absent.
+#   - Deploys configs/rsyslog/30-workstation.conf to /etc/rsyslog.d/, then
+#     enables + restarts rsyslog so the drop-in takes effect (the local0..local7
+#     facilities funnel into /var/log/workstation.log).
+#   - Stamp is content-hashed (RSYSLOG_CONF_SHA) so editing the tracked drop-in
+#     auto-redeploys; cf. wsl-config. No version to bake (dnf-versioned).
+# -----------------------------------------------------------------------------
+.PHONY: rsyslog-service clean-rsyslog-service
+ifeq ($(MODE),dev)
+ifeq ($(IS_WSL),true)
+rsyslog-service:
+	@echo "rsyslog-service: skipping on WSL — host logging is handled on the Windows side, not the WSL guest"
+else
+RSYSLOG_CONF_SHA := $(shell sha256sum ../configs/rsyslog/30-workstation.conf 2>/dev/null | cut -c1-12)
+rsyslog-service: $(STAMP)/rsyslog-service-$(RSYSLOG_CONF_SHA).done
+$(STAMP)/rsyslog-service-$(RSYSLOG_CONF_SHA).done:
+	@printf '==> rsyslog-service (daemon + local-routing drop-in)\n'
+	@if ! rpm -q rsyslog >/dev/null 2>&1; then \
+	   printf '  ERROR: rsyslog package not installed. Run `make MODE=dev packages` first,\n' >&2; \
+	   printf '         or `make MODE=dev provision` (which runs packages before this target).\n' >&2; \
+	   exit 1; \
+	 fi
+	@$(SUDO) install -m 0644 ../configs/rsyslog/30-workstation.conf /etc/rsyslog.d/30-workstation.conf
+	@$(SUDO) systemctl enable rsyslog
+	@$(SUDO) systemctl restart rsyslog
+	@printf '  rsyslog enabled; local0..local7 -> /var/log/workstation.log\n'
+	@mkdir -p $(@D) && touch $@
+endif
+else
+rsyslog-service:
+	@echo "rsyslog-service is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-rsyslog-service:
+	@$(SUDO) rm -f /etc/rsyslog.d/30-workstation.conf
+	@$(SUDO) systemctl restart rsyslog 2>/dev/null || true
+	@rm -f $(STAMP)/rsyslog-service-*.done
+
+# -----------------------------------------------------------------------------
 # wsl-config — install the tracked /etc/wsl.conf on WSL hosts.
 #   - Runs only when IS_WSL=true AND HAS_SUDO=true. Writing /etc/ needs root,
 #     so a non-WSL host or a sudo-less prod scope skips with a message.
@@ -461,7 +507,7 @@ user-tools: $(USER_TOOLS)
 
 provision: packages tools user-tools shell dotfiles wsl-config
 ifeq ($(MODE),dev)
-provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service
+provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
@@ -495,6 +541,7 @@ DOCTOR_ROWS += bespoke|nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)
 DOCTOR_ROWS += bespoke|docker-engine|-
 DOCTOR_ROWS += bespoke|dozzle-service|$(DOZZLE_VERSION)
 DOCTOR_ROWS += bespoke|cockpit-service|-
+DOCTOR_ROWS += bespoke|rsyslog-service|-
 DOCTOR_ROWS += bespoke|wsl-config|-
 
 # NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe
@@ -568,7 +615,7 @@ list:
 	@printf '\nuser-tools (%d):\n' $(words $(USER_TOOLS))
 	@printf '  %s\n' $(sort $(USER_TOOLS))
 	@printf '\nservices (provisioned on MODE=dev only; no-op on WSL):\n'
-	@printf '  docker-engine\n  dozzle-service\n  cockpit-service\n'
+	@printf '  docker-engine\n  dozzle-service\n  cockpit-service\n  rsyslog-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
@@ -589,6 +636,7 @@ help:
 	@echo "  make docker-engine    install Docker CE + enable the service (dev only, non-WSL)"
 	@echo "  make dozzle-service   install dozzle systemd unit + start service (dev only)"
 	@echo "  make cockpit-service  install cockpit.conf + enable socket + open firewall (dev only)"
+	@echo "  make rsyslog-service  install local-routing drop-in + enable rsyslog (dev only, non-WSL)"
 	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"
 	@echo "  make <tool>       install just one tool, e.g. make gitui"
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"
