@@ -12,7 +12,7 @@ IGNORE_TMPL="$CHEZMOI_SRC/.chezmoiignore.tmpl"
 WIDGET_TRACKED_SRC="$CHEZMOI_SRC/dot_config/ccstatusline/settings.json"
 WIDGET_DEST="$HOME/.config/ccstatusline/settings.json"
 # shellcheck disable=SC2034  # documents the tracked settings source; pairs with CLAUDE_SETTINGS_DEST
-CLAUDE_SETTINGS_TRACKED_SRC="$CHEZMOI_SRC/private_dot_claude/private_settings.json.tmpl"
+CLAUDE_SETTINGS_TRACKED_SRC="$CHEZMOI_SRC/private_dot_claude/modify_private_settings.json"
 CLAUDE_SETTINGS_DEST="$HOME/.claude/settings.json"
 
 BOLD=$'\033[1m'
@@ -159,8 +159,8 @@ option_set_global() {
   # re-added because ccstatusline's TUI "Install to Claude Code" path
   # overwrites the local file with a statusLine-only block, which would
   # strip every other key (skipAutoPermissionPrompt, tui, theme, etc.) on
-  # every save. That template is hand-managed via direct edits to
-  # chezmoi/private_dot_claude/private_settings.json.tmpl; statusline
+  # every save. That merge-template is hand-managed via direct edits to
+  # chezmoi/private_dot_claude/modify_private_settings.json; statusline
   # version bumps are a dual-edit with versions.mk per CLAUDE.md.
   chezmoi re-add "$WIDGET_DEST"
   cd "$REPO_ROOT"

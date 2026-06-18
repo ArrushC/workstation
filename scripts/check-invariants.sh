@@ -46,11 +46,11 @@ check_version_pins() {
 
   v=$(mkval CCSTATUSLINE_VERSION)
   ref=$(grep -oE 'ccstatusline@[0-9][0-9.]*' \
-    chezmoi/private_dot_claude/private_settings.json.tmpl | head -1 | sed 's/.*@//')
+    chezmoi/private_dot_claude/modify_private_settings.json | head -1 | sed 's/.*@//')
   if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-    ok "ccstatusline @ $v  (versions.mk == settings.json.tmpl)"
+    ok "ccstatusline @ $v  (versions.mk == modify_private_settings.json)"
   else
-    bad "ccstatusline drift: versions.mk='$v' settings.json.tmpl='$ref'"
+    bad "ccstatusline drift: versions.mk='$v' modify_private_settings.json='$ref'"
   fi
 
   v=$(mkval JETBRAINSMONO_NERD_VERSION)

@@ -39,7 +39,7 @@ case "$norm" in
   msg="Parity pair: you edited dot_bashrc.tmpl — mirror the change in dot_zshrc.tmpl. Change both in the same commit. See CLAUDE.md."
   ;;
 */makefile/versions.mk)
-  msg="versions.mk changed. Dual/triple-edit pins that have NO template bridge: CCSTATUSLINE_VERSION -> ccstatusline@ in private_settings.json.tmpl; JETBRAINSMONO_NERD_VERSION -> lib/font.sh SHA arm + install-nerd-fonts.ps1; HELIX_VERSION -> bootstrap.ps1 download URL. If you touched any of those pins, update its paired file(s) in the same commit."
+  msg="versions.mk changed. Dual/triple-edit pins that have NO template bridge: CCSTATUSLINE_VERSION -> ccstatusline@ in modify_private_settings.json; JETBRAINSMONO_NERD_VERSION -> lib/font.sh SHA arm + install-nerd-fonts.ps1; HELIX_VERSION -> bootstrap.ps1 download URL. If you touched any of those pins, update its paired file(s) in the same commit."
   ;;
 */makefile/scope.mk)
   msg="scope.mk changed. If you touched HELIX_RUNTIME_DEST, mirror the value in the HELIX_RUNTIME rc literal in BOTH dot_zshrc.tmpl and dot_bashrc.tmpl (no template var bridges them). See CLAUDE.md."
@@ -56,7 +56,7 @@ if [ -z "$msg" ]; then
   manage-hosts.ps1)
     msg="Parity pair: manage-hosts.ps1 and manage-hosts.sh must stay feature-identical. Change both in the same commit. (Also keep the UTF-8 BOM on the .ps1.)"
     ;;
-  private_settings.json.tmpl)
+  modify_private_settings.json)
     msg="If you changed the ccstatusline@ pin here, mirror it in CCSTATUSLINE_VERSION in makefile/versions.mk (dual-edit, no bridge)."
     ;;
   esac
