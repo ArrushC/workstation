@@ -459,6 +459,52 @@ fssh() {
   [[ -n "$host" ]] && ssh "$host"
 }
 
+# ssh — launched from WezTerm, keep TERM=wezterm only if the remote actually has
+# the wezterm terminfo; otherwise fall back to xterm-256color so `clear`/TUIs
+# don't error with `unknown terminal type` on hosts not provisioned with this
+# repo. Fail-safe: anything uncertain (unparsable dest, probe timeout, password-
+# only host with no live ControlMaster) downgrades; we only *upgrade* on a
+# positive infocmp. Bypass once with `command ssh …`; disable permanently via
+# `unset -f ssh` in ~/.zshrc.local. PARITY: identical body in dot_bashrc.tmpl.
+ssh() {
+  if [ "$TERM" != wezterm ]; then
+    command ssh "$@"
+    return
+  fi
+
+  # Destination = first bareword that isn't an option or an option's value.
+  local arg dest='' expect_val=0
+  local val_flags='bcDEeFIiJLlmOopRSWw'
+  for arg in "$@"; do
+    if [ "$expect_val" = 1 ]; then
+      expect_val=0
+      continue
+    fi
+    case $arg in
+    --) continue ;;
+    -[$val_flags]) expect_val=1 ;;
+    -[$val_flags]*) continue ;;
+    -*) continue ;;
+    *)
+      dest=${arg#*@}
+      break
+      ;;
+    esac
+  done
+
+  # Default to the safe fallback; only upgrade on a positive non-interactive
+  # probe. -o BatchMode=yes never prompts; the probe reuses the ControlMaster
+  # socket (ControlMaster auto / ControlPersist 60s, Linux/WSL) so it's cheap.
+  local term=xterm-256color
+  if [ -n "$dest" ] &&
+    command ssh -o BatchMode=yes -o ConnectTimeout=5 "$dest" \
+      'infocmp wezterm >/dev/null 2>&1'; then
+    term=wezterm
+  fi
+
+  TERM=$term command ssh "$@"
+}
+
 # Start or attach to a named zellij session
 zs() {
   local session="${1:-main}"
