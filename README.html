@@ -2397,7 +2397,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         it&rsquo;s missing, but its chezmoi config deploys
                         regardless. <strong>zoxide</strong> is no longer
                         installed (the PowerShell profile no-ops without it).
-                        WezTerm/Starship/Helix versions are pinned in
+                        WezTerm/Starship/Helix/Nushell versions are pinned in
                         <code>bootstrap.ps1</code> (<code>$PortableTools</code>),
                         the same self-contained pattern as
                         <code>install-nerd-fonts.ps1</code>; the Helix pin tracks
@@ -2405,6 +2405,28 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         Your helix config deploys to
                         <code>%APPDATA%\helix\config.toml</code> on Windows
                         (Helix&rsquo;s Windows config dir).
+                    </p>
+                    <p>
+                        <strong>Nushell is the default local shell.</strong> It
+                        replaces PowerShell as the default in both WezTerm
+                        (<code>default_prog</code> in <code>wezterm.lua</code>) and
+                        Windows Terminal (the <em>Nushell</em> profile +
+                        <code>defaultProfile</code>) &mdash; a structured-data,
+                        cross-platform modern shell. It&rsquo;s installed as a
+                        pinned portable tool to
+                        <code>%LOCALAPPDATA%\workstation\nu</code>; its config
+                        deploys to <code>%APPDATA%\nushell\config.nu</code> (the
+                        <code>cz*</code>/<code>g*</code> aliases mirror the
+                        PowerShell profile), and the Starship prompt is generated
+                        into
+                        <code>%APPDATA%\nushell\vendor\autoload\starship.nu</code>.
+                        <strong>PowerShell stays installed</strong> for
+                        .NET/COM/registry tasks and the WSL2 notify hook &mdash;
+                        it&rsquo;s just no longer the default. Nushell is pre-1.0
+                        and ships breaking changes every few releases, so the pin
+                        is deliberate: bump it (and re-check
+                        <code>config.nu</code>) intentionally, upgrading
+                        <em>incrementally</em> rather than skipping releases.
                     </p>
                     <p>
                         <strong>Hand-install shopping list.</strong> Beyond what
@@ -2419,7 +2441,9 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                     <p>
                         <strong>Windows Terminal</strong> is themed
                         <strong>Catppuccin Mocha</strong> (color scheme + app
-                        theme, applied to all profiles). Its
+                        theme, applied to all profiles), and its default profile
+                        is <strong>Nushell</strong> (PowerShell, cmd, Git Bash,
+                        WSL, and the SSH-host profiles remain available). Its
                         <code>settings.json</code> is chezmoi-tracked at
                         <code>%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json</code>,
                         the same sync-from-host pattern as the Zed/VSCode
@@ -2457,7 +2481,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
-.\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix already on PATH
+.\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix/Nushell already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
 .\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed) even if present
@@ -2482,7 +2506,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Install chezmoi + WezTerm + Starship + Helix</span
+                            ><span class="lbl">Install chezmoi + WezTerm + Starship + Helix + Nushell</span
                             ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -2512,15 +2536,16 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                     <p class="note-row">
                         <strong>No elevation anywhere in this flow.</strong>
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship/Helix installs <em>and</em> the
-                        installer-class apps (Obsidian, Zed) entirely (assumes
-                        they&rsquo;re already present). Obsidian and Zed install
+                        chezmoi/WezTerm/Starship/Helix/Nushell installs
+                        <em>and</em> the installer-class apps (Obsidian, Zed)
+                        entirely (assumes they&rsquo;re already present). Obsidian and Zed install
                         silently per-user via their own <code>.exe</code> at the
                         latest release; pass <code>-ForceInstaller</code> to
                         reinstall them even when already present. The diagram is a
                         simplified view &mdash; the script also creates the
-                        WezTerm Start Menu shortcut and runs BurntToast and the
-                        Nerd Font install (its step 7) between
+                        WezTerm Start Menu shortcut, generates the Nushell
+                        Starship prompt, and runs BurntToast and the Nerd Font
+                        install (its step 7) between
                         <code>Set WEZTERM_CONFIG_FILE</code> and the SSH-key step.
                         <code>GITHUB_TOKEN</code> persists into
                         <code>.git/config</code> (github.com-scoped) so
@@ -3932,7 +3957,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         </summary>
                         <div class="ts-body">
                             <p>
-                                WezTerm/Starship/Helix are pinned to a specific version
+                                WezTerm/Starship/Helix/Nushell are pinned to a specific version
                                 <em>and</em> sha256 in
                                 <code>$PortableTools</code> inside
                                 <code>bootstrap.ps1</code>. A mismatch means the

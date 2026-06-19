@@ -1,0 +1,102 @@
+# =============================================================================
+# config.nu — Nushell config, managed by chezmoi
+# Machine: {{ .chezmoi.hostname }} | User: {{ .chezmoi.username }}
+#
+# Deploys to %APPDATA%\nushell\config.nu (Windows only — the whole AppData tree
+# is ignored on Linux via .chezmoiignore). Nushell is the default LOCAL Windows
+# shell (see wezterm.lua default_prog + the Windows Terminal "Nushell" profile);
+# PowerShell stays installed for .NET/COM tasks and the WSL2 notify hook.
+#
+# This file owns the HAND-WRITTEN config (aliases, env, helpers). The Starship
+# prompt is wired separately by a GENERATED file at
+# %APPDATA%\nushell\vendor\autoload\starship.nu (written by bootstrap.ps1's
+# Invoke-NushellStarship — everything under vendor/autoload is auto-sourced on
+# startup, so there is no `source` line for it here).
+#
+# PARITY NOTE: the cz*/g* aliases below mirror the PowerShell profile
+# (Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tmpl). Keep the two in
+# sync when adding or renaming an alias so both Windows shells behave the same.
+#
+# Per-machine overrides (untracked): drop a `*.nu` file into
+# %APPDATA%\nushell\vendor\autoload\ — it is auto-sourced after this file.
+# =============================================================================
+
+# --- Shell behaviour --------------------------------------------------------
+# Mutate fields on the pre-populated default $env.config (never reassign the
+# whole record — that would wipe Nushell's defaults).
+$env.config.show_banner = false
+
+# --- chezmoi aliases (mirror the PowerShell profile) ------------------------
+alias cz  = chezmoi
+alias cza = chezmoi apply
+alias cze = chezmoi edit
+alias czd = chezmoi diff
+alias czu = chezmoi update
+alias czs = chezmoi status
+
+# --- git aliases ------------------------------------------------------------
+alias gs  = git status
+alias ga  = git add
+alias gc  = git commit
+alias gp  = git push
+alias gl  = git log --oneline --graph --decorate
+alias gd  = git diff
+alias gco = git checkout
+alias gbr = git branch
+
+# --- Navigation -------------------------------------------------------------
+# No aliases needed: Nushell has `..`, `...`, `....` (and deeper) built in as
+# parent-directory shortcuts, so the bash/PowerShell `..`/`...` helpers are
+# already covered natively.
+
+# --- workstation helpers ----------------------------------------------------
+# Quick path to the workstation repo. Defaults to bootstrap.ps1's clone path;
+# override in a vendor/autoload/*.nu file if you cloned elsewhere.
+$env.WORKSTATION_REPO = ($env.USERPROFILE | path join ".local" "share" "chezmoi")
+
+# Open the interactive host manager (PowerShell script — Windows-side tooling).
+def hosts [] {
+    powershell -NoProfile -File ($env.WORKSTATION_REPO | path join "scripts" "manage-hosts.ps1")
+}
+
+# ssh-copy-id — Windows OpenSSH has none; port of the PowerShell profile helper.
+# Picks a ~/.ssh/*.pub (prompts if several), confirms, then appends it to the
+# target's authorized_keys over ssh.
+def ssh-copy-id [target: string] {
+    # Build the path from $USERPROFILE and list+filter rather than glob, to dodge
+    # glob's backslash-as-escape and tilde-expansion ambiguities on Windows.
+    let ssh_dir = ($env.USERPROFILE | path join ".ssh")
+    let pubs = (if ($ssh_dir | path exists) { ls $ssh_dir | where name =~ '\.pub$' | get name } else { [] })
+    if ($pubs | is-empty) {
+        error make { msg: $"No public keys found in ($ssh_dir)" }
+    }
+    let key = if (($pubs | length) == 1) {
+        $pubs | first
+    } else {
+        print "Available public keys:"
+        $pubs | enumerate | each {|e| print $"[($e.index + 1)] ($e.item)" } | ignore
+        let choice = (input "Select key number [1]: ")
+        # Non-numeric -> 0 so it fails the range check below, mirroring the
+        # PowerShell profile's "Invalid selection" guard.
+        let idx = (if ($choice | is-empty) { 1 } else { try { $choice | into int } catch { 0 } })
+        if ($idx < 1 or $idx > ($pubs | length)) {
+            error make { msg: $"Invalid selection: ($choice)" }
+        }
+        $pubs | get ($idx - 1)
+    }
+    print $"Using key: ($key)"
+    let confirm = (input $"Copy this key to ($target)? [Y/n] ")
+    if ($confirm | str downcase | str starts-with "n") {
+        print "Cancelled."
+        return
+    }
+    open --raw $key | ssh $target "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+}
+
+# adminpw — LAPS lookup lives in the PowerShell profile (needs the AdmPwd.PS
+# .NET module), so delegate to PowerShell rather than reimplement it in nu. It
+# copies the password to the clipboard (system-wide, so it survives the child
+# process) and prints only the machine + expiry.
+def adminpw [] {
+    powershell -Command "Get-AdminPassword"
+}
