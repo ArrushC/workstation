@@ -32,7 +32,7 @@
     "alwaysOnTop": false,
     "copyFormatting": "none",
     "copyOnSelect": true,
-    "defaultProfile": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+    "defaultProfile": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
     "keybindings": 
     [
         {
@@ -64,8 +64,28 @@
         {
             "colorScheme": "Catppuccin Mocha"
         },
-        "list": 
+        "list":
         [
+            {
+                "altGrAliasing": true,
+                "antialiasingMode": "grayscale",
+                "closeOnExit": "automatic",
+                "commandline": "%LOCALAPPDATA%\\workstation\\nu\\nu.exe",
+                "cursorShape": "bar",
+                "font":
+                {
+                    "face": "JetBrainsMono Nerd Font Mono",
+                    "size": 11
+                },
+                "guid": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
+                "hidden": false,
+                "historySize": 9001,
+                "name": "Nushell",
+                "padding": "8, 8, 8, 8",
+                "snapOnInput": true,
+                "startingDirectory": "%USERPROFILE%",
+                "useAcrylic": false
+            },
             {
                 "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nologo",
                 "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",

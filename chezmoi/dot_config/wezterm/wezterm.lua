@@ -111,16 +111,34 @@ end
 -- ---------------------------------------------------------------------------
 local config = wezterm.config_builder()
 
+-- nu_prog — resolve Nushell for local Windows tabs. Prefer the bootstrap.ps1
+-- portable install (%LOCALAPPDATA%\workstation\nu\nu.exe), fall back to a bare
+-- 'nu' on PATH (winget/scoop installs). Belt-and-suspenders like config.font_dirs
+-- below: an absolute path survives the bootstrap User-PATH-propagation race, and
+-- WezTerm does NOT tilde-/PATH-expand a missing absolute path, so we only return
+-- the absolute form when the file actually exists.
+local function nu_prog()
+  local lad = os.getenv('LOCALAPPDATA')
+  if lad then
+    local nu = lad .. '\\workstation\\nu\\nu.exe'
+    local f = io.open(nu, 'r')
+    if f then f:close(); return { nu } end
+  end
+  return { 'nu' }
+end
+
 -- Default shell for local tabs on Windows. Decision tree based on detected
 -- WSL distros (parsed from `wsl.exe -l -v` by wezterm.default_wsl_domains()):
---   0 distros  → powershell.exe (Windows PowerShell 5.1, always present).
+--   0 distros  → Nushell (nu_prog above) — the modern default local shell.
 --   1 distro   → default_domain points at that distro; new tabs land in WSL.
---   2+ distros → powershell.exe placeholder + a one-shot picker fires on the
---                first update-status tick, replacing the placeholder with the
+--   2+ distros → Nushell placeholder + a one-shot picker fires on the first
+--                update-status tick, replacing the placeholder with the
 --                user-chosen distro. See gui-startup + update-status handlers
 --                near the bottom of this file.
--- SSH-domain tabs still spawn `zellij attach --create main` via per-domain
--- default_prog — this only affects local (non-SSH) tabs.
+-- PowerShell is intentionally NOT the default anymore (it stays installed for
+-- .NET/COM tasks + the WSL2 notify hook — see bootstrap.ps1). SSH-domain tabs
+-- still spawn `zellij attach --create main` via per-domain default_prog — this
+-- only affects local (non-SSH) tabs.
 local wsl_doms = {}
 if wezterm.target_triple:find('windows') then
   wsl_doms = wezterm.default_wsl_domains()
@@ -137,8 +155,8 @@ if wezterm.target_triple:find('windows') then
   if #wsl_doms == 1 then
     config.default_domain = wsl_doms[1].name
   else
-    -- 0 or 2+: default to powershell. For 2+, picker replaces this on launch.
-    config.default_prog = { 'powershell.exe', '-NoLogo' }
+    -- 0 or 2+: default to Nushell. For 2+, the picker replaces this on launch.
+    config.default_prog = nu_prog()
   end
 end
 
@@ -1245,8 +1263,9 @@ config.key_tables = {}
 -- ---------------------------------------------------------------------------
 -- The "show picker before first tab" UX requires bridging gui-startup (no GUI
 -- Window yet) and update-status (GUI Window exists, ~1s after launch). We
--- spawn the placeholder powershell tab in gui-startup, stash its tab id keyed
--- by mux window id, then fire the picker from update-status — once per window.
+-- spawn the placeholder local tab (Nushell, via default_prog) in gui-startup,
+-- stash its tab id keyed by mux window id, then fire the picker from
+-- update-status — once per window.
 -- The existing update-status handler at render_right_status is a separate
 -- registration; WezTerm composes multiple handlers per event without conflict.
 local wsl_picker_pending = {}

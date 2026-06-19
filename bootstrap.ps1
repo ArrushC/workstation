@@ -151,11 +151,13 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 #   workstation\bin      — single-exe tools (chezmoi, starship)  → on User PATH
 #   workstation\wezterm  — the multi-file WezTerm portable tree  → on User PATH
 #   workstation\helix    — the multi-file Helix portable tree    → on User PATH
+#   workstation\nu       — the multi-file Nushell portable tree  → on User PATH
 #   workstation\stamps   — "<exe>.<version>.stamp" idempotency markers
 $WsRoot    = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin     = Join-Path $WsRoot "bin"
 $WsWezterm = Join-Path $WsRoot "wezterm"
 $WsHelix   = Join-Path $WsRoot "helix"
+$WsNu      = Join-Path $WsRoot "nu"
 $WsStamps  = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
@@ -208,6 +210,23 @@ $PortableTools = @(
         Repo       = "helix-editor/helix"
         TagPrefix  = ""
         UpdateHint = "dual-edit: `$PortableTools here AND HELIX_VERSION in makefile/versions.mk"
+    },
+    @{
+        # Nushell — the default LOCAL Windows shell (wezterm.lua default_prog +
+        # the Windows Terminal "Nushell" profile both point at this install).
+        # Pre-1.0 and churny: bump deliberately and upgrade INCREMENTALLY (the
+        # pin/stamp model here is exactly the "pin it, read the changelog" hygiene
+        # Nushell's 0.x cadence needs). Tags are bare "0.113.1" (no prefix).
+        Name       = "Nushell"
+        Exe        = "nu"
+        Version    = "0.113.1"
+        Url        = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x86_64-pc-windows-msvc.zip"
+        Sha256     = "fd3e56dac9f866d2d3fe2fabd6580c14371afdcec9ddda54624a50986d36b3d2"
+        Layout     = "tree"   # zip bundles nu.exe + nu_plugin_*.exe
+        Dest       = $WsNu
+        Repo       = "nushell/nushell"
+        TagPrefix  = ""
+        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools — pre-1.0: READ the release's Breaking-changes section and upgrade incrementally (skipping releases can break config.nu)"
     },
     @{
         Name       = "jq"
@@ -648,7 +667,7 @@ function Invoke-ToolInstall {
         return
     }
 
-    foreach ($d in @($WsRoot, $WsBin, $WsHelix, $WsStamps)) {
+    foreach ($d in @($WsRoot, $WsBin, $WsHelix, $WsNu, $WsStamps)) {
         if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
     }
 
@@ -886,6 +905,43 @@ function Invoke-WeztermShortcut {
         }
     } catch {
         Write-Warn "Could not create the WezTerm Start Menu shortcut: $($_.Exception.Message)"
+    }
+}
+
+# =============================================================================
+# 5d. NUSHELL STARSHIP PROMPT — Nushell wires the Starship prompt through a
+#    GENERATED file in its autoload dir. Unlike PowerShell's
+#    `Invoke-Expression (& starship init powershell)`, nu's init output can't be
+#    eval'd at parse time, so it must be written to
+#    %APPDATA%\nushell\vendor\autoload\starship.nu — everything under
+#    vendor/autoload is auto-sourced on every nu startup. The chezmoi-managed
+#    config.nu owns the hand-written config (aliases, env); this owns ONLY the
+#    generated prompt, so the two never fight. Runs EVERY bootstrap independent
+#    of any stamp, so a Starship pin-bump refreshes it and a deleted file
+#    self-heals — same pattern as Invoke-WeztermShortcut. Per-user, no admin;
+#    soft-fails to a warning, never blocks the rest of the bootstrap.
+# =============================================================================
+function Invoke-NushellStarship {
+    if (-not (Get-Command starship -ErrorAction SilentlyContinue)) {
+        Write-Warn "Skipping Nushell starship prompt — starship not on PATH (install step skipped?)."
+        return
+    }
+    if (-not (Get-Command nu -ErrorAction SilentlyContinue)) {
+        Write-Warn "Skipping Nushell starship prompt — nu not on PATH (install step skipped?)."
+        return
+    }
+
+    $autoload = Join-Path $env:APPDATA "nushell\vendor\autoload"
+    $target   = Join-Path $autoload "starship.nu"
+    try {
+        if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
+        # starship emits the nu prompt wiring on stdout. Write UTF-8 WITHOUT a
+        # BOM — nu chokes on a leading BOM in sourced scripts.
+        $init = (& starship init nu) -join "`n"
+        [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "Nushell starship prompt generated ($target)"
+    } catch {
+        Write-Warn "Could not generate the Nushell starship prompt: $($_.Exception.Message)"
     }
 }
 
@@ -1224,6 +1280,10 @@ function Invoke-Doctor {
     if (Test-Path $lnk) { Write-Ok "WezTerm Start Menu shortcut present" }
     else { Write-Warn "WezTerm Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
 
+    $nuStarship = Join-Path $env:APPDATA "nushell\vendor\autoload\starship.nu"
+    if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
+    else { Write-Warn "Nushell starship prompt missing — re-run .\bootstrap.ps1 (regenerates it)" }
+
     $realDocs    = [Environment]::GetFolderPath("MyDocuments")
     $literalDocs = Join-Path $env:USERPROFILE "Documents"
     if ([string]::IsNullOrEmpty($realDocs) -or ($realDocs -eq $literalDocs)) {
@@ -1335,6 +1395,7 @@ Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
 Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
 Invoke-WeztermShortcut    # drop a per-user Start Menu .lnk for the portable WezTerm GUI
+Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
@@ -1343,9 +1404,10 @@ Invoke-EnsureSshKey
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
-Write-Host "Open a NEW PowerShell tab so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsWezterm${Reset},"
-Write-Host "${Bold}$WsHelix${Reset}) and the chezmoi-applied `$PROFILE pick up — starship"
-Write-Host "prompt, chezmoi/git aliases, etc."
+Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsWezterm${Reset},"
+Write-Host "${Bold}$WsHelix${Reset}, ${Bold}$WsNu${Reset}) and the chezmoi-applied configs pick up — starship"
+Write-Host "prompt, chezmoi/git aliases, etc. Nushell is now the default local shell;"
+Write-Host "PowerShell stays installed (for .NET/COM tasks + the WSL2 notify hook)."
 Write-Host "Restart WezTerm too if any instances were running — they need a fresh process"
 Write-Host "to see the new ${Bold}WEZTERM_CONFIG_FILE${Reset} env var."
 Write-Host ""
