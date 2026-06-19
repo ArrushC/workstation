@@ -18,15 +18,28 @@ Nushell rollout:
   other `HWND_BROADCAST` messages from it DO reach running GUI apps. Prefer
   [[project_winterop_wsl_windows_interop]] (`winterop`) for simple calls.
 
-- **`chezmoi init --apply` HANGS non-interactively.** Run from a WSL-spawned
-  `powershell.exe` (no attached console), `chezmoi init --apply` blocked
-  indefinitely (~16 min) while **holding the persistent-state lock**. Plain
-  `chezmoi apply` completes but is slow (~60-90s, likely the
-  `modify_private_settings.json` merge-template). Fixes: use **`chezmoi apply`**
-  not `init --apply` for re-applies; wrap the call in PowerShell
-  `Start-Job` + `Wait-Job -Timeout 60` so it can't hang the turn; redirect the
-  outer powershell stdin from `/dev/null`. (Complements
-  [[feedback_windows_chezmoi_check_before_apply]].)
+- **`chezmoi apply` HANGS non-interactively on the "changed since chezmoi last
+  wrote it" prompt.** When a target was modified EXTERNALLY since chezmoi last
+  wrote it (e.g. git/GCM appended a `[credential]` block to `~/.gitconfig`, or
+  Zed/WT rewrote their settings), `chezmoi apply` shows an interactive
+  overwrite prompt — visible in `--debug` as `... has changed since chezmoi last
+  wrote it?` followed by `[?25l[?2004h` (cursor-hide + bracketed-paste). With no
+  console (WSL-spawned `powershell.exe`), it waits forever. **Fix: `chezmoi
+  apply --force <target>`** (overwrites without prompting). `chezmoi init
+  --apply` likewise hung ~16 min holding the lock. **`chezmoi cat` / `chezmoi
+  diff` are read-only, take no lock, and never prompt — use them to diagnose**
+  (if `cat` renders fast but `apply` hangs, it's the prompt, not the template).
+  A clean targeted apply of an unmodified-or-source-only-changed file (e.g.
+  config.nu, the Nushell WT profile) works without `--force`; the prompt only
+  fires when the live file drifted from chezmoi's last-written state.
+- **`Start-Job` + `Stop-Job` on timeout ORPHANS the `chezmoi` grandchild**,
+  which keeps holding the persistent-state lock → every later `apply` then waits
+  on the lock and also "hangs." After any timed-out apply, explicitly
+  `Get-Process chezmoi | Stop-Process -Force` before retrying. Apply is slow on
+  this host anyway (~60-90s source-state eval — likely the
+  `modify_private_settings.json` merge-template), so use a generous
+  `Wait-Job -Timeout` (≥200s) and redirect the outer powershell stdin from
+  `/dev/null`. (Complements [[feedback_windows_chezmoi_check_before_apply]].)
 
 - **Never run `bootstrap.ps1` concurrently.** My background bootstrap was
   mid-`chezmoi apply` (holding the lock) when a second manual run started → the
