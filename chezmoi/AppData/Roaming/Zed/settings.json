@@ -12,6 +12,27 @@
 // current Zed config, or edit this file via `chezmoi edit` and then
 // `chezmoi apply`.
 {
+  "relative_line_numbers": "enabled",
+  "ssh_connections": [
+    {
+      "host": "atc-cache-dev10",
+      "username": "arrush.chaturvedi",
+      "args": [],
+      "projects": [
+        {
+          "paths": [
+            "/data/svn/AtcomCache/AtcomSearch/./"
+          ]
+        }
+      ]
+    },
+    {
+      "host": "atc-cache-dev09",
+      "username": "arrush.chaturvedi",
+      "args": [],
+      "projects": []
+    }
+  ],
   "buffer_font_weight": 400.0,
   "ui_font_family": "JetBrainsMono NFM",
   "buffer_font_family": "JetBrainsMono NFM",

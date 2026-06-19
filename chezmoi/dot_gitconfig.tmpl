@@ -74,3 +74,12 @@
 [credential "https://gist.github.com"]
     helper = !gh auth git-credential
 {{ end }}
+{{- if eq .chezmoi.os "windows" }}
+# Git Credential Manager (Windows-only) records the provider for the internal
+# git server so it doesn't re-probe on every auth; GCM writes this to
+# ~/.gitconfig on first access, which always drifted from this source. Track it
+# here (Windows-gated, mirroring the Linux gh block above) so `chezmoi status`
+# stays clean and `apply` won't wipe it.
+[credential "https://repo.atcoretec.com"]
+    provider = generic
+{{- end }}
