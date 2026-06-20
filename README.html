@@ -4597,12 +4597,20 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 install via dnf on
                                 <span class="badge dev">dev_machine</span> only,
                                 <strong>best-effort</strong>. Several come from
-                                EPEL/CRB, not BaseOS &mdash; if one didn&rsquo;t
-                                install, enable those repos and re-run
-                                <code>make MODE=dev packages</code>:
+                                EPEL/CRB, not BaseOS &mdash; <code>make
+                                provision</code> auto-enables both (EPEL +
+                                CodeReady Builder) on RHEL-family hosts, because
+                                EPEL on EL9 needs CRB or
+                                <code>meson</code>/<code>ninja-build</code> (which
+                                live in CRB) and
+                                <code>heaptrack</code>/<code>bear</code> (which
+                                pull CRB deps) fail to resolve. If a package
+                                still shows <code>skipped</code> (e.g. CRB
+                                couldn&rsquo;t be auto-enabled), enable it
+                                manually and re-run:
                             </p>
                             <pre><code>sudo dnf install epel-release
-sudo /usr/bin/crb enable   # or: sudo dnf config-manager --set-enabled crb
+sudo dnf config-manager --set-enabled crb   # EL9 Alma/Rocky/Stream (powertools on EL8)
 make -C makefile MODE=dev packages</code></pre>
                             <p>
                                 <strong><code>ninja: command not found</code></strong>
