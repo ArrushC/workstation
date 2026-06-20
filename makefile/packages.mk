@@ -112,8 +112,18 @@ packages-core:
 	fi
 
 # EPEL + CRB — RHEL family (Rocky/Alma/RHEL/CentOS) only. Fedora has the same
-# packages in its base repo, so EPEL would be wrong there. Detection matches the
-# old `os_family == 'RedHat' and distribution != 'Fedora'` condition.
+# packages in its base repo, so EPEL would be wrong there.
+#
+# Detection sources /etc/os-release and matches on $ID / $ID_LIKE. Do NOT use a
+# loose `grep -i fedora /etc/os-release` (the previous approach): AlmaLinux's
+# os-release carries `ID_LIKE="rhel centos fedora"` AND `LOGO="fedora-logo-icon"`,
+# so the substring match wrongly classified Alma as Fedora and skipped EPEL/CRB
+# entirely (was masked while epel-release happened to be pre-installed; exposed
+# once CRB enable moved ahead of that fast-path). So: exclude ONLY true Fedora
+# (`$ID = fedora`), then require an EL marker in `$ID $ID_LIKE` (rhel/centos/
+# almalinux/rocky — RHEL itself is `ID=rhel` even though its `ID_LIKE` is just
+# "fedora"). os-release is also more reliable than `[ -f /etc/redhat-release ]`,
+# which is absent on some minimal/container images.
 #
 # CRB (CodeReady Builder) is enabled here too because EPEL on EL9 REQUIRES it:
 # many EPEL packages fail dependency resolution without CRB, and some toolbelt
@@ -127,8 +137,11 @@ packages-core:
 # no-op on every provision. NOTE: `--set-enabled` is dnf4 syntax (EL9); a future
 # EL10/dnf5 host would need `config-manager setopt <repo>.enabled=1` instead.
 packages-epel:
-	@if [ ! -f /etc/redhat-release ] || grep -qi fedora /etc/os-release 2>/dev/null; then \
-	  printf '  skipping EPEL/CRB (non-RHEL or Fedora)\n'; \
+	@if [ -r /etc/os-release ]; then . /etc/os-release; fi; \
+	if [ "$$ID" = fedora ]; then \
+	  printf '  skipping EPEL/CRB (Fedora — these packages are in the base repo)\n'; \
+	elif ! printf '%s %s' "$$ID" "$$ID_LIKE" | grep -qiwE 'rhel|centos|almalinux|rocky'; then \
+	  printf '  skipping EPEL/CRB (not RHEL-family: ID=%s)\n' "$${ID:-unknown}"; \
 	else \
 	  if rpm -q epel-release >/dev/null 2>&1; then \
 	    printf '  EPEL already installed\n'; \
