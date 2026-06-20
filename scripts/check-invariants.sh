@@ -114,6 +114,18 @@ check_version_pins() {
   else
     bad "helix-runtime drift: expect='$expect' zshrc='$rc_z' bashrc='$rc_b'"
   fi
+
+  # VCPKG_ROOT — the dev-gated rc literal must match VCPKG_ROOT_DIR in the
+  # Makefile (the vcpkg target clones the tree there; the rc exports it).
+  mk_vcpkg=$(grep -E '^[[:space:]]*VCPKG_ROOT_DIR[[:space:]]*:=[[:space:]]*/' \
+    makefile/Makefile | head -1 | sed -E 's#.*:=[[:space:]]*##; s/[[:space:]]*$//')
+  rc_z=$(grep -oE 'VCPKG_ROOT="[^"]*"' chezmoi/dot_zshrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  rc_b=$(grep -oE 'VCPKG_ROOT="[^"]*"' chezmoi/dot_bashrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  if [ -n "$mk_vcpkg" ] && [ "$rc_z" = "$mk_vcpkg" ] && [ "$rc_b" = "$mk_vcpkg" ]; then
+    ok "vcpkg-root @ $mk_vcpkg  (Makefile == zshrc == bashrc)"
+  else
+    bad "vcpkg-root drift: Makefile='$mk_vcpkg' zshrc='$rc_z' bashrc='$rc_b'"
+  fi
 }
 
 check_line_endings_and_mode() {

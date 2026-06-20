@@ -377,6 +377,15 @@ $(eval $(call TOOL,pueue,$(PUEUE_VERSION),\
 $(eval $(call TOOL,pueued,$(PUEUE_VERSION),\
   $(LIB)/direct.sh pueued https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueued-x86_64-unknown-linux-musl))
 
+# nnd — modern from-scratch TUI debugger for Linux (al13n321/nnd): not built on
+# gdb/lldb, single dependency-free binary, async multi-threaded debug-info load
+# (snappy on large binaries). Complements gdb/lldb; both scopes. The release
+# ships BARE binaries — `nnd` plus a `nnd-dbgo` debug-info-optimized variant —
+# with no os/arch tokens, so eget can't auto-select; direct.sh fetches the plain
+# `nnd` raw URL (same pattern as jq/shfmt/witr). v-prefixed tag.
+$(eval $(call TOOL,nnd,$(NND_VERSION),\
+  $(LIB)/direct.sh nnd https://github.com/al13n321/nnd/releases/download/v$(NND_VERSION)/nnd))
+
 # =============================================================================
 # HELIX  (special-cased — binary + runtime tree)
 # =============================================================================
@@ -455,6 +464,7 @@ UPDATE_SPECS += tldr|$(TEALDEER_VERSION)|tealdeer-rs/tealdeer|v$(TEALDEER_VERSIO
 UPDATE_SPECS += shfmt|$(SHFMT_VERSION)|mvdan/sh|v$(SHFMT_VERSION)
 UPDATE_SPECS += pueue|$(PUEUE_VERSION)|Nukesor/pueue|v$(PUEUE_VERSION)
 UPDATE_SPECS += pueued|$(PUEUE_VERSION)|Nukesor/pueue|v$(PUEUE_VERSION)
+UPDATE_SPECS += nnd|$(NND_VERSION)|al13n321/nnd|v$(NND_VERSION)
 UPDATE_SPECS += witr|$(WITR_VERSION)|pranshuparmar/witr|v$(WITR_VERSION)
 UPDATE_SPECS += ctop|$(CTOP_VERSION)|bcicen/ctop|v$(CTOP_VERSION)
 UPDATE_SPECS += sops|$(SOPS_VERSION)|getsops/sops|v$(SOPS_VERSION)
@@ -480,3 +490,7 @@ UPDATE_SPECS += node|$(NODE_VERSION)|nodejs/node|v$(NODE_VERSION)
 UPDATE_SPECS += ccstatusline|$(CCSTATUSLINE_VERSION)|sirmalloc/ccstatusline|v$(CCSTATUSLINE_VERSION)
 UPDATE_SPECS += dozzle|$(DOZZLE_VERSION)|amir20/dozzle|v$(DOZZLE_VERSION)
 UPDATE_SPECS += nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)|ryanoasis/nerd-fonts|v$(JETBRAINSMONO_NERD_VERSION)
+# pwndbg + vcpkg — dev-only bespoke targets (Makefile); tags carry no `v` prefix
+# (tag == version, so check-updates uses an empty glob prefix → matches all).
+UPDATE_SPECS += pwndbg|$(PWNDBG_VERSION)|pwndbg/pwndbg|$(PWNDBG_VERSION)
+UPDATE_SPECS += vcpkg|$(VCPKG_VERSION)|microsoft/vcpkg|$(VCPKG_VERSION)

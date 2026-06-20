@@ -47,6 +47,10 @@ export VISUAL="hx"
 # runtime to ~/.config/helix/runtime (already a default search path), hence the
 # dev gate. KEEP IN SYNC with HELIX_RUNTIME_DEST in makefile/scope.mk.
 export HELIX_RUNTIME="/usr/local/lib/helix/runtime"
+# vcpkg (Microsoft C/C++ package manager) — dev_machine only. `make vcpkg`
+# clones + bootstraps it into this dir (= $VCPKG_ROOT) and symlinks the `vcpkg`
+# binary onto PATH. KEEP IN SYNC with VCPKG_ROOT_DIR in makefile/Makefile.
+export VCPKG_ROOT="/usr/local/share/vcpkg"
 {{ end }}
 export PAGER="less"
 # Colorized man pages via bat when available; plain less otherwise.

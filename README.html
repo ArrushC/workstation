@@ -323,7 +323,10 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         Scope tags: <code>(dnf)</code> =
                         <span class="badge dev">dev_machine</span> only via dnf,
                         <code>(pip)</code> = via <code>pip --user</code> (both
-                        hosts), <code>(ins)</code> = via upstream installer.
+                        hosts), <code>(ins)</code> = via upstream installer,
+                        <code>(dev)</code> =
+                        <span class="badge dev">dev_machine</span> only via a
+                        bespoke installer (portable build / git clone).
                         Hover any chip for a one-line purpose.
                     </p>
                     <div class="filter-bar">
@@ -1175,6 +1178,193 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                     ><span class="sr-only">
                                         — list open files / sockets (dev_machine
                                         only via dnf)</span
+                                    ></span
+                                >
+                            </div>
+                        </article>
+
+                        <article class="tool-card tilt cat-cdev" data-cat="cdev">
+                            <h4>C / C++ dev</h4>
+                            <div class="chips">
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="GNU C/C++ compilers (gcc core; g++ via gcc-c++)"
+                                    >gcc / g++ <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — GNU C/C++ compilers; gcc is core, g++
+                                        (gcc-c++) is dev_machine only via dnf</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="LLVM C/C++ compiler + toolchain"
+                                    >clang / llvm <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — LLVM C/C++ compiler + toolchain
+                                        (dev_machine only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="C/C++ language server (the LSP backend Helix uses)"
+                                    >clangd <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — C/C++ language server, the LSP backend
+                                        Helix uses (clang-tools-extra; dev_machine
+                                        only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Clang-based linter / static analysis (auto-fix with -fix)"
+                                    >clang-tidy <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — clang-based linter + static analysis
+                                        (dev_machine only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Code formatter (clang-format -i)"
+                                    >clang-format <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — C/C++ code formatter (dev_machine only
+                                        via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Static analyzer, strives for zero false positives"
+                                    >cppcheck <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — static analyzer, strives for zero false
+                                        positives (dev_machine only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="ASan / UBSan / TSan — built into gcc/clang (-fsanitize=)"
+                                    >sanitizers<span class="sr-only">
+                                        — AddressSanitizer / UBSan / ThreadSanitizer,
+                                        built into gcc/clang via -fsanitize= (no
+                                        separate install; ~2–4x overhead vs
+                                        Valgrind's ~20–50x)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Runs unmodified binaries; catches uninitialized reads ASan misses"
+                                    >valgrind <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — runs unmodified binaries; complements the
+                                        sanitizers, catches uninitialized-memory
+                                        reads ASan misses (dev_machine only via
+                                        dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="LLVM debugger"
+                                    >lldb <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — LLVM debugger (dev_machine only via
+                                        dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Modern from-scratch TUI debugger (fast on big binaries)"
+                                    >nnd<span class="sr-only">
+                                        — modern from-scratch TUI debugger, single
+                                        binary, fast on large binaries (dev +
+                                        prod)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="GDB front-end, standalone `pwndbg` command (portable build)"
+                                    >pwndbg <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — GDB front-end installed as a standalone
+                                        pwndbg command via the portable build
+                                        (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="GDB Enhanced Features — auto-loaded into plain `gdb` via ~/.gdbinit"
+                                    >gef <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — GDB Enhanced Features, vendored gef.py
+                                        auto-loaded into plain gdb via a tracked
+                                        ~/.gdbinit (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Heap memory profiler (lower overhead than Valgrind/Massif)"
+                                    >heaptrack <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — heap memory profiler, lower overhead than
+                                        Valgrind/Massif (dev_machine only via
+                                        dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Build systems (ninja installs as `ninja-build` on RHEL)"
+                                    >cmake / meson / ninja <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — build systems; note the ninja binary is
+                                        ninja-build on RHEL (dev_machine only via
+                                        dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Generates compile_commands.json so clangd works on Make builds"
+                                    >bear <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — generates compile_commands.json
+                                        (bear -- make) so clangd works on
+                                        Make-based projects (dev_machine only via
+                                        dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Compiler cache — speeds up rebuilds"
+                                    >ccache <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — compiler cache, speeds up rebuilds
+                                        (dev_machine only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Microsoft C/C++ package manager (sets $VCPKG_ROOT)"
+                                    >vcpkg <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — Microsoft C/C++ package manager; git-cloned
+                                        + bootstrapped, exports VCPKG_ROOT
+                                        (dev_machine only)</span
                                     ></span
                                 >
                             </div>
@@ -3510,7 +3700,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the normal bootstrap flow. There are three macros;
                         <strong>prefer <code>EGET_TOOL</code></strong> for
                         single-binary GitHub releases (the common case &mdash;
-                        63 of the current 85 tools use it).
+                        63 of the current 86 tools use it).
                     </p>
                     <ol>
                         <li>
@@ -4386,6 +4576,74 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 tracked <code>.wslconfig</code> returns cached
                                 VM memory to Windows automatically &mdash; no
                                 action needed.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            C / C++ toolchain &mdash; a tool is missing, or
+                            <code>ninja</code> / <code>vcpkg</code> behaves oddly
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The compilers, debuggers and analysis tools
+                                (<code>gcc-c++</code>, <code>clang</code>,
+                                <code>clangd</code>/<code>clang-tidy</code>/<code>clang-format</code>,
+                                <code>lldb</code>, <code>valgrind</code>,
+                                <code>cppcheck</code>, <code>cmake</code>,
+                                <code>meson</code>, <code>ninja-build</code>,
+                                <code>heaptrack</code>, the sanitizer runtimes)
+                                install via dnf on
+                                <span class="badge dev">dev_machine</span> only,
+                                <strong>best-effort</strong>. Several come from
+                                EPEL/CRB, not BaseOS &mdash; if one didn&rsquo;t
+                                install, enable those repos and re-run
+                                <code>make MODE=dev packages</code>:
+                            </p>
+                            <pre><code>sudo dnf install epel-release
+sudo /usr/bin/crb enable   # or: sudo dnf config-manager --set-enabled crb
+make -C makefile MODE=dev packages</code></pre>
+                            <p>
+                                <strong><code>ninja: command not found</code></strong>
+                                &mdash; on RHEL the binary is
+                                <code>ninja-build</code>, not <code>ninja</code>.
+                                If a project hard-codes <code>ninja</code>,
+                                symlink it once:
+                                <code>ln -s "$(command -v ninja-build)" ~/.local/bin/ninja</code>.
+                            </p>
+                            <p>
+                                <strong>Two GDB front-ends, no conflict.</strong>
+                                Plain <code>gdb</code> auto-loads
+                                <strong>GEF</strong> (via the tracked
+                                <code>~/.gdbinit</code>); <strong>pwndbg</strong>
+                                is a separate standalone command. So
+                                <code>gdb ./a.out</code> &rarr; GEF,
+                                <code>pwndbg ./a.out</code> &rarr; pwndbg, and
+                                <code>gdb -nx ./a.out</code> &rarr; vanilla gdb
+                                (no GEF). <code>nnd ./a.out</code> is the modern
+                                from-scratch TUI debugger.
+                            </p>
+                            <p>
+                                <strong>vcpkg:</strong> it lives at
+                                <code>$VCPKG_ROOT</code>
+                                (<code>/usr/local/share/vcpkg</code>, exported by
+                                the shell rc on dev hosts). The tree is
+                                root-owned, so classic-mode
+                                <code>vcpkg install &lt;pkg&gt;</code> (which
+                                writes into the tree) needs sudo &mdash; prefer
+                                <strong>manifest mode</strong>
+                                (a <code>vcpkg.json</code> per project, installs
+                                into the project&rsquo;s
+                                <code>vcpkg_installed/</code>), or
+                                <code>sudo chown -R "$USER" "$VCPKG_ROOT"</code>
+                                to use classic mode unprivileged. Prefer the
+                                compiler sanitizers
+                                (<code>-fsanitize=address,undefined</code>,
+                                ~2&ndash;4&times; overhead) over Valgrind
+                                (~20&ndash;50&times;) for everyday checks; keep
+                                Valgrind for unmodified binaries and
+                                uninitialized-read detection ASan misses.
                             </p>
                         </div>
                     </details>

@@ -1037,6 +1037,7 @@ tbody tr:last-child td {
 .tool-card.cat-quality    { --cat: var(--ok); }
 .tool-card.cat-profiling  { --cat: var(--pink); }
 .tool-card.cat-lang       { --cat: var(--c2); }
+.tool-card.cat-cdev       { --cat: var(--warn); }
 .tool-card.cat-shellaug   { --cat: var(--c1); }
 .tool-card.cat-shellutil  { --cat: var(--teal); }
 .tool-card.cat-ai         { --cat: var(--windows); }

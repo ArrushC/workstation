@@ -236,6 +236,59 @@ else
 endif
 
 # -----------------------------------------------------------------------------
+# pwndbg — GDB front-end (dev_machine only). Installs the self-contained
+# portable release tarball via lib/pwndbg.sh, exposing a standalone `pwndbg`
+# command (its own bundled Python). It deliberately does NOT touch ~/.gdbinit,
+# so plain `gdb` keeps loading GEF (the chezmoi-tracked ~/.gdbinit): `gdb` →
+# GEF, `pwndbg` → pwndbg, no collision. $(SUDO) because it deposits under
+# $(DEST) (/usr/local on dev), like node-runtime. Stamp bakes PWNDBG_VERSION so
+# a bump in versions.mk reinstalls. No WSL skip — a debugger is useful in a WSL
+# dev guest (unlike the host-management services below).
+# -----------------------------------------------------------------------------
+.PHONY: pwndbg clean-pwndbg
+ifeq ($(MODE),dev)
+pwndbg: $(STAMP)/pwndbg-$(PWNDBG_VERSION).done
+$(STAMP)/pwndbg-$(PWNDBG_VERSION).done:
+	@printf '==> pwndbg %s\n' "$(PWNDBG_VERSION)"
+	@$(SUDO) $(LIB)/pwndbg.sh $(PWNDBG_VERSION)
+	@mkdir -p $(@D) && touch $@
+else
+pwndbg:
+	@echo "pwndbg is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-pwndbg:
+	@rm -f $(STAMP)/pwndbg-*.done
+	@$(SUDO) rm -f $(DEST)/pwndbg
+	@$(SUDO) rm -rf $(DEST)/_pwndbg-*
+
+# -----------------------------------------------------------------------------
+# vcpkg — Microsoft C/C++ package manager (dev_machine only). git-clones +
+# bootstraps the repo at VCPKG_VERSION into $(VCPKG_ROOT_DIR) (the clone IS
+# $VCPKG_ROOT) via lib/vcpkg.sh, then symlinks the `vcpkg` binary into $(DEST).
+# The shell rc exports the SAME VCPKG_ROOT literal (dev-gated) — keep
+# dot_zshrc.tmpl / dot_bashrc.tmpl in sync with VCPKG_ROOT_DIR (CLAUDE.md
+# dual-edit). $(SUDO) because the root tree + the $(DEST) symlink live under
+# /usr/local on dev. Stamp bakes VCPKG_VERSION. No WSL skip (builds fine in a
+# WSL dev guest).
+# -----------------------------------------------------------------------------
+VCPKG_ROOT_DIR := /usr/local/share/vcpkg
+.PHONY: vcpkg clean-vcpkg
+ifeq ($(MODE),dev)
+vcpkg: $(STAMP)/vcpkg-$(VCPKG_VERSION).done
+$(STAMP)/vcpkg-$(VCPKG_VERSION).done:
+	@printf '==> vcpkg %s\n' "$(VCPKG_VERSION)"
+	@$(SUDO) $(LIB)/vcpkg.sh $(VCPKG_VERSION) $(VCPKG_ROOT_DIR)
+	@mkdir -p $(@D) && touch $@
+else
+vcpkg:
+	@echo "vcpkg is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-vcpkg:
+	@rm -f $(STAMP)/vcpkg-*.done
+	@$(SUDO) rm -f $(DEST)/vcpkg
+	@$(SUDO) rm -rf $(VCPKG_ROOT_DIR)
+
+# -----------------------------------------------------------------------------
 # docker-engine — Docker CE from Docker's official dnf repo, enabled via systemd.
 #   - dev_machine only; skipped on WSL (the engine belongs to Docker Desktop on
 #     the Windows host — same gating rationale as dozzle-/cockpit-service).
@@ -508,6 +561,7 @@ user-tools: $(USER_TOOLS)
 provision: packages tools user-tools shell dotfiles wsl-config
 ifeq ($(MODE),dev)
 provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
+provision: pwndbg vcpkg
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
@@ -543,6 +597,8 @@ DOCTOR_ROWS += bespoke|dozzle-service|$(DOZZLE_VERSION)
 DOCTOR_ROWS += bespoke|cockpit-service|-
 DOCTOR_ROWS += bespoke|rsyslog-service|-
 DOCTOR_ROWS += bespoke|wsl-config|-
+DOCTOR_ROWS += bespoke|pwndbg|$(PWNDBG_VERSION)
+DOCTOR_ROWS += bespoke|vcpkg|$(VCPKG_VERSION)
 
 # NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe
 # (via $(foreach …,'…')) or the shell parses every row as a pipeline and
@@ -618,6 +674,8 @@ list:
 	@printf '  docker-engine\n  dozzle-service\n  cockpit-service\n  rsyslog-service\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
+	@printf '\nC/C++ dev tools (provisioned on MODE=dev only): pwndbg vcpkg\n'
+	@printf '  (nnd debugger is a scope-tool above; gcc/clang/gdb/valgrind/... come from dnf)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
 
 clean:
@@ -637,6 +695,8 @@ help:
 	@echo "  make dozzle-service   install dozzle systemd unit + start service (dev only)"
 	@echo "  make cockpit-service  install cockpit.conf + enable socket + open firewall (dev only)"
 	@echo "  make rsyslog-service  install local-routing drop-in + enable rsyslog (dev only, non-WSL)"
+	@echo "  make pwndbg           install the pwndbg GDB front-end, portable build (dev only)"
+	@echo "  make vcpkg            install the vcpkg C/C++ package manager (dev only)"
 	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"
 	@echo "  make <tool>       install just one tool, e.g. make gitui"
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"

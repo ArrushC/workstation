@@ -165,3 +165,23 @@ DUST_VERSION     := 1.2.4
 HEXYL_VERSION    := 0.17.0
 PUEUE_VERSION    := 4.0.4
 GUM_VERSION      := 0.17.0
+
+# --- (2026-06) C / C++ development & debugging toolchain ----------------------
+# Most of the toolchain is dnf packages (see packages.mk: gcc-c++ / clang /
+# clang-tools-extra [clangd+clang-tidy+clang-format] / llvm / lldb / valgrind /
+# cppcheck / cmake / meson / ninja-build / heaptrack / sanitizer runtimes —
+# best-effort, dev_machine only). The three pins below are managed here:
+#   nnd     — from-scratch TUI debugger (al13n321/nnd). Raw single binary via
+#             direct.sh, NOT eget: the release assets are bare `nnd` + a
+#             `nnd-dbgo` variant with no os/arch tokens, so eget can't
+#             auto-disambiguate. Both scopes. v-prefixed tag (v$(NND_VERSION)).
+#   pwndbg  — GDB front-end; dev-only bespoke target installs the self-contained
+#             portable tarball (makefile/lib/pwndbg.sh). Tag has NO `v` prefix.
+#   vcpkg   — Microsoft C/C++ package manager; dev-only bespoke target git-clones
+#             + bootstraps at this tag (makefile/lib/vcpkg.sh). Tag has NO `v`.
+# GEF (the other GDB front-end) is a vendored chezmoi dotfile (gef.py + a tracked
+# ~/.gdbinit), rolling upstream with no release tags — pinned by commit in its
+# .vendor sidecar, so it has NO versions.mk entry (cf. batpipe / cht.sh).
+NND_VERSION    := 0.78
+PWNDBG_VERSION := 2026.02.18
+VCPKG_VERSION  := 2026.06.01
