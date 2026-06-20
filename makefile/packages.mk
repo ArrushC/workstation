@@ -2,7 +2,7 @@
 #
 # Replaces ansible/roles/linux-base/tasks/packages.yml. Three targets:
 #   packages-core      — required packages (idempotent, fails loud)
-#   packages-epel      — EPEL (best-effort, RHEL family only — skipped on Fedora)
+#   packages-epel      — EPEL + CRB (best-effort, RHEL family only — skipped on Fedora)
 #   packages-optional  — long list of nice-to-have packages (per-pkg non-fatal)
 #
 # Only runs when INSTALL_PACKAGES=true (set by scope.mk for MODE=dev).
@@ -111,18 +111,40 @@ packages-core:
 	  $(SUDO) dnf install -y $$missing; \
 	fi
 
-# EPEL — RHEL family (Rocky/Alma/RHEL/CentOS) only. Fedora has the same
-# packages in its base repo, so EPEL would be wrong there. Detection
-# matches the old `ansible_facts['os_family'] == 'RedHat' and
-# ansible_facts['distribution'] != 'Fedora'` condition.
+# EPEL + CRB — RHEL family (Rocky/Alma/RHEL/CentOS) only. Fedora has the same
+# packages in its base repo, so EPEL would be wrong there. Detection matches the
+# old `os_family == 'RedHat' and distribution != 'Fedora'` condition.
+#
+# CRB (CodeReady Builder) is enabled here too because EPEL on EL9 REQUIRES it:
+# many EPEL packages fail dependency resolution without CRB, and some toolbelt
+# packages live directly in CRB (meson, ninja-build) or pull CRB-resident deps
+# (heaptrack, bear) — without it they silently land on the packages-optional
+# skip path. Enabling is best-effort + idempotent: ensure dnf-plugins-core (for
+# config-manager), then `--set-enabled` across the known CRB repo ids — `crb`
+# (EL9 Alma/Rocky/Stream), `powertools` (EL8), and the `codeready-builder-*`
+# name (subscribed RHEL). A failure only warns (the optional packages degrade to
+# skip, as before); it never aborts the build. Idempotent, so it re-runs as a
+# no-op on every provision. NOTE: `--set-enabled` is dnf4 syntax (EL9); a future
+# EL10/dnf5 host would need `config-manager setopt <repo>.enabled=1` instead.
 packages-epel:
-	@if rpm -q epel-release >/dev/null 2>&1; then \
-	  printf '  EPEL already installed\n'; \
-	elif [ -f /etc/redhat-release ] && ! grep -qi fedora /etc/os-release 2>/dev/null; then \
-	  printf '==> EPEL (RHEL family)\n'; \
-	  $(SUDO) dnf install -y epel-release || true; \
+	@if [ ! -f /etc/redhat-release ] || grep -qi fedora /etc/os-release 2>/dev/null; then \
+	  printf '  skipping EPEL/CRB (non-RHEL or Fedora)\n'; \
 	else \
-	  printf '  skipping EPEL (non-RHEL or Fedora)\n'; \
+	  if rpm -q epel-release >/dev/null 2>&1; then \
+	    printf '  EPEL already installed\n'; \
+	  else \
+	    printf '==> EPEL (RHEL family)\n'; \
+	    $(SUDO) dnf install -y epel-release || true; \
+	  fi; \
+	  printf '==> CRB (CodeReady Builder — required by many EPEL packages)\n'; \
+	  rpm -q dnf-plugins-core >/dev/null 2>&1 || $(SUDO) dnf install -y dnf-plugins-core || true; \
+	  crb_ok=""; \
+	  for repo in crb powertools "codeready-builder-for-rhel-9-$$(uname -m)-rpms"; do \
+	    if $(SUDO) dnf config-manager --set-enabled "$$repo" >/dev/null 2>&1; then \
+	      printf '  CRB enabled (repo: %s)\n' "$$repo"; crb_ok=1; break; \
+	    fi; \
+	  done; \
+	  [ -n "$$crb_ok" ] || printf '  ! could not auto-enable CRB — meson/ninja-build/heaptrack/bear may skip (enable manually: sudo dnf config-manager --set-enabled crb)\n'; \
 	fi
 
 # Optional packages — rpm-q fast-path skips dnf for installed ones. Only
