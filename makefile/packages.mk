@@ -49,6 +49,23 @@ LINUX_PACKAGES := \
 # On EL9 the file-watching need is covered by `inotify-tools` (EPEL) +
 # `watchexec` (EGET_TOOL, both scopes). To get real fswatch on EL9 you'd have
 # to build it from source (autotools) — deliberately not done here.
+#
+# C/C++ TOOLCHAIN GROUP (gcc-c++ … heaptrack): the GNU + LLVM toolchains plus
+# debuggers, analysis, build systems, and the sanitizer runtimes. `gcc`/`make`
+# are already core (LINUX_PACKAGES); `gdb`/`perf`/`strace` are already listed
+# above — not repeated here. Several of these come from EPEL/CRB rather than
+# BaseOS (clang-tools-extra → clangd+clang-tidy+clang-format, cppcheck, meson,
+# ninja-build, heaptrack), so the per-package `|| true` best-effort path is
+# load-bearing: on a host without those repos enabled they skip cleanly instead
+# of failing the build. The sanitizers themselves (ASan/UBSan/TSan) are compiler
+# features — libasan/libubsan/libtsan are only the gcc runtime .so's the
+# `-fsanitize=` link step needs (clang ships its own compiler-rt). GOTCHA: on
+# RHEL the ninja binary is `ninja-build`, not `ninja` (symlink it in
+# ~/.local/bin if a build expects `ninja`). `bear` generates a
+# compile_commands.json (`bear -- make`) so clangd works on Make-based projects
+# that aren't CMake/meson; `ccache` is a compiler cache (use via `ccache gcc` or
+# PATH shims). nnd/pwndbg/vcpkg are NOT here — see tools.mk (nnd) and the
+# bespoke pwndbg/vcpkg targets in the Makefile.
 LINUX_OPTIONAL_PACKAGES := \
   ripgrep bash-completion \
   htop multitail goaccess rsyslog \
@@ -59,6 +76,10 @@ LINUX_OPTIONAL_PACKAGES := \
   man-db man-pages info \
   rsync vim-common vim-enhanced \
   shellcheck gdb lsof tcpdump \
+  gcc-c++ clang clang-tools-extra llvm lldb \
+  valgrind cppcheck ltrace \
+  libasan libubsan libtsan \
+  cmake meson ninja-build heaptrack bear ccache \
   cockpit cockpit-system cockpit-storaged cockpit-networkmanager \
   cockpit-packagekit cockpit-podman
 

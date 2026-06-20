@@ -198,6 +198,12 @@ check_bespoke() {
       fi
     fi
     ;;
+  pwndbg)
+    check_component pwndbg pwndbg pwndbg "$DEST" "$version"
+    ;;
+  vcpkg)
+    check_component vcpkg vcpkg vcpkg "$DEST" "$version"
+    ;;
   *)
     row_warn "$name" "doctor.sh has no check for this bespoke target — add one"
     ;;

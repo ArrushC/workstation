@@ -24,7 +24,9 @@ Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 .zshrc
 .nbrc
 .dircolors
+.gdbinit
 .config/cheat
+.config/gdb
 .config/helix
 .config/tealdeer
 .config/zellij
@@ -68,6 +70,9 @@ re-bootstrap), the gate engages correctly.
 {{ if and (hasKey . "group") (ne .group "dev_machine") }}
 .claude
 .config/ccstatusline
+# GEF + its ~/.gdbinit are dev-only (gdb itself is a dev_machine dnf package).
+.gdbinit
+.config/gdb
 {{ end }}
 
 {{/*
