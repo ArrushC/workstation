@@ -321,6 +321,20 @@ $(eval $(call EGET_TOOL,hexyl,$(HEXYL_VERSION),sharkdp/hexyl,,--asset musl))
 # the single Linux_x86_64 tarball. Default v-tag.
 $(eval $(call EGET_TOOL,gum,$(GUM_VERSION),charmbracelet/gum))
 
+# --- (2026-06) Language servers (single-binary, both-scope) -------------------
+# rust-analyzer — date-tagged release; asset rust-analyzer-x86_64-unknown-linux-
+# gnu.gz (eget decompresses the .gz to the `rust-analyzer` binary). gnu-only for
+# x86_64; tag == the date pin (no `v`).
+$(eval $(call EGET_TOOL,rust-analyzer,$(RUST_ANALYZER_VERSION),rust-lang/rust-analyzer,$(RUST_ANALYZER_VERSION),--asset gnu))
+
+# marksman — Markdown LSP. Date-tagged; asset is a BARE binary `marksman-linux-x64`
+# (no archive), so eget renames it to the repo name `marksman`. Tag == the date.
+$(eval $(call EGET_TOOL,marksman,$(MARKSMAN_VERSION),artempyanykh/marksman,$(MARKSMAN_VERSION),--asset linux-x64))
+
+# taplo — TOML LSP (`taplo lsp stdio`). Non-v tag; asset taplo-full-linux-x86_64.gz
+# (the `full` build includes the LSP). eget decompresses the .gz to `taplo`.
+$(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--asset full --asset x86_64))
+
 # =============================================================================
 # DIRECT  (raw binary URL, no archive)
 # =============================================================================

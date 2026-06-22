@@ -194,6 +194,35 @@ check_sentinels() {
   else
     bad "wezterm.lua HOSTS sentinels START=$s END=$e (want 1/1)"
   fi
+  s=$(grep -cE '<!-- TOOLS:START' chezmoi/private_dot_claude/CLAUDE.md)
+  e=$(grep -cE '<!-- TOOLS:END -->' chezmoi/private_dot_claude/CLAUDE.md)
+  if [ "$s" = "1" ] && [ "$e" = "1" ]; then
+    ok "machine-memory  TOOLS:START/END (1/1)"
+  else
+    bad "machine-memory TOOLS sentinels START=$s END=$e (want 1/1)"
+  fi
+}
+
+check_tools_block() {
+  hdr "machine-memory TOOLS block in sync"
+  local mem="chezmoi/private_dot_claude/CLAUDE.md" tmp
+  if [ ! -f "$mem" ]; then
+    bad "missing: $mem"
+    return
+  fi
+  tmp="$(mktemp)"
+  cp "$mem" "$tmp"
+  if MEMFILE="$tmp" scripts/gen-tool-memory.sh >/dev/null 2>&1; then
+    if diff -q "$mem" "$tmp" >/dev/null; then
+      ok "TOOLS block matches gen-tool-memory.sh output"
+    else
+      bad "TOOLS block stale — run: scripts/gen-tool-memory.sh"
+      diff "$mem" "$tmp" | sed 's/^/       /' | head -30
+    fi
+  else
+    bad "gen-tool-memory.sh failed against a temp copy"
+  fi
+  rm -f "$tmp"
 }
 
 check_chezmoiignore_targets() {
@@ -279,6 +308,7 @@ check_version_pins
 check_line_endings_and_mode
 check_bom
 check_sentinels
+check_tools_block
 check_chezmoiignore_targets
 check_shellcheck
 check_shfmt

@@ -117,6 +117,18 @@ ok "ask chmod -R 777" has '"permissionDecision":"ask"'
 g 'ls -la && echo done'
 ok "allow normal command" empty
 
+echo "== sync-tool-memory (R5) =="
+ST="$(mktemp -d)"
+printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$ST/CLAUDE.md"
+OUT="$(printf '%s' "$(j --arg f "$ROOT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
+ok "versions.mk -> cza nudge" has 'cza'
+ok "block regenerated (stale gone)" bash -c '! grep -q stale "'"$ST"'/CLAUDE.md"'
+run "$RH/sync-tool-memory.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "unrelated path -> silent" empty
+run "$RH/sync-tool-memory.sh" 'not json at all'
+ok "malformed input -> fail-open silent" empty
+rm -rf "$ST"
+
 echo
 if [ "$fail" -eq 0 ]; then
   printf '\033[0;32m✓ all %d hook assertions passed\033[0m\n' "$pass"

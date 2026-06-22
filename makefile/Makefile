@@ -187,6 +187,23 @@ clean-node-runtime:
 	@$(SUDO) rm -rf $(DEST)/_node-*
 
 # -----------------------------------------------------------------------------
+# go-runtime — Go toolchain from the official go.dev tarball. Dev-only (gopls
+# is built from it; Go is generally useful on a dev box). Pinned to GO_VERSION
+# in versions.mk. lib/go.sh extracts to $(DEST)/_go-X.Y.Z/ and symlinks go +
+# gofmt into $(DEST). Older _go-* trees are stripped on every (re-)install.
+# -----------------------------------------------------------------------------
+.PHONY: go-runtime clean-go-runtime
+go-runtime: $(STAMP)/go-$(GO_VERSION).done
+$(STAMP)/go-$(GO_VERSION).done:
+	@printf '==> go %s\n' "$(GO_VERSION)"
+	@$(SUDO) $(LIB)/go.sh $(GO_VERSION)
+	@mkdir -p $(@D) && touch $@
+clean-go-runtime:
+	@rm -f $(STAMP)/go-*.done
+	@$(SUDO) rm -f $(DEST)/go $(DEST)/gofmt
+	@$(SUDO) rm -rf $(DEST)/_go-*
+
+# -----------------------------------------------------------------------------
 # nerd-fonts — JetBrainsMono Nerd Font Mono variants from ryanoasis/nerd-fonts.
 #   - dev_machine only (added to provision's deps only on MODE=dev, below).
 #   - Skips on WSL hosts (IS_WSL=true) because WezTerm runs on the Windows
@@ -287,6 +304,52 @@ clean-vcpkg:
 	@rm -f $(STAMP)/vcpkg-*.done
 	@$(SUDO) rm -f $(DEST)/vcpkg
 	@$(SUDO) rm -rf $(VCPKG_ROOT_DIR)
+
+# -----------------------------------------------------------------------------
+# lsp-servers — install/verify the whole language-server stack (dev_machine
+# only). One coherent target so `make lsp-servers` covers every server. The
+# single-binary servers (rust-analyzer/marksman/taplo) are both-scope EGET_TOOLs
+# installed by `tools`; this target DEPENDS on them and adds the rest:
+#   - lua-language-server  (TREE install via lib/lsp.sh; not a single binary)
+#   - npm servers          (typescript/bash/yaml/vscode-langservers via node)
+#   - gopls                (go install via go-runtime)
+#   - basedpyright         (uv tool install — user-site, no sudo)
+#   - clangd               (VERIFIED only; comes from clang-tools-extra, dnf)
+# Each install is best-effort inside lib/lsp.sh (a server's outage never aborts
+# the provision, matching the C/C++ `|| true` and cht.sh SOFT_TOOL precedent).
+# Stamp bakes a hash of all the LSP pins so bumping any reinstalls.
+# -----------------------------------------------------------------------------
+LSP_PINS := $(GOPLS_VERSION)|$(LUA_LS_VERSION)|$(BASEDPYRIGHT_VERSION)|$(TYPESCRIPT_LS_VERSION)|$(BASH_LS_VERSION)|$(YAML_LS_VERSION)|$(VSCODE_LANGSERVERS_VERSION)
+LSP_STAMP := $(shell printf '%s' '$(LSP_PINS)' | cksum | cut -d' ' -f1)
+.PHONY: lsp-servers clean-lsp-servers
+ifeq ($(MODE),dev)
+lsp-servers: rust-analyzer marksman taplo node-runtime go-runtime $(STAMP)/lsp-servers-$(LSP_STAMP).done
+$(STAMP)/lsp-servers-$(LSP_STAMP).done:
+	@printf '==> lsp-servers (language-server stack)\n'
+	@$(LIB)/lsp.sh verify-clangd
+	@$(SUDO) $(LIB)/lsp.sh lua $(DEST) $(LUA_LS_VERSION)
+	@$(SUDO) $(LIB)/lsp.sh npm $(DEST) \
+	  typescript-language-server@$(TYPESCRIPT_LS_VERSION) typescript \
+	  bash-language-server@$(BASH_LS_VERSION) \
+	  yaml-language-server@$(YAML_LS_VERSION) \
+	  vscode-langservers-extracted@$(VSCODE_LANGSERVERS_VERSION)
+	@$(SUDO) $(LIB)/lsp.sh gopls $(DEST) $(GOPLS_VERSION)
+	@$(LIB)/lsp.sh basedpyright $(BASEDPYRIGHT_VERSION)
+	@mkdir -p $(@D) && touch $@
+else
+lsp-servers:
+	@echo "lsp-servers is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-lsp-servers:
+	@rm -f $(STAMP)/lsp-servers-*.done
+	@$(SUDO) rm -f $(DEST)/lua-language-server $(DEST)/gopls \
+	  $(DEST)/typescript-language-server $(DEST)/bash-language-server \
+	  $(DEST)/yaml-language-server $(DEST)/vscode-json-language-server \
+	  $(DEST)/vscode-css-language-server $(DEST)/vscode-html-language-server \
+	  $(DEST)/vscode-eslint-language-server $(DEST)/vscode-markdown-language-server \
+	  $(DEST)/tsc $(DEST)/tsserver
+	@$(SUDO) rm -rf $(DEST)/_lua-language-server-*
+	@uv tool uninstall basedpyright 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
 # docker-engine — Docker CE from Docker's official dnf repo, enabled via systemd.
@@ -561,7 +624,7 @@ user-tools: $(USER_TOOLS)
 provision: packages tools user-tools shell dotfiles wsl-config
 ifeq ($(MODE),dev)
 provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-provision: pwndbg vcpkg
+provision: pwndbg vcpkg go-runtime lsp-servers
 endif
 
 # Friendly aliases — re-invoke make with the right MODE so scope.mk
@@ -599,6 +662,8 @@ DOCTOR_ROWS += bespoke|rsyslog-service|-
 DOCTOR_ROWS += bespoke|wsl-config|-
 DOCTOR_ROWS += bespoke|pwndbg|$(PWNDBG_VERSION)
 DOCTOR_ROWS += bespoke|vcpkg|$(VCPKG_VERSION)
+DOCTOR_ROWS += bespoke|go-runtime|$(GO_VERSION)
+DOCTOR_ROWS += bespoke|lsp-servers|-
 
 # NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe
 # (via $(foreach …,'…')) or the shell parses every row as a pipeline and
@@ -676,6 +741,8 @@ list:
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
 	@printf '\nC/C++ dev tools (provisioned on MODE=dev only): pwndbg vcpkg\n'
 	@printf '  (nnd debugger is a scope-tool above; gcc/clang/gdb/valgrind/... come from dnf)\n'
+	@printf '\nLanguage servers (provisioned on MODE=dev only): lsp-servers (+ go-runtime)\n'
+	@printf '  (rust-analyzer/marksman/taplo are scope-tools above; clangd from clang-tools-extra)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
 
 clean:
