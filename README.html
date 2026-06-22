@@ -1173,6 +1173,17 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
+                                    data-tip="Remote debugging stub — run on the target, attach gdb from the host"
+                                    >gdbserver <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — remote-debug stub (gdb-gdbserver); run on
+                                        the target, attach gdb from the host
+                                        (dev_machine only via dnf)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
                                     data-tip="List open files / sockets"
                                     >lsof <small>(dnf)</small
                                     ><span class="sr-only">
