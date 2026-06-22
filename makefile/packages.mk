@@ -53,7 +53,9 @@ LINUX_PACKAGES := \
 # C/C++ TOOLCHAIN GROUP (gcc-c++ … heaptrack): the GNU + LLVM toolchains plus
 # debuggers, analysis, build systems, and the sanitizer runtimes. `gcc`/`make`
 # are already core (LINUX_PACKAGES); `gdb`/`perf`/`strace` are already listed
-# above — not repeated here. Several of these come from EPEL/CRB rather than
+# above — not repeated here. (`gdb-gdbserver`, the separate EL subpackage for the
+# remote-debug stub `gdbserver` — `gdb` doesn't bundle it — is paired with `gdb`
+# in that general group above.) Several of these come from EPEL/CRB rather than
 # BaseOS (clang-tools-extra → clangd+clang-tidy+clang-format, cppcheck, meson,
 # ninja-build, heaptrack), so the per-package `|| true` best-effort path is
 # load-bearing: on a host without those repos enabled they skip cleanly instead
@@ -75,7 +77,7 @@ LINUX_OPTIONAL_PACKAGES := \
   inotify-tools fswatch \
   man-db man-pages info \
   rsync vim-common vim-enhanced \
-  shellcheck gdb lsof tcpdump \
+  shellcheck gdb gdb-gdbserver lsof tcpdump \
   gcc-c++ clang clang-tools-extra llvm lldb \
   valgrind cppcheck ltrace \
   libasan libubsan libtsan \
