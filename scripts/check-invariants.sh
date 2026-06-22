@@ -225,6 +225,32 @@ check_tools_block() {
   rm -f "$tmp"
 }
 
+check_lsp_plugin() {
+  hdr "workstation-lsp plugin manifest"
+  local src="chezmoi/private_dot_claude/skills/workstation-lsp"
+  if [ ! -f "$src/dot_claude-plugin/plugin.json" ] || [ ! -f "$src/dot_lsp.json" ]; then
+    bad "missing workstation-lsp plugin source ($src/dot_claude-plugin/plugin.json + dot_lsp.json)"
+    return
+  fi
+  if ! command -v claude >/dev/null 2>&1; then
+    note "claude not installed — skipped LSP plugin validate (dev hosts enforce; CI has no claude)"
+    return
+  fi
+  local tmp
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/.claude-plugin"
+  cp "$src/dot_claude-plugin/plugin.json" "$tmp/.claude-plugin/plugin.json"
+  cp "$src/dot_lsp.json" "$tmp/.lsp.json"
+  [ -f "$src/SKILL.md" ] && cp "$src/SKILL.md" "$tmp/SKILL.md"
+  if claude plugin validate "$tmp" --strict >/dev/null 2>&1; then
+    ok "workstation-lsp manifest validates (claude plugin validate --strict)"
+  else
+    bad "workstation-lsp manifest failed claude plugin validate --strict:"
+    claude plugin validate "$tmp" --strict 2>&1 | sed 's/^/       /' | head -20
+  fi
+  rm -rf "$tmp"
+}
+
 check_chezmoiignore_targets() {
   hdr "chezmoiignore uses target paths (not source-state names)"
   local offenders
@@ -309,6 +335,7 @@ check_line_endings_and_mode
 check_bom
 check_sentinels
 check_tools_block
+check_lsp_plugin
 check_chezmoiignore_targets
 check_shellcheck
 check_shfmt

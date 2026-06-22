@@ -1531,7 +1531,12 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 rest. <code>rust-analyzer</code>,
                                 <code>marksman</code>, and <code>taplo</code>
                                 install on both <code>dev_machine</code> and
-                                <code>prod_machine</code> (eget binaries).
+                                <code>prod_machine</code> (eget binaries). On
+                                <code>dev_machine</code>, all servers are
+                                automatically registered with Claude&nbsp;Code's
+                                <code>LSP</code> tool via the bundled
+                                <code>workstation-lsp</code> plugin (deployed
+                                by <code>cza</code> &mdash; no extra setup).
                             </p>
                         </article>
 
