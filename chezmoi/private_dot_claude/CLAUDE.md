@@ -15,8 +15,9 @@ for anything a language server answers better:
   applies, for literal/regex/structural matches, or as a fallback when a server
   isn't running for that language.
 
-A server must be **installed** and the file's **language detected**. Coverage on
-this host (install via `make lsp-servers MODE=dev`):
+These servers are registered with Claude Code's `LSP` tool by the bundled
+`workstation-lsp` plugin (`~/.claude/skills/workstation-lsp/`); their binaries
+come from `make lsp-servers MODE=dev`. Coverage on this host:
 
 | Language | Server |
 |---|---|
