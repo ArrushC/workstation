@@ -1038,6 +1038,7 @@ tbody tr:last-child td {
 .tool-card.cat-profiling  { --cat: var(--pink); }
 .tool-card.cat-lang       { --cat: var(--c2); }
 .tool-card.cat-cdev       { --cat: var(--warn); }
+.tool-card.cat-lsp        { --cat: var(--teal); }
 .tool-card.cat-shellaug   { --cat: var(--c1); }
 .tool-card.cat-shellutil  { --cat: var(--teal); }
 .tool-card.cat-ai         { --cat: var(--windows); }
@@ -1561,6 +1562,12 @@ details[data-ts][open] summary::before {
     font-size: 0.86rem;
     margin-top: 0.4rem;
     line-height: 1.55;
+}
+.card-note {
+    color: var(--text-soft);
+    font-size: 0.78rem;
+    margin-top: 0.65rem;
+    line-height: 1.5;
 }
 .callout {
     display: flex;

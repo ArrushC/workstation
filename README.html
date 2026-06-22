@@ -1391,7 +1391,148 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         pip + venv)</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Go toolchain from go.dev (dev_machine only — make go-runtime MODE=dev)"
+                                    >go <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — official Go toolchain; extracted from
+                                        go.dev tarball into /usr/local/bin
+                                        (dev_machine only via go-runtime
+                                        bespoke target)</span
+                                    ></span
+                                >
                             </div>
+                        </article>
+
+                        <article class="tool-card tilt cat-lsp" data-cat="lsp">
+                            <h4>Code intelligence (LSP)</h4>
+                            <div class="chips">
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="C/C++ language server (clang-tools-extra via dnf; installed by provisioning, verified by lsp-servers)"
+                                    >clangd <small>(verify)</small
+                                    ><span class="sr-only">
+                                        — C/C++ language server (clang-tools-extra
+                                        via dnf, dev_machine only; lsp-servers
+                                        verifies its presence)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Rust language server (eget, dev + prod)"
+                                    >rust-analyzer<span class="sr-only">
+                                        — Rust language server; eget binary,
+                                        dev + prod</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Markdown language server (eget, dev + prod)"
+                                    >marksman<span class="sr-only">
+                                        — Markdown language server; eget binary,
+                                        dev + prod</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="TOML formatter + language server (eget, dev + prod)"
+                                    >taplo<span class="sr-only">
+                                        — TOML formatter + language server; eget
+                                        binary, dev + prod</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Go language server (go install, dev_machine only — needs go-runtime)"
+                                    >gopls <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — Go language server; installed via
+                                        go install with GOBIN pointing at
+                                        /usr/local/bin (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Lua language server tree install (dev_machine only)"
+                                    >lua-language-server <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — Lua language server; full tree install
+                                        (multi-file, not a single binary)
+                                        dev_machine only</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Type-strict Python LSP (uv tool install, dev_machine only)"
+                                    >basedpyright <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — type-strict Python language server;
+                                        installed via uv tool install to the
+                                        user site (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="TypeScript/JS language server (npm, dev_machine only)"
+                                    >typescript-language-server <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — TypeScript + JavaScript language
+                                        server; npm install (dev_machine
+                                        only, needs node-runtime)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Bash language server (npm, dev_machine only)"
+                                    >bash-language-server <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — Bash language server; npm install
+                                        (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="YAML language server (npm, dev_machine only)"
+                                    >yaml-language-server <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — YAML language server; npm install
+                                        (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="JSON language server (npm via vscode-langservers-extracted, dev_machine only)"
+                                    >vscode-json-languageserver <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — JSON language server from
+                                        vscode-langservers-extracted; npm
+                                        install (dev_machine only)</span
+                                    ></span
+                                >
+                            </div>
+                            <p class="card-note">
+                                Install with
+                                <code>make lsp-servers MODE=dev</code> (runs as
+                                part of <code>make dev</code>). Each server is
+                                best-effort &mdash; one failure never aborts the
+                                rest. <code>rust-analyzer</code>,
+                                <code>marksman</code>, and <code>taplo</code>
+                                install on both <code>dev_machine</code> and
+                                <code>prod_machine</code> (eget binaries).
+                            </p>
                         </article>
 
                         <article
@@ -4576,6 +4717,36 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 tracked <code>.wslconfig</code> returns cached
                                 VM memory to Windows automatically &mdash; no
                                 action needed.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            LSP servers &mdash; a language server is missing or
+                            <code>make lsp-servers</code> failed for one server
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                <code>make lsp-servers MODE=dev</code> (also
+                                runs as part of <code>make dev</code>) installs
+                                each server best-effort &mdash; one failure
+                                warns and continues. Servers and their
+                                mechanisms:
+                            </p>
+                            <ul>
+                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; eget binaries, dev + prod; re-run <code>make provision MODE=dev</code>.</li>
+                                <li><strong>gopls</strong> &mdash; <code>go install</code> via <code>go-runtime</code>; needs <code>make go-runtime MODE=dev</code> first.</li>
+                                <li><strong>lua-language-server</strong> &mdash; tree install (not a single binary); verify <code>lua-language-server --version</code>.</li>
+                                <li><strong>basedpyright</strong> &mdash; <code>uv tool install</code> to user site; check <code>uv tool list</code>.</li>
+                                <li><strong>typescript-language-server / bash-language-server / yaml-language-server / vscode-json-languageserver</strong> &mdash; npm, needs <code>node-runtime</code>; check <code>npm list -g --prefix /usr/local</code>.</li>
+                                <li><strong>clangd</strong> &mdash; verified-only (comes from <code>clang-tools-extra</code> via dnf, see the C/C++ entry below); <code>make lsp-servers</code> only warns if absent.</li>
+                            </ul>
+                            <p>
+                                Re-run a single mechanism:
+                                <code>make lsp-servers MODE=dev</code>.
+                                To force a reinstall of the Go toolchain:
+                                <code>make clean-go-runtime go-runtime MODE=dev</code>.
                             </p>
                         </div>
                     </details>

@@ -185,3 +185,24 @@ GUM_VERSION      := 0.17.0
 NND_VERSION    := 0.78
 PWNDBG_VERSION := 2026.02.18
 VCPKG_VERSION  := 2026.06.01
+
+# --- (2026-06) Language servers (LSP) + runtimes ------------------------------
+# All dev_machine only (navigation is a dev activity; Claude Code is dev-only-
+# deployed). Three are single-binary EGET_TOOL static servers (tools.mk,
+# both-scope). The rest install via the bespoke `lsp-servers` target (Makefile):
+# lua-language-server is a multi-file TREE (not a single binary, so NOT eget);
+# basedpyright via `uv tool install` (self-contained PyPI build, bundles its own
+# JS runtime); the four *-language-server npm packages via node-runtime's npm;
+# gopls via `go install` against the new go-runtime. clangd is provisioned
+# separately (clang-tools-extra, packages.mk) and only VERIFIED by lsp-servers.
+GO_VERSION                 := 1.24.4
+GOPLS_VERSION              := 0.18.1
+RUST_ANALYZER_VERSION      := 2026-06-15
+MARKSMAN_VERSION           := 2024-12-18
+TAPLO_VERSION              := 0.9.3
+LUA_LS_VERSION             := 3.13.0
+BASEDPYRIGHT_VERSION       := 1.29.0
+TYPESCRIPT_LS_VERSION      := 4.3.4
+BASH_LS_VERSION            := 5.4.3
+YAML_LS_VERSION            := 1.15.0
+VSCODE_LANGSERVERS_VERSION := 4.10.0
