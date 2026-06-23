@@ -44,6 +44,12 @@ alias gd  = git diff
 alias gco = git checkout
 alias gbr = git branch
 
+# --- Screen clearing --------------------------------------------------------
+# Nushell's built-in `clear` already wipes the scrollback (so the WezTerm footer
+# line-count resets). `hide` is the soft variant — clear the screen but KEEP the
+# scrollback history (scroll up to see it). Mirrors the bash/zsh `hide`.
+alias hide = clear --keep-scrollback
+
 # --- Navigation -------------------------------------------------------------
 # No aliases needed: Nushell has `..`, `...`, `....` (and deeper) built in as
 # parent-directory shortcuts, so the bash/PowerShell `..`/`...` helpers are
