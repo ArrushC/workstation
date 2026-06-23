@@ -899,6 +899,8 @@ local function help_choices()
     { label = 'alias zja              zellij attach',                       id = '' },
 
     -- Bash functions (host tabs only)
+    { label = 'fn    clear            clear screen AND scrollback (full reset; footer count resets)', id = '' },
+    { label = 'fn    hide             soft clear — keeps scrollback so history survives (scroll up)', id = '' },
     { label = 'fn    fh               fzf history search (Ctrl+R enhanced)', id = '' },
     { label = 'fn    fcd [dir]        fzf cd into any subdirectory',        id = '' },
     { label = 'fn    fssh             fzf ssh — pick from ~/.ssh/config',   id = '' },

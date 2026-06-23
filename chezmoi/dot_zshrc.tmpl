@@ -418,20 +418,45 @@ alias cockpit-status='systemctl status cockpit.socket'
 # the E3 capability, so the stock ncurses `clear` emits only \e[H\e[2J (erase the
 # visible screen) and leaves the scrollback — the footer count never drops. We
 # re-add the scrollback wipe (\e[3J) so `clear` truly clears. `hide` does the
-# inverse: it scrolls the current screen UP into the scrollback (nothing lost —
-# scroll up to see it), mimicking a clear while keeping history. (Nushell's
-# built-in `clear` already wipes scrollback; its soft variant — aliased to
-# `hide` there — is `clear --keep-scrollback`.)
+# inverse: it scrolls only the on-screen content (not a full screen) up into the
+# scrollback — nothing lost, scroll up to see it, and a clean screen adds nothing
+# so repeated `hide` doesn't inflate the count. (Nushell's built-in `clear`
+# already wipes scrollback; its soft variant — aliased to `hide` there — is
+# `clear --keep-scrollback`.)
 clear() {
   command clear "$@"
   printf '\033[3J'
 }
 hide() {
-  local rows=${LINES:-$(tput lines 2>/dev/null || echo 24)}
-  printf '\033[%d;1H' "$rows"                          # cursor to the bottom-left
-  local i
-  for ((i = 0; i < rows; i++)); do printf '\n'; done   # scroll the viewport into scrollback
-  printf '\033[H'                                       # home — fresh screen, history above
+  # Scroll only the on-screen content ABOVE the prompt into the scrollback (so a
+  # clean screen adds nothing — no blank padding, no line-count jump; the old
+  # version scrolled a FULL screen of newlines every call). Ask the terminal
+  # where the cursor is (DSR: ESC[6n -> ESC[row;colR) via stty+dd — the same code
+  # works in bash and zsh — then scroll exactly that much. Falls back to clearing
+  # just the visible screen if the terminal doesn't answer.
+  local pos row saved n i
+  saved=$(stty -g </dev/tty 2>/dev/null) || {
+    printf '\033[H\033[J'
+    return
+  }
+  stty -echo -icanon min 0 time 2 </dev/tty 2>/dev/null
+  printf '\033[6n' >/dev/tty
+  pos=$(dd bs=32 count=1 2>/dev/null </dev/tty)
+  stty "$saved" </dev/tty 2>/dev/null
+  row=${pos#*\[}
+  row=${row%%;*}                            # ESC[row;colR -> row
+  case $row in *[!0-9]* | '') row=2 ;; esac # no usable reply -> fall back (n=0)
+  n=$((row - 2))                            # content lines above a single-line prompt
+  [ "$n" -lt 0 ] && n=0
+  if [ "$n" -gt 0 ]; then
+    printf '\033[%d;1H' "${LINES:-$(tput lines 2>/dev/null || echo 24)}" # to the bottom row
+    i=0
+    while [ "$i" -lt "$n" ]; do
+      printf '\n' # scroll just the content up into scrollback
+      i=$((i + 1))
+    done
+  fi
+  printf '\033[H\033[J' # home + clear the visible screen
 }
 
 # czh — chezmoi cheatsheet. Single source of truth for the cz* aliases +
