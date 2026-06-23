@@ -852,6 +852,7 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+C     Copy selection',                      id = '' },
     { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
     { label = 'key   CTRL+SHIFT+A     Copy entire scrollback to clipboard', id = '' },
+    { label = 'note  footer ↕        Active tab line count: total · rows on screen (cursor line when a program moves it; hidden in full-screen apps)', id = '' },
     -- Built-in WezTerm defaults (not bound in config.keys) surfaced here
     -- for discoverability:
     { label = 'key   CTRL+SHIFT+F     Search scrollback',                   id = '' },
@@ -976,6 +977,45 @@ local function time_icon()
   end
 end
 
+-- group_thousands(10234) -> '10,234'. Lua has no built-in digit grouping.
+-- Non-negative integers only (line counts), so no sign handling.
+local function group_thousands(n)
+  local s   = tostring(math.floor(n))
+  local rev = s:reverse():gsub('(%d%d%d)', '%1,')  -- comma after every 3 digits
+  local out = rev:reverse():gsub('^,', '')         -- un-reverse, drop leading comma
+  return out
+end
+
+-- Active-pane line-count for the right status. Returns a display string, or nil
+-- when the module should be HIDDEN: dimensions unavailable, window too narrow,
+-- the pane is on the alternate screen (Zellij/helix/less/htop — no scrollback),
+-- or there's no real scrollback yet (total <= rows-on-screen; also covers a
+-- fresh shell). WezTerm exposes no live scroll offset and update-status doesn't
+-- fire on scroll, so 'rows' is the viewport HEIGHT, never a scrolled range.
+--   '↕ 10,234 · 38 rows'        cursor on the last line (at a shell prompt)
+--   '↕ 9,800/10,234 · 38 rows'  a main-screen program moved the cursor up
+local function format_line_status(pane, dim_info, cols)
+  if not dim_info then return nil end
+  if cols < 100 then return nil end
+  if pane:is_alt_screen_active() then return nil end
+  local total = dim_info.scrollback_rows or 0
+  local rows  = dim_info.viewport_rows or 0
+  if total <= rows then return nil end
+  -- Cursor line within the buffer; nil cursor/scrollback_top → stay at total
+  -- (the no-position form below). pos == total at a prompt; < total only when
+  -- a main-screen program has moved the cursor up.
+  local pos = total
+  local cur = pane:get_cursor_position()
+  if cur and dim_info.scrollback_top then
+    pos = math.max(1, math.min(total, cur.y - dim_info.scrollback_top + 1))
+  end
+  if pos < total then
+    return string.format('↕ %s/%s · %d rows',
+      group_thousands(pos), group_thousands(total), rows)
+  end
+  return string.format('↕ %s · %d rows', group_thousands(total), rows)
+end
+
 -- "Copied!" badge: timestamps per-window, fires from the 'copied' event
 -- emitted by the CTRL+SHIFT+C / CTRL+SHIFT+A bindings below. Visible for
 -- COPIED_BADGE_DURATION seconds, then the next ~1s tick of update-right-status
@@ -1003,6 +1043,11 @@ local function render_right_status(window, pane)
     if cols >= 130 then
       table.insert(parts, { text = 'zellij:main' })
     end
+  end
+
+  local line_status = format_line_status(pane, dim_info, cols)
+  if line_status then
+    table.insert(parts, { text = line_status })
   end
 
   if cols >= 80 then
