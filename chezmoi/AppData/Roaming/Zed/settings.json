@@ -69,6 +69,8 @@
   },
   "diff_view_style": "split",
   "gutter": {
+    "folds": true,
+    "runnables": true,
     "bookmarks": true,
     "breakpoints": false,
   },
@@ -109,7 +111,8 @@
     },
   },
   "debugger": {
-    "button": false,
+    "dock": "bottom",
+    "button": true,
   },
   "colorize_brackets": true,
   "tab_bar": {
@@ -129,6 +132,7 @@
   "show_edit_predictions": false,
   "show_whitespaces": "all",
   "git_panel": {
+    "file_icons": true,
     "dock": "left",
     "collapse_untracked_diff": true,
     "tree_view": true,
