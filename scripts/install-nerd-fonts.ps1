@@ -5,21 +5,28 @@
 # Invoked by bootstrap.ps1 (NOT directly). Downloads JetBrainsMono.zip from
 # ryanoasis/nerd-fonts, verifies its SHA256 against the hard-coded pin below,
 # extracts the six Mono variants, copies them to %LOCALAPPDATA%\Microsoft\Windows\Fonts\,
-# and registers them in HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts
-# (per-user — no admin needed for the registration even though bootstrap.ps1
-# runs elevated), then ACTIVATES them in the current logon session via
-# AddFontResourceW + a WM_FONTCHANGE broadcast (Invoke-FontActivation) so the
-# font is usable immediately — without it, HKCU registration is honoured only at
-# the next logon and the font stays invisible to every app until then. Honours
+# and registers them (by FULL PATH — bare filenames resolve only against
+# C:\Windows\Fonts, so an HKCU bare-name entry never loads at logon) in
+# HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts
+# (per-user — no admin needed; bootstrap.ps1 itself runs WITHOUT elevation), then
+# ACTIVATES them in the current logon session via AddFontResourceW + a
+# WM_FONTCHANGE broadcast (Invoke-FontActivation) so the font is usable
+# immediately. Because Windows does NOT reliably load HKCU per-user fonts into the
+# system font collection at logon (so the font can vanish after a reboot), it also
+# registers a per-logon scheduled task (Register-FontLogonTask) that re-runs that
+# activation at every sign-in — the durable, admin-free guarantee. Honours
 # $env:GITHUB_TOKEN (Authorization: Bearer header) to avoid the 60-req/hour
 # unauthenticated GitHub rate limit.
 #
 # Idempotency: a no-op fast path returns early if a stamp file exists at
 #   %LOCALAPPDATA%\workstation\nerd-fonts.<VERSION>.stamp
-# AND all six TTFs are present AND all six HKCU registrations exist (it still
-# re-runs the cheap session activation first, so a host provisioned by an older
-# build — registered but never activated — goes live without a logout). Otherwise
-# stale installs are swept (file + registry) before depositing the new set.
+# AND all six TTFs are present AND all six HKCU registrations exist with
+# full-path values (it still re-runs the cheap session activation + re-registers
+# the per-logon task first, so a host provisioned by an older build — registered
+# but never activated, or registered by bare filename — goes live without a
+# logout). Otherwise stale installs are swept
+# (file + registry) before depositing the new set, which also rewrites the
+# bare-filename registrations left by older builds of this script as full paths.
 #
 # Hard-fails on download or SHA256 issues (bootstrap.ps1 aborts). Soft-fails
 # on registry-write failure (WezTerm still works via config.font_dirs;
@@ -58,19 +65,30 @@ function Test-Installed {
     if (-not $reg) { return $false }
     foreach ($f in $FontFiles) {
         $regName = "$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"
-        if (-not $reg.PSObject.Properties[$regName]) { return $false }
+        $prop = $reg.PSObject.Properties[$regName]
+        if (-not $prop) { return $false }
+        # Per-user font registrations MUST store the FULL PATH, not a bare filename:
+        # a bare name resolves only against C:\Windows\Fonts (the implicit base for
+        # HKLM/machine fonts), so an HKCU bare-name entry silently fails to load at
+        # logon and the font stays invisible to DirectWrite apps (Windows Terminal,
+        # Zed, VS Code) — even though the .ttf is present + the entry exists. Treat a
+        # stale bare-name registration (from an older build of this script) as
+        # not-installed so the fresh-install path below rewrites it with full paths.
+        if ($prop.Value -ne (Join-Path $FontDir $f)) { return $false }
     }
     return $true
 }
 
 # Activate the installed fonts in the CURRENT logon session. HKCU registration
-# alone is honoured only at the NEXT logon, so without this the font stays
-# invisible to every app (Zed, VS Code, terminals) until the user logs out and
-# back in. AddFontResourceW loads each face into the session font table; the
-# WM_FONTCHANGE broadcast tells already-running apps to refresh. Idempotent
-# (AddFontResourceW just bumps a refcount if a face is already loaded) and
-# soft-fail — a failure here only costs the user one logout, since the persistent
-# HKCU entry still activates the font at the next logon, so it must never abort.
+# alone does NOT reliably load per-user fonts into the system font collection at
+# logon (the per-user fonts dir "has no special powers" — it is deliberately
+# excluded from the KnownFolder API), so without this the font stays invisible to
+# every app (Zed, VS Code, terminals) in this session. AddFontResourceW loads each
+# face into the session font table; the WM_FONTCHANGE broadcast tells
+# already-running apps to refresh. Idempotent (AddFontResourceW just bumps a
+# refcount if a face is already loaded) and soft-fail — it must never abort; the
+# per-logon task (Register-FontLogonTask) re-runs this at every future sign-in, so
+# a transient failure here self-corrects next logon.
 function Invoke-FontActivation {
     try {
         if (-not ([System.Management.Automation.PSTypeName]'Workstation.FontActivator').Type) {
@@ -90,13 +108,66 @@ public static extern int SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam
         [Workstation.FontActivator]::SendMessageTimeout(
             [IntPtr]0xffff, 0x001D, [IntPtr]::Zero, [IntPtr]::Zero, 0x0002, 1000, [ref]$res) | Out-Null
     } catch {
-        Write-Warning ("Font session-activation failed ($_). The font will still " +
-            "activate at your next logon (HKCU registration is in place).")
+        Write-Warning ("Font session-activation failed ($_). The per-logon task " +
+            "re-activates it at your next sign-in.")
+    }
+}
+
+# Register a per-user, no-admin scheduled task that re-runs the AddFontResourceW
+# activation at EVERY logon. This is the durability guarantee: Windows does not
+# reliably load HKCU-registered per-user fonts into the DirectWrite/GDI system
+# font collection at logon, so without this the font can silently disappear from
+# Windows Terminal / Zed / VS Code after a reboot even though it is installed and
+# registered. AddFontResourceW (run in the user's interactive session) IS proven
+# to make the font visible to apps launched afterwards, so a task that runs it
+# AtLogOn closes the gap. The task runs a self-contained activation script
+# deposited next to the stamp (no dependency on the repo checkout, which may move),
+# hidden, as the current user with their interactive token (LogonType Interactive
+# → it affects the live session; RunLevel Limited → no elevation). Idempotent
+# (-Force replaces in place) and soft-fail; re-registered every run so a deleted
+# task or a host seeded by an older build self-heals on the next bootstrap.
+function Register-FontLogonTask {
+    try {
+        New-Item -ItemType Directory -Path $StampDir -Force | Out-Null
+        $activateScript = Join-Path $StampDir 'activate-nerd-fonts.ps1'
+        # Self-contained: globs the per-user fonts dir for our faces and loads each
+        # via AddFontResourceW + a WM_FONTCHANGE broadcast. Matches by filename
+        # prefix so a font-version bump needs no change to the task or this script.
+        $body = @'
+$ErrorActionPreference = "SilentlyContinue"
+$fdir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
+Add-Type -Namespace Workstation -Name FontLogon -MemberDefinition @"
+[DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int AddFontResourceW(string lpszFilename);
+[DllImport("user32.dll")] public static extern int SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+"@
+Get-ChildItem $fdir -Filter "JetBrainsMonoNerdFontMono-*.ttf" -ErrorAction SilentlyContinue |
+    ForEach-Object { [Workstation.FontLogon]::AddFontResourceW($_.FullName) | Out-Null }
+$res = [IntPtr]::Zero
+[Workstation.FontLogon]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [IntPtr]::Zero, [IntPtr]::Zero, 0x0002, 1000, [ref]$res) | Out-Null
+'@
+        Set-Content -Path $activateScript -Value $body -Encoding UTF8
+
+        $taskName  = 'WorkstationNerdFontActivate'
+        $whoami    = "$env:USERDOMAIN\$env:USERNAME"
+        $action    = New-ScheduledTaskAction -Execute 'powershell.exe' `
+            -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$activateScript`""
+        $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $whoami
+        $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+        $principal = New-ScheduledTaskPrincipal -UserId $whoami -LogonType Interactive -RunLevel Limited
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+            -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
+        Write-Host "  registered per-logon font-activation task ($taskName)"
+    } catch {
+        Write-Warning ("Could not register the per-logon font-activation task ($_). " +
+            "The font is active now, but to survive a reboot it may need a re-run of " +
+            "bootstrap.ps1 (or a manual sign-out) afterwards.")
     }
 }
 
 if (Test-Installed) {
     Invoke-FontActivation
+    Register-FontLogonTask
     Write-Host "  nerd-fonts already installed (v$Version)"
     return
 }
@@ -164,7 +235,9 @@ $RegistrationFailed = $false
 foreach ($f in $FontFiles) {
     $regName = "$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"
     try {
-        New-ItemProperty -Path $RegPath -Name $regName -Value $f `
+        # FULL PATH, not the bare filename — see Test-Installed for why HKCU
+        # per-user fonts won't load at logon when registered by bare name.
+        New-ItemProperty -Path $RegPath -Name $regName -Value (Join-Path $FontDir $f) `
             -PropertyType String -Force | Out-Null
     } catch {
         Write-Warning "Failed to register $regName in HKCU: $_"
@@ -179,8 +252,10 @@ Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
 Set-Content -Path $StampFile -Value $Version -Encoding ASCII
 
 # Activate the new faces in the current session (no logout needed — see the
-# Invoke-FontActivation definition above).
+# Invoke-FontActivation definition above) and register the per-logon re-activation
+# task so the font survives reboots.
 Invoke-FontActivation
+Register-FontLogonTask
 
 if ($RegistrationFailed) {
     Write-Warning ("Some HKCU registrations failed — WezTerm will work via " +

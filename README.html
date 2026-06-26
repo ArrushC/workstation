@@ -2801,17 +2801,25 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                     <p class="note-row">
                         <strong>JetBrainsMono Nerd Font Mono</strong> (per-user)
                         &mdash; installed to
-                        <code>%LOCALAPPDATA%\Microsoft\Windows\Fonts\</code> and
-                        registered under
-                        <code>HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts</code>
-                        by <code>scripts/install-nerd-fonts.ps1</code> (invoked
-                        from <code>bootstrap.ps1</code> step 7). Per-user install
-                        &mdash; no admin needed for the registry registration
-                        (nothing in <code>bootstrap.ps1</code> requires
-                        elevation).
-                        Visible to WezTerm, Zed, VS Code, and any other Windows
-                        app. Font version matches <code>JETBRAINSMONO_NERD_VERSION</code>
-                        in <code>makefile/versions.mk</code>.
+                        <code>%LOCALAPPDATA%\Microsoft\Windows\Fonts\</code>,
+                        registered (by full path) under
+                        <code>HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts</code>,
+                        and re-activated at every logon by a per-user, no-admin
+                        scheduled task
+                        (<code>WorkstationNerdFontActivate</code>) &mdash; all by
+                        <code>scripts/install-nerd-fonts.ps1</code> (invoked from
+                        <code>bootstrap.ps1</code> step 7). The logon task is the
+                        durability guarantee: Windows does not reliably load HKCU
+                        per-user fonts into the system font collection at logon, so
+                        the task re-runs the <code>AddFontResourceW</code>
+                        activation each sign-in (otherwise the font can vanish from
+                        Windows Terminal / Zed / VS Code after a reboot). Per-user
+                        install &mdash; no admin needed (nothing in
+                        <code>bootstrap.ps1</code> requires elevation). Visible to
+                        WezTerm, Zed, VS Code, Windows Terminal, and any other
+                        Windows app. Font version matches
+                        <code>JETBRAINSMONO_NERD_VERSION</code> in
+                        <code>makefile/versions.mk</code>.
                     </p>
 
                     <h4>One-liner (no elevation needed)</h4>
@@ -4540,8 +4548,10 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                 Symptom: starship prompt shows boxes instead of
                                 icons; <code>eza</code> rows show empty cells
                                 where icons should appear; lazygit / k9s / yazi
-                                look broken. JetBrainsMono Nerd Font Mono
-                                isn&rsquo;t loaded.
+                                look broken; on Windows, Windows Terminal pops
+                                <em>Unable to find the following fonts:
+                                JetBrainsMono NFM</em>. JetBrainsMono Nerd Font
+                                Mono isn&rsquo;t loaded.
                             </p>
                             <p>Triage:</p>
                             <ul>
@@ -4563,11 +4573,27 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     font in the current session
                                     (<code>AddFontResourceW</code> +
                                     <code>WM_FONTCHANGE</code>), so no logout is
-                                    needed &mdash; but a host last provisioned by
-                                    an older build registered the font without
-                                    activating it; one re-run of
-                                    <code>bootstrap.ps1</code> (or a single logout)
-                                    makes it live.
+                                    needed. If the <code>.ttf</code> exists but
+                                    apps still can&rsquo;t find the font (Windows
+                                    Terminal pops <em>Unable to find the following
+                                    fonts: JetBrainsMono NFM</em>) &mdash; typically
+                                    after a reboot &mdash; the cause is that Windows
+                                    does not reliably load HKCU per-user fonts into
+                                    the system font collection at logon (the
+                                    per-user fonts dir &ldquo;has no special
+                                    powers&rdquo; and is excluded from the
+                                    KnownFolder API). The installer handles this by
+                                    registering a per-user, hidden, no-admin
+                                    scheduled task
+                                    (<code>WorkstationNerdFontActivate</code>) that
+                                    re-runs the <code>AddFontResourceW</code>
+                                    activation at every logon, so the font is
+                                    durable across reboots. Re-run
+                                    <code>bootstrap.ps1</code> to (re-)create the
+                                    task and re-activate the current session; the
+                                    same run also rewrites any stale bare-filename
+                                    <code>HKCU</code> entries left by older builds as
+                                    full paths.
                                 </li>
                                 <li>
                                     <strong>VS Code / Zed still showing tofu:</strong>
