@@ -127,18 +127,25 @@ local function nu_prog()
   return { 'nu' }
 end
 
--- Default shell for local tabs on Windows. Decision tree based on detected
--- WSL distros (parsed from `wsl.exe -l -v` by wezterm.default_wsl_domains()):
---   0 distros  → Nushell (nu_prog above) — the modern default local shell.
---   1 distro   → default_domain points at that distro; new tabs land in WSL.
---   2+ distros → Nushell placeholder + a one-shot picker fires on the first
---                update-status tick, replacing the placeholder with the
---                user-chosen distro. See gui-startup + update-status handlers
---                near the bottom of this file.
+-- Local-domain shell + default domain for Windows. Two ORTHOGONAL settings:
+--   * config.default_prog   — what the LOCAL ('local') domain spawns. Set
+--     UNCONDITIONALLY to Nushell below, so an explicitly-opened local tab is
+--     never cmd.exe/PowerShell, whatever the WSL distro count.
+--   * config.default_domain — which domain new tabs/windows use by default.
+--     Pointed at the sole WSL distro when exactly one exists (WSL-first new
+--     tabs); left as 'local' (→ Nushell) otherwise.
+-- Decision tree based on detected WSL distros (parsed from `wsl.exe -l -v`
+-- by wezterm.default_wsl_domains()):
+--   0 distros  → default_domain stays 'local' → launch + new tabs = Nushell.
+--   1 distro   → default_domain points at that distro; launch/new tabs land
+--                in WSL, but a local tab still falls back to Nushell.
+--   2+ distros → a one-shot picker fires on the first update-status tick (see
+--                gui-startup + update-status near the bottom); the placeholder
+--                local tab it spawns is Nushell via default_prog.
 -- PowerShell is intentionally NOT the default anymore (it stays installed for
 -- .NET/COM tasks + the WSL2 notify hook — see bootstrap.ps1). SSH-domain tabs
 -- still spawn `zellij attach --create main` via per-domain default_prog — this
--- only affects local (non-SSH) tabs.
+-- block only affects local (non-SSH) tabs.
 local wsl_doms = {}
 if wezterm.target_triple:find('windows') then
   wsl_doms = wezterm.default_wsl_domains()
@@ -152,12 +159,17 @@ if wezterm.target_triple:find('windows') then
     d.default_cwd = '~'
   end
   config.wsl_domains = wsl_doms
+  -- Local domain ALWAYS runs Nushell (orthogonal to default_domain below), so
+  -- an explicitly-opened local tab is never cmd.exe/PowerShell. nu_prog()
+  -- resolves the portable %LOCALAPPDATA%\workstation\nu\nu.exe, else bare 'nu'.
+  config.default_prog = nu_prog()
   if #wsl_doms == 1 then
+    -- Exactly one distro → make it the default for launch + new tabs. The
+    -- local domain still falls back to Nushell via default_prog above.
     config.default_domain = wsl_doms[1].name
-  else
-    -- 0 or 2+: default to Nushell. For 2+, the picker replaces this on launch.
-    config.default_prog = nu_prog()
   end
+  -- 0 distros → default_domain stays 'local' (Nushell via default_prog).
+  -- 2+ distros → gui-startup spawns a Nushell placeholder + the WSL picker.
 end
 
 -- Catppuccin Mocha palette — single source for every hardcoded chrome/tab/status
