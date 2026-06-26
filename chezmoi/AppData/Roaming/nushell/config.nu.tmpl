@@ -26,6 +26,17 @@
 # whole record — that would wipe Nushell's defaults).
 $env.config.show_banner = false
 
+# WezTerm on Windows mishandles Nushell's OSC 133 shell-integration marks, so
+# reedline inserts a stray newline on every keystroke — the prompt "walks" down
+# the screen with growing gaps (and feels laggy from the constant repaint).
+# Disable OSC 133 ONLY under WezTerm: Windows Terminal handles it correctly and
+# keeps the semantic-prompt features. WezTerm sets WEZTERM_PANE in every pane it
+# spawns, including local Windows shells. Refs: nushell/nushell#5585,
+# wezterm/wezterm#1999.
+if 'WEZTERM_PANE' in $env {
+    $env.config.shell_integration.osc133 = false
+}
+
 # --- chezmoi aliases (mirror the PowerShell profile) ------------------------
 alias cz  = chezmoi
 alias cza = chezmoi apply
