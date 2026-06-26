@@ -989,8 +989,10 @@ function Invoke-InstallBurntToast {
 # 7. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user. Required by
 #    chezmoi-tracked configs that assume Nerd Font glyphs (starship, eza --icons,
 #    lazygit, k9s, yazi, broot, helix, ccstatusline, Claude Code TUI). Invokes
-#    scripts/install-nerd-fonts.ps1. Soft-fails if -SkipNerdFonts or the helper
-#    is missing.
+#    scripts/install-nerd-fonts.ps1, which also registers a per-user at-logon
+#    scheduled task (WorkstationNerdFontActivate) that re-activates the font each
+#    sign-in — HKCU per-user fonts do not reliably load at logon on their own.
+#    Soft-fails if -SkipNerdFonts or the helper is missing.
 # =============================================================================
 function Invoke-InstallNerdFonts {
     if ($SkipNerdFonts) {
