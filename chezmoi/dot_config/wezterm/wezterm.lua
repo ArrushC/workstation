@@ -348,18 +348,43 @@ config.initial_rows = 38
 -- GPU rendering
 config.front_end = 'WebGpu'
 
--- GPU adapter selection for the WebGpu front end. Default is 'LowPower', which
--- on dual-GPU laptops binds the integrated GPU and can bottleneck the bumped
--- max_fps below. 'HighPerformance' asks for the discrete adapter so the higher
--- frame rate has the headroom to land. Harmless no-op on single-GPU machines.
-config.webgpu_power_preference = 'HighPerformance'
+-- Adaptive render rate + GPU power hint, tuned to the ACTUAL hardware. A fixed
+-- 120fps + forced discrete adapter assumes a dual-GPU, 120Hz+ laptop; on a 60Hz
+-- integrated-GPU machine that makes the shared iGPU render frames the panel can
+-- never show (wasted work that reads as lag) and pins a discrete adapter that
+-- isn't there. Detect the real hardware instead. Signal priority:
+--   1. screens().active.max_fps — the panel's true refresh rate, when WezTerm
+--      can report it. pcall-guarded: screens() may be unavailable at config-load
+--      time on some versions/platforms, and a throw there must NOT break loading.
+--   2. else enumerate_gpus() — a DiscreteGpu implies a high-refresh box (120);
+--      integrated-only falls back to WezTerm's default 60.
+-- Clamped to [60, 240] so a stray reading can't set something absurd.
+local has_dgpu = false
+if wezterm.gui and wezterm.gui.enumerate_gpus then
+  for _, g in ipairs(wezterm.gui.enumerate_gpus()) do
+    if g.device_type == 'DiscreteGpu' then has_dgpu = true break end
+  end
+end
 
--- Redraw-rate cap — the throttle on how often the surface repaints (scrolling,
--- TUI updates, output churn). WezTerm's default is 60; 120 lets the terminal
--- keep up with 120 Hz+ displays so fast scrollback and busy TUIs don't visibly
--- frame-drop. Costs more GPU/CPU per second of motion, hence pairing with the
--- WebGpu front end above. No effect beyond the monitor's actual refresh rate.
-config.max_fps = 120
+local render_fps = has_dgpu and 120 or 60
+local ok, screens = pcall(function() return wezterm.gui.screens() end)
+if ok and screens and screens.active and type(screens.active.max_fps) == 'number'
+  and screens.active.max_fps > 0 then
+  render_fps = math.floor(screens.active.max_fps)
+end
+render_fps = math.max(60, math.min(render_fps, 240))
+
+-- webgpu_power_preference='HighPerformance' only means anything with a discrete
+-- adapter present; on an integrated-only machine it targets nothing, so set it
+-- ONLY when a DiscreteGpu was detected (otherwise leave WezTerm's default).
+if has_dgpu then
+  config.webgpu_power_preference = 'HighPerformance'
+end
+
+-- Redraw-rate cap — how often the surface repaints (scrolling, TUI updates,
+-- output churn). Matched to the detected refresh rate above: keep up with a
+-- high-refresh panel without making a 60Hz iGPU render frames it can't show.
+config.max_fps = render_fps
 
 -- TERM advertising — pair with the chezmoi-deployed wezterm terminfo
 -- (.chezmoiscripts/run_install-wezterm-terminfo.sh.tmpl). Setting
@@ -380,8 +405,8 @@ config.term = 'wezterm'
 -- bell easing only (NOT scrolling — terminals scroll by row). Default is 10,
 -- which makes blinks visibly choppy on a 60 Hz+ display. Harmless to leave
 -- high even when using a Steady* cursor; only applies when something blinks.
--- Matched to max_fps above so eased transitions render at the same cadence.
-config.animation_fps = 120
+-- Matched to max_fps (render_fps) above so eased transitions share its cadence.
+config.animation_fps = render_fps
 
 -- Cursor — blinking vertical bar (I-beam). animation_fps above smooths the
 -- blink transitions; cursor_blink_rate sets the period in ms (default 800).
