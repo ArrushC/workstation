@@ -348,42 +348,31 @@ config.initial_rows = 38
 -- GPU rendering
 config.front_end = 'WebGpu'
 
--- Adaptive render rate + GPU power hint, tuned to the ACTUAL hardware. A fixed
--- 120fps + forced discrete adapter assumes a dual-GPU, 120Hz+ laptop; on a 60Hz
--- integrated-GPU machine that makes the shared iGPU render frames the panel can
--- never show (wasted work that reads as lag) and pins a discrete adapter that
--- isn't there. Detect the real hardware instead. Signal priority:
---   1. screens().active.max_fps — the panel's true refresh rate, when WezTerm
---      can report it. pcall-guarded: screens() may be unavailable at config-load
---      time on some versions/platforms, and a throw there must NOT break loading.
---   2. else enumerate_gpus() — a DiscreteGpu implies a high-refresh box (120);
---      integrated-only falls back to WezTerm's default 60.
--- Clamped to [60, 240] so a stray reading can't set something absurd.
-local has_dgpu = false
-if wezterm.gui and wezterm.gui.enumerate_gpus then
-  for _, g in ipairs(wezterm.gui.enumerate_gpus()) do
-    if g.device_type == 'DiscreteGpu' then has_dgpu = true break end
-  end
-end
-
-local render_fps = has_dgpu and 120 or 60
-local ok, screens = pcall(function() return wezterm.gui.screens() end)
-if ok and screens and screens.active and type(screens.active.max_fps) == 'number'
-  and screens.active.max_fps > 0 then
-  render_fps = math.floor(screens.active.max_fps)
-end
-render_fps = math.max(60, math.min(render_fps, 240))
-
--- webgpu_power_preference='HighPerformance' only means anything with a discrete
--- adapter present; on an integrated-only machine it targets nothing, so set it
--- ONLY when a DiscreteGpu was detected (otherwise leave WezTerm's default).
-if has_dgpu then
+-- Render rate + GPU power hint. These MUST be static, non-GUI values resolved
+-- at config-load. A previous attempt detected the panel/GPU here via
+-- wezterm.gui.screens() / wezterm.gui.enumerate_gpus() — those GUI calls are
+-- NOT safe at config-parse time: they DEADLOCKED WezTerm into a fully
+-- unresponsive window (a hang slips past pcall, which only catches throws).
+-- wezterm.hostname() IS safe at load (already used below for LOCAL_HOSTNAME),
+-- so scope by host instead.
+--
+-- Default assumes a dual-GPU, 120Hz+ box: 120fps + the discrete adapter. Hosts
+-- in LOW_POWER_60HZ_HOSTS are single integrated-GPU @ 60Hz, where 120fps just
+-- makes the shared iGPU render frames the panel can't show (reads as input lag)
+-- and 'HighPerformance' targets a discrete adapter that isn't there.
+local LOW_POWER_60HZ_HOSTS = {
+  ['CBL-LT-PW0FW9T4'] = true,  -- single Intel iGPU, 1920x1080@60
+}
+local render_fps = 120
+if LOW_POWER_60HZ_HOSTS[wezterm.hostname() or ''] then
+  render_fps = 60
+  -- leave webgpu_power_preference at WezTerm's default 'LowPower' (the iGPU)
+else
   config.webgpu_power_preference = 'HighPerformance'
 end
 
 -- Redraw-rate cap — how often the surface repaints (scrolling, TUI updates,
--- output churn). Matched to the detected refresh rate above: keep up with a
--- high-refresh panel without making a 60Hz iGPU render frames it can't show.
+-- output churn). Matched to render_fps above (also drives animation_fps below).
 config.max_fps = render_fps
 
 -- TERM advertising — pair with the chezmoi-deployed wezterm terminfo
