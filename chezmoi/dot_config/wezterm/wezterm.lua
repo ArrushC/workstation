@@ -345,30 +345,30 @@ config.window_padding = {
 config.initial_cols = 140
 config.initial_rows = 38
 
--- GPU rendering
-config.front_end = 'WebGpu'
-
--- Render rate + GPU power hint. These MUST be static, non-GUI values resolved
--- at config-load. A previous attempt detected the panel/GPU here via
--- wezterm.gui.screens() / wezterm.gui.enumerate_gpus() — those GUI calls are
--- NOT safe at config-parse time: they DEADLOCKED WezTerm into a fully
--- unresponsive window (a hang slips past pcall, which only catches throws).
--- wezterm.hostname() IS safe at load (already used below for LOCAL_HOSTNAME),
--- so scope by host instead.
+-- GPU rendering. ALL render settings are decided per-host from a single, SAFE
+-- check — wezterm.hostname() ONLY. NEVER call wezterm.gui.* (screens /
+-- enumerate_gpus) here: those need a GUI context that isn't ready at
+-- config-load and DEADLOCK WezTerm into an unresponsive window (a hang slips
+-- past pcall, which only catches throws). See #39→#40.
 --
--- Default assumes a dual-GPU, 120Hz+ box: 120fps + the discrete adapter. Hosts
--- in LOW_POWER_60HZ_HOSTS are single integrated-GPU @ 60Hz, where 120fps just
--- makes the shared iGPU render frames the panel can't show (reads as input lag)
--- and 'HighPerformance' targets a discrete adapter that isn't there.
+-- Hosts in LOW_POWER_60HZ_HOSTS are single integrated-GPU @ 60Hz: OpenGL (a
+-- touch lower-latency than WebGpu on Intel iGPUs), 60fps, and the default
+-- LowPower adapter. Every other host assumes a dual-GPU, 120Hz+ box: WebGpu +
+-- 120fps + the discrete (HighPerformance) adapter. (At 120fps on a 60Hz panel
+-- the iGPU would render frames it can't show — wasted work that reads as input
+-- lag — and 'HighPerformance' would target a discrete adapter that isn't there.)
 local LOW_POWER_60HZ_HOSTS = {
   ['CBL-LT-PW0FW9T4'] = true,  -- single Intel iGPU, 1920x1080@60
 }
-local render_fps = 120
+local render_fps
 if LOW_POWER_60HZ_HOSTS[wezterm.hostname() or ''] then
+  config.front_end = 'OpenGL'
   render_fps = 60
-  -- leave webgpu_power_preference at WezTerm's default 'LowPower' (the iGPU)
+  -- webgpu_power_preference left at default (and irrelevant under OpenGL)
 else
+  config.front_end = 'WebGpu'
   config.webgpu_power_preference = 'HighPerformance'
+  render_fps = 120
 end
 
 -- Redraw-rate cap — how often the surface repaints (scrolling, TUI updates,
