@@ -2755,11 +2755,12 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                     </p>
                     <p>
                         <strong>Nushell is the default local shell.</strong> It
-                        replaces PowerShell as the default in both WezTerm
-                        (<code>default_prog</code> in <code>wezterm.lua</code>) and
+                        replaces PowerShell as the default in WezTerm
+                        (<code>default_prog</code> in <code>wezterm.lua</code>),
                         Windows Terminal (the <em>Nushell</em> profile +
-                        <code>defaultProfile</code>) &mdash; a structured-data,
-                        cross-platform modern shell. It&rsquo;s installed as a
+                        <code>defaultProfile</code>), and Zed&rsquo;s integrated
+                        terminal (<code>terminal.shell.program</code>) &mdash; a
+                        structured-data, cross-platform modern shell. It&rsquo;s installed as a
                         pinned portable tool to
                         <code>%LOCALAPPDATA%\workstation\nu</code>; its config
                         deploys to <code>%APPDATA%\nushell\config.nu</code> (the
