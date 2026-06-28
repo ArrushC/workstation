@@ -97,6 +97,7 @@
   },
   "show_wrap_guides": false,
   "terminal": {
+    "shell": { "program": "nu" },
     "font_size": 13.0,
     "font_family": "JetBrainsMono NFM",
     "toolbar": {
