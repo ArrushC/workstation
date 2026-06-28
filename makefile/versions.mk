@@ -51,9 +51,9 @@ GITUI_VERSION      := 0.28.1
 LAZYGIT_VERSION    := 0.62.2
 JUJUTSU_VERSION    := 0.42.0
 YAZI_VERSION       := 26.5.6
-AST_GREP_VERSION   := 0.43.0
+AST_GREP_VERSION   := 0.44.0
 TELEVISION_VERSION := 0.15.9
-XH_VERSION         := 0.25.3
+XH_VERSION         := 0.26.1
 GPING_VERSION      := 1.20.2
 ATUIN_VERSION      := 18.16.1
 DELTA_VERSION      := 0.19.2
@@ -65,19 +65,19 @@ K9S_VERSION        := 0.51.0
 RCLONE_VERSION     := 1.74.3
 CROC_VERSION       := 10.4.4
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.6.10
-UV_VERSION         := 0.11.21
+MISE_VERSION       := 2026.6.12
+UV_VERSION         := 0.11.23
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
-GH_VERSION        := 2.94.0
+GH_VERSION        := 2.95.0
 SOPS_VERSION      := 3.13.1
 HTMLQ_VERSION     := 0.4.0
 OUCH_VERSION      := 0.8.0
 WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
-BOTTOM_VERSION        := 0.12.3
+BOTTOM_VERSION        := 0.14.1
 SYSTEMCTL_TUI_VERSION := 0.5.2
 LAZYJOURNAL_VERSION   := 0.8.6
 SYSZ_VERSION          := 1.4.3
@@ -95,7 +95,7 @@ CHEZIT_VERSION := 0.3.0
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.19
-NODE_VERSION := 26.3.0
+NODE_VERSION := 26.3.1
 
 # --- Service / web admin (dev_machine only) ---------------------------------
 # Dozzle is run as a Docker container via systemd (no native binary —
@@ -105,7 +105,7 @@ NODE_VERSION := 26.3.0
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.6.5
+DOZZLE_VERSION := 10.6.6
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
