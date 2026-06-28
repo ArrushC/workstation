@@ -67,6 +67,17 @@ while IFS='|' read -r _ name detail; do
   fi
 done <<<"$updates"
 
+# Keep the machine-memory TOOLS block in sync with the pins we just bumped.
+# This script runs in CI (and locally) where the Claude Code sync-tool-memory.sh
+# hook never fires, so regenerate the block here — otherwise the bumped
+# versions.mk and the <!-- TOOLS --> block in chezmoi/private_dot_claude/CLAUDE.md
+# drift, and check-invariants.sh ("machine-memory TOOLS block in sync") fails on
+# merge (the bumped pin reinstalls, but the verify step the workflow runs before
+# opening the PR — and lint.yml on merge — go red).
+if [ -n "$bumped" ]; then
+  scripts/gen-tool-memory.sh >/dev/null
+fi
+
 {
   echo "## Automated version-pin bumps"
   echo

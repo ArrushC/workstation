@@ -87,9 +87,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lazygit` 0.62.2
 - `jj` 0.42.0
 - `yazi` 26.5.6
-- `ast-grep` 0.43.0
+- `ast-grep` 0.44.0
 - `television` 0.15.9
-- `xh` 0.25.3
+- `xh` 0.26.1
 - `gping` 1.20.2
 - `atuin` 18.16.1
 - `delta` 0.19.2
@@ -101,19 +101,19 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `rclone` 1.74.3
 - `croc` 10.4.4
 - `hyperfine` 1.20.0
-- `mise` 2026.6.10
-- `uv` 0.11.21
+- `mise` 2026.6.12
+- `uv` 0.11.23
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
-- `gh` 2.94.0
+- `gh` 2.95.0
 - `sops` 3.13.1
 - `htmlq` 0.4.0
 - `ouch` 0.8.0
 - `watchexec` 2.5.1
 
 ### Service / journal / cgroup observability
-- `bottom` 0.12.3
+- `bottom` 0.14.1
 - `systemctl-tui` 0.5.2
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
@@ -129,10 +129,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Claude Code CLI
 - `claude` latest
 - `ccstatusline` 2.2.19
-- `node` 26.3.0
+- `node` 26.3.1
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.6.5
+- `dozzle` 10.6.6
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.4.0
