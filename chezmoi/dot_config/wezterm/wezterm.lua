@@ -345,31 +345,32 @@ config.window_padding = {
 config.initial_cols = 140
 config.initial_rows = 38
 
--- GPU rendering. ALL render settings are decided per-host from a single, SAFE
--- check — wezterm.hostname() ONLY. NEVER call wezterm.gui.* (screens /
+-- GPU rendering. Static values only — NEVER call wezterm.gui.* (screens /
 -- enumerate_gpus) here: those need a GUI context that isn't ready at
 -- config-load and DEADLOCK WezTerm into an unresponsive window (a hang slips
 -- past pcall, which only catches throws). See #39→#40.
 --
--- Hosts in LOW_POWER_60HZ_HOSTS are single integrated-GPU @ 60Hz: OpenGL (a
--- touch lower-latency than WebGpu on Intel iGPUs), 60fps, and the default
--- LowPower adapter. Every other host assumes a dual-GPU, 120Hz+ box: WebGpu +
--- 120fps + the discrete (HighPerformance) adapter. (At 120fps on a 60Hz panel
--- the iGPU would render frames it can't show — wasted work that reads as input
--- lag — and 'HighPerformance' would target a discrete adapter that isn't there.)
-local LOW_POWER_60HZ_HOSTS = {
-  ['CBL-LT-PW0FW9T4'] = true,  -- single Intel iGPU, 1920x1080@60
-}
-local render_fps
-if LOW_POWER_60HZ_HOSTS[wezterm.hostname() or ''] then
-  config.front_end = 'OpenGL'
-  render_fps = 60
-  -- webgpu_power_preference left at default (and irrelevant under OpenGL)
-else
-  config.front_end = 'WebGpu'
-  config.webgpu_power_preference = 'HighPerformance'
-  render_fps = 120
-end
+-- WebGpu (D3D12 on Windows) + 120fps + the HighPerformance adapter, on EVERY
+-- host. This is the simple config that ran snappily for ~7 weeks (from
+-- 2026-05-06). Two per-host "optimizations" were later tried on the single
+-- Intel-iGPU @ 60Hz laptop CBL-LT-PW0FW9T4 and BOTH reverted as perceived-
+-- latency REGRESSIONS (A/B-confirmed on that machine):
+--   * #39/#40 capped max_fps to the 60Hz panel rate, reasoning that frames
+--     above the refresh rate are wasted. They are NOT wasted for INPUT latency:
+--     a higher max_fps repaints the framebuffer sooner after a keypress, so the
+--     next vsync shows fresher content. 120fps feels markedly snappier than 60
+--     even on the 60Hz panel; the iGPU renders 120fps fine.
+--   * #42 switched it to OpenGL, reasoning OpenGL is lower-latency than WebGpu
+--     on Intel iGPUs (true on Linux/Mesa). On WINDOWS Intel's GL driver is weak
+--     and WezTerm's GL backend can degrade toward software, so the D3D12-backed
+--     WebGpu path is faster (the slowdown read as "worse than Windows Terminal",
+--     itself a DirectX app).
+-- DO NOT re-introduce a per-host max_fps cap or an OpenGL front_end here.
+-- (webgpu_power_preference='HighPerformance' is a no-op on a single-GPU box —
+-- only one adapter to pick — and selects the discrete GPU on multi-GPU hosts.)
+config.front_end = 'WebGpu'
+config.webgpu_power_preference = 'HighPerformance'
+local render_fps = 120
 
 -- Redraw-rate cap — how often the surface repaints (scrolling, TUI updates,
 -- output churn). Matched to render_fps above (also drives animation_fps below).
