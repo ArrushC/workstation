@@ -6,6 +6,7 @@ When you ship a change that affects user-facing surface, append a row here in th
 
 | Change | README update? | What to add |
 |---|---|---|
+| Adopted 3 interactive-shell ergonomics after surveying `radleylewis/zsh` — zsh `HIST_IGNORE_SPACE` + bash `HISTCONTROL=ignoreboth` (a leading-space command skips history); case/delimiter-insensitive completion (zsh `matcher-list` ↔ bash readline `completion-ignore-case` + `completion-map-case`); zsh-only `NUMERIC_GLOB_SORT` (bash carries a PARITY NOTE). `dot_zshrc.tmpl` ↔ `dot_bashrc.tmpl`, same commit. | No | Non-CLI interactive-shell behavior — no new command/flag/path, so no user-facing surface changed. Parity pair edited together. |
 | Added `winterop` — WSL→Windows interop helper (`chezmoi/dot_local/bin/executable_winterop` → `~/.local/bin`) | **Yes** | New `§daily` h3 "Windows interop from WSL / a Linux VM (`winterop`)" — one paragraph (detects WSL2 vs VM; VM → SSH/shared-folder/RDP pointer) + a small command table (`winterop`, `run`, `path`, `clip`, `open`, `host`) + a "`winterop help` for the rest" line. No TOC change (the other `§daily` h3s aren't individually linked). |
 | Added `MODE=dev|prod` support | **Yes** | Scope-mapping table + `make MODE=...` examples under Daily make workflow |
 | Renamed `manage-hosts.sh --sync` to `--regen` | **Yes** | Replace every command example, add a one-line "renamed from `--sync`" note for one release |
