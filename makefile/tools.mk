@@ -92,9 +92,14 @@ $(eval $(call EGET_TOOL,dive,$(DIVE_VERSION),wagoodman/dive))
 $(eval $(call EGET_TOOL,lnav,$(LNAV_VERSION),tstack/lnav,,--asset musl))
 $(eval $(call EGET_TOOL,gopass,$(GOPASS_VERSION),gopasspw/gopass))
 
-# fastfetch — non-v tag; publishes both .tar.gz and .zip per Linux variant.
-# Prefer the tarball for consistency with the other tools.
-$(eval $(call EGET_TOOL,fastfetch,$(FASTFETCH_VERSION),fastfetch-cli/fastfetch,$(FASTFETCH_VERSION),--asset musl --asset .tar.gz))
+# fastfetch — non-v tag; publishes .tar.gz + .zip per Linux variant in three
+# flavors: glibc `linux-amd64` (needs GLIBC_2.34), `linux-amd64-polyfilled`
+# (needs only GLIBC_2.17), and `musl-amd64`. The musl build is DYNAMICALLY linked
+# against /lib/ld-musl-x86_64.so.1, which the glibc fleet (AlmaLinux/RHEL) does
+# not ship — so `fastfetch` died with "no such file or directory" (absent
+# loader). Use the polyfilled glibc build: runs across the whole fleet incl.
+# older prod hosts (floor 2.17 << the fleet's 2.28+). Prefer .tar.gz over .zip.
+$(eval $(call EGET_TOOL,fastfetch,$(FASTFETCH_VERSION),fastfetch-cli/fastfetch,$(FASTFETCH_VERSION),--asset amd64-polyfilled --asset .tar.gz))
 
 # --- Second-wave -------------------------------------------------------------
 # gitui — ./prefix tarball (auto-handled by eget); default v-tag.
