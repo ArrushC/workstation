@@ -55,7 +55,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Tier-0: original toolbelt
 - `fzf` 0.73.1
 - `zoxide` 0.9.9
-- `starship` 1.25.1
+- `starship` 1.26.0
 - `zellij` 0.44.3
 - `glow` 2.1.2
 - `nb` latest
@@ -71,7 +71,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `jq` 1.8.1
 - `yq` 4.53.3
 - `tldr` 1.8.1
-- `witr` 0.3.2
+- `witr` 0.3.3
 - `broot` latest
 - `usql` 0.21.4
 - `lazydocker` 0.25.2
@@ -79,7 +79,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lnav` 0.14.0
 - `gopass` 1.16.1
 - `age` 1.3.1
-- `fastfetch` 2.64.2
+- `fastfetch` 2.65.2
 - `ssh-copy-id` latest
 
 ### Second-wave expansion (2026-05)
@@ -90,7 +90,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ast-grep` 0.44.0
 - `television` 0.15.9
 - `xh` 0.26.1
-- `gping` 1.20.2
+- `gping` 1.20.4
 - `atuin` 18.16.1
 - `delta` 0.19.2
 - `micro` 2.0.15
@@ -101,8 +101,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `rclone` 1.74.3
 - `croc` 10.4.4
 - `hyperfine` 1.20.0
-- `mise` 2026.6.12
-- `uv` 0.11.23
+- `mise` 2026.6.14
+- `uv` 0.11.25
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
@@ -113,7 +113,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `watchexec` 2.5.1
 
 ### Service / journal / cgroup observability
-- `bottom` 0.14.1
+- `bottom` 0.14.2
 - `systemctl-tui` 0.5.2
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
@@ -129,7 +129,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Claude Code CLI
 - `claude` latest
 - `ccstatusline` 2.2.19
-- `node` 26.3.1
+- `node` 26.4.0
 
 ### Service / web admin (dev_machine only)
 - `dozzle` 10.6.6
@@ -150,7 +150,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `csvlens` 0.15.1
 - `difft` 0.69.0
 - `trip` 0.13.0
-- `doggo` 1.1.7
+- `doggo` 1.2.0
 - `scc` 3.7.0
 - `git-absorb` 0.9.0
 - `miniserve` 0.35.0
@@ -163,7 +163,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### (2026-06) tier-1 lint/security + system/util gap-fillers
 - `shfmt` 3.13.1
 - `gitleaks` 8.30.1
-- `procs` 0.14.11
+- `procs` 0.14.12
 - `dust` 1.2.4
 - `hexyl` 0.17.0
 - `pueue` 4.0.4
@@ -173,14 +173,14 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### (2026-06) C / C++ development & debugging toolchain
 - `nnd` 0.78
 - `pwndbg` 2026.02.18
-- `vcpkg` 2026.06.01
+- `vcpkg` 2026.06.24
 
 ### (2026-06) Language servers (LSP) + runtimes
 - `go` 1.24.4
 - `gopls` 0.18.1
 - `rust-analyzer` 2026-06-15
 - `marksman` 2024-12-18
-- `taplo` 0.9.3
+- `taplo` 0.10.0
 - `lua-language-server` 3.13.0
 - `basedpyright` 1.29.0
 - `typescript-language-server` 4.3.4
