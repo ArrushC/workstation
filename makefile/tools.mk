@@ -45,7 +45,7 @@
 # this stamp lands first under `make -j8`.
 # =============================================================================
 $(eval $(call TOOL,eget,$(EGET_VERSION),\
-  $(LIB)/archive.sh eget https://github.com/zyedidia/eget/releases/download/v$(EGET_VERSION)/eget-$(EGET_VERSION)-linux_amd64.tar.gz))
+  $(LIB)/archive.sh eget https://github.com/zyedidia/eget/releases/download/v$(EGET_VERSION)/eget-$(EGET_VERSION)-linux_amd64.tar.gz,eget))
 
 # =============================================================================
 # ARCHIVE single-binary  (tar.gz / tar.bz2 / tar.xz / zip)
@@ -74,19 +74,17 @@ $(eval $(call EGET_TOOL,btop,$(BTOP_VERSION),aristocratos/btop,,--asset musl))
 
 # ncdu — published at dev.yorhel.nl, not GitHub. Stays on archive.sh.
 $(eval $(call TOOL,ncdu,$(NCDU_VERSION),\
-  $(LIB)/archive.sh ncdu https://dev.yorhel.nl/download/ncdu-$(NCDU_VERSION)-linux-x86_64.tar.gz))
+  $(LIB)/archive.sh ncdu https://dev.yorhel.nl/download/ncdu-$(NCDU_VERSION)-linux-x86_64.tar.gz,ncdu))
 
 $(eval $(call EGET_TOOL,bandwhich,$(BANDWHICH_VERSION),imsnif/bandwhich,,--asset musl))
-# usql — both regular and `usql_static` variants published per arch.
-# `--asset '^_static'` excludes the static-linked one (matches the existing
-# behavior — we install the regular dynamically-linked usql).
-# NOTE: the dynamic build requires GLIBC 2.38+ and GLIBCXX 3.4.30+
-# (≈ RHEL 9.4 / Fedora 38 / Ubuntu 24.04 baseline). On hosts with older
-# glibc (e.g. AlmaLinux 9 ships glibc 2.34) usql will install but fail
-# to run with "GLIBC_2.38 not found"; switch to the static archive
-# (--asset _static, archive contains binary `usql_static`) if you need
-# it working on those hosts.
-$(eval $(call EGET_TOOL,usql,$(USQL_VERSION),xo/usql,,--asset '^_static'))
+# usql — universal SQL CLI. The regular dynamic build links GLIBC_2.38 +
+# GLIBCXX_3.4.30 (absent on the glibc-2.34 fleet → "version not found" at exec:
+# it installs but won't run). Install the STATIC variant instead — statically
+# linked, no glibc floor, runs fleet-wide. The archive's binary is `usql_static`;
+# install it as `usql` (same rename pattern as nnn). A TOOL (archive.sh) now, not
+# EGET_TOOL, so it self-registers nothing for check-updates — see UPDATE-CHECK below.
+$(eval $(call TOOL,usql,$(USQL_VERSION),\
+  $(LIB)/archive.sh usql_static=usql https://github.com/xo/usql/releases/download/v$(USQL_VERSION)/usql_static-$(USQL_VERSION)-linux-amd64.tar.bz2,usql))
 $(eval $(call EGET_TOOL,lazydocker,$(LAZYDOCKER_VERSION),jesseduffield/lazydocker))
 $(eval $(call EGET_TOOL,dive,$(DIVE_VERSION),wagoodman/dive))
 $(eval $(call EGET_TOOL,lnav,$(LNAV_VERSION),tstack/lnav,,--asset musl))
@@ -112,7 +110,7 @@ $(eval $(call EGET_TOOL,jj,$(JUJUTSU_VERSION),jj-vcs/jj))
 # would install the completions/ subdir into $(DEST) as junk; stays on
 # archive.sh which uses an explicit binary spec to extract only yazi + ya.
 $(eval $(call TOOL,yazi,$(YAZI_VERSION),\
-  $(LIB)/archive.sh yazi:ya https://github.com/sxyazi/yazi/releases/download/v$(YAZI_VERSION)/yazi-x86_64-unknown-linux-musl.zip))
+  $(LIB)/archive.sh yazi:ya https://github.com/sxyazi/yazi/releases/download/v$(YAZI_VERSION)/yazi-x86_64-unknown-linux-musl.zip,yazi))
 
 # ast-grep ships two binaries (sg + ast-grep)
 # ast-grep — multi-binary archive (installs both `sg` and `ast-grep`).
@@ -124,7 +122,7 @@ $(eval $(call EGET_TOOL,ast-grep,$(AST_GREP_VERSION),ast-grep/ast-grep,$(AST_GRE
 # television — binary inside the archive is `tv`; non-v tag; both musl/gnu
 # published. eget extracts `tv` to $(DEST); the EGET_TOOL macro's stamp
 # uses the registered name (`television`).
-$(eval $(call EGET_TOOL,television,$(TELEVISION_VERSION),alexpasmantier/television,$(TELEVISION_VERSION),--asset musl))
+$(eval $(call EGET_TOOL,television,$(TELEVISION_VERSION),alexpasmantier/television,$(TELEVISION_VERSION),--asset musl,tv))
 
 # --- (2026-06) interactive explorers + git replay ---------------------------
 # nnn — the musl-static tarball's internal binary is named `nnn-musl-static`,
@@ -132,7 +130,7 @@ $(eval $(call EGET_TOOL,television,$(TELEVISION_VERSION),alexpasmantier/televisi
 # this cleanly for archive members (its repo-name rename only applies to
 # raw-binary assets), so nnn uses TOOL+archive.sh like yazi/ncdu — no eget dep.
 $(eval $(call TOOL,nnn,$(NNN_VERSION),\
-  $(LIB)/archive.sh nnn-musl-static=nnn https://github.com/jarun/nnn/releases/download/v$(NNN_VERSION)/nnn-musl-static-$(NNN_VERSION).x86_64.tar.gz))
+  $(LIB)/archive.sh nnn-musl-static=nnn https://github.com/jarun/nnn/releases/download/v$(NNN_VERSION)/nnn-musl-static-$(NNN_VERSION).x86_64.tar.gz,nnn))
 
 # fx — interactive JSON viewer. Non-v tag (like television), so pass it as the
 # explicit 4th arg. Assets are raw binaries; eget auto-detects linux/amd64 and
@@ -208,7 +206,7 @@ $(eval $(call EGET_TOOL,watchexec,$(WATCHEXEC_VERSION),watchexec/watchexec,,--as
 # EGET_TOOL macro uses the registered name (`bottom`) for the stamp;
 # eget extracts `btm` to $(DEST). clean-bottom doesn't remove btm
 # (cosmetic only).
-$(eval $(call EGET_TOOL,bottom,$(BOTTOM_VERSION),ClementTsang/bottom,$(BOTTOM_VERSION),--asset musl --file btm))
+$(eval $(call EGET_TOOL,bottom,$(BOTTOM_VERSION),ClementTsang/bottom,$(BOTTOM_VERSION),--asset musl --file btm,btm))
 
 $(eval $(call EGET_TOOL,systemctl-tui,$(SYSTEMCTL_TUI_VERSION),rgwood/systemctl-tui,,--asset musl))
 
@@ -217,7 +215,7 @@ $(eval $(call EGET_TOOL,systemctl-tui,$(SYSTEMCTL_TUI_VERSION),rgwood/systemctl-
 # (including LICENSE) into $(DEST). Stays on archive.sh which uses an
 # explicit binary spec to extract only the two we want.
 $(eval $(call TOOL,age,$(AGE_VERSION),\
-  $(LIB)/archive.sh age:age-keygen https://github.com/FiloSottile/age/releases/download/v$(AGE_VERSION)/age-v$(AGE_VERSION)-linux-amd64.tar.gz))
+  $(LIB)/archive.sh age:age-keygen https://github.com/FiloSottile/age/releases/download/v$(AGE_VERSION)/age-v$(AGE_VERSION)-linux-amd64.tar.gz,age))
 
 # --- (2026-06) gap-fillers ---------------------------------------------------
 # search / data-wrangling / structural-diff / network-diag / git-extras / util.
@@ -298,7 +296,7 @@ $(eval $(call EGET_TOOL,jless,$(JLESS_VERSION),PaulJuliusMartinez/jless))
 # RUNTIME: needs a graphical clipboard + a background `clipse -listen` daemon;
 # harmless no-op on headless prod hosts (installs, just never runs).
 $(eval $(call TOOL,clipse,$(CLIPSE_VERSION),\
-  $(LIB)/archive.sh clipse-linux-x11-amd64=clipse https://github.com/savedra1/clipse/releases/download/v$(CLIPSE_VERSION)/clipse_v$(CLIPSE_VERSION)_linux_x11_amd64.tar.gz))
+  $(LIB)/archive.sh clipse-linux-x11-amd64=clipse https://github.com/savedra1/clipse/releases/download/v$(CLIPSE_VERSION)/clipse_v$(CLIPSE_VERSION)_linux_x11_amd64.tar.gz,clipse))
 
 # --- (2026-06) tier-1 lint/security + system/util gap-fillers ----------------
 # gitleaks/procs/dust/hexyl/gum are eget single-binary installs (below);
@@ -350,30 +348,30 @@ $(eval $(call TOOL,nb,$(NB_VERSION),\
   $(LIB)/direct.sh nb https://raw.githubusercontent.com/xwmx/nb/master/nb))
 
 $(eval $(call TOOL,jq,$(JQ_VERSION),\
-  $(LIB)/direct.sh jq https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-linux-amd64))
+  $(LIB)/direct.sh jq https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-linux-amd64,jq))
 
 $(eval $(call TOOL,yq,$(YQ_VERSION),\
-  $(LIB)/direct.sh yq https://github.com/mikefarah/yq/releases/download/v$(YQ_VERSION)/yq_linux_amd64))
+  $(LIB)/direct.sh yq https://github.com/mikefarah/yq/releases/download/v$(YQ_VERSION)/yq_linux_amd64,yq))
 
 # tealdeer binary is installed as `tldr` for the canonical command name
 $(eval $(call TOOL,tldr,$(TEALDEER_VERSION),\
-  $(LIB)/direct.sh tldr https://github.com/tealdeer-rs/tealdeer/releases/download/v$(TEALDEER_VERSION)/tealdeer-linux-x86_64-musl))
+  $(LIB)/direct.sh tldr https://github.com/tealdeer-rs/tealdeer/releases/download/v$(TEALDEER_VERSION)/tealdeer-linux-x86_64-musl,tldr))
 
 $(eval $(call TOOL,witr,$(WITR_VERSION),\
-  $(LIB)/direct.sh witr https://github.com/pranshuparmar/witr/releases/download/v$(WITR_VERSION)/witr-linux-amd64))
+  $(LIB)/direct.sh witr https://github.com/pranshuparmar/witr/releases/download/v$(WITR_VERSION)/witr-linux-amd64,witr))
 
 # broot has no version pinning — upstream always serves "latest" at this URL
 $(eval $(call TOOL,broot,$(BROOT_VERSION),\
-  $(LIB)/direct.sh broot https://dystroy.org/broot/download/x86_64-linux/broot))
+  $(LIB)/direct.sh broot https://dystroy.org/broot/download/x86_64-linux/broot,broot))
 
 $(eval $(call TOOL,ctop,$(CTOP_VERSION),\
-  $(LIB)/direct.sh ctop https://github.com/bcicen/ctop/releases/download/v$(CTOP_VERSION)/ctop-$(CTOP_VERSION)-linux-amd64))
+  $(LIB)/direct.sh ctop https://github.com/bcicen/ctop/releases/download/v$(CTOP_VERSION)/ctop-$(CTOP_VERSION)-linux-amd64,ctop))
 
 $(eval $(call TOOL,sops,$(SOPS_VERSION),\
-  $(LIB)/direct.sh sops https://github.com/getsops/sops/releases/download/v$(SOPS_VERSION)/sops-v$(SOPS_VERSION).linux.amd64))
+  $(LIB)/direct.sh sops https://github.com/getsops/sops/releases/download/v$(SOPS_VERSION)/sops-v$(SOPS_VERSION).linux.amd64,sops))
 
 $(eval $(call TOOL,lazyjournal,$(LAZYJOURNAL_VERSION),\
-  $(LIB)/direct.sh lazyjournal https://github.com/Lifailon/lazyjournal/releases/download/$(LAZYJOURNAL_VERSION)/lazyjournal-$(LAZYJOURNAL_VERSION)-linux-amd64))
+  $(LIB)/direct.sh lazyjournal https://github.com/Lifailon/lazyjournal/releases/download/$(LAZYJOURNAL_VERSION)/lazyjournal-$(LAZYJOURNAL_VERSION)-linux-amd64,lazyjournal))
 
 $(eval $(call TOOL,sysz,$(SYSZ_VERSION),\
   $(LIB)/direct.sh sysz https://raw.githubusercontent.com/joehillen/sysz/$(SYSZ_VERSION)/sysz))
@@ -386,7 +384,7 @@ $(eval $(call TOOL,ssh-copy-id,$(SSH_COPY_ID_VERSION),\
 # shfmt_v<V>_linux_amd64 — eget would install it under the repo name (`sh`), so
 # direct.sh fetches the raw URL and names it `shfmt`. Go-static (glibc-free).
 $(eval $(call TOOL,shfmt,$(SHFMT_VERSION),\
-  $(LIB)/direct.sh shfmt https://github.com/mvdan/sh/releases/download/v$(SHFMT_VERSION)/shfmt_v$(SHFMT_VERSION)_linux_amd64))
+  $(LIB)/direct.sh shfmt https://github.com/mvdan/sh/releases/download/v$(SHFMT_VERSION)/shfmt_v$(SHFMT_VERSION)_linux_amd64,shfmt))
 
 # pueue — background job queue: daemon (pueued) + client (pueue), shipped as TWO
 # separate raw-binary assets. eget renames any raw binary to the repo name
@@ -394,9 +392,9 @@ $(eval $(call TOOL,shfmt,$(SHFMT_VERSION),\
 # under its correct name. musl-static. No systemd unit is installed; start the
 # daemon manually (`pueued -d`).
 $(eval $(call TOOL,pueue,$(PUEUE_VERSION),\
-  $(LIB)/direct.sh pueue https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueue-x86_64-unknown-linux-musl))
+  $(LIB)/direct.sh pueue https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueue-x86_64-unknown-linux-musl,pueue))
 $(eval $(call TOOL,pueued,$(PUEUE_VERSION),\
-  $(LIB)/direct.sh pueued https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueued-x86_64-unknown-linux-musl))
+  $(LIB)/direct.sh pueued https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueued-x86_64-unknown-linux-musl,pueued))
 
 # nnd — modern from-scratch TUI debugger for Linux (al13n321/nnd): not built on
 # gdb/lldb, single dependency-free binary, async multi-threaded debug-info load
@@ -405,7 +403,7 @@ $(eval $(call TOOL,pueued,$(PUEUE_VERSION),\
 # with no os/arch tokens, so eget can't auto-select; direct.sh fetches the plain
 # `nnd` raw URL (same pattern as jq/shfmt/witr). v-prefixed tag.
 $(eval $(call TOOL,nnd,$(NND_VERSION),\
-  $(LIB)/direct.sh nnd https://github.com/al13n321/nnd/releases/download/v$(NND_VERSION)/nnd))
+  $(LIB)/direct.sh nnd https://github.com/al13n321/nnd/releases/download/v$(NND_VERSION)/nnd,nnd))
 
 # =============================================================================
 # HELIX  (special-cased — binary + runtime tree)
@@ -475,6 +473,7 @@ $(eval $(call SOFT_TOOL,cht.sh,$(CHTSH_VERSION),\
 # TOOL-installed (archive.sh / direct.sh / helix.sh) with real version pins:
 UPDATE_SPECS += eget|$(EGET_VERSION)|zyedidia/eget|v$(EGET_VERSION)
 UPDATE_SPECS += ncdu|$(NCDU_VERSION)|https://code.blicky.net/yorhel/ncdu.git|v$(NCDU_VERSION)
+UPDATE_SPECS += usql|$(USQL_VERSION)|xo/usql|v$(USQL_VERSION)
 UPDATE_SPECS += yazi|$(YAZI_VERSION)|sxyazi/yazi|v$(YAZI_VERSION)
 UPDATE_SPECS += nnn|$(NNN_VERSION)|jarun/nnn|v$(NNN_VERSION)
 UPDATE_SPECS += clipse|$(CLIPSE_VERSION)|savedra1/clipse|v$(CLIPSE_VERSION)

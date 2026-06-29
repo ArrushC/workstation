@@ -37,10 +37,21 @@ REPO_ROOT := $(abspath $(CURDIR)/..)
 # wsl-config gating); IS_WSL is exported from scope.mk.
 export DEST HELIX_RUNTIME_DEST LIB STAMP SUDO MODE HAS_SUDO
 
+# verify_cmd <basename> — shell snippet (for &&-chaining onto an install
+# command) that runs the install-time capability check against $(DEST)/<basename>,
+# or a no-op `:` when <basename> is the skip sentinel `-`. A failing check exits
+# non-zero so _RULE_BODY's trailing `touch` never fires — no stamp for a binary
+# that cannot run on this host. See docs/claude/invariants.md.
+verify_cmd = $(if $(filter -,$1),:,$(SUDO) $(LIB)/verify-binary.sh '$(DEST)/$1')
+
 # -----------------------------------------------------------------------------
 # Macros — used by tools.mk to register one tool per call.
 #
-#   $(eval $(call TOOL,<name>,<version>,<install_cmd>))       scope-aware
+#   $(eval $(call TOOL,<name>,<version>,<install_cmd>[,<verify-binary>]))
+# <verify-binary> (optional, opt-in): basename under $(DEST) to capability-check
+# after install. Pass it for ELF-binary installs (archive.sh/direct.sh); omit
+# for script installs (nb, sysz, ssh-copy-id) and non-binary helpers.
+#
 #   $(eval $(call USER_TOOL,<name>,<version>,<install_cmd>))  always ~/.local
 #
 # Difference: TOOL prefixes the install command (and the rm in clean-*) with
@@ -65,7 +76,7 @@ endef
 define TOOL
 SCOPE_TOOLS += $(1)
 DOCTOR_ROWS += scope|$(1)|$(2)
-$(call _RULE_BODY,$(1),$(2),$(SUDO) $(3))
+$(call _RULE_BODY,$(1),$(2),$(SUDO) $(3)$(if $(4), && $(call verify_cmd,$(4))))
 clean-$(1):
 	@rm -f $$(STAMP)/$(1)-*.done
 	@$(SUDO) rm -f $$(DEST)/$(1)
@@ -120,6 +131,9 @@ endef
 #                       --asset <s>    other disambiguator
 #                       --all          install every executable in the
 #                                      archive (for multi-binary releases)
+#   $(6)  verify     OPTIONAL installed-binary basename for the capability
+#                    check. Defaults to $(1); set when the binary name differs
+#                    (bottom -> btm). Set to `-` to skip verification.
 #
 # Like TOOL: joins $(SCOPE_TOOLS), emits a stamp rule, threads $(SUDO).
 # Unlike TOOL: adds an order-only `| eget` prerequisite so the eget binary
@@ -129,7 +143,7 @@ define EGET_TOOL
 SCOPE_TOOLS += $(1)
 DOCTOR_ROWS += scope|$(1)|$(2)
 UPDATE_SPECS += $(1)|$(2)|$(3)|$(if $(4),$(4),v$(2))
-$(call _RULE_BODY,$(1),$(2),$(SUDO) $(LIB)/eget.sh $(3) $(if $(4),$(4),v$(2)) $(5))
+$(call _RULE_BODY,$(1),$(2),$(SUDO) $(LIB)/eget.sh $(3) $(if $(4),$(4),v$(2)) $(5) && $(call verify_cmd,$(if $(6),$(6),$(1))))
 $$(STAMP)/$(1)-$(2).done: | $$(STAMP)/eget-$$(EGET_VERSION).done
 clean-$(1):
 	@rm -f $$(STAMP)/$(1)-*.done
