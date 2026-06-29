@@ -74,12 +74,15 @@ export COLORTERM=truecolor   # WezTerm advertises 24-bit RGB; apps honor this en
 # HISTSIZE = lines kept in memory; HISTFILESIZE = lines kept on disk.
 export HISTSIZE=10000
 export HISTFILESIZE=20000
-export HISTCONTROL=ignoredups:erasedups   # drop dupes, including older ones
+export HISTCONTROL=ignoreboth:erasedups   # drop dupes (incl. older) + space-prefixed cmds (ignoreboth = ignoredups+ignorespace)
 shopt -s histappend                        # append on exit instead of clobbering
 
 # --- Shell behavior ----------------------------------------------------------
 shopt -s checkwinsize     # refresh LINES/COLUMNS after each command
 shopt -s globstar         # ** matches files/dirs recursively
+# PARITY NOTE (numeric glob sort): zsh sets NUMERIC_GLOB_SORT so a glob expands
+# file9 before file10 (see dot_zshrc.tmpl). bash has no equivalent option — its
+# glob results sort by plain LC_COLLATE byte order — so this is zsh-only.
 
 # --- Colors (dircolors / LS_COLORS) ------------------------------------------
 # Theme file-type/extension colors from ~/.dircolors (Catppuccin Mocha). Sets
@@ -125,6 +128,13 @@ fi
 # the top), so `bind` is always safe here.
 bind 'set colored-stats on'
 bind 'set colored-completion-prefix on'
+
+# Case- and `-`/`_`-insensitive Tab completion (readline). Parity with the zsh
+# `matcher-list` in dot_zshrc.tmpl, though readline only offers case folding plus
+# `-`↔`_` equivalence (completion-map-case), not zsh's general partial-word
+# matching. completion-map-case requires completion-ignore-case to take effect.
+bind 'set completion-ignore-case on'
+bind 'set completion-map-case on'
 
 # --- Shift+Arrow movement (readline) -----------------------------------------
 # WezTerm sends ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
