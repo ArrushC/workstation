@@ -331,9 +331,11 @@ $(eval $(call EGET_TOOL,rust-analyzer,$(RUST_ANALYZER_VERSION),rust-lang/rust-an
 # (no archive), so eget renames it to the repo name `marksman`. Tag == the date.
 $(eval $(call EGET_TOOL,marksman,$(MARKSMAN_VERSION),artempyanykh/marksman,$(MARKSMAN_VERSION),--asset linux-x64))
 
-# taplo — TOML LSP (`taplo lsp stdio`). Non-v tag; asset taplo-full-linux-x86_64.gz
-# (the `full` build includes the LSP). eget decompresses the .gz to `taplo`.
-$(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--asset full --asset x86_64))
+# taplo — TOML LSP (`taplo lsp stdio`). Non-v tag; asset taplo-linux-x86_64.gz.
+# 0.10.0 unified the build: the single binary now bundles the LSP, and the
+# separate `taplo-full-*` asset was dropped (0.9.3 was the last to ship it), so
+# select linux+x86_64 (NOT `full`). eget decompresses the .gz to `taplo`.
+$(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--asset linux --asset x86_64))
 
 # =============================================================================
 # DIRECT  (raw binary URL, no archive)

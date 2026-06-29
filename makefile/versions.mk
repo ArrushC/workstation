@@ -19,7 +19,7 @@ EGET_VERSION := 1.3.4
 # --- Tier-0: original toolbelt -----------------------------------------------
 FZF_VERSION      := 0.73.1
 ZOXIDE_VERSION   := 0.9.9
-STARSHIP_VERSION := 1.25.1
+STARSHIP_VERSION := 1.26.0
 ZELLIJ_VERSION   := 0.44.3
 GLOW_VERSION     := 2.1.2
 NB_VERSION       := latest
@@ -35,7 +35,7 @@ BANDWHICH_VERSION  := 0.23.1
 JQ_VERSION         := 1.8.1
 YQ_VERSION         := 4.53.3
 TEALDEER_VERSION   := 1.8.1
-WITR_VERSION       := 0.3.2
+WITR_VERSION       := 0.3.3
 BROOT_VERSION      := latest
 USQL_VERSION       := 0.21.4
 LAZYDOCKER_VERSION := 0.25.2
@@ -43,7 +43,7 @@ DIVE_VERSION       := 0.13.1
 LNAV_VERSION       := 0.14.0
 GOPASS_VERSION     := 1.16.1
 AGE_VERSION        := 1.3.1
-FASTFETCH_VERSION  := 2.64.2
+FASTFETCH_VERSION  := 2.65.2
 SSH_COPY_ID_VERSION := latest
 
 # --- Second-wave expansion (2026-05) -----------------------------------------
@@ -54,7 +54,7 @@ YAZI_VERSION       := 26.5.6
 AST_GREP_VERSION   := 0.44.0
 TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.26.1
-GPING_VERSION      := 1.20.2
+GPING_VERSION      := 1.20.4
 ATUIN_VERSION      := 18.16.1
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
@@ -65,8 +65,8 @@ K9S_VERSION        := 0.51.0
 RCLONE_VERSION     := 1.74.3
 CROC_VERSION       := 10.4.4
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.6.12
-UV_VERSION         := 0.11.23
+MISE_VERSION       := 2026.6.14
+UV_VERSION         := 0.11.25
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
@@ -77,7 +77,7 @@ OUCH_VERSION      := 0.8.0
 WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
-BOTTOM_VERSION        := 0.14.1
+BOTTOM_VERSION        := 0.14.2
 SYSTEMCTL_TUI_VERSION := 0.5.2
 LAZYJOURNAL_VERSION   := 0.8.6
 SYSZ_VERSION          := 1.4.3
@@ -95,7 +95,7 @@ CHEZIT_VERSION := 0.3.0
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.19
-NODE_VERSION := 26.3.1
+NODE_VERSION := 26.4.0
 
 # --- Service / web admin (dev_machine only) ---------------------------------
 # Dozzle is run as a Docker container via systemd (no native binary —
@@ -141,7 +141,7 @@ MILLER_VERSION     := 6.18.1
 CSVLENS_VERSION    := 0.15.1
 DIFFTASTIC_VERSION := 0.69.0
 TRIPPY_VERSION     := 0.13.0
-DOGGO_VERSION      := 1.1.7
+DOGGO_VERSION      := 1.2.0
 SCC_VERSION        := 3.7.0
 GIT_ABSORB_VERSION := 0.9.0
 MINISERVE_VERSION  := 0.35.0
@@ -160,7 +160,7 @@ CLIPSE_VERSION     := 1.2.1
 # publishes no musl build) but runs fine on the glibc-2.34 fleet.
 SHFMT_VERSION    := 3.13.1
 GITLEAKS_VERSION := 8.30.1
-PROCS_VERSION    := 0.14.11
+PROCS_VERSION    := 0.14.12
 DUST_VERSION     := 1.2.4
 HEXYL_VERSION    := 0.17.0
 PUEUE_VERSION    := 4.0.4
@@ -184,7 +184,7 @@ GUM_VERSION      := 0.17.0
 # .vendor sidecar, so it has NO versions.mk entry (cf. batpipe / cht.sh).
 NND_VERSION    := 0.78
 PWNDBG_VERSION := 2026.02.18
-VCPKG_VERSION  := 2026.06.01
+VCPKG_VERSION  := 2026.06.24
 
 # --- (2026-06) Language servers (LSP) + runtimes ------------------------------
 # All dev_machine only (navigation is a dev activity; Claude Code is dev-only-
@@ -199,7 +199,7 @@ GO_VERSION                 := 1.24.4
 GOPLS_VERSION              := 0.18.1
 RUST_ANALYZER_VERSION      := 2026-06-15
 MARKSMAN_VERSION           := 2024-12-18
-TAPLO_VERSION              := 0.9.3
+TAPLO_VERSION              := 0.10.0
 LUA_LS_VERSION             := 3.13.0
 BASEDPYRIGHT_VERSION       := 1.29.0
 TYPESCRIPT_LS_VERSION      := 4.3.4
