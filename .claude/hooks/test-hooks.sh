@@ -144,18 +144,36 @@ echo "== session-end-notify (R7) =="
 SE="$(mktemp -d)"
 mkdir -p "$SE/repo" "$SE/home"
 git -C "$SE/repo" init -q
-# recording stub for the notifier
+# recording stub for the notifier (records args immediately)
 cat >"$SE/stub.sh" <<STUB
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"$SE/notified.log"
 STUB
 chmod +x "$SE/stub.sh"
+# slow stub: records immediately, then lingers — proves the hook does NOT wait
+# on the notifier (the toast is fired detached so SessionEnd can't cancel it).
+cat >"$SE/slowstub.sh" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$SE/notified.log"
+sleep 3
+STUB
+chmod +x "$SE/slowstub.sh"
 se_run() {
   : >"$SE/notified.log"
   printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR HOME="$SE/home" \
     WORKSTATION_NOTIFY="$SE/stub.sh" bash "$1" >/dev/null 2>&1
 }
-notified() { [ -s "$SE/notified.log" ] && grep -qF "$1" "$SE/notified.log"; }
+# The notifier is fired detached/backgrounded, so poll briefly for the async write.
+notified() {
+  local i=0
+  while [ "$i" -lt 50 ]; do
+    [ -s "$SE/notified.log" ] && grep -qF "$1" "$SE/notified.log" && return 0
+    i=$((i + 1))
+    sleep 0.1
+  done
+  return 1
+}
+# Silent paths never spawn the notifier, so an immediate check is race-free.
 silent() { [ ! -s "$SE/notified.log" ]; }
 
 # dirty repo (untracked file) -> toast mentions uncommitted
@@ -163,9 +181,22 @@ printf 'x\n' >"$SE/repo/dirty.txt"
 se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')"
 ok "dirty repo -> toast mentions uncommitted" notified 'uncommitted'
 
+# hook must NOT block on the notifier: a slow notifier still returns the hook fast
+: >"$SE/notified.log"
+_t0=$(date +%s)
+printf '%s' "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')" |
+  env -u CLAUDE_PROJECT_DIR HOME="$SE/home" WORKSTATION_NOTIFY="$SE/slowstub.sh" \
+    bash "$RH/session-end-notify.sh" >/dev/null 2>&1
+_t1=$(date +%s)
+ok "does not block on a slow notifier (<2s)" test "$((_t1 - _t0))" -lt 2
+
 # reason=clear on dirty repo -> silent (no nag on /clear)
 se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"clear",cwd:$c}')"
 ok "reason=clear -> silent" silent
+
+# reason=resume on dirty repo -> silent (resume is not a real departure)
+se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"resume",cwd:$c}')"
+ok "reason=resume -> silent" silent
 
 # clean repo -> silent
 rm -f "$SE/repo/dirty.txt"

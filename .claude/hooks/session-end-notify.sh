@@ -5,7 +5,10 @@
 # pending `chezmoi apply`, fire a desktop toast so the work isn't forgotten.
 # Reuses the global notify.sh (WSL toast / notify-send / bell). SessionEnd can't
 # inject context, so the only output is the toast side-effect. Fail-open; always
-# exit 0. Skips reason=clear (a /clear is not a real departure).
+# exit 0. Skips reason=clear/resume (neither is a real departure). The toast is
+# fired DETACHED (setsid) so the hook returns instantly: SessionEnd runs during
+# shutdown, and a synchronous ~1s powershell.exe toast on WSL gets cancelled
+# ("Hook cancelled") before it finishes.
 #
 # Honors WORKSTATION_NOTIFY (override the notifier) so the hook test can target a
 # recording stub. See CLAUDE.md + docs/claude/.
@@ -29,7 +32,8 @@ print(v if isinstance(v,str) else "")' 2>/dev/null
 }
 
 reason="$(hookfield '.reason')"
-[ "$reason" = "clear" ] && exit 0
+# clear (/clear) and resume (suspend-for-resume) are not real departures — no nag.
+case "$reason" in clear | resume) exit 0 ;; esac
 
 cwd="$(hookfield '.cwd')"
 root=""
@@ -59,6 +63,16 @@ fi
 msg="workstation: $nd uncommitted change(s)"
 [ "$np" -gt 0 ] && msg="$msg; chezmoi apply pending ($np)"
 
+# Fire the toast DETACHED so this hook returns immediately and the toast still
+# completes after SessionEnd tears the hook down. setsid reparents it into its
+# own session (survives a process-group kill); fall back to a backgrounded
+# subshell where setsid is absent (e.g. macOS).
 notify="${WORKSTATION_NOTIFY:-$HOME/.claude/notify.sh}"
-[ -x "$notify" ] && "$notify" 'Workstation repo' "$msg" </dev/null >/dev/null 2>&1
+if [ -x "$notify" ]; then
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$notify" 'Workstation repo' "$msg" </dev/null >/dev/null 2>&1 &
+  else
+    ("$notify" 'Workstation repo' "$msg" </dev/null >/dev/null 2>&1 &)
+  fi
+fi
 exit 0
