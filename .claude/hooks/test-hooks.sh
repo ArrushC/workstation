@@ -129,6 +129,54 @@ run "$RH/sync-tool-memory.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
 rm -rf "$ST"
 
+echo "== session-context (R6) =="
+run_env() { OUT="$(printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR bash "$1" 2>/dev/null)"; }
+oneline() { [ "$(printf '%s' "$OUT" | grep -c .)" -eq 1 ]; }
+run_env "$RH/session-context.sh" "$(j --arg c "$ROOT" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
+ok "emits SessionStart event" has '"hookEventName":"SessionStart"'
+ok "reports host" has 'host='
+ok "reports guard readiness" has 'guards:'
+ok "is one JSON object (single line)" oneline
+run_env "$RH/session-context.sh" 'not json at all'
+ok "malformed input -> fail-open silent" empty
+
+echo "== session-end-notify (R7) =="
+SE="$(mktemp -d)"
+mkdir -p "$SE/repo" "$SE/home"
+git -C "$SE/repo" init -q
+# recording stub for the notifier
+cat >"$SE/stub.sh" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$SE/notified.log"
+STUB
+chmod +x "$SE/stub.sh"
+se_run() {
+  : >"$SE/notified.log"
+  printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR HOME="$SE/home" \
+    WORKSTATION_NOTIFY="$SE/stub.sh" bash "$1" >/dev/null 2>&1
+}
+notified() { [ -s "$SE/notified.log" ] && grep -qF "$1" "$SE/notified.log"; }
+silent() { [ ! -s "$SE/notified.log" ]; }
+
+# dirty repo (untracked file) -> toast mentions uncommitted
+printf 'x\n' >"$SE/repo/dirty.txt"
+se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')"
+ok "dirty repo -> toast mentions uncommitted" notified 'uncommitted'
+
+# reason=clear on dirty repo -> silent (no nag on /clear)
+se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"clear",cwd:$c}')"
+ok "reason=clear -> silent" silent
+
+# clean repo -> silent
+rm -f "$SE/repo/dirty.txt"
+se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')"
+ok "clean repo -> silent" silent
+
+# malformed input -> silent
+se_run "$RH/session-end-notify.sh" 'not json at all'
+ok "malformed input -> fail-open silent" silent
+rm -rf "$SE"
+
 echo
 if [ "$fail" -eq 0 ]; then
   printf '\033[0;32m✓ all %d hook assertions passed\033[0m\n' "$pass"
