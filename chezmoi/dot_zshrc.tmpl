@@ -400,6 +400,7 @@ alias preview='glow'
 alias zj='zellij'
 alias zjl='zellij list-sessions'
 alias zja='zellij attach'
+alias py='python-cli' # newest installed Python, never downloads (see python-cli fn)
 
 # --- Aliases — chezmoi -------------------------------------------------------
 alias cz='chezmoi'
@@ -605,6 +606,31 @@ nn() {
   NNN_TMPFILE="$tmp" command nnn "$@"
   [[ -s "$tmp" ]] && source "$tmp"
   command rm -f -- "$tmp"
+}
+
+# python-cli — run the NEWEST Python that is already installed, never downloading
+# one. The OS deliberately pins `python`/`python3` to the platform interpreter
+# (3.9 on EL9) so dnf and system tooling keep working; this is the opt-in "use my
+# latest" command. uv enumerates every installed interpreter (system + uv-managed)
+# and we exec the highest version directly by its path — nothing is ever fetched
+# (no `uv run`/`uv python install` in the hot path). Give it a newer target once
+# with `uv python install 3.14` (or `sudo dnf install python3.14`) and python-cli
+# picks it up automatically. Falls back to system python3 if uv/jq are absent.
+# PARITY: identical body in dot_bashrc.tmpl.
+python-cli() {
+  local py=''
+  if command -v uv >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    py=$(uv python list --only-installed --output-format json 2>/dev/null |
+      jq -r 'map(select(.path))
+             | max_by(.version | split(".") | map(tonumber? // 0))
+             | .path // empty')
+  fi
+  [ -n "$py" ] || py=$(command -v python3)
+  [ -n "$py" ] || {
+    echo 'python-cli: no Python interpreter found' >&2
+    return 1
+  }
+  "$py" "$@"
 }
 
 # --- Machine-specific overrides ----------------------------------------------
