@@ -1812,6 +1812,18 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         install.sh, dev_machine only)</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="herdr — agent multiplexer (tmux/zellij-like, aware of AI coding-agent state); adds to, doesn't replace, zellij"
+                                    >herdr<span class="sr-only">
+                                        — agent multiplexer: tmux/zellij-like but
+                                        aware of AI coding-agent state
+                                        (working/idle/blocked/done); a
+                                        dev_machine addition alongside zellij, not
+                                        a replacement</span
+                                    ></span
+                                >
                             </div>
                         </article>
                     </div>
@@ -3871,7 +3883,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the normal bootstrap flow. There are three macros;
                         <strong>prefer <code>EGET_TOOL</code></strong> for
                         single-binary GitHub releases (the common case &mdash;
-                        63 of the current 86 tools use it).
+                        64 of the current 87 tools use it).
                     </p>
                     <ol>
                         <li>
