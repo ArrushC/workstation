@@ -206,3 +206,16 @@ TYPESCRIPT_LS_VERSION      := 4.3.4
 BASH_LS_VERSION            := 5.4.3
 YAML_LS_VERSION            := 1.15.0
 VSCODE_LANGSERVERS_VERSION := 4.10.0
+
+# --- (2026-07) agent multiplexer (dev_machine only) --------------------------
+# herdr — a tmux/zellij-like terminal multiplexer that is AWARE of AI coding-
+# agent state (each pane rolls up to working/idle/blocked/done), with a socket/
+# CLI API for orchestrating agents. dev_machine ONLY: it supervises coding
+# agents and Claude Code itself is dev-only-deployed, so it has no place in the
+# prod toolbelt. Single-binary GitHub release (bare per-platform assets; eget
+# auto-selects herdr-linux-x86_64, verified), installed via a MODE-gated
+# EGET_TOOL in tools.mk — the one scope tool that isn't both-scope. It does NOT
+# replace zellij (kept as the general multiplexer); herdr is the agent-aware
+# addition. NOTE: pre-1.0 and dual-licensed AGPL-3.0/commercial — bump the pin
+# deliberately (breaking changes are likely before 1.0).
+HERDR_VERSION := 0.7.1

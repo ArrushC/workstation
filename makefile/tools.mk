@@ -341,6 +341,29 @@ $(eval $(call EGET_TOOL,marksman,$(MARKSMAN_VERSION),artempyanykh/marksman,$(MAR
 $(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--asset linux --asset x86_64))
 
 # =============================================================================
+# DEV-ONLY scope tool (MODE-gated)  — the ONLY scope tool that isn't both-scope.
+# Every EGET_TOOL/TOOL above joins $(SCOPE_TOOLS) unconditionally (dev + prod).
+# herdr is dev_machine-only (it supervises AI coding agents, and Claude Code is
+# itself dev-only-deployed), so we wrap the PREFERRED EGET_TOOL macro in a MODE
+# guard: on dev it joins $(SCOPE_TOOLS) and installs with `make tools`/`provision`
+# (and auto-registers its doctor + check-updates rows); on prod the eval is
+# skipped and a stub prints the same friendly "dev_machine tool — skipping"
+# message the bespoke dev-only targets (pwndbg/vcpkg) use. herdr is a textbook
+# single-binary release: bare per-platform assets, eget auto-selects
+# herdr-linux-x86_64 (no --asset needed), tag v$(HERDR_VERSION). It does NOT
+# replace zellij — zellij stays the general multiplexer; herdr is the agent-aware
+# addition. (gen-tool-memory.sh greps this call line regardless of the ifeq, so
+# the dev-only machine-memory TOOLS block still lists herdr.)
+# =============================================================================
+ifeq ($(MODE),dev)
+$(eval $(call EGET_TOOL,herdr,$(HERDR_VERSION),ogulcancelik/herdr))
+else
+.PHONY: herdr
+herdr:
+	@echo "herdr is a dev_machine tool — skipping (MODE=$(MODE))"
+endif
+
+# =============================================================================
 # DIRECT  (raw binary URL, no archive)
 # =============================================================================
 
