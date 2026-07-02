@@ -39,7 +39,7 @@ User-facing docs — point users here:
 | WSL setup | `README.html` §setup-wsl |
 | Adding a tool / adding a host walkthrough | `README.html` §adding |
 | Daily workflows (`cze`/`cza`/`czd`/`czu`/`czs`, `make`, `update-hosts.sh`) | `README.html` §daily |
-| Troubleshooting (20 entries) | `README.html` §troubleshooting |
+| Troubleshooting (24 entries) | `README.html` §troubleshooting |
 | Dozzle + Cockpit web admin (dev_machine only) | `README.html` §stack > Web admin card; §troubleshooting; §daily-services |
 
 ## Claude-internal reference docs
