@@ -192,7 +192,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `herdr` 0.7.1
 
 ### System packages (dnf, dev-only)
-- bash-completion bear ccache clang clang-tools-extra cmake cockpit cockpit-networkmanager cockpit-packagekit cockpit-podman cockpit-storaged cockpit-system cppcheck cronie entr fswatch gcc-c++ gdb gdb-gdbserver goaccess heaptrack htop info inotify-tools libasan libtsan libubsan lldb llvm lsof ltrace man-db man-pages meson mtr multitail ninja-build nmap parallel perf pv ripgrep rlwrap rsync rsyslog shellcheck strace tcpdump time tree valgrind vim-common vim-enhanced
+- bash-completion bear bind-utils ccache clang clang-tools-extra cmake cockpit cockpit-networkmanager cockpit-packagekit cockpit-podman cockpit-storaged cockpit-system cppcheck cronie entr fswatch gcc-c++ gdb gdb-gdbserver goaccess heaptrack htop info inotify-tools libasan libtsan libubsan lldb llvm lsof ltrace man-db man-pages meson mtr multitail ninja-build nmap parallel perf pv ripgrep rlwrap rsync rsyslog shellcheck strace tcpdump time tree valgrind vim-common vim-enhanced
 
 ### System packages (dnf, dev-only, non-WSL)
 - autofs nfs-utils nfs4-acl-tools

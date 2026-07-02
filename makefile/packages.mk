@@ -68,10 +68,15 @@ LINUX_PACKAGES := \
 # that aren't CMake/meson; `ccache` is a compiler cache (use via `ccache gcc` or
 # PATH shims). nnd/pwndbg/vcpkg are NOT here — see tools.mk (nnd) and the
 # bespoke pwndbg/vcpkg targets in the Makefile.
+#
+# `bind-utils` is the classic ISC DNS toolset (dig/nslookup/host/delv/nsupdate,
+# EL9 AppStream). Kept alongside the modern `doggo` (EGET_TOOL, both scopes)
+# because scripts, docs, and muscle memory everywhere assume plain
+# `dig`/`nslookup` exist. No WSL gate — DNS tooling works fine there.
 LINUX_OPTIONAL_PACKAGES := \
   ripgrep bash-completion \
   htop multitail goaccess rsyslog \
-  nmap mtr \
+  nmap mtr bind-utils \
   parallel pv entr tree strace perf cronie time \
   rlwrap \
   inotify-tools fswatch \
