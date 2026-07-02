@@ -796,7 +796,52 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         — zero-config HTTP file server</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="NFS client tools — mount.nfs, showmount, nfsstat, nfsiostat"
+                                    >nfs-utils <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — NFS client tools: mount.nfs,
+                                        showmount, nfsstat, nfsiostat
+                                        (dev_machine only via dnf; skipped on
+                                        WSL)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="NFSv4 ACL tools — nfs4_getfacl / nfs4_setfacl"
+                                    >nfs4-acl-tools <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — NFSv4 ACL tools: nfs4_getfacl /
+                                        nfs4_setfacl (dev_machine only via dnf;
+                                        skipped on WSL)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="On-demand NFS automounter (installed, not enabled)"
+                                    >autofs <small>(dnf)</small
+                                    ><span class="sr-only">
+                                        — on-demand automounter daemon
+                                        (dev_machine only via dnf; skipped on
+                                        WSL; installed but not enabled)</span
+                                    ></span
+                                >
                             </div>
+                            <p class="card-note">
+                                The NFS client group (<code>nfs-utils</code>,
+                                <code>nfs4-acl-tools</code>,
+                                <code>autofs</code>) is
+                                <span class="badge dev">dev_machine</span> only
+                                and <strong>skips WSL hosts entirely</strong>.
+                                <code>autofs</code> is installed but never
+                                enabled &mdash; write your maps
+                                (<code>/etc/auto.master</code>&hellip;), then
+                                <code>sudo systemctl enable --now autofs</code>.
+                            </p>
                         </article>
 
                         <article
@@ -4883,6 +4928,35 @@ make -C makefile MODE=dev packages</code></pre>
                                 (~20&ndash;50&times;) for everyday checks; keep
                                 Valgrind for unmodified binaries and
                                 uninitialized-read detection ASan misses.
+                            </p>
+                        </div>
+                    </details>
+                    <details data-ts>
+                        <summary>
+                            NFS tools (<code>showmount</code>,
+                            <code>nfsstat</code>, <code>autofs</code>) are
+                            missing on a dev host
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The NFS client group (<code>nfs-utils</code>,
+                                <code>nfs4-acl-tools</code>,
+                                <code>autofs</code>) installs via dnf on
+                                <span class="badge dev">dev_machine</span> only
+                                &mdash; and is
+                                <strong>skipped entirely on WSL hosts</strong>
+                                by design (same policy as the Docker engine and
+                                Cockpit: provision prints
+                                <code>skipping NFS client group on WSL</code>).
+                                On a native dev host, re-run
+                                <code>make -C makefile MODE=dev packages</code>.
+                            </p>
+                            <p>
+                                <code>autofs</code> is installed but
+                                <strong>not enabled</strong> &mdash; an
+                                automounter with no maps does nothing. Write
+                                your maps first, then
+                                <code>sudo systemctl enable --now autofs</code>.
                             </p>
                         </div>
                     </details>

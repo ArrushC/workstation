@@ -85,6 +85,28 @@ LINUX_OPTIONAL_PACKAGES := \
   cockpit cockpit-system cockpit-storaged cockpit-networkmanager \
   cockpit-packagekit cockpit-podman
 
+# NFS CLIENT GROUP — dev-only like everything in this file, and additionally
+# skipped on WSL hosts (IS_WSL comes from scope.mk). Client-side tooling only:
+# mount/inspect/debug NFS shares served elsewhere — this repo never turns a
+# dev box into an NFS server (no nfs-server/exportfs/rpcbind service wiring).
+#   nfs-utils      — mount.nfs, showmount, nfsstat, nfsiostat, mountstats (BaseOS)
+#   nfs4-acl-tools — nfs4_getfacl / nfs4_setfacl / nfs4_editfacl (AppStream)
+#   autofs         — on-demand automounter; installed but NOT enabled/configured
+#                    (maps are per-host /etc config this repo doesn't manage;
+#                    activate per host: write maps, then
+#                    `sudo systemctl enable --now autofs`)
+# The WSL exclusion matches the docker-engine/cockpit/rsyslog-service policy:
+# NFS on WSL2 is out of scope. The conditional append keeps the group out of
+# LINUX_OPTIONAL_PACKAGES entirely on WSL; packages-optional prints a skip
+# line there so provision output stays auditable. gen-tool-memory.sh extracts
+# this variable by name for the TOOLS memory block — rename it and the
+# generator stanza must move with it.
+LINUX_NFS_PACKAGES := nfs-utils nfs4-acl-tools autofs
+
+ifeq ($(IS_WSL),false)
+LINUX_OPTIONAL_PACKAGES += $(LINUX_NFS_PACKAGES)
+endif
+
 .PHONY: packages packages-core packages-epel packages-optional
 
 ifeq ($(INSTALL_PACKAGES),true)
@@ -169,6 +191,7 @@ packages-epel:
 # magnitude faster on re-runs.
 packages-optional:
 	@printf '==> Optional packages (best-effort)\n'
+	@if [ "$(IS_WSL)" = "true" ]; then printf '  skipping NFS client group on WSL (%s)\n' "$(LINUX_NFS_PACKAGES)"; fi
 	@n_installed=0; n_added=0; n_skipped=0; \
 	for pkg in $(LINUX_OPTIONAL_PACKAGES); do \
 	  if rpm -q "$$pkg" >/dev/null 2>&1; then \

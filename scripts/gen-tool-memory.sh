@@ -76,12 +76,22 @@ emit_block() {
     sed -E 's/^LINUX_OPTIONAL_PACKAGES[[:space:]]*:=//; s/\\//g' |
     tr ' ' '\n' | grep -vE '^$' | LC_ALL=C sort -u | paste -sd' ' - | sed 's/^/- /'
 
+  # 4. dnf NFS client group — dev-only AND skipped on WSL (the IS_WSL append
+  # in packages.mk). Extracted by variable name from the file text, so the
+  # output is host-independent (never make-evaluated).
+  printf '\n### System packages (dnf, dev-only, non-WSL)\n'
+  awk '/^LINUX_NFS_PACKAGES[[:space:]]*:=/{f=1}
+       f{print}
+       f && $0 !~ /\\$/{exit}' "$MK/packages.mk" |
+    sed -E 's/^LINUX_NFS_PACKAGES[[:space:]]*:=//; s/\\//g' |
+    tr ' ' '\n' | grep -vE '^$' | LC_ALL=C sort -u | paste -sd' ' - | sed 's/^/- /'
+
   printf '\n<!-- TOOLS:END -->\n'
 }
 
 block="$(emit_block)"
 
-# 4. Splice the block in place of the existing one (atomic via temp + mv).
+# 5. Splice the block in place of the existing one (atomic via temp + mv).
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 awk -v block="$block" '
