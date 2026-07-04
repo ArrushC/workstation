@@ -1,6 +1,6 @@
 # Memory index
 
-- [Use PR-review workflow](feedback_use_pr_review_workflow.md) — land changes via feature branch + PR; the user merges. Claude can't push or merge to main (harness blocks it). Supersedes the old "always work on main" preference as of 2026-06-15.
+- [Use PR-review workflow](feedback_use_pr_review_workflow.md) — land changes via feature branch + PR; the user merges, or gives a go-ahead that NAMES the merge (a bare "Continue" gets classifier-denied). Never push/merge to main unprompted. Supersedes the old "always work on main" preference as of 2026-06-15.
 - [Always push after commit](feedback_always_push_after_commit.md) — standing instruction: every commit gets pushed without asking, overriding the default guardrail.
 - [Commit .claude/ changes routinely](feedback_commit_claude_dir_routinely.md) — .claude/{settings.json, settings.local.json, memory/*} are regular tracked content. Stop treating their modifications as session-drift to defer.
 - [WezTerm: no wezterm.gui.* calls at config-load](project_wezterm_no_gui_calls_at_config_load.md) — calling screens()/enumerate_gpus() at config-parse time DEADLOCKS WezTerm (froze it in #39, fixed #40); pcall doesn't catch a hang. Use wezterm.hostname()/static values, or a gui-startup event handler.

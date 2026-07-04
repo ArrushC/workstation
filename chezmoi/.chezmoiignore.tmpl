@@ -28,6 +28,7 @@ Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 .config/cheat
 .config/gdb
 .config/helix
+.config/herdr
 .config/tealdeer
 .config/zellij
 .config/zsh
@@ -73,6 +74,8 @@ re-bootstrap), the gate engages correctly.
 # GEF + its ~/.gdbinit are dev-only (gdb itself is a dev_machine dnf package).
 .gdbinit
 .config/gdb
+# herdr is the dev_machine-only agent multiplexer; its config is inert on prod.
+.config/herdr
 {{ end }}
 
 {{/*

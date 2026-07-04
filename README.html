@@ -1871,13 +1871,18 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="herdr — agent multiplexer (tmux/zellij-like, aware of AI coding-agent state); adds to, doesn't replace, zellij"
+                                    data-tip="herdr — agent multiplexer (tmux/zellij-like, aware of AI coding-agent state); adds to, doesn't replace, zellij. Ships the herdr-file-viewer plugin: prefix+f (split) / prefix+shift+f (tab)"
                                     >herdr<span class="sr-only">
                                         — agent multiplexer: tmux/zellij-like but
                                         aware of AI coding-agent state
                                         (working/idle/blocked/done); a
                                         dev_machine addition alongside zellij, not
-                                        a replacement</span
+                                        a replacement. The herdr-file-viewer
+                                        plugin (git-aware file browser) is
+                                        auto-installed on apply, bound to
+                                        prefix+f (split pane) and prefix+shift+f
+                                        (own tab) in the tracked
+                                        ~/.config/herdr/config.toml</span
                                     ></span
                                 >
                             </div>
@@ -2171,6 +2176,15 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                 layouts/dev.kdl}
                                                 <span class="note"
                                                     >&mdash; Linux only</span
+                                                >
+                                            </li>
+                                            <li>
+                                                herdr/config.toml
+                                                <span class="note"
+                                                    >&mdash; Linux
+                                                    dev_machine only;
+                                                    file-viewer plugin
+                                                    keybindings</span
                                                 >
                                             </li>
                                             <li>
