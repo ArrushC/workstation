@@ -127,6 +127,17 @@ run "$RH/sync-tool-memory.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit
 ok "unrelated path -> silent" empty
 run "$RH/sync-tool-memory.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
+# worktree: an edit in a SECOND checkout must regenerate THAT checkout's
+# memory file even when CLAUDE_PROJECT_DIR points at this (main) one.
+WT="$(mktemp -d)"
+mkdir -p "$WT/scripts" "$WT/makefile" "$WT/chezmoi/private_dot_claude"
+cp "$ROOT/scripts/gen-tool-memory.sh" "$WT/scripts/"
+cp "$ROOT/makefile/versions.mk" "$ROOT/makefile/tools.mk" "$ROOT/makefile/packages.mk" "$WT/makefile/"
+printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/chezmoi/private_dot_claude/CLAUDE.md"
+OUT="$(printf '%s' "$(j --arg f "$WT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | CLAUDE_PROJECT_DIR="$ROOT" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
+ok "worktree edit -> cza nudge" has 'cza'
+ok "worktree's own memory regenerated" bash -c '! grep -q stale "'"$WT"'/chezmoi/private_dot_claude/CLAUDE.md"'
+rm -rf "$WT"
 rm -rf "$ST"
 
 echo "== session-context (R6) =="
