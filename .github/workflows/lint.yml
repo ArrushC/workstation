@@ -1,6 +1,10 @@
 name: lint
 on: [push, pull_request]
 
+# All three jobs only read the checkout — pin the token to least privilege.
+permissions:
+  contents: read
+
 jobs:
   invariants:
     runs-on: ubuntu-latest

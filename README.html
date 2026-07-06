@@ -112,7 +112,7 @@
                         <ol class="sub">
                             <li>
                                 <a href="#daily-services"
-                                    >Web admin services</a
+                                    >Services</a
                                 >
                             </li>
                         </ol>
@@ -3807,7 +3807,13 @@ make -n MODE=prod provision
 make gitui MODE=prod
 make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
 
-                    <h3 id="daily-services">Web admin services (dev_machine, non-WSL)</h3>
+                    <h3 id="daily-services">Services</h3>
+                    <p>
+                        The web-admin trio below (Docker engine, Cockpit,
+                        Dozzle) is <strong>dev_machine-only</strong> and
+                        skipped on WSL; <code>pueue</code> runs on every
+                        Linux host, both groups.
+                    </p>
                     <ul>
                         <li>
                             <strong>Docker engine</strong> — installed

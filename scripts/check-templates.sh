@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# check-templates.sh — render the chezmoi templates for each host group and
-# syntax-check the rendered output. Catches Go-template errors and shell/nu/
-# gitconfig syntax errors at lint time instead of at `chezmoi apply` time on
-# a live host (where a broken .zshrc breaks every new shell).
+# check-templates.sh — render ALL tracked chezmoi templates for each host
+# group and syntax-check the rendered output: rc files, .chezmoiscripts/*.tmpl,
+# dot_config/dotfile/AppData templates. Catches Go-template errors and
+# shell/nu/gitconfig/yaml/toml syntax errors at lint time instead of at
+# `chezmoi apply` time on a live host (where a broken .zshrc breaks every new
+# shell). Only .chezmoi.toml.tmpl is excluded: it's the CONFIG template
+# (needs promptStringOnce data, not renderable with the synthetic config).
 #
 # Renders happen on Linux, so `.chezmoi.os` is "linux": Linux-target files
 # get full render+syntax coverage; Windows-target files (config.nu, the
-# PowerShell profile) still get template-PARSE coverage plus a syntax check
-# of their linux-rendered body (both barely branch on OS — see CLAUDE.md).
+# PowerShell profile + ps1 script, helix config.toml) still get
+# template-PARSE coverage plus a syntax check of their linux-rendered body
+# (they barely branch on OS — see CLAUDE.md).
 #
-# Checkers soft-skip when absent (mirrors check-invariants.sh): zsh, nu and
-# pwsh may be missing locally; CI (lint.yml `templates` job) installs them
-# all, so the full matrix always enforces there.
+# Checkers soft-skip when absent (mirrors check-invariants.sh): zsh, nu,
+# pwsh, yq and python3-with-tomllib (3.11+) may be missing locally; CI (lint.yml
+# `templates` job) has them all, so the full matrix always enforces there
+# (ubuntu-latest ships yq + python 3.12 — no extra install steps needed).
 #
 # Usage: bash scripts/check-templates.sh          (from anywhere; repo-relative)
 set -euo pipefail
@@ -68,9 +73,10 @@ render() {
 check() {
   local group=$1 tmpl=$2 label=$3
   shift 3
-  local out="$WORK/out"
+  local out="$WORK/out" err
   if ! render "$group" "$tmpl" "$out"; then
-    bad "$label [$group]: template render failed: $(head -1 "$WORK/render-err")"
+    err="$(head -1 "$WORK/render-err")"
+    bad "$label [$group]: template render failed: ${err:-(no stderr)}"
     return
   fi
   if [ "$#" -eq 0 ]; then
@@ -80,7 +86,8 @@ check() {
   if "$@" "$out" >"$WORK/check-err" 2>&1; then
     ok "$label [$group]: renders + syntax OK"
   else
-    bad "$label [$group]: syntax check failed: $(head -1 "$WORK/check-err")"
+    err="$(head -1 "$WORK/check-err")"
+    bad "$label [$group]: syntax check failed: ${err:-(no stderr)}"
   fi
 }
 
@@ -92,6 +99,8 @@ pwsh_check() {
   pwsh -NoProfile -Command \
     "\$e=\$null; [void][System.Management.Automation.Language.Parser]::ParseFile('$1',[ref]\$null,[ref]\$e); if (\$e) { \$e | ForEach-Object { \$_.Message }; exit 1 }"
 }
+yaml_check() { yq eval '.' "$1" >/dev/null; }
+toml_check() { python3 -c 'import tomllib,sys; tomllib.load(open(sys.argv[1],"rb"))' "$1"; }
 
 hdr "rendered-template syntax checks (dev_machine + prod_machine)"
 for group in dev_machine prod_machine; do
@@ -104,9 +113,32 @@ for group in dev_machine prod_machine; do
   check "$group" dot_bashrc.tmpl ".bashrc" bash_check
   check "$group" dot_gitconfig.tmpl ".gitconfig" git_check
   check "$group" .chezmoiignore.tmpl ".chezmoiignore"
+  # chezmoi scripts: every .sh body must be valid bash in every group render
+  # (a gated-out render is an empty file — bash -n passes trivially).
+  for s in "$SRC"/.chezmoiscripts/*.sh.tmpl; do
+    check "$group" ".chezmoiscripts/$(basename "$s")" "$(basename "$s" .tmpl)" bash_check
+  done
+  # systemd user unit: ExecStart branches on .group — render both ways.
+  check "$group" dot_config/systemd/user/pueued.service.tmpl "pueued.service"
 done
 
+# Group-independent Linux-target files: render once as dev_machine.
+if command -v yq >/dev/null 2>&1; then
+  check dev_machine dot_config/cheat/conf.yml.tmpl "cheat conf.yml" yaml_check
+else
+  note "cheat conf.yml: yq not installed — render-only (CI enforces)"
+  check dev_machine dot_config/cheat/conf.yml.tmpl "cheat conf.yml(render)"
+fi
+check dev_machine dot_gdbinit.tmpl ".gdbinit"
+check dev_machine private_dot_ssh/private_config.tmpl "ssh config"
+
 # Windows-target files: group-independent content; render once as dev_machine.
+if python3 -c 'import tomllib' 2>/dev/null; then
+  check dev_machine AppData/Roaming/helix/config.toml.tmpl "helix config.toml" toml_check
+else
+  note "helix config.toml: python3 tomllib (3.11+) unavailable — render-only (CI enforces)"
+  check dev_machine AppData/Roaming/helix/config.toml.tmpl "helix config.toml(render)"
+fi
 if command -v nu >/dev/null 2>&1; then
   check dev_machine AppData/Roaming/nushell/config.nu.tmpl "config.nu" nu_check
 else
@@ -115,9 +147,11 @@ else
 fi
 if command -v pwsh >/dev/null 2>&1; then
   check dev_machine Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tmpl "PS profile" pwsh_check
+  check dev_machine .chezmoiscripts/run_onchange_after_remind-wslconfig-restart.ps1.tmpl "wslconfig ps1" pwsh_check
 else
   note "PS profile: pwsh not installed — render-only (CI enforces)"
   check dev_machine Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tmpl "PS profile(render)"
+  check dev_machine .chezmoiscripts/run_onchange_after_remind-wslconfig-restart.ps1.tmpl "wslconfig ps1(render)"
 fi
 
 hdr "summary"

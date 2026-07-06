@@ -37,19 +37,22 @@ case "$norm" in
 *) exit 0 ;;
 esac
 
-# Resolve the generator: prefer CLAUDE_PROJECT_DIR, else walk up from the file.
+# Resolve the generator from the EDITED FILE's checkout (walk up from the
+# file), so an edit inside a git worktree regenerates THAT worktree's memory
+# file. CLAUDE_PROJECT_DIR is only a fallback: it points at the main checkout,
+# and preferring it used to silently regenerate the WRONG copy (a content
+# no-op) while claiming success for the worktree edit.
 gen=""
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -x "$CLAUDE_PROJECT_DIR/scripts/gen-tool-memory.sh" ]; then
+d="$(dirname "$norm")"
+while [ "$d" != "/" ] && [ -n "$d" ]; do
+  if [ -x "$d/scripts/gen-tool-memory.sh" ]; then
+    gen="$d/scripts/gen-tool-memory.sh"
+    break
+  fi
+  d="$(dirname "$d")"
+done
+if [ -z "$gen" ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -x "$CLAUDE_PROJECT_DIR/scripts/gen-tool-memory.sh" ]; then
   gen="$CLAUDE_PROJECT_DIR/scripts/gen-tool-memory.sh"
-else
-  d="$(dirname "$norm")"
-  while [ "$d" != "/" ] && [ -n "$d" ]; do
-    if [ -x "$d/scripts/gen-tool-memory.sh" ]; then
-      gen="$d/scripts/gen-tool-memory.sh"
-      break
-    fi
-    d="$(dirname "$d")"
-  done
 fi
 [ -n "$gen" ] || exit 0
 
