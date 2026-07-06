@@ -149,7 +149,6 @@ NUMBAT_VERSION     := 1.23.0
 QSV_VERSION        := 21.1.0
 GREX_VERSION       := 1.4.6
 JLESS_VERSION      := 0.9.0
-CLIPSE_VERSION     := 1.2.1
 
 # --- (2026-06) tier-1 lint/security + system/util gap-fillers -----------------
 # shfmt + gitleaks are ALSO enforced by scripts/check-invariants.sh (so they run

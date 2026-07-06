@@ -287,17 +287,6 @@ $(eval $(call EGET_TOOL,grex,$(GREX_VERSION),pemistahl/grex,,--asset musl))
 # works headless); kept as a dedicated pager. .zip, one binary.
 $(eval $(call EGET_TOOL,jless,$(JLESS_VERSION),PaulJuliusMartinez/jless))
 
-# clipse — TUI clipboard manager. Publishes TWO linux builds (x11 + wayland);
-# we install the x11 one for broadest reach — native X11 and under XWayland/
-# WSLg. For a pure-Wayland session, swap the asset to *_linux_wayland_amd64*.
-# The tarball's lone binary is named `clipse-linux-x11-amd64`, not `clipse`, and
-# eget can't rename archive members — so this uses TOOL+archive.sh with a
-# `src=dst` rename (same pattern as nnn), NOT EGET_TOOL. (UPDATE_SPECS below.)
-# RUNTIME: needs a graphical clipboard + a background `clipse -listen` daemon;
-# harmless no-op on headless prod hosts (installs, just never runs).
-$(eval $(call TOOL,clipse,$(CLIPSE_VERSION),\
-  $(LIB)/archive.sh clipse-linux-x11-amd64=clipse https://github.com/savedra1/clipse/releases/download/v$(CLIPSE_VERSION)/clipse_v$(CLIPSE_VERSION)_linux_x11_amd64.tar.gz,clipse))
-
 # --- (2026-06) tier-1 lint/security + system/util gap-fillers ----------------
 # gitleaks/procs/dust/hexyl/gum are eget single-binary installs (below);
 # shfmt + pueue/pueued are raw-binary direct.sh installs (DIRECT section).
@@ -412,8 +401,9 @@ $(eval $(call TOOL,shfmt,$(SHFMT_VERSION),\
 # pueue — background job queue: daemon (pueued) + client (pueue), shipped as TWO
 # separate raw-binary assets. eget renames any raw binary to the repo name
 # (`pueue`), so the daemon would also land as `pueue` — direct.sh fetches each
-# under its correct name. musl-static. No systemd unit is installed; start the
-# daemon manually (`pueued -d`).
+# under its correct name. musl-static. The daemon runs via the chezmoi-managed
+# systemd user unit (chezmoi/dot_config/systemd/user/pueued.service.tmpl),
+# auto-enabled on apply.
 $(eval $(call TOOL,pueue,$(PUEUE_VERSION),\
   $(LIB)/direct.sh pueue https://github.com/Nukesor/pueue/releases/download/v$(PUEUE_VERSION)/pueue-x86_64-unknown-linux-musl,pueue))
 $(eval $(call TOOL,pueued,$(PUEUE_VERSION),\
@@ -499,7 +489,6 @@ UPDATE_SPECS += ncdu|$(NCDU_VERSION)|https://code.blicky.net/yorhel/ncdu.git|v$(
 UPDATE_SPECS += usql|$(USQL_VERSION)|xo/usql|v$(USQL_VERSION)
 UPDATE_SPECS += yazi|$(YAZI_VERSION)|sxyazi/yazi|v$(YAZI_VERSION)
 UPDATE_SPECS += nnn|$(NNN_VERSION)|jarun/nnn|v$(NNN_VERSION)
-UPDATE_SPECS += clipse|$(CLIPSE_VERSION)|savedra1/clipse|v$(CLIPSE_VERSION)
 UPDATE_SPECS += age|$(AGE_VERSION)|FiloSottile/age|v$(AGE_VERSION)
 UPDATE_SPECS += jq|$(JQ_VERSION)|jqlang/jq|jq-$(JQ_VERSION)
 UPDATE_SPECS += yq|$(YQ_VERSION)|mikefarah/yq|v$(YQ_VERSION)

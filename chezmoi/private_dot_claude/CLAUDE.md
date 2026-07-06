@@ -158,7 +158,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `qsv` 21.1.0
 - `grex` 1.4.6
 - `jless` 0.9.0
-- `clipse` 1.2.1
 
 ### (2026-06) tier-1 lint/security + system/util gap-fillers
 - `shfmt` 3.13.1

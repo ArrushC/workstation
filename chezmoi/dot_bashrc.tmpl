@@ -213,6 +213,13 @@ if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function bash)"
 fi
 
+# --- mise (per-project tool versions: node/python/go from mise.toml) ---------
+# `mise activate` hooks PROMPT_COMMAND to put the active project's tools on
+# PATH as you cd. Without it the mise binary is inert outside `mise exec`.
+if command -v mise &>/dev/null; then
+  eval "$(mise activate bash)"
+fi
+
 # --- starship prompt ---------------------------------------------------------
 if command -v starship &>/dev/null; then
   eval "$(starship init bash)"
