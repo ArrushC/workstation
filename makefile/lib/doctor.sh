@@ -239,6 +239,38 @@ packages_section() {
   fi
 }
 
+# --- wiring — tools that need more than a binary on PATH ---------------------
+# verify-binary.sh gates "installed but won't RUN"; this gates "installed but
+# won't DO anything": tools whose value depends on a shell hook or a running
+# daemon. Read-only, like everything else in this report.
+check_wiring() {
+  hdr "wiring (shell hooks + daemons)"
+
+  # mise — inert without `mise activate` in the interactive shell rc.
+  if command -v mise >/dev/null 2>&1; then
+    if grep -q 'mise activate' "$HOME/.zshrc" 2>/dev/null; then
+      row_ok "mise" "activated in ~/.zshrc"
+    else
+      row_warn "mise" "no 'mise activate' in ~/.zshrc — run: chezmoi apply"
+    fi
+  else
+    row_skip "mise" "not installed"
+  fi
+
+  # pueued — every pueue command fails until the daemon runs.
+  if command -v pueued >/dev/null 2>&1; then
+    if ! command -v systemctl >/dev/null 2>&1 || ! systemctl --user show-environment >/dev/null 2>&1; then
+      row_skip "pueued" "no systemd user manager (start manually: pueued -d)"
+    elif systemctl --user is-active --quiet pueued.service; then
+      row_ok "pueued" "user service active"
+    else
+      row_warn "pueued" "daemon not running — run: systemctl --user enable --now pueued (jobs that must survive logout also need: loginctl enable-linger)"
+    fi
+  else
+    row_skip "pueued" "not installed"
+  fi
+}
+
 main() {
   local scope_rows=() user_rows=() bespoke_rows=() row name version
 
@@ -275,6 +307,9 @@ main() {
   done
 
   packages_section
+
+  echo ""
+  check_wiring
 
   echo ""
   hdr "summary"

@@ -1810,15 +1810,6 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="TUI clipboard manager (needs a graphical session)"
-                                    >clipse<span class="sr-only">
-                                        — TUI clipboard manager; needs a
-                                        graphical session (X11 build)</span
-                                    ></span
-                                >
-                                <span
-                                    class="chip"
-                                    tabindex="0"
                                     data-tip="Colored hex viewer (sharkdp)"
                                     >hexyl<span class="sr-only">
                                         — colored hex viewer</span
@@ -3792,7 +3783,12 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         <code>make MODE=&lt;mode&gt; provision</code> inside
                         <code>makefile/</code>. You can invoke
                         <code>make</code> manually for repeated runs without
-                        going through bootstrap each time.
+                        going through bootstrap each time. Thanks to the
+                        root <code>GNUmakefile</code> shim, the same
+                        <code>make</code> commands also work directly from
+                        the repo root (e.g.
+                        <code>make lint MODE=prod</code>) &mdash; no
+                        <code>cd makefile</code> needed.
                     </p>
                     <pre><code>cd makefile
 
@@ -3875,6 +3871,19 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <code>docker-engine</code> /
                             <code>dozzle-service</code> /
                             <code>cockpit-service</code> instead of failing.
+                        </li>
+                        <li>
+                            <strong>pueue</strong> — unlike the services
+                            above, this one runs on every Linux host (both
+                            groups, WSL included): the daemon
+                            (<code>pueued</code>) runs as a per-user systemd
+                            unit, auto-enabled by <code>chezmoi apply</code>.
+                            Inspect with
+                            <code>systemctl --user status pueued</code>.
+                            Note that the daemon and all queued jobs are torn
+                            down when your last login session ends; if jobs
+                            must survive logout, enable user lingering with
+                            <code>loginctl enable-linger</code>.
                         </li>
                     </ul>
 

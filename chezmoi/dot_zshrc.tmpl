@@ -173,6 +173,14 @@ if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function zsh)"
 fi
 
+# --- mise (per-project tool versions: node/python/go from mise.toml) ---------
+# `mise activate` installs a precmd/chpwd hook that puts the active project's
+# tools on PATH as you cd. Without it the mise binary is inert outside an
+# explicit `mise exec` — installed-but-not-wired (caught by `make doctor`).
+if command -v mise &>/dev/null; then
+  eval "$(mise activate zsh)"
+fi
+
 # --- starship prompt ---------------------------------------------------------
 if command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
