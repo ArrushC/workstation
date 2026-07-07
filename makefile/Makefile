@@ -23,6 +23,27 @@
 # Bootstrap.sh calls `make MODE=dev provision` (or MODE=prod). The
 # update-hosts.sh script does the same for remote hosts over ssh.
 
+# --- MODE inference from the dev/prod goals ----------------------------------
+# `make dev` / `make prod` are the documented human entry points (README
+# §daily, scope.mk's own error text). The goal itself names the scope, so
+# derive MODE from it HERE, before scope.mk is included — a recipe (like the
+# old aliases' `$(MAKE) MODE=dev provision` re-invocation) is too late:
+# scope.mk's parse-time $(error) fires before any recipe can run, which made
+# `make dev` dead on arrival from day one. An explicit MODE= from the command
+# line or environment is NOT overridden (?=); if it contradicts the goal we
+# error rather than provision the wrong scope. Goal-less `make` and every
+# other target still require MODE= — this is inference from an explicit goal,
+# not a default.
+ifneq ($(filter dev prod,$(MAKECMDGOALS)),)
+  ifneq ($(words $(filter dev prod,$(MAKECMDGOALS))),1)
+    $(error 'dev' and 'prod' goals are mutually exclusive — pick one)
+  endif
+  MODE ?= $(filter dev prod,$(MAKECMDGOALS))
+  ifneq ($(MODE),$(filter dev prod,$(MAKECMDGOALS)))
+    $(error goal '$(filter dev prod,$(MAKECMDGOALS))' conflicts with MODE=$(MODE))
+  endif
+endif
+
 include scope.mk
 include versions.mk
 
@@ -641,13 +662,12 @@ provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockp
 provision: pwndbg vcpkg go-runtime lsp-servers
 endif
 
-# Friendly aliases — re-invoke make with the right MODE so scope.mk
-# resolves before any rule fires.
-dev:
-	@$(MAKE) --no-print-directory MODE=dev provision
-
-prod:
-	@$(MAKE) --no-print-directory MODE=prod provision
+# Friendly aliases for provision. MODE comes from the goal-name inference
+# above `include scope.mk` — do NOT turn these back into recipe-level
+# `$(MAKE) MODE=… provision` re-invocations: scope.mk's parse-time $(error)
+# fires before any recipe runs, so that original design never worked.
+dev: provision
+prod: provision
 
 # `make all` — synonym for `make tools` (scope-aware bulk install).
 # Predates the provision target; preserved so existing muscle memory works.
