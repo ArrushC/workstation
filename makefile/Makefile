@@ -478,7 +478,7 @@ endif
 clean-dozzle-service:
 	@$(SUDO) systemctl disable --now dozzle.service 2>/dev/null || true
 	@$(SUDO) docker rm -f dozzle 2>/dev/null || true
-	@$(SUDO) docker image rm amir20/dozzle:$(DOZZLE_VERSION) 2>/dev/null || true
+	@$(SUDO) docker image rm amir20/dozzle:v$(DOZZLE_VERSION) 2>/dev/null || true
 	@$(SUDO) rm -f /etc/systemd/system/dozzle.service /etc/dozzle/dozzle.env
 	@$(SUDO) rmdir /etc/dozzle 2>/dev/null || true
 	@$(SUDO) systemctl daemon-reload
