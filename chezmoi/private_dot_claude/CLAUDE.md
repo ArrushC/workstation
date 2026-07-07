@@ -54,7 +54,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Tier-0: original toolbelt
 - `fzf` 0.73.1
-- `zoxide` 0.9.9
+- `zoxide` 0.10.0
 - `starship` 1.26.0
 - `zellij` 0.44.3
 - `glow` 2.1.2
@@ -68,7 +68,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `btop` 1.4.7
 - `ncdu` 2.9.1
 - `bandwhich` 0.23.1
-- `jq` 1.8.1
+- `jq` 1.8.2
 - `yq` 4.53.3
 - `tldr` 1.8.1
 - `witr` 0.3.3
@@ -84,10 +84,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Second-wave expansion (2026-05)
 - `gitui` 0.28.1
-- `lazygit` 0.62.2
-- `jj` 0.42.0
+- `lazygit` 0.63.0
+- `jj` 0.43.0
 - `yazi` 26.5.6
-- `ast-grep` 0.44.0
+- `ast-grep` 0.44.1
 - `television` 0.15.9
 - `xh` 0.26.1
 - `gping` 1.20.4
@@ -99,21 +99,21 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.74.3
-- `croc` 10.4.4
+- `croc` 10.4.7
 - `hyperfine` 1.20.0
-- `mise` 2026.6.14
-- `uv` 0.11.25
+- `mise` 2026.7.0
+- `uv` 0.11.26
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
-- `gh` 2.95.0
-- `sops` 3.13.1
+- `gh` 2.96.0
+- `sops` 3.13.2
 - `htmlq` 0.4.0
-- `ouch` 0.8.0
+- `ouch` 0.8.1
 - `watchexec` 2.5.1
 
 ### Service / journal / cgroup observability
-- `bottom` 0.14.2
+- `bottom` 0.14.3
 - `systemctl-tui` 0.5.2
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
@@ -128,11 +128,11 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Claude Code CLI
 - `claude` latest
-- `ccstatusline` 2.2.19
+- `ccstatusline` 2.2.22
 - `node` 26.4.0
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.6.6
+- `dozzle` 10.6.7
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.4.0
@@ -146,7 +146,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `fx` 39.2.0
 - `gitlogue` 0.9.0
 - `rg` 15.1.0
-- `mlr` 6.18.1
+- `mlr` 6.20.2
 - `csvlens` 0.15.1
 - `difft` 0.69.0
 - `trip` 0.13.0
@@ -170,7 +170,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gum` 0.17.0
 
 ### (2026-06) C / C++ development & debugging toolchain
-- `nnd` 0.78
+- `nnd` 0.79
 - `pwndbg` 2026.02.18
 - `vcpkg` 2026.06.24
 

@@ -29,12 +29,19 @@ EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSIO
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
-# from the pin variable). Without these, tldr would never auto-bump and the
-# nerd-fonts EXCLUDE guard would be unreachable.
+# from the pin variable). Without these the tool lands in "skipped — no matching
+# pin line" forever (and the nerd-fonts EXCLUDE guard would be unreachable).
+# Keys MUST stay quoted: shfmt reformats unquoted hyphenated subscripts as
+# arithmetic ([nerd-fonts] -> [nerd - fonts]), silently breaking the lookup.
 declare -A ALIAS=(
-  [tldr]=TEALDEER_VERSION
-  [jj]=JUJUTSU_VERSION
-  [nerd - fonts]=JETBRAINSMONO_NERD_VERSION
+  ["tldr"]=TEALDEER_VERSION
+  ["jj"]=JUJUTSU_VERSION
+  ["nerd-fonts"]=JETBRAINSMONO_NERD_VERSION
+  ["mlr"]=MILLER_VERSION
+  ["rg"]=RIPGREP_VERSION
+  ["difft"]=DIFFTASTIC_VERSION
+  ["trip"]=TRIPPY_VERSION
+  ["pueued"]=PUEUE_VERSION # shares pueue's pin (one release covers both)
 )
 
 bumped=""
@@ -51,6 +58,7 @@ while IFS='|' read -r _ name detail; do
   new="${detail##* }" # "old → new" -> "new"
   var="${ALIAS[$name]:-$(printf '%s' "$name" | tr '[:lower:]-' '[:upper:]_')_VERSION}"
   old_re="${old//./\\.}"
+  new_re="${new//./\\.}"
 
   case " $EXCLUDE " in
   *" $var "*)
@@ -58,6 +66,12 @@ while IFS='|' read -r _ name detail; do
     continue
     ;;
   esac
+
+  # Shared-pin dedup (pueue+pueued both map to PUEUE_VERSION): an earlier row
+  # may have already bumped this var to $new — that's done, not a skip.
+  if grep -qE "^${var}[[:space:]]*:=[[:space:]]*${new_re}[[:space:]]*\$" "$VERSIONS"; then
+    continue
+  fi
 
   if grep -qE "^${var}[[:space:]]*:=[[:space:]]*${old_re}[[:space:]]*\$" "$VERSIONS"; then
     sed -i -E "s|^(${var}[[:space:]]*:=[[:space:]]*)${old_re}[[:space:]]*\$|\1${new}|" "$VERSIONS"
