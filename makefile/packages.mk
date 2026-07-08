@@ -121,6 +121,16 @@ packages:
 	@echo "  skipping system packages (MODE=$(MODE), INSTALL_PACKAGES=$(INSTALL_PACKAGES))"
 endif
 
+# core → epel → optional is a REAL dependency chain, not just a nice order:
+# packages-optional silently degrades (per-package `|| true`) for anything
+# EPEL/CRB-backed, so it MUST run after packages-epel has enabled those repos.
+# Before these edges the ordering was incidental (left-to-right prereqs of
+# `packages` under serial make) — under `make -j` the siblings would race and
+# reintroduce the exact CRB failure mode documented in the packages-epel
+# comment above. The edges also serialize dnf, which holds a global lock.
+packages-epel: packages-core
+packages-optional: packages-epel
+
 # Fast-path strategy across all three package targets: `rpm -q <pkg>` is a
 # local rpmdb lookup (~10ms) vs dnf's ~500ms metadata + dependency round
 # trip. We probe with rpm -q first and only invoke `sudo dnf install` for

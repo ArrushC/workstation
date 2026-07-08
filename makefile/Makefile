@@ -47,6 +47,26 @@ endif
 include scope.mk
 include versions.mk
 
+# --- Parallel by default ------------------------------------------------------
+# The per-tool install layer is an independent-stamp DAG and network-bound, so
+# it parallelizes ~linearly (measured 6.3x on 12 tools at -j8). Default to
+# -j$(NPROC); `make <goal> -j1` is the serial escape hatch (an explicit -j on
+# the command line IS visible in parse-time MAKEFLAGS, so the guard yields).
+# MAKELEVEL guard: only the top-level make self-assigns -j — makefile-assigned
+# flags do NOT reach a sub-make's parse-time MAKEFLAGS (verified on make 4.3),
+# so without the guard every recursive phase below would re-add -j and clobber
+# the parent's jobserver ("-jN forced in submake" warnings). Sub-makes instead
+# inherit parallelism through the jobserver via the `+` recipe prefix.
+# GNUmakefile carries the same block for root-shim invocations (it is level 0
+# there). Phase ordering under -j is handled by `provision`'s sequential
+# recipe lines + the packages-core→epel→optional chain in packages.mk.
+NPROC := $(shell nproc 2>/dev/null || echo 4)
+ifeq ($(MAKELEVEL),0)
+  ifeq ($(filter -j%,$(MAKEFLAGS)),)
+    MAKEFLAGS += --jobs=$(NPROC)
+  endif
+endif
+
 STAMP ?= $(HOME)/.local/share/workstation-install
 LIB   := $(CURDIR)/lib
 # REPO_ROOT — make runs with CWD = makefile/, so the repo root is one dir up.
@@ -651,16 +671,42 @@ include dotfiles.mk
 #   shell.yml     → shell
 #   dotfiles.yml  → dotfiles
 # -----------------------------------------------------------------------------
-.PHONY: provision dev prod all tools user-tools list clean help doctor check-updates
+.PHONY: provision provision-fanout dev prod all tools user-tools list clean help doctor check-updates
 
 tools: $(SCOPE_TOOLS)
 user-tools: $(USER_TOOLS)
 
-provision: packages tools user-tools shell dotfiles wsl-config
+# provision — three sequential phases (recipe lines are hard barriers under
+# -j; prerequisites of one target are NOT ordered among themselves, so a
+# prereq list can't express phases):
+#   1. packages  — serial (dnf holds a global lock; the core→epel→optional
+#                  chain lives in packages.mk). On dev this also fields the
+#                  ONE sudo password prompt; everything after rides the
+#                  cached timestamp instead of racing 8 prompts onto the tty.
+#   2. fanout    — every independent phase target, in parallel (jobserver
+#                  inherited via `+`). --output-sync=target is passed HERE,
+#                  explicitly: -O never appears in a child's parse-time
+#                  MAKEFLAGS, so it can't be set-and-detected globally.
+#   3. dotfiles  — serial tail, deliberately UNSYNCED: `chezmoi update` can
+#                  prompt interactively, and output-sync buffering would
+#                  make that prompt invisible (recursive `+` lines are
+#                  exempt from the parent's sync — verified on make 4.3).
+#                  Running last also guarantees chezmoi run_ scripts see a
+#                  fully-provisioned host (tic, pueued, ...).
+# New provision-phase targets join PROVISION_FANOUT (or, if they must be
+# ordered, get an explicit edge) — see the parallel-provisioning invariant.
+PROVISION_FANOUT := tools user-tools shell wsl-config
 ifeq ($(MODE),dev)
-provision: claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-provision: pwndbg vcpkg go-runtime lsp-servers
+PROVISION_FANOUT += claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
+PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers
 endif
+
+provision-fanout: $(PROVISION_FANOUT)
+
+provision:
+	+@$(MAKE) --no-print-directory packages
+	+@$(MAKE) --no-print-directory --output-sync=target provision-fanout
+	+@$(MAKE) --no-print-directory dotfiles
 
 # Friendly aliases for provision. MODE comes from the goal-name inference
 # above `include scope.mk` — do NOT turn these back into recipe-level

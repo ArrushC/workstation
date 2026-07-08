@@ -3806,6 +3806,16 @@ make -n MODE=prod provision
 # Single tool — useful for iterating when one install is flaky
 make gitui MODE=prod
 make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
+                    <p class="note-row">
+                        <strong>Provisioning is parallel by default</strong>
+                        &mdash; make self-assigns <code>-j$(nproc)</code>, and
+                        <code>provision</code> runs as three ordered phases
+                        (dnf packages &rarr; tool fan-out &rarr; chezmoi
+                        dotfiles) so the sudo password prompt and any chezmoi
+                        overwrite prompt stay readable. Pass
+                        <code>-j1</code> (e.g. <code>make dev -j1</code>) for
+                        a fully serial run when debugging a flaky install.
+                    </p>
 
                     <h3 id="daily-services">Services</h3>
                     <p>
