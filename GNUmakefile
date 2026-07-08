@@ -16,6 +16,16 @@
 
 MAKEFLAGS += --no-print-directory
 
+# Same top-level -j default as makefile/Makefile (see the "Parallel by
+# default" block there for the full why). It must ALSO live here because this
+# shim is MAKELEVEL 0 for root invocations — the sub-make it spawns is level 1
+# and deliberately never self-assigns -j (it inherits this jobserver instead).
+# Not a rule; the never-add-rules-here policy above still holds.
+NPROC := $(shell nproc 2>/dev/null || echo 4)
+ifeq ($(filter -j%,$(MAKEFLAGS)),)
+  MAKEFLAGS += --jobs=$(NPROC)
+endif
+
 GOALS := $(or $(MAKECMDGOALS),__default)
 FIRST := $(firstword $(GOALS))
 REST  := $(filter-out $(FIRST),$(GOALS))
