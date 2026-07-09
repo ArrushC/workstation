@@ -200,6 +200,51 @@ __wezterm_osc7() {
 autoload -Uz add-zsh-hook
 add-zsh-hook -Uz precmd __wezterm_osc7
 
+# --- WezTerm OSC 133 (semantic prompt zones) ----------------------------------
+# FinalTerm-style prompt marks: A = prompt start, B = prompt end / input
+# start, C = command output start, D;<exit> = command finished. WezTerm uses
+# them for CTRL+SHIFT+Up/Down scroll-to-prompt and CTRL+triple-click
+# "select this command's output" (see wezterm.lua). Harmless on terminals
+# that don't speak OSC 133 — ignored, like the OSC 7 above. Inside Zellij
+# the marks land in Zellij's own screen, so the wezterm-side features simply
+# don't apply there (same boundary as the wezterm line-count footer).
+# PARITY: mirrored in dot_bashrc.tmpl — change both together.
+#
+# Hook order matters twice:
+#   * __wezterm_osc133_pre must run FIRST in precmd_functions — later hooks
+#     (starship, mise, __wezterm_osc7) clobber $?, and D needs the real exit
+#     code. add-zsh-hook only appends, so it is manually PREPENDED (with a
+#     membership guard for re-sourcing), and it returns that code so
+#     starship's own $? capture still sees the truth.
+#   * __wezterm_osc133_post must run LAST — starship's PROMPT is a static
+#     promptsubst string set at init, but appending AFTER starship's hook
+#     stays correct even if a future starship rebuilds PROMPT per cycle;
+#     the substring guard makes the append idempotent either way.
+__wezterm_osc133_pre() {
+  local last=$?
+  if [[ -n ${__wezterm_cmd_ran:-} ]]; then
+    printf '\033]133;D;%d\033\\' "$last"
+    unset __wezterm_cmd_ran
+  fi
+  printf '\033]133;A\033\\'
+  return $last
+}
+__wezterm_osc133_post() {
+  # %{...%} tells ZLE the bytes are zero-width so cursor math stays right.
+  if [[ ${PROMPT-} != *']133;B'* ]]; then
+    PROMPT="${PROMPT}%{"$'\033]133;B\033\\'"%}"
+  fi
+}
+__wezterm_osc133_preexec() {
+  __wezterm_cmd_ran=1
+  printf '\033]133;C\033\\'
+}
+if (( ! ${precmd_functions[(Ie)__wezterm_osc133_pre]} )); then
+  precmd_functions=(__wezterm_osc133_pre "${precmd_functions[@]}")
+fi
+add-zsh-hook -Uz precmd __wezterm_osc133_post
+add-zsh-hook -Uz preexec __wezterm_osc133_preexec
+
 # --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
 # Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
 # / Shift+Home/End) extend a visible highlight; typing replaces it; Backspace/

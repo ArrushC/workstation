@@ -967,6 +967,8 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
     { label = 'key   CTRL+SHIFT+A     Copy entire scrollback to clipboard', id = '' },
     { label = 'key   CTRL+SHIFT+O     Open scrollback in Helix (local/WSL tabs)', id = '' },
+    { label = 'key   CTRL+SHIFT+↑/↓   Jump to previous/next prompt (WSL/local tabs)', id = '' },
+    { label = 'key   CTRL+3×click     Select a command\'s whole output + copy (WSL/local tabs)', id = '' },
     { label = 'note  tab markers      ● unseen output · 󰂞 bell rang (background tabs; clear on view)', id = '' },
     { label = 'note  footer ↕        Active tab line count: total · rows on screen (cursor line when a program moves it; hidden in full-screen apps)', id = '' },
     -- Built-in WezTerm defaults (not bound in config.keys) surfaced here
@@ -1397,6 +1399,24 @@ config.mouse_bindings = {
     mods = 'SUPER',
     action = act.StartWindowDrag,
   },
+  -- CTRL+triple-click — select ONE command's entire output as a unit
+  -- (SemanticZone, via the OSC 133 marks from the managed rcs). The Up half
+  -- completes the selection and auto-copies via copy_and_announce, mirroring
+  -- the plain drag-release copy UX above. Plain triple-click keeps its
+  -- default line-select. Inert where no marks exist (Zellij tabs).
+  {
+    event = { Down = { streak = 3, button = 'Left' } },
+    mods = 'CTRL',
+    action = act.SelectTextAtMouseCursor 'SemanticZone',
+  },
+  {
+    event = { Up = { streak = 3, button = 'Left' } },
+    mods = 'CTRL',
+    action = act.Multiple {
+      act.CompleteSelection 'PrimarySelection',
+      copy_and_announce,
+    },
+  },
 }
 
 -- Rename current tab — extracted to a named value so the CTRL+SHIFT+E
@@ -1486,6 +1506,15 @@ config.keys = {
 
   -- Copy entire scrollback to clipboard (enters copy mode, selects all, copies, exits)
   { key = 'a', mods = 'CTRL|SHIFT', action = copy_all_scrollback },
+
+  -- Scroll-to-prompt — jump the scrollback prompt-by-prompt using the OSC 133
+  -- marks the managed rcs emit (dot_zshrc.tmpl / dot_bashrc.tmpl). Overrides
+  -- the default CTRL|SHIFT+Up/Down pane-navigation assignments, which Zellij
+  -- makes redundant here (it owns panes inside SSH tabs; the Left/Right
+  -- pane-nav defaults stay). Works in WSL/local/raw-ssh panes; inert inside
+  -- Zellij tabs (the alt screen owns that buffer).
+  { key = 'UpArrow',   mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(-1) },
+  { key = 'DownArrow', mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(1) },
 
   -- Font size
   { key = '=', mods = 'CTRL', action = act.IncreaseFontSize },
