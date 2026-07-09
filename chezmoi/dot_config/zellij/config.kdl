@@ -12,13 +12,15 @@ simplified_ui true
 // Mouse support
 mouse_mode true
 
-// Scrollback depth, per pane. Default is 10000; 1000000 matches WezTerm's
+// Scrollback depth, per pane. Default is 10000; 100000 matches WezTerm's
 // scrollback_lines (chezmoi/dot_config/wezterm/wezterm.lua) so scrollback is
-// consistent across both layers. Zellij runs on the remote SSH hosts, so this
-// buffer lives in *their* RAM — allocated lazily as lines scroll off, capped
-// at this ceiling. Read at session creation: an already-running 'main' session
-// won't pick up a change until it's recreated (zellij kill-session main).
-scroll_buffer_size 1000000
+// consistent across both layers — both trimmed from 1000000 on 2026-07-09
+// after unbounded buffers accumulated hundreds of MB over multi-day sessions
+// and made scroll/search sluggish. Zellij runs on the remote SSH hosts, so
+// this buffer lives in *their* RAM — allocated lazily as lines scroll off,
+// capped at this ceiling. Read at session creation: an already-running 'main'
+// session won't pick up a change until it's recreated (zellij kill-session main).
+scroll_buffer_size 100000
 
 // Copy to system clipboard
 copy_command "xclip -selection clipboard"
