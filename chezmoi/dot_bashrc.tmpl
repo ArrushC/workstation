@@ -236,9 +236,48 @@ fi
 __wezterm_osc7() {
   printf '\033]7;file://%s%s\033\\' "${HOSTNAME:-$(hostname)}" "$PWD"
 }
-case ":${PROMPT_COMMAND:-}:" in
-  *:__wezterm_osc7:*) ;;
+case ";${PROMPT_COMMAND:-};" in
+  *";__wezterm_osc7;"*) ;;
   *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}__wezterm_osc7" ;;
+esac
+
+# --- WezTerm OSC 133 (semantic prompt zones) ----------------------------------
+# PARITY: mirrors dot_zshrc.tmpl — change both together.
+# A = prompt start, B = prompt end / input start, C = command output start,
+# D;<exit> = command finished. Consumed by WezTerm for scroll-to-prompt and
+# select-command-output; ignored by other terminals; inert inside Zellij.
+#
+# __wezterm_osc133_pre is PREPENDED to PROMPT_COMMAND: later entries
+# (starship_precmd, __wezterm_osc7) clobber $?, and D needs the real exit
+# code — it returns that code so starship still sees it. The B mark is
+# appended to PS1 by __wezterm_osc133_post, which runs LAST: starship
+# rebuilds PS1 every cycle in bash, so the append must re-apply after it
+# (the substring guard keeps a static, starship-less PS1 from growing).
+# C fires from PS0 (expanded once per command: after Enter, before exec).
+# The '${TERM:$((__wezterm_cmd_ran=1)):0}' tail is a standard PS0 trick —
+# the arithmetic ASSIGNS the flag in the current shell while the expansion
+# itself produces an empty string (zero-length slice), so nothing prints.
+__wezterm_osc133_pre() {
+  local last=$?
+  if [[ -n ${__wezterm_cmd_ran:-} ]]; then
+    printf '\033]133;D;%d\033\\' "$last"
+    unset __wezterm_cmd_ran
+  fi
+  printf '\033]133;A\033\\'
+  return "$last"
+}
+__wezterm_osc133_post() {
+  if [[ ${PS1-} != *']133;B'* ]]; then
+    PS1="${PS1}\[\e]133;B\a\]"
+  fi
+}
+case ";${PROMPT_COMMAND:-};" in
+  *";__wezterm_osc133_pre;"*) ;;
+  *) PROMPT_COMMAND="__wezterm_osc133_pre${PROMPT_COMMAND:+;$PROMPT_COMMAND};__wezterm_osc133_post" ;;
+esac
+case "${PS0:-}" in
+  *']133;C'*) ;;
+  *) PS0="${PS0}"'\e]133;C\a${TERM:$((__wezterm_cmd_ran=1)):0}' ;;
 esac
 
 # --- nb (notes) --------------------------------------------------------------

@@ -3234,6 +3234,30 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             </tr>
                             <tr>
                                 <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                        >&uarr;</kbd
+                                    >/<kbd>&darr;</kbd>
+                                </td>
+                                <td>
+                                    Jump to the previous/next prompt in the
+                                    scrollback (WSL and local tabs &mdash;
+                                    uses the OSC 133 marks the managed shell
+                                    configs emit; inert inside Zellij tabs).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+triple-click
+                                </td>
+                                <td>
+                                    Select one command&rsquo;s entire output
+                                    as a unit and copy it (WSL and local
+                                    tabs; plain triple-click still selects a
+                                    line).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
                                     <kbd>CTRL</kbd>+<kbd>TAB</kbd> /
                                     <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
                                         >TAB</kbd
