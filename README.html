@@ -3207,7 +3207,8 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 <td>
                                     Close current tab (no confirmation
                                     prompt; remote Zellij sessions survive
-                                    and reattach)
+                                    and reattach). Closing the whole window
+                                    never prompts either.
                                 </td>
                             </tr>
                             <tr>
@@ -3217,6 +3218,19 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                     >
                                 </td>
                                 <td>Copy entire scrollback to clipboard</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                        >O</kbd
+                                    >
+                                </td>
+                                <td>
+                                    Open the scrollback in Helix in a new
+                                    tab (local and WSL tabs; SSH tabs show a
+                                    toast instead &mdash; Zellij owns their
+                                    scrollback).
+                                </td>
                             </tr>
                             <tr>
                                 <td>

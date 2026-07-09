@@ -241,6 +241,21 @@ config.hide_tab_bar_if_only_one_tab = false
 -- with a row of host tabs open, "check something, close it" lands back on
 -- the tab you were actually working in.
 config.switch_to_last_active_tab_when_closing_tab = true
+
+-- Closing the WINDOW never prompts either — same rationale as the
+-- no-confirm tab close (CTRL+SHIFT+W): SSH tabs run inside remote Zellij
+-- sessions that survive and reattach; local/WSL shells hold no state worth
+-- a modal.
+config.window_close_confirmation = 'NeverPrompt'
+
+-- Extra quick-select atoms (CTRL+SHIFT+Space) — APPENDED to the built-in
+-- URL/path/hash patterns, not replacing them: IPv4 addresses (the
+-- 10.21.x.x host fleet) and #NN PR/issue refs.
+config.quick_select_patterns = {
+  [[\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b]],
+  [[#\d+]],
+}
+
 -- Cap tab labels at 32 cells in both modes. Retro no longer stretches tabs
 -- to fill the bar (see format-tab-title below) so the cap only matters for
 -- truncating absurdly long renames; 32 is plenty for "<idx>: <hostname>"
@@ -453,6 +468,15 @@ local function host_hash(name)
   return h
 end
 
+-- Accent hex for a host name (HOST_ACCENTS bucket via host_hash); mauve for
+-- nil (local tabs) — the same mauve identity as the cursor + active local tab.
+-- Single source for tab_colors, the tab activity dot, and the right-status
+-- domain color.
+local function host_accent(host)
+  if not host then return mocha.mauve end
+  return HOST_ACCENTS[(host_hash(host) % #HOST_ACCENTS) + 1]
+end
+
 -- This machine's hostname, lowercased. WSL distros share the Windows
 -- computer name by default (no hostname override in configs/wsl/wsl.conf),
 -- so a WSL pane's OWN shell reports this value in its OSC 7 — anything else
@@ -484,7 +508,7 @@ end
 local function tab_colors(host, is_active, is_hover)
   local BAR_BG = mocha.base
   if host then
-    local accent = wezterm.color.parse(HOST_ACCENTS[(host_hash(host) % #HOST_ACCENTS) + 1])
+    local accent = wezterm.color.parse(host_accent(host))
     if is_active then
       return tostring(accent),                                mocha.crust
     elseif is_hover then
@@ -507,6 +531,29 @@ local function tab_colors(host, is_active, is_hover)
   end
   return BAR_BG, mocha.overlay0
 end
+
+-- Bell markers — pane_id → true when BEL rang in that pane. format-tab-title
+-- clears the mark when it renders the tab as ACTIVE, so the glyph survives
+-- exactly until the tab is next viewed. Deliberately NO toast here:
+-- ~/.claude/notify.sh already fires a BurntToast Windows toast + this same
+-- BEL for Claude Code notifications — a WezTerm toast would double-notify.
+-- The tab marker is the visual channel; notify.sh keeps toast + audio.
+local bell_panes = {}
+
+wezterm.on('bell', function(_window, pane)
+  bell_panes[pane:pane_id()] = true
+end)
+
+-- Nerd Font glyphs (JetBrainsMono NF ships the md_/fa_ sets). Defensive
+-- fallbacks: a nil table key would crash string concat at render time.
+local nf = wezterm.nerdfonts or {}
+local GLYPH_BELL  = nf.md_bell    or '🔔'
+-- Domain-type glyphs for tab titles: what kind of thing the pane is talking
+-- to — an ssh session (domain tab OR embedded ssh detected in a WSL pane),
+-- a WSL distro shell, or the local Nushell.
+local GLYPH_SSH   = nf.md_ssh     or nf.fa_terminal or ''
+local GLYPH_WSL   = nf.fa_linux   or ''
+local GLYPH_LOCAL = nf.md_console or nf.fa_terminal or ''
 
 wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, max_width)
   local pane   = tab.active_pane
@@ -609,7 +656,33 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, ma
       if t.tab_id == tab.tab_id then idx = i; break end
     end
   end
-  local label = string.format(' %d: %s ', idx, title)
+  -- Activity markers — INACTIVE tabs only. '●' = unseen output since last
+  -- viewed; bell glyph = BEL rang in the pane (Claude Code notify.sh, remote
+  -- printf '\a', finished builds). Cleared when the tab is activated. Bell
+  -- outranks the dot (a bell also produces output). Known Zellij caveat:
+  -- SSH+Zellij tabs redraw their UI, which can keep has_unseen_output
+  -- permanently true — if live testing confirms, gate the DOT (never the
+  -- bell) on non-SSH domains; see the spec's fallback plan.
+  local marker
+  if tab.is_active then
+    bell_panes[pane.pane_id] = nil
+  elseif bell_panes[pane.pane_id] then
+    marker = GLYPH_BELL
+  elseif pane.has_unseen_output then
+    marker = '●'
+  end
+
+  -- Domain-type glyph: ssh (incl. embedded ssh inside a WSL pane — the
+  -- wsl_remote_host detection above), WSL distro shell, or local.
+  local glyph
+  if is_wsl then
+    glyph = wsl_remote_host and GLYPH_SSH or GLYPH_WSL
+  elseif host then
+    glyph = GLYPH_SSH
+  else
+    glyph = GLYPH_LOCAL
+  end
+  local label = string.format('%s %d: %s ', glyph, idx, title)
 
   -- No stretch-to-fill padding here. Tabs stay compact, left-aligned, with
   -- the right status (battery · time) anchored at the far right and bare
@@ -620,10 +693,17 @@ wezterm.on('format-tab-title', function(tab, all_tabs, panes, _config, hover, ma
   -- Every tab (host or local) gets explicit bg/fg from tab_colors so active,
   -- hover, and inactive states are visually distinct. Active also gets bold.
   local bg, fg = tab_colors(host, tab.is_active, hover)
-  local items = {
-    { Background = { Color = bg } },
-    { Foreground = { Color = fg } },
-  }
+  local items = { { Background = { Color = bg } } }
+  -- Leading space + optional marker; the marker carries its own fg (host
+  -- accent for the dot, peach for the bell) against the tab bg.
+  if marker then
+    local mfg = (marker == GLYPH_BELL) and mocha.peach or host_accent(host)
+    table.insert(items, { Foreground = { Color = mfg } })
+    table.insert(items, { Text = ' ' .. marker .. ' ' })
+  else
+    table.insert(items, { Text = ' ' })
+  end
+  table.insert(items, { Foreground = { Color = fg } })
   if tab.is_active then
     table.insert(items, { Attribute = { Intensity = 'Bold' } })
   end
@@ -862,7 +942,7 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+E     Rename current tab',                  id = '' },
     { label = 'key   CTRL+TAB         Next tab',                            id = '' },
     { label = 'key   CTRL+SHIFT+TAB   Previous tab',                        id = '' },
-    { label = 'key   ALT+1..4         Jump directly to tab 1-4',            id = '' },
+    { label = 'key   ALT+1..9         Jump directly to tab 1-9',            id = '' },
     { label = 'key   CTRL+SHIFT+S     Tab switcher (fuzzy list)',           id = '' },
     -- Wezterm: window
     { label = 'key   CTRL+SHIFT+N     New window',                          id = '' },
@@ -879,11 +959,15 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+C     Copy selection',                      id = '' },
     { label = 'key   CTRL+SHIFT+V     Paste from clipboard',                id = '' },
     { label = 'key   CTRL+SHIFT+A     Copy entire scrollback to clipboard', id = '' },
+    { label = 'key   CTRL+SHIFT+O     Open scrollback in Helix (local/WSL tabs)', id = '' },
+    { label = 'note  tab markers      ● unseen output · 󰂞 bell rang (background tabs; clear on view)', id = '' },
     { label = 'note  footer ↕        Active tab line count: total · rows on screen (cursor line when a program moves it; hidden in full-screen apps)', id = '' },
     -- Built-in WezTerm defaults (not bound in config.keys) surfaced here
     -- for discoverability:
     { label = 'key   CTRL+SHIFT+F     Search scrollback',                   id = '' },
-    { label = 'key   CTRL+SHIFT+Space Quick-select URLs/paths/hashes',      id = '' },
+    { label = 'key   CTRL+SHIFT+Space Quick-select URLs/paths/hashes/IPs/#refs', id = '' },
+    { label = 'key   CTRL+SHIFT+U     Character/emoji picker',              id = '' },
+    { label = 'key   CTRL+SHIFT+L     Debug overlay (Lua REPL + logs)',     id = '' },
     { label = 'key   CTRL+SHIFT+P     Command palette',                     id = '' },
     -- Wezterm: font
     { label = 'key   CTRL+=           Increase font size',                  id = '' },
@@ -984,6 +1068,11 @@ local function format_battery()
   if not batteries or #batteries == 0 then return nil end
   local b = batteries[1]
   local pct = math.floor((b.state_of_charge or 0) * 100 + 0.5)
+  -- Fully charged = zero information — hide the module. Still shown while
+  -- charging (progress) or actively discharging (drain rate matters).
+  if b.state == 'Full' or (pct >= 100 and b.state ~= 'Discharging') then
+    return nil
+  end
   local icon
   if b.state == 'Charging' then
     icon = '⚡'
@@ -1060,6 +1149,17 @@ local function render_right_status(window, pane)
   -- Each part: { text = string, fg = '#hex' (optional), bold = bool (optional) }
   local parts = {}
 
+  -- Modal-state badge — copy mode / search overlay are otherwise invisible.
+  -- window:active_key_table() reports the built-in modal tables
+  -- ('copy_mode' / 'search_mode'). Read on the ~1s status tick; up to a
+  -- tick of latency to appear/clear — same cadence as the whole bar.
+  local key_table = window:active_key_table()
+  if key_table == 'copy_mode' then
+    table.insert(parts, { text = 'COPY', fg = mocha.yellow, bold = true })
+  elseif key_table == 'search_mode' then
+    table.insert(parts, { text = 'SEARCH', fg = mocha.sky, bold = true })
+  end
+
   local domain = pane:get_domain_name()
   -- Show domain + zellij:main in the right status ONLY for SSH-domain tabs.
   -- Local tabs ('local') and WSL tabs ('WSL:<distro>') skip this block:
@@ -1068,7 +1168,9 @@ local function render_right_status(window, pane)
   -- battery/time is redundant noise. WSL also has no zellij wrap so
   -- 'zellij:main' would be a lie there.
   if domain and domain ~= 'local' and not domain:find('^WSL:') then
-    table.insert(parts, { text = domain })
+    -- Same accent as the tab (host_accent shares the HOST_ACCENTS bucket) —
+    -- the status bar and tab bar agree on which host you're looking at.
+    table.insert(parts, { text = domain, fg = host_accent(domain) })
     if cols >= 130 then
       table.insert(parts, { text = 'zellij:main' })
     end
@@ -1085,7 +1187,7 @@ local function render_right_status(window, pane)
   end
 
   if cols >= 60 then
-    table.insert(parts, { text = time_icon() .. ' ' .. wezterm.strftime('%H:%M') })
+    table.insert(parts, { text = time_icon() .. ' ' .. wezterm.strftime('%a %H:%M') })
   else
     table.insert(parts, { text = wezterm.strftime('%H:%M') })
   end
@@ -1174,6 +1276,57 @@ local copy_and_announce = wezterm.action_callback(function(window, pane)
 end)
 
 -- ---------------------------------------------------------------------------
+-- Scrollback → Helix — dump the pane's scrollback to a temp file, open in hx
+-- ---------------------------------------------------------------------------
+-- Bound to CTRL|SHIFT+O below (O = open); also in the command palette.
+-- Complements CTRL+SHIFT+A (copy to clipboard): same text, but landed in an
+-- editor with search/jump instead. Routing mirrors the open-uri handler:
+--   • local pane → hx.exe (on the User PATH via the portable Helix install)
+--     opening the Windows temp path.
+--   • WSL pane   → hx inside the SAME distro, opening the /mnt/c translation
+--     of that temp path (Lua io runs on the Windows side, so the file is
+--     written under %TEMP% either way).
+--   • SSH pane   → toast and bail: WezTerm's buffer for an SSH+Zellij tab is
+--     just the alt screen; Zellij owns the real scrollback there.
+-- Per-pane filename, overwritten on reuse; cleanup is OS temp policy's job.
+local scrollback_to_helix = wezterm.action_callback(function(window, pane)
+  local domain = pane:get_domain_name() or ''
+  local is_wsl = domain:find('^WSL:') ~= nil
+  if domain ~= 'local' and not is_wsl then
+    window:toast_notification('WezTerm',
+      'Zellij owns scrollback in SSH tabs — use its search there', nil, 4000)
+    return
+  end
+  local dims   = pane:get_dimensions()
+  local nlines = (dims and dims.scrollback_rows) or 10000
+  local text   = pane:get_lines_as_text(nlines)
+  local tmp    = (os.getenv('TEMP') or os.getenv('TMP') or '.')
+    .. '\\wezterm-scrollback-' .. pane:pane_id() .. '.txt'
+  local f, err = io.open(tmp, 'w')
+  if not f then
+    window:toast_notification('WezTerm',
+      'Scrollback dump failed: ' .. tostring(err), nil, 4000)
+    return
+  end
+  f:write(text)
+  f:close()
+  local path = tmp
+  if is_wsl then
+    -- C:\Users\me\...\x.txt → /mnt/c/Users/me/.../x.txt
+    path = tmp:gsub('\\', '/'):gsub('^(%a):', function(drive)
+      return '/mnt/' .. drive:lower()
+    end)
+  end
+  window:perform_action(
+    act.SpawnCommandInNewTab {
+      domain = { DomainName = domain },
+      args   = { 'hx', path },
+    },
+    pane
+  )
+end)
+
+-- ---------------------------------------------------------------------------
 -- Keybinds
 -- ---------------------------------------------------------------------------
 -- Zellij owns Ctrl+p and pane management inside the session.
@@ -1239,6 +1392,43 @@ config.mouse_bindings = {
   },
 }
 
+-- Rename current tab — extracted to a named value so the CTRL+SHIFT+E
+-- keybind and the command-palette entry share one definition.
+local rename_tab = act.PromptInputLine {
+  description = 'New tab title (empty = reset):',
+  action = wezterm.action_callback(function(window, _pane, line)
+    if line == nil then return end  -- Esc cancels
+    window:active_tab():set_title(line)
+  end),
+}
+
+-- Copy entire scrollback — extracted for the same keybind/palette sharing.
+local copy_all_scrollback = act.Multiple {
+  act.ActivateCopyMode,
+  act.CopyMode 'MoveToScrollbackTop',
+  act.CopyMode { SetSelectionMode = 'Cell' },
+  act.CopyMode 'MoveToScrollbackBottom',
+  act.CopyTo 'Clipboard',
+  act.CopyMode 'Close',
+  act.EmitEvent 'copied',
+}
+
+-- Custom actions mirrored into the command palette (CTRL+SHIFT+P). Without
+-- this the palette lists only built-ins — a misleading "second surface" that
+-- omits every bespoke binding. Entries reuse the SAME action values as
+-- config.keys, so the two can't drift.
+wezterm.on('augment-command-palette', function(_window, _pane)
+  return {
+    { brief = 'Connect to host (fuzzy)',  action = pick_host },
+    { brief = 'Switch tab (fuzzy)',       action = pick_tab },
+    { brief = 'Reconnect SSH pane',       action = reconnect_ssh_pane },
+    { brief = 'Rename current tab',       action = rename_tab },
+    { brief = 'Copy entire scrollback',   action = copy_all_scrollback },
+    { brief = 'Open scrollback in Helix', action = scrollback_to_helix },
+    { brief = 'Help / cheatsheet',        action = show_help },
+  }
+end)
+
 config.keys = {
   -- New window
   { key = 'n', mods = 'CTRL|SHIFT', action = act.SpawnWindow },
@@ -1268,27 +1458,12 @@ config.keys = {
   { key = 'Tab',       mods = 'CTRL',       action = act.ActivateTabRelative(1) },
   { key = 'Tab',       mods = 'CTRL|SHIFT', action = act.ActivateTabRelative(-1) },
 
-  -- Jump to tab by number
-  { key = '1', mods = 'ALT', action = act.ActivateTab(0) },
-  { key = '2', mods = 'ALT', action = act.ActivateTab(1) },
-  { key = '3', mods = 'ALT', action = act.ActivateTab(2) },
-  { key = '4', mods = 'ALT', action = act.ActivateTab(3) },
-
   -- Tab switcher — fuzzy list with explicit tab index + domain in label
   { key = 's', mods = 'CTRL|SHIFT', action = pick_tab },
 
   -- Rename current tab — prompts for a new title; submit empty to clear
   -- and revert to the auto-generated name.
-  {
-    key = 'e', mods = 'CTRL|SHIFT',
-    action = act.PromptInputLine {
-      description = 'New tab title (empty = reset):',
-      action = wezterm.action_callback(function(window, _pane, line)
-        if line == nil then return end  -- Esc cancels
-        window:active_tab():set_title(line)
-      end),
-    },
-  },
+  { key = 'e', mods = 'CTRL|SHIFT', action = rename_tab },
 
   -- Copy/paste. copy_and_announce is selection-aware: it only writes to the
   -- clipboard (and shows the badge) if there's actually a selection, so a
@@ -1298,19 +1473,12 @@ config.keys = {
   { key = 'Insert', mods = 'CTRL',       action = copy_and_announce },
   { key = 'v',      mods = 'CTRL|SHIFT', action = act.PasteFrom 'Clipboard' },
 
+  -- Dump scrollback to a temp file and open it in Helix (local/WSL panes;
+  -- SSH panes toast — Zellij owns their scrollback). O = open.
+  { key = 'o', mods = 'CTRL|SHIFT', action = scrollback_to_helix },
+
   -- Copy entire scrollback to clipboard (enters copy mode, selects all, copies, exits)
-  {
-    key = 'a', mods = 'CTRL|SHIFT',
-    action = act.Multiple {
-      act.ActivateCopyMode,
-      act.CopyMode 'MoveToScrollbackTop',
-      act.CopyMode { SetSelectionMode = 'Cell' },
-      act.CopyMode 'MoveToScrollbackBottom',
-      act.CopyTo 'Clipboard',
-      act.CopyMode 'Close',
-      act.EmitEvent 'copied',
-    },
-  },
+  { key = 'a', mods = 'CTRL|SHIFT', action = copy_all_scrollback },
 
   -- Font size
   { key = '=', mods = 'CTRL', action = act.IncreaseFontSize },
@@ -1328,6 +1496,31 @@ config.keys = {
   { key = 'UpArrow',    mods = 'SUPER', action = act.DisableDefaultAssignment },
   { key = 'DownArrow',  mods = 'SUPER', action = act.DisableDefaultAssignment },
 }
+
+-- Jump to tab by number — ALT+1..9. README.html's keybind table already
+-- documents 1..9; this loop makes the config match it (was 1..4).
+for i = 1, 9 do
+  table.insert(config.keys, {
+    key = tostring(i), mods = 'ALT', action = act.ActivateTab(i - 1),
+  })
+end
+
+-- Feedback for CTRL+SHIFT+R and silent auto-reloads on file save: a brief
+-- toast confirms the new config actually loaded (a Lua error surfaces
+-- WezTerm's own error window instead — so silence means it didn't apply).
+-- The first fire per window is (or may be) window creation, not a reload;
+-- swallow it so launching WezTerm doesn't toast. If live testing shows the
+-- event does NOT fire at creation, the cost is one swallowed toast on the
+-- first real reload per window — acceptable; re-check live and simplify if so.
+local config_reload_seen = {}
+wezterm.on('window-config-reloaded', function(window, _pane)
+  local wid = window:window_id()
+  if not config_reload_seen[wid] then
+    config_reload_seen[wid] = true
+    return
+  end
+  window:toast_notification('WezTerm', 'Config reloaded', nil, 1500)
+end)
 
 -- Pass through Ctrl+p to Zellij unmodified
 config.key_tables = {}
