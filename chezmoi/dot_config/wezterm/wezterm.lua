@@ -327,17 +327,24 @@ config.command_palette_fg_color  = mocha.text
 config.command_palette_font_size = 12.0
 
 -- Scrollback depth — how many lines WezTerm retains per pane above the
--- viewport. Default is 3500; 1,000,000 is effectively "never lose output".
--- Memory is per-pane and allocated LAZILY as lines actually scroll off — the
--- value is a ceiling, not an upfront cost, so an idle pane pays nothing.
+-- viewport. Default is 3500; 100,000 (~28× default) is deep enough for heavy
+-- build/log output while staying bounded. Memory is per-pane and allocated
+-- LAZILY as lines actually scroll off — the value is a ceiling, not an
+-- upfront cost, so an idle pane pays nothing.
+--
+-- Was 1,000,000 ("never lose output") until 2026-07-09: at ~100-200 bytes a
+-- line, long-lived busy panes accumulated ~745MB of committed memory over a
+-- 3-day session on the iGPU laptop and performance degraded until a restart
+-- (restart confirmed the cause live). Need a full capture instead of a deep
+-- buffer? CTRL+SHIFT+A copies the whole scrollback; CTRL+SHIFT+O dumps it
+-- into Helix.
 --
 -- Scope: this governs panes WezTerm renders directly — local WSL / PowerShell
 -- tabs and raw SSH output. Inside SSH tabs, Zellij owns its own scroll buffer
 -- while drawing its UI, so its internal scrollback is bounded by Zellij's
 -- scroll_buffer_size (see chezmoi/dot_config/zellij/config.kdl — kept matched
--- at 1,000,000), NOT this. Pairs with the CTRL+SHIFT+A "copy entire
--- scrollback" binding below.
-config.scrollback_lines = 1000000
+-- at 100,000), NOT this.
+config.scrollback_lines = 100000
 
 -- Show the right-side scrollbar. It lives inside window_padding.right, so
 -- the right padding is bumped below to give it room without crowding text.
