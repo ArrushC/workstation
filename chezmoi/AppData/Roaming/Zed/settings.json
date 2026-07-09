@@ -12,6 +12,11 @@
 // current Zed config, or edit this file via `chezmoi edit` and then
 // `chezmoi apply`.
 {
+  "git": {
+    "inline_blame": {
+      "location": "status_bar"
+    }
+  },
   "relative_line_numbers": "enabled",
   "ssh_connections": [
     {
