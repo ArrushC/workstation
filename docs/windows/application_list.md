@@ -17,3 +17,7 @@ Apps auto-installed by bootstrap.ps1 (WezTerm, Starship, Obsidian, Zed — plus 
 - Nilesoft Shell
 - WSL - AlmaLinux
 - Devolutions RDM
+- Bruno
+- Fork (Git Client)
+- Flow Launcher
+- Beyond Compare
