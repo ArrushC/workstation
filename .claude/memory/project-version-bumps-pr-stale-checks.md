@@ -30,4 +30,4 @@ PR head and to current `main`, e.g. `gh pr view <n> --json statusCheckRollup,hea
 and `gh api repos/{owner}/{repo}/commits/<pr-head>/check-runs --jq '.check_runs[].head_sha'`.
 If they lag, push an empty commit / re-run CI (or just run `make -C makefile lint
 MODE=prod` locally on the merged tree) before merging. Relates to
-[[project_verify_tool_bumps_at_runtime.md]] and [[feedback_use_pr_review_workflow.md]].
+[[project-verify-tool-bumps-at-runtime]] and [[feedback-use-pr-review-workflow]].

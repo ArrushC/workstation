@@ -166,7 +166,7 @@ install something wrong.
 4. **`docs/claude/file-care.md`** — extend the `bootstrap.ps1` entry: besides the BOM, it now
    carries **pinned `version` + `sha256` for WezTerm and Starship** in `$PortableTools` (bump =
    edit version + refresh sha256, same discipline as `install-nerd-fonts.ps1`).
-5. **`.claude/memory/feedback_windows_chezmoi_check_before_apply.md`** — update the stale chezmoi
+5. **`.claude/memory/feedback-windows-chezmoi-check-before-apply.md`** — update the stale chezmoi
    location (`C:\ProgramData\chocoportable\bin\chezmoi.exe` → `%LOCALAPPDATA%\workstation\bin\chezmoi.exe`)
    and the reinstall hint (`choco install -y chezmoi` → re-run `bootstrap.ps1`, which reinstalls
    chezmoi via the official binary installer). Update `.claude/memory/MEMORY.md` pointer if its

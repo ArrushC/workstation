@@ -1,5 +1,5 @@
 ---
-name: shfmt-mangles-assoc-array-keys
+name: project-shfmt-mangles-assoc-array-keys
 description: shfmt rewrites unquoted hyphenated bash associative-array keys as arithmetic ([nerd-fonts] -> [nerd - fonts]), silently changing the key — always quote assoc-array keys in first-party shell
 metadata:
   type: project

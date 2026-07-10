@@ -22,7 +22,7 @@
 | `README.html` | Modify | §setup-wsl note-row; troubleshooting cross-ref |
 | `CLAUDE.md` | Modify | Extend the `configs/`→`/etc/` invariant |
 | `docs/claude/file-care.md` | Modify | Per-file care entries |
-| `.claude/memory/project_wsl_appendwindowspath_false.md` | Modify | "NOT repo-tracked" → now repo-deployed |
+| `.claude/memory/project-wsl-appendwindowspath-false.md` | Modify | "NOT repo-tracked" → now repo-deployed |
 | `CLAUDE_CHANGELOG.md` | Modify | Append a worked-example entry |
 
 > **Note on running make:** the Makefile recipes reference `../configs/...`, i.e. make runs with CWD = `makefile/`. All verify commands below use `make -C makefile …` so the relative paths resolve correctly.
@@ -251,7 +251,7 @@ git commit -m "feat(wsl): track global .wslconfig via chezmoi with run_onchange 
 ## Task 3: Documentation, memory, and changelog
 
 **Files:**
-- Modify: `README.html`, `CLAUDE.md`, `docs/claude/file-care.md`, `.claude/memory/project_wsl_appendwindowspath_false.md`, `CLAUDE_CHANGELOG.md`
+- Modify: `README.html`, `CLAUDE.md`, `docs/claude/file-care.md`, `.claude/memory/project-wsl-appendwindowspath-false.md`, `CLAUDE_CHANGELOG.md`
 
 - [ ] **Step 1: Add a README §setup-wsl note-row**
 
@@ -318,7 +318,7 @@ In `CLAUDE.md`, under "Load-bearing invariants", replace the bullet:
 with:
 
 ```markdown
-- **`configs/` is sudo-installed to `/etc/`, NOT chezmoi-managed** — deployed by paired make targets (`dozzle-service`, `cockpit-service`, and `wsl-config` for `/etc/wsl.conf`). Chezmoi owns `$HOME` only. `wsl-config` is gated on `IS_WSL`+`HAS_SUDO` (no-op off WSL / on sudo-less prod), content-hash stamped (no version to bake), and prints a `wsl --shutdown` reminder; it joins the base `provision` line. The Windows-side global `%USERPROFILE%\.wslconfig` is the chezmoi counterpart (`chezmoi/dot_wslconfig`, Windows-gated as a TARGET path in `.chezmoiignore.tmpl`, plus a `run_onchange` restart reminder script). Together they make WSL config reproducible — and `wsl-config` now auto-applies the `appendWindowsPath=false` flip that `project_wsl_appendwindowspath_false.md` previously called a manual per-host step.
+- **`configs/` is sudo-installed to `/etc/`, NOT chezmoi-managed** — deployed by paired make targets (`dozzle-service`, `cockpit-service`, and `wsl-config` for `/etc/wsl.conf`). Chezmoi owns `$HOME` only. `wsl-config` is gated on `IS_WSL`+`HAS_SUDO` (no-op off WSL / on sudo-less prod), content-hash stamped (no version to bake), and prints a `wsl --shutdown` reminder; it joins the base `provision` line. The Windows-side global `%USERPROFILE%\.wslconfig` is the chezmoi counterpart (`chezmoi/dot_wslconfig`, Windows-gated as a TARGET path in `.chezmoiignore.tmpl`, plus a `run_onchange` restart reminder script). Together they make WSL config reproducible — and `wsl-config` now auto-applies the `appendWindowsPath=false` flip that `project-wsl-appendwindowspath-false.md` previously called a manual per-host step.
 ```
 
 - [ ] **Step 5: Add per-file care entries to `docs/claude/file-care.md`**
@@ -329,7 +329,7 @@ Read `docs/claude/file-care.md` first to see its section structure. Then:
 
 - [ ] **Step 6: Correct the `appendWindowsPath` memory ("NOT repo-tracked" is now false)**
 
-In `.claude/memory/project_wsl_appendwindowspath_false.md`, replace list item 1 under "The adopted fix":
+In `.claude/memory/project-wsl-appendwindowspath-false.md`, replace list item 1 under "The adopted fix":
 
 > 1. **Host-global:** `appendWindowsPath=false` under `[interop]` in `/etc/wsl.conf`, then `wsl --shutdown` from a Windows terminal so the distro re-reads it. NOT repo-tracked (chezmoi owns `$HOME` only; `/etc/wsl.conf` is outside scope). Needs sudo — run via `!` in the session, since the agent has no TTY for the sudo password.
 
@@ -358,7 +358,7 @@ chezmoi ignored | grep -x '.wslconfig'   # still prints .wslconfig
 Expected: no CRLF; `.wslconfig` listed.
 
 ```bash
-git add README.html CLAUDE.md docs/claude/file-care.md .claude/memory/project_wsl_appendwindowspath_false.md CLAUDE_CHANGELOG.md
+git add README.html CLAUDE.md docs/claude/file-care.md .claude/memory/project-wsl-appendwindowspath-false.md CLAUDE_CHANGELOG.md
 git commit -m "docs(wsl): document WSL config tracking + correct appendWindowsPath memory"
 ```
 

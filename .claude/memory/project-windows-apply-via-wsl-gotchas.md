@@ -1,5 +1,5 @@
 ---
-name: project_windows_apply_via_wsl_gotchas
+name: project-windows-apply-via-wsl-gotchas
 description: Driving the Windows chezmoi/bootstrap from WSL — non-interactive chezmoi hangs, the bootstrap lock collision, and targeted-apply dir quirk.
 metadata:
   type: project
@@ -11,12 +11,12 @@ Nushell rollout:
 
 - **Reaching Windows:** `powershell.exe` resolves at
   `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe` (works even
-  with `appendWindowsPath=false` — see [[project_wsl_appendwindowspath_false]]).
+  with `appendWindowsPath=false` — see [[project-wsl-appendwindowspath-false]]).
   The Windows chezmoi clone is `/mnt/c/Users/arrush.chaturvedi/.local/share/chezmoi`.
   A WSL-spawned `powershell.exe` runs in the **user's interactive session
   (SessionId 1)** — same session as WindowsTerminal — so `WM_FONTCHANGE` and
   other `HWND_BROADCAST` messages from it DO reach running GUI apps. Prefer
-  [[project_winterop_wsl_windows_interop]] (`winterop`) for simple calls.
+  [[project-winterop-wsl-windows-interop]] (`winterop`) for simple calls.
 
 - **`chezmoi apply` HANGS non-interactively on the "changed since chezmoi last
   wrote it" prompt.** When a target was modified EXTERNALLY since chezmoi last
@@ -39,7 +39,7 @@ Nushell rollout:
   this host anyway (~60-90s source-state eval — likely the
   `modify_private_settings.json` merge-template), so use a generous
   `Wait-Job -Timeout` (≥200s) and redirect the outer powershell stdin from
-  `/dev/null`. (Complements [[feedback_windows_chezmoi_check_before_apply]].)
+  `/dev/null`. (Complements [[feedback-windows-chezmoi-check-before-apply]].)
 
 - **Never run `bootstrap.ps1` concurrently.** My background bootstrap was
   mid-`chezmoi apply` (holding the lock) when a second manual run started → the

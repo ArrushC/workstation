@@ -1,5 +1,5 @@
 ---
-name: project_windows_nerdfont_activation
+name: project-windows-nerdfont-activation
 description: Windows Terminal/DirectWrite needs the Win32 family name "JetBrainsMono NFM"; per-user fonts must be activated in-session, and WezTerm masks a missing one.
 metadata:
   type: project
@@ -26,7 +26,7 @@ distinct things can be wrong — check BOTH:
    `Invoke-FontActivation` runs `AddFontResourceW` + a `WM_FONTCHANGE` broadcast
    — and it runs on *every* bootstrap. So if `bootstrap.ps1` **aborts before its
    font step (step 7)** — e.g. it died at the `chezmoi` step (see
-   [[project_windows_apply_via_wsl_gotchas]]) — the font is registered but NOT
+   [[project-windows-apply-via-wsl-gotchas]]) — the font is registered but NOT
    live, and apps can't find it under any name until a logon or manual
    activation.
 

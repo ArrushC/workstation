@@ -15,7 +15,7 @@
 - Branch: `feat/wezterm-quickwins` (already exists, tracks origin; spec committed on it).
 - Pinned build 20240203: do NOT use nightly-only APIs (`wezterm.serde`, `pane:get_progress()`, `PromptInputLine initial_value`).
 - No-gos (memory-guarded): never touch `config.front_end` / `max_fps` / `webgpu_power_preference`; never call `wezterm.gui.*` at config-load; never edit inside the `HOSTS:START/END` sentinel.
-- Syntax check after EVERY wezterm.lua edit (NOT the LSP tool — `feedback_lua_syntax_use_luaparse_not_lsp`):
+- Syntax check after EVERY wezterm.lua edit (NOT the LSP tool — `feedback-lua-syntax-use-luaparse-not-lsp`):
   `node /tmp/lua-syntax-check/check.js chezmoi/dot_config/wezterm/wezterm.lua` → expect `OK`.
   If the harness is missing, recreate it first:
   ```bash
@@ -27,8 +27,8 @@
   catch (e) { console.error(e.message); process.exit(1); }
   EOF
   ```
-- Commit after every task; push after every commit (`feedback_always_push_after_commit`). Commit messages end with the Co-Authored-By + Claude-Session footer.
-- Do NOT merge the PR — the user merges (`feedback_use_pr_review_workflow`).
+- Commit after every task; push after every commit (`feedback-always-push-after-commit`). Commit messages end with the Co-Authored-By + Claude-Session footer.
+- Do NOT merge the PR — the user merges (`feedback-use-pr-review-workflow`).
 - House style in `wezterm.lua`: heavy *why* comments are the norm — keep the comment blocks in the code below verbatim.
 - All `config.keys` letter bindings use lowercase `key` + mods string (existing file convention).
 
