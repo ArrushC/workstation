@@ -256,11 +256,45 @@ config.quick_select_patterns = {
   [[#\d+]],
 }
 
+-- Hyperlink rules — the built-in defaults (URLs, mailto:, file://) plus one
+-- custom rule: bare #NN issue/PR refs link into the workstation repo
+-- (GitHub auto-redirects /issues/NN → /pull/NN when NN is a PR). \B# keeps
+-- word#12 unlinked; the trailing \b can't fire inside hex colors (#1e1e2e:
+-- \d+ eats "1" but hits "e" — a word char — so there's no boundary and no
+-- match). Deliberately NO bare owner/repo rule: in path-heavy output every
+-- makefile/versions.mk would light up as a GitHub link. Open with
+-- SHIFT+click (works in Zellij panes too) or CTRL+click (plain panes).
+config.hyperlink_rules = wezterm.default_hyperlink_rules()
+table.insert(config.hyperlink_rules, {
+  regex  = [[\B#(\d+)\b]],
+  format = 'https://github.com/ArrushC/workstation/issues/$1',
+})
+
 -- Cap tab labels at 32 cells in both modes. Retro no longer stretches tabs
 -- to fill the bar (see format-tab-title below) so the cap only matters for
 -- truncating absurdly long renames; 32 is plenty for "<idx>: <hostname>"
 -- against any name in hosts.conf without leaving a trail of dead space.
 config.tab_max_width               = 32
+
+-- Switching panes while one is zoomed un-zooms instead of silently swapping
+-- the zoomed content — pairs with the CTRL+SHIFT+Z zoom toggle.
+config.unzoom_on_switch_pane = true
+
+-- Update-check toast off — the Windows build is deliberately pinned at
+-- 20240203 (bootstrap.ps1 $PortableTools), so "new version available" is
+-- pure noise. Re-enable if the pin policy ever changes. (Supersedes the
+-- 2026-07-09 UX-sweep spec's decline — re-approved 2026-07-10.)
+config.check_for_updates = false
+
+-- Kitty graphics protocol — off by default on this build. Enables inline
+-- image previews (yazi, wezterm imgcat) in local/WSL/raw-ssh panes. Known
+-- limit: NOT through Zellij tabs (no kitty-graphics passthrough there).
+config.enable_kitty_graphics = true
+
+-- Drag-and-dropping a file onto the terminal pastes its path quoted
+-- (Windows-style double quotes — also valid in POSIX shells). The
+-- SpacesOnly default leaves parens/brackets in Windows paths unquoted.
+config.quote_dropped_files = 'WindowsAlwaysQuoted'
 
 -- Fancy-mode chrome (Catppuccin Mocha-matched). Ignored when use_fancy_tab_bar = false.
 -- Font is JetBrainsMono Nerd Font Mono (Medium weight) so the tab bar carries
@@ -969,12 +1003,25 @@ local function help_choices()
     { label = 'key   CTRL+SHIFT+O     Open scrollback in Helix (local/WSL tabs)', id = '' },
     { label = 'key   CTRL+SHIFT+↑/↓   Jump to previous/next prompt (WSL/local tabs)', id = '' },
     { label = 'key   CTRL+3×click     Select a command\'s whole output + copy (WSL/local tabs)', id = '' },
+    { label = 'key   SHIFT+click      Open link under mouse (the one modifier that works inside Zellij/Helix panes)', id = '' },
+    { label = 'note  #NN refs         Clickable → github.com/ArrushC/workstation PR/issue', id = '' },
     { label = 'note  tab markers      ● unseen output · 󰂞 bell rang (background tabs; clear on view)', id = '' },
     { label = 'note  footer ↕        Active tab line count: total · rows on screen (cursor line when a program moves it; hidden in full-screen apps)', id = '' },
     -- Built-in WezTerm defaults (not bound in config.keys) surfaced here
     -- for discoverability:
     { label = 'key   CTRL+SHIFT+F     Search scrollback',                   id = '' },
     { label = 'key   CTRL+SHIFT+Space Quick-select URLs/paths/hashes/IPs/#refs', id = '' },
+    { label = 'key   CTRL+SHIFT+I     Quick-select an IP → open SSH to it', id = '' },
+    { label = 'key   CTRL+SHIFT+G     Quick-select file:line → open in Helix', id = '' },
+    { label = 'key   CTRL+SHIFT+Y     Quick-select a git SHA → paste into prompt', id = '' },
+    -- Wezterm: panes (local/WSL tabs; Zellij owns panes inside SSH tabs)
+    { label = 'key   ALT+SHIFT+D/R    Split pane down / right (local/WSL tabs)', id = '' },
+    { label = 'key   ALT+SHIFT+arrows Move between panes', id = '' },
+    { label = 'key   CTRL+SHIFT+Z     Toggle pane zoom', id = '' },
+    { label = 'key   CTRL+SHIFT+Q     Pane picker (letter overlay)', id = '' },
+    { label = 'note  CTRL+SHIFT+←/→   Reaches the shell now — zsh word-extend selection works', id = '' },
+    { label = 'note  drag & drop      Dropping a file pastes its quoted path', id = '' },
+    { label = 'note  images           yazi/imgcat previews render inline (not through Zellij)', id = '' },
     { label = 'key   CTRL+SHIFT+U     Character/emoji picker',              id = '' },
     { label = 'key   CTRL+SHIFT+L     Debug overlay (Lua REPL + logs)',     id = '' },
     { label = 'key   CTRL+SHIFT+P     Command palette',                     id = '' },
@@ -1384,6 +1431,34 @@ config.mouse_bindings = {
     mods = 'CTRL',
     action = act.OpenLinkAtMouseCursor,
   },
+  -- SHIFT+click — open the hyperlink under the mouse. The stock SHIFT+Down
+  -- default is ExtendSelectionToMouseCursor(Cell), which means the SHIFT+Up
+  -- composite (CompleteSelectionOrOpenLinkAtMouseCursor) ALWAYS sees a live
+  -- selection and takes the complete-selection branch — the link-open branch
+  -- was unreachable (verified against inputmap.rs at the pinned 20240203
+  -- tag). Overriding Down to START a fresh selection instead of extending
+  -- makes a plain shift-click arrive at Up with an EMPTY selection → the
+  -- link opens. Shift+drag still selects: Down anchors, the untouched
+  -- SHIFT+Drag default extends, Up completes + copies (copy_and_announce
+  -- re-copy is harmless; it no-ops when the selection is empty).
+  -- SHIFT is the point: it's the bypass_mouse_reporting_modifier (default,
+  -- unchanged), so this is the ONE modifier that reaches WezTerm's own mouse
+  -- handling inside mouse-reporting panes (Zellij/Helix) — the CTRL+click
+  -- binding above never fires there. Accepted loss: shift-click-to-EXTEND an
+  -- existing selection (niche; drag selection covers it).
+  {
+    event = { Down = { streak = 1, button = 'Left' } },
+    mods = 'SHIFT',
+    action = act.SelectTextAtMouseCursor 'Cell',
+  },
+  {
+    event = { Up = { streak = 1, button = 'Left' } },
+    mods = 'SHIFT',
+    action = act.Multiple {
+      act.CompleteSelectionOrOpenLinkAtMouseCursor 'ClipboardAndPrimarySelection',
+      copy_and_announce,
+    },
+  },
   -- Window drag-to-move — required since window_decorations='RESIZE' removed
   -- the OS title bar (and the bottom retro tab bar is not a drag area). The
   -- two bindings are the canonical pair from wezterm.org's window_decorations
@@ -1440,6 +1515,83 @@ local copy_all_scrollback = act.Multiple {
   act.EmitEvent 'copied',
 }
 
+-- ---------------------------------------------------------------------------
+-- QuickSelect action bindings — Enter DOES something with the selection
+-- ---------------------------------------------------------------------------
+-- Pattern-restricted QuickSelect overlays whose action consumes the selection
+-- instead of just copying it (the plain CTRL+SHIFT+Space overlay keeps its
+-- copy behavior). Each `label` names the action in the overlay footer.
+-- Extracted to locals so config.keys and the command palette share one
+-- definition (rename_tab precedent).
+
+-- CTRL+SHIFT+I — pick an IPv4 from the screen, open SSH to it. A managed
+-- host (remote_address match in ssh_domains) opens as its domain tab, so
+-- Zellij attaches via the per-domain default_prog; any other IP gets a plain
+-- `ssh <ip>` in the CURRENT pane's domain (WSL/local both carry an ssh
+-- client; from an SSH pane it chains a hop from that host).
+local quick_ssh_ip = act.QuickSelectArgs {
+  label    = 'open SSH to IP',
+  patterns = { [[\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b]] },
+  action   = wezterm.action_callback(function(window, pane)
+    local ip = window:get_selection_text_for_pane(pane)
+    if not ip or #ip == 0 then return end
+    for _, d in ipairs(ssh_domains) do
+      if d.remote_address == ip then
+        window:perform_action(act.SpawnTab { DomainName = d.name }, pane)
+        return
+      end
+    end
+    window:perform_action(act.SpawnCommandInNewTab {
+      domain = 'CurrentPaneDomain',
+      args   = { 'ssh', ip },
+    }, pane)
+  end),
+}
+
+-- CTRL+SHIFT+G — pick a file:line[:col] (compiler error, grep -n, stack
+-- trace) and open it in Helix at that position (hx accepts file:line:col
+-- directly). Same-domain spawn mirrors the open-uri handler: WSL → hx in
+-- the distro, SSH → one-shot hx tab on that host, local → portable hx.exe.
+-- Relative paths resolve because SpawnCommandInNewTab inherits the pane's
+-- OSC 7-tracked cwd.
+local quick_open_hx = act.QuickSelectArgs {
+  label    = 'open in Helix',
+  patterns = { [[[\w./~_-]+:\d+(?::\d+)?]] },
+  action   = wezterm.action_callback(function(window, pane)
+    local sel = window:get_selection_text_for_pane(pane)
+    if not sel or #sel == 0 then return end
+    window:perform_action(act.SpawnCommandInNewTab {
+      domain = 'CurrentPaneDomain',
+      args   = { 'hx', sel },
+    }, pane)
+  end),
+}
+
+-- CTRL+SHIFT+Y — pick a git SHA (7–40 hex chars) and type it into the
+-- prompt: no clipboard round-trip for `git show <pick>` flows. All-digit
+-- runs of 7+ (ports, sizes) match too — visual noise in the overlay, not a
+-- correctness issue (you pick the label you want).
+local quick_yank_sha = act.QuickSelectArgs {
+  label    = 'paste into prompt',
+  patterns = { [[\b[0-9a-f]{7,40}\b]] },
+  action   = wezterm.action_callback(function(window, pane)
+    local sel = window:get_selection_text_for_pane(pane)
+    if not sel or #sel == 0 then return end
+    pane:send_text(sel)
+  end),
+}
+
+-- ---------------------------------------------------------------------------
+-- Local pane management — splits, nav, zoom, picker
+-- ---------------------------------------------------------------------------
+-- Zellij owns panes inside SSH tabs; these cover local/WSL tabs, which
+-- previously had no ergonomic pane story at all. Split mnemonics match
+-- Zellij's pane mode (d = down, r = right) so muscle memory transfers;
+-- pane NAV lives on the same ALT+SHIFT layer (arrows).
+local split_down  = act.SplitVertical   { domain = 'CurrentPaneDomain' }
+local split_right = act.SplitHorizontal { domain = 'CurrentPaneDomain' }
+local pane_picker = act.PaneSelect {}
+
 -- Custom actions mirrored into the command palette (CTRL+SHIFT+P). Without
 -- this the palette lists only built-ins — a misleading "second surface" that
 -- omits every bespoke binding. Entries reuse the SAME action values as
@@ -1453,6 +1605,12 @@ wezterm.on('augment-command-palette', function(_window, _pane)
     { brief = 'Copy entire scrollback',   action = copy_all_scrollback },
     { brief = 'Open scrollback in Helix', action = scrollback_to_helix },
     { brief = 'Help / cheatsheet',        action = show_help },
+    { brief = 'QuickSelect: IP → open SSH',     action = quick_ssh_ip },
+    { brief = 'QuickSelect: file:line → Helix', action = quick_open_hx },
+    { brief = 'QuickSelect: SHA → prompt',      action = quick_yank_sha },
+    { brief = 'Split pane down',  action = split_down },
+    { brief = 'Split pane right', action = split_right },
+    { brief = 'Pane picker',      action = pane_picker },
   }
 end)
 
@@ -1511,10 +1669,39 @@ config.keys = {
   -- marks the managed rcs emit (dot_zshrc.tmpl / dot_bashrc.tmpl). Overrides
   -- the default CTRL|SHIFT+Up/Down pane-navigation assignments, which Zellij
   -- makes redundant here (it owns panes inside SSH tabs; the Left/Right
-  -- pane-nav defaults stay). Works in WSL/local/raw-ssh panes; inert inside
-  -- Zellij tabs (the alt screen owns that buffer).
+  -- defaults are separately released to the SHELL — see the
+  -- DisableDefaultAssignment block below). Works in WSL/local/raw-ssh panes;
+  -- inert inside Zellij tabs (the alt screen owns that buffer).
   { key = 'UpArrow',   mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(-1) },
   { key = 'DownArrow', mods = 'CTRL|SHIFT', action = act.ScrollToPrompt(1) },
+
+  -- QuickSelect action bindings (locals above): I = IP → SSH, G = goto
+  -- file:line in Helix, Y = yank SHA into the prompt.
+  { key = 'i', mods = 'CTRL|SHIFT', action = quick_ssh_ip },
+  { key = 'g', mods = 'CTRL|SHIFT', action = quick_open_hx },
+  { key = 'y', mods = 'CTRL|SHIFT', action = quick_yank_sha },
+
+  -- Panes (local/WSL tabs — Zellij owns panes inside SSH tabs). ALT+SHIFT
+  -- layer: D/R split (Zellij pane-mode mnemonics), arrows navigate.
+  -- CTRL+SHIFT+Z restates the built-in zoom default so the cheatsheet and
+  -- this config stay the source of truth; CTRL+SHIFT+Q = letter overlay.
+  { key = 'd', mods = 'SHIFT|ALT', action = split_down },
+  { key = 'r', mods = 'SHIFT|ALT', action = split_right },
+  { key = 'z', mods = 'CTRL|SHIFT', action = act.TogglePaneZoomState },
+  { key = 'q', mods = 'CTRL|SHIFT', action = pane_picker },
+  { key = 'LeftArrow',  mods = 'SHIFT|ALT', action = act.ActivatePaneDirection 'Left' },
+  { key = 'RightArrow', mods = 'SHIFT|ALT', action = act.ActivatePaneDirection 'Right' },
+  { key = 'UpArrow',    mods = 'SHIFT|ALT', action = act.ActivatePaneDirection 'Up' },
+  { key = 'DownArrow',  mods = 'SHIFT|ALT', action = act.ActivatePaneDirection 'Down' },
+
+  -- Release CTRL+SHIFT+←/→ back to the SHELL. The build's defaults bind
+  -- them to ActivatePaneDirection, and a bound chord is consumed even with
+  -- a single pane — which silently shadowed the zsh shift-select
+  -- word-extend (README §prompt-keys) in EVERY pane since that feature
+  -- landed. Pane nav lives on ALT+SHIFT+arrows above; CTRL+SHIFT+Up/Down
+  -- stay ScrollToPrompt overrides (they never reached the shell either way).
+  { key = 'LeftArrow',  mods = 'CTRL|SHIFT', action = act.DisableDefaultAssignment },
+  { key = 'RightArrow', mods = 'CTRL|SHIFT', action = act.DisableDefaultAssignment },
 
   -- Font size
   { key = '=', mods = 'CTRL', action = act.IncreaseFontSize },
