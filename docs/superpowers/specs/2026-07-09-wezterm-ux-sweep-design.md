@@ -13,8 +13,8 @@ This sweep adds six feature groups selected in a two-round brainstorm.
 
 Explicitly out of scope (previously tried and reverted, or declined):
 Acrylic/translucency, any per-host render tuning (`max_fps` caps / OpenGL —
-see `project_wezterm_render_webgpu_120fps`), `wezterm.gui.*` at config load
-(see `project_wezterm_no_gui_calls_at_config_load`), font-zoom window pinning,
+see `project-wezterm-render-webgpu-120fps`), `wezterm.gui.*` at config load
+(see `project-wezterm-no-gui-calls-at-config-load`), font-zoom window pinning,
 `check_for_updates=false`. Nothing in this sweep touches the render block or
 the `HOSTS` sentinel.
 
@@ -135,7 +135,7 @@ Two PRs:
 
 ## Testing / verification
 
-- `luaparse` gate for wezterm.lua syntax (per `feedback_lua_syntax_use_luaparse_not_lsp`).
+- `luaparse` gate for wezterm.lua syntax (per `feedback-lua-syntax-use-luaparse-not-lsp`).
 - `make -C makefile lint MODE=prod` (invariants incl. HOSTS sentinel intact) +
   `scripts/check-templates.sh` for the rc pair (PR 2).
 - Live verification requires syncing the **Windows clone** (WezTerm reads it

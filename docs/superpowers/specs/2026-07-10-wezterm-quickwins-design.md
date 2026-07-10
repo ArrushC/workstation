@@ -15,8 +15,8 @@ the pinned stable build 20240203-110809-5046fc22 (no stable release has shipped
 since, so the plugin/recipe ecosystem matured on this exact build).
 
 Explicitly out of scope (unchanged no-gos): per-host render tuning
-(`max_fps` caps / OpenGL — `project_wezterm_render_webgpu_120fps`),
-`wezterm.gui.*` at config load (`project_wezterm_no_gui_calls_at_config_load`),
+(`max_fps` caps / OpenGL — `project-wezterm-render-webgpu-120fps`),
+`wezterm.gui.*` at config load (`project-wezterm-no-gui-calls-at-config-load`),
 Acrylic/translucency, nightly-only features (OSC 9;4 progress, `wezterm.serde`),
 SSHMUX domains, tab-bar plugin replacements, workspace/resurrect plugins
 (deferred, not rejected).
@@ -140,7 +140,7 @@ bindings at all. Additions (all `domain = 'CurrentPaneDomain'`):
   same commit. **CLAUDE_CHANGELOG.md**: one row.
 - **Verification**: luaparse syntax harness
   (`node /tmp/lua-syntax-check/check.js` — recreate if gone, per
-  `feedback_lua_syntax_use_luaparse_not_lsp`); `make lint MODE=prod`;
+  `feedback-lua-syntax-use-luaparse-not-lsp`); `make lint MODE=prod`;
   live smoke on the Windows clone after merge (config reload toast confirms
   parse; shift-click a URL inside a Zellij pane; `#NN` click; QuickSelect trio;
   split/zoom in a WSL tab; yazi image preview).

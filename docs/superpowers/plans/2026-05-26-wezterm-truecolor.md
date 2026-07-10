@@ -431,7 +431,7 @@ EOF
 ```
 Replace `<TAG>` with the pinned tag from Task 1.
 
-- [ ] **Step 4: Push (per standing memory `feedback_always_push_after_commit`)**
+- [ ] **Step 4: Push (per standing memory `feedback-always-push-after-commit`)**
 
 ```bash
 git push

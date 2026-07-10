@@ -4,7 +4,7 @@
 
 **Goal:** Replace Chocolatey + admin requirement in `bootstrap.ps1` with admin-free binary/portable installs under `%LOCALAPPDATA%\workstation`, make Git a hard prerequisite, drop all legacy handling, and update the docs/memory that describe it.
 
-**Architecture:** `bootstrap.ps1` is rewritten so the only auto-installs are chezmoi (official `get.chezmoi.io` binary installer → `workstation\bin`), Starship and WezTerm (pinned, sha256-verified portable `.zip`s → `workstation\bin` / `workstation\wezterm`). Git hard-fails if missing; Zed/VSCode soft-warn; zoxide is dropped. A reusable `Install-PortableTool` helper (modeled on `scripts\install-nerd-fonts.ps1`) does download→verify→extract→PATH. `Invoke-LegacyPathMigrate`, `Test-IsAdmin`, `Install-Chocolatey`, `$ChocoTools`, and the WezTerm legacy-hardlink cleanup are all removed. README.html, CLAUDE_CHANGELOG.md, docs/claude/file-care.md, CLAUDE.md, and the `feedback_windows_chezmoi_check_before_apply` memory are updated to match.
+**Architecture:** `bootstrap.ps1` is rewritten so the only auto-installs are chezmoi (official `get.chezmoi.io` binary installer → `workstation\bin`), Starship and WezTerm (pinned, sha256-verified portable `.zip`s → `workstation\bin` / `workstation\wezterm`). Git hard-fails if missing; Zed/VSCode soft-warn; zoxide is dropped. A reusable `Install-PortableTool` helper (modeled on `scripts\install-nerd-fonts.ps1`) does download→verify→extract→PATH. `Invoke-LegacyPathMigrate`, `Test-IsAdmin`, `Install-Chocolatey`, `$ChocoTools`, and the WezTerm legacy-hardlink cleanup are all removed. README.html, CLAUDE_CHANGELOG.md, docs/claude/file-care.md, CLAUDE.md, and the `feedback-windows-chezmoi-check-before-apply` memory are updated to match.
 
 **Tech Stack:** PowerShell 5.1 (Windows host; UTF-8 **with BOM** required), chezmoi, Git, GitHub release artifacts. No `pwsh` on the authoring host — verification here is structural (`grep`, `file`); functional verification runs on the Windows host.
 
@@ -1239,12 +1239,12 @@ git commit -m "docs(claude): record Windows de-Chocolatey bootstrap (changelog, 
 ## Task 4: Update the stale Windows-chezmoi memory
 
 **Files:**
-- Modify: `.claude/memory/feedback_windows_chezmoi_check_before_apply.md`
+- Modify: `.claude/memory/feedback-windows-chezmoi-check-before-apply.md`
 - Modify (if its hook text mentions choco): `.claude/memory/MEMORY.md`
 
 The memory references the old chezmoi location (`C:\ProgramData\chocoportable\bin\chezmoi.exe`) and `choco install -y chezmoi` — both stale after this change.
 
-- [ ] **Step 1: Update the existence-check path.** In `.claude/memory/feedback_windows_chezmoi_check_before_apply.md`, replace:
+- [ ] **Step 1: Update the existence-check path.** In `.claude/memory/feedback-windows-chezmoi-check-before-apply.md`, replace:
 ```
 ALWAYS first check whether the native Windows `chezmoi` binary exists — via WSL interop, e.g. `powershell.exe -NoProfile -Command 'Test-Path "C:\ProgramData\chocoportable\bin\chezmoi.exe"'` or `Get-Command chezmoi`. Then branch:
 ```
@@ -1283,7 +1283,7 @@ If the pointer line for this memory mentions choco, edit it to drop the word (ke
 Run:
 ```bash
 cd /home/arrush.chaturvedi/.local/share/chezmoi
-grep -in -E 'chocoportable|choco install' .claude/memory/feedback_windows_chezmoi_check_before_apply.md && echo "STILL STALE" || echo "OK: memory updated"
+grep -in -E 'chocoportable|choco install' .claude/memory/feedback-windows-chezmoi-check-before-apply.md && echo "STILL STALE" || echo "OK: memory updated"
 ```
 Expected: `OK: memory updated`.
 

@@ -10,7 +10,7 @@ WSL configuration. The two files that actually configure WSL — the per-distro
 `/etc/wsl.conf` (Linux side) and the global `%USERPROFILE%\.wslconfig`
 (Windows side) — are currently hand-managed and unversioned. In particular
 `/etc/wsl.conf` already carries the load-bearing `appendWindowsPath=false`
-perf fix (see `.claude/memory/project_wsl_appendwindowspath_false.md`), which
+perf fix (see `.claude/memory/project-wsl-appendwindowspath-false.md`), which
 today must be applied **by hand** on every WSL host; the tracked rc PATH
 re-add is inert until someone does. We want both files version-controlled and
 deployed by the repo like every other tool, so a fresh clone reproduces them.
@@ -96,7 +96,7 @@ default=arrush.chaturvedi
 
 **Synergy:** deploying `wsl.conf` from the repo **automates** the manual
 `appendWindowsPath=false` flip described in
-`project_wsl_appendwindowspath_false.md`. The tracked rc PATH re-add and the
+`project-wsl-appendwindowspath-false.md`. The tracked rc PATH re-add and the
 `wsl.conf` flip now ship together, so the rc block is no longer inert on a
 fresh host. (Restart still required; the target prints the reminder.) The
 memory's "NOT repo-tracked" statement becomes false and must be updated.
@@ -166,7 +166,7 @@ This adds user-facing surface, so in the **same commit**:
 - **docs/claude/file-care.md:** `configs/wsl/wsl.conf` is the source of truth;
   the deployed `/etc/wsl.conf` is overwritten by `wsl-config` (don't hand-edit
   the live file). `.wslconfig` initial content is a commented template.
-- **.claude/memory/project_wsl_appendwindowspath_false.md:** update the "NOT
+- **.claude/memory/project-wsl-appendwindowspath-false.md:** update the "NOT
   repo-tracked" line — `wsl.conf` is now repo-deployed, and the rc re-add +
   `wsl.conf` flip ship together (restart still required).
 - **CLAUDE_CHANGELOG.md:** append a row.
