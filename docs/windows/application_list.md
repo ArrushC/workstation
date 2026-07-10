@@ -16,3 +16,4 @@ Apps auto-installed by bootstrap.ps1 (WezTerm, Starship, Obsidian, Zed — plus 
 - C, C++, Go, Python, Bun
 - Nilesoft Shell
 - WSL - AlmaLinux
+- Devolutions RDM
