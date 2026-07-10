@@ -3295,6 +3295,69 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 <td>Reload <code>wezterm.lua</code></td>
                             </tr>
                             <tr>
+                                <td><kbd>SHIFT</kbd>+click</td>
+                                <td>
+                                    Open the link under the mouse. SHIFT
+                                    bypasses app mouse handling, so this is
+                                    the click that works inside Zellij and
+                                    Helix panes; bare <code>#NN</code> refs
+                                    are linkified to the workstation repo's
+                                    PR/issue pages.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>I</kbd>
+                                </td>
+                                <td>
+                                    Quick-select an IPv4 from the screen and
+                                    open SSH to it (managed hosts attach
+                                    their Zellij session; other IPs get a
+                                    plain <code>ssh</code>).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>G</kbd>
+                                </td>
+                                <td>
+                                    Quick-select a <code>file:line</code>
+                                    from build/grep output and open it in
+                                    Helix at that position (same domain as
+                                    the pane).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Y</kbd>
+                                </td>
+                                <td>
+                                    Quick-select a git SHA and type it
+                                    straight into the prompt (no clipboard
+                                    round-trip).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>D</kbd>
+                                    / <kbd>R</kbd>
+                                </td>
+                                <td>
+                                    Split the pane down / right (local and
+                                    WSL tabs &mdash; Zellij owns panes inside
+                                    SSH tabs). Navigate panes with
+                                    <kbd>ALT</kbd>+<kbd>SHIFT</kbd>+arrows;
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Z</kbd>
+                                    zooms; <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Q</kbd>
+                                    opens a letter-overlay pane picker.
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>&larr;</kbd>/<kbd>&rarr;</kbd>
+                                    now pass through to the shell, so the
+                                    word-extend selection documented under
+                                    Shell prompt selection works inside
+                                    WezTerm.
+                                </td>
+                            </tr>
+                            <tr>
                                 <td>
                                     <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+drag /
                                     <kbd>WIN</kbd>+drag
