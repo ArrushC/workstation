@@ -2752,6 +2752,11 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         fonts). <strong>Git is a prerequisite you install
                         yourself</strong> &mdash; the script hard-fails with an
                         install link if <code>git</code> isn&rsquo;t on PATH.
+                        <strong>One best-effort exception:</strong> the
+                        SSHFS-Win step (WinFsp kernel driver) is machine-scope
+                        and pops a UAC prompt &mdash; decline it (or pass
+                        <code>-SkipElevated</code>) and everything else still
+                        completes admin-free.
                     </div>
                     <p>
                         <strong>What the script installs (no package manager,
@@ -2810,6 +2815,24 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             (<code>-ForceInstaller</code> to reinstall). Not
                             added to <code>PATH</code> (GUI app, makes its own
                             shortcut).
+                        </li>
+                        <li>
+                            <strong>SSHFS-Win</strong> &mdash; mounts remote
+                            Unix filesystems over SSH as Windows drives
+                            (<code>\\sshfs\user@host</code> UNC paths, or
+                            <code>net use X: \\sshfs\user@host</code>).
+                            <strong>The one elevated install:</strong> it
+                            depends on WinFsp, a kernel-mode filesystem
+                            driver, so both MSIs are machine-scope and a UAC
+                            prompt is unavoidable. Best-effort &mdash;
+                            installed via <code>winget</code> (which pulls
+                            WinFsp automatically as a dependency), falling
+                            back to sha256-verified direct MSI downloads when
+                            winget is absent; declining the UAC prompt (or
+                            passing <code>-SkipElevated</code>) skips the step
+                            and the rest of the bootstrap completes normally.
+                            Detected via the Uninstall registry, so an
+                            already-provisioned machine never sees the prompt.
                         </li>
                     </ul>
                     <p>
@@ -2917,6 +2940,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
 .\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed) even if present
+.\bootstrap.ps1 -SkipElevated                    # skip the UAC-prompting SSHFS-Win/WinFsp install
 .\bootstrap.ps1 -Doctor                          # read-only health report, then exit
 .\bootstrap.ps1 -CheckForUpdates                 # read-only update scan (repo first), then exit</code></pre>
                     <p class="note-row">
@@ -2966,7 +2990,11 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         </div>
                     </div>
                     <p class="note-row">
-                        <strong>No elevation anywhere in this flow.</strong>
+                        <strong>No elevation anywhere in this flow</strong>
+                        &mdash; except the best-effort SSHFS-Win/WinFsp step,
+                        which pops a UAC prompt when not yet installed
+                        (declining just skips it; suppress it entirely with
+                        <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
                         chezmoi/WezTerm/Starship/Helix/Nushell installs
                         <em>and</em> the installer-class apps (Obsidian, Zed)
@@ -5111,6 +5139,41 @@ make -C makefile MODE=dev packages</code></pre>
                                 automounter with no maps does nothing. Write
                                 your maps first, then
                                 <code>sudo systemctl enable --now autofs</code>.
+                            </p>
+                        </div>
+                    </details>
+                    <details data-ts>
+                        <summary>
+                            <code>bootstrap.ps1</code> popped a UAC prompt (or
+                            SSHFS-Win reports &ldquo;skipping&rdquo;)
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                That&rsquo;s the <strong>SSHFS-Win</strong>
+                                step &mdash; the one deliberate exception to
+                                the otherwise admin-free bootstrap. SSHFS-Win
+                                depends on <strong>WinFsp</strong>, a
+                                kernel-mode filesystem driver; kernel drivers
+                                install machine-wide, so elevation is
+                                unavoidable. The step is best-effort: declining
+                                the prompt, being offline, or having neither
+                                <code>winget</code> nor network just skips it
+                                &mdash; nothing else in the bootstrap is
+                                affected, and an already-installed machine
+                                never sees the prompt (Uninstall-registry
+                                detection).
+                            </p>
+                            <p>
+                                Install it later with
+                                <code>winget install SSHFS-Win.SSHFS-Win</code>
+                                (pulls WinFsp automatically) or re-run
+                                <code>.\bootstrap.ps1</code> and accept the
+                                prompt; suppress the attempt entirely with
+                                <code>-SkipElevated</code>. Once installed,
+                                mount with
+                                <code>net use X: \\sshfs\user@host</code> or
+                                browse <code>\\sshfs\user@host</code> directly
+                                in Explorer.
                             </p>
                         </div>
                     </details>
