@@ -78,8 +78,8 @@
 #   -RepoPath <path>    override clone target
 #                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the chezmoi/WezTerm/Starship/Helix auto-installs
-#                       (assume they're already on PATH)
+#   -SkipToolInstall    skip the chezmoi/WezTerm/Starship/Helix/Nushell/jq/
+#                       OpenCode/omp auto-installs AND the Claude Code step
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
@@ -254,6 +254,34 @@ $PortableTools = @(
         Repo       = "jqlang/jq"
         TagPrefix  = "jq-"
         UpdateHint = "dual-edit: `$PortableTools here AND JQ_VERSION in makefile/versions.mk (jq powers the Claude Code hooks' JSON parsing on Windows)"
+    },
+    @{
+        # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
+        # Linux dev-only EGET_TOOLs (see the AI-agents section in
+        # makefile/versions.mk). Bun-compiled x64 binaries: both REQUIRE AVX2
+        # (any CPU since ~2013).
+        Name       = "OpenCode"
+        Exe        = "opencode"
+        Version    = "1.17.18"
+        Url        = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-windows-x64.zip"
+        Sha256     = "7d489fd9b314e25bccf9c5dd2f17ef2774902c7b7db9aa34f46b0aab4715c70c"
+        Layout     = "single"   # zip contains exactly one opencode.exe (starship precedent)
+        Dest       = $WsBin
+        Repo       = "anomalyco/opencode"
+        TagPrefix  = "v"
+        UpdateHint = "dual-edit: `$PortableTools here AND OPENCODE_VERSION in makefile/versions.mk"
+    },
+    @{
+        Name       = "Oh My Pi"
+        Exe        = "omp"
+        Version    = "16.4.4"
+        Url        = "https://github.com/can1357/oh-my-pi/releases/download/v16.4.4/omp-windows-x64.exe"
+        Sha256     = "d7c07164b357d787493781a13a5370941f98b3c8df617b428ab8009d117fc83d"
+        Layout     = "exe"      # bare single-.exe release asset (jq precedent)
+        Dest       = $WsBin
+        Repo       = "can1357/oh-my-pi"
+        TagPrefix  = "v"
+        UpdateHint = "dual-edit: `$PortableTools here AND OMP_VERSION in makefile/versions.mk"
     }
 )
 
@@ -865,7 +893,7 @@ function Install-ElevatedTool {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix on PATH; Obsidian/Zed/SSHFS-Win not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp on PATH; Obsidian/Zed/SSHFS-Win/Claude Code not installed"
         return
     }
 
@@ -1196,6 +1224,48 @@ function Invoke-InstallBurntToast {
 }
 
 # =============================================================================
+# 6b. CLAUDE CODE — native Windows install via the OFFICIAL installer script.
+#     The script verifies claude.exe's sha256 against Anthropic's signed
+#     release manifest, then `claude.exe install latest` sets up the launcher
+#     (%USERPROFILE%\.local\bin), PATH, and shell integration itself.
+#     NOT $PortableTools: native installs SELF-UPDATE in the background, so a
+#     pin would fight the auto-updater (mirrors CLAUDE_VERSION := latest on
+#     the Linux side — the claude-cli target in makefile/). NOT
+#     $InstallerTools: no Uninstall-registry entry, not a GitHub release.
+#     Detect-by-command, skip when present; soft-fails (warn-and-continue).
+#     Runs in a CHILD powershell.exe — the installer script calls `exit` on
+#     its error paths, which would kill this bootstrap if dot-run in-process.
+# =============================================================================
+function Invoke-InstallClaudeCode {
+    if ($SkipToolInstall) {
+        Write-Log "Claude Code install skipped (-SkipToolInstall)"
+        return
+    }
+    $claudeExe = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
+    if ((Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path $claudeExe)) {
+        Write-Ok "Claude Code already installed (self-updates in the background)"
+        return
+    }
+    Write-Log "Installing Claude Code (official installer, manifest-verified)..."
+    $tmp = Join-Path $env:TEMP "claude-install-$PID.ps1"
+    try {
+        # Download-then-run (never `irm | iex`) — auditable, same posture as
+        # the Linux side's pipe.sh.
+        [System.Net.ServicePointManager]::SecurityProtocol = `
+            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        Invoke-WebRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp -UseBasicParsing -ErrorAction Stop
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp
+        if ($LASTEXITCODE -ne 0) { throw "installer exited with code $LASTEXITCODE" }
+        Write-Ok "Claude Code installed (launcher in ~\.local\bin; self-updates)"
+    } catch {
+        Write-Warn "Claude Code install failed: $_"
+        Write-Warn "  Retry manually:  irm https://claude.ai/install.ps1 | iex"
+    } finally {
+        Remove-Item -Force $tmp -ErrorAction SilentlyContinue
+    }
+}
+
+# =============================================================================
 # 7. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user. Required by
 #    chezmoi-tracked configs that assume Nerd Font glyphs (starship, eza --icons,
 #    lazygit, k9s, yazi, broot, helix, ccstatusline, Claude Code TUI). Invokes
@@ -1487,6 +1557,15 @@ function Invoke-Doctor {
     }
     if (Get-Command code -ErrorAction SilentlyContinue) { Write-Ok "VSCode on PATH (hand-installed)" }
     else { Write-Warn "VSCode not on PATH — hand-install when wanted; its chezmoi config deploys regardless" }
+    $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
+    $claudeExe = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
+    if ($claudeCmd) {
+        Write-Ok "Claude Code installed ($($claudeCmd.Source); self-updates in the background)"
+    } elseif (Test-Path $claudeExe) {
+        Write-Warn "Claude Code installed at $claudeExe but not on PATH — open a NEW shell"
+    } else {
+        Write-Bad "Claude Code not installed — re-run .\bootstrap.ps1"
+    }
     $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
           Sort-Object Version -Descending | Select-Object -First 1
     if ($bt) { Write-Ok "BurntToast $($bt.Version) module available (WSL2 toast notifications)" }
@@ -1636,6 +1715,12 @@ function Invoke-CheckForUpdates {
           Sort-Object Version -Descending | Select-Object -First 1
     if ($bt) { Write-Ok "BurntToast $($bt.Version) installed — update via: Update-Module BurntToast" }
     else { Write-Warn "BurntToast module missing — re-run .\bootstrap.ps1" }
+    if ((Get-Command claude -ErrorAction SilentlyContinue) -or
+        (Test-Path (Join-Path $env:USERPROFILE ".local\bin\claude.exe"))) {
+        Write-Ok "Claude Code installed — self-updates in the background (no pin; rolling, like Linux CLAUDE_VERSION := latest)"
+    } else {
+        Write-Warn "Claude Code not installed — re-run .\bootstrap.ps1"
+    }
 }
 
 # =============================================================================
@@ -1662,6 +1747,7 @@ Invoke-WeztermShortcut    # drop a per-user Start Menu .lnk for the portable Wez
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
+Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
 Invoke-EnsureSshKey
 

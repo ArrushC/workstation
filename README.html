@@ -1876,6 +1876,31 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                         ~/.config/herdr/config.toml</span
                                     ></span
                                 >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="OpenCode — open-source terminal coding agent (anomalyco/opencode, Bun-compiled single binary); also in the Windows portable belt"
+                                    >opencode<span class="sr-only">
+                                        — OpenCode: open-source terminal coding
+                                        agent (Bun-compiled single binary,
+                                        dev_machine only; Windows gets the
+                                        pinned portable .zip via
+                                        bootstrap.ps1)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="omp — Oh My Pi, the batteries-included fork of the Pi coding agent (LSP, DAP debugger, subagents, plan mode); also in the Windows portable belt"
+                                    >omp<span class="sr-only">
+                                        — Oh My Pi: maintained hard fork of the
+                                        Pi coding agent adding LSP, a DAP
+                                        debugger, subagents and plan mode
+                                        (dev_machine only; Windows gets the
+                                        pinned portable .exe via
+                                        bootstrap.ps1)</span
+                                    ></span
+                                >
                             </div>
                         </article>
                     </div>
@@ -2794,6 +2819,15 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             (binary + bundled runtime). The git/chezmoi editor.
                         </li>
                         <li>
+                            <strong>OpenCode</strong> and <strong>Oh My Pi</strong>
+                            (<code>omp</code>) &mdash; AI coding agents; pinned,
+                            sha256-verified portable binaries into
+                            <code>%LOCALAPPDATA%\workstation\bin</code>. The
+                            Windows halves of the Linux dev-only installs
+                            (versions dual-edit with
+                            <code>makefile/versions.mk</code>).
+                        </li>
+                        <li>
                             <strong>Obsidian</strong> &mdash; silent, per-user
                             install of its <code>.exe</code> (no portable
                             <code>.zip</code> exists). Unlike the pinned tools
@@ -2833,6 +2867,17 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             and the rest of the bootstrap completes normally.
                             Detected via the Uninstall registry, so an
                             already-provisioned machine never sees the prompt.
+                        </li>
+                        <li>
+                            <strong>Claude Code</strong> &mdash; native install
+                            via the <strong>official</strong> installer script,
+                            which verifies the binary against Anthropic&rsquo;s
+                            signed release manifest and then self-updates in
+                            the background (nothing to pin). Skipped when
+                            <code>claude</code> already resolves; soft-fails
+                            with a manual-retry hint. The WSL2 copy (installed
+                            by <code>make dev</code> inside the distro) is
+                            independent and unaffected.
                         </li>
                     </ul>
                     <p>
@@ -2996,9 +3041,11 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         (declining just skips it; suppress it entirely with
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship/Helix/Nushell installs
-                        <em>and</em> the installer-class apps (Obsidian, Zed)
-                        entirely (assumes they&rsquo;re already present). Obsidian and Zed install
+                        chezmoi/WezTerm/Starship/Helix/Nushell/OpenCode/omp
+                        installs, <em>and</em> the installer-class apps
+                        (Obsidian, Zed) and the native
+                        <strong>Claude Code</strong> install entirely
+                        (assumes they&rsquo;re already present). Obsidian and Zed install
                         silently per-user via their own <code>.exe</code> at the
                         latest release; pass <code>-ForceInstaller</code> to
                         reinstall them even when already present. The diagram is a
