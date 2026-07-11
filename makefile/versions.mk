@@ -220,3 +220,23 @@ VSCODE_LANGSERVERS_VERSION := 4.10.0
 # addition. NOTE: pre-1.0 and dual-licensed AGPL-3.0/commercial — bump the pin
 # deliberately (breaking changes are likely before 1.0).
 HERDR_VERSION := 0.7.1
+
+# --- (2026-07) AI coding agents (dev_machine only) ----------------------------
+# Two terminal coding agents joining claude-cli (the bespoke Makefile target) in
+# the dev-only AI belt. Both are Bun-compiled single-binary GitHub releases,
+# installed via MODE-gated EGET_TOOLs in tools.mk (herdr's pattern). Both pins
+# DUAL-EDIT with $PortableTools in bootstrap.ps1 (the Windows halves) — enforced
+# by check-invariants.sh; bump both sides together and refresh the Sha256 there.
+# opencode — open-source coding agent (anomalyco/opencode; repo moved from
+#   sst/opencode, old path 301s). CAVEAT: the plain linux-x64 asset REQUIRES
+#   AVX2 (Intel 2013+/AMD 2015+). verify-binary.sh can't catch a SIGILL (it
+#   never executes the binary) — on a pre-AVX2 host, flip the tools.mk filters
+#   to select the `-baseline` asset instead.
+# omp — "Oh My Pi" (can1357/oh-my-pi): the maintained, batteries-included hard
+#   fork of Mario Zechner's Pi (LSP, DAP debugger, subagents, plan mode; Rust
+#   core). It REPLACES Pi — upstream Pi is deliberately NOT installed. Bare
+#   per-platform binary assets; eget names the download after the REPO
+#   (oh-my-pi), so the tools.mk entry passes a trailing `--to $(DEST)/omp` to
+#   force the command name (verified: the later --to wins).
+OPENCODE_VERSION := 1.17.18
+OMP_VERSION      := 16.4.4

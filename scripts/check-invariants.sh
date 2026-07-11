@@ -85,6 +85,24 @@ check_version_pins() {
     bad "jq drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
+  v=$(mkval OPENCODE_VERSION)
+  ref=$(grep -oE 'anomalyco/opencode/releases/download/v[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/v##')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "opencode @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "opencode drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
+  v=$(mkval OMP_VERSION)
+  ref=$(grep -oE 'can1357/oh-my-pi/releases/download/v[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/v##')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "omp @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "omp drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
   # shfmt + gitleaks are enforced below (check_shfmt / check_gitleaks). CI
   # (.github/workflows/lint.yml) installs these exact versions so the checks
   # actually run there, so the pins dual-edit with lint.yml's `SHFMT=`/`GITLEAKS=`.

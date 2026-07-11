@@ -330,26 +330,35 @@ $(eval $(call EGET_TOOL,marksman,$(MARKSMAN_VERSION),artempyanykh/marksman,$(MAR
 $(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--asset linux --asset x86_64))
 
 # =============================================================================
-# DEV-ONLY scope tool (MODE-gated)  — the ONLY scope tool that isn't both-scope.
+# DEV-ONLY scope tools (MODE-gated) — the only scope tools that aren't both-scope.
 # Every EGET_TOOL/TOOL above joins $(SCOPE_TOOLS) unconditionally (dev + prod).
-# herdr is dev_machine-only (it supervises AI coding agents, and Claude Code is
-# itself dev-only-deployed), so we wrap the PREFERRED EGET_TOOL macro in a MODE
-# guard: on dev it joins $(SCOPE_TOOLS) and installs with `make tools`/`provision`
-# (and auto-registers its doctor + check-updates rows); on prod the eval is
-# skipped and a stub prints the same friendly "dev_machine tool — skipping"
-# message the bespoke dev-only targets (pwndbg/vcpkg) use. herdr is a textbook
-# single-binary release: bare per-platform assets, eget auto-selects
-# herdr-linux-x86_64 (no --asset needed), tag v$(HERDR_VERSION). It does NOT
-# replace zellij — zellij stays the general multiplexer; herdr is the agent-aware
-# addition. (gen-tool-memory.sh greps this call line regardless of the ifeq, so
-# the dev-only machine-memory TOOLS block still lists herdr.)
+# These three are dev_machine-only (herdr supervises AI coding agents; opencode
+# and omp ARE AI coding agents — and Claude Code itself is dev-only-deployed),
+# so we wrap the PREFERRED EGET_TOOL macro in a MODE guard: on dev they join
+# $(SCOPE_TOOLS) and install with `make tools`/`provision` (auto-registering
+# their doctor + check-updates rows); on prod the evals are skipped and a stub
+# prints the same friendly "dev_machine tool — skipping" message the bespoke
+# dev-only targets (pwndbg/vcpkg) use.
+# herdr: textbook single-binary release — bare per-platform assets, eget
+#   auto-selects herdr-linux-x86_64 (no --asset needed), tag v$(HERDR_VERSION).
+#   It does NOT replace zellij — herdr is the agent-aware addition.
+# opencode: tar.gz containing the single binary. Anti-match filters drop the
+#   musl/baseline CPU-and-libc variants (EL9 = glibc; fleet CPUs have AVX2 —
+#   see the versions.mk caveat) and the opencode-desktop-* app assets.
+# omp: bare per-platform binary like herdr, BUT eget would name it after the
+#   repo (oh-my-pi) — the trailing `--to $(DEST)/omp` overrides eget.sh's
+#   earlier `--to $(DEST)` (later flag wins) to force the real command name.
+# (gen-tool-memory.sh greps these call lines regardless of the ifeq, so the
+# dev-only machine-memory TOOLS block still lists all three.)
 # =============================================================================
 ifeq ($(MODE),dev)
 $(eval $(call EGET_TOOL,herdr,$(HERDR_VERSION),ogulcancelik/herdr))
+$(eval $(call EGET_TOOL,opencode,$(OPENCODE_VERSION),anomalyco/opencode,,--asset '^musl' --asset '^baseline' --asset '^desktop'))
+$(eval $(call EGET_TOOL,omp,$(OMP_VERSION),can1357/oh-my-pi,,--to $(DEST)/omp))
 else
-.PHONY: herdr
-herdr:
-	@echo "herdr is a dev_machine tool — skipping (MODE=$(MODE))"
+.PHONY: herdr opencode omp
+herdr opencode omp:
+	@echo "$@ is a dev_machine tool — skipping (MODE=$(MODE))"
 endif
 
 # =============================================================================
