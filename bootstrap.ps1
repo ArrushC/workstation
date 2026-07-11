@@ -12,6 +12,11 @@
 #   - WezTerm   — pinned portable .zip (sha256-verified)    → workstation\wezterm
 #   - Helix     — pinned portable .zip (sha256-verified)    → workstation\helix
 #                 (hx.exe + bundled runtime/; no HELIX_RUNTIME env var needed)
+#   - SSHFS-Win — BEST-EFFORT ELEVATED (the ONE exception to no-admin): mounts
+#                 remote Unix filesystems over SSH (\\sshfs\user@host). Depends
+#                 on the WinFsp kernel driver -> machine-scope MSIs -> UAC
+#                 prompt. winget first, digest/pin-verified MSI fallback when
+#                 winget is absent, soft-fail everywhere. Skip: -SkipElevated.
 #
 #   Git is a PREREQUISITE you install yourself — the script HARD-FAILS if git
 #   isn't on PATH (https://git-scm.com/download/win or `winget install Git.Git`).
@@ -23,7 +28,9 @@
 #   1. preflight    — require git on PATH (hard-fail w/ install link); warn if
 #                     ssh-keygen / Zed / VSCode are missing.
 #   2. tool install — chezmoi (official installer) + WezTerm/Starship/Helix (pinned
-#                     portable downloads), all into %LOCALAPPDATA%\workstation.
+#                     portable downloads), all into %LOCALAPPDATA%\workstation;
+#                     then the installer-class apps (Obsidian, Zed) and the
+#                     best-effort elevated class (SSHFS-Win — may pop UAC).
 #   3. clone repo   — into -RepoPath (default %USERPROFILE%\.local\share\chezmoi,
 #                     matching bootstrap.sh's $HOME/.local/share/chezmoi and
 #                     chezmoi's own default source dir).
@@ -40,7 +47,11 @@
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
 #
 # NO ADMIN REQUIRED: every step writes to per-user locations (workstation\ on
-# the User PATH, CurrentUser PSGallery, HKCU fonts, ~/.ssh).
+# the User PATH, CurrentUser PSGallery, HKCU fonts, ~/.ssh) — with ONE
+# sanctioned, best-effort exception: $ElevatedTools (SSHFS-Win + its WinFsp
+# kernel-driver dependency) pops UAC when not yet installed. Declining the
+# prompt (or -SkipElevated, or no winget + no network) soft-fails that step
+# only; everything else still completes with zero elevation.
 #
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME,
 # GIT_USER_EMAIL before running. The token authenticates the bootstrap.ps1 fetch
@@ -75,6 +86,9 @@
 #   -ForceInstaller     re-run installer-layout tool installs (e.g. Obsidian) even
 #                       if already present. Portable tools (WezTerm/Starship/Helix)
 #                       are unaffected — they reinstall on a version-pin bump.
+#   -SkipElevated       skip the best-effort ELEVATED installs ($ElevatedTools:
+#                       SSHFS-Win + WinFsp). Everything else stays admin-free;
+#                       this is the only step that can pop a UAC prompt.
 #   -Reinstall          wipe the cloned repo + chezmoi config first, then run the
 #                       normal flow. Does NOT remove installed tools or deployed
 #                       dotfiles — the bootstrap is idempotent over those.
@@ -101,6 +115,7 @@ param(
     [switch]$SkipBurntToast,
     [switch]$SkipNerdFonts,
     [switch]$ForceInstaller,
+    [switch]$SkipElevated,
     [switch]$Reinstall,
     [switch]$Yes,
     [switch]$Doctor,
@@ -264,6 +279,48 @@ $InstallerTools = @(
         AssetMatch = "Zed-x86_64.exe"                 # x64 Windows installer asset (NOT Zed-aarch64.exe)
         SilentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno Setup silent; PrivilegesRequired=lowest -> per-user, no admin (NOT NSIS /S)
         DetectName = "Zed"                            # exact HKCU Uninstall DisplayName (avoids "Zed Preview"/"Zed Nightly")
+    }
+)
+
+# Elevated tools — the ONE sanctioned exception to the no-admin rule. SSHFS-Win
+# mounts remote Unix filesystems over SSH (\\sshfs\user@host UNC paths / net use
+# drive letters); it depends on WinFsp, a kernel-mode filesystem driver, so both
+# MSIs are machine-scope and a UAC prompt is unavoidable. Install is BEST-EFFORT:
+# Uninstall-registry detect first (an already-provisioned machine never sees
+# UAC), then winget (its manifest pulls WinFsp.WinFsp as a dependency), then a
+# digest/pin-verified direct-MSI fallback when winget is ABSENT. EVERY failure
+# mode (declined UAC, offline, hash mismatch) warns and continues — this class
+# never aborts the bootstrap. -SkipElevated skips it; -ForceInstaller reinstalls
+# (and adds --force on the winget path). NOT pinned in versions.mk — latest-
+# release model, same as $InstallerTools (winget installs latest anyway).
+$ElevatedTools = @(
+    @{
+        Name       = "SSHFS-Win"
+        WingetId   = "SSHFS-Win.SSHFS-Win"   # manifest declares WinFsp.WinFsp as a dependency
+        DetectName = "SSHFS-Win*"            # HKLM Uninstall DisplayName glob (machine-scope MSI)
+        Repo       = "winfsp/sshfs-win"      # for -CheckForUpdates tag lookups
+        # MSI fallback chain (winget absent) — installed IN ORDER; each entry is
+        # skipped when its own DetectName is already registered:
+        Msi        = @(
+            @{
+                Name       = "WinFsp"
+                WingetId   = "WinFsp.WinFsp"
+                Repo       = "winfsp/winfsp"
+                AssetMatch = "winfsp-*.msi"
+                DetectName = "WinFsp*"
+            },
+            @{
+                Name       = "SSHFS-Win"
+                WingetId   = "SSHFS-Win.SSHFS-Win"
+                Repo       = "winfsp/sshfs-win"
+                AssetMatch = "sshfs-win-*-x64.msi"
+                DetectName = "SSHFS-Win*"
+                # v3.5.20357 (2020) predates GitHub's per-asset digests (the API
+                # reports digest: null); official x64 sha256 from the winget
+                # manifest (microsoft/winget-pkgs manifests/s/SSHFS-Win) instead:
+                Sha256Pin  = "1657e397f8dce1c2d2e3220007f9c9f882631882b9bec4608f7835e87dcd096c"
+            }
+        )
     }
 )
 
@@ -661,9 +718,154 @@ The GitHub-reported digest doesn't match the download (corrupted or tampered).
     }
 }
 
+# One MSI of an elevated tool's fallback chain: resolve the LATEST GitHub
+# release, download, verify (API digest -> Sha256Pin -> warn+proceed), install
+# via msiexec -Verb RunAs. A silent machine-scope msiexec from a non-elevated
+# shell does NOT trigger UAC — it fails with MSI error 1925; -Verb RunAs is
+# what pops the prompt, and a DECLINED prompt THROWS (caught into a soft-fail).
+# A hash mismatch refuses this MSI (Write-Bad, never Write-Fail — this class
+# must not abort the bootstrap; refusing to run an elevated binary is the safe
+# side). Returns $true when the MSI is (already) installed, $false otherwise.
+function Install-ElevatedMsi {
+    param([hashtable]$Msi)
+
+    if (Test-InstallerPresent -DisplayName $Msi.DetectName) {
+        Write-Ok "$($Msi.Name) already installed"
+        return $true
+    }
+
+    [System.Net.ServicePointManager]::SecurityProtocol = `
+        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+    $headers = @{ "User-Agent" = "workstation-bootstrap" }
+    if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
+
+    try {
+        $release = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/$($Msi.Repo)/releases/latest" `
+            -Headers $headers -UseBasicParsing
+    } catch {
+        Write-Warn "$($Msi.Name): GitHub API lookup failed: $($_.Exception.Message)"
+        return $false
+    }
+
+    $assets = @($release.assets | Where-Object { $_.name -like $Msi.AssetMatch })
+    if ($assets.Count -eq 0) {
+        Write-Warn "$($Msi.Name): no asset matching '$($Msi.AssetMatch)' in $($release.tag_name)"
+        return $false
+    }
+    if ($assets.Count -gt 1) {
+        Write-Warn "$($Msi.Name): $($assets.Count) assets match '$($Msi.AssetMatch)' — using $($assets[0].name)"
+    }
+    $asset  = $assets[0]
+    $tmpMsi = Join-Path $env:TEMP "ws-$($Msi.Name).msi"
+
+    try {
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpMsi -UseBasicParsing
+    } catch {
+        Remove-Item $tmpMsi -Force -ErrorAction SilentlyContinue
+        Write-Warn "$($Msi.Name) download failed: $($_.Exception.Message)"
+        return $false
+    }
+
+    try {
+        # Verify: GitHub API digest -> Sha256Pin fallback -> warn+proceed (same
+        # escalation as Install-InstallerTool; the pin covers digest-less
+        # pre-2025 releases like sshfs-win v3.5.20357). Probe 'digest' via
+        # PSObject.Properties — StrictMode throws on bare access when absent.
+        $digest   = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
+        $expected = $null
+        if ($digest -and $digest.StartsWith("sha256:")) {
+            $expected = $digest.Substring(7).ToLower()
+        } elseif ($Msi.ContainsKey('Sha256Pin')) {
+            $expected = $Msi.Sha256Pin.ToLower()
+        }
+        if ($expected) {
+            $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpMsi).Hash.ToLower()
+            if ($actual -ne $expected) {
+                Write-Bad "$($Msi.Name) sha256 mismatch — refusing to install (corrupted or tampered download)."
+                Write-Bad "  expected: $expected"
+                Write-Bad "  actual:   $actual"
+                return $false
+            }
+        } else {
+            Write-Warn "$($Msi.Name): no sha256 available for $($asset.name) — skipping hash verification."
+        }
+
+        try {
+            $proc = Start-Process msiexec -ArgumentList "/i `"$tmpMsi`" /qn /norestart" `
+                -Verb RunAs -Wait -PassThru
+        } catch {
+            Write-Warn "$($Msi.Name): elevation declined or unavailable ($($_.Exception.Message))"
+            return $false
+        }
+        if ($proc.ExitCode -eq 3010) {
+            Write-Ok "$($Msi.Name) installed ($($release.tag_name)) — reboot may be required"
+            return $true
+        }
+        if ($proc.ExitCode -ne 0) {
+            Write-Warn "$($Msi.Name): msiexec exited with code $($proc.ExitCode) — verify it installed"
+            return $false
+        }
+        Write-Ok "$($Msi.Name) installed ($($release.tag_name))"
+        return $true
+    } finally {
+        Remove-Item $tmpMsi -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Install an elevated (machine-scope) tool — the ONE exception to the no-admin
+# rule; see $ElevatedTools. BEST-EFFORT: every failure path warns and returns.
+# Chain: Uninstall-registry detect (no UAC when present) -> winget (manifest
+# dependencies pull WinFsp; UAC pops) -> direct-MSI fallback ONLY when winget
+# is ABSENT (a winget FAILURE is deliberately not retried via MSI — the cause,
+# a declined UAC or no network, would recur and just pop a second prompt) ->
+# manual instructions.
+function Install-ElevatedTool {
+    param([hashtable]$Tool)
+
+    # Idempotency first — an already-provisioned machine must never see UAC.
+    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $Tool.DetectName)) {
+        Write-Ok "$($Tool.Name) already installed (use -ForceInstaller to reinstall)"
+        return
+    }
+
+    Write-Log "Installing $($Tool.Name) (machine-scope)..."
+    Write-Warn "$($Tool.Name) needs a machine-wide install (WinFsp kernel driver) — the ONE elevated step; expect a UAC prompt (skip with -SkipElevated)"
+
+    $manualHint = "install manually later:  winget install $($Tool.WingetId)"
+
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        $wingetArgs = @(
+            "install", "--id", $Tool.WingetId, "--exact",
+            "--accept-source-agreements", "--accept-package-agreements"
+        )
+        if ($ForceInstaller) { $wingetArgs += "--force" }
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        & winget @wingetArgs
+        $code = $LASTEXITCODE
+        $ErrorActionPreference = $oldEap
+        if ($code -eq 0) {
+            Write-Ok "$($Tool.Name) installed (winget $($Tool.WingetId))"
+        } else {
+            Write-Warn "$($Tool.Name): winget exited with code $code (declined UAC? offline?) — skipping; $manualHint"
+        }
+        return
+    }
+
+    Write-Warn "winget not found — falling back to direct MSI downloads"
+    foreach ($msi in $Tool.Msi) {
+        if (-not (Install-ElevatedMsi -Msi $msi)) {
+            Write-Warn "$($Tool.Name): MSI chain stopped at $($msi.Name) — $manualHint"
+            return
+        }
+    }
+    Write-Ok "$($Tool.Name) installed (MSI fallback)"
+}
+
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix on PATH; Obsidian/Zed not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix on PATH; Obsidian/Zed/SSHFS-Win not installed"
         return
     }
 
@@ -674,6 +876,14 @@ function Invoke-ToolInstall {
     Install-Chezmoi
     foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
     foreach ($tool in $InstallerTools) { Install-InstallerTool -Tool $tool }
+
+    # Elevated class last, so a declined UAC can't interrupt the admin-free
+    # installs above. Best-effort; -SkipElevated opts out entirely.
+    if ($SkipElevated) {
+        Write-Log "Elevated tool install skipped (-SkipElevated) — SSHFS-Win/WinFsp not installed"
+    } else {
+        foreach ($tool in $ElevatedTools) { Install-ElevatedTool -Tool $tool }
+    }
 
     Update-SessionPath
 
@@ -1253,6 +1463,28 @@ function Invoke-Doctor {
             Write-Bad "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
         }
     }
+
+    foreach ($tool in $ElevatedTools) {
+        if (Test-InstallerPresent -DisplayName $tool.DetectName) {
+            $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
+            $verText = if ($ver) { " $ver" } else { "" }
+            Write-Ok "$($tool.Name)$verText installed (elevated class; update via: winget upgrade $($tool.WingetId))"
+        } else {
+            Write-Warn "$($tool.Name) not installed (best-effort elevated tool) — re-run .\bootstrap.ps1 (UAC prompt) or: winget install $($tool.WingetId)"
+        }
+        # Report the tool's dependency MSIs (WinFsp kernel driver) separately so
+        # a half-install (driver without sshfs, or vice versa) is visible.
+        foreach ($msi in $tool.Msi) {
+            if ($msi.DetectName -eq $tool.DetectName) { continue }
+            if (Test-InstallerPresent -DisplayName $msi.DetectName) {
+                $depVer = Get-InstalledAppVersion -DisplayName $msi.DetectName
+                $depText = if ($depVer) { " $depVer" } else { "" }
+                Write-Ok "$($msi.Name)$depText installed ($($tool.Name)'s kernel-driver dependency)"
+            } else {
+                Write-Warn "$($msi.Name) not installed — $($tool.Name) can't mount without it (winget installs both)"
+            }
+        }
+    }
     if (Get-Command code -ErrorAction SilentlyContinue) { Write-Ok "VSCode on PATH (hand-installed)" }
     else { Write-Warn "VSCode not on PATH — hand-install when wanted; its chezmoi config deploys regardless" }
     $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
@@ -1357,6 +1589,36 @@ function Invoke-CheckForUpdates {
             Write-Ok "$($tool.Name) installed (latest upstream: $latest; self-updates in-app)"
         } else {
             Write-Ok "$($tool.Name) installed (self-updates in-app)"
+        }
+    }
+    Write-Host ""
+
+    Write-Log "Elevated tools (best-effort; update via winget when flagged)"
+    foreach ($tool in $ElevatedTools) {
+        $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
+        $latest    = Get-LatestGitTag -Repo $tool.Repo
+        if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
+            Write-Warn "$($tool.Name) not installed (best-effort elevated tool) — re-run .\bootstrap.ps1 or: winget install $($tool.WingetId)"
+        } elseif ($installed -and $latest) {
+            Write-UpdateStatus -Name $tool.Name -Pinned $installed -Latest $latest -Hint "winget upgrade $($tool.WingetId)"
+        } elseif ($latest) {
+            Write-Ok "$($tool.Name) installed (latest upstream: $latest)"
+        } else {
+            Write-Ok "$($tool.Name) installed"
+        }
+        foreach ($msi in $tool.Msi) {
+            if ($msi.DetectName -eq $tool.DetectName) { continue }
+            $depInstalled = Get-InstalledAppVersion -DisplayName $msi.DetectName
+            $depLatest    = Get-LatestGitTag -Repo $msi.Repo
+            if (-not (Test-InstallerPresent -DisplayName $msi.DetectName)) {
+                Write-Warn "$($msi.Name) not installed — $($tool.Name)'s kernel-driver dependency"
+            } elseif ($depInstalled -and $depLatest) {
+                Write-UpdateStatus -Name $msi.Name -Pinned $depInstalled -Latest $depLatest -Hint "winget upgrade $($msi.WingetId)"
+            } elseif ($depLatest) {
+                Write-Ok "$($msi.Name) installed ($($tool.Name)'s kernel-driver dependency; latest upstream: $depLatest)"
+            } else {
+                Write-Ok "$($msi.Name) installed ($($tool.Name)'s kernel-driver dependency)"
+            }
         }
     }
     Write-Host ""
