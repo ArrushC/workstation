@@ -361,6 +361,34 @@ clean-vcpkg:
 	@$(SUDO) rm -rf $(VCPKG_ROOT_DIR)
 
 # -----------------------------------------------------------------------------
+# devtoys-cli — DevToys CLI (dev_machine only): scriptable command-line
+# versions of the DevToys developer tools (json<->yaml, base64, hash, jwt).
+# NOT an EGET_TOOL: the single-file DevToys.CLI executable requires its
+# sibling Plugins/ tree, so lib/devtoys-cli.sh extracts the whole portable
+# zip to $(DEST)/_devtoys-cli-<ver>/ and symlinks $(DEST)/devtoys.cli
+# (command-name parity with the Windows $PortableTools install). The pin
+# DUAL-EDITS with bootstrap.ps1 (check-invariants.sh enforces). $(SUDO)
+# because it deposits under $(DEST). Stamp bakes DEVTOYS_CLI_VERSION so a
+# bump in versions.mk reinstalls. No WSL skip (a converter belt is useful in
+# a WSL dev guest).
+# -----------------------------------------------------------------------------
+.PHONY: devtoys-cli clean-devtoys-cli
+ifeq ($(MODE),dev)
+devtoys-cli: $(STAMP)/devtoys-cli-$(DEVTOYS_CLI_VERSION).done
+$(STAMP)/devtoys-cli-$(DEVTOYS_CLI_VERSION).done:
+	@printf '==> devtoys-cli %s\n' "$(DEVTOYS_CLI_VERSION)"
+	@$(SUDO) $(LIB)/devtoys-cli.sh $(DEVTOYS_CLI_VERSION)
+	@mkdir -p $(@D) && touch $@
+else
+devtoys-cli:
+	@echo "devtoys-cli is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-devtoys-cli:
+	@rm -f $(STAMP)/devtoys-cli-*.done
+	@$(SUDO) rm -f $(DEST)/devtoys.cli
+	@$(SUDO) rm -rf $(DEST)/_devtoys-cli-*
+
+# -----------------------------------------------------------------------------
 # lsp-servers — install/verify the whole language-server stack (dev_machine
 # only). One coherent target so `make lsp-servers` covers every server. The
 # single-binary servers (rust-analyzer/marksman/taplo) are both-scope EGET_TOOLs
@@ -698,7 +726,7 @@ user-tools: $(USER_TOOLS)
 PROVISION_FANOUT := tools user-tools shell wsl-config
 ifeq ($(MODE),dev)
 PROVISION_FANOUT += claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers
+PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers devtoys-cli
 endif
 
 provision-fanout: $(PROVISION_FANOUT)
@@ -743,6 +771,7 @@ DOCTOR_ROWS += bespoke|wsl-config|-
 DOCTOR_ROWS += bespoke|pwndbg|$(PWNDBG_VERSION)
 DOCTOR_ROWS += bespoke|vcpkg|$(VCPKG_VERSION)
 DOCTOR_ROWS += bespoke|go-runtime|$(GO_VERSION)
+DOCTOR_ROWS += bespoke|devtoys-cli|$(DEVTOYS_CLI_VERSION)
 DOCTOR_ROWS += bespoke|lsp-servers|-
 
 # NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe

@@ -1050,6 +1050,19 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
+                                    data-tip="DevToys CLI — scriptable DevToys utilities: convert, encode/decode, hash, format (dev_machine only; shell alias devtoys); also in the Windows portable belt"
+                                    >devtoys.cli<span class="sr-only">
+                                        — DevToys CLI: scriptable developer
+                                        utilities (json/yaml convert, base64,
+                                        hash, jwt; dev_machine only; shell
+                                        alias devtoys in zsh/bash; Windows
+                                        gets the pinned portable tree via
+                                        bootstrap.ps1)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
                                     data-tip="Query HTML like jq queries JSON"
                                     >htmlq<span class="sr-only">
                                         — query HTML like jq queries JSON</span
@@ -2828,6 +2841,17 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>makefile/versions.mk</code>).
                         </li>
                         <li>
+                            <strong>DevToys CLI</strong>
+                            (<code>devtoys.cli</code>) &mdash; scriptable
+                            command-line DevToys utilities; pinned,
+                            sha256-verified portable tree into
+                            <code>%LOCALAPPDATA%\workstation\devtoys-cli</code>
+                            (the single-file exe needs its sibling
+                            <code>Plugins\</code> tree). The Windows half of
+                            the Linux dev-only install (version dual-edit
+                            with <code>makefile/versions.mk</code>).
+                        </li>
+                        <li>
                             <strong>Obsidian</strong> &mdash; silent, per-user
                             install of its <code>.exe</code> (no portable
                             <code>.zip</code> exists). Unlike the pinned tools
@@ -2849,6 +2873,18 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             (<code>-ForceInstaller</code> to reinstall). Not
                             added to <code>PATH</code> (GUI app, makes its own
                             shortcut).
+                        </li>
+                        <li>
+                            <strong>DevToys</strong> &mdash; same
+                            installer-class path: silent, per-user install of
+                            its Inno Setup <code>.exe</code>, verified against
+                            the GitHub API&rsquo;s sha256 digest and detected
+                            via the Uninstall registry. Two wrinkles: DevToys
+                            flags every release pre-release, so the script
+                            resolves the newest non-draft release (not
+                            <em>latest</em>); and it only <em>notifies</em>
+                            about updates (no self-update) &mdash; refresh
+                            with <code>-ForceInstaller</code>.
                         </li>
                         <li>
                             <strong>SSHFS-Win</strong> &mdash; mounts remote
@@ -2984,7 +3020,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix/Nushell already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
-.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed) even if present
+.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed, DevToys) even if present
 .\bootstrap.ps1 -SkipElevated                    # skip the UAC-prompting SSHFS-Win/WinFsp install
 .\bootstrap.ps1 -Doctor                          # read-only health report, then exit
 .\bootstrap.ps1 -CheckForUpdates                 # read-only update scan (repo first), then exit</code></pre>
@@ -3041,11 +3077,11 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         (declining just skips it; suppress it entirely with
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship/Helix/Nushell/OpenCode/omp
+                        chezmoi/WezTerm/Starship/Helix/Nushell/OpenCode/omp/DevToys CLI
                         installs, <em>and</em> the installer-class apps
-                        (Obsidian, Zed) and the native
+                        (Obsidian, Zed, DevToys) and the native
                         <strong>Claude Code</strong> install entirely
-                        (assumes they&rsquo;re already present). Obsidian and Zed install
+                        (assumes they&rsquo;re already present). Obsidian, Zed, and DevToys install
                         silently per-user via their own <code>.exe</code> at the
                         latest release; pass <code>-ForceInstaller</code> to
                         reinstall them even when already present. The diagram is a
@@ -4613,7 +4649,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 The script refuses to install an unverified
                                 binary. Installer-class tools
                                 (<code>$InstallerTools</code>, e.g. Obsidian,
-                                Zed) are
+                                Zed, DevToys) are
                                 <em>not</em> pinned &mdash; they verify against the
                                 GitHub API&rsquo;s sha256 <code>digest</code> for
                                 the latest asset, and the same hard-fail applies on

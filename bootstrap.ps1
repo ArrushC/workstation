@@ -163,17 +163,19 @@ $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
 # Per-user install root for every binary this script provisions. Admin-free:
-#   workstation\bin      — single-exe tools (chezmoi, starship)  → on User PATH
-#   workstation\wezterm  — the multi-file WezTerm portable tree  → on User PATH
-#   workstation\helix    — the multi-file Helix portable tree    → on User PATH
-#   workstation\nu       — the multi-file Nushell portable tree  → on User PATH
-#   workstation\stamps   — "<exe>.<version>.stamp" idempotency markers
-$WsRoot    = Join-Path $env:LOCALAPPDATA "workstation"
-$WsBin     = Join-Path $WsRoot "bin"
-$WsWezterm = Join-Path $WsRoot "wezterm"
-$WsHelix   = Join-Path $WsRoot "helix"
-$WsNu      = Join-Path $WsRoot "nu"
-$WsStamps  = Join-Path $WsRoot "stamps"
+#   workstation\bin          — single-exe tools (chezmoi, starship)  → on User PATH
+#   workstation\wezterm      — the multi-file WezTerm portable tree  → on User PATH
+#   workstation\helix        — the multi-file Helix portable tree    → on User PATH
+#   workstation\nu           — the multi-file Nushell portable tree  → on User PATH
+#   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
+#   workstation\stamps       — "<exe>.<version>.stamp" idempotency markers
+$WsRoot       = Join-Path $env:LOCALAPPDATA "workstation"
+$WsBin        = Join-Path $WsRoot "bin"
+$WsWezterm    = Join-Path $WsRoot "wezterm"
+$WsHelix      = Join-Path $WsRoot "helix"
+$WsNu         = Join-Path $WsRoot "nu"
+$WsDevToysCli = Join-Path $WsRoot "devtoys-cli"
+$WsStamps     = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
 # as scripts\install-nerd-fonts.ps1) — NOT makefile/versions.mk, because Make
@@ -282,6 +284,25 @@ $PortableTools = @(
         Repo       = "can1357/oh-my-pi"
         TagPrefix  = "v"
         UpdateHint = "dual-edit: `$PortableTools here AND OMP_VERSION in makefile/versions.mk"
+    },
+    @{
+        # DevToys CLI — scriptable command-line half of DevToys; the Windows
+        # half of the Linux dev-only devtoys-cli target (see versions.mk).
+        # The *_portable zip is self-contained .NET (the plain zip needs a
+        # system .NET 8 runtime — never use it). NOT Layout 'single': the
+        # single-file DevToys.CLI.exe REQUIRES its sibling Plugins\ tree.
+        # Invoked as `devtoys.cli` (Windows resolves DevToys.CLI.exe
+        # case-insensitively).
+        Name       = "DevToys CLI"
+        Exe        = "DevToys.CLI"
+        Version    = "2.0.9.0"
+        Url        = "https://github.com/DevToys-app/DevToys/releases/download/v2.0.9.0/devtoys.cli_win_x64_portable.zip"
+        Sha256     = "27327ad18c06d5bba4356f039c76203b0099f864d10f6de0d833225077dd310a"
+        Layout     = "tree"
+        Dest       = $WsDevToysCli
+        Repo       = "DevToys-app/DevToys"
+        TagPrefix  = "v"
+        UpdateHint = "dual-edit: `$PortableTools here AND DEVTOYS_CLI_VERSION in makefile/versions.mk (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
     }
 )
 
@@ -293,6 +314,14 @@ $PortableTools = @(
 # their own Start-menu shortcut). Presence is detected via the Uninstall registry
 # (DisplayName), so a manual uninstall makes the next bootstrap reinstall. Force a
 # reinstall with -ForceInstaller.
+# Two OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
+#   IncludePrerelease  resolve the newest NON-DRAFT release from /releases
+#                      instead of /releases/latest — DevToys flags EVERY 2.x
+#                      release prerelease:true, so "latest" returns 2023's
+#                      v1.0.13.0 (an MSIX-only release with no .exe asset).
+#   UpdateHint         status text for -Doctor/-CheckForUpdates when the
+#                      default "self-updates" story is wrong — DevToys' in-app
+#                      update check is notification-only (it never installs).
 $InstallerTools = @(
     @{
         Name       = "Obsidian"
@@ -307,6 +336,15 @@ $InstallerTools = @(
         AssetMatch = "Zed-x86_64.exe"                 # x64 Windows installer asset (NOT Zed-aarch64.exe)
         SilentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno Setup silent; PrivilegesRequired=lowest -> per-user, no admin (NOT NSIS /S)
         DetectName = "Zed"                            # exact HKCU Uninstall DisplayName (avoids "Zed Preview"/"Zed Nightly")
+    },
+    @{
+        Name              = "DevToys"
+        Repo              = "DevToys-app/DevToys"
+        AssetMatch        = "devtoys_win_x64.exe"     # Inno Setup installer (x64 only; NOT arm64/x86, NOT the *_portable.zip)
+        SilentArgs        = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno; PrivilegesRequired=lowest -> per-user, no admin
+        DetectName        = "DevToys*"                # HKCU ...\Uninstall\DevToys_is1 -> DisplayName "DevToys <ver>" (version-suffixed; glob also matches a user's "DevToys Preview" — intended: don't force a stable seed alongside)
+        IncludePrerelease = $true                     # see banner: /releases/latest lies for this repo
+        UpdateHint        = "update-checks in-app only (no self-update); re-run bootstrap with -ForceInstaller to update"
     }
 )
 
@@ -679,9 +717,20 @@ function Install-InstallerTool {
     if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
 
     try {
-        $release = Invoke-RestMethod `
-            -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
-            -Headers $headers -UseBasicParsing
+        if ($Tool.ContainsKey('IncludePrerelease') -and $Tool.IncludePrerelease) {
+            # /releases/latest excludes prereleases, and some repos (DevToys)
+            # flag EVERY release prerelease:true — take the newest non-draft
+            # entry of /releases instead (the list is newest-first).
+            $releases = @(Invoke-RestMethod `
+                -Uri "https://api.github.com/repos/$($Tool.Repo)/releases?per_page=10" `
+                -Headers $headers -UseBasicParsing)
+            $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
+            if (-not $release) { throw "no non-draft release among the newest $($releases.Count)" }
+        } else {
+            $release = Invoke-RestMethod `
+                -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
+                -Headers $headers -UseBasicParsing
+        }
     } catch {
         Write-Warn "$($Tool.Name): GitHub API lookup failed: $($_.Exception.Message)"
         Write-Warn "  Skipping — install it manually or re-run later."
@@ -893,7 +942,7 @@ function Install-ElevatedTool {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp on PATH; Obsidian/Zed/SSHFS-Win/Claude Code not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
         return
     }
 
@@ -1528,7 +1577,8 @@ function Invoke-Doctor {
         if (Test-InstallerPresent -DisplayName $tool.DetectName) {
             $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
             $verText = if ($ver) { " $ver" } else { "" }
-            Write-Ok "$($tool.Name)$verText installed (self-updates; -ForceInstaller to reseed)"
+            $hint = if ($tool.ContainsKey('UpdateHint')) { $tool.UpdateHint } else { "self-updates; -ForceInstaller to reseed" }
+            Write-Ok "$($tool.Name)$verText installed ($hint)"
         } else {
             Write-Bad "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
         }
@@ -1656,18 +1706,22 @@ function Invoke-CheckForUpdates {
     }
     Write-Host ""
 
-    Write-Log "Installer apps (install LATEST + self-update — nothing to pin)"
+    Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
     foreach ($tool in $InstallerTools) {
         $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
         $latest    = Get-LatestGitTag -Repo $tool.Repo
+        $hasHint   = $tool.ContainsKey('UpdateHint')
         if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
             Write-Warn "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
         } elseif ($installed -and $latest) {
-            Write-UpdateStatus -Name $tool.Name -Pinned $installed -Latest $latest -Hint 'self-updates in-app; -ForceInstaller reseeds'
+            $hint = if ($hasHint) { $tool.UpdateHint } else { 'self-updates in-app; -ForceInstaller reseeds' }
+            Write-UpdateStatus -Name $tool.Name -Pinned $installed -Latest $latest -Hint $hint
         } elseif ($latest) {
-            Write-Ok "$($tool.Name) installed (latest upstream: $latest; self-updates in-app)"
+            $hint = if ($hasHint) { $tool.UpdateHint } else { 'self-updates in-app' }
+            Write-Ok "$($tool.Name) installed (latest upstream: $latest; $hint)"
         } else {
-            Write-Ok "$($tool.Name) installed (self-updates in-app)"
+            $hint = if ($hasHint) { $tool.UpdateHint } else { 'self-updates in-app' }
+            Write-Ok "$($tool.Name) installed ($hint)"
         }
     }
     Write-Host ""
