@@ -240,3 +240,18 @@ HERDR_VERSION := 0.7.1
 #   force the command name (verified: the later --to wins).
 OPENCODE_VERSION := 1.17.18
 OMP_VERSION      := 16.4.4
+
+# --- (2026-07) DevToys CLI (dev_machine only) ---------------------------------
+# devtoys.cli — scriptable command-line half of DevToys (DevToys-app/DevToys):
+# offline dev utilities (json<->yaml, base64, hash, jwt, ...). dev_machine
+# ONLY. NOT an EGET_TOOL: the release zip is a self-contained single-file .NET
+# executable PLUS a required sibling Plugins/ tree, so lib/devtoys-cli.sh
+# extracts the whole tree and symlinks $(DEST)/devtoys.cli (bespoke Makefile
+# target, pwndbg's shape). Always the *_portable.zip (self-contained) — the
+# plain zip is framework-dependent (needs a system .NET 8 runtime).
+# CAVEAT: every DevToys 2.x release is flagged prerelease:true, so GitHub's
+# /releases/latest LIES for this repo (returns 2023's v1.0.13.0) — find the
+# real newest tag on the releases PAGE. Tags are vX.Y.Z.0. The pin DUAL-EDITS
+# with $PortableTools in bootstrap.ps1 (the Windows half; refresh its Sha256
+# when bumping) — enforced by check-invariants.sh.
+DEVTOYS_CLI_VERSION := 2.0.9.0
