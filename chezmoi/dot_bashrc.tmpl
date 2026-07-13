@@ -109,6 +109,14 @@ fi
 # login-only loader.
 [[ -f /etc/bash_completion ]] && source /etc/bash_completion
 
+# First-party completions for the repo's own scripts (bootstrap.sh,
+# manage-hosts.sh, update-hosts.sh — flag words + --group values), deployed
+# by chezmoi to ~/.config/bash/completions.bash. PARITY NOTE: zsh gets
+# richer versions (descriptions + exclusions) via
+# ~/.config/zsh/completions/_* (see dot_zshrc.tmpl); all surfaces are kept
+# in lockstep with the scripts by check-invariants.sh's flag-parity check.
+[[ -f "$HOME/.config/bash/completions.bash" ]] && source "$HOME/.config/bash/completions.bash"
+
 # PARITY NOTE (cht.sh): cht.sh ships completions for zsh/fish/emacs but NOT bash
 # (upstream has no :bash endpoint), so there is deliberately no cht.sh
 # tab-completion here. zsh gets it via ~/.config/zsh/completions/_cht.sh (see

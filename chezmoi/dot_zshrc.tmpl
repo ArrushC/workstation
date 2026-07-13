@@ -110,8 +110,12 @@ fi
 #   rm -f ~/.zcompdump && exec zsh
 
 # cht.sh ships a zsh completion (#compdef cht.sh) installed to
-# ~/.config/zsh/completions/_cht.sh; add that dir to fpath so compinit
-# autoloads it. MUST precede the compinit call below.
+# ~/.config/zsh/completions/_cht.sh (vendored), and the repo's own
+# first-party completions live next to it: _bootstrap.sh, _manage-hosts.sh,
+# _update-hosts.sh (flag completion for the repo scripts; kept in lockstep
+# with the scripts by check-invariants.sh, bash parity via
+# ~/.config/bash/completions.bash). Add that dir to fpath so compinit
+# autoloads them. MUST precede the compinit call below.
 fpath=("$HOME/.config/zsh/completions" $fpath)
 autoload -Uz compinit && compinit -C
 

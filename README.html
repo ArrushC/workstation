@@ -2966,6 +2966,12 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         is deliberate: bump it (and re-check
                         <code>config.nu</code>) intentionally, upgrading
                         <em>incrementally</em> rather than skipping releases.
+                        Nushell also tab-completes the repo&rsquo;s own
+                        scripts: <code>.\bootstrap.ps1 -</code> + Tab and
+                        <code>manage-hosts.ps1 -</code> + Tab list their flags
+                        with descriptions (an external completer in
+                        <code>config.nu</code>; classic PowerShell completes
+                        <code>param()</code> flags natively, no setup).
                     </p>
                     <p>
                         <strong>Hand-install shopping list.</strong> Beyond what
@@ -3805,6 +3811,18 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                 <section id="daily">
                     <h2>Daily workflows</h2>
 
+                    <p class="note-row">
+                        <strong>Tab completion:</strong> the repo&rsquo;s own
+                        scripts complete their flags &mdash;
+                        <code>bootstrap.sh</code>,
+                        <code>manage-hosts.sh</code> and
+                        <code>update-hosts.sh</code> in zsh and bash on Linux
+                        (plus <code>--group</code> values); on Windows,
+                        Nushell completes <code>bootstrap.ps1</code> and
+                        <code>manage-hosts.ps1</code> flags (PowerShell does
+                        this natively). Kept in lockstep with the scripts by
+                        the repo&rsquo;s invariant check.
+                    </p>
                     <h3>chezmoi (Linux or Windows)</h3>
                     <p>
                         Same aliases on both OSes &mdash; defined in
