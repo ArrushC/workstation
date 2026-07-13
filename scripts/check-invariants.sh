@@ -302,6 +302,94 @@ check_chezmoiignore_targets() {
   fi
 }
 
+# --- flag-parity: repo-script flags == completion-surface flags --------------
+# Spec: docs/superpowers/specs/2026-07-13-script-flag-completions-design.md.
+# Five pairs: the three .sh scripts -> zsh _<name> files + completions.bash;
+# the two .ps1 scripts -> the workstation_*_flags records in config.nu.tmpl.
+# Long-form flags only. Trailing args to _sh_script_flags are EXCLUSIONS —
+# flags the script accepts but completions deliberately omit
+# (bootstrap.sh: the removed-flag --full fail arm, the --checkforupdates
+# compat alias).
+
+# Long flags a bash script accepts: its case arms (any nesting depth),
+# alternatives split, short forms dropped. $2+ = exclusions.
+_sh_script_flags() {
+  local script=$1 out f
+  shift
+  out=$(grep -E '^[[:space:]]*-{1,2}[A-Za-z-]+([[:space:]]*\|[[:space:]]*-{1,2}[A-Za-z-]+)*\)' "$script" |
+    grep -oE -- '--[a-z-]+' | sort -u)
+  for f in "$@"; do
+    out=$(printf '%s\n' "$out" | grep -vx -- "$f")
+  done
+  printf '%s\n' "$out"
+}
+
+# -Flag names from a PowerShell script's param() block.
+_ps_script_flags() {
+  awk '/^param\(/{f=1} f{print} f&&/^\)/{exit}' "$1" |
+    grep -oE '\[(switch|string)\]\$[A-Za-z]+' | sed 's/.*\$/-/' | sort -u
+}
+
+# --flag tokens from a zsh completion file (full-line comments stripped —
+# comments may legitimately name excluded flags).
+_zsh_completion_flags() {
+  grep -v '^#' "$1" | grep -oE -- '--[a-z-]+' | sort -u
+}
+
+# --flag tokens from one function body in completions.bash.
+_bash_completion_flags() {
+  awk -v fn="$1" '$0 ~ "^"fn"\\(\\)" {f=1} f{print} f&&/^}/{exit}' \
+    chezmoi/dot_config/bash/completions.bash |
+    grep -oE -- '--[a-z-]+' | sort -u
+}
+
+# Quoted "-Flag" values from one `let workstation_*_flags` list in config.nu.tmpl.
+_nu_completion_flags() {
+  awk -v v="$1" '$0 ~ "^let "v {f=1} f{print} f&&/^\]/{exit}' \
+    chezmoi/AppData/Roaming/nushell/config.nu.tmpl |
+    grep -oE '"-[A-Za-z]+"' | tr -d '"' | sort -u
+}
+
+_flags_eq() { # $1=label  $2=script-side set  $3=completion-side set
+  if [ -n "$2" ] && [ "$2" = "$3" ]; then
+    ok "$1"
+  else
+    bad "$1 drift (<:script-only  >:completion-only):"
+    diff <(printf '%s\n' "$2") <(printf '%s\n' "$3") | sed 's/^/       /' | head -20
+  fi
+}
+
+check_completion_parity() {
+  hdr "script-flag <-> completion parity"
+  local want
+
+  want=$(_sh_script_flags bootstrap.sh --full --checkforupdates)
+  _flags_eq "bootstrap.sh == _bootstrap.sh (zsh)" "$want" \
+    "$(_zsh_completion_flags chezmoi/dot_config/zsh/completions/_bootstrap.sh)"
+  _flags_eq "bootstrap.sh == completions.bash" "$want" \
+    "$(_bash_completion_flags _workstation_complete_bootstrap)"
+
+  want=$(_sh_script_flags scripts/manage-hosts.sh)
+  _flags_eq "manage-hosts.sh == _manage-hosts.sh (zsh)" "$want" \
+    "$(_zsh_completion_flags chezmoi/dot_config/zsh/completions/_manage-hosts.sh)"
+  _flags_eq "manage-hosts.sh == completions.bash" "$want" \
+    "$(_bash_completion_flags _workstation_complete_manage_hosts)"
+
+  want=$(_sh_script_flags scripts/update-hosts.sh)
+  _flags_eq "update-hosts.sh == _update-hosts.sh (zsh)" "$want" \
+    "$(_zsh_completion_flags chezmoi/dot_config/zsh/completions/_update-hosts.sh)"
+  _flags_eq "update-hosts.sh == completions.bash" "$want" \
+    "$(_bash_completion_flags _workstation_complete_update_hosts)"
+
+  want=$(_ps_script_flags bootstrap.ps1)
+  _flags_eq "bootstrap.ps1 == config.nu (nushell)" "$want" \
+    "$(_nu_completion_flags workstation_bootstrap_flags)"
+
+  want=$(_ps_script_flags scripts/manage-hosts.ps1)
+  _flags_eq "manage-hosts.ps1 == config.nu (nushell)" "$want" \
+    "$(_nu_completion_flags workstation_manage_hosts_flags)"
+}
+
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -313,7 +401,8 @@ check_shellcheck() {
   local -a targets=(bootstrap.sh makefile/lib/*.sh scripts/*.sh
     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
     chezmoi/private_dot_claude/executable_notify.sh
-    chezmoi/dot_local/bin/executable_winterop)
+    chezmoi/dot_local/bin/executable_winterop
+    chezmoi/dot_config/bash/completions.bash)
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else
@@ -331,7 +420,8 @@ check_shfmt() {
   local -a targets=(bootstrap.sh makefile/lib/*.sh scripts/*.sh
     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
     chezmoi/private_dot_claude/executable_notify.sh
-    chezmoi/dot_local/bin/executable_winterop)
+    chezmoi/dot_local/bin/executable_winterop
+    chezmoi/dot_config/bash/completions.bash)
   local out
   if out=$(shfmt -d -i 2 "${targets[@]}" 2>&1); then
     ok "clean over ${#targets[@]} shell files (shfmt -i 2)"
@@ -364,6 +454,7 @@ check_sentinels
 check_tools_block
 check_lsp_plugin
 check_chezmoiignore_targets
+check_completion_parity
 check_shellcheck
 check_shfmt
 check_gitleaks
