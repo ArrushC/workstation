@@ -314,7 +314,7 @@ $PortableTools = @(
 # their own Start-menu shortcut). Presence is detected via the Uninstall registry
 # (DisplayName), so a manual uninstall makes the next bootstrap reinstall. Force a
 # reinstall with -ForceInstaller.
-# Two OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
+# Three OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
 #   IncludePrerelease  resolve the newest NON-DRAFT release from /releases
 #                      instead of /releases/latest — DevToys flags EVERY 2.x
 #                      release prerelease:true, so "latest" returns 2023's
@@ -322,6 +322,9 @@ $PortableTools = @(
 #   UpdateHint         status text for -Doctor/-CheckForUpdates when the
 #                      default "self-updates" story is wrong — DevToys' in-app
 #                      update check is notification-only (it never installs).
+#   TagPrefix          git-tag prefix for the -CheckForUpdates version lookup
+#                      (default "v") — DBeaver's tags are bare (26.1.2), so it
+#                      overrides with "" or the update scan resolves nothing.
 $InstallerTools = @(
     @{
         Name       = "Obsidian"
@@ -345,6 +348,14 @@ $InstallerTools = @(
         DetectName        = "DevToys*"                # HKCU ...\Uninstall\DevToys_is1 -> DisplayName "DevToys <ver>" (version-suffixed; glob also matches a user's "DevToys Preview" — intended: don't force a stable seed alongside)
         IncludePrerelease = $true                     # see banner: /releases/latest lies for this repo
         UpdateHint        = "update-checks in-app only (no self-update); re-run bootstrap with -ForceInstaller to update"
+    },
+    @{
+        Name       = "DBeaver"
+        Repo       = "dbeaver/dbeaver"                 # CE; /releases/latest is honest here (unlike DevToys)
+        AssetMatch = "dbeaver-ce-*-windows-x86_64.exe" # NSIS installer (NOT -aarch64.exe, NOT the .zip archives)
+        SilentArgs = "/S /currentuser"                 # NSIS silent + MultiUser per-user pin -> no admin/UAC
+        DetectName = "DBeaver*"                        # HKCU ...\Uninstall\"DBeaver (current user)"; glob also matches commercial editions (intended: never force CE alongside a licensed install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys)
+        TagPrefix  = ""                                # tags are bare (26.1.2, no v) — read by the -CheckForUpdates lookup only
     }
 )
 
@@ -1709,7 +1720,8 @@ function Invoke-CheckForUpdates {
     Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
     foreach ($tool in $InstallerTools) {
         $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
-        $latest    = Get-LatestGitTag -Repo $tool.Repo
+        $tagPrefix = if ($tool.ContainsKey('TagPrefix')) { $tool.TagPrefix } else { 'v' }
+        $latest    = Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tagPrefix
         $hasHint   = $tool.ContainsKey('UpdateHint')
         if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
             Write-Warn "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
