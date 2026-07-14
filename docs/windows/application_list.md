@@ -4,7 +4,6 @@ Apps auto-installed by bootstrap.ps1 (second list below) are omitted from the ma
 ## Manual installs
 
 - Ghostty / Alacritty / MobaXterm / Tabby / PuTTY
-- WinSCP / FileZilla
 - Everything
 - Notion / Typora
 - Git / SVN
@@ -33,5 +32,6 @@ Apps auto-installed by bootstrap.ps1 (second list below) are omitted from the ma
 - Zed
 - DevToys
 - DBeaver
+- WinSCP
 - Claude Code
 - chezmoi, Helix, and the JetBrainsMono Nerd Font (were never in the manual list)
