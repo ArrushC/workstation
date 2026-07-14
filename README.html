@@ -2913,6 +2913,22 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             reseed from the script.
                         </li>
                         <li>
+                            <strong>Beyond Compare</strong> &mdash; same
+                            installer-class path with a further twist: Scooter
+                            Software has no GitHub presence at all, so the
+                            script resolves the newest published version from
+                            the official winget manifest tree, downloads the
+                            Inno Setup <code>.exe</code> straight from
+                            scootersoftware.com, and verifies it against that
+                            same manifest&rsquo;s sha256 &mdash; version and
+                            hash from one authority. Silent per-user install
+                            (<code>/VERYSILENT /CURRENTUSER</code> &mdash; no
+                            admin). Commercial: runs as a 30-day trial until
+                            your license key is entered; its in-app update
+                            check prompts before installing &mdash;
+                            <code>-ForceInstaller</code> to reseed.
+                        </li>
+                        <li>
                             <strong>SSHFS-Win</strong> &mdash; mounts remote
                             Unix filesystems over SSH as Windows drives
                             (<code>\\sshfs\user@host</code> UNC paths, or
@@ -3052,7 +3068,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix/Nushell already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
-.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed, DevToys, DBeaver, WinSCP) even if present
+.\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond Compare) even if present
 .\bootstrap.ps1 -SkipElevated                    # skip the UAC-prompting SSHFS-Win/WinFsp install
 .\bootstrap.ps1 -Doctor                          # read-only health report, then exit
 .\bootstrap.ps1 -CheckForUpdates                 # read-only update scan (repo first), then exit</code></pre>
@@ -3111,9 +3127,10 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         Pass <code>-SkipToolInstall</code> to skip the
                         chezmoi/WezTerm/Starship/Helix/Nushell/OpenCode/omp/DevToys CLI
                         installs, <em>and</em> the installer-class apps
-                        (Obsidian, Zed, DevToys, DBeaver, WinSCP) and the native
+                        (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond
+                        Compare) and the native
                         <strong>Claude Code</strong> install entirely
-                        (assumes they&rsquo;re already present). Obsidian, Zed, DevToys, DBeaver, and WinSCP install
+                        (assumes they&rsquo;re already present). Obsidian, Zed, DevToys, DBeaver, WinSCP, and Beyond Compare install
                         silently per-user via their own <code>.exe</code> at the
                         latest release; pass <code>-ForceInstaller</code> to
                         reinstall them even when already present. The diagram is a
@@ -4693,13 +4710,14 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 The script refuses to install an unverified
                                 binary. Installer-class tools
                                 (<code>$InstallerTools</code>, e.g. Obsidian,
-                                Zed, DevToys, DBeaver, WinSCP) are
-                                <em>not</em> pinned &mdash; they verify against the
-                                GitHub API&rsquo;s sha256 <code>digest</code> for
-                                the latest asset (WinSCP, which has no GitHub
-                                releases, verifies against the official winget
-                                manifest&rsquo;s sha256 instead), and the same
-                                hard-fail applies on a mismatch.
+                                Zed, DevToys, DBeaver, WinSCP, Beyond Compare)
+                                are <em>not</em> pinned &mdash; they verify against
+                                the GitHub API&rsquo;s sha256 <code>digest</code>
+                                for the latest asset (WinSCP and Beyond Compare,
+                                which publish no GitHub releases, verify against
+                                the official winget manifest&rsquo;s sha256
+                                instead), and the same hard-fail applies on a
+                                mismatch.
                             </p>
                             <p>
                                 Fix: re-download the pinned asset, recompute its

@@ -309,13 +309,15 @@ $PortableTools = @(
 # Installer-layout tools — apps that publish a silent, admin-free installer (.exe)
 # instead of a portable zip. Unlike $PortableTools these are NOT version-pinned:
 # we resolve the LATEST release at run time (the app self-updates after) — via
-# the GitHub releases API + per-asset sha256 'digest' normally, or via git tags
+# the GitHub releases API + per-asset sha256 'digest' normally, via git tags
 # + a vendor URL template for apps with no GitHub release assets (UrlTemplate
-# below) — then run the installer silently PER-USER (no admin), and add NOTHING
-# to PATH (GUI apps create their own Start-menu shortcut). Presence is detected
-# via the Uninstall registry (DisplayName), so a manual uninstall makes the next
-# bootstrap reinstall. Force a reinstall with -ForceInstaller.
-# Five OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
+# below), or via a winget-pkgs version listing for apps with no GitHub presence
+# at all (WingetVersions below) — then run the installer silently PER-USER (no
+# admin), and add NOTHING to PATH (GUI apps create their own Start-menu
+# shortcut). Presence is detected via the Uninstall registry (DisplayName), so
+# a manual uninstall makes the next bootstrap reinstall. Force a reinstall with
+# -ForceInstaller.
+# Six OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
 #   IncludePrerelease  resolve the newest NON-DRAFT release from /releases
 #                      instead of /releases/latest — DevToys flags EVERY 2.x
 #                      release prerelease:true, so "latest" returns 2023's
@@ -340,6 +342,16 @@ $PortableTools = @(
 #                      hard-fails; a missing/lagging manifest (winget trails
 #                      brand-new releases by hours-days) warns and proceeds —
 #                      the same posture as a missing GitHub digest.
+#   WingetVersions     microsoft/winget-pkgs directory path whose subdirectory
+#                      names ARE the published versions — the version source
+#                      for upstreams with NO GitHub presence at all (Beyond
+#                      Compare; WinSCP at least had tags). Its presence makes
+#                      the UrlTemplate path (and the -CheckForUpdates lookup)
+#                      resolve via Get-LatestWingetVersion instead of
+#                      Get-LatestGitTag. Version + sha256 then come from the
+#                      SAME authority: a lagging winget seeds the prior
+#                      version — still hash-verified — never an unverified
+#                      install.
 $InstallerTools = @(
     @{
         Name       = "Obsidian"
@@ -381,6 +393,15 @@ $InstallerTools = @(
         SilentArgs   = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
         DetectName   = "WinSCP*"                       # HKCU ...\Uninstall\winscp3_is1, DisplayName version-suffixed ("WinSCP 6.5.6"); glob also matches a machine-wide HKLM install (intended: never double-install alongside an admin install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys/DBeaver)
         UpdateHint   = "in-app update check prompts to install (not silent) — or re-run bootstrap with -ForceInstaller"
+    },
+    @{
+        Name           = "Beyond Compare"                                       # commercial trialware: seed = 30-day trial; the user's license key unlocks it (Standard vs Pro by key)
+        WingetVersions = "manifests/s/ScooterSoftware/BeyondCompare/5"          # version source: subdir names ARE the 4-part versions (Scooter has NO GitHub presence; the URL needs the build number)
+        UrlTemplate    = "https://www.scootersoftware.com/files/BCompare-{VERSION}.exe"  # first-party, direct (no redirect); English installer deliberate — localized siblings (BCompare-de-…) never match the hash lookup
+        HashManifest   = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/s/ScooterSoftware/BeyondCompare/5/{VERSION}/ScooterSoftware.BeyondCompare.5.installer.yaml"
+        SilentArgs     = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
+        DetectName     = "Beyond Compare*"                                      # HKCU ...\Uninstall\BeyondCompare5_is1; glob also matches BC4 or a machine-wide HKLM install (intended: never seed a trial alongside a licensed copy)
+        UpdateHint     = "in-app update check prompts to install (not silent) — or re-run bootstrap with -ForceInstaller"
     }
 )
 
@@ -728,8 +749,9 @@ function Test-InstallerPresent {
     return $false
 }
 
-# Install a silent, admin-free .exe installer at its LATEST GitHub release. NOT
-# version-pinned (app self-updates after); verified against the API 'digest'.
+# Install a silent, admin-free .exe installer at its LATEST release. NOT
+# version-pinned (app self-updates after); sha256-verified (API digest or
+# winget manifest — see the $InstallerTools banner for the resolver paths).
 function Install-InstallerTool {
     param([hashtable]$Tool)
 
@@ -754,17 +776,26 @@ function Install-InstallerTool {
     #   $versionLabel   what the success line reports
     #   $hashSource     names the hash authority in the mismatch hard-fail
     if ($Tool.ContainsKey('UrlTemplate')) {
-        # --- Direct-URL path (WinSCP) — no GitHub release assets upstream. ---
-        # Version = newest upstream git tag (the same Get-LatestGitTag lookup
-        # -CheckForUpdates uses; TagPrefix-aware; its default filter drops
-        # -beta tags). URL = {VERSION}-substituted vendor template. sha256 =
-        # the official winget manifest for that version (the SSHFS-Win
-        # Sha256Pin precedent, resolved at run time so the latest-release
-        # model keeps working).
-        $tagPrefix = if ($Tool.ContainsKey('TagPrefix')) { $Tool.TagPrefix } else { 'v' }
-        $version   = Get-LatestGitTag -Repo $Tool.Repo -TagPrefix $tagPrefix
+        # --- Direct-URL path (WinSCP, Beyond Compare) — no GitHub release ---
+        # assets upstream. Version source is one of two:
+        #   WingetVersions — winget-pkgs directory listing (Beyond Compare:
+        #     no GitHub presence at all; dir names ARE the 4-part versions
+        #     its download URL needs).
+        #   git tags — Get-LatestGitTag (WinSCP: tags only; TagPrefix-aware;
+        #     its default filter drops -beta tags).
+        # URL = {VERSION}-substituted vendor template. sha256 = the official
+        # winget manifest for that version (the SSHFS-Win Sha256Pin precedent,
+        # resolved at run time so the latest-release model keeps working).
+        if ($Tool.ContainsKey('WingetVersions')) {
+            $version   = Get-LatestWingetVersion -Path $Tool.WingetVersions
+            $verSource = "the winget-pkgs listing $($Tool.WingetVersions)"
+        } else {
+            $tagPrefix = if ($Tool.ContainsKey('TagPrefix')) { $Tool.TagPrefix } else { 'v' }
+            $version   = Get-LatestGitTag -Repo $Tool.Repo -TagPrefix $tagPrefix
+            $verSource = "$($Tool.Repo) tags"
+        }
         if (-not $version) {
-            Write-Warn "$($Tool.Name): couldn't resolve the latest version tag from $($Tool.Repo) (offline? tag scheme changed?)"
+            Write-Warn "$($Tool.Name): couldn't resolve the latest version from $verSource (offline? scheme changed?)"
             Write-Warn "  Skipping — install it manually or re-run later."
             return
         }
@@ -816,12 +847,17 @@ function Install-InstallerTool {
             if ($Tool.ContainsKey('IncludePrerelease') -and $Tool.IncludePrerelease) {
                 # /releases/latest excludes prereleases, and some repos (DevToys)
                 # flag EVERY release prerelease:true — take the newest non-draft
-                # entry of /releases instead (the list is newest-first).
-                $releases = @(Invoke-RestMethod `
+                # entry of /releases instead (the list is newest-first). NOTE:
+                # the assignment is deliberately BARE — PS 5.1's Invoke-RestMethod
+                # returns a JSON array as ONE Object[] (not pipeline-unrolled),
+                # so @(...) would NEST it and Where-Object would test the whole
+                # list as a single item (DevToys then warn-skipped instead of
+                # installing; caught + fixed 2026-07-14).
+                $releases = Invoke-RestMethod `
                     -Uri "https://api.github.com/repos/$($Tool.Repo)/releases?per_page=10" `
-                    -Headers $headers -UseBasicParsing)
+                    -Headers $headers -UseBasicParsing
                 $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
-                if (-not $release) { throw "no non-draft release among the newest $($releases.Count)" }
+                if (-not $release) { throw "no non-draft release among the newest $(@($releases).Count)" }
             } else {
                 $release = Invoke-RestMethod `
                     -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
@@ -1576,6 +1612,35 @@ function Get-LatestGitTag {
     return ($vers | Sort-Object { [version]$_ } -Descending | Select-Object -First 1)
 }
 
+# Newest published version of a winget package, from the microsoft/winget-pkgs
+# manifest tree: the given directory holds one subdirectory per published
+# version and the names ARE the versions (Beyond Compare's are 4-part —
+# 5.2.3.32296 — matching its download URLs, which embed the build number).
+# The version source for $InstallerTools entries whose upstream has NO GitHub
+# presence at all (no releases AND no tags). Anonymous API works (60 req/hr);
+# $env:GITHUB_TOKEN lifts the limit like the release resolver. Returns the raw
+# directory name of the highest [version], or $null on ANY failure (offline,
+# rate-limited, tree moved, nothing parses) — callers warn + skip.
+function Get-LatestWingetVersion {
+    param([string]$Path)
+    $headers = @{ "User-Agent" = "workstation-bootstrap" }
+    if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
+    try {
+        $entries = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/microsoft/winget-pkgs/contents/$Path" `
+            -Headers $headers -UseBasicParsing
+    } catch {
+        return $null
+    }
+    $vers = @(foreach ($e in $entries) {
+        if ($e.type -ne 'dir') { continue }   # skip stray files (.validation etc.)
+        $v = $null
+        if ([System.Version]::TryParse($e.name, [ref]$v)) { $e.name }
+    })
+    if ($vers.Count -eq 0) { return $null }
+    return ($vers | Sort-Object { [version]$_ } -Descending | Select-Object -First 1)
+}
+
 # DisplayVersion from the Uninstall registry (same three roots as
 # Test-InstallerPresent). $null when not installed or no version recorded.
 function Get-InstalledAppVersion {
@@ -1815,8 +1880,12 @@ function Invoke-CheckForUpdates {
     Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
     foreach ($tool in $InstallerTools) {
         $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
-        $tagPrefix = if ($tool.ContainsKey('TagPrefix')) { $tool.TagPrefix } else { 'v' }
-        $latest    = Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tagPrefix
+        $latest    = if ($tool.ContainsKey('WingetVersions')) {
+            Get-LatestWingetVersion -Path $tool.WingetVersions
+        } else {
+            $tagPrefix = if ($tool.ContainsKey('TagPrefix')) { $tool.TagPrefix } else { 'v' }
+            Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tagPrefix
+        }
         $hasHint   = $tool.ContainsKey('UpdateHint')
         if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
             Write-Warn "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
