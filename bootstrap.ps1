@@ -308,23 +308,38 @@ $PortableTools = @(
 
 # Installer-layout tools — apps that publish a silent, admin-free installer (.exe)
 # instead of a portable zip. Unlike $PortableTools these are NOT version-pinned:
-# we resolve the LATEST GitHub release at run time (the app self-updates after),
-# verify the download against the GitHub API's per-asset sha256 'digest', run the
-# installer silently PER-USER (no admin), and add NOTHING to PATH (GUI apps create
-# their own Start-menu shortcut). Presence is detected via the Uninstall registry
-# (DisplayName), so a manual uninstall makes the next bootstrap reinstall. Force a
-# reinstall with -ForceInstaller.
-# Three OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
+# we resolve the LATEST release at run time (the app self-updates after) — via
+# the GitHub releases API + per-asset sha256 'digest' normally, or via git tags
+# + a vendor URL template for apps with no GitHub release assets (UrlTemplate
+# below) — then run the installer silently PER-USER (no admin), and add NOTHING
+# to PATH (GUI apps create their own Start-menu shortcut). Presence is detected
+# via the Uninstall registry (DisplayName), so a manual uninstall makes the next
+# bootstrap reinstall. Force a reinstall with -ForceInstaller.
+# Five OPT-IN per-tool fields (absent = old behavior, Obsidian/Zed untouched):
 #   IncludePrerelease  resolve the newest NON-DRAFT release from /releases
 #                      instead of /releases/latest — DevToys flags EVERY 2.x
 #                      release prerelease:true, so "latest" returns 2023's
 #                      v1.0.13.0 (an MSIX-only release with no .exe asset).
 #   UpdateHint         status text for -Doctor/-CheckForUpdates when the
 #                      default "self-updates" story is wrong — DevToys' in-app
-#                      update check is notification-only (it never installs).
+#                      update check is notification-only (it never installs);
+#                      WinSCP's prompts before installing.
 #   TagPrefix          git-tag prefix for the -CheckForUpdates version lookup
-#                      (default "v") — DBeaver's tags are bare (26.1.2), so it
-#                      overrides with "" or the update scan resolves nothing.
+#                      AND the UrlTemplate version resolve (default "v") —
+#                      DBeaver's/WinSCP's tags are bare (26.1.2 / 6.5.6), so
+#                      they override with "" or the lookup resolves nothing.
+#   UrlTemplate        direct download URL with a {VERSION} placeholder — for
+#                      apps with NO GitHub release assets (WinSCP publishes
+#                      tags only). Its presence switches Install-InstallerTool
+#                      from the releases API + AssetMatch to: version =
+#                      Get-LatestGitTag (beta tags dropped by its default
+#                      filter), URL = template substitution.
+#   HashManifest       {VERSION}-templated URL of the official winget
+#                      installer manifest — the sha256 source for UrlTemplate
+#                      installs (no GitHub digest exists there). Mismatch
+#                      hard-fails; a missing/lagging manifest (winget trails
+#                      brand-new releases by hours-days) warns and proceeds —
+#                      the same posture as a missing GitHub digest.
 $InstallerTools = @(
     @{
         Name       = "Obsidian"
@@ -356,6 +371,16 @@ $InstallerTools = @(
         SilentArgs = "/S /currentuser"                 # NSIS silent + MultiUser per-user pin -> no admin/UAC
         DetectName = "DBeaver*"                        # HKCU ...\Uninstall\"DBeaver (current user)"; glob also matches commercial editions (intended: never force CE alongside a licensed install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys)
         TagPrefix  = ""                                # tags are bare (26.1.2, no v) — read by the -CheckForUpdates lookup only
+    },
+    @{
+        Name         = "WinSCP"
+        Repo         = "winscp/winscp"                 # tags only — NO release assets; version source for UrlTemplate + -CheckForUpdates
+        TagPrefix    = ""                              # bare tags (6.5.6); Get-LatestGitTag's default filter drops 6.6-beta et al.
+        UrlTemplate  = "https://winscp.net/download/WinSCP-{VERSION}-Setup.exe/download"  # first-party; redirects to a SourceForge mirror
+        HashManifest = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/w/WinSCP/WinSCP/{VERSION}/WinSCP.WinSCP.installer.yaml"
+        SilentArgs   = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
+        DetectName   = "WinSCP*"                       # HKCU ...\Uninstall\winscp3_is1, DisplayName version-suffixed ("WinSCP 6.5.6"); glob also matches a machine-wide HKLM install (intended: never double-install alongside an admin install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys/DBeaver)
+        UpdateHint   = "in-app update check prompts to install (not silent) — or re-run bootstrap with -ForceInstaller"
     }
 )
 
@@ -721,46 +746,120 @@ function Install-InstallerTool {
     [System.Net.ServicePointManager]::SecurityProtocol = `
         [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 
-    # Resolve the latest release. $env:GITHUB_TOKEN (already used for the private-repo
-    # clone) lifts the 60-req/hr anonymous API rate limit. A User-Agent is required
-    # by the GitHub API.
-    $headers = @{ "User-Agent" = "workstation-bootstrap" }
-    if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
-
-    try {
-        if ($Tool.ContainsKey('IncludePrerelease') -and $Tool.IncludePrerelease) {
-            # /releases/latest excludes prereleases, and some repos (DevToys)
-            # flag EVERY release prerelease:true — take the newest non-draft
-            # entry of /releases instead (the list is newest-first).
-            $releases = @(Invoke-RestMethod `
-                -Uri "https://api.github.com/repos/$($Tool.Repo)/releases?per_page=10" `
-                -Headers $headers -UseBasicParsing)
-            $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
-            if (-not $release) { throw "no non-draft release among the newest $($releases.Count)" }
-        } else {
-            $release = Invoke-RestMethod `
-                -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
-                -Headers $headers -UseBasicParsing
+    # Two resolver paths produce the same four facts for the shared
+    # download/verify/install tail below:
+    #   $downloadUrl    where the installer .exe comes from
+    #   $expectedSha    lowercase sha256 to enforce, or $null (warn+proceed)
+    #   $noHashWarning  warn text used when $expectedSha is $null
+    #   $versionLabel   what the success line reports
+    #   $hashSource     names the hash authority in the mismatch hard-fail
+    if ($Tool.ContainsKey('UrlTemplate')) {
+        # --- Direct-URL path (WinSCP) — no GitHub release assets upstream. ---
+        # Version = newest upstream git tag (the same Get-LatestGitTag lookup
+        # -CheckForUpdates uses; TagPrefix-aware; its default filter drops
+        # -beta tags). URL = {VERSION}-substituted vendor template. sha256 =
+        # the official winget manifest for that version (the SSHFS-Win
+        # Sha256Pin precedent, resolved at run time so the latest-release
+        # model keeps working).
+        $tagPrefix = if ($Tool.ContainsKey('TagPrefix')) { $Tool.TagPrefix } else { 'v' }
+        $version   = Get-LatestGitTag -Repo $Tool.Repo -TagPrefix $tagPrefix
+        if (-not $version) {
+            Write-Warn "$($Tool.Name): couldn't resolve the latest version tag from $($Tool.Repo) (offline? tag scheme changed?)"
+            Write-Warn "  Skipping — install it manually or re-run later."
+            return
         }
-    } catch {
-        Write-Warn "$($Tool.Name): GitHub API lookup failed: $($_.Exception.Message)"
-        Write-Warn "  Skipping — install it manually or re-run later."
-        return
+        $downloadUrl  = $Tool.UrlTemplate.Replace('{VERSION}', $version)
+        $versionLabel = $version
+        $hashSource   = "winget-manifest InstallerSha256"
+        # The installer's basename picks the right InstallerSha256 out of the
+        # manifest (which also hashes sibling assets — WinSCP's .msi). Vendor
+        # URLs end in a /download action segment (winscp.net, SourceForge) —
+        # strip it before taking the basename.
+        $baseName      = ($downloadUrl -replace '/download/?$', '').Split('/')[-1]
+        $expectedSha   = $null
+        $noHashWarning = "$($Tool.Name): no HashManifest configured — skipping hash verification."
+        if ($Tool.ContainsKey('HashManifest')) {
+            $manifestUrl   = $Tool.HashManifest.Replace('{VERSION}', $version)
+            $noHashWarning = "$($Tool.Name): winget manifest fetch failed for $version (not published there yet?) — skipping hash verification."
+            try {
+                $manifest = (Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing).Content
+                # komac-emitted manifests put InstallerUrl before its
+                # InstallerSha256 within each installer entry; the lazy match
+                # pairs each URL with the nearest FOLLOWING hash.
+                $pairs = [regex]::Matches($manifest, '(?ms)InstallerUrl:\s*(\S+).*?InstallerSha256:\s*([0-9A-Fa-f]{64})')
+                foreach ($m in $pairs) {
+                    if ($m.Groups[1].Value -like "*$baseName*") {
+                        $expectedSha = $m.Groups[2].Value.ToLower()
+                        break
+                    }
+                }
+                if (-not $expectedSha) {
+                    $noHashWarning = "$($Tool.Name): winget manifest has no entry matching $baseName — skipping hash verification."
+                }
+            } catch {
+                # 404 = winget lags this brand-new release -> $noHashWarning
+                # fires in the warn+proceed branch below. (The assignment also
+                # keeps the catch non-empty for PSAvoidUsingEmptyCatchBlock —
+                # the repo's PSSA gate runs at Warning+.)
+                $expectedSha = $null
+            }
+        }
+    } else {
+        # --- GitHub-release path (Obsidian/Zed/DevToys/DBeaver) ---
+        # Resolve the latest release. $env:GITHUB_TOKEN (already used for the private-repo
+        # clone) lifts the 60-req/hr anonymous API rate limit. A User-Agent is required
+        # by the GitHub API.
+        $headers = @{ "User-Agent" = "workstation-bootstrap" }
+        if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
+
+        try {
+            if ($Tool.ContainsKey('IncludePrerelease') -and $Tool.IncludePrerelease) {
+                # /releases/latest excludes prereleases, and some repos (DevToys)
+                # flag EVERY release prerelease:true — take the newest non-draft
+                # entry of /releases instead (the list is newest-first).
+                $releases = @(Invoke-RestMethod `
+                    -Uri "https://api.github.com/repos/$($Tool.Repo)/releases?per_page=10" `
+                    -Headers $headers -UseBasicParsing)
+                $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
+                if (-not $release) { throw "no non-draft release among the newest $($releases.Count)" }
+            } else {
+                $release = Invoke-RestMethod `
+                    -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
+                    -Headers $headers -UseBasicParsing
+            }
+        } catch {
+            Write-Warn "$($Tool.Name): GitHub API lookup failed: $($_.Exception.Message)"
+            Write-Warn "  Skipping — install it manually or re-run later."
+            return
+        }
+
+        $assets = @($release.assets | Where-Object { $_.name -like $Tool.AssetMatch })
+        if ($assets.Count -eq 0) {
+            Write-Warn "$($Tool.Name): no asset matching '$($Tool.AssetMatch)' in $($release.tag_name) — skipping"
+            return
+        }
+        if ($assets.Count -gt 1) {
+            Write-Warn "$($Tool.Name): $($assets.Count) assets match '$($Tool.AssetMatch)' — using $($assets[0].name)"
+        }
+        $asset        = $assets[0]
+        $downloadUrl  = $asset.browser_download_url
+        $versionLabel = $release.tag_name
+        $hashSource   = "GitHub-reported digest"
+        # Under Set-StrictMode -Version Latest an absent 'digest' property
+        # THROWS on access, so probe it via PSObject.Properties (not
+        # $asset.digest directly) to keep the warn-and-proceed path working.
+        $digest      = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
+        $expectedSha = $null
+        if ($digest -and $digest.StartsWith("sha256:")) {
+            $expectedSha = $digest.Substring(7).ToLower()
+        }
+        $noHashWarning = "$($Tool.Name): GitHub published no sha256 digest for $($asset.name) — skipping hash verification."
     }
 
-    $assets = @($release.assets | Where-Object { $_.name -like $Tool.AssetMatch })
-    if ($assets.Count -eq 0) {
-        Write-Warn "$($Tool.Name): no asset matching '$($Tool.AssetMatch)' in $($release.tag_name) — skipping"
-        return
-    }
-    if ($assets.Count -gt 1) {
-        Write-Warn "$($Tool.Name): $($assets.Count) assets match '$($Tool.AssetMatch)' — using $($assets[0].name)"
-    }
-    $asset  = $assets[0]
     $tmpExe = Join-Path $env:TEMP "ws-$($Tool.Name)-installer.exe"
 
     try {
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpExe -UseBasicParsing
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpExe -UseBasicParsing
     } catch {
         Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
         Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
@@ -769,28 +868,24 @@ function Install-InstallerTool {
     }
 
     try {
-        # Verify against the API-reported sha256 digest. Mismatch is a HARD fail
-        # (corruption/tamper); a missing digest warns but proceeds (HTTPS + GitHub).
-        # NOTE: Write-Fail calls exit 1; remove the temp file BEFORE it so cleanup
-        # is guaranteed regardless of whether finally runs on exit — mirrors
-        # Install-PortableTool. Under Set-StrictMode -Version Latest an absent
-        # 'digest' property THROWS on access, so probe it via PSObject.Properties
-        # (not $asset.digest directly) to keep the warn-and-proceed path working.
-        $digest = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
-        if ($digest -and $digest.StartsWith("sha256:")) {
-            $expected = $digest.Substring(7).ToLower()
-            $actual   = (Get-FileHash -Algorithm SHA256 -Path $tmpExe).Hash.ToLower()
-            if ($actual -ne $expected) {
+        # Verify against the published sha256. Mismatch is a HARD fail
+        # (corruption/tamper); an unavailable hash warns but proceeds (HTTPS +
+        # a trusted host). NOTE: Write-Fail calls exit 1; remove the temp file
+        # BEFORE it so cleanup is guaranteed regardless of whether finally
+        # runs on exit — mirrors Install-PortableTool.
+        if ($expectedSha) {
+            $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpExe).Hash.ToLower()
+            if ($actual -ne $expectedSha) {
                 Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
                 Write-Fail @"
 $($Tool.Name) sha256 mismatch — refusing to install.
-  expected: $expected
+  expected: $expectedSha
   actual:   $actual
-The GitHub-reported digest doesn't match the download (corrupted or tampered).
+The $hashSource doesn't match the download (corrupted or tampered).
 "@
             }
         } else {
-            Write-Warn "$($Tool.Name): GitHub published no sha256 digest for $($asset.name) — skipping hash verification."
+            Write-Warn $noHashWarning
         }
 
         # Silent, per-user install. No Add-ToUserPath — GUI apps make their own
@@ -799,7 +894,7 @@ The GitHub-reported digest doesn't match the download (corrupted or tampered).
         if ($proc.ExitCode -ne 0) {
             Write-Warn "$($Tool.Name) installer exited with code $($proc.ExitCode) — verify it installed."
         } else {
-            Write-Ok "$($Tool.Name) installed ($($release.tag_name))"
+            Write-Ok "$($Tool.Name) installed ($versionLabel)"
         }
     } finally {
         Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
