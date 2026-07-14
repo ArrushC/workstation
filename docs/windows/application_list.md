@@ -14,7 +14,6 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 - Bruno
 - Fork (Git Client)
 - Flow Launcher
-- Beyond Compare
 - HTTP Toolkit
 
 ## Auto-installed by bootstrap.ps1
@@ -27,6 +26,7 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 - DevToys + DevToys CLI
 - DBeaver
 - WinSCP
+- Beyond Compare
 - Claude Code
 - OpenCode
 - Oh My Pi
