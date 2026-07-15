@@ -645,9 +645,16 @@ function Install-PortableTool {
 
     $stamp = Join-Path $WsStamps "$($Tool.Exe).$($Tool.Version).stamp"
 
-    # Idempotency: stamp present AND command resolves → already done. A version
-    # bump changes the stamp name, so the old stamp won't match → reinstall.
-    if ((Test-Path $stamp) -and (Get-Command $Tool.Exe -ErrorAction SilentlyContinue)) {
+    # Idempotency: stamp present AND the pinned exe exists on disk → already
+    # done. A version bump changes the stamp name, so the old stamp won't
+    # match → reinstall. Deliberately NOT Get-Command: PATH resolution depends
+    # on the CALLING session's environment, so a session started before the
+    # tool's dir joined the User PATH re-installed forever (bit DevToys CLI —
+    # the only tool with its own PATH dir — 2026-07-14). The Add-ToUserPath
+    # below keeps the User PATH entry self-healing on the skip path (idempotent
+    # and silent when already present).
+    if ((Test-Path $stamp) -and (Test-Path (Join-Path $Tool.Dest "$($Tool.Exe).exe"))) {
+        Add-ToUserPath $Tool.Dest
         Write-Ok "$($Tool.Name) $($Tool.Version) already installed"
         return
     }
