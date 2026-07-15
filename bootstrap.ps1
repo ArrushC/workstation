@@ -40,8 +40,13 @@
 #   5. wezterm env  — set User-scope WEZTERM_CONFIG_FILE at the chezmoi source.
 #   5b. profile shim— if Documents is redirected (OneDrive), drop a loader at the
 #                     real $PROFILE that sources the chezmoi canonical profile.
-#   5c. wezterm lnk — drop a per-user Start Menu shortcut for the portable WezTerm
-#                     (the .zip ships none); idempotent + duplicate-proof.
+#   5c. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
+#                     tools (WezTerm/dnGrep/LogExpert — their .zips ship none);
+#                     idempotent + duplicate-proof.
+#   5d. nushell prompt — generate the starship prompt into nushell's
+#                     vendor/autoload dir (self-heals every run).
+#   5e. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
+#                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -79,13 +84,14 @@
 #                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
 #   -SkipToolInstall    skip the chezmoi/WezTerm/Starship/Helix/Nushell/jq/
-#                       OpenCode/omp auto-installs AND the Claude Code step
+#                       OpenCode/omp/DevToys CLI/dnGrep/LogExpert auto-installs
+#                       AND the Claude Code step
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
 #   -ForceInstaller     re-run installer-layout tool installs (e.g. Obsidian) even
-#                       if already present. Portable tools (WezTerm/Starship/Helix)
-#                       are unaffected — they reinstall on a version-pin bump.
+#                       if already present. Portable tools ($PortableTools) are
+#                       unaffected — they reinstall on a version-pin bump.
 #   -SkipElevated       skip the best-effort ELEVATED installs ($ElevatedTools:
 #                       SSHFS-Win + WinFsp). Everything else stays admin-free;
 #                       this is the only step that can pop a UAC prompt.
@@ -97,7 +103,7 @@
 #   -Doctor             read-only health report, then exit (installs nothing):
 #                       prereqs, repo git state (branch, ahead/behind, dirty),
 #                       chezmoi init + drift, portable/installer tools, fonts,
-#                       BurntToast, WEZTERM_CONFIG_FILE, Start-menu shortcut,
+#                       BurntToast, WEZTERM_CONFIG_FILE, Start-menu shortcuts,
 #                       profile shim, SSH key.
 #   -CheckForUpdates    read-only update scan, then exit: the workstation repo
 #                       first (fetch + commits-behind), then every pinned tool
@@ -168,6 +174,8 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 #   workstation\helix        — the multi-file Helix portable tree    → on User PATH
 #   workstation\nu           — the multi-file Nushell portable tree  → on User PATH
 #   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
+#   workstation\dngrep       — the dnGrep portable GUI tree          → on User PATH
+#   workstation\logexpert    — the LogExpert portable GUI tree       → on User PATH
 #   workstation\stamps       — "<exe>.<version>.stamp" idempotency markers
 $WsRoot       = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin        = Join-Path $WsRoot "bin"
@@ -175,6 +183,8 @@ $WsWezterm    = Join-Path $WsRoot "wezterm"
 $WsHelix      = Join-Path $WsRoot "helix"
 $WsNu         = Join-Path $WsRoot "nu"
 $WsDevToysCli = Join-Path $WsRoot "devtoys-cli"
+$WsDnGrep     = Join-Path $WsRoot "dngrep"
+$WsLogExpert  = Join-Path $WsRoot "logexpert"
 $WsStamps     = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
@@ -189,6 +199,13 @@ $WsStamps     = Join-Path $WsRoot "stamps"
 # TagFilter accepts version shapes after the prefix is stripped, TagSort
 # 'string' is for WezTerm's date-style tags ([version] can't parse them),
 # and UpdateHint is appended to the "update available" line.
+#
+# OPT-IN key `Shortcut = @{ Target = "<exe-basename>"; Description = "..." }` —
+# for GUI tools whose portable .zip ships no Start Menu entry: step 5c
+# (Invoke-StartMenuShortcuts) drops a per-user "<Name>.lnk" pointing at
+# <Dest>\<Target>.exe. Target is a basename WITHOUT ".exe", and may differ
+# from Exe (WezTerm's shortcut launches wezterm-gui.exe, not the wezterm.exe
+# CLI/mux). CLI-only tools omit the key — no shortcut is made.
 $PortableTools = @(
     @{
         Name       = "Starship"
@@ -215,6 +232,7 @@ $PortableTools = @(
         TagFilter  = '^\d{8}-\d{6}-[0-9a-f]+$'   # date-stamped release tags; excludes 'nightly'
         TagSort    = "string"
         UpdateHint = "pin tracks the vendored wezterm.terminfo tag — bump both together (see CLAUDE.md)"
+        Shortcut   = @{ Target = "wezterm-gui"; Description = "WezTerm terminal emulator" }
     },
     @{
         Name       = "Helix"
@@ -303,6 +321,52 @@ $PortableTools = @(
         Repo       = "DevToys-app/DevToys"
         TagPrefix  = "v"
         UpdateHint = "dual-edit: `$PortableTools here AND DEVTOYS_CLI_VERSION in makefile/versions.mk (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
+    },
+    @{
+        # dnGrep — search/replace GUI (grep for Windows). Portable, NOT
+        # installer class: dnGrep publishes only machine-scope WiX .msi
+        # installers (Scope: machine per its winget manifest → UAC, and the
+        # installer class has no msiexec path anyway) plus these per-arch
+        # portable zips — flat root, self-contained .NET. dnGrep stores its
+        # settings NEXT TO THE EXE when that dir is writable (always true
+        # here), and the 'tree' wipe on a pin bump would destroy them — so
+        # step 5e (Invoke-DnGrepConfig) seeds a dnGrep.config.xml redirecting
+        # its data dir to %APPDATA%\dnGREP. Windows-only GUI tool: no
+        # makefile/versions.mk pin, no dual-edit (Nushell precedent).
+        Name       = "dnGrep"
+        Exe        = "dnGREP"
+        Version    = "5.0.30.0"
+        Url        = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
+        Sha256     = "27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45bd32"
+        Layout     = "tree"
+        Dest       = $WsDnGrep
+        Repo       = "dnGrep/dnGrep"
+        TagPrefix  = "v"
+        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools (in-app updater targets the machine-scope MSI — don't use it)"
+        Shortcut   = @{ Target = "dnGREP"; Description = "dnGrep — search and replace in files (grep GUI)" }
+    },
+    @{
+        # LogExpert — tabbed log-file viewer (tail-follow, filters,
+        # columnizers). Portable, NOT installer class: its Setup .exe is Inno
+        # with DefaultDirName={commonpf} and no PrivilegesRequired override →
+        # admin-only; winget itself packages this same zip as a portable.
+        # FRAMEWORK-DEPENDENT: needs the .NET 10 Desktop Runtime (the Setup
+        # exe exists to chain-install it) — hand-installed, this script
+        # installs no runtimes; first launch prompts with a download link if
+        # it's missing. Settings live in %APPDATA%\LogExpert (safe across pin
+        # bumps); only its sessionFiles\ sit next to the exe — minor loss on
+        # a bump. Windows-only GUI tool: no versions.mk pin, no dual-edit.
+        Name       = "LogExpert"
+        Exe        = "LogExpert"
+        Version    = "1.41.0"
+        Url        = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpert.1.41.0.zip"
+        Sha256     = "74524db34332aed480c5c631ca9023118140bc120075c1365ae6713620673c89"
+        Layout     = "tree"
+        Dest       = $WsLogExpert
+        Repo       = "LogExperts/LogExpert"
+        TagPrefix  = "v"
+        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
+        Shortcut   = @{ Target = "LogExpert"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
     }
 )
 
@@ -467,7 +531,7 @@ function Invoke-Reinstall {
     Write-Host "    - SSH keys"
     Write-Host ""
     Write-Host "  For a deeper uninstall (remove the portable tools too), do that manually first:"
-    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # chezmoi/starship/wezterm/helix re-download next run"
+    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # chezmoi + every portable tool re-downloads next run"
     Write-Host ""
 
     # Self-deletion guard: if this script is being run from inside the path we're
@@ -1091,7 +1155,7 @@ function Install-ElevatedTool {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
         return
     }
 
@@ -1286,61 +1350,66 @@ if (Test-Path $canonical) { . $canonical }
 }
 
 # =============================================================================
-# 5c. WEZTERM START MENU SHORTCUT — the portable WezTerm .zip ships no shortcut
+# 5c. START MENU SHORTCUTS — the portable GUI .zips ship no shortcut
 #    (unlike the installer-class apps, whose own installers create one), so the
 #    Start menu has nothing to launch and the GUI hides behind the PATH'd exe.
-#    Drop a per-user Start Menu .lnk pointing at wezterm-gui.exe (the GUI binary,
-#    NOT the wezterm.exe CLI/mux).
+#    Data-driven: every $PortableTools entry carrying the opt-in Shortcut key
+#    (WezTerm/dnGrep/LogExpert today) gets a per-user "<Name>.lnk" pointing at
+#    <Dest>\<Shortcut.Target>.exe (WezTerm's targets wezterm-gui.exe, the GUI
+#    binary — NOT the wezterm.exe CLI/mux).
 #
-#    Idempotent + duplicate-proof: a fixed filename (WezTerm.lnk) means a re-run
+#    Idempotent + duplicate-proof: a fixed filename per tool means a re-run
 #    overwrites the same path in place — a second copy can never appear. Runs on
-#    EVERY bootstrap, independent of the install stamp, so deleting the shortcut
-#    and re-running restores it (self-healing). Soft-fails to a warning; never
-#    blocks the rest of the bootstrap.
+#    EVERY bootstrap, independent of the install stamp, so deleting a shortcut
+#    and re-running restores it (self-healing). Each tool soft-fails to a
+#    warning; never blocks the rest of the bootstrap.
 # =============================================================================
-function Invoke-WeztermShortcut {
-    # Resolve the GUI launcher. Prefer the portable install dir; fall back to PATH
-    # (e.g. -SkipToolInstall with WezTerm already installed somewhere else).
-    $exe = Join-Path $WsWezterm "wezterm-gui.exe"
-    if (-not (Test-Path $exe)) {
-        $cmd = Get-Command "wezterm-gui" -ErrorAction SilentlyContinue
-        if ($cmd) {
-            $exe = $cmd.Source
-        } else {
-            Write-Warn "Skipping WezTerm Start Menu shortcut — wezterm-gui.exe not found at $WsWezterm or on PATH."
-            return
-        }
-    }
-
-    # Fixed filename in the per-user Start Menu Programs folder (no admin). The
-    # deterministic path is what makes this duplicate-proof: .Save() overwrites.
-    $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "WezTerm.lnk"
-
-    try {
-        $existed = Test-Path $lnk
-        $wsh = New-Object -ComObject WScript.Shell
-        try {
-            # CreateShortcut loads the existing .lnk when present, so its current
-            # TargetPath is readable — skip the rewrite when it already matches.
-            $sc = $wsh.CreateShortcut($lnk)
-            if ($existed -and ($sc.TargetPath -eq $exe)) {
-                Write-Ok "WezTerm Start Menu shortcut already present"
-                return
-            }
-            $sc.TargetPath       = $exe
-            $sc.WorkingDirectory = $env:USERPROFILE
-            $sc.Description       = "WezTerm terminal emulator"
-            $sc.Save()
-            if ($existed) {
-                Write-Ok "WezTerm Start Menu shortcut updated (target: $exe)"
+function Invoke-StartMenuShortcuts {
+    foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
+        # Resolve the GUI launcher. Prefer the portable install dir; fall back to
+        # PATH (e.g. -SkipToolInstall with the tool already installed elsewhere).
+        $target = $tool.Shortcut.Target
+        $exe = Join-Path $tool.Dest "$target.exe"
+        if (-not (Test-Path $exe)) {
+            $cmd = Get-Command $target -ErrorAction SilentlyContinue
+            if ($cmd) {
+                $exe = $cmd.Source
             } else {
-                Write-Ok "WezTerm Start Menu shortcut created at $lnk"
+                Write-Warn "Skipping $($tool.Name) Start Menu shortcut — $target.exe not found at $($tool.Dest) or on PATH."
+                continue
             }
-        } finally {
-            [void][Runtime.InteropServices.Marshal]::ReleaseComObject($wsh)
         }
-    } catch {
-        Write-Warn "Could not create the WezTerm Start Menu shortcut: $($_.Exception.Message)"
+
+        # Fixed filename in the per-user Start Menu Programs folder (no admin). The
+        # deterministic path is what makes this duplicate-proof: .Save() overwrites.
+        $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
+
+        try {
+            $existed = Test-Path $lnk
+            $wsh = New-Object -ComObject WScript.Shell
+            try {
+                # CreateShortcut loads the existing .lnk when present, so its current
+                # TargetPath is readable — skip the rewrite when it already matches.
+                $sc = $wsh.CreateShortcut($lnk)
+                if ($existed -and ($sc.TargetPath -eq $exe)) {
+                    Write-Ok "$($tool.Name) Start Menu shortcut already present"
+                    continue
+                }
+                $sc.TargetPath       = $exe
+                $sc.WorkingDirectory = $env:USERPROFILE
+                $sc.Description       = $tool.Shortcut.Description
+                $sc.Save()
+                if ($existed) {
+                    Write-Ok "$($tool.Name) Start Menu shortcut updated (target: $exe)"
+                } else {
+                    Write-Ok "$($tool.Name) Start Menu shortcut created at $lnk"
+                }
+            } finally {
+                [void][Runtime.InteropServices.Marshal]::ReleaseComObject($wsh)
+            }
+        } catch {
+            Write-Warn "Could not create the $($tool.Name) Start Menu shortcut: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -1354,7 +1423,7 @@ function Invoke-WeztermShortcut {
 #    config.nu owns the hand-written config (aliases, env); this owns ONLY the
 #    generated prompt, so the two never fight. Runs EVERY bootstrap independent
 #    of any stamp, so a Starship pin-bump refreshes it and a deleted file
-#    self-heals — same pattern as Invoke-WeztermShortcut. Per-user, no admin;
+#    self-heals — same pattern as Invoke-StartMenuShortcuts. Per-user, no admin;
 #    soft-fails to a warning, never blocks the rest of the bootstrap.
 # =============================================================================
 function Invoke-NushellStarship {
@@ -1378,6 +1447,53 @@ function Invoke-NushellStarship {
         Write-Ok "Nushell starship prompt generated ($target)"
     } catch {
         Write-Warn "Could not generate the Nushell starship prompt: $($_.Exception.Message)"
+    }
+}
+
+# =============================================================================
+# 5e. DNGREP CONFIG SEED — dnGrep stores its settings NEXT TO THE EXE whenever
+#    that directory is writable (verified in dnGREP.Common's
+#    DirectoryConfiguration.cs), and %LOCALAPPDATA%\workstation\dngrep always
+#    is — so a pin bump's 'tree' wipe would destroy the user's settings,
+#    bookmarks and scripts. dnGrep's own escape hatch is a dnGrep.config.xml
+#    beside the exe whose DataDirectory/LogDirectory redirect everything; seed
+#    it pointing at %APPDATA%\dnGREP (where the MSI-installed dnGrep would keep
+#    them anyway). The values must be EXPANDED absolute paths — dnGrep does not
+#    expand %ENV% variables.
+#
+#    Seed-if-absent ONLY: dnGrep's Options dialog rewrites this same file, so
+#    overwriting on every run would clobber a user's deliberate choice. Runs on
+#    EVERY bootstrap (after the tool installs), so the file self-heals in the
+#    same run after a pin-bump wipe recreates Dest. Per-user, no admin;
+#    soft-fails to a warning, never blocks the rest of the bootstrap.
+# =============================================================================
+function Invoke-DnGrepConfig {
+    if (-not (Test-Path (Join-Path $WsDnGrep "dnGREP.exe"))) {
+        Write-Warn "Skipping dnGrep config seed — dnGREP.exe not found at $WsDnGrep (install step skipped?)."
+        return
+    }
+
+    $cfg = Join-Path $WsDnGrep "dnGrep.config.xml"
+    if (Test-Path $cfg) {
+        Write-Ok "dnGrep config already present ($cfg)"
+        return
+    }
+
+    $dataDir = Join-Path $env:APPDATA "dnGREP"
+    $logDir  = Join-Path $dataDir "logs"
+    $xml = @"
+<?xml version="1.0" encoding="utf-8"?>
+<DirectoryConfiguration>
+  <DataDirectory>$dataDir</DataDirectory>
+  <LogDirectory>$logDir</LogDirectory>
+</DirectoryConfiguration>
+"@
+    try {
+        # UTF-8 without BOM (matches the XML declaration; dnGrep reads it fine).
+        [System.IO.File]::WriteAllText($cfg, $xml, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "dnGrep config seeded (settings dir -> $dataDir)"
+    } catch {
+        Write-Warn "Could not seed the dnGrep config: $($_.Exception.Message)"
     }
 }
 
@@ -1817,13 +1933,19 @@ function Invoke-Doctor {
     } else {
         Write-Bad "WEZTERM_CONFIG_FILE not set (User scope) — WezTerm won't find the tracked config; re-run .\bootstrap.ps1"
     }
-    $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "WezTerm.lnk"
-    if (Test-Path $lnk) { Write-Ok "WezTerm Start Menu shortcut present" }
-    else { Write-Warn "WezTerm Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
+    foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
+        $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
+        if (Test-Path $lnk) { Write-Ok "$($tool.Name) Start Menu shortcut present" }
+        else { Write-Warn "$($tool.Name) Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
+    }
 
     $nuStarship = Join-Path $env:APPDATA "nushell\vendor\autoload\starship.nu"
     if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
     else { Write-Warn "Nushell starship prompt missing — re-run .\bootstrap.ps1 (regenerates it)" }
+
+    $dnGrepCfg = Join-Path $WsDnGrep "dnGrep.config.xml"
+    if (Test-Path $dnGrepCfg) { Write-Ok "dnGrep config seeded ($dnGrepCfg)" }
+    else { Write-Warn "dnGrep config not seeded — settings would die with a pin bump; re-run .\bootstrap.ps1 (re-seeds it)" }
 
     $realDocs    = [Environment]::GetFolderPath("MyDocuments")
     $literalDocs = Join-Path $env:USERPROFILE "Documents"
@@ -1980,8 +2102,9 @@ Invoke-CloneRepo
 Invoke-Chezmoi
 Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
 Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
-Invoke-WeztermShortcut    # drop a per-user Start Menu .lnk for the portable WezTerm GUI
+Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (WezTerm/dnGrep/LogExpert)
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
+Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
@@ -1998,8 +2121,8 @@ Write-Host "PowerShell stays installed (for .NET/COM tasks + the WSL2 notify hoo
 Write-Host "Restart WezTerm too if any instances were running — they need a fresh process"
 Write-Host "to see the new ${Bold}WEZTERM_CONFIG_FILE${Reset} env var."
 Write-Host ""
-Write-Host "Not installed by this script (install yourself if you want them):"
-Write-Host "  Zed, VSCode  — their chezmoi configs are already deployed."
+Write-Host "Not installed by this script (install yourself if you want it):"
+Write-Host "  VSCode  — its chezmoi config is already deployed."
 Write-Host ""
 
 # Print the curated hand-install shopping list (docs/windows/application_list.md).

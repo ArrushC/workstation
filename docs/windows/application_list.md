@@ -27,6 +27,8 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 - DBeaver
 - WinSCP
 - Beyond Compare
+- dnGrep
+- LogExpert (needs the .NET 10 Desktop Runtime — install it by hand; first launch prompts with a download link)
 - Claude Code
 - OpenCode
 - Oh My Pi
