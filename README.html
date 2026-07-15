@@ -2653,7 +2653,8 @@ make -C makefile check-updates MODE=dev</code></pre>
                             package lists. On Windows it covers the portable
                             and installer-class tools, Nerd Fonts, BurntToast,
                             <code>WEZTERM_CONFIG_FILE</code>, the Start Menu
-                            shortcut, the profile shim, and the SSH key.
+                            shortcuts, the dnGrep config seed, the profile
+                            shim, and the SSH key.
                         </p>
                         <p>
                             <strong><code>--check-for-updates</code></strong>
@@ -2818,7 +2819,9 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             Idempotent and duplicate-proof: the fixed filename
                             means a re-run overwrites in place rather than adding a
                             second copy, and a deleted shortcut is re-created on
-                            the next bootstrap.
+                            the next bootstrap. (dnGrep and LogExpert below get
+                            the same treatment &mdash; every portable GUI tool
+                            gets its own <code>.lnk</code>.)
                         </li>
                         <li>
                             <strong>Starship</strong> &mdash; pinned,
@@ -2850,6 +2853,35 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>Plugins\</code> tree). The Windows half of
                             the Linux dev-only install (version dual-edit
                             with <code>makefile/versions.mk</code>).
+                        </li>
+                        <li>
+                            <strong>dnGrep</strong> &mdash; search/replace GUI
+                            (&ldquo;grep for Windows&rdquo;); pinned,
+                            sha256-verified portable <code>.zip</code> into
+                            <code>%LOCALAPPDATA%\workstation\dngrep</code>, with
+                            a per-user Start Menu shortcut
+                            (<code>dnGrep.lnk</code>). Portable because dnGrep
+                            publishes no admin-free installer (its
+                            <code>.msi</code> is machine-scope &rarr; UAC). The
+                            bootstrap also seeds a
+                            <code>dnGrep.config.xml</code> next to the exe
+                            (only if absent) redirecting settings to
+                            <code>%APPDATA%\dnGREP</code> &mdash; dnGrep
+                            otherwise keeps them beside the exe, where a
+                            version-pin bump would wipe them.
+                        </li>
+                        <li>
+                            <strong>LogExpert</strong> &mdash; tabbed log-file
+                            viewer with tail-follow; pinned, sha256-verified
+                            portable <code>.zip</code> into
+                            <code>%LOCALAPPDATA%\workstation\logexpert</code>,
+                            with a per-user Start Menu shortcut
+                            (<code>LogExpert.lnk</code>). Portable because its
+                            setup <code>.exe</code> is admin-only.
+                            <strong>Needs the .NET 10 Desktop Runtime</strong>
+                            (hand-installed &mdash; the script installs no
+                            runtimes; first launch prompts with a download
+                            link if it&rsquo;s missing).
                         </li>
                         <li>
                             <strong>Obsidian</strong> &mdash; silent, per-user
@@ -2966,7 +2998,8 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         it&rsquo;s missing, but its chezmoi config deploys
                         regardless. <strong>zoxide</strong> is no longer
                         installed (the PowerShell profile no-ops without it).
-                        WezTerm/Starship/Helix/Nushell versions are pinned in
+                        WezTerm/Starship/Helix/Nushell/dnGrep/LogExpert versions
+                        are pinned in
                         <code>bootstrap.ps1</code> (<code>$PortableTools</code>),
                         the same self-contained pattern as
                         <code>install-nerd-fonts.ps1</code>; the Helix pin tracks
@@ -3065,7 +3098,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
-.\bootstrap.ps1 -SkipToolInstall                 # chezmoi/WezTerm/Starship/Helix/Nushell already on PATH
+.\bootstrap.ps1 -SkipToolInstall                 # the portable tools (chezmoi/WezTerm/Starship/&hellip;) already on PATH
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
 .\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond Compare) even if present
@@ -3091,7 +3124,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Install chezmoi + WezTerm + Starship + Helix + Nushell</span
+                            ><span class="lbl">Install chezmoi + the portable tools (WezTerm, Starship, Helix, Nushell, dnGrep, LogExpert, &hellip;)</span
                             ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -3125,7 +3158,8 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         (declining just skips it; suppress it entirely with
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship/Helix/Nushell/OpenCode/omp/DevToys CLI
+                        chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
+                        CLI/dnGrep/LogExpert
                         installs, <em>and</em> the installer-class apps
                         (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond
                         Compare) and the native
@@ -3135,8 +3169,10 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         latest release; pass <code>-ForceInstaller</code> to
                         reinstall them even when already present. The diagram is a
                         simplified view &mdash; the script also creates the
-                        WezTerm Start Menu shortcut, generates the Nushell
-                        Starship prompt, and runs BurntToast and the Nerd Font
+                        Start Menu shortcuts for the portable GUI tools
+                        (WezTerm, dnGrep, LogExpert), generates the Nushell
+                        Starship prompt, seeds dnGrep&rsquo;s config redirect,
+                        and runs BurntToast and the Nerd Font
                         install (its step 7) between
                         <code>Set WEZTERM_CONFIG_FILE</code> and the SSH-key step.
                         <code>GITHUB_TOKEN</code> persists into
@@ -4701,7 +4737,9 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         </summary>
                         <div class="ts-body">
                             <p>
-                                WezTerm/Starship/Helix/Nushell are pinned to a specific version
+                                The portable tools
+                                (WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
+                                CLI/dnGrep/LogExpert) are pinned to a specific version
                                 <em>and</em> sha256 in
                                 <code>$PortableTools</code> inside
                                 <code>bootstrap.ps1</code>. A mismatch means the
