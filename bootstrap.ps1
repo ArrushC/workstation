@@ -1474,7 +1474,24 @@ function Invoke-DnGrepConfig {
     }
 
     $cfg = Join-Path $WsDnGrep "dnGrep.config.xml"
+
+    # The redirect TARGETS must exist, not just the config file: dnGrep
+    # enumerates DataDirectory at startup (AppTheme.LoadExternalThemes does
+    # Directory.GetFiles over it) and CRASHES with DirectoryNotFoundException
+    # if it's missing — it auto-creates only its DEFAULT data folder, never a
+    # config-file value (caught on first launch, 2026-07-15). On the
+    # already-present path, read the dirs from the file itself so a
+    # user-customized location is healed too.
     if (Test-Path $cfg) {
+        try {
+            $existing = [xml](Get-Content -Raw $cfg)
+            foreach ($dir in @($existing.DirectoryConfiguration.DataDirectory,
+                               $existing.DirectoryConfiguration.LogDirectory)) {
+                if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+            }
+        } catch {
+            Write-Warn "Could not verify the dnGrep data dirs: $($_.Exception.Message)"
+        }
         Write-Ok "dnGrep config already present ($cfg)"
         return
     }
@@ -1489,6 +1506,10 @@ function Invoke-DnGrepConfig {
 </DirectoryConfiguration>
 "@
     try {
+        # Dirs first, config second — if creation fails, no config is written
+        # and dnGrep falls back to its built-in (exe-dir) behavior instead of
+        # crashing on a dangling redirect. -Force creates $dataDir with it.
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
         # UTF-8 without BOM (matches the XML declaration; dnGrep reads it fine).
         [System.IO.File]::WriteAllText($cfg, $xml, (New-Object System.Text.UTF8Encoding($false)))
         Write-Ok "dnGrep config seeded (settings dir -> $dataDir)"
