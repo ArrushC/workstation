@@ -2812,9 +2812,16 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>%LOCALAPPDATA%\workstation\bin</code>.
                         </li>
                         <li>
-                            <strong>WezTerm</strong> &mdash; pinned, sha256-verified
-                            portable <code>.zip</code> into
+                            <strong>WezTerm</strong> &mdash; rides nightly via
+                            weekly mirrored snapshots: a scheduled workflow
+                            validates each nightly (sha256 digest + a config
+                            smoke test on a Windows runner), mirrors it as an
+                            immutable release asset, and opens a pin-bump PR;
+                            merging + re-running <code>bootstrap.ps1</code>
+                            (with WezTerm closed) installs it into
                             <code>%LOCALAPPDATA%\workstation\wezterm</code>.
+                            Requires <code>GITHUB_TOKEN</code> (already
+                            required on this private repo).
                             A per-user <strong>Start Menu shortcut</strong>
                             (<code>WezTerm.lnk</code> &rarr;
                             <code>wezterm-gui.exe</code>) is created on every run
@@ -4741,6 +4748,32 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                     running WezTerm instances</strong> after
                                 &mdash; the env var is read at process start.
                             </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Roll back a bad WezTerm nightly
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The mirror keeps the newest 8 snapshots as
+                                immutable release assets
+                                (<code>wezterm-nightly-snapshots</code>). To
+                                roll back: edit the WezTerm entry in
+                                <code>bootstrap.ps1</code>&rsquo;s
+                                <code>$PortableTools</code> &mdash; set
+                                <code>Version</code>/<code>Url</code>/<code
+                                    >Sha256</code
+                                >
+                                to any retained snapshot (or to the
+                                forever-immutable stable <code>20240203</code>
+                                upstream URL), close WezTerm, re-run
+                                <code>.\bootstrap.ps1</code>. Revert or close
+                                the offending weekly PR so the next run
+                                doesn&rsquo;t re-bump.
+                            </p>
+                            <pre><code>gh release view wezterm-nightly-snapshots --json assets --jq '.assets[].name'</code></pre>
                         </div>
                     </details>
 

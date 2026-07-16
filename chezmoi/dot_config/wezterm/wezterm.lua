@@ -9,9 +9,10 @@
 local wezterm = require 'wezterm'
 
 -- Make the sibling modules require-able BEFORE requiring any of them:
--- wezterm 20240203 does NOT add the config file's own directory to
--- package.path (only ~/.config/wezterm, ~/.wezterm, and wezterm_modules
--- next to the exe — see config/src/lua.rs at the pinned tag). On Windows
+-- wezterm does NOT add the config file's own directory to package.path
+-- (only ~/.config/wezterm, ~/.wezterm, and wezterm_modules next to the
+-- exe — config/src/lua.rs, verified at 20240203 AND on nightly main
+-- 2026-07-16; the pin policy is weekly nightly snapshots). On Windows
 -- this config loads from the chezmoi repo via WEZTERM_CONFIG_FILE and
 -- ~/.config/wezterm doesn't exist (the dir is chezmoi-ignored on every
 -- OS), so without this prepend every sibling require fails. The gsub

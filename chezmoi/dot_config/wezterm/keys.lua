@@ -60,7 +60,7 @@ function M.apply(config)
     --
     -- There is NO default mods='CTRL' binding for OpenLinkAtMouseCursor (the
     -- wezterm.org/config/mouse.html page incorrectly lists one — the source at
-    -- wezterm-gui/src/inputmap.rs disagrees, and the recipes page is correct).
+    -- wezterm-gui/src/inputmap.rs disagrees, verified at 20240203 + nightly main 2026-07-16).
     -- Restating CTRL+click explicitly here restores link-open behaviour without
     -- giving up the copy-on-release UX from the no-mods override above.
     --
@@ -82,8 +82,8 @@ function M.apply(config)
     -- default is ExtendSelectionToMouseCursor(Cell), which means the SHIFT+Up
     -- composite (CompleteSelectionOrOpenLinkAtMouseCursor) ALWAYS sees a live
     -- selection and takes the complete-selection branch — the link-open branch
-    -- was unreachable (verified against inputmap.rs at the pinned 20240203
-    -- tag). Overriding Down to START a fresh selection instead of extending
+    -- was unreachable (verified against inputmap.rs at 20240203 + nightly
+    -- main 2026-07-16). Overriding Down to START a fresh selection instead of extending
     -- makes a plain shift-click arrive at Up with an EMPTY selection → the
     -- link opens. Shift+drag still selects: Down anchors, the untouched
     -- SHIFT+Drag default extends, Up completes + copies (copy_and_announce

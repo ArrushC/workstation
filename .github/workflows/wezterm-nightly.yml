@@ -1,0 +1,162 @@
+name: wezterm-nightly
+
+# Weekly WezTerm nightly snapshot: validate upstream's rolling nightly on a
+# windows runner (API-digest verify + a show-keys smoke gate against OUR
+# config), mirror the zip as an immutable release asset (upstream keeps only
+# ONE rolling nightly — old builds vanish), then PR the bootstrap.ps1 pin
+# bump + a vendored-terminfo refresh when upstream drifted.
+# Design: docs/superpowers/specs/2026-07-16-wezterm-nightly-design.md
+on:
+  schedule:
+    - cron: '0 7 * * 1'   # Mondays 07:00 UTC — an hour after version-bumps
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    outputs:
+      proceed:     ${{ steps.nightly.outputs.proceed }}
+      version:     ${{ steps.nightly.outputs.version }}
+      sha256:      ${{ steps.nightly.outputs.sha256 }}
+      digest_note: ${{ steps.nightly.outputs.digest_note }}
+      updated_at:  ${{ steps.nightly.outputs.updated_at }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download, verify, identify, smoke-test
+        id: nightly
+        shell: pwsh
+        run: |
+          $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/wez/wezterm/releases/tags/nightly' `
+            -Headers @{ 'User-Agent' = 'workstation-wezterm-nightly' }
+          $asset = @($rel.assets) | Where-Object { $_.name -eq 'WezTerm-windows-nightly.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'WezTerm-windows-nightly.zip not found on the nightly release (renamed upstream?)' }
+
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile nightly.zip
+          $actual = (Get-FileHash nightly.zip -Algorithm SHA256).Hash.ToLower()
+
+          $digestNote = 'upstream API digest verified'
+          $digest = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
+          if ($digest) {
+            $expected = ($digest -replace '^sha256:', '').ToLower()
+            if ($actual -ne $expected) { throw "digest mismatch - api=$expected actual=$actual" }
+          } else {
+            $digestNote = 'WARNING: upstream asset had no API digest - sha pinned from the download itself'
+          }
+
+          Expand-Archive nightly.zip -DestinationPath wt
+          $exe = (Get-ChildItem wt -Recurse -Filter wezterm.exe | Select-Object -First 1).FullName
+          $ver = ((& $exe --version) -split '\s+')[1]
+          if ($ver -notmatch '^\d{8}-\d{6}-[0-9a-f]+$') { throw "unexpected version string: $ver" }
+
+          # Config smoke gate: a nightly that can't load OUR config never ships.
+          # 'error' on stderr may false-positive on benign text — acceptable:
+          # it fails toward a human looking at the run, never toward a bad PR.
+          & $exe --config-file chezmoi/dot_config/wezterm/wezterm.lua show-keys 1> keys.txt 2> err.txt
+          if ($LASTEXITCODE -ne 0 -or (Select-String -Path err.txt -Pattern 'error' -Quiet)) {
+            Get-Content err.txt
+            throw "show-keys smoke gate FAILED on nightly $ver - config incompatible, no PR will be created"
+          }
+          if (-not (Select-String -Path keys.txt -Pattern 'ActivateLastTab' -Quiet)) {
+            throw 'show-keys ran but our bindings are missing - config fell back to defaults?'
+          }
+
+          # Early-exit success (no PR) when this exact build is already pinned.
+          $bootstrap = Get-Content bootstrap.ps1 -Raw
+          $pinned = [regex]::Match($bootstrap, '(?s)Name\s+=\s+"WezTerm".*?Version\s+=\s+"([^"]+)"').Groups[1].Value
+          $proceed = if ($pinned -eq $ver) { 'false' } else { 'true' }
+
+          "proceed=$proceed"                >> $env:GITHUB_OUTPUT
+          "version=$ver"                    >> $env:GITHUB_OUTPUT
+          "sha256=$actual"                  >> $env:GITHUB_OUTPUT
+          "digest_note=$digestNote"         >> $env:GITHUB_OUTPUT
+          "updated_at=$($asset.updated_at)" >> $env:GITHUB_OUTPUT
+          Write-Host "nightly $ver (pinned: $pinned, proceed: $proceed)"
+      - name: Stash the verified zip for the mirror job
+        if: steps.nightly.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wezterm-nightly-zip
+          path: nightly.zip
+          retention-days: 3
+
+  mirror-and-pr:
+    needs: validate
+    if: needs.validate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      SHA256:  ${{ needs.validate.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: wezterm-nightly-zip
+      - name: Mirror the snapshot (immutable asset; prune to newest 8)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=wezterm-nightly-snapshots
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --title "WezTerm nightly snapshots (mirror)" --latest=false \
+            --notes "Immutable mirror of upstream WezTerm nightly builds (upstream keeps only ONE rolling nightly). Pinned by bootstrap.ps1; pruned to the newest 8. Managed by wezterm-nightly.yml."
+          mv nightly.zip "WezTerm-windows-${VERSION}.zip"
+          gh release upload "$TAG" "WezTerm-windows-${VERSION}.zip" --clobber
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" \
+            --jq '.assets | sort_by(.created_at) | reverse | .[8:][].id' |
+            while read -r id; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$id"
+            done
+      - name: Bump the bootstrap.ps1 pin
+        run: |
+          bash scripts/bump-wezterm-nightly.sh "$VERSION" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/wezterm-nightly-snapshots/WezTerm-windows-${VERSION}.zip" \
+            "$SHA256"
+      - name: Sync vendored wezterm.terminfo from upstream main
+        id: terminfo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VENDORED=chezmoi/dot_local/share/wezterm/wezterm.terminfo
+          COMMIT=$(gh api 'repos/wez/wezterm/commits?path=termwiz/data/wezterm.terminfo&per_page=1' --jq '.[0].sha')
+          curl -fsSL "https://raw.githubusercontent.com/wez/wezterm/${COMMIT}/termwiz/data/wezterm.terminfo" -o upstream.terminfo
+          # tic-validate before adopting (ubuntu runners ship ncurses tic)
+          tic -x -o "$(mktemp -d)" upstream.terminfo
+          if cmp -s <(tail -n +3 "$VENDORED") upstream.terminfo; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "# Vendored from wezterm/wezterm@${COMMIT:0:12} termwiz/data/wezterm.terminfo (nightly snapshot $(date -u +%F))"
+              echo "# Synced by .github/workflows/wezterm-nightly.yml; manual re-vendor recipe in docs/claude/file-care.md. chezmoi's run_ script auto-re-tic's on next cza."
+              cat upstream.terminfo
+            } > "$VENDORED"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f upstream.terminfo
+      # A PR opened by GITHUB_TOKEN does NOT trigger lint.yml (GitHub's
+      # recursion guard) — validate the bumped tree here, like version-bumps.
+      - name: Verify invariants on the bumped tree
+        run: bash scripts/check-invariants.sh
+      - name: Write PR body
+        run: |
+          cat > "$RUNNER_TEMP/pr-body.md" <<EOF
+          Weekly WezTerm nightly snapshot.
+
+          - build: \`${VERSION}\` (upstream asset updated ${{ needs.validate.outputs.updated_at }})
+          - integrity: ${{ needs.validate.outputs.digest_note }}; mirrored sha256 \`${SHA256}\`
+          - smoke gate: \`wezterm show-keys\` PASSED against the repo config on windows-latest
+          - terminfo: $([ "${{ steps.terminfo.outputs.changed }}" = "true" ] && echo "refreshed from upstream main — hosts re-tic on next cza" || echo "unchanged")
+
+          After merge, on the Windows box: close WezTerm, \`git pull\` the chezmoi clone, re-run \`bootstrap.ps1\`.
+          EOF
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/wezterm-nightly
+          delete-branch: true
+          title: 'chore(wezterm): nightly snapshot ${{ needs.validate.outputs.version }}'
+          commit-message: 'chore(wezterm): nightly snapshot ${{ needs.validate.outputs.version }}'
+          body-path: ${{ runner.temp }}/pr-body.md
