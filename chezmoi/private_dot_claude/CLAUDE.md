@@ -53,7 +53,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `eget` 1.3.4
 
 ### Tier-0: original toolbelt
-- `fzf` 0.73.1
+- `fzf` 0.74.0
 - `zoxide` 0.10.0
 - `starship` 1.26.0
 - `zellij` 0.44.3
@@ -79,7 +79,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lnav` 0.14.0
 - `gopass` 1.16.1
 - `age` 1.3.1
-- `fastfetch` 2.65.2
+- `fastfetch` 2.66.0
 - `ssh-copy-id` latest
 
 ### Second-wave expansion (2026-05)
@@ -91,18 +91,18 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `television` 0.15.9
 - `xh` 0.26.1
 - `gping` 1.20.4
-- `atuin` 18.16.1
+- `atuin` 18.17.0
 - `delta` 0.19.2
 - `micro` 2.0.15
-- `eza` 0.23.4
+- `eza` 0.23.5
 - `sd` 1.1.0
 - `ctop` 0.7.7
 - `k9s` 0.51.0
-- `rclone` 1.74.3
-- `croc` 10.4.7
+- `rclone` 1.74.4
+- `croc` 10.4.13
 - `hyperfine` 1.20.0
-- `mise` 2026.7.0
-- `uv` 0.11.26
+- `mise` 2026.7.5
+- `uv` 0.11.28
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
@@ -113,8 +113,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `watchexec` 2.5.1
 
 ### Service / journal / cgroup observability
-- `bottom` 0.14.3
-- `systemctl-tui` 0.5.2
+- `bottom` 0.14.4
+- `systemctl-tui` 0.6.0
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
 
@@ -129,10 +129,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Claude Code CLI
 - `claude` latest
 - `ccstatusline` 2.2.22
-- `node` 26.4.0
+- `node` 26.5.0
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.6.7
+- `dozzle` 10.6.9
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.4.0
@@ -170,7 +170,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gum` 0.17.0
 
 ### (2026-06) C / C++ development & debugging toolchain
-- `nnd` 0.79
+- `nnd` 0.80
 - `pwndbg` 2026.02.18
 - `vcpkg` 2026.06.24
 
