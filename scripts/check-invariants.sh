@@ -206,7 +206,7 @@ check_sentinels() {
   hdr "sentinel blocks matched"
   local s e
   # Anchor to a whole marker line — prose that merely mentions the token
-  # (e.g. wezterm.lua's "between HOSTS:START / HOSTS:END" comment) must not count.
+  # (e.g. hosts.lua's "between HOSTS:START / HOSTS:END" comment) must not count.
   s=$(grep -cE '^[[:space:]]*# CCSTATUSLINE:START[[:space:]]*$' chezmoi/.chezmoiignore.tmpl)
   e=$(grep -cE '^[[:space:]]*# CCSTATUSLINE:END[[:space:]]*$' chezmoi/.chezmoiignore.tmpl)
   if [ "$s" = "1" ] && [ "$e" = "1" ]; then
@@ -214,12 +214,12 @@ check_sentinels() {
   else
     bad "chezmoiignore CCSTATUSLINE sentinels START=$s END=$e (want 1/1)"
   fi
-  s=$(grep -cE '^[[:space:]]*-- HOSTS:START[[:space:]]*$' chezmoi/dot_config/wezterm/wezterm.lua)
-  e=$(grep -cE '^[[:space:]]*-- HOSTS:END[[:space:]]*$' chezmoi/dot_config/wezterm/wezterm.lua)
+  s=$(grep -cE '^[[:space:]]*-- HOSTS:START[[:space:]]*$' chezmoi/dot_config/wezterm/hosts.lua)
+  e=$(grep -cE '^[[:space:]]*-- HOSTS:END[[:space:]]*$' chezmoi/dot_config/wezterm/hosts.lua)
   if [ "$s" = "1" ] && [ "$e" = "1" ]; then
-    ok "wezterm.lua    HOSTS:START/END (1/1)"
+    ok "hosts.lua      HOSTS:START/END (1/1)"
   else
-    bad "wezterm.lua HOSTS sentinels START=$s END=$e (want 1/1)"
+    bad "hosts.lua HOSTS sentinels START=$s END=$e (want 1/1)"
   fi
   s=$(grep -cE '<!-- TOOLS:START' chezmoi/private_dot_claude/CLAUDE.md)
   e=$(grep -cE '<!-- TOOLS:END -->' chezmoi/private_dot_claude/CLAUDE.md)

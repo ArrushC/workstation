@@ -4,7 +4,7 @@
 #
 # Menu-driven host manager. Reads hosts.conf as the single source of truth
 # and regenerates:
-#   - wezterm.lua SSH domains block (between -- HOSTS:START / -- HOSTS:END)
+#   - wezterm hosts.lua SSH domains block (between -- HOSTS:START / -- HOSTS:END)
 #
 # Provisioning consumes hosts.conf directly: bootstrap.sh self-registers
 # this host into it, and scripts/update-hosts.sh iterates over it for
@@ -31,7 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HOSTS_CONF="$REPO_ROOT/hosts.conf"
-WEZTERM_LUA="$REPO_ROOT/chezmoi/dot_config/wezterm/wezterm.lua"
+HOSTS_LUA="$REPO_ROOT/chezmoi/dot_config/wezterm/hosts.lua"
 
 # Valid host groups. dev_machine → MODE=dev provisioning (sudo, system-wide);
 # prod_machine → MODE=prod (no sudo, ~/.local/bin). makefile/scope.mk maps
@@ -131,7 +131,7 @@ is_valid_group() {
 # =============================================================================
 
 generate_wezterm_domains() {
-  log "Regenerating wezterm.lua SSH domains..."
+  log "Regenerating wezterm hosts.lua SSH domains..."
 
   # Build the ssh_domains lua block
   local domains_block
@@ -149,7 +149,7 @@ generate_wezterm_domains() {
 
   domains_block+="}"
 
-  # Replace the ssh_domains block in wezterm.lua between the sentinel comments
+  # Replace the ssh_domains block in hosts.lua between the sentinel comments
   local tmp
   tmp=$(mktemp)
 
@@ -157,10 +157,10 @@ generate_wezterm_domains() {
     /^-- HOSTS:START/ { print; print block; skip=1; next }
     /^-- HOSTS:END/   { skip=0 }
     !skip             { print }
-  ' "$WEZTERM_LUA" >"$tmp"
+  ' "$HOSTS_LUA" >"$tmp"
 
-  mv "$tmp" "$WEZTERM_LUA"
-  ok "wezterm.lua SSH domains updated ($(read_hosts | wc -l | tr -d ' ') hosts)"
+  mv "$tmp" "$HOSTS_LUA"
+  ok "wezterm hosts.lua SSH domains updated ($(read_hosts | wc -l | tr -d ' ') hosts)"
 }
 
 sync_all() {
@@ -664,7 +664,7 @@ show_menu() {
   echo -e "  ${BOLD}4)${RESET} Test SSH connection"
   echo -e "  ${BOLD}5)${RESET} Copy SSH key"
   echo -e "  ${BOLD}6)${RESET} Copy SSH key to ALL hosts"
-  echo -e "  ${BOLD}7)${RESET} Sync configs (regenerate wezterm.lua sentinel block)"
+  echo -e "  ${BOLD}7)${RESET} Sync configs (regenerate wezterm hosts.lua sentinel block)"
   echo -e "  ${BOLD}8)${RESET} View hosts.conf"
   echo -e "  ${BOLD}9)${RESET} Reformat hosts.conf"
   echo -e "  ${BOLD}q)${RESET} Quit"

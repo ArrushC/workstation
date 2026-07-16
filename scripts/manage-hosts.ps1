@@ -3,7 +3,7 @@
 #
 # Windows PowerShell host manager. Reads hosts.conf as the single source of
 # truth and regenerates:
-#   - wezterm.lua SSH domains block (between -- HOSTS:START / -- HOSTS:END)
+#   - wezterm hosts.lua SSH domains block (between -- HOSTS:START / -- HOSTS:END)
 #
 # Provisioning consumes hosts.conf directly: bootstrap.sh self-registers
 # this host into it, and scripts/update-hosts.sh iterates over it for
@@ -50,7 +50,7 @@ $ErrorActionPreference = "Stop"
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path -Parent $ScriptDir
 $HostsConf  = Join-Path $RepoRoot "hosts.conf"
-$WeztermLua = Join-Path $RepoRoot "chezmoi\dot_config\wezterm\wezterm.lua"
+$HostsLua   = Join-Path $RepoRoot "chezmoi\dot_config\wezterm\hosts.lua"
 
 # Valid host groups. dev_machine → MODE=dev provisioning (sudo, system-wide);
 # prod_machine → MODE=prod (no sudo, ~/.local/bin). makefile/scope.mk maps
@@ -147,9 +147,9 @@ function Show-Hosts {
 # =============================================================================
 
 function Invoke-GenerateWezterm {
-    Write-Log "Regenerating wezterm.lua SSH domains..."
+    Write-Log "Regenerating wezterm hosts.lua SSH domains..."
 
-    if (-not (Test-Path $WeztermLua)) { Write-Fail "wezterm.lua not found at $WeztermLua" }
+    if (-not (Test-Path $HostsLua)) { Write-Fail "hosts.lua not found at $HostsLua" }
 
     $hosts = Read-Hosts
 
@@ -168,20 +168,20 @@ function Invoke-GenerateWezterm {
     $block.Add("-- HOSTS:END")
 
     $newBlock = $block -join "`n"
-    $content  = [System.IO.File]::ReadAllText($WeztermLua)
+    $content  = [System.IO.File]::ReadAllText($HostsLua)
     $pattern  = "(?s)-- HOSTS:START.*?-- HOSTS:END"
 
     if (-not [regex]::IsMatch($content, $pattern)) {
-        Write-Warn "HOSTS:START / HOSTS:END sentinels not found in wezterm.lua -- skipping."
+        Write-Warn "HOSTS:START / HOSTS:END sentinels not found in hosts.lua -- skipping."
         return
     }
 
     $replaced = [regex]::Replace($content, $pattern, $newBlock)
     $replaced = $replaced -replace "`r`n", "`n"
-    [System.IO.File]::WriteAllText($WeztermLua, $replaced)
+    [System.IO.File]::WriteAllText($HostsLua, $replaced)
 
     $count = ($hosts | Measure-Object).Count
-    Write-Ok "wezterm.lua SSH domains updated ($count hosts)"
+    Write-Ok "wezterm hosts.lua SSH domains updated ($count hosts)"
 }
 
 function Invoke-SyncAll {

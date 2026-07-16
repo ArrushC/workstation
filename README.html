@@ -2217,9 +2217,13 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                 >
                                             </li>
                                             <li>
-                                                wezterm/wezterm.lua
+                                                wezterm/*.lua
                                                 <span class="note"
-                                                    >&mdash; Windows only</span
+                                                    >&mdash; Windows only;
+                                                    wezterm.lua is the entry
+                                                    point, hosts.lua carries
+                                                    the SSH-domains sentinel
+                                                    block</span
                                                 >
                                             </li>
                                         </ul>
@@ -2778,7 +2782,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         The Windows host is a <strong>client</strong> &mdash; no
                         provisioning Makefile (that's Linux-only), but chezmoi
                         runs here too to deploy
-                        <code>wezterm.lua</code>, the PowerShell profile,
+                        the WezTerm config, the PowerShell profile,
                         Zed/VSCode settings, and the Windows Terminal
                         <code>settings.json</code> (themed Catppuccin Mocha).
                         <code>bootstrap.ps1</code> is the
@@ -3011,7 +3015,8 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                     <p>
                         <strong>Nushell is the default local shell.</strong> It
                         replaces PowerShell as the default in WezTerm
-                        (<code>default_prog</code> in <code>wezterm.lua</code>),
+                        (<code>default_prog</code> in the WezTerm config&rsquo;s
+                        <code>wsl.lua</code>),
                         Windows Terminal (the <em>Nushell</em> profile +
                         <code>defaultProfile</code>), and Zed&rsquo;s integrated
                         terminal (<code>terminal.shell.program</code>) &mdash; a
@@ -3184,18 +3189,28 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                     </p>
                     <p class="note-row">
                         <strong>WezTerm config model:</strong> chezmoi tracks
-                        <code>chezmoi/dot_config/wezterm/wezterm.lua</code> as
-                        the canonical source, but
+                        <code>chezmoi/dot_config/wezterm/</code> (the
+                        <code>wezterm.lua</code> entry point plus its Lua
+                        modules &mdash; <code>hosts</code>,
+                        <code>appearance</code>, <code>domains</code>,
+                        <code>wsl</code>, <code>tabs</code>,
+                        <code>status</code>, <code>actions</code>,
+                        <code>keys</code>) as the canonical source, but
                         <code>.chezmoiignore.tmpl</code> skips
                         <code>dot_config/wezterm</code> on Windows &mdash;
                         chezmoi <em>never</em> writes a copy to
                         <code>%USERPROFILE%\.config\wezterm\</code>. Step 5
                         instead sets a User-scope environment variable
                         <code>WEZTERM_CONFIG_FILE</code> pointing directly at
-                        the chezmoi source path. WezTerm reads the repo file
-                        live, so edits (including
-                        <code>manage-hosts.ps1 -Sync</code> rewriting the
-                        sentinel block) appear immediately via
+                        the chezmoi source path. The entry file prepends its
+                        own directory to Lua&rsquo;s <code>package.path</code>
+                        (WezTerm doesn&rsquo;t search the config file&rsquo;s
+                        directory on its own), so the sibling modules resolve
+                        from the repo too, and WezTerm watches
+                        <code>require</code>&rsquo;d files &mdash; edits to any
+                        module (including <code>manage-hosts.ps1 -Sync</code>
+                        rewriting <code>hosts.lua</code>&rsquo;s sentinel
+                        block) appear immediately via
                         <code>automatically_reload_config</code>. This replaces
                         the pre-v2 hardlink mechanism, which broke whenever
                         chezmoi atomic-wrote the target on a content mismatch.
@@ -3251,8 +3266,8 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </p>
                     <p class="note-row">
                         <strong>Why WSL tabs land in <code>~</code>:</strong>
-                        Two complementary mechanisms in
-                        <code>chezmoi/dot_config/wezterm/wezterm.lua</code>:
+                        Two complementary mechanisms in the WezTerm config
+                        (<code>wsl.lua</code> / <code>actions.lua</code>):
                         (1) <code>default_cwd = '~'</code> on every WSL
                         domain, so a <em>fresh</em> WSL tab cd&rsquo;s to
                         the WSL user&rsquo;s home instead of inheriting
@@ -3297,7 +3312,8 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <strong>Truecolor signaling.</strong> Every chezmoi-managed shell exports
                         <code>COLORTERM=truecolor</code> on startup (see <code>dot_zshrc.tmpl</code> /
                         <code>dot_bashrc.tmpl</code>) and WezTerm advertises <code>TERM=wezterm</code>
-                        to every spawned PTY (<code>config.term</code> in <code>wezterm.lua</code>).
+                        to every spawned PTY (<code>config.term</code> in the WezTerm
+                        config&rsquo;s <code>appearance.lua</code>).
                         Apps querying terminfo see <code>Tc</code>, <code>Smulx</code>, and
                         <code>Setulc</code> &mdash; full 24-bit RGB plus extended underline capabilities
                         &mdash; via the vendored <code>wezterm.terminfo</code> at
@@ -3469,6 +3485,23 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             </tr>
                             <tr>
                                 <td>
+                                    <kbd>ALT</kbd>+<kbd>0</kbd>
+                                </td>
+                                <td>Return to the previously active tab</td>
+                            </tr>
+                            <tr>
+                                <td>&ldquo;+&rdquo; button</td>
+                                <td>
+                                    Left-click: new tab (same smart-cwd
+                                    behavior as
+                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
+                                        >T</kbd
+                                    >); middle-click: SSH host picker;
+                                    right-click: WezTerm&rsquo;s launcher menu.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
                                     <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
                                         >F5</kbd
                                     >
@@ -3488,7 +3521,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                         >R</kbd
                                     >
                                 </td>
-                                <td>Reload <code>wezterm.lua</code></td>
+                                <td>Reload the WezTerm config</td>
                             </tr>
                             <tr>
                                 <td><kbd>SHIFT</kbd>+click</td>
@@ -3746,7 +3779,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p class="lede">
                         <code>hosts.conf</code> is the single source of truth.
                         One output is regenerated from it: the
-                        <code>chezmoi/dot_config/wezterm/wezterm.lua</code>
+                        <code>chezmoi/dot_config/wezterm/hosts.lua</code>
                         SSH-domains block (in-place replace between
                         <code>-- HOSTS:START</code> /
                         <code>-- HOSTS:END</code> sentinels). On Linux WezTerm
@@ -4670,9 +4703,9 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Normally edits to
+                                Normally edits to the WezTerm config under
                                 <code
-                                    >chezmoi/dot_config/wezterm/wezterm.lua</code
+                                    >chezmoi/dot_config/wezterm/</code
                                 >
                                 are visible immediately because
                                 <code>bootstrap.ps1</code> sets a User-scope
