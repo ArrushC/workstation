@@ -95,6 +95,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: wezterm-nightly-zip
+          path: ${{ runner.temp }}
       - name: Mirror the snapshot (immutable asset; prune to newest 8)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -103,8 +104,11 @@ jobs:
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
             --title "WezTerm nightly snapshots (mirror)" --latest=false \
             --notes "Immutable mirror of upstream WezTerm nightly builds (upstream keeps only ONE rolling nightly). Pinned by bootstrap.ps1; pruned to the newest 8. Managed by wezterm-nightly.yml."
-          mv nightly.zip "WezTerm-windows-${VERSION}.zip"
-          gh release upload "$TAG" "WezTerm-windows-${VERSION}.zip" --clobber
+          # Stage the asset OUTSIDE the workspace — peter-evans git-add -A's
+          # the whole tree, and a workspace-resident zip lands IN the bump PR
+          # (bit the first dispatch, 2026-07-16).
+          mv "$RUNNER_TEMP/nightly.zip" "$RUNNER_TEMP/WezTerm-windows-${VERSION}.zip"
+          gh release upload "$TAG" "$RUNNER_TEMP/WezTerm-windows-${VERSION}.zip" --clobber
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" \
             --jq '.assets | sort_by(.created_at) | reverse | .[8:][].id' |
             while read -r id; do

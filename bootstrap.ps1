@@ -765,23 +765,17 @@ function Install-PortableTool {
                 -Headers $headers -UseBasicParsing
             $asset = @($rel.assets) | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
             if (-not $asset) { throw "asset '$assetName' not found on release '$relTag'" }
-            # PS 5.1 re-sends the Authorization header on the S3 redirect the
-            # asset endpoint returns, and S3 rejects requests carrying BOTH a
-            # pre-signed URL and an auth header. Catch the 302 ourselves and
-            # follow the Location with NO auth header.
+            # The asset endpoint + Accept: octet-stream 302s to a pre-signed
+            # CDN URL. .NET Framework's HttpWebRequest (PS 5.1's engine)
+            # STRIPS the Authorization header when auto-following the
+            # redirect, so the pre-signed hop arrives clean — no manual 302
+            # handling needed (proven live 2026-07-16: fetched-asset sha256
+            # matched the pin; the -MaximumRedirection 0 capture alternative
+            # instead throws InvalidOperationException with a null Response
+            # on PS 5.1, so it can never work there).
             $headers['Accept'] = 'application/octet-stream'
-            $assetUri = "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/assets/$($asset.id)"
-            $loc = $null
-            try {
-                $resp = Invoke-WebRequest -Uri $assetUri -Headers $headers -MaximumRedirection 0 `
-                    -UseBasicParsing -ErrorAction Stop
-                if ($resp.Headers['Location']) { $loc = $resp.Headers['Location'] }
-            } catch {
-                $r = $_.Exception.Response
-                if ($r -and $r.Headers['Location']) { $loc = $r.Headers['Location'] }
-            }
-            if (-not $loc) { throw "no redirect Location from the asset endpoint (asset id $($asset.id))" }
-            Invoke-WebRequest -Uri $loc -OutFile $tmpZip -UseBasicParsing
+            Invoke-WebRequest -Uri "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/assets/$($asset.id)" `
+                -Headers $headers -OutFile $tmpZip -UseBasicParsing
         } else {
             Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
         }
