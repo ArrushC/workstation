@@ -17,7 +17,7 @@
 EGET_VERSION := 1.3.4
 
 # --- Tier-0: original toolbelt -----------------------------------------------
-FZF_VERSION      := 0.73.1
+FZF_VERSION      := 0.74.0
 ZOXIDE_VERSION   := 0.10.0
 STARSHIP_VERSION := 1.26.0
 ZELLIJ_VERSION   := 0.44.3
@@ -43,7 +43,7 @@ DIVE_VERSION       := 0.13.1
 LNAV_VERSION       := 0.14.0
 GOPASS_VERSION     := 1.16.1
 AGE_VERSION        := 1.3.1
-FASTFETCH_VERSION  := 2.65.2
+FASTFETCH_VERSION  := 2.66.0
 SSH_COPY_ID_VERSION := latest
 
 # --- Second-wave expansion (2026-05) -----------------------------------------
@@ -55,18 +55,18 @@ AST_GREP_VERSION   := 0.44.1
 TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.26.1
 GPING_VERSION      := 1.20.4
-ATUIN_VERSION      := 18.16.1
+ATUIN_VERSION      := 18.17.0
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
-EZA_VERSION        := 0.23.4
+EZA_VERSION        := 0.23.5
 SD_VERSION         := 1.1.0
 CTOP_VERSION       := 0.7.7
 K9S_VERSION        := 0.51.0
-RCLONE_VERSION     := 1.74.3
-CROC_VERSION       := 10.4.7
+RCLONE_VERSION     := 1.74.4
+CROC_VERSION       := 10.4.13
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.7.0
-UV_VERSION         := 0.11.26
+MISE_VERSION       := 2026.7.5
+UV_VERSION         := 0.11.28
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
@@ -77,8 +77,8 @@ OUCH_VERSION      := 0.8.1
 WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
-BOTTOM_VERSION        := 0.14.3
-SYSTEMCTL_TUI_VERSION := 0.5.2
+BOTTOM_VERSION        := 0.14.4
+SYSTEMCTL_TUI_VERSION := 0.6.0
 LAZYJOURNAL_VERSION   := 0.8.6
 SYSZ_VERSION          := 1.4.3
 
@@ -95,7 +95,7 @@ CHEZIT_VERSION := 0.3.0
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.22
-NODE_VERSION := 26.4.0
+NODE_VERSION := 26.5.0
 
 # --- Service / web admin (dev_machine only) ---------------------------------
 # Dozzle is run as a Docker container via systemd (no native binary —
@@ -107,7 +107,7 @@ NODE_VERSION := 26.4.0
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.6.7
+DOZZLE_VERSION := 10.6.9
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
@@ -183,7 +183,7 @@ GUM_VERSION      := 0.17.0
 # GEF (the other GDB front-end) is a vendored chezmoi dotfile (gef.py + a tracked
 # ~/.gdbinit), rolling upstream with no release tags — pinned by commit in its
 # .vendor sidecar, so it has NO versions.mk entry (cf. batpipe / cht.sh).
-NND_VERSION    := 0.79
+NND_VERSION    := 0.80
 PWNDBG_VERSION := 2026.02.18
 VCPKG_VERSION  := 2026.06.24
 
