@@ -1,5 +1,5 @@
-# Vendored from wezterm/wezterm@20240203-110809-5046fc22 termwiz/data/wezterm.terminfo
-# Bump: re-download from https://raw.githubusercontent.com/wezterm/wezterm/<new-tag>/termwiz/data/wezterm.terminfo; chezmoi's run_onchange script auto-re-tic's on next cza.
+# Vendored from wezterm/wezterm@52c351503751 termwiz/data/wezterm.terminfo (nightly snapshot 2026-07-16)
+# Synced by .github/workflows/wezterm-nightly.yml; manual re-vendor recipe in docs/claude/file-care.md. chezmoi's run_ script auto-re-tic's on next cza.
 #	This is Wez's term definition for wezterm.
 #	It was reconstructed via infocmp from file: /lib/terminfo/x/xterm-256color
 #	and then has some additions in the top few lines (until the line starting
@@ -23,10 +23,11 @@
 # https://codeberg.org/dnkl/foot/pulls/243/files
 # although we use OSC 0 for the title rather than OSC 2.
 # https://github.com/neovim/neovim/issues/20706
-# https://github.com/wez/wezterm/issues/2635
+# https://github.com/wezterm/wezterm/issues/2635
 wezterm|Wez's terminal emulator,
   Tc,
   hs,
+  Su,
   sitm=\E[3m, ritm=\E[23m,
   Cr=\E]112\007, Cs=\E]12;%p1%s\007, Ms=\E]52;%p1%s;%p2%s\007, Se=\E[2\sq,
   Ss=\E[%p1%d\sq,
