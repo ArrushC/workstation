@@ -231,9 +231,9 @@ $PortableTools = @(
     @{
         Name         = "WezTerm"
         Exe          = "wezterm"
-        Version      = "20240203-110809-5046fc22"
-        Url          = "https://github.com/wez/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
-        Sha256       = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
+        Version      = "20260716-102532-2ef4bef4"
+        Url          = "https://github.com/ArrushC/workstation/releases/download/wezterm-nightly-snapshots/WezTerm-windows-20260716-102532-2ef4bef4.zip"
+        Sha256       = "f1fd19ca1ed4241247cd7f324602cd6d2c9ad84e3d368cbd6f08730d87d3f816"
         Layout       = "tree"
         Dest         = $WsWezterm
         Repo         = "wez/wezterm"
