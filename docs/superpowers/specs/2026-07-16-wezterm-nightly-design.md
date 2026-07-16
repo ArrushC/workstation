@@ -55,8 +55,10 @@ sha entirely abandons the repo's pinned+verified ethos and any rollback story.
    the WezTerm entry; when present AND the pinned `Url` points into that repo,
    the download resolves the asset id by name via the GitHub API and fetches
    through the asset endpoint with `Authorization: Bearer $env:GITHUB_TOKEN` +
-   `Accept: application/octet-stream` (redirect handled manually — PS 5.1
-   re-sends the Authorization header on the S3 redirect, which S3 rejects).
+   `Accept: application/octet-stream` (plain auto-redirect download — .NET
+   Framework strips the Authorization header on the redirect hop, verified
+   live; a manual -MaximumRedirection 0 capture is impossible on PS 5.1,
+   which throws with a null Response).
    Absent token → warn-and-skip, the download-failure posture. Sha256 verify
    unchanged. Rejected: a separate public mirror repo (cross-repo PAT secret +
    second repo to maintain) and dropping the mirror (loses reproducibility +
