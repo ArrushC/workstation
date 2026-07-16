@@ -80,10 +80,14 @@ function M.apply(config)
   -- a modal.
   config.window_close_confirmation = 'NeverPrompt'
 
-  -- Update-check toast off — the Windows build is deliberately pinned at
-  -- 20240203 (bootstrap.ps1 $PortableTools), so "new version available" is
-  -- pure noise. Re-enable if the pin policy ever changes. (Supersedes the
-  -- 2026-07-09 UX-sweep spec's decline — re-approved 2026-07-10.)
+  -- Update-check toast off — the WezTerm pin is maintained as weekly
+  -- mirrored NIGHTLY snapshots (bootstrap.ps1 $PortableTools, bumped only by
+  -- .github/workflows/wezterm-nightly.yml), so the update channel is the
+  -- weekly PR + bootstrap re-run; against a rolling nightly the in-app toast
+  -- is pure noise. (History: pinned stable 20240203 from 2026-05; nightly
+  -- snapshot policy adopted 2026-07-16 — the stable pin stays until the
+  -- first workflow-driven bump PR lands. Toast declined 2026-07-09,
+  -- re-approved 2026-07-10, kept off under the nightly policy.)
   config.check_for_updates = false
 
   -- Kitty graphics protocol — off by default on this build. Enables inline

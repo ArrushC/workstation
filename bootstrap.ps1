@@ -191,14 +191,23 @@ $WsStamps     = Join-Path $WsRoot "stamps"
 # as scripts\install-nerd-fonts.ps1) — NOT makefile/versions.mk, because Make
 # never runs on Windows. Bump = update Version + refresh Sha256 (compute over the
 # downloaded .zip). Layout 'single' copies <Exe>.exe into Dest; 'tree' extracts
-# the whole archive into Dest. WezTerm is pinned to the same tag as the vendored
-# terminfo (see CLAUDE.md's wezterm-terminfo invariant).
+# the whole archive into Dest. WezTerm's pin and vendored terminfo are both
+# maintained by .github/workflows/wezterm-nightly.yml.
 #
 # The Repo/Tag* keys feed -CheckForUpdates only (latest upstream tag via
 # `git ls-remote`): TagPrefix is what precedes the version in the tag,
 # TagFilter accepts version shapes after the prefix is stripped, TagSort
 # 'string' is for WezTerm's date-style tags ([version] can't parse them),
 # and UpdateHint is appended to the "update available" line.
+#   NightlyAsset       upstream rolling-nightly asset filename (WezTerm). Its
+#                      presence switches the -CheckForUpdates row from a git-tag
+#                      lookup (meaningless against a single rolling 'nightly'
+#                      tag) to comparing the pin's leading yyyymmdd against the
+#                      asset's updated_at. Repo then means the UPSTREAM repo.
+#   PrivateRepo        owner/repo of OUR private mirror. When set AND Url points
+#                      into it, Install-PortableTool downloads via the GitHub
+#                      API asset endpoint with GITHUB_TOKEN (private release
+#                      assets 404 unauthenticated); absent token warns-and-skips.
 #
 # OPT-IN key `Shortcut = @{ Target = "<exe-basename>"; Description = "..." }` —
 # for GUI tools whose portable .zip ships no Start Menu entry: step 5c
@@ -220,19 +229,18 @@ $PortableTools = @(
         UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
     },
     @{
-        Name       = "WezTerm"
-        Exe        = "wezterm"
-        Version    = "20240203-110809-5046fc22"
-        Url        = "https://github.com/wez/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
-        Sha256     = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
-        Layout     = "tree"
-        Dest       = $WsWezterm
-        Repo       = "wez/wezterm"
-        TagPrefix  = ""
-        TagFilter  = '^\d{8}-\d{6}-[0-9a-f]+$'   # date-stamped release tags; excludes 'nightly'
-        TagSort    = "string"
-        UpdateHint = "pin tracks the vendored wezterm.terminfo tag — bump both together (see CLAUDE.md)"
-        Shortcut   = @{ Target = "wezterm-gui"; Description = "WezTerm terminal emulator" }
+        Name         = "WezTerm"
+        Exe          = "wezterm"
+        Version      = "20240203-110809-5046fc22"
+        Url          = "https://github.com/wez/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
+        Sha256       = "57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
+        Layout       = "tree"
+        Dest         = $WsWezterm
+        Repo         = "wez/wezterm"
+        NightlyAsset = "WezTerm-windows-nightly.zip"
+        PrivateRepo  = "ArrushC/workstation"
+        UpdateHint   = "weekly wezterm-nightly.yml PRs snapshot bumps; dispatch it for an immediate refresh"
+        Shortcut     = @{ Target = "wezterm-gui"; Description = "WezTerm terminal emulator" }
     },
     @{
         Name       = "Helix"
@@ -732,10 +740,51 @@ function Install-PortableTool {
     $tmpZip = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version).zip"
     $tmpDir = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version)"
 
+    # Private-mirror download (opt-in via PrivateRepo — today only WezTerm's
+    # nightly-snapshot mirror): release assets on a PRIVATE repo 404 on the
+    # plain releases/download URL, so resolve the asset id by name via the
+    # API and fetch through the asset endpoint with the token. Gated on the
+    # Url actually pointing INTO PrivateRepo, so a rollback re-pin to the
+    # public upstream stable URL takes the plain path with no field edits.
+    # GITHUB_TOKEN is already mandatory on private-repo machines (the clone
+    # step below) — an absent token warns-and-skips like a download failure.
+    $usePrivate = $Tool.ContainsKey('PrivateRepo') -and
+        ($Tool.Url -like "*github.com/$($Tool.PrivateRepo)/*")
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = `
             [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
+        if ($usePrivate) {
+            if (-not $env:GITHUB_TOKEN) {
+                Write-Warn "$($Tool.Name): GITHUB_TOKEN not set — can't download the private mirror asset. Skipping."
+                return
+            }
+            $assetName = $Tool.Url.Split('/')[-1]
+            $relTag    = $Tool.Url.Split('/')[-2]
+            $headers   = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; 'User-Agent' = 'workstation-bootstrap' }
+            $rel   = Invoke-RestMethod -Uri "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/tags/$relTag" `
+                -Headers $headers -UseBasicParsing
+            $asset = @($rel.assets) | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
+            if (-not $asset) { throw "asset '$assetName' not found on release '$relTag'" }
+            # PS 5.1 re-sends the Authorization header on the S3 redirect the
+            # asset endpoint returns, and S3 rejects requests carrying BOTH a
+            # pre-signed URL and an auth header. Catch the 302 ourselves and
+            # follow the Location with NO auth header.
+            $headers['Accept'] = 'application/octet-stream'
+            $assetUri = "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/assets/$($asset.id)"
+            $loc = $null
+            try {
+                $resp = Invoke-WebRequest -Uri $assetUri -Headers $headers -MaximumRedirection 0 `
+                    -UseBasicParsing -ErrorAction Stop
+                if ($resp.Headers['Location']) { $loc = $resp.Headers['Location'] }
+            } catch {
+                $r = $_.Exception.Response
+                if ($r -and $r.Headers['Location']) { $loc = $r.Headers['Location'] }
+            }
+            if (-not $loc) { throw "no redirect Location from the asset endpoint (asset id $($asset.id))" }
+            Invoke-WebRequest -Uri $loc -OutFile $tmpZip -UseBasicParsing
+        } else {
+            Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
+        }
     } catch {
         Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
         Write-Warn "  Skipping — install it manually or re-run later."
@@ -2002,6 +2051,31 @@ function Invoke-CheckForUpdates {
 
     Write-Log "Pinned portable tools"
     foreach ($tool in $PortableTools) {
+        if ($tool.ContainsKey('NightlyAsset')) {
+            # Rolling-nightly snapshot (WezTerm): upstream has ONE rolling
+            # 'nightly' tag, so a tag lookup is meaningless — compare our
+            # snapshot's build date (Version leads with yyyymmdd) against the
+            # upstream asset's updated_at instead.
+            $asset = $null
+            try {
+                $rel   = Invoke-RestMethod -Uri "https://api.github.com/repos/$($tool.Repo)/releases/tags/nightly" `
+                    -Headers @{ 'User-Agent' = 'workstation-bootstrap' } -UseBasicParsing
+                $asset = @($rel.assets) | Where-Object { $_.name -eq $tool.NightlyAsset } | Select-Object -First 1
+            } catch { $asset = $null }   # network/API failure -> unresolved; warn below
+            if (-not $asset) {
+                Write-Warn "$($tool.Name): couldn't resolve the upstream nightly asset (offline? renamed?)"
+                continue
+            }
+            $upstreamDay = ([datetime]$asset.updated_at).ToUniversalTime().ToString('yyyyMMdd')
+            $pinnedDay   = ($tool.Version -split '-')[0]
+            $hint        = if ($tool.ContainsKey('UpdateHint')) { " — $($tool.UpdateHint)" } else { "" }
+            if ($upstreamDay -gt $pinnedDay) {
+                Write-Warn "$($tool.Name) snapshot $($tool.Version) — upstream nightly rebuilt $upstreamDay$hint"
+            } else {
+                Write-Ok "$($tool.Name) snapshot $($tool.Version) is current (upstream nightly $upstreamDay)"
+            }
+            continue
+        }
         $filter    = if ($tool.ContainsKey('TagFilter')) { $tool.TagFilter } else { '^\d+(\.\d+)*$' }
         $useString = ($tool.ContainsKey('TagSort') -and $tool.TagSort -eq 'string')
         $hint      = if ($tool.ContainsKey('UpdateHint')) { $tool.UpdateHint } else { "" }
