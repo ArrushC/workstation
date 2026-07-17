@@ -25,7 +25,8 @@
 #   installed (the PowerShell profile no-ops without it).
 #
 # Flow:
-#   1. preflight    — require git on PATH (hard-fail w/ install link); warn if
+#   1. preflight    — require git + an authenticated gh on PATH (hard-fail
+#                     w/ install links); warn if
 #                     ssh-keygen / Zed / VSCode are missing.
 #   2. tool install — chezmoi (official installer) + WezTerm/Starship/Helix (pinned
 #                     portable downloads), all into %LOCALAPPDATA%\workstation;
@@ -206,8 +207,10 @@ $WsStamps     = Join-Path $WsRoot "stamps"
 #                      asset's updated_at. Repo then means the UPSTREAM repo.
 #   PrivateRepo        owner/repo of OUR private mirror. When set AND Url points
 #                      into it, Install-PortableTool downloads via the GitHub
-#                      API asset endpoint with GITHUB_TOKEN (private release
-#                      assets 404 unauthenticated); absent token warns-and-skips.
+#                      API asset endpoint with the gh-sourced token (`gh auth
+#                      token` — honors GITHUB_TOKEN; gh is a preflight hard
+#                      prerequisite, private assets 404 unauthenticated); no
+#                      usable token warns-and-skips.
 #
 # OPT-IN key `Shortcut = @{ Target = "<exe-basename>"; Description = "..." }` —
 # for GUI tools whose portable .zip ships no Start Menu entry: step 5c
@@ -614,6 +617,36 @@ This script does NOT install Git for you.
     }
     Write-Ok "git found ($((Get-Command git).Source))"
 
+    # GitHub CLI is a hard prerequisite too (2026-07-16) — the WezTerm
+    # nightly-snapshot mirror lives on this PRIVATE repo, and gh is the auth
+    # source for its download: `gh auth token` returns GITHUB_TOKEN when set
+    # (token-only/CI flows keep working) and the stored `gh auth login`
+    # credential otherwise — no PAT management on fresh machines. This
+    # script does NOT install gh.
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Fail @"
+GitHub CLI (gh) is required but isn't on PATH.
+
+Install it, authenticate once, then re-run this script:
+  winget install GitHub.cli
+  gh auth login
+or:  https://cli.github.com
+
+This script does NOT install gh for you.
+"@
+    }
+    $ghTok = (& gh auth token 2>$null | Select-Object -First 1)
+    if (-not $ghTok) {
+        Write-Fail @"
+gh is installed but has no usable token (not logged in, and GITHUB_TOKEN unset).
+
+Authenticate once:  gh auth login
+(or set `$env:GITHUB_TOKEN for this session) — needed for the private-repo
+clone and the WezTerm nightly-snapshot mirror download.
+"@
+    }
+    Write-Ok "gh found + authenticated ($((Get-Command gh).Source))"
+
     # chezmoi is installed by the tool step unless skipped. If -SkipToolInstall
     # is set and the chezmoi-apply step will run, chezmoi must already be present.
     if ($SkipToolInstall -and -not $SkipChezmoi -and -not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
@@ -743,24 +776,30 @@ function Install-PortableTool {
     # Private-mirror download (opt-in via PrivateRepo — today only WezTerm's
     # nightly-snapshot mirror): release assets on a PRIVATE repo 404 on the
     # plain releases/download URL, so resolve the asset id by name via the
-    # API and fetch through the asset endpoint with the token. Gated on the
+    # API and fetch through the asset endpoint with a token. Gated on the
     # Url actually pointing INTO PrivateRepo, so a rollback re-pin to the
     # public upstream stable URL takes the plain path with no field edits.
-    # GITHUB_TOKEN is already mandatory on private-repo machines (the clone
-    # step below) — an absent token warns-and-skips like a download failure.
+    # Token source is the gh CLI (a preflight hard prerequisite, like Git):
+    # `gh auth token` returns GITHUB_TOKEN when set and the stored login
+    # otherwise. No usable token warns-and-skips like a download failure.
     $usePrivate = $Tool.ContainsKey('PrivateRepo') -and
         ($Tool.Url -like "*github.com/$($Tool.PrivateRepo)/*")
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = `
             [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
         if ($usePrivate) {
-            if (-not $env:GITHUB_TOKEN) {
-                Write-Warn "$($Tool.Name): GITHUB_TOKEN not set — can't download the private mirror asset. Skipping."
+            $tok = $null
+            if (Get-Command gh -ErrorAction SilentlyContinue) {
+                $tok = (& gh auth token 2>$null | Select-Object -First 1)
+            }
+            if (-not $tok) { $tok = $env:GITHUB_TOKEN }
+            if (-not $tok) {
+                Write-Warn "$($Tool.Name): no GitHub token (gh not authenticated, GITHUB_TOKEN unset) — can't download the private mirror asset. Skipping."
                 return
             }
             $assetName = $Tool.Url.Split('/')[-1]
             $relTag    = $Tool.Url.Split('/')[-2]
-            $headers   = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; 'User-Agent' = 'workstation-bootstrap' }
+            $headers   = @{ Authorization = "Bearer $tok"; 'User-Agent' = 'workstation-bootstrap' }
             $rel   = Invoke-RestMethod -Uri "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/tags/$relTag" `
                 -Headers $headers -UseBasicParsing
             $asset = @($rel.assets) | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
