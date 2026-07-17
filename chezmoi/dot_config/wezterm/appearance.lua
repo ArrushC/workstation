@@ -153,6 +153,16 @@ function M.apply(config)
     -- distinct from the mauve cursor it momentarily replaces (config.visual_bell
     -- below targets CursorColor).
     visual_bell   = mocha.peach,
+    -- NIGHTLY-ONLY: label-row colors for the InputSelector overlays (host
+    -- picker, tab switcher, help, WSL picker) and the launcher menu — the
+    -- last two overlay surfaces that ignored the Mocha chrome. Matched to
+    -- the command-palette treatment (crust bg / text fg) so every overlay
+    -- reads as one system. ColorSpec wrappers ({ Color = ... }) are the
+    -- required shape for these keys, unlike the plain-hex keys above.
+    input_selector_label_bg = { Color = mocha.crust },
+    input_selector_label_fg = { Color = mocha.text },
+    launcher_label_bg       = { Color = mocha.crust },
+    launcher_label_fg       = { Color = mocha.text },
   }
 
   -- Fuzzy-overlay chrome — the command palette (CTRL+SHIFT+P) AND every

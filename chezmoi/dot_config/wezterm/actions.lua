@@ -22,6 +22,13 @@ function M.apply(config)
     [[#\d+]],
   }
 
+  -- NIGHTLY-ONLY: strip colors/styling from the pane while a quick-select
+  -- overlay is active, so the labels + matches stand out against colorful
+  -- eza/git/compiler output (upstream #4022). If the pin ever rolls back to
+  -- stable 20240203, remove the NIGHTLY-ONLY-tagged lines in this dir —
+  -- 20240203 errors on unknown config options.
+  config.quick_select_remove_styling = true
+
   -- Hyperlink rules — the built-in defaults (URLs, mailto:, file://) plus one
   -- custom rule: bare #NN issue/PR refs link into the workstation repo
   -- (GitHub auto-redirects /issues/NN → /pull/NN when NN is a PR). \B# keeps
@@ -279,7 +286,7 @@ function M.apply(config)
       { label = 'key   CTRL+3×click     Select a command\'s whole output + copy (WSL/local tabs)', id = '' },
       { label = 'key   SHIFT+click      Open link under mouse (the one modifier that works inside Zellij/Helix panes)', id = '' },
       { label = 'note  #NN refs         Clickable → github.com/ArrushC/workstation PR/issue', id = '' },
-      { label = 'note  tab markers      ● unseen output · 󰂞 bell rang (background tabs; clear on view)', id = '' },
+      { label = 'note  tab markers      ● unseen output · 󰂞 bell rang (background tabs; clear on view) · NN% progress · underline = ALT+0 target', id = '' },
       { label = 'note  footer ↕        Active tab line count: total · rows on screen (cursor line when a program moves it; hidden in full-screen apps)', id = '' },
       -- Built-in WezTerm defaults (not bound in config.keys) surfaced here
       -- for discoverability:
@@ -442,14 +449,22 @@ function M.apply(config)
   end)
 
   -- Rename current tab — extracted to a named value so the CTRL+SHIFT+E
-  -- keybind and the command-palette entry share one definition.
-  local rename_tab = act.PromptInputLine {
-    description = 'New tab title (empty = reset):',
-    action = wezterm.action_callback(function(window, _pane, line)
-      if line == nil then return end  -- Esc cancels
-      window:active_tab():set_title(line)
-    end),
-  }
+  -- keybind and the command-palette entry share one definition. Wrapped in a
+  -- callback so initial_value can carry the CURRENT explicit title at
+  -- keypress time (NIGHTLY-ONLY param; editing a rename no longer means
+  -- retyping it). Auto-generated titles aren't prefilled — tab_title is
+  -- empty until a deliberate CTRL+SHIFT+E rename, which is exactly the case
+  -- where a prefill helps.
+  local rename_tab = wezterm.action_callback(function(window, pane)
+    window:perform_action(act.PromptInputLine {
+      description = 'New tab title (empty = reset):',
+      initial_value = window:active_tab():get_title(),
+      action = wezterm.action_callback(function(inner_win, _pane, line)
+        if line == nil then return end  -- Esc cancels
+        inner_win:active_tab():set_title(line)
+      end),
+    }, pane)
+  end)
 
   -- Copy entire scrollback — extracted for the same keybind/palette sharing.
   local copy_all_scrollback = act.Multiple {
