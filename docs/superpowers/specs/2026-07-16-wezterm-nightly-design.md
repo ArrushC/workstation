@@ -70,6 +70,17 @@ sha entirely abandons the repo's pinned+verified ethos and any rollback story.
    returns the stored `gh auth login` credential, so fresh machines
    browser-login once instead of managing a PAT, and existing boxes' re-runs
    need no session token at all.
+   **Amendment 2 (2026-07-17, user-directed):** gh is demoted from
+   prerequisite to a bootstrap-installed pinned portable tool (`GitHub CLI`
+   in `$PortableTools`, `GH_VERSION` dual-edit, ordered BEFORE WezTerm — it
+   supplies the mirror-download token, resolved by concrete `$WsBin` path
+   since the session PATH is stale mid-loop). The preflight auth check is
+   SOFT: no token → warn + the WezTerm download skips without stamping and
+   self-heals on a later run after the one-time `gh auth login`. Deliberately
+   NOT winget (the `GitHub.cli` package is a machine-scope MSI → UAC,
+   violating the no-admin invariant); the portable zip follows the house
+   pattern. The only remaining human step on a fresh machine is
+   `gh auth login` once.
 
 ## Design
 
