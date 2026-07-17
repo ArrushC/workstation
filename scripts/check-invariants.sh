@@ -112,6 +112,15 @@ check_version_pins() {
     bad "devtoys-cli drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
+  v=$(mkval GH_VERSION)
+  ref=$(grep -oE 'cli/cli/releases/download/v[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/v##')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "gh @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "gh drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
   # shfmt + gitleaks are enforced below (check_shfmt / check_gitleaks). CI
   # (.github/workflows/lint.yml) installs these exact versions so the checks
   # actually run there, so the pins dual-edit with lint.yml's `SHFMT=`/`GITLEAKS=`.

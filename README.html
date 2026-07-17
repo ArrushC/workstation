@@ -2792,14 +2792,15 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         <strong>No admin required.</strong> Everything installs
                         into your user profile (<code>%LOCALAPPDATA%\workstation</code>,
                         the User <code>PATH</code>, CurrentUser PSGallery, HKCU
-                        fonts). <strong>Git and the GitHub CLI
-                        (<code>gh</code>, authenticated) are prerequisites you
-                        install yourself</strong> &mdash; the script hard-fails
-                        with install links if <code>git</code> or
-                        <code>gh</code> isn&rsquo;t on PATH, or if
-                        <code>gh</code> has no usable token (run
-                        <code>gh auth login</code> once; a set
-                        <code>GITHUB_TOKEN</code> also satisfies it).
+                        fonts). <strong>Git is a prerequisite you install
+                        yourself</strong> &mdash; the script hard-fails with an
+                        install link if <code>git</code> isn&rsquo;t on PATH.
+                        The GitHub CLI is <em>not</em> a prerequisite &mdash;
+                        the script installs it as a pinned portable tool; you
+                        just authenticate once (<code>gh auth login</code>, or
+                        a set <code>GITHUB_TOKEN</code>). Without a token the
+                        script only warns and skips the WezTerm mirror
+                        download, which self-heals on the next run.
                         <strong>One best-effort exception:</strong> the
                         SSHFS-Win step (WinFsp kernel driver) is machine-scope
                         and pops a UAC prompt &mdash; decline it (or pass
@@ -2817,6 +2818,19 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>%LOCALAPPDATA%\workstation\bin</code>.
                         </li>
                         <li>
+                            <strong>GitHub CLI</strong> (<code>gh</code>)
+                            &mdash; pinned, sha256-verified portable install
+                            into <code>%LOCALAPPDATA%\workstation\bin</code>,
+                            deliberately ordered <em>before</em> WezTerm: it
+                            supplies the token (<code>gh auth token</code>)
+                            for WezTerm&rsquo;s private-mirror download.
+                            Authenticate once with
+                            <code>gh auth login</code>. The pin dual-edits
+                            <code>GH_VERSION</code> in
+                            <code>makefile/versions.mk</code> (the Linux half
+                            is the eget-installed <code>gh</code>).
+                        </li>
+                        <li>
                             <strong>WezTerm</strong> &mdash; rides nightly via
                             weekly mirrored snapshots: a scheduled workflow
                             validates each nightly (sha256 digest + a config
@@ -2828,7 +2842,9 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             Auth comes from the <code>gh</code> CLI
                             (<code>gh auth token</code> &mdash; a set
                             <code>GITHUB_TOKEN</code> takes precedence), since
-                            the mirror lives on this private repo.
+                            the mirror lives on this private repo; the script
+                            installs <code>gh</code> itself just before
+                            WezTerm in the same run.
                             A per-user <strong>Start Menu shortcut</strong>
                             (<code>WezTerm.lnk</code> &rarr;
                             <code>wezterm-gui.exe</code>) is created on every run
@@ -4800,13 +4816,14 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                             <pre><code>winget install Git.Git
 # or download: https://git-scm.com/download/win</code></pre>
                             <p>
-                                The GitHub CLI is the same kind of prerequisite
-                                (the equivalent aborts name <code>gh</code> or
-                                &ldquo;no usable token&rdquo;) &mdash; install
-                                and authenticate it once:
+                                The GitHub CLI is <em>not</em> such a
+                                prerequisite &mdash; the script installs it
+                                (pinned portable). If preflight warns about a
+                                missing GitHub token, authenticate once and
+                                re-run; the skipped WezTerm mirror download
+                                self-heals:
                             </p>
-                            <pre><code>winget install GitHub.cli
-gh auth login</code></pre>
+                            <pre><code>gh auth login</code></pre>
                         </div>
                     </details>
 

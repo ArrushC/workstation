@@ -25,9 +25,10 @@
 #   installed (the PowerShell profile no-ops without it).
 #
 # Flow:
-#   1. preflight    — require git + an authenticated gh on PATH (hard-fail
-#                     w/ install links); warn if
-#                     ssh-keygen / Zed / VSCode are missing.
+#   1. preflight    — require git on PATH (hard-fail w/ install link); warn
+#                     (never fail) if no GitHub token is available yet, and if
+#                     ssh-keygen / Zed / VSCode are missing. gh itself is NOT
+#                     a prerequisite — step 2 installs it (pinned portable).
 #   2. tool install — chezmoi (official installer) + WezTerm/Starship/Helix (pinned
 #                     portable downloads), all into %LOCALAPPDATA%\workstation;
 #                     then the installer-class apps (Obsidian, Zed) and the
@@ -84,9 +85,9 @@
 #   -RepoPath <path>    override clone target
 #                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the chezmoi/WezTerm/Starship/Helix/Nushell/jq/
-#                       OpenCode/omp/DevToys CLI/dnGrep/LogExpert auto-installs
-#                       AND the Claude Code step
+#   -SkipToolInstall    skip the chezmoi/GitHub CLI/WezTerm/Starship/Helix/
+#                       Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert
+#                       auto-installs AND the Claude Code step
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
@@ -208,9 +209,11 @@ $WsStamps     = Join-Path $WsRoot "stamps"
 #   PrivateRepo        owner/repo of OUR private mirror. When set AND Url points
 #                      into it, Install-PortableTool downloads via the GitHub
 #                      API asset endpoint with the gh-sourced token (`gh auth
-#                      token` — honors GITHUB_TOKEN; gh is a preflight hard
-#                      prerequisite, private assets 404 unauthenticated); no
-#                      usable token warns-and-skips.
+#                      token` — honors GITHUB_TOKEN; gh is itself a pinned
+#                      portable tool installed EARLIER in this manifest, and
+#                      is resolved by its concrete $WsBin path first — the
+#                      session PATH is stale mid-loop; private assets 404
+#                      unauthenticated); no usable token warns-and-skips.
 #
 # OPT-IN key `Shortcut = @{ Target = "<exe-basename>"; Description = "..." }` —
 # for GUI tools whose portable .zip ships no Start Menu entry: step 5c
@@ -230,6 +233,21 @@ $PortableTools = @(
         Repo       = "starship/starship"
         TagPrefix  = "v"
         UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
+    },
+    @{
+        # ORDER MATTERS: gh must precede WezTerm in this manifest — the
+        # install loop is sequential, and WezTerm's PrivateRepo mirror
+        # download sources its token from this gh moments after it lands.
+        Name       = "GitHub CLI"
+        Exe        = "gh"
+        Version    = "2.96.0"
+        Url        = "https://github.com/cli/cli/releases/download/v2.96.0/gh_2.96.0_windows_amd64.zip"
+        Sha256     = "c2d6acc935cd2f00e2144d7e036d5cd82e6b6bd5594e8c75aa75ef2a4ed6aac3"
+        Layout     = "single"
+        Dest       = $WsBin
+        Repo       = "cli/cli"
+        TagPrefix  = "v"
+        UpdateHint = "dual-edit: `$PortableTools here AND GH_VERSION in makefile/versions.mk"
     },
     @{
         Name         = "WezTerm"
@@ -617,35 +635,20 @@ This script does NOT install Git for you.
     }
     Write-Ok "git found ($((Get-Command git).Source))"
 
-    # GitHub CLI is a hard prerequisite too (2026-07-16) — the WezTerm
-    # nightly-snapshot mirror lives on this PRIVATE repo, and gh is the auth
-    # source for its download: `gh auth token` returns GITHUB_TOKEN when set
-    # (token-only/CI flows keep working) and the stored `gh auth login`
-    # credential otherwise — no PAT management on fresh machines. This
-    # script does NOT install gh.
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        Write-Fail @"
-GitHub CLI (gh) is required but isn't on PATH.
-
-Install it, authenticate once, then re-run this script:
-  winget install GitHub.cli
-  gh auth login
-or:  https://cli.github.com
-
-This script does NOT install gh for you.
-"@
+    # GitHub auth — SOFT check (2026-07-17; supersedes the brief hard-fail):
+    # gh itself is NOT a prerequisite — the tool step below installs it as a
+    # pinned portable (`GitHub CLI` in $PortableTools, GH_VERSION dual-edit).
+    # Only the WezTerm nightly-snapshot mirror needs a token at download time
+    # (`gh auth token` — honors GITHUB_TOKEN — else plain GITHUB_TOKEN), and
+    # that download warns-and-skips without one, stamping nothing, so a later
+    # re-run self-heals. Surface the miss early; never block the bootstrap.
+    $ghProbe = Get-Command gh -ErrorAction SilentlyContinue
+    $ghTok = $null
+    if ($ghProbe) { $ghTok = (& gh auth token 2>$null | Select-Object -First 1) }
+    if (-not $ghTok -and -not $env:GITHUB_TOKEN) {
+        Write-Warn "No GitHub token yet (gh not authenticated / GITHUB_TOKEN unset) — the WezTerm"
+        Write-Warn "  nightly-mirror download will be skipped this run. Fix once, then re-run:  gh auth login"
     }
-    $ghTok = (& gh auth token 2>$null | Select-Object -First 1)
-    if (-not $ghTok) {
-        Write-Fail @"
-gh is installed but has no usable token (not logged in, and GITHUB_TOKEN unset).
-
-Authenticate once:  gh auth login
-(or set `$env:GITHUB_TOKEN for this session) — needed for the private-repo
-clone and the WezTerm nightly-snapshot mirror download.
-"@
-    }
-    Write-Ok "gh found + authenticated ($((Get-Command gh).Source))"
 
     # chezmoi is installed by the tool step unless skipped. If -SkipToolInstall
     # is set and the chezmoi-apply step will run, chezmoi must already be present.
@@ -667,9 +670,11 @@ will run. Either drop -SkipToolInstall (so the script installs chezmoi), pass
 
 # =============================================================================
 # 2. TOOL INSTALL — admin-free binary/portable installs under %LOCALAPPDATA%\
-#    workstation. chezmoi via its official installer; WezTerm + Starship + Helix via
-#    pinned, sha256-verified portable archives. Zed/VSCode are hand-installed
-#    (soft-warn). zoxide is intentionally not installed.
+#    workstation. chezmoi via its official installer; GitHub CLI + WezTerm +
+#    Starship + Helix via pinned, sha256-verified portable archives (gh before
+#    WezTerm — it supplies the token for WezTerm's private-mirror download).
+#    Zed/VSCode are hand-installed (soft-warn). zoxide is intentionally not
+#    installed.
 # =============================================================================
 function Update-SessionPath {
     # New PATH entries are written to the User registry scope; the current
@@ -788,13 +793,22 @@ function Install-PortableTool {
         [System.Net.ServicePointManager]::SecurityProtocol = `
             [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
         if ($usePrivate) {
+            # Resolve gh by its concrete portable path FIRST — the tool step
+            # installs gh moments earlier in this same loop, and the running
+            # session's PATH doesn't see fresh User-PATH entries (the DevToys
+            # stale-PATH lesson, 2026-07-14). PATH lookup is the fallback for
+            # non-portable gh installs.
             $tok = $null
-            if (Get-Command gh -ErrorAction SilentlyContinue) {
-                $tok = (& gh auth token 2>$null | Select-Object -First 1)
+            $ghExe = Join-Path $WsBin 'gh.exe'
+            if (-not (Test-Path $ghExe)) {
+                $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+                $ghExe = if ($ghCmd) { $ghCmd.Source } else { $null }
             }
+            if ($ghExe) { $tok = (& $ghExe auth token 2>$null | Select-Object -First 1) }
             if (-not $tok) { $tok = $env:GITHUB_TOKEN }
             if (-not $tok) {
                 Write-Warn "$($Tool.Name): no GitHub token (gh not authenticated, GITHUB_TOKEN unset) — can't download the private mirror asset. Skipping."
+                Write-Warn "  Fix once, then re-run bootstrap:  gh auth login"
                 return
             }
             $assetName = $Tool.Url.Split('/')[-1]
