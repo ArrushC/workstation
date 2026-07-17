@@ -63,6 +63,13 @@ sha entirely abandons the repo's pinned+verified ethos and any rollback story.
    unchanged. Rejected: a separate public mirror repo (cross-repo PAT secret +
    second repo to maintain) and dropping the mirror (loses reproducibility +
    rollback — the reasons it was chosen).
+   **Amendment (2026-07-16, post-migration, user-directed):** the gh CLI is
+   promoted to a Windows hard prerequisite (like Git; preflight hard-fails if
+   absent or unauthenticated) and becomes the token source — `gh auth token`
+   honors a set `GITHUB_TOKEN` (token-only/CI flows unchanged) and otherwise
+   returns the stored `gh auth login` credential, so fresh machines
+   browser-login once instead of managing a PAT, and existing boxes' re-runs
+   need no session token at all.
 
 ## Design
 
