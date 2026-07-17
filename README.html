@@ -4794,7 +4794,16 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 upstream URL), close WezTerm, re-run
                                 <code>.\bootstrap.ps1</code>. Revert or close
                                 the offending weekly PR so the next run
-                                doesn&rsquo;t re-bump.
+                                doesn&rsquo;t re-bump. Note: the config now
+                                uses a few nightly-only options &mdash; a
+                                rollback all the way to stable
+                                <code>20240203</code> additionally needs the
+                                <code>NIGHTLY-ONLY</code>-tagged lines removed
+                                from the WezTerm config
+                                (<code>rg NIGHTLY-ONLY
+chezmoi/dot_config/wezterm/</code>);
+                                rolling back to another nightly snapshot needs
+                                nothing.
                             </p>
                             <pre><code>gh release view wezterm-nightly-snapshots --json assets --jq '.assets[].name'</code></pre>
                         </div>

@@ -213,6 +213,29 @@ function M.apply(config)
     -- panes; see activity_marker above.
     local marker = activity_marker(tab)
 
+    -- ConEmu OSC 9;4 progress (nightly exposes it as a plain PaneInformation
+    -- field — nil-safe on any build). Rendered in the marker slot for ANY tab
+    -- including the active one (a running command's progress is exactly what
+    -- you want to see). Priority: bell > progress > unseen dot — progress
+    -- supersedes "something happened" with "something is happening". Emitters
+    -- today are mostly Windows-side (winget et al.); inert through Zellij.
+    local marker_fg
+    if marker ~= GLYPH_BELL then
+      local progress = tab.active_pane.progress or 'None'
+      if progress ~= 'None' then
+        if type(progress) == 'table' and progress.Percentage ~= nil then
+          marker    = string.format('%d%%', progress.Percentage)
+          marker_fg = mocha.green
+        elseif type(progress) == 'table' and progress.Error ~= nil then
+          marker    = string.format('%d%%', progress.Error)
+          marker_fg = mocha.red
+        elseif progress == 'Indeterminate' then
+          marker    = '~'
+          marker_fg = mocha.peach
+        end
+      end
+    end
+
     -- Domain-type glyph: ssh (incl. embedded ssh inside a WSL pane — the
     -- wsl_remote_host detection above), WSL distro shell, or local.
     local glyph
@@ -252,15 +275,24 @@ function M.apply(config)
     local bg, fg = tab_colors(host, tab.is_active, hover)
     local items = { { Background = { Color = bg } } }
     -- Leading space + optional marker; the marker carries its own fg (host
-    -- accent for the dot, peach for the bell) against the tab bg.
+    -- accent for the dot, peach for the bell, green/red for progress) against
+    -- the tab bg.
     if marker then
-      local mfg = (marker == GLYPH_BELL) and mocha.peach or host_accent(host)
+      local mfg = marker_fg
+        or ((marker == GLYPH_BELL) and mocha.peach or host_accent(host))
       table.insert(items, { Foreground = { Color = mfg } })
     end
     table.insert(items, { Text = leading })
     table.insert(items, { Foreground = { Color = fg } })
     if tab.is_active then
       table.insert(items, { Attribute = { Intensity = 'Bold' } })
+    end
+    -- Alt+0 target — underline the previously-active tab (is_last_active is
+    -- a nightly PaneInformation-style field; nil-safe read elsewhere). The
+    -- quietest possible marker: no glyph, no color, just an underline on the
+    -- one tab ALT+0 would jump to.
+    if not tab.is_active and tab.is_last_active then
+      table.insert(items, { Attribute = { Underline = 'Single' } })
     end
     table.insert(items, { Text = label })
     return items
