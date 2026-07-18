@@ -90,10 +90,26 @@ function M.apply(config)
   -- re-approved 2026-07-10, kept off under the nightly policy.)
   config.check_for_updates = false
 
+  -- OSC 9 / OSC 777 escape-sequence toasts: suppress them for the pane
+  -- you're looking at (you can already see it); background panes still
+  -- toast. Governs ONLY escape-originated notifications — a channel nothing
+  -- here emits on today, so this is dormant policy. ~/.claude/notify.sh's
+  -- BurntToast + BEL channel is completely unaffected.
+  config.notification_handling = 'SuppressFromFocusedPane'
+
   -- Kitty graphics protocol — off by default on this build. Enables inline
   -- image previews (yazi, wezterm imgcat) in local/WSL/raw-ssh panes. Known
   -- limit: NOT through Zellij tabs (no kitty-graphics passthrough there).
   config.enable_kitty_graphics = true
+
+  -- Kitty keyboard protocol — honor enhanced-key-encoding requests from
+  -- apps that ask for it (Helix gets disambiguated keys where the chain
+  -- negotiates it; Zellij 0.41+ passes the protocol through). Opt-in per
+  -- app at runtime, so panes whose programs never request it are untouched;
+  -- in native ConPTY panes win32-input-mode takes precedence anyway
+  -- (allow_win32_input_mode default true, deliberately kept). If a TUI
+  -- misbehaves after this lands, flip this back first.
+  config.enable_kitty_keyboard = true
 
   -- Drag-and-dropping a file onto the terminal pastes its path quoted
   -- (Windows-style double quotes — also valid in POSIX shells). The
@@ -153,6 +169,26 @@ function M.apply(config)
     -- distinct from the mauve cursor it momentarily replaces (config.visual_bell
     -- below targets CursorColor).
     visual_bell   = mocha.peach,
+    -- Quick-select overlay (CTRL+SHIFT+Space/I/G/Y) — the stock label/match
+    -- colors are an olive/green pair that ignores the Mocha chrome. Labels
+    -- (the jump letters you type) go loud peach-on-crust — the same
+    -- "attention" peach as the visual bell; matches lift onto surface1 with
+    -- sky text, readable without shouting across a screenful of hits.
+    -- Pairs with quick_select_remove_styling (actions.lua), which de-styles
+    -- the pane so these are the only colors left. ColorSpec wrappers
+    -- ({ Color = ... }) are the required shape, as for the label keys below.
+    quick_select_label_bg = { Color = mocha.peach },
+    quick_select_label_fg = { Color = mocha.crust },
+    quick_select_match_bg = { Color = mocha.surface1 },
+    quick_select_match_fg = { Color = mocha.sky },
+    -- Copy mode (CTRL+SHIFT+A path; also X/V selections in the overlay) —
+    -- the active selection region carries the mauve identity (cursor, active
+    -- local tab); inactive highlight drops to a neutral surface. Last
+    -- overlay-adjacent surface that still used stock colors.
+    copy_mode_active_highlight_bg   = { Color = mocha.mauve },
+    copy_mode_active_highlight_fg   = { Color = mocha.crust },
+    copy_mode_inactive_highlight_bg = { Color = mocha.surface2 },
+    copy_mode_inactive_highlight_fg = { Color = mocha.text },
     -- NIGHTLY-ONLY: label-row colors for the InputSelector overlays (host
     -- picker, tab switcher, help, WSL picker) and the launcher menu — the
     -- last two overlay surfaces that ignored the Mocha chrome. Matched to
@@ -174,6 +210,13 @@ function M.apply(config)
   config.command_palette_fg_color  = mocha.text
   config.command_palette_font_size = 12.0
 
+  -- Character/emoji picker (CTRL+SHIFT+U) — same Mocha treatment as the
+  -- command palette above (stock is a #333333 gray box). Top-level options,
+  -- not config.colors keys; font size matched to the palette's 12.0.
+  config.char_select_bg_color  = mocha.crust
+  config.char_select_fg_color  = mocha.text
+  config.char_select_font_size = 12.0
+
   -- Scrollback depth — how many lines WezTerm retains per pane above the
   -- viewport. Default is 3500; 100,000 (~28× default) is deep enough for heavy
   -- build/log output while staying bounded. Memory is per-pane and allocated
@@ -194,6 +237,23 @@ function M.apply(config)
   -- at 100,000), NOT this.
   config.scrollback_lines = 100000
 
+  -- Per-pane render caches — undocumented (no doc pages; fields verified in
+  -- config/src/config.rs) but load-bearing for scroll smoothness: shaping,
+  -- line-state, and quad data are computed per LINE and cached, and fast
+  -- scrolling through a deep buffer (100k above) blows the default caches
+  -- (1024 entries each; image cache 256) into worst-case re-shaping every
+  -- frame (upstream discussion #3664). 4096 trades a few MB per pane for
+  -- cache hits during heavy scroll; the image cache serves kitty-graphics
+  -- panes (yazi previews). Name trap: the fourth one really is
+  -- line_to_ele_shape_cache_size — "line_shape_cache_size" does not exist.
+  -- To measure: temporarily set periodic_stat_logging (seconds) and watch
+  -- the *.hit.rate lines in the log.
+  config.shape_cache_size             = 4096
+  config.line_state_cache_size        = 4096
+  config.line_quad_cache_size         = 4096
+  config.line_to_ele_shape_cache_size = 4096
+  config.glyph_cache_image_cache_size = 1024
+
   -- Show the right-side scrollbar. It lives inside window_padding.right, so
   -- the right padding is bumped below to give it room without crowding text.
   config.enable_scroll_bar = true
@@ -206,6 +266,16 @@ function M.apply(config)
     right  = 16,
     top    = 6,
     bottom = 6,
+  }
+
+  -- NIGHTLY-ONLY: center the leftover pixel gap when the window size isn't
+  -- an exact multiple of the cell size (snap/maximize almost never is) —
+  -- stock behavior dumps the whole remainder on the right/bottom edge.
+  -- use_resize_increments is NOT the fix here: documented X11/Wayland/macOS
+  -- only, no effect on Windows.
+  config.window_content_alignment = {
+    horizontal = 'Center',
+    vertical   = 'Center',
   }
 
   -- Initial window size in terminal cells. WezTerm's default is 80x24 —
@@ -283,6 +353,12 @@ function M.apply(config)
   -- so the on→off transition still eases rather than hard-flipping.
   config.default_cursor_style = 'BlinkingBar'
   config.cursor_blink_rate    = 500
+
+  -- Bar width — the default derives from the font's underline thickness
+  -- (~1px for JetBrainsMono at 10.5pt), which reads thin against the mauve
+  -- accent. pt units are DPI-scaled: 1.5pt ≈ 2px on the 96-DPI panel and
+  -- grows proportionally on high-DPI displays (a raw px value would not).
+  config.cursor_thickness = '1.5pt'
 
   -- Blinking *text* (distinct from the cursor) has two cadences: text_blink_rate
   -- for SGR 5 (slow blink, default 500ms) and text_blink_rate_rapid for SGR 6

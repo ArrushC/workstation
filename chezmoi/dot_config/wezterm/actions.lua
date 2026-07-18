@@ -83,7 +83,12 @@ function M.apply(config)
   -- (in default_prog) reattaches the existing remote session, so the user
   -- lands back where they were. Prevention half lives in ~/.ssh/config
   -- (ServerAliveInterval=30, ServerAliveCountMax=3) — chezmoi source at
-  -- private_dot_ssh/private_config.
+  -- private_dot_ssh/private_config. Nightly caveat pair: the libssh backend
+  -- now actually honors ServerAliveInterval for these domain tabs (upstream
+  -- #4023 — stable 20240203 silently ignored it), but as fire-and-forget
+  -- keepalives only: they keep NAT/firewall state alive, while
+  -- ServerAliveCountMax is NOT implemented, so a dead peer is still never
+  -- detected terminal-side — this keybind stays load-bearing.
   --
   -- The dead tab is intentionally left open: its scrollback is useful for
   -- diagnosing the disconnect. Close it with CTRL+SHIFT+W when done.
@@ -266,6 +271,7 @@ function M.apply(config)
       { label = 'key   ALT+0            Return to previously active tab',     id = '' },
       { label = 'key   CTRL+SHIFT+S     Tab switcher (fuzzy list)',           id = '' },
       { label = 'note  + button         Left: new tab · middle: host picker · right: launcher', id = '' },
+      { label = 'note  launcher         Lists domains + PowerShell / cmd entries (launch_menu in wsl.lua)', id = '' },
       -- Wezterm: window
       { label = 'key   CTRL+SHIFT+N     New window (WSL distro picker if 2+ distros)', id = '' },
       { label = 'key   CTRL+SHIFT+drag  Move window (no title bar to grab)',  id = '' },
@@ -298,6 +304,7 @@ function M.apply(config)
       -- Wezterm: panes (local/WSL tabs; Zellij owns panes inside SSH tabs)
       { label = 'key   ALT+SHIFT+D/R    Split pane down / right (local/WSL tabs)', id = '' },
       { label = 'key   ALT+SHIFT+arrows Move between panes', id = '' },
+      { label = 'key   ALT+SHIFT+S      Resize-pane mode (arrows resize · Esc/Enter done · RESIZE badge)', id = '' },
       { label = 'key   CTRL+SHIFT+Z     Toggle pane zoom', id = '' },
       { label = 'key   CTRL+SHIFT+Q     Pane picker (letter overlay)', id = '' },
       { label = 'note  CTRL+SHIFT+←/→   Reaches the shell now — zsh word-extend selection works', id = '' },
@@ -467,6 +474,11 @@ function M.apply(config)
   end)
 
   -- Copy entire scrollback — extracted for the same keybind/palette sharing.
+  -- The explicit ScrollToBottom is nightly hardening: CopyMode 'Close' no
+  -- longer implicitly scrolls to bottom (changelog behavior change — the
+  -- default copy-mode key table composes Close with ScrollToBottom now).
+  -- This chain happens to end at the scrollback bottom anyway, but the
+  -- explicit step makes the viewport restore immune rather than incidental.
   local copy_all_scrollback = act.Multiple {
     act.ActivateCopyMode,
     act.CopyMode 'MoveToScrollbackTop',
@@ -474,6 +486,7 @@ function M.apply(config)
     act.CopyMode 'MoveToScrollbackBottom',
     act.CopyTo 'Clipboard',
     act.CopyMode 'Close',
+    act.ScrollToBottom,
     act.EmitEvent 'copied',
   }
 
@@ -554,6 +567,17 @@ function M.apply(config)
   local split_right = act.SplitHorizontal { domain = 'CurrentPaneDomain' }
   local pane_picker = act.PaneSelect {}
 
+  -- ALT+SHIFT+S — resize-pane mode: enter the 'resize_pane' key table
+  -- (defined in keys.lua) and stay in it (one_shot=false) so arrows resize
+  -- repeatedly until Esc/Enter pops it. status.lua shows a RESIZE badge
+  -- while the table is active. Complements the built-in one-cell
+  -- CTRL+SHIFT+ALT+arrows defaults (untouched, unlisted — mode beats chord
+  -- for repeated adjustment).
+  local resize_pane_mode = act.ActivateKeyTable {
+    name     = 'resize_pane',
+    one_shot = false,
+  }
+
   -- Custom actions mirrored into the command palette (CTRL+SHIFT+P). Without
   -- this the palette lists only built-ins — a misleading "second surface" that
   -- omits every bespoke binding. Entries reuse the SAME action values as
@@ -573,6 +597,7 @@ function M.apply(config)
       { brief = 'Split pane down',  action = split_down },
       { brief = 'Split pane right', action = split_right },
       { brief = 'Pane picker',      action = pane_picker },
+      { brief = 'Resize panes (mode; Esc/Enter exits)', action = resize_pane_mode },
     }
   end)
 
@@ -591,6 +616,7 @@ function M.apply(config)
   M.split_down          = split_down
   M.split_right         = split_right
   M.pane_picker         = pane_picker
+  M.resize_pane_mode    = resize_pane_mode
 end
 
 return M

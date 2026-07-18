@@ -116,15 +116,19 @@ function M.apply(config)
     -- Each part: { text = string, fg = '#hex' (optional), bold = bool (optional) }
     local parts = {}
 
-    -- Modal-state badge — copy mode / search overlay are otherwise invisible.
-    -- window:active_key_table() reports the built-in modal tables
-    -- ('copy_mode' / 'search_mode'). Read on the ~1s status tick; up to a
-    -- tick of latency to appear/clear — same cadence as the whole bar.
+    -- Modal-state badge — copy mode / search overlay / resize mode are
+    -- otherwise invisible. window:active_key_table() reports the built-in
+    -- modal tables ('copy_mode' / 'search_mode') plus the custom
+    -- 'resize_pane' table (ALT+SHIFT+S, keys.lua). Read on the ~1s status
+    -- tick; up to a tick of latency to appear/clear — same cadence as the
+    -- whole bar.
     local key_table = window:active_key_table()
     if key_table == 'copy_mode' then
       table.insert(parts, { text = 'COPY', fg = mocha.yellow, bold = true })
     elseif key_table == 'search_mode' then
       table.insert(parts, { text = 'SEARCH', fg = mocha.sky, bold = true })
+    elseif key_table == 'resize_pane' then
+      table.insert(parts, { text = 'RESIZE', fg = mocha.teal, bold = true })
     end
 
     local domain = pane:get_domain_name()
