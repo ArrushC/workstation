@@ -49,6 +49,9 @@
 #                     vendor/autoload dir (self-heals every run).
 #   5e. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
 #                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
+#   5f. wezterm toast id — register the org.wezfurlong.wezterm AppUserModelId
+#                     (HKCU) so WezTerm's own toast notifications display (the
+#                     portable .zip has no installer to register it).
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -1615,6 +1618,39 @@ function Invoke-DnGrepConfig {
 }
 
 # =============================================================================
+# 5f. WEZTERM TOAST APPID — WezTerm's Windows toast backend shows notifications
+#    via ToastNotificationManager.CreateToastNotifierWithId("org.wezfurlong.wezterm")
+#    (wezterm-toast-notification/src/windows.rs), and Windows only DELIVERS a
+#    toast from an unpackaged app when that AppUserModelId is registered. The
+#    official WezTerm installer registers it via a Start Menu shortcut carrying
+#    the AUMID property; our portable .zip can't (WScript.Shell .lnks can't set
+#    shortcut properties), so without this step every window:toast_notification()
+#    in the tracked config — config-reloaded, the SSH-reconnect gate, the
+#    scrollback-in-SSH bail — fails SILENTLY (the error goes only to WezTerm's
+#    invisible stderr; diagnosed live 2026-07-18). Minimal HKCU registration:
+#    DisplayName is all Windows requires — the same shape BurntToast's
+#    New-BTAppId writes. Per-user, no admin. Runs EVERY bootstrap independent
+#    of the install stamp (a deleted key self-heals) — the
+#    Invoke-StartMenuShortcuts pattern. Takes effect on WezTerm's NEXT toast
+#    attempt; no restart needed (the AUMID is checked per Show() call).
+# =============================================================================
+function Invoke-WeztermToastAppId {
+    $key = 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm'
+    try {
+        $cur = (Get-ItemProperty -Path $key -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
+        if ($cur -eq 'WezTerm') {
+            Write-Ok "WezTerm toast AppUserModelId already registered"
+            return
+        }
+        if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+        New-ItemProperty -Path $key -Name DisplayName -Value 'WezTerm' -PropertyType String -Force | Out-Null
+        Write-Ok "WezTerm toast AppUserModelId registered (HKCU) — WezTerm toasts can now display"
+    } catch {
+        Write-Warn "Could not register the WezTerm toast AppUserModelId: $($_.Exception.Message)"
+    }
+}
+
+# =============================================================================
 # 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
 #    chezmoi/private_dot_claude/executable_notify.sh (deployed to
@@ -2056,6 +2092,10 @@ function Invoke-Doctor {
         else { Write-Warn "$($tool.Name) Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
     }
 
+    $aumid = (Get-ItemProperty -Path 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm' -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
+    if ($aumid) { Write-Ok "WezTerm toast AppUserModelId registered" }
+    else { Write-Warn "WezTerm toast AppUserModelId missing — WezTerm's own toasts won't display; re-run .\bootstrap.ps1 (registers it)" }
+
     $nuStarship = Join-Path $env:APPDATA "nushell\vendor\autoload\starship.nu"
     if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
     else { Write-Warn "Nushell starship prompt missing — re-run .\bootstrap.ps1 (regenerates it)" }
@@ -2247,6 +2287,7 @@ Test-AgeIdentity          # warn if age key / binary missing when recipient is c
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (WezTerm/dnGrep/LogExpert)
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
+Invoke-WeztermToastAppId  # register org.wezfurlong.wezterm AppUserModelId (HKCU) so WezTerm toasts display
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
