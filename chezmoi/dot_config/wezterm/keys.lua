@@ -27,6 +27,7 @@ function M.apply(config)
   local split_down          = actions.split_down
   local split_right         = actions.split_right
   local pane_picker         = actions.pane_picker
+  local resize_pane_mode    = actions.resize_pane_mode
   local new_window_action   = wsl.new_window_action
 
   -- ---------------------------------------------------------------------------
@@ -210,11 +211,14 @@ function M.apply(config)
     { key = 'y', mods = 'CTRL|SHIFT', action = quick_yank_sha },
 
     -- Panes (local/WSL tabs — Zellij owns panes inside SSH tabs). ALT+SHIFT
-    -- layer: D/R split (Zellij pane-mode mnemonics), arrows navigate.
-    -- CTRL+SHIFT+Z restates the built-in zoom default so the cheatsheet and
-    -- this config stay the source of truth; CTRL+SHIFT+Q = letter overlay.
+    -- layer: D/R split (Zellij pane-mode mnemonics), arrows navigate, S =
+    -- resize mode (the resize_pane key table below; RESIZE badge while
+    -- active). CTRL+SHIFT+Z restates the built-in zoom default so the
+    -- cheatsheet and this config stay the source of truth; CTRL+SHIFT+Q =
+    -- letter overlay.
     { key = 'd', mods = 'SHIFT|ALT', action = split_down },
     { key = 'r', mods = 'SHIFT|ALT', action = split_right },
+    { key = 's', mods = 'SHIFT|ALT', action = resize_pane_mode },
     { key = 'z', mods = 'CTRL|SHIFT', action = act.TogglePaneZoomState },
     { key = 'q', mods = 'CTRL|SHIFT', action = pane_picker },
     { key = 'LeftArrow',  mods = 'SHIFT|ALT', action = act.ActivatePaneDirection 'Left' },
@@ -246,6 +250,25 @@ function M.apply(config)
     { key = 'RightArrow', mods = 'SUPER', action = act.DisableDefaultAssignment },
     { key = 'UpArrow',    mods = 'SUPER', action = act.DisableDefaultAssignment },
     { key = 'DownArrow',  mods = 'SUPER', action = act.DisableDefaultAssignment },
+  }
+
+  -- Modal key tables. resize_pane backs the ALT+SHIFT+S binding above
+  -- (ActivateKeyTable one_shot=false in actions.lua): arrows adjust by 3
+  -- cells per press — the built-in CTRL+SHIFT+ALT+arrows defaults move 1
+  -- and stay untouched — until Esc or Enter pops the table. While active,
+  -- status.lua renders a RESIZE badge via window:active_key_table(), the
+  -- same hook that powers the COPY/SEARCH badges. (A bare
+  -- `config.key_tables = {}` was once removed as misleading; this is the
+  -- first real table.)
+  config.key_tables = {
+    resize_pane = {
+      { key = 'LeftArrow',  action = act.AdjustPaneSize { 'Left', 3 } },
+      { key = 'RightArrow', action = act.AdjustPaneSize { 'Right', 3 } },
+      { key = 'UpArrow',    action = act.AdjustPaneSize { 'Up', 3 } },
+      { key = 'DownArrow',  action = act.AdjustPaneSize { 'Down', 3 } },
+      { key = 'Escape', action = 'PopKeyTable' },
+      { key = 'Enter',  action = 'PopKeyTable' },
+    },
   }
 
   -- Jump to tab by number — ALT+1..9. README.html's keybind table already

@@ -68,6 +68,25 @@ function M.apply(config)
     end
     -- 0 distros → default_domain stays 'local' (Nushell via default_prog).
     -- 2+ distros → gui-startup spawns a Nushell placeholder + the WSL picker.
+
+    -- Launcher menu (right-click the "+" button) — custom entries compose
+    -- ALONGSIDE the auto-listed SSH/WSL domains, not instead of them.
+    -- PowerShell stays installed for .NET/COM/registry tasks (see
+    -- bootstrap.ps1) but Nushell-as-default made it unreachable without
+    -- typing `powershell` into a nu tab; cmd for the odd batch-file moment.
+    -- Both spawn in the LOCAL domain regardless of the current pane.
+    config.launch_menu = {
+      {
+        label  = 'PowerShell',
+        args   = { 'powershell.exe', '-NoLogo' },
+        domain = { DomainName = 'local' },
+      },
+      {
+        label  = 'cmd',
+        args   = { 'cmd.exe' },
+        domain = { DomainName = 'local' },
+      },
+    }
   end
 
   -- ---------------------------------------------------------------------------
