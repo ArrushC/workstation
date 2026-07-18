@@ -287,15 +287,25 @@ function M.apply(config)
   -- Feedback for CTRL+SHIFT+R and silent auto-reloads on file save: a brief
   -- toast confirms the new config actually loaded (a Lua error surfaces
   -- WezTerm's own error window instead — so silence means it didn't apply).
-  -- The first fire per window is (or may be) window creation, not a reload;
-  -- swallow it so launching WezTerm doesn't toast. If live testing shows the
-  -- event does NOT fire at creation, the cost is one swallowed toast on the
-  -- first real reload per window — acceptable; re-check live and simplify if so.
-  local config_reload_seen = {}
+  -- The event fires once per window at CREATION too (termwindow/mod.rs
+  -- emits it right after window.show(); verified at nightly 2ef4bef4), so
+  -- the first fire per window is swallowed to keep launch quiet.
+  --
+  -- The seen-marker MUST live in wezterm.GLOBAL, not a module local: every
+  -- reload evaluates the config in a FRESH Lua VM (config/src/lib.rs sends
+  -- a new lua context down LUA_PIPE per successful load) and events
+  -- dispatch into that newest VM — so a module-local table reset on every
+  -- reload and the handler swallowed EVERY fire; the toast never showed
+  -- from the day it landed (diagnosed 2026-07-18). GLOBAL persists across
+  -- reloads. Fetch-mutate-REASSIGN so the write sticks whether reads
+  -- return a live proxy or a copy; tostring keys — GLOBAL round-trips
+  -- through serialization, where sparse integer keys aren't reliable.
   wezterm.on('window-config-reloaded', function(window, _pane)
-    local wid = window:window_id()
-    if not config_reload_seen[wid] then
-      config_reload_seen[wid] = true
+    local wid  = tostring(window:window_id())
+    local seen = wezterm.GLOBAL.config_reload_seen or {}
+    if not seen[wid] then
+      seen[wid] = true
+      wezterm.GLOBAL.config_reload_seen = seen
       return
     end
     window:toast_notification('WezTerm', 'Config reloaded', nil, 1500)

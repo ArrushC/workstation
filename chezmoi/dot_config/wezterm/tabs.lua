@@ -69,10 +69,19 @@ function M.apply(config)
   -- ~/.claude/notify.sh already fires a BurntToast Windows toast + this same
   -- BEL for Claude Code notifications — a WezTerm toast would double-notify.
   -- The tab marker is the visual channel; notify.sh keeps toast + audio.
-  local bell_panes = {}
-
+  --
+  -- Marks live in wezterm.GLOBAL, not a module local: their lifetime is
+  -- INDEFINITE (until the tab is viewed), and every config reload evaluates
+  -- in a fresh Lua VM — a module-local table wiped all pending marks on any
+  -- reload, which auto-fires exactly when a czu/cza sync or a config edit
+  -- touches the tracked .lua files (the same VM-reset mechanism as the
+  -- config-reloaded toast fix in keys.lua). tostring keys + reassign-after-
+  -- mutate for serialization safety. Marks for long-dead panes linger for
+  -- the process lifetime — a few bytes, accepted.
   wezterm.on('bell', function(_window, pane)
-    bell_panes[pane:pane_id()] = true
+    local marks = wezterm.GLOBAL.bell_panes or {}
+    marks[tostring(pane:pane_id())] = true
+    wezterm.GLOBAL.bell_panes = marks
   end)
 
   -- Nerd Font glyphs (JetBrainsMono NF ships the md_/fa_ sets). Defensive
@@ -97,17 +106,30 @@ function M.apply(config)
   -- their UI, which can keep has_unseen_output permanently true — if live
   -- testing confirms, gate the DOT (never the bell) on non-SSH domains; see
   -- the spec's fallback plan.
+  --
+  -- Runs on every tab-bar redraw, so the wezterm.GLOBAL write-back happens
+  -- ONLY when a mark was actually cleared (dirty) — never unconditionally
+  -- per render. The GLYPH_BELL early return can't lose a write: dirty is
+  -- only ever set in the is_active branch, and is_active is constant for
+  -- the whole loop, so the early return is unreachable once dirty is true.
   local function activity_marker(tab)
+    local marks  = wezterm.GLOBAL.bell_panes or {}
+    local dirty  = false
     local unseen = false
     for _, p in ipairs(tab.panes or {}) do
+      local key = tostring(p.pane_id)
       if tab.is_active then
-        bell_panes[p.pane_id] = nil
-      elseif bell_panes[p.pane_id] then
+        if marks[key] then
+          marks[key] = nil
+          dirty = true
+        end
+      elseif marks[key] then
         return GLYPH_BELL
       elseif p.has_unseen_output then
         unseen = true
       end
     end
+    if dirty then wezterm.GLOBAL.bell_panes = marks end
     return unseen and '●' or nil
   end
 
