@@ -13,6 +13,7 @@ local M = {}
 function M.apply(config)
   local ssh_domains      = require 'hosts'
   local ssh_domain_names = (require 'domains').ssh_domain_names
+  local status           = require 'status'
 
   -- Extra quick-select atoms (CTRL+SHIFT+Space) — APPENDED to the built-in
   -- URL/path/hash patterns, not replacing them: IPv4 addresses (the
@@ -100,8 +101,8 @@ function M.apply(config)
   local reconnect_ssh_pane = wezterm.action_callback(function(window, pane)
     local domain = pane:get_domain_name() or ''
     if not ssh_domain_names[domain] then
-      window:toast_notification('WezTerm',
-        'Current pane is not a configured SSH domain — nothing to reconnect', nil, 3000)
+      status.flash(window, pane,
+        'Not a configured SSH domain — nothing to reconnect', 'warn')
       return
     end
     window:perform_action(act.SpawnTab { DomainName = domain }, pane)
@@ -415,15 +416,16 @@ function M.apply(config)
   --   • WSL pane   → hx inside the SAME distro, opening the /mnt/c translation
   --     of that temp path (Lua io runs on the Windows side, so the file is
   --     written under %TEMP% either way).
-  --   • SSH pane   → toast and bail: WezTerm's buffer for an SSH+Zellij tab is
-  --     just the alt screen; Zellij owns the real scrollback there.
+  --   • SSH pane   → flash a notice and bail: WezTerm's buffer for an
+  --     SSH+Zellij tab is just the alt screen; Zellij owns the real
+  --     scrollback there.
   -- Per-pane filename, overwritten on reuse; cleanup is OS temp policy's job.
   local scrollback_to_helix = wezterm.action_callback(function(window, pane)
     local domain = pane:get_domain_name() or ''
     local is_wsl = domain:find('^WSL:') ~= nil
     if domain ~= 'local' and not is_wsl then
-      window:toast_notification('WezTerm',
-        'Zellij owns scrollback in SSH tabs — use its search there', nil, 4000)
+      status.flash(window, pane,
+        'Zellij owns scrollback in SSH tabs — search there', 'warn')
       return
     end
     local dims   = pane:get_dimensions()
@@ -433,8 +435,8 @@ function M.apply(config)
       .. '\\wezterm-scrollback-' .. pane:pane_id() .. '.txt'
     local f, err = io.open(tmp, 'w')
     if not f then
-      window:toast_notification('WezTerm',
-        'Scrollback dump failed: ' .. tostring(err), nil, 4000)
+      status.flash(window, pane,
+        'Scrollback dump failed: ' .. tostring(err), 'error')
       return
     end
     f:write(text)

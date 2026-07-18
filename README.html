@@ -2865,10 +2865,13 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             AppUserModelId is registered, the official
                             installer does this via its own Start Menu
                             shortcut, and the portable <code>.zip</code> has
-                            no installer &mdash; so without it every
-                            config-driven WezTerm toast (&ldquo;Config
-                            reloaded&rdquo;, the SSH-reconnect notice) fails
-                            silently.
+                            no installer. It keeps OS toasts deliverable for
+                            escape-driven notifications (OSC 9/777 from
+                            remote or background programs) and any future
+                            toast caller; the config&rsquo;s own feedback
+                            (&ldquo;Config reloaded&rdquo;, the SSH-reconnect
+                            notice, &ldquo;Copied!&rdquo;) renders in-window
+                            in the status bar instead.
                         </li>
                         <li>
                             <strong>Starship</strong> &mdash; pinned,
