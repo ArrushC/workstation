@@ -2657,8 +2657,9 @@ make -C makefile check-updates MODE=dev</code></pre>
                             package lists. On Windows it covers the portable
                             and installer-class tools, Nerd Fonts, BurntToast,
                             <code>WEZTERM_CONFIG_FILE</code>, the Start Menu
-                            shortcuts, the dnGrep config seed, the profile
-                            shim, and the SSH key.
+                            shortcuts, the WezTerm toast AppUserModelId, the
+                            dnGrep config seed, the profile shim, and the SSH
+                            key.
                         </p>
                         <p>
                             <strong><code>--check-for-updates</code></strong>
@@ -2856,6 +2857,18 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             the next bootstrap. (dnGrep and LogExpert below get
                             the same treatment &mdash; every portable GUI tool
                             gets its own <code>.lnk</code>.)
+                            The script also registers WezTerm&rsquo;s toast
+                            <strong>AppUserModelId</strong>
+                            (<code>org.wezfurlong.wezterm</code>, HKCU, every
+                            run) &mdash; Windows only displays toast
+                            notifications from an unpackaged app when its
+                            AppUserModelId is registered, the official
+                            installer does this via its own Start Menu
+                            shortcut, and the portable <code>.zip</code> has
+                            no installer &mdash; so without it every
+                            config-driven WezTerm toast (&ldquo;Config
+                            reloaded&rdquo;, the SSH-reconnect notice) fails
+                            silently.
                         </li>
                         <li>
                             <strong>Starship</strong> &mdash; pinned,
