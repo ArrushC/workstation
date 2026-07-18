@@ -32,7 +32,8 @@ local config = wezterm.config_builder()
 --   wsl.lua        — WSL distro detection, default domain, distro pickers,
 --                    new_window_action
 --   tabs.lua       — tab bar: tab_colors, activity markers, format-tab-title
---   status.lua     — right status + "Copied!" badge
+--   status.lua     — right status + in-window notices (M.flash; "Copied!"
+--                    badge rides it)
 --   actions.lua    — bespoke actions/overlays/open-uri/command palette
 --   keys.lua       — config.keys + config.mouse_bindings
 require('appearance').apply(config)

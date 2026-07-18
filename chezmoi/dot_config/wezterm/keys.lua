@@ -11,6 +11,7 @@ local M = {}
 function M.apply(config)
   local actions = require 'actions'
   local wsl     = require 'wsl'
+  local status  = require 'status'
 
   local smart_new_tab       = actions.smart_new_tab
   local pick_host           = actions.pick_host
@@ -188,7 +189,7 @@ function M.apply(config)
     { key = 'v',      mods = 'CTRL|SHIFT', action = act.PasteFrom 'Clipboard' },
 
     -- Dump scrollback to a temp file and open it in Helix (local/WSL panes;
-    -- SSH panes toast — Zellij owns their scrollback). O = open.
+    -- SSH panes flash a notice — Zellij owns their scrollback). O = open.
     { key = 'o', mods = 'CTRL|SHIFT', action = scrollback_to_helix },
 
     -- Copy entire scrollback to clipboard (enters copy mode, selects all, copies, exits)
@@ -285,8 +286,10 @@ function M.apply(config)
   table.insert(config.keys, { key = '0', mods = 'ALT', action = act.ActivateLastTab })
 
   -- Feedback for CTRL+SHIFT+R and silent auto-reloads on file save: a brief
-  -- toast confirms the new config actually loaded (a Lua error surfaces
-  -- WezTerm's own error window instead — so silence means it didn't apply).
+  -- green flash in the right status confirms the new config actually loaded
+  -- (in-window notice via status.lua's flash — user-directed 2026-07-18,
+  -- replacing the OS toast; a Lua error still surfaces WezTerm's own error
+  -- window instead, so silence means it didn't apply).
   -- The event fires once per window at CREATION too (termwindow/mod.rs
   -- emits it right after window.show(); verified at nightly 2ef4bef4), so
   -- the first fire per window is swallowed to keep launch quiet.
@@ -300,7 +303,7 @@ function M.apply(config)
   -- reloads. Fetch-mutate-REASSIGN so the write sticks whether reads
   -- return a live proxy or a copy; tostring keys — GLOBAL round-trips
   -- through serialization, where sparse integer keys aren't reliable.
-  wezterm.on('window-config-reloaded', function(window, _pane)
+  wezterm.on('window-config-reloaded', function(window, pane)
     local wid  = tostring(window:window_id())
     local seen = wezterm.GLOBAL.config_reload_seen or {}
     if not seen[wid] then
@@ -308,7 +311,7 @@ function M.apply(config)
       wezterm.GLOBAL.config_reload_seen = seen
       return
     end
-    window:toast_notification('WezTerm', 'Config reloaded', nil, 1500)
+    status.flash(window, pane, 'Config reloaded', 'info')
   end)
 end
 

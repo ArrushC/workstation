@@ -1,6 +1,7 @@
 -- =============================================================================
 -- status.lua — right status line: domain · zellij · line count · battery ·
--- time, plus the "Copied!" badge (the 'copied' event handler lives here)
+-- time, plus the in-window notice system (M.flash — the config's "toast"
+-- surface; the 'copied' event handler is its first consumer)
 -- =============================================================================
 
 local wezterm = require 'wezterm'
@@ -101,13 +102,32 @@ function M.apply(config)
     return string.format('↕ %s · %d rows', group_thousands(total), rows)
   end
 
-  -- "Copied!" badge: timestamps per-window, fires from the 'copied' event
-  -- emitted by the CTRL+SHIFT+C / CTRL+SHIFT+A bindings below. Visible for
-  -- COPIED_BADGE_DURATION seconds, then the next ~1s tick of update-right-status
-  -- removes it. The badge is rendered immediately on copy (not on the next
-  -- tick) by calling render_right_status from the 'copied' handler directly.
-  local copied_at = {}
-  local COPIED_BADGE_DURATION = 2
+  -- ---------------------------------------------------------------------------
+  -- In-window notices — the "toast" surface for this config
+  -- ---------------------------------------------------------------------------
+  -- A transient colored message rendered in the right-status slot (the
+  -- "Copied!" badge pattern from the UX sweep, generalized; user-directed
+  -- 2026-07-18 — replaces every window:toast_notification() call site).
+  -- This is the WezTerm-native equivalent of a TUI toast: the Lua API has no
+  -- floating-overlay primitive, so the status strip is the only surface a
+  -- config can flash without stealing focus (modal overlays) or corrupting
+  -- pane content (inject_output). Levels carry the established accent
+  -- language — info=green (success), warn=peach (attention), error=red —
+  -- mapped HERE so callers never plumb colors and the language can't drift.
+  -- Last-writer-wins per window.
+  --
+  -- State is module-local ON PURPOSE (copied_at precedent from the 2026-07-18
+  -- reload-state audit): notices live for seconds — too ephemeral for a
+  -- config reload to plausibly intersect — and the one reload-adjacent
+  -- notice ('Config reloaded', keys.lua) is set by the NEW Lua VM after the
+  -- reload completes, so it never needs to survive one. Do not "fix" this
+  -- into wezterm.GLOBAL.
+  local NOTICE_LEVELS = {
+    info  = { fg = mocha.green, secs = 2 },
+    warn  = { fg = mocha.peach, secs = 3.5 },
+    error = { fg = mocha.red,   secs = 5 },
+  }
+  local notice = {}  -- window_id → { text, fg, expires }
 
   local function render_right_status(window, pane)
     local dim_info = pane:get_dimensions()
@@ -198,23 +218,24 @@ function M.apply(config)
 
     local normal_w = display_width(plain)
 
-    -- When a recent copy is active, replace the rendered text with the badge —
-    -- but center-pad it to the SAME cell width as the normal status so the
-    -- right-status block doesn't resize and the tab-bar layout doesn't shift.
-    -- Width-measurement uses the normal width in both branches so format-tab-title
-    -- reserves the same space throughout.
+    -- When a notice is active, replace the rendered text with it — center-
+    -- padded to AT LEAST the normal status width so the right-status block
+    -- doesn't resize and the tab-bar layout doesn't shift (a notice longer
+    -- than the normal status renders wider for its few seconds — accepted).
+    -- Width-measurement uses the normal width in both branches so
+    -- format-tab-title reserves the same space throughout.
     local wid = window:window_id()
-    if copied_at[wid] and (os.time() - copied_at[wid] < COPIED_BADGE_DURATION) then
-      local badge   = '📋 Copied!'
-      local badge_w = display_width(badge)
+    local n = notice[wid]
+    if n and os.time() < n.expires then
+      local badge_w = display_width(n.text)
       local extra   = math.max(0, normal_w - badge_w)
       local left    = math.floor(extra / 2)
       local right   = extra - left
       window:set_right_status(wezterm.format {
         { Text = string.rep(' ', left) },
-        { Foreground = { Color = mocha.green } },
+        { Foreground = { Color = n.fg } },
         { Attribute = { Intensity = 'Bold' } },
-        { Text = badge },
+        { Text = n.text },
         { Attribute = { Intensity = 'Normal' } },
         { Text = string.rep(' ', right) },
       })
@@ -225,13 +246,27 @@ function M.apply(config)
 
   wezterm.on('update-right-status', render_right_status)
 
-  -- Emitted by act.EmitEvent 'copied' in the copy keybindings (CTRL+SHIFT+C,
-  -- CTRL+SHIFT+A). Re-renders the right status immediately so the badge appears
-  -- without waiting for the next ~1s update-right-status tick.
-  wezterm.on('copied', function(window, pane)
-    copied_at[window:window_id()] = os.time()
+  -- Show a notice NOW: set state and re-render immediately rather than
+  -- waiting for the next ~1s update-right-status tick; the tick after
+  -- `expires` clears it. Exported for keys.lua / actions.lua call sites.
+  local function flash(window, pane, text, level, secs)
+    local lv = NOTICE_LEVELS[level] or NOTICE_LEVELS.info
+    notice[window:window_id()] = {
+      text    = text,
+      fg      = lv.fg,
+      expires = os.time() + (secs or lv.secs),
+    }
     render_right_status(window, pane)
+  end
+
+  -- Emitted by act.EmitEvent 'copied' in the copy keybindings (CTRL+SHIFT+C,
+  -- CTRL+SHIFT+A) — act.Multiple chains have no callback context, so they
+  -- bridge into the notice system via this event.
+  wezterm.on('copied', function(window, pane)
+    flash(window, pane, '📋 Copied!', 'info')
   end)
+
+  M.flash = flash
 end
 
 return M
