@@ -3248,14 +3248,16 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         unchanged.
                     </p>
                     <p>
-                        In Warp, select <strong>AlmaLinux-9</strong> under
-                        <em>Settings &rarr; Features &rarr; Session &rarr;
-                        Startup shell for new sessions</em>. The distro&rsquo;s login
+                        The tracked Warp settings already make
+                        <strong>AlmaLinux-9</strong> the startup shell for new
+                        sessions (<code>new_session_shell_override</code> in
+                        <code>settings.toml</code> &mdash; no manual Settings
+                        step needed). The distro&rsquo;s login
                         shell is <code>/usr/bin/zsh</code>; use Linux-home paths
                         for active projects where practical. The generated
                         <em>WSL: AlmaLinux-9</em> Tab Config is the fallback if
-                        Warp&rsquo;s detected profile fails. Open that WSL session
-                        (or <code>wsl.exe</code> in any shell) and run:
+                        the override fails. Open a new tab (or
+                        <code>wsl.exe</code> in any shell) and run:
                     </p>
                     <pre><code># Inside the WSL distro:
 sudo dnf install -y curl git python3 python3-pip iproute    # RHEL / AlmaLinux / Fedora
