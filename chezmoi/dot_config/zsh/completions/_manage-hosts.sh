@@ -6,7 +6,6 @@
 # via the Nushell external completer in config.nu. NOTE: the script has no
 # help flag — none is completed.
 _arguments \
-  '--sync[regenerate the wezterm.lua SSH domains block from hosts.conf]' \
   '--list[list hosts from hosts.conf]' \
   '--format[re-pad hosts.conf columns]' \
   '--add[add a host to hosts.conf (interactive when no option flags given)]' \

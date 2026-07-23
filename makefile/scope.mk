@@ -48,7 +48,7 @@ endif
 
 # WSL detection — true if running inside a WSL distro (any version). Centralised
 # here so targets that should no-op on WSL (e.g. nerd-fonts, where the Windows
-# host already supplies the font to WezTerm) share one probe instead of
+# host already supplies the font to the terminal) share one probe instead of
 # duplicating the detection. Mirrors bootstrap.sh's is_wsl() helper.
 IS_WSL := $(shell { [ -n "$$WSL_DISTRO_NAME" ] || grep -qi microsoft /proc/version 2>/dev/null; } && echo true || echo false)
 export IS_WSL

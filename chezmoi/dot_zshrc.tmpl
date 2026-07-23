@@ -68,7 +68,7 @@ fi
 if command -v batpipe &>/dev/null && command -v bat &>/dev/null; then
   eval "$(batpipe)"
 fi
-export COLORTERM=truecolor   # WezTerm advertises 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
+export COLORTERM=truecolor   # the fleet's terminals support 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
 
 # --- History -----------------------------------------------------------------
 # HISTSIZE = lines kept in memory; SAVEHIST = lines kept on disk.
@@ -142,8 +142,10 @@ export FZF_DEFAULT_OPTS="
   --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4
 "
 
-# fzf shell integration (Ctrl+T, Ctrl+R, Alt+C)
-if command -v fzf &>/dev/null; then
+# fzf shell integration (Ctrl+T, Ctrl+R, Alt+C). Warp owns the input editor and
+# documents fzf's ZLE integration as incompatible; the standalone fzf command
+# remains available there.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
   eval "$(fzf --zsh)"
 fi
 
@@ -160,7 +162,7 @@ fi
 # free for zsh-history-substring-search (plugins block below). Local-only by
 # default — no account/sync unless you run `atuin login`. First run on a host
 # imports existing history via `atuin import auto`.
-if command -v atuin &>/dev/null; then
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v atuin &>/dev/null; then
   eval "$(atuin init zsh --disable-up-arrow)"
 fi
 
@@ -186,68 +188,9 @@ if command -v mise &>/dev/null; then
 fi
 
 # --- starship prompt ---------------------------------------------------------
-if command -v starship &>/dev/null; then
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
 fi
-
-# --- WezTerm OSC 7 (cwd tracking for new tabs/panes) -------------------------
-# Emit the current working directory as an OSC 7 file:// URL after every
-# prompt so WezTerm tracks cwd. New WezTerm tabs (CTRL+SHIFT+T) and panes
-# then start in the same directory as the parent pane instead of falling
-# back to wezterm's own cwd (a Windows path for WSL hosts, a stale path
-# for SSH'd hosts). Harmless on terminals that don't speak OSC 7 — they
-# ignore the sequence. `add-zsh-hook -Uz` is idempotent: re-sourcing this
-# file won't double-register the hook.
-__wezterm_osc7() {
-  printf '\033]7;file://%s%s\033\\' "${HOST:-${HOSTNAME:-$(hostname)}}" "$PWD"
-}
-autoload -Uz add-zsh-hook
-add-zsh-hook -Uz precmd __wezterm_osc7
-
-# --- WezTerm OSC 133 (semantic prompt zones) ----------------------------------
-# FinalTerm-style prompt marks: A = prompt start, B = prompt end / input
-# start, C = command output start, D;<exit> = command finished. WezTerm uses
-# them for CTRL+SHIFT+Up/Down scroll-to-prompt and CTRL+triple-click
-# "select this command's output" (see wezterm.lua). Harmless on terminals
-# that don't speak OSC 133 — ignored, like the OSC 7 above. Inside Zellij
-# the marks land in Zellij's own screen, so the wezterm-side features simply
-# don't apply there (same boundary as the wezterm line-count footer).
-# PARITY: mirrored in dot_bashrc.tmpl — change both together.
-#
-# Hook order matters twice:
-#   * __wezterm_osc133_pre must run FIRST in precmd_functions — later hooks
-#     (starship, mise, __wezterm_osc7) clobber $?, and D needs the real exit
-#     code. add-zsh-hook only appends, so it is manually PREPENDED (with a
-#     membership guard for re-sourcing), and it returns that code so
-#     starship's own $? capture still sees the truth.
-#   * __wezterm_osc133_post must run LAST — starship's PROMPT is a static
-#     promptsubst string set at init, but appending AFTER starship's hook
-#     stays correct even if a future starship rebuilds PROMPT per cycle;
-#     the substring guard makes the append idempotent either way.
-__wezterm_osc133_pre() {
-  local last=$?
-  if [[ -n ${__wezterm_cmd_ran:-} ]]; then
-    printf '\033]133;D;%d\033\\' "$last"
-    unset __wezterm_cmd_ran
-  fi
-  printf '\033]133;A\033\\'
-  return $last
-}
-__wezterm_osc133_post() {
-  # %{...%} tells ZLE the bytes are zero-width so cursor math stays right.
-  if [[ ${PROMPT-} != *']133;B'* ]]; then
-    PROMPT="${PROMPT}%{"$'\033]133;B\033\\'"%}"
-  fi
-}
-__wezterm_osc133_preexec() {
-  __wezterm_cmd_ran=1
-  printf '\033]133;C\033\\'
-}
-if (( ! ${precmd_functions[(Ie)__wezterm_osc133_pre]} )); then
-  precmd_functions=(__wezterm_osc133_pre "${precmd_functions[@]}")
-fi
-add-zsh-hook -Uz precmd __wezterm_osc133_post
-add-zsh-hook -Uz preexec __wezterm_osc133_preexec
 
 # --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
 # Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
@@ -262,7 +205,7 @@ add-zsh-hook -Uz preexec __wezterm_osc133_preexec
 # bash gets movement-only parity (no highlight — readline limitation); the two
 # rc files are a parity pair, so the bash side lives in dot_bashrc.tmpl.
 zmodload zsh/parameter zsh/zleparameter 2>/dev/null
-if [[ -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
   source "$HOME/.config/zsh/plugins/zsh-shift-select.zsh"
 
   # Supplement 1 — replace-on-type. The vendored plugin's deselect-and-input
@@ -315,8 +258,9 @@ fi
 # the picker inherit the Catppuccin theme set above. `menu no` stops zsh's own
 # menu from racing fzf-tab; the descriptions `format` turns on completion groups
 # that `<` / `>` switch between.
-zstyle ':completion:*' menu no
-zstyle ':completion:*:descriptions' format '[%d]'
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]]; then
+  zstyle ':completion:*' menu no
+  zstyle ':completion:*:descriptions' format '[%d]'
 if [[ -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
   source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh"
   zstyle ':fzf-tab:*' use-fzf-default-opts yes
@@ -411,7 +355,7 @@ export YSU_MESSAGE_POSITION="after"
 # left ↑/↓ free via --disable-up-arrow above.
 if [[ -r "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]]; then
   # Themed match highlight (Catppuccin Mocha). The plugin's defaults are a harsh
-  # magenta/red background that clashes with the WezTerm theme; set these BEFORE
+  # magenta/red background that clashes with the terminal theme; set these BEFORE
   # sourcing (the plugin uses `: ${VAR=default}`, so a pre-set value wins).
   # surface1 bg + green/red fg signal found / not-found.
   typeset -g HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND='bg=#45475a,fg=#a6e3a1,bold'
@@ -424,6 +368,7 @@ if [[ -r "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-sub
   bindkey '^[OB' history-substring-search-down
   [[ -n "${terminfo[kcuu1]}" ]] && bindkey "${terminfo[kcuu1]}" history-substring-search-up
   [[ -n "${terminfo[kcud1]}" ]] && bindkey "${terminfo[kcud1]}" history-substring-search-down
+fi
 fi
 
 # --- nb (notes) --------------------------------------------------------------
@@ -481,14 +426,14 @@ alias cockpit-status='systemctl status cockpit.socket'
 
 # --- Functions ---------------------------------------------------------------
 
-# Screen clearing — `clear` wipes WezTerm's scrollback so the footer line-count
-# resets; `hide` is the soft variant that preserves it. WezTerm's terminfo lacks
-# the E3 capability, so the stock ncurses `clear` emits only \e[H\e[2J (erase the
-# visible screen) and leaves the scrollback — the footer count never drops. We
-# re-add the scrollback wipe (\e[3J) so `clear` truly clears. `hide` does the
-# inverse: it scrolls only the on-screen content (not a full screen) up into the
-# scrollback — nothing lost, scroll up to see it, and a clean screen adds nothing
-# so repeated `hide` doesn't inflate the count. (Nushell's built-in `clear`
+# Screen clearing — `clear` wipes the scrollback too; `hide` is the soft
+# variant that preserves it. Not every terminfo the fleet sees advertises the
+# E3 capability, so the stock ncurses `clear` can emit only \e[H\e[2J (erase
+# the visible screen) and leave the scrollback intact. We re-add the
+# scrollback wipe (\e[3J) so `clear` truly clears. `hide` does the inverse:
+# it scrolls only the on-screen content (not a full screen) up into the
+# scrollback — nothing lost, scroll up to see it, and a clean screen adds
+# nothing so repeated `hide` doesn't inflate it. (Nushell's built-in `clear`
 # already wipes scrollback; its soft variant — aliased to `hide` there — is
 # `clear --keep-scrollback`.)
 clear() {
@@ -575,52 +520,6 @@ fssh() {
   local host
   host=$(grep -E "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}' | fzf)
   [[ -n "$host" ]] && ssh "$host"
-}
-
-# ssh — launched from WezTerm, keep TERM=wezterm only if the remote actually has
-# the wezterm terminfo; otherwise fall back to xterm-256color so `clear`/TUIs
-# don't error with `unknown terminal type` on hosts not provisioned with this
-# repo. Fail-safe: anything uncertain (unparsable dest, probe timeout, password-
-# only host with no live ControlMaster) downgrades; we only *upgrade* on a
-# positive infocmp. Bypass once with `command ssh …`; disable permanently via
-# `unset -f ssh` in ~/.zshrc.local. PARITY: identical body in dot_bashrc.tmpl.
-ssh() {
-  if [ "$TERM" != wezterm ]; then
-    command ssh "$@"
-    return
-  fi
-
-  # Destination = first bareword that isn't an option or an option's value.
-  local arg dest='' expect_val=0
-  local val_flags='bcDEeFIiJLlmOopRSWw'
-  for arg in "$@"; do
-    if [ "$expect_val" = 1 ]; then
-      expect_val=0
-      continue
-    fi
-    case $arg in
-    --) continue ;;
-    -[$val_flags]) expect_val=1 ;;
-    -[$val_flags]*) continue ;;
-    -*) continue ;;
-    *)
-      dest=${arg#*@}
-      break
-      ;;
-    esac
-  done
-
-  # Default to the safe fallback; only upgrade on a positive non-interactive
-  # probe. -o BatchMode=yes never prompts; the probe reuses the ControlMaster
-  # socket (ControlMaster auto / ControlPersist 60s, Linux/WSL) so it's cheap.
-  local term=xterm-256color
-  if [ -n "$dest" ] &&
-    command ssh -o BatchMode=yes -o ConnectTimeout=5 "$dest" \
-      'infocmp wezterm >/dev/null 2>&1'; then
-    term=wezterm
-  fi
-
-  TERM=$term command ssh "$@"
 }
 
 # Start or attach to a named zellij session

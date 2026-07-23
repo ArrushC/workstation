@@ -21,7 +21,7 @@ _workstation_complete_manage_hosts() {
     mapfile -t COMPREPLY < <(compgen -W 'dev_machine prod_machine' -- "$cur")
     return
   fi
-  mapfile -t COMPREPLY < <(compgen -W '--sync --list --format --add --remove --copy-id --name --ip --user --group --skip-confirm --all' -- "$cur")
+  mapfile -t COMPREPLY < <(compgen -W '--list --format --add --remove --copy-id --name --ip --user --group --skip-confirm --all' -- "$cur")
 }
 
 _workstation_complete_update_hosts() {

@@ -4,8 +4,9 @@
 #
 # Deploys to %APPDATA%\nushell\config.nu (Windows only — the whole AppData tree
 # is ignored on Linux via .chezmoiignore). Nushell is the default LOCAL Windows
-# shell (see wezterm.lua default_prog + the Windows Terminal "Nushell" profile);
-# PowerShell stays installed for .NET/COM tasks and the WSL2 notify hook.
+# shell (the Windows Terminal "Nushell" profile + the Warp compatibility Tab
+# Config); PowerShell stays installed for .NET/COM tasks and the WSL2 notify
+# hook.
 #
 # This file owns the HAND-WRITTEN config (aliases, env, helpers). The Starship
 # prompt is wired separately by a GENERATED file at
@@ -26,17 +27,6 @@
 # whole record — that would wipe Nushell's defaults).
 $env.config.show_banner = false
 
-# WezTerm on Windows mishandles Nushell's OSC 133 shell-integration marks, so
-# reedline inserts a stray newline on every keystroke — the prompt "walks" down
-# the screen with growing gaps (and feels laggy from the constant repaint).
-# Disable OSC 133 ONLY under WezTerm: Windows Terminal handles it correctly and
-# keeps the semantic-prompt features. WezTerm sets WEZTERM_PANE in every pane it
-# spawns, including local Windows shells. Refs: nushell/nushell#5585,
-# wezterm/wezterm#1999.
-if 'WEZTERM_PANE' in $env {
-    $env.config.shell_integration.osc133 = false
-}
-
 # --- chezmoi aliases (mirror the PowerShell profile) ------------------------
 alias cz  = chezmoi
 alias cza = chezmoi apply
@@ -56,9 +46,9 @@ alias gco = git checkout
 alias gbr = git branch
 
 # --- Screen clearing --------------------------------------------------------
-# Nushell's built-in `clear` already wipes the scrollback (so the WezTerm footer
-# line-count resets). `hide` is the soft variant — clear the screen but KEEP the
-# scrollback history (scroll up to see it). Mirrors the bash/zsh `hide`.
+# Nushell's built-in `clear` already wipes the scrollback. `hide` is the soft
+# variant — clear the screen but KEEP the scrollback history (scroll up to see
+# it). Mirrors the bash/zsh `hide`.
 alias hide = clear --keep-scrollback
 
 # --- Navigation -------------------------------------------------------------
@@ -149,7 +139,6 @@ let workstation_bootstrap_flags = [
 ]
 
 let workstation_manage_hosts_flags = [
-    { value: "-Sync", description: "regenerate the wezterm.lua SSH domains block from hosts.conf" }
     { value: "-List", description: "list hosts from hosts.conf" }
     { value: "-Format", description: "re-pad hosts.conf columns" }
     { value: "-Add", description: "add a host to hosts.conf" }

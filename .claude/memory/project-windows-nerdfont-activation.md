@@ -1,6 +1,6 @@
 ---
 name: project-windows-nerdfont-activation
-description: Windows Terminal/DirectWrite needs the Win32 family name "JetBrainsMono NFM"; per-user fonts must be activated in-session, and WezTerm masks a missing one.
+description: Windows Terminal/DirectWrite needs the Win32 family name "JetBrainsMono NFM"; per-user fonts must be activated in-session.
 metadata:
   type: project
 ---
@@ -16,8 +16,8 @@ distinct things can be wrong — check BOTH:
    name (name ID 16). So **Windows Terminal profiles must use `JetBrainsMono
    NFM`**. (Confirm names from the file, session-independently:
    `(New-Object System.Windows.Media.GlyphTypeface $ttf).Win32FamilyNames.Values`.)
-   `wezterm.lua` keeps the long name on purpose — WezTerm matches the
-   typographic name, and fontconfig exposes the long name on Linux.
+   fontconfig exposes the long typographic name on Linux, so Linux configs
+   keep `JetBrainsMono Nerd Font Mono`.
 
 2. **Font not activated in the session.** Per-user fonts (in
    `%LOCALAPPDATA%\Microsoft\Windows\Fonts`, registered in
@@ -30,10 +30,10 @@ distinct things can be wrong — check BOTH:
    live, and apps can't find it under any name until a logon or manual
    activation.
 
-**`works in WezTerm` ≠ `installed for the system`.** WezTerm reads the `.ttf`
-directly via `config.font_dirs` AND ships its own Nerd Font glyph fallback, so
-it renders fine even when the font is misnamed or not session-activated — it
-masks both failures. Don't use WezTerm as proof the system has the font.
+**One app rendering the glyphs ≠ installed for the system.** An app with its
+own font fallback can render fine even when the font is misnamed or not
+session-activated — verify with the diagnosis recipe below, not by eyeballing
+a single terminal.
 
 **Diagnosis recipe:** `InstalledFontCollection().Families` (run in the *user's*
 session — a WSL-spawned powershell shares SessionId 1) shows what's actually

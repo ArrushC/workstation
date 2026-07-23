@@ -111,7 +111,7 @@ check_bespoke() {
   nerd-fonts)
     if [[ "${IS_WSL:-false}" == true ]]; then
       if [[ -f "$STAMP/nerd-fonts-$version.done" ]]; then
-        row_ok "$name" "WSL — Windows-side WezTerm owns fonts (skip-stamp present)"
+        row_ok "$name" "WSL — Windows side owns fonts (skip-stamp present)"
       else
         row_warn "$name" "WSL skip not stamped yet — next 'make provision' writes it"
       fi
