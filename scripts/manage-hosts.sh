@@ -2,17 +2,17 @@
 # =============================================================================
 # scripts/manage-hosts.sh
 #
-# Menu-driven host manager. Reads hosts.conf as the single source of truth
-# and regenerates:
-#   - wezterm hosts.lua SSH domains block (between -- HOSTS:START / -- HOSTS:END)
+# Menu-driven host manager. Reads and edits hosts.conf, the single source of
+# truth for the fleet inventory.
 #
 # Provisioning consumes hosts.conf directly: bootstrap.sh self-registers
-# this host into it, and scripts/update-hosts.sh iterates over it for
-# bulk multi-host updates. No separate inventory file is generated.
+# this host into it, scripts/update-hosts.sh iterates over it for bulk
+# multi-host updates, and on Windows bootstrap.ps1's Invoke-WarpTabConfigs
+# regenerates the managed Warp Tab Configs (workstation-*.toml) from it on
+# every run. No separate inventory file is generated.
 #
 # Usage (no args opens the interactive menu):
 #   ./scripts/manage-hosts.sh
-#   ./scripts/manage-hosts.sh --sync
 #   ./scripts/manage-hosts.sh --list
 #   ./scripts/manage-hosts.sh --format
 #   ./scripts/manage-hosts.sh --remove
@@ -31,7 +31,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HOSTS_CONF="$REPO_ROOT/hosts.conf"
-HOSTS_LUA="$REPO_ROOT/chezmoi/dot_config/wezterm/hosts.lua"
 
 # Valid host groups. dev_machine → MODE=dev provisioning (sudo, system-wide);
 # prod_machine → MODE=prod (no sudo, ~/.local/bin). makefile/scope.mk maps
@@ -126,47 +125,12 @@ is_valid_group() {
   return 1
 }
 
-# =============================================================================
-# GENERATORS
-# =============================================================================
-
-generate_wezterm_domains() {
-  log "Regenerating wezterm hosts.lua SSH domains..."
-
-  # Build the ssh_domains lua block
-  local domains_block
-  domains_block="local ssh_domains = {"$'\n'
-
-  while IFS= read -r line; do
-    read -r name ip user group <<<"$line"
-    domains_block+="  {"$'\n'
-    domains_block+="    name           = '${name}',"$'\n'
-    domains_block+="    remote_address = '${ip}',"$'\n'
-    domains_block+="    username       = '${user}',"$'\n'
-    domains_block+="    multiplexing   = 'None',"$'\n'
-    domains_block+="  },"$'\n'
-  done <<<"$(read_hosts)"
-
-  domains_block+="}"
-
-  # Replace the ssh_domains block in hosts.lua between the sentinel comments
-  local tmp
-  tmp=$(mktemp)
-
-  awk -v block="$domains_block" '
-    /^-- HOSTS:START/ { print; print block; skip=1; next }
-    /^-- HOSTS:END/   { skip=0 }
-    !skip             { print }
-  ' "$HOSTS_LUA" >"$tmp"
-
-  mv "$tmp" "$HOSTS_LUA"
-  ok "wezterm hosts.lua SSH domains updated ($(read_hosts | wc -l | tr -d ' ') hosts)"
-}
-
-sync_all() {
-  generate_wezterm_domains
-  echo ""
-  ok "Configs synced from hosts.conf"
+# Printed after any hosts.conf change. Nothing is generated on the Linux
+# side; the Windows terminal entries (Warp Tab Configs) are regenerated from
+# hosts.conf by bootstrap.ps1's Invoke-WarpTabConfigs. PARITY: manage-hosts.ps1
+# prints the same note.
+note_warp_refresh() {
+  log "Warp Tab Configs (Windows) pick this up on the next bootstrap.ps1 run"
 }
 
 # =============================================================================
@@ -369,8 +333,8 @@ add_host() {
   ok "Host '$name' added to hosts.conf"
 
   if [[ "$skip_confirm" == true ]]; then
-    # Non-interactive default: don't copy keys, do sync configs.
-    sync_all
+    # Non-interactive default: don't copy keys.
+    note_warp_refresh
     return
   fi
 
@@ -380,12 +344,7 @@ add_host() {
     copy_ssh_id "$name"
   fi
 
-  echo ""
-  read -rp "  Sync configs now? [Y/n]: " sync_ans
-  sync_ans="${sync_ans:-Y}"
-  if [[ "$sync_ans" =~ ^[Yy]$ ]]; then
-    sync_all
-  fi
+  note_warp_refresh
 }
 
 remove_host() {
@@ -415,7 +374,7 @@ remove_host() {
     mv "$tmp" "$HOSTS_CONF"
     save_hosts
     ok "Host '$name' removed from hosts.conf"
-    sync_all
+    note_warp_refresh
   else
     warn "Aborted."
   fi
@@ -478,7 +437,7 @@ edit_host() {
     mv "$tmp" "$HOSTS_CONF"
     save_hosts
     ok "Host '$name' updated"
-    sync_all
+    note_warp_refresh
   else
     warn "Aborted."
   fi
@@ -664,9 +623,8 @@ show_menu() {
   echo -e "  ${BOLD}4)${RESET} Test SSH connection"
   echo -e "  ${BOLD}5)${RESET} Copy SSH key"
   echo -e "  ${BOLD}6)${RESET} Copy SSH key to ALL hosts"
-  echo -e "  ${BOLD}7)${RESET} Sync configs (regenerate wezterm hosts.lua sentinel block)"
-  echo -e "  ${BOLD}8)${RESET} View hosts.conf"
-  echo -e "  ${BOLD}9)${RESET} Reformat hosts.conf"
+  echo -e "  ${BOLD}7)${RESET} View hosts.conf"
+  echo -e "  ${BOLD}8)${RESET} Reformat hosts.conf"
   echo -e "  ${BOLD}q)${RESET} Quit"
   echo ""
   read -rp "Choice: " choice
@@ -679,9 +637,8 @@ show_menu() {
   4) test_host ;;
   5) copy_ssh_id ;;
   6) copy_ssh_id_all ;;
-  7) sync_all ;;
-  8) cat "$HOSTS_CONF" ;;
-  9) format_hosts ;;
+  7) cat "$HOSTS_CONF" ;;
+  8) format_hosts ;;
   q | Q)
     echo "Bye."
     exit 0
@@ -698,10 +655,6 @@ show_menu() {
 [[ -f "$HOSTS_CONF" ]] || fail "hosts.conf not found at $HOSTS_CONF"
 
 case "${1:-}" in
---sync)
-  sync_all
-  exit 0
-  ;;
 --list)
   print_hosts
   exit 0
@@ -755,7 +708,7 @@ case "${1:-}" in
   done
   ;;
 *)
-  echo "Usage: $0 [--sync | --list | --format | --remove"
+  echo "Usage: $0 [--list | --format | --remove"
   echo "          | --add [--name N --ip I --user U --group G --skip-confirm]"
   echo "          | --copy-id [--name N | --all [--skip-confirm]]]"
   exit 1

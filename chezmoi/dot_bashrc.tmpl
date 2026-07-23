@@ -68,7 +68,7 @@ fi
 if command -v batpipe &>/dev/null && command -v bat &>/dev/null; then
   eval "$(batpipe)"
 fi
-export COLORTERM=truecolor   # WezTerm advertises 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
+export COLORTERM=truecolor   # the fleet's terminals support 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
 
 # --- History -----------------------------------------------------------------
 # HISTSIZE = lines kept in memory; HISTFILESIZE = lines kept on disk.
@@ -145,7 +145,7 @@ bind 'set completion-ignore-case on'
 bind 'set completion-map-case on'
 
 # --- Shift+Arrow movement (readline) -----------------------------------------
-# WezTerm sends ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
+# Terminals send ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
 # so the tail (";2D") leaks into the line. Bind them to plain movement so the
 # leak is gone and navigation is sane. PARITY NOTE: zsh gets a real, visible
 # shift-SELECT highlight (see dot_zshrc.tmpl); readline has no "active selection
@@ -189,8 +189,9 @@ export FZF_DEFAULT_OPTS="
   --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4
 "
 
-# fzf shell integration
-if command -v fzf &>/dev/null; then
+# fzf shell integration. Warp owns the input editor and documents shell-level
+# fzf bindings as incompatible; the standalone fzf command remains available.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
   eval "$(fzf --bash)"
 fi
 
@@ -229,64 +230,9 @@ if command -v mise &>/dev/null; then
 fi
 
 # --- starship prompt ---------------------------------------------------------
-if command -v starship &>/dev/null; then
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
   eval "$(starship init bash)"
 fi
-
-# --- WezTerm OSC 7 (cwd tracking for new tabs/panes) -------------------------
-# Emit the current working directory as an OSC 7 file:// URL after every
-# prompt so WezTerm tracks cwd. New WezTerm tabs (CTRL+SHIFT+T) and panes
-# then start in the same directory as the parent pane instead of falling
-# back to wezterm's own cwd (a Windows path for WSL hosts, a stale path for
-# SSH'd hosts). Harmless on terminals that don't speak OSC 7 — they ignore
-# the sequence. The case-guard prevents double-registration if the bashrc
-# gets sourced twice in the same shell.
-__wezterm_osc7() {
-  printf '\033]7;file://%s%s\033\\' "${HOSTNAME:-$(hostname)}" "$PWD"
-}
-case ";${PROMPT_COMMAND:-};" in
-  *";__wezterm_osc7;"*) ;;
-  *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}__wezterm_osc7" ;;
-esac
-
-# --- WezTerm OSC 133 (semantic prompt zones) ----------------------------------
-# PARITY: mirrors dot_zshrc.tmpl — change both together.
-# A = prompt start, B = prompt end / input start, C = command output start,
-# D;<exit> = command finished. Consumed by WezTerm for scroll-to-prompt and
-# select-command-output; ignored by other terminals; inert inside Zellij.
-#
-# __wezterm_osc133_pre is PREPENDED to PROMPT_COMMAND: later entries
-# (starship_precmd, __wezterm_osc7) clobber $?, and D needs the real exit
-# code — it returns that code so starship still sees it. The B mark is
-# appended to PS1 by __wezterm_osc133_post, which runs LAST: starship
-# rebuilds PS1 every cycle in bash, so the append must re-apply after it
-# (the substring guard keeps a static, starship-less PS1 from growing).
-# C fires from PS0 (expanded once per command: after Enter, before exec).
-# The '${TERM:$((__wezterm_cmd_ran=1)):0}' tail is a standard PS0 trick —
-# the arithmetic ASSIGNS the flag in the current shell while the expansion
-# itself produces an empty string (zero-length slice), so nothing prints.
-__wezterm_osc133_pre() {
-  local last=$?
-  if [[ -n ${__wezterm_cmd_ran:-} ]]; then
-    printf '\033]133;D;%d\033\\' "$last"
-    unset __wezterm_cmd_ran
-  fi
-  printf '\033]133;A\033\\'
-  return "$last"
-}
-__wezterm_osc133_post() {
-  if [[ ${PS1-} != *']133;B'* ]]; then
-    PS1="${PS1}\[\e]133;B\a\]"
-  fi
-}
-case ";${PROMPT_COMMAND:-};" in
-  *";__wezterm_osc133_pre;"*) ;;
-  *) PROMPT_COMMAND="__wezterm_osc133_pre${PROMPT_COMMAND:+;$PROMPT_COMMAND};__wezterm_osc133_post" ;;
-esac
-case "${PS0:-}" in
-  *']133;C'*) ;;
-  *) PS0="${PS0}"'\e]133;C\a${TERM:$((__wezterm_cmd_ran=1)):0}' ;;
-esac
 
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
@@ -343,14 +289,14 @@ alias cockpit-status='systemctl status cockpit.socket'
 
 # --- Functions ---------------------------------------------------------------
 
-# Screen clearing — `clear` wipes WezTerm's scrollback so the footer line-count
-# resets; `hide` is the soft variant that preserves it. WezTerm's terminfo lacks
-# the E3 capability, so the stock ncurses `clear` emits only \e[H\e[2J (erase the
-# visible screen) and leaves the scrollback — the footer count never drops. We
-# re-add the scrollback wipe (\e[3J) so `clear` truly clears. `hide` does the
-# inverse: it scrolls only the on-screen content (not a full screen) up into the
-# scrollback — nothing lost, scroll up to see it, and a clean screen adds nothing
-# so repeated `hide` doesn't inflate the count. (Nushell's built-in `clear`
+# Screen clearing — `clear` wipes the scrollback too; `hide` is the soft
+# variant that preserves it. Not every terminfo the fleet sees advertises the
+# E3 capability, so the stock ncurses `clear` can emit only \e[H\e[2J (erase
+# the visible screen) and leave the scrollback intact. We re-add the
+# scrollback wipe (\e[3J) so `clear` truly clears. `hide` does the inverse:
+# it scrolls only the on-screen content (not a full screen) up into the
+# scrollback — nothing lost, scroll up to see it, and a clean screen adds
+# nothing so repeated `hide` doesn't inflate it. (Nushell's built-in `clear`
 # already wipes scrollback; its soft variant — aliased to `hide` there — is
 # `clear --keep-scrollback`.)
 clear() {
@@ -435,52 +381,6 @@ fssh() {
   local host
   host=$(grep -E "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}' | fzf)
   [[ -n "$host" ]] && ssh "$host"
-}
-
-# ssh — launched from WezTerm, keep TERM=wezterm only if the remote actually has
-# the wezterm terminfo; otherwise fall back to xterm-256color so `clear`/TUIs
-# don't error with `unknown terminal type` on hosts not provisioned with this
-# repo. Fail-safe: anything uncertain (unparsable dest, probe timeout, password-
-# only host with no live ControlMaster) downgrades; we only *upgrade* on a
-# positive infocmp. Bypass once with `command ssh …`; disable permanently via
-# `unset -f ssh` in ~/.bashrc.local. PARITY: identical body in dot_zshrc.tmpl.
-ssh() {
-  if [ "$TERM" != wezterm ]; then
-    command ssh "$@"
-    return
-  fi
-
-  # Destination = first bareword that isn't an option or an option's value.
-  local arg dest='' expect_val=0
-  local val_flags='bcDEeFIiJLlmOopRSWw'
-  for arg in "$@"; do
-    if [ "$expect_val" = 1 ]; then
-      expect_val=0
-      continue
-    fi
-    case $arg in
-    --) continue ;;
-    -[$val_flags]) expect_val=1 ;;
-    -[$val_flags]*) continue ;;
-    -*) continue ;;
-    *)
-      dest=${arg#*@}
-      break
-      ;;
-    esac
-  done
-
-  # Default to the safe fallback; only upgrade on a positive non-interactive
-  # probe. -o BatchMode=yes never prompts; the probe reuses the ControlMaster
-  # socket (ControlMaster auto / ControlPersist 60s, Linux/WSL) so it's cheap.
-  local term=xterm-256color
-  if [ -n "$dest" ] &&
-    command ssh -o BatchMode=yes -o ConnectTimeout=5 "$dest" \
-      'infocmp wezterm >/dev/null 2>&1'; then
-    term=wezterm
-  fi
-
-  TERM=$term command ssh "$@"
 }
 
 # Start or attach to a named zellij session

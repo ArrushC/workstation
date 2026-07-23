@@ -2,16 +2,18 @@
 # bootstrap.ps1 — workstation setup (Windows client side)
 #
 # The Windows host is a CLIENT — Ansible/Make run on Linux hosts only. On
-# Windows this script provisions its slice with NO package manager and NO admin
-# rights: it installs a small set of first-party binaries into a per-user
-# location, then hands off to chezmoi to deploy the tracked dotfiles.
+# Windows this script provisions its slice with NO admin rights: it installs a
+# small set of first-party binaries into a per-user location, seeds Warp through
+# its official WinGet package when available, then hands off to chezmoi to deploy
+# the tracked dotfiles.
 #
 # Install model (everything under %LOCALAPPDATA%\workstation, added to User PATH):
 #   - chezmoi   — official get.chezmoi.io binary installer  → workstation\bin
 #   - Starship  — pinned portable .zip (sha256-verified)    → workstation\bin
-#   - WezTerm   — pinned portable .zip (sha256-verified)    → workstation\wezterm
 #   - Helix     — pinned portable .zip (sha256-verified)    → workstation\helix
 #                 (hx.exe + bundled runtime/; no HELIX_RUNTIME env var needed)
+#   - Warp      — latest official per-user WinGet package   → LocalAppData\Programs
+#                 (best-effort; self-updating; the PRIMARY terminal)
 #   - SSHFS-Win — BEST-EFFORT ELEVATED (the ONE exception to no-admin): mounts
 #                 remote Unix filesystems over SSH (\\sshfs\user@host). Depends
 #                 on the WinFsp kernel driver -> machine-scope MSIs -> UAC
@@ -26,32 +28,32 @@
 #
 # Flow:
 #   1. preflight    — require git on PATH (hard-fail w/ install link); warn
-#                     (never fail) if no GitHub token is available yet, and if
-#                     ssh-keygen / Zed / VSCode are missing. gh itself is NOT
-#                     a prerequisite — step 2 installs it (pinned portable).
-#   2. tool install — chezmoi (official installer) + WezTerm/Starship/Helix (pinned
+#                     (never fail) if ssh-keygen / Zed / VSCode are missing.
+#                     gh itself is NOT a prerequisite — step 2 installs it
+#                     (pinned portable).
+#   2. tool install — chezmoi (official installer) + Starship/Helix (pinned
 #                     portable downloads), all into %LOCALAPPDATA%\workstation;
-#                     then the installer-class apps (Obsidian, Zed) and the
+#                     then Warp, the installer-class apps (Obsidian, Zed), and the
 #                     best-effort elevated class (SSHFS-Win — may pop UAC).
 #   3. clone repo   — into -RepoPath (default %USERPROFILE%\.local\share\chezmoi,
 #                     matching bootstrap.sh's $HOME/.local/share/chezmoi and
 #                     chezmoi's own default source dir).
 #   4. chezmoi apply— applies chezmoi/ to %USERPROFILE% (PowerShell profile,
-#                     Zed/VSCode settings, etc.). wezterm.lua is ignored on
-#                     Windows; WezTerm reads it via the env var in step 5.
-#   5. wezterm env  — set User-scope WEZTERM_CONFIG_FILE at the chezmoi source.
-#   5b. profile shim— if Documents is redirected (OneDrive), drop a loader at the
+#                     Warp settings, Zed/VSCode settings, etc.).
+#   5. profile shim — if Documents is redirected (OneDrive), drop a loader at the
 #                     real $PROFILE that sources the chezmoi canonical profile.
-#   5c. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
-#                     tools (WezTerm/dnGrep/LogExpert — their .zips ship none);
+#   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
+#                     tools (dnGrep/LogExpert — their .zips ship none);
 #                     idempotent + duplicate-proof.
+#   5c. warp configs — regenerate WSL/Nushell/PowerShell and hosts.conf-driven
+#                     SSH+Zellij Tab Configs (managed workstation-*.toml only).
 #   5d. nushell prompt — generate the starship prompt into nushell's
 #                     vendor/autoload dir (self-heals every run).
 #   5e. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
 #                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
-#   5f. wezterm toast id — register the org.wezfurlong.wezterm AppUserModelId
-#                     (HKCU) so WezTerm's own toast notifications display (the
-#                     portable .zip has no installer to register it).
+#   5f. wezterm retire — remove leftovers of the retired WezTerm install
+#                     (env var, toast AppId, shortcut, portable tree + PATH
+#                     entry); cheap no-op once clean.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -88,9 +90,9 @@
 #   -RepoPath <path>    override clone target
 #                       (default $env:USERPROFILE\.local\share\chezmoi)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the chezmoi/GitHub CLI/WezTerm/Starship/Helix/
-#                       Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert
-#                       auto-installs AND the Claude Code step
+#   -SkipToolInstall    skip the chezmoi/GitHub CLI/Starship/Helix/Nushell/jq/
+#                       OpenCode/omp/DevToys CLI/dnGrep/LogExpert
+#                       auto-installs, the Warp seed, AND the Claude Code step
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
@@ -108,7 +110,7 @@
 #   -Doctor             read-only health report, then exit (installs nothing):
 #                       prereqs, repo git state (branch, ahead/behind, dirty),
 #                       chezmoi init + drift, portable/installer tools, fonts,
-#                       BurntToast, WEZTERM_CONFIG_FILE, Start-menu shortcuts,
+#                       BurntToast, Start-menu shortcuts, Warp Tab Configs,
 #                       profile shim, SSH key.
 #   -CheckForUpdates    read-only update scan, then exit: the workstation repo
 #                       first (fetch + commits-behind), then every pinned tool
@@ -175,7 +177,6 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 
 # Per-user install root for every binary this script provisions. Admin-free:
 #   workstation\bin          — single-exe tools (chezmoi, starship)  → on User PATH
-#   workstation\wezterm      — the multi-file WezTerm portable tree  → on User PATH
 #   workstation\helix        — the multi-file Helix portable tree    → on User PATH
 #   workstation\nu           — the multi-file Nushell portable tree  → on User PATH
 #   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
@@ -184,7 +185,6 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 #   workstation\stamps       — "<exe>.<version>.stamp" idempotency markers
 $WsRoot       = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin        = Join-Path $WsRoot "bin"
-$WsWezterm    = Join-Path $WsRoot "wezterm"
 $WsHelix      = Join-Path $WsRoot "helix"
 $WsNu         = Join-Path $WsRoot "nu"
 $WsDevToysCli = Join-Path $WsRoot "devtoys-cli"
@@ -196,34 +196,19 @@ $WsStamps     = Join-Path $WsRoot "stamps"
 # as scripts\install-nerd-fonts.ps1) — NOT makefile/versions.mk, because Make
 # never runs on Windows. Bump = update Version + refresh Sha256 (compute over the
 # downloaded .zip). Layout 'single' copies <Exe>.exe into Dest; 'tree' extracts
-# the whole archive into Dest. WezTerm's pin and vendored terminfo are both
-# maintained by .github/workflows/wezterm-nightly.yml.
+# the whole archive into Dest.
 #
 # The Repo/Tag* keys feed -CheckForUpdates only (latest upstream tag via
 # `git ls-remote`): TagPrefix is what precedes the version in the tag,
 # TagFilter accepts version shapes after the prefix is stripped, TagSort
-# 'string' is for WezTerm's date-style tags ([version] can't parse them),
-# and UpdateHint is appended to the "update available" line.
-#   NightlyAsset       upstream rolling-nightly asset filename (WezTerm). Its
-#                      presence switches the -CheckForUpdates row from a git-tag
-#                      lookup (meaningless against a single rolling 'nightly'
-#                      tag) to comparing the pin's leading yyyymmdd against the
-#                      asset's updated_at. Repo then means the UPSTREAM repo.
-#   PrivateRepo        owner/repo of OUR private mirror. When set AND Url points
-#                      into it, Install-PortableTool downloads via the GitHub
-#                      API asset endpoint with the gh-sourced token (`gh auth
-#                      token` — honors GITHUB_TOKEN; gh is itself a pinned
-#                      portable tool installed EARLIER in this manifest, and
-#                      is resolved by its concrete $WsBin path first — the
-#                      session PATH is stale mid-loop; private assets 404
-#                      unauthenticated); no usable token warns-and-skips.
+# 'string' is for date-style tags [version] can't parse, and UpdateHint is
+# appended to the "update available" line.
 #
 # OPT-IN key `Shortcut = @{ Target = "<exe-basename>"; Description = "..." }` —
-# for GUI tools whose portable .zip ships no Start Menu entry: step 5c
+# for GUI tools whose portable .zip ships no Start Menu entry: step 5b
 # (Invoke-StartMenuShortcuts) drops a per-user "<Name>.lnk" pointing at
 # <Dest>\<Target>.exe. Target is a basename WITHOUT ".exe", and may differ
-# from Exe (WezTerm's shortcut launches wezterm-gui.exe, not the wezterm.exe
-# CLI/mux). CLI-only tools omit the key — no shortcut is made.
+# from Exe. CLI-only tools omit the key — no shortcut is made.
 $PortableTools = @(
     @{
         Name       = "Starship"
@@ -238,9 +223,6 @@ $PortableTools = @(
         UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
     },
     @{
-        # ORDER MATTERS: gh must precede WezTerm in this manifest — the
-        # install loop is sequential, and WezTerm's PrivateRepo mirror
-        # download sources its token from this gh moments after it lands.
         Name       = "GitHub CLI"
         Exe        = "gh"
         Version    = "2.96.0"
@@ -251,20 +233,6 @@ $PortableTools = @(
         Repo       = "cli/cli"
         TagPrefix  = "v"
         UpdateHint = "dual-edit: `$PortableTools here AND GH_VERSION in makefile/versions.mk"
-    },
-    @{
-        Name         = "WezTerm"
-        Exe          = "wezterm"
-        Version      = "20260716-102532-2ef4bef4"
-        Url          = "https://github.com/ArrushC/workstation/releases/download/wezterm-nightly-snapshots/WezTerm-windows-20260716-102532-2ef4bef4.zip"
-        Sha256       = "f1fd19ca1ed4241247cd7f324602cd6d2c9ad84e3d368cbd6f08730d87d3f816"
-        Layout       = "tree"
-        Dest         = $WsWezterm
-        Repo         = "wez/wezterm"
-        NightlyAsset = "WezTerm-windows-nightly.zip"
-        PrivateRepo  = "ArrushC/workstation"
-        UpdateHint   = "weekly wezterm-nightly.yml PRs snapshot bumps; dispatch it for an immediate refresh"
-        Shortcut     = @{ Target = "wezterm-gui"; Description = "WezTerm terminal emulator" }
     },
     @{
         Name       = "Helix"
@@ -279,8 +247,8 @@ $PortableTools = @(
         UpdateHint = "dual-edit: `$PortableTools here AND HELIX_VERSION in makefile/versions.mk"
     },
     @{
-        # Nushell — the default LOCAL Windows shell (wezterm.lua default_prog +
-        # the Windows Terminal "Nushell" profile both point at this install).
+        # Nushell — the default LOCAL Windows shell (the Windows Terminal
+        # "Nushell" profile points at this install).
         # Pre-1.0 and churny: bump deliberately and upgrade INCREMENTALLY (the
         # pin/stamp model here is exactly the "pin it, read the changelog" hygiene
         # Nushell's 0.x cadence needs). Tags are bare "0.113.1" (no prefix).
@@ -501,6 +469,15 @@ $InstallerTools = @(
     }
 )
 
+# Warp's official Windows distribution is a WinGet package rather than a
+# GitHub release asset. WinGet's manifest enforces the installer hash; Warp
+# self-updates after this best-effort per-user seed.
+$WarpTool = @{
+    Name       = "Warp"
+    WingetId   = "Warp.Warp"
+    DetectName = "Warp"
+}
+
 # Elevated tools — the ONE sanctioned exception to the no-admin rule. SSHFS-Win
 # mounts remote Unix filesystems over SSH (\\sshfs\user@host UNC paths / net use
 # drive letters); it depends on WinFsp, a kernel-mode filesystem driver, so both
@@ -638,21 +615,6 @@ This script does NOT install Git for you.
     }
     Write-Ok "git found ($((Get-Command git).Source))"
 
-    # GitHub auth — SOFT check (2026-07-17; supersedes the brief hard-fail):
-    # gh itself is NOT a prerequisite — the tool step below installs it as a
-    # pinned portable (`GitHub CLI` in $PortableTools, GH_VERSION dual-edit).
-    # Only the WezTerm nightly-snapshot mirror needs a token at download time
-    # (`gh auth token` — honors GITHUB_TOKEN — else plain GITHUB_TOKEN), and
-    # that download warns-and-skips without one, stamping nothing, so a later
-    # re-run self-heals. Surface the miss early; never block the bootstrap.
-    $ghProbe = Get-Command gh -ErrorAction SilentlyContinue
-    $ghTok = $null
-    if ($ghProbe) { $ghTok = (& gh auth token 2>$null | Select-Object -First 1) }
-    if (-not $ghTok -and -not $env:GITHUB_TOKEN) {
-        Write-Warn "No GitHub token yet (gh not authenticated / GITHUB_TOKEN unset) — the WezTerm"
-        Write-Warn "  nightly-mirror download will be skipped this run. Fix once, then re-run:  gh auth login"
-    }
-
     # chezmoi is installed by the tool step unless skipped. If -SkipToolInstall
     # is set and the chezmoi-apply step will run, chezmoi must already be present.
     if ($SkipToolInstall -and -not $SkipChezmoi -and -not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
@@ -673,9 +635,8 @@ will run. Either drop -SkipToolInstall (so the script installs chezmoi), pass
 
 # =============================================================================
 # 2. TOOL INSTALL — admin-free binary/portable installs under %LOCALAPPDATA%\
-#    workstation. chezmoi via its official installer; GitHub CLI + WezTerm +
-#    Starship + Helix via pinned, sha256-verified portable archives (gh before
-#    WezTerm — it supplies the token for WezTerm's private-mirror download).
+#    workstation. chezmoi via its official installer; GitHub CLI + Starship +
+#    Helix via pinned, sha256-verified portable archives.
 #    Zed/VSCode are hand-installed (soft-warn). zoxide is intentionally not
 #    installed.
 # =============================================================================
@@ -710,6 +671,27 @@ function Add-ToUserPath {
     if (-not $inSession) {
         $env:PATH = "$(($env:PATH).TrimEnd(';'));$Dir"
     }
+}
+
+function Remove-FromUserPath {
+    # Inverse of Add-ToUserPath (same case/trailing-slash-insensitive match) —
+    # used by the WezTerm retire step. Idempotent: absent entries are a no-op.
+    param([string]$Dir)
+
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($userPath) {
+        $entries = $userPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries)
+        $kept    = @($entries | Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
+        if ($kept.Count -ne $entries.Count) {
+            [Environment]::SetEnvironmentVariable("PATH", ($kept -join ';'), "User")
+            Write-Ok "Removed $Dir from User PATH"
+        }
+    }
+
+    # Drop it from the in-session PATH too so later steps don't resolve it.
+    $sessionKept = @(($env:PATH).Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
+        Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
+    $env:PATH = $sessionKept -join ';'
 }
 
 function Install-Chezmoi {
@@ -781,60 +763,10 @@ function Install-PortableTool {
     $tmpZip = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version).zip"
     $tmpDir = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version)"
 
-    # Private-mirror download (opt-in via PrivateRepo — today only WezTerm's
-    # nightly-snapshot mirror): release assets on a PRIVATE repo 404 on the
-    # plain releases/download URL, so resolve the asset id by name via the
-    # API and fetch through the asset endpoint with a token. Gated on the
-    # Url actually pointing INTO PrivateRepo, so a rollback re-pin to the
-    # public upstream stable URL takes the plain path with no field edits.
-    # Token source is the gh CLI (a preflight hard prerequisite, like Git):
-    # `gh auth token` returns GITHUB_TOKEN when set and the stored login
-    # otherwise. No usable token warns-and-skips like a download failure.
-    $usePrivate = $Tool.ContainsKey('PrivateRepo') -and
-        ($Tool.Url -like "*github.com/$($Tool.PrivateRepo)/*")
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = `
             [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        if ($usePrivate) {
-            # Resolve gh by its concrete portable path FIRST — the tool step
-            # installs gh moments earlier in this same loop, and the running
-            # session's PATH doesn't see fresh User-PATH entries (the DevToys
-            # stale-PATH lesson, 2026-07-14). PATH lookup is the fallback for
-            # non-portable gh installs.
-            $tok = $null
-            $ghExe = Join-Path $WsBin 'gh.exe'
-            if (-not (Test-Path $ghExe)) {
-                $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
-                $ghExe = if ($ghCmd) { $ghCmd.Source } else { $null }
-            }
-            if ($ghExe) { $tok = (& $ghExe auth token 2>$null | Select-Object -First 1) }
-            if (-not $tok) { $tok = $env:GITHUB_TOKEN }
-            if (-not $tok) {
-                Write-Warn "$($Tool.Name): no GitHub token (gh not authenticated, GITHUB_TOKEN unset) — can't download the private mirror asset. Skipping."
-                Write-Warn "  Fix once, then re-run bootstrap:  gh auth login"
-                return
-            }
-            $assetName = $Tool.Url.Split('/')[-1]
-            $relTag    = $Tool.Url.Split('/')[-2]
-            $headers   = @{ Authorization = "Bearer $tok"; 'User-Agent' = 'workstation-bootstrap' }
-            $rel   = Invoke-RestMethod -Uri "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/tags/$relTag" `
-                -Headers $headers -UseBasicParsing
-            $asset = @($rel.assets) | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
-            if (-not $asset) { throw "asset '$assetName' not found on release '$relTag'" }
-            # The asset endpoint + Accept: octet-stream 302s to a pre-signed
-            # CDN URL. .NET Framework's HttpWebRequest (PS 5.1's engine)
-            # STRIPS the Authorization header when auto-following the
-            # redirect, so the pre-signed hop arrives clean — no manual 302
-            # handling needed (proven live 2026-07-16: fetched-asset sha256
-            # matched the pin; the -MaximumRedirection 0 capture alternative
-            # instead throws InvalidOperationException with a null Response
-            # on PS 5.1, so it can never work there).
-            $headers['Accept'] = 'application/octet-stream'
-            Invoke-WebRequest -Uri "https://api.github.com/repos/$($Tool.PrivateRepo)/releases/assets/$($asset.id)" `
-                -Headers $headers -OutFile $tmpZip -UseBasicParsing
-        } else {
-            Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
-        }
+        Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
     } catch {
         Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
         Write-Warn "  Skipping — install it manually or re-run later."
@@ -880,10 +812,10 @@ The pinned hash in `$PortableTools is stale, or the download was corrupted/tampe
             Add-ToUserPath $Tool.Dest
         } else {
             # 'tree' — the archive may wrap everything in a single top-level
-            # folder; flatten that so wezterm-gui.exe lands directly in Dest.
+            # folder; flatten that so the exe lands directly in Dest.
             $top = @(Get-ChildItem -Path $tmpDir)
             $src = if (($top.Count -eq 1) -and $top[0].PSIsContainer) { $top[0].FullName } else { $tmpDir }
-            # NOTE: if the tool is running from $Dest its files are locked — this wipe then throws and the outer try/catch warn-not-fails. Close the app (WezTerm/Helix) before re-running to refresh it.
+            # NOTE: if the tool is running from $Dest its files are locked — this wipe then throws and the outer try/catch warn-not-fails. Close the app (Helix/dnGrep) before re-running to refresh it.
             if (Test-Path $Tool.Dest) { Remove-Item -Recurse -Force $Tool.Dest }
             New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null
             Copy-Item -Path (Join-Path $src '*') -Destination $Tool.Dest -Recurse -Force
@@ -1252,9 +1184,39 @@ function Install-ElevatedTool {
     Write-Ok "$($Tool.Name) installed (MSI fallback)"
 }
 
+# Best-effort, per-user Warp seed. A missing WinGet or failed install must not
+# block the portable toolbelt or chezmoi; Warp's official installer self-updates.
+function Install-Warp {
+    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
+        Write-Ok "Warp already installed (use -ForceInstaller to reinstall)"
+        return
+    }
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Warn "Warp not installed — winget is unavailable; install manually from https://www.warp.dev/download"
+        return
+    }
+
+    Write-Log "Installing Warp (official WinGet package, per-user)..."
+    $wingetArgs = @(
+        "install", "--id", $WarpTool.WingetId, "--exact", "--scope", "user",
+        "--silent", "--accept-source-agreements", "--accept-package-agreements"
+    )
+    if ($ForceInstaller) { $wingetArgs += "--force" }
+    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & winget @wingetArgs
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $oldEap
+    if ($code -eq 0) {
+        Write-Ok "Warp installed (winget $($WarpTool.WingetId))"
+    } else {
+        Write-Warn "Warp: winget exited with code $code — install manually from https://www.warp.dev/download or re-run later"
+    }
+}
+
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
         return
     }
 
@@ -1264,6 +1226,7 @@ function Invoke-ToolInstall {
 
     Install-Chezmoi
     foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
+    Install-Warp
     foreach ($tool in $InstallerTools) { Install-InstallerTool -Tool $tool }
 
     # Elevated class last, so a declined UAC can't interrupt the admin-free
@@ -1364,45 +1327,7 @@ function Invoke-Chezmoi {
 }
 
 # =============================================================================
-# 5. WEZTERM_CONFIG_FILE — point WezTerm directly at the chezmoi source.
-#    WezTerm reads its config from whatever $env:WEZTERM_CONFIG_FILE resolves
-#    to, and the chezmoi source path is a normal file. automatically_reload_config
-#    picks up edits live (e.g. from manage-hosts.ps1 -Sync), and there's no
-#    home-path copy to maintain — dot_config/wezterm is in .chezmoiignore.tmpl
-#    on Windows, so chezmoi never writes %USERPROFILE%\.config\wezterm\.
-#
-#    Idempotent: re-running with the same RepoPath is a no-op.
-# =============================================================================
-function Invoke-WeztermConfigEnv {
-    $envName  = 'WEZTERM_CONFIG_FILE'
-    $newValue = Join-Path $RepoPath "chezmoi\dot_config\wezterm\wezterm.lua"
-
-    if (-not (Test-Path $newValue)) {
-        Write-Warn "Skipping $envName setup — chezmoi source not found at $newValue"
-        return
-    }
-
-    $current = [Environment]::GetEnvironmentVariable($envName, 'User')
-
-    if ($current -eq $newValue) {
-        Write-Ok "$envName already points at the chezmoi source"
-    } else {
-        Write-Log "Setting User-scope $envName to $newValue..."
-        [Environment]::SetEnvironmentVariable($envName, $newValue, 'User')
-        # Propagate to the current session so anything later in this script
-        # (and any wezterm spawned from the same shell) sees the new value.
-        Set-Item "Env:$envName" $newValue
-        if ($current) {
-            Write-Ok "$envName updated (was: $current)"
-        } else {
-            Write-Ok "$envName set"
-        }
-        Write-Warn "Restart any running WezTerm instances to pick up the new config location."
-    }
-}
-
-# =============================================================================
-# 5b. POWERSHELL PROFILE SHIM (Documents redirection) — when Documents is
+# 5. POWERSHELL PROFILE SHIM (Documents redirection) — when Documents is
 #    redirected (OneDrive / corporate folder redirection), $PROFILE resolves to
 #    the redirected dir, but chezmoi deploys the canonical profile to the LITERAL
 #    %USERPROFILE%\Documents\PowerShell — so PowerShell never loads the managed
@@ -1449,13 +1374,12 @@ if (Test-Path $canonical) { . $canonical }
 }
 
 # =============================================================================
-# 5c. START MENU SHORTCUTS — the portable GUI .zips ship no shortcut
+# 5b. START MENU SHORTCUTS — the portable GUI .zips ship no shortcut
 #    (unlike the installer-class apps, whose own installers create one), so the
 #    Start menu has nothing to launch and the GUI hides behind the PATH'd exe.
 #    Data-driven: every $PortableTools entry carrying the opt-in Shortcut key
-#    (WezTerm/dnGrep/LogExpert today) gets a per-user "<Name>.lnk" pointing at
-#    <Dest>\<Shortcut.Target>.exe (WezTerm's targets wezterm-gui.exe, the GUI
-#    binary — NOT the wezterm.exe CLI/mux).
+#    (dnGrep/LogExpert today) gets a per-user "<Name>.lnk" pointing at
+#    <Dest>\<Shortcut.Target>.exe.
 #
 #    Idempotent + duplicate-proof: a fixed filename per tool means a re-run
 #    overwrites the same path in place — a second copy can never appear. Runs on
@@ -1509,6 +1433,109 @@ function Invoke-StartMenuShortcuts {
         } catch {
             Write-Warn "Could not create the $($tool.Name) Start Menu shortcut: $($_.Exception.Message)"
         }
+    }
+}
+
+# =============================================================================
+# 5c. WARP TAB CONFIGS — deterministic launch entries for the supported Windows
+#      shells plus one SSH+Zellij entry per hosts.conf row. Files beginning with
+#      workstation- are owned by this function; user-created configs are never
+#      touched. Runs every bootstrap so host removals and edits self-heal.
+# =============================================================================
+function Invoke-WarpTabConfigs {
+    if (-not (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
+        Write-Warn "Skipping Warp Tab Config generation — Warp is not installed."
+        return
+    }
+
+    $dir = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
+    try {
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        Get-ChildItem -Path $dir -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $configs = @{
+            "workstation-wsl-almalinux-9.toml" = @'
+name = "WSL: AlmaLinux-9"
+title = "AlmaLinux-9"
+color = "blue"
+
+[[panes]]
+id = "main"
+type = "terminal"
+shell = "pwsh"
+commands = ['wsl.exe --distribution AlmaLinux-9 --cd ~']
+is_focused = true
+'@
+            "workstation-powershell.toml" = @'
+name = "Windows PowerShell"
+title = "PowerShell"
+color = "blue"
+
+[[panes]]
+id = "main"
+type = "terminal"
+shell = "pwsh"
+commands = []
+is_focused = true
+'@
+            "workstation-nushell-compat.toml" = @'
+name = "Nushell (compatibility)"
+title = "Nushell compatibility"
+color = "magenta"
+
+[[panes]]
+id = "main"
+type = "terminal"
+shell = "pwsh"
+commands = ['& "$env:LOCALAPPDATA\workstation\nu\nu.exe" --login']
+is_focused = true
+'@
+        }
+        foreach ($entry in $configs.GetEnumerator()) {
+            [System.IO.File]::WriteAllText((Join-Path $dir $entry.Key), $entry.Value.Trim() + "`n", $utf8)
+        }
+
+        $hostsFile = Join-Path $RepoPath "hosts.conf"
+        if (Test-Path $hostsFile) {
+            foreach ($line in Get-Content $hostsFile) {
+                $trimmed = $line.Trim()
+                if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
+                $parts = $trimmed -split '\s+'
+                if ($parts.Count -lt 4) {
+                    Write-Warn "Skipping malformed hosts.conf row: $line"
+                    continue
+                }
+                $name  = $parts[0]
+                $ip    = $parts[1]
+                $user  = $parts[2]
+                $group = $parts[3]
+                $slug  = ($name.ToLower() -replace '[^a-z0-9-]', '-')
+                $color = if ($group -eq 'dev_machine') { 'green' } else { 'cyan' }
+                $body = @"
+name = "SSH: $name"
+title = "$name"
+color = "$color"
+
+[[panes]]
+id = "main"
+type = "terminal"
+shell = "pwsh"
+commands = ['ssh -t $user@$ip zellij attach --create main']
+is_focused = true
+"@
+                [System.IO.File]::WriteAllText(
+                    (Join-Path $dir "workstation-ssh-$slug.toml"),
+                    $body.Trim() + "`n",
+                    $utf8)
+            }
+        } else {
+            Write-Warn "hosts.conf not found at $hostsFile — generated only local Warp Tab Configs."
+        }
+        Write-Ok "Warp Tab Configs regenerated from hosts.conf ($dir)"
+    } catch {
+        Write-Warn "Could not generate Warp Tab Configs: $($_.Exception.Message)"
     }
 }
 
@@ -1618,35 +1645,57 @@ function Invoke-DnGrepConfig {
 }
 
 # =============================================================================
-# 5f. WEZTERM TOAST APPID — WezTerm's Windows toast backend shows notifications
-#    via ToastNotificationManager.CreateToastNotifierWithId("org.wezfurlong.wezterm")
-#    (wezterm-toast-notification/src/windows.rs), and Windows only DELIVERS a
-#    toast from an unpackaged app when that AppUserModelId is registered. The
-#    official WezTerm installer registers it via a Start Menu shortcut carrying
-#    the AUMID property; our portable .zip can't (WScript.Shell .lnks can't set
-#    shortcut properties), so without this step every window:toast_notification()
-#    in the tracked config — config-reloaded, the SSH-reconnect gate, the
-#    scrollback-in-SSH bail — fails SILENTLY (the error goes only to WezTerm's
-#    invisible stderr; diagnosed live 2026-07-18). Minimal HKCU registration:
-#    DisplayName is all Windows requires — the same shape BurntToast's
-#    New-BTAppId writes. Per-user, no admin. Runs EVERY bootstrap independent
-#    of the install stamp (a deleted key self-heals) — the
-#    Invoke-StartMenuShortcuts pattern. Takes effect on WezTerm's NEXT toast
-#    attempt; no restart needed (the AUMID is checked per Show() call).
+# 5f. WEZTERM RETIRE — migration cleanup for the retired WezTerm install
+#    (the fleet's terminal is Warp as of 2026-07). Earlier bootstraps set a
+#    User-scope WEZTERM_CONFIG_FILE env var, registered the
+#    org.wezfurlong.wezterm toast AppUserModelId (HKCU), created a Start Menu
+#    shortcut, and installed the portable tree at workstation\wezterm on the
+#    User PATH. None of that is provisioned anymore, so this step removes
+#    whatever is still present. Every action is independent and best-effort
+#    (warn-and-continue — e.g. the tree wipe throws if wezterm-gui.exe is
+#    still running); once a machine is clean the whole step is a cheap no-op.
 # =============================================================================
-function Invoke-WeztermToastAppId {
-    $key = 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm'
+function Invoke-WeztermRetire {
+    # User-scope env var (pointed at the now-deleted repo config).
     try {
-        $cur = (Get-ItemProperty -Path $key -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
-        if ($cur -eq 'WezTerm') {
-            Write-Ok "WezTerm toast AppUserModelId already registered"
-            return
+        if ([Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')) {
+            [Environment]::SetEnvironmentVariable('WEZTERM_CONFIG_FILE', $null, 'User')
+            Remove-Item Env:WEZTERM_CONFIG_FILE -ErrorAction SilentlyContinue
+            Write-Ok "WezTerm retired: WEZTERM_CONFIG_FILE (User) removed"
         }
-        if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
-        New-ItemProperty -Path $key -Name DisplayName -Value 'WezTerm' -PropertyType String -Force | Out-Null
-        Write-Ok "WezTerm toast AppUserModelId registered (HKCU) — WezTerm toasts can now display"
+    } catch { Write-Warn "Could not remove WEZTERM_CONFIG_FILE: $($_.Exception.Message)" }
+
+    # Toast AppUserModelId registration (HKCU).
+    try {
+        $key = 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm'
+        if (Test-Path $key) {
+            Remove-Item -Path $key -Recurse -Force
+            Write-Ok "WezTerm retired: toast AppUserModelId unregistered"
+        }
+    } catch { Write-Warn "Could not remove the WezTerm AppUserModelId key: $($_.Exception.Message)" }
+
+    # Start Menu shortcut.
+    try {
+        $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "WezTerm.lnk"
+        if (Test-Path $lnk) {
+            Remove-Item $lnk -Force
+            Write-Ok "WezTerm retired: Start Menu shortcut removed"
+        }
+    } catch { Write-Warn "Could not remove the WezTerm Start Menu shortcut: $($_.Exception.Message)" }
+
+    # Portable tree + its User PATH entry + install stamps.
+    $dir = Join-Path $WsRoot "wezterm"
+    try {
+        Remove-FromUserPath $dir
+        if (Test-Path $dir) {
+            Remove-Item -Recurse -Force $dir
+            Write-Ok "WezTerm retired: portable tree removed ($dir)"
+        }
+        Get-ChildItem -Path $WsStamps -Filter "wezterm.*.stamp" -ErrorAction SilentlyContinue |
+            Remove-Item -Force
     } catch {
-        Write-Warn "Could not register the WezTerm toast AppUserModelId: $($_.Exception.Message)"
+        Write-Warn "Could not remove the WezTerm portable tree (still running?): $($_.Exception.Message)"
+        Write-Warn "  Close WezTerm and re-run .\bootstrap.ps1 — this step self-heals."
     }
 }
 
@@ -1860,7 +1909,7 @@ function Show-RepoState {
 # no rate limits. $Repo is owner/repo or a full git URL; $TagPrefix is what
 # precedes the version in the tag name; $Filter accepts version shapes after
 # the prefix strip (default: clean dotted numerics — drops -rc/-pre tags);
-# -StringSort for tags [version] can't parse (WezTerm's date stamps).
+# -StringSort for date-style tags [version] can't parse.
 # Returns $null when nothing matches (offline, renamed tag scheme).
 function Get-LatestGitTag {
     param(
@@ -2020,6 +2069,13 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Installer apps + extras"
+    if (Test-InstallerPresent -DisplayName $WarpTool.DetectName) {
+        $warpVer = Get-InstalledAppVersion -DisplayName $WarpTool.DetectName
+        $warpText = if ($warpVer) { " $warpVer" } else { "" }
+        Write-Ok "Warp$warpText installed (self-updates; official WinGet package)"
+    } else {
+        Write-Bad "Warp not installed — re-run .\bootstrap.ps1 or: winget install Warp.Warp"
+    }
     foreach ($tool in $InstallerTools) {
         if (Test-InstallerPresent -DisplayName $tool.DetectName) {
             $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
@@ -2077,24 +2133,22 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Environment"
-    $expectedCfg = Join-Path $RepoPath "chezmoi\dot_config\wezterm\wezterm.lua"
-    $currentCfg  = [Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')
-    if ($currentCfg -eq $expectedCfg) {
-        Write-Ok "WEZTERM_CONFIG_FILE points at the chezmoi source"
-    } elseif ($currentCfg) {
-        Write-Warn "WEZTERM_CONFIG_FILE points at $currentCfg (expected $expectedCfg) — re-run .\bootstrap.ps1"
+    # WezTerm was retired 2026-07 (Warp is the terminal) — flag any leftovers
+    # the retire step hasn't cleaned up yet.
+    $wezLeftovers = @()
+    if ([Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')) { $wezLeftovers += 'WEZTERM_CONFIG_FILE' }
+    if (Test-Path 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm') { $wezLeftovers += 'toast AppUserModelId' }
+    if (Test-Path (Join-Path $WsRoot "wezterm")) { $wezLeftovers += 'portable tree' }
+    if ($wezLeftovers.Count -gt 0) {
+        Write-Warn "retired-WezTerm leftovers present ($($wezLeftovers -join ', ')) — re-run .\bootstrap.ps1 (the retire step removes them)"
     } else {
-        Write-Bad "WEZTERM_CONFIG_FILE not set (User scope) — WezTerm won't find the tracked config; re-run .\bootstrap.ps1"
+        Write-Ok "no retired-WezTerm leftovers"
     }
     foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
         $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
         if (Test-Path $lnk) { Write-Ok "$($tool.Name) Start Menu shortcut present" }
         else { Write-Warn "$($tool.Name) Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
     }
-
-    $aumid = (Get-ItemProperty -Path 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm' -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
-    if ($aumid) { Write-Ok "WezTerm toast AppUserModelId registered" }
-    else { Write-Warn "WezTerm toast AppUserModelId missing — WezTerm's own toasts won't display; re-run .\bootstrap.ps1 (registers it)" }
 
     $nuStarship = Join-Path $env:APPDATA "nushell\vendor\autoload\starship.nu"
     if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
@@ -2103,6 +2157,11 @@ function Invoke-Doctor {
     $dnGrepCfg = Join-Path $WsDnGrep "dnGrep.config.xml"
     if (Test-Path $dnGrepCfg) { Write-Ok "dnGrep config seeded ($dnGrepCfg)" }
     else { Write-Warn "dnGrep config not seeded — settings would die with a pin bump; re-run .\bootstrap.ps1 (re-seeds it)" }
+
+    $warpTabs = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
+    $managedWarpTabs = @(Get-ChildItem -Path $warpTabs -Filter "workstation-*.toml" -ErrorAction SilentlyContinue)
+    if ($managedWarpTabs.Count -gt 0) { Write-Ok "$($managedWarpTabs.Count) managed Warp Tab Config(s) present" }
+    else { Write-Warn "managed Warp Tab Configs missing — re-run .\bootstrap.ps1 (regenerates them)" }
 
     $realDocs    = [Environment]::GetFolderPath("MyDocuments")
     $literalDocs = Join-Path $env:USERPROFILE "Documents"
@@ -2138,31 +2197,6 @@ function Invoke-CheckForUpdates {
 
     Write-Log "Pinned portable tools"
     foreach ($tool in $PortableTools) {
-        if ($tool.ContainsKey('NightlyAsset')) {
-            # Rolling-nightly snapshot (WezTerm): upstream has ONE rolling
-            # 'nightly' tag, so a tag lookup is meaningless — compare our
-            # snapshot's build date (Version leads with yyyymmdd) against the
-            # upstream asset's updated_at instead.
-            $asset = $null
-            try {
-                $rel   = Invoke-RestMethod -Uri "https://api.github.com/repos/$($tool.Repo)/releases/tags/nightly" `
-                    -Headers @{ 'User-Agent' = 'workstation-bootstrap' } -UseBasicParsing
-                $asset = @($rel.assets) | Where-Object { $_.name -eq $tool.NightlyAsset } | Select-Object -First 1
-            } catch { $asset = $null }   # network/API failure -> unresolved; warn below
-            if (-not $asset) {
-                Write-Warn "$($tool.Name): couldn't resolve the upstream nightly asset (offline? renamed?)"
-                continue
-            }
-            $upstreamDay = ([datetime]$asset.updated_at).ToUniversalTime().ToString('yyyyMMdd')
-            $pinnedDay   = ($tool.Version -split '-')[0]
-            $hint        = if ($tool.ContainsKey('UpdateHint')) { " — $($tool.UpdateHint)" } else { "" }
-            if ($upstreamDay -gt $pinnedDay) {
-                Write-Warn "$($tool.Name) snapshot $($tool.Version) — upstream nightly rebuilt $upstreamDay$hint"
-            } else {
-                Write-Ok "$($tool.Name) snapshot $($tool.Version) is current (upstream nightly $upstreamDay)"
-            }
-            continue
-        }
         $filter    = if ($tool.ContainsKey('TagFilter')) { $tool.TagFilter } else { '^\d+(\.\d+)*$' }
         $useString = ($tool.ContainsKey('TagSort') -and $tool.TagSort -eq 'string')
         $hint      = if ($tool.ContainsKey('UpdateHint')) { $tool.UpdateHint } else { "" }
@@ -2189,6 +2223,13 @@ function Invoke-CheckForUpdates {
     Write-Host ""
 
     Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
+    if (Test-InstallerPresent -DisplayName $WarpTool.DetectName) {
+        $warpVer = Get-InstalledAppVersion -DisplayName $WarpTool.DetectName
+        $warpText = if ($warpVer) { " $warpVer" } else { "" }
+        Write-Ok "Warp$warpText installed (self-updates; check with: winget upgrade Warp.Warp)"
+    } else {
+        Write-Warn "Warp not installed — re-run .\bootstrap.ps1 or: winget install Warp.Warp"
+    }
     foreach ($tool in $InstallerTools) {
         $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
         $latest    = if ($tool.ContainsKey('WingetVersions')) {
@@ -2282,12 +2323,12 @@ Invoke-Preflight
 Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
 Invoke-Chezmoi
-Invoke-WeztermConfigEnv   # after chezmoi apply — point WezTerm at the chezmoi source
 Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
-Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (WezTerm/dnGrep/LogExpert)
+Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
+Invoke-WarpTabConfigs     # regenerate WSL/Nushell/PowerShell + hosts.conf SSH/Zellij launch entries
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
-Invoke-WeztermToastAppId  # register org.wezfurlong.wezterm AppUserModelId (HKCU) so WezTerm toasts display
+Invoke-WeztermRetire      # remove retired-WezTerm leftovers (env var, AppId, shortcut, portable tree)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
@@ -2297,12 +2338,12 @@ Invoke-EnsureSshKey
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
-Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsWezterm${Reset},"
-Write-Host "${Bold}$WsHelix${Reset}, ${Bold}$WsNu${Reset}) and the chezmoi-applied configs pick up — starship"
-Write-Host "prompt, chezmoi/git aliases, etc. Nushell is now the default local shell;"
-Write-Host "PowerShell stays installed (for .NET/COM tasks + the WSL2 notify hook)."
-Write-Host "Restart WezTerm too if any instances were running — they need a fresh process"
-Write-Host "to see the new ${Bold}WEZTERM_CONFIG_FILE${Reset} env var."
+Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset},"
+Write-Host "${Bold}$WsNu${Reset}) and the chezmoi-applied configs pick up — starship prompt,"
+Write-Host "chezmoi/git aliases, etc. Warp is the terminal and AlmaLinux-9 is its"
+Write-Host "recommended default; Nushell remains available through the compatibility"
+Write-Host "Tab Config. Restart Warp if it was running — it reloads the tracked"
+Write-Host "settings on restart."
 Write-Host ""
 Write-Host "Not installed by this script (install yourself if you want it):"
 Write-Host "  VSCode  — its chezmoi config is already deployed."
@@ -2325,7 +2366,7 @@ Write-Host "       .\scripts\manage-hosts.ps1     # interactive menu"
 Write-Host "  2. Copy your SSH key to a registered host:"
 Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -Name <host-name>"
 Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -All     # or, bulk to every host"
-Write-Host "  3. Launch WezTerm — it auto-opens a tab per host in hosts.conf."
+Write-Host "  3. Launch Warp — choose a generated SSH host or WSL Tab Config from the + menu."
 Write-Host ""
 Write-Host "Editing dotfiles:"
 Write-Host "  cze   # chezmoi edit (opens the file in chezmoi's source)"

@@ -35,30 +35,19 @@ Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 .config/tealdeer
 .config/zellij
 .config/zsh
-# ~/.local holds the vendored batpipe bash script (.local/bin) and the Linux
-# wezterm terminfo (.local/share/wezterm) — both useless on Windows, so skip
-# all of ~/.local rather than depositing it in %USERPROFILE%.
+# ~/.local holds the vendored batpipe bash script (.local/bin) — useless on
+# Windows, so skip all of ~/.local rather than depositing it in %USERPROFILE%.
 .local
 # .chezmoiscripts/ entries cannot be ignored via .chezmoiignore — chezmoi
-# treats scripts specially (no destination path). The Linux-only init script
-# is gated inside the file via .tmpl with an OS-conditional that renders
+# treats scripts specially (no destination path). Linux-only scripts are
+# gated inside the file via .tmpl with an OS-conditional that renders
 # the body only on linux; chezmoi skips zero-byte scripts.
-# wezterm.lua: bootstrap.ps1 sets a User-scope WEZTERM_CONFIG_FILE env var
-# pointing at the chezmoi source directly, so WezTerm reads the repo file
-# without chezmoi needing to deploy a copy to %USERPROFILE%\.config\wezterm\.
-# This eliminates the pre-v2 hardlink dance (which broke on chezmoi
-# atomic-writes). See "WEZTERM_CONFIG_FILE" notes in CLAUDE.md + README.html.
-.config/wezterm
 {{ else }}
 # --- On Linux/macOS, ignore Windows-only paths ------------------------------
 AppData
 Documents
 # .wslconfig is the Windows host's global WSL2 config; meaningless on Linux.
 .wslconfig
-# wezterm.lua is the Windows client's terminal config; the Linux hosts run no
-# GUI / WezTerm, so we don't apply it there. Remove this line if you ever
-# want WezTerm config on a Linux desktop.
-.config/wezterm
 {{ end }}
 
 {{/*

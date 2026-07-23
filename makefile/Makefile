@@ -261,8 +261,8 @@ clean-go-runtime:
 # -----------------------------------------------------------------------------
 # nerd-fonts — JetBrainsMono Nerd Font Mono variants from ryanoasis/nerd-fonts.
 #   - dev_machine only (added to provision's deps only on MODE=dev, below).
-#   - Skips on WSL hosts (IS_WSL=true) because WezTerm runs on the Windows
-#     host where the Windows-side installer (scripts/install-nerd-fonts.ps1,
+#   - Skips on WSL hosts (IS_WSL=true) because the terminal runs on the
+#     Windows host where the Windows-side installer (scripts/install-nerd-fonts.ps1,
 #     invoked from bootstrap.ps1) handles registration. Stamp still written
 #     so `make nerd-fonts` returns fast on subsequent WSL runs.
 #   - NO $(SUDO) — deposits to $HOME/.local/share/fonts/JetBrainsMonoNerdFontMono/
@@ -276,7 +276,7 @@ clean-go-runtime:
 nerd-fonts: $(STAMP)/nerd-fonts-$(JETBRAINSMONO_NERD_VERSION).done
 $(STAMP)/nerd-fonts-$(JETBRAINSMONO_NERD_VERSION).done:
 	@if [ "$(IS_WSL)" = "true" ]; then \
-	  printf '  skipping nerd-fonts on WSL — fonts resolved by Windows-side WezTerm\n'; \
+	  printf '  skipping nerd-fonts on WSL — fonts resolved by the Windows-side terminal\n'; \
 	  mkdir -p $(@D) && touch $@; \
 	else \
 	  $(LIB)/font.sh "$$HOME/.local/share/fonts" $(JETBRAINSMONO_NERD_VERSION) $@; \

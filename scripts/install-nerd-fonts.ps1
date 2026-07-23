@@ -29,9 +29,8 @@
 # bare-filename registrations left by older builds of this script as full paths.
 #
 # Hard-fails on download or SHA256 issues (bootstrap.ps1 aborts). Soft-fails
-# on registry-write failure (WezTerm still works via config.font_dirs;
-# Zed/VS Code may not see the font until manual registration via Settings →
-# Personalization → Fonts).
+# on registry-write failure (Warp/Zed/VS Code may not see the font until
+# manual registration via Settings → Personalization → Fonts).
 #
 # Version + SHA256 are pinned in the script body — must mirror
 # JETBRAINSMONO_NERD_VERSION in makefile/versions.mk + the per-version SHA in
@@ -258,9 +257,9 @@ Invoke-FontActivation
 Register-FontLogonTask
 
 if ($RegistrationFailed) {
-    Write-Warning ("Some HKCU registrations failed — WezTerm will work via " +
-        "config.font_dirs, but Zed/VS Code may not see the font until manual " +
-        "registration (Settings → Personalization → Fonts).")
+    Write-Warning ("Some HKCU registrations failed — Warp/Zed/VS Code may not " +
+        "see the font until manual registration (Settings → Personalization " +
+        "→ Fonts).")
 } else {
     Write-Host "  installed + activated 6 Mono variants ($FontDir + HKCU)"
 }

@@ -19,10 +19,9 @@
 # 38;2;R;G;B = foreground, 48;2;R;G;B = background.
 
 # --- Terminal capability gate ------------------------------------------------
-# dircolors only emits LS_COLORS when a TERM directive matches $TERM. The fleet
-# runs TERM=wezterm (config.term='wezterm', see CLAUDE.md), which matches NONE
-# of the GNU default TERM globs below — so the explicit `TERM wezterm` line is
-# load-bearing: drop it and colors break under TERM=wezterm. (Verified on
+# dircolors only emits LS_COLORS when a TERM directive matches $TERM. The
+# fleet runs TERM=xterm-256color (Warp) or a screen/tmux TERM inside
+# multiplexers — all matched by the GNU default globs below. (Verified on
 # coreutils 8.32: `COLORTERM ?*` does NOT rescue an unmatched TERM; it's kept
 # only as a harmless secondary catch-all for newer coreutils, not relied upon.)
 COLORTERM ?*
@@ -49,7 +48,6 @@ TERM st
 TERM terminator
 TERM tmux*
 TERM vt100
-TERM wezterm
 TERM xterm*
 
 # --- File types --------------------------------------------------------------

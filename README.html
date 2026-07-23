@@ -96,7 +96,7 @@
                             </li>
                             <li><a href="#setup-windows">On Windows</a></li>
                             <li>
-                                <a href="#setup-wezterm">WezTerm keybinds</a>
+                                <a href="#setup-warp">Warp keybinds</a>
                             </li>
                             <li>
                                 <a href="#prompt-keys">Shell prompt selection</a>
@@ -131,8 +131,8 @@
                                 aria-hidden="true"
                             ></span><span class="tag">dev env</span></h1>
                         <p class="lede">
-                            Dev-environment provisioning for Linux hosts, plus the
-                            WezTerm config that connects to them from Windows.
+                            Dev-environment provisioning for Linux hosts, plus
+                            Warp as the Windows terminal.
                             A single <code>Makefile</code> under
                             <code>makefile/</code> drives everything &mdash;
                             system packages, PATH, tool installs, and the chezmoi
@@ -209,9 +209,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             </h3>
                             <p class="qs-sub">
                                 <strong>No admin needed.</strong> Install Git
-                                first, then this installs chezmoi + WezTerm +
-                                Starship under your user profile, applies
-                                dotfiles, and points WezTerm at the repo config.
+                                first, then this installs Warp, chezmoi,
+                                and Starship under your user profile, applies
+                                dotfiles, and deploys the terminal configs.
                             </p>
                             <pre><code>$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
 $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
@@ -306,9 +306,9 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <div class="layer-label">Terminal</div>
                             <h3>
                                 <span class="ico" aria-hidden="true">🖥️</span>
-                                WezTerm
+                                Warp
                             </h3>
-                            <p>Windows terminal, auto-connects to hosts.</p>
+                            <p>Warp is the terminal — WSL, SSH+Zellij, and local shells all launch from its Tab Configs.</p>
                         </article>
                     </div>
 
@@ -2023,8 +2023,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                             manage-hosts.sh
                                             <span class="note"
                                                 >&mdash; Linux host manager
-                                                (hosts.conf CRUD +
-                                                wezterm sentinel sync)</span
+                                                (hosts.conf CRUD)</span
                                             >
                                         </li>
                                         <li>
@@ -2214,16 +2213,6 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                     dev_machine only;
                                                     file-viewer plugin
                                                     keybindings</span
-                                                >
-                                            </li>
-                                            <li>
-                                                wezterm/*.lua
-                                                <span class="note"
-                                                    >&mdash; Windows only;
-                                                    wezterm.lua is the entry
-                                                    point, hosts.lua carries
-                                                    the SSH-domains sentinel
-                                                    block</span
                                                 >
                                             </li>
                                         </ul>
@@ -2552,7 +2541,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </p>
                     <p class="note-row">
                         <strong>WSL hosts skip this step automatically</strong>
-                        &mdash; WSL apps render via WezTerm on the Windows host,
+                        &mdash; WSL apps render via Warp on the Windows host,
                         which reads Windows-registered fonts. Run
                         <code>bootstrap.ps1</code> on the Windows side to install
                         the font there instead (step 7: <code>Invoke-InstallNerdFonts</code>
@@ -2655,11 +2644,10 @@ make -C makefile check-updates MODE=dev</code></pre>
                             (docker/dozzle/cockpit/rsyslog &mdash; active or
                             inactive), <code>wsl-config</code>, and the dnf
                             package lists. On Windows it covers the portable
-                            and installer-class tools, Nerd Fonts, BurntToast,
-                            <code>WEZTERM_CONFIG_FILE</code>, the Start Menu
-                            shortcuts, the WezTerm toast AppUserModelId, the
-                            dnGrep config seed, the profile shim, and the SSH
-                            key.
+                            and installer-class tools, Warp, Nerd Fonts, BurntToast,
+                            the Start Menu shortcuts, managed Warp Tab Configs,
+                            retired-WezTerm leftovers, the dnGrep config seed,
+                            the profile shim, and the SSH key.
                         </p>
                         <p>
                             <strong><code>--check-for-updates</code></strong>
@@ -2783,7 +2771,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         The Windows host is a <strong>client</strong> &mdash; no
                         provisioning Makefile (that's Linux-only), but chezmoi
                         runs here too to deploy
-                        the WezTerm config, the PowerShell profile,
+                        the Warp config, the PowerShell profile,
                         Zed/VSCode settings, and the Windows Terminal
                         <code>settings.json</code> (themed Catppuccin Mocha).
                         <code>bootstrap.ps1</code> is the
@@ -2797,11 +2785,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         yourself</strong> &mdash; the script hard-fails with an
                         install link if <code>git</code> isn&rsquo;t on PATH.
                         The GitHub CLI is <em>not</em> a prerequisite &mdash;
-                        the script installs it as a pinned portable tool; you
-                        just authenticate once (<code>gh auth login</code>, or
-                        a set <code>GITHUB_TOKEN</code>). Without a token the
-                        script only warns and skips the WezTerm mirror
-                        download, which self-heals on the next run.
+                        the script installs it as a pinned portable tool.
                         <strong>One best-effort exception:</strong> the
                         SSHFS-Win step (WinFsp kernel driver) is machine-scope
                         and pops a UAC prompt &mdash; decline it (or pass
@@ -2809,10 +2793,34 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         completes admin-free.
                     </div>
                     <p>
-                        <strong>What the script installs (no package manager,
-                        no admin):</strong>
+                        <strong>What the script installs (no admin):</strong>
                     </p>
                     <ul>
+                        <li>
+                            <strong>Warp</strong> &mdash; the primary Windows
+                            terminal, seeded from the official
+                            <code>Warp.Warp</code> WinGet package at user scope
+                            and self-updating afterward. The seed is
+                            best-effort: when WinGet is unavailable the script
+                            warns and points at Warp&rsquo;s download page. Chezmoi
+                            owns <code>settings.toml</code>,
+                            <code>keybindings.yaml</code>, and a canonical
+                            Catppuccin Mocha theme; bootstrap regenerates only
+                            <code>workstation-*.toml</code> Tab Configs (WSL,
+                            PowerShell, Nushell compatibility, and one ordinary
+                            SSH + Zellij entry per <code>hosts.conf</code> row).
+                            User-created Warp Tab Configs are never removed.
+                            Telemetry, crash reporting, cloud settings sync,
+                            cloud conversation storage, and Warp Agent remain
+                            disabled; Warp Drive is enabled for its synced
+                            workflow/orchestration library while chezmoi remains
+                            authoritative for device settings.
+                            The tracked feature profile also enables structured
+                            block navigation/bookmarks, live completions and
+                            command correction, vertical-tab repository metadata,
+                            tab indicators, the local editor/file tree/code review,
+                            session restoration, and 60-second closed-tab recovery.
+                        </li>
                         <li>
                             <strong>chezmoi</strong> &mdash; official
                             <code>get.chezmoi.io</code> binary installer into
@@ -2821,57 +2829,12 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         <li>
                             <strong>GitHub CLI</strong> (<code>gh</code>)
                             &mdash; pinned, sha256-verified portable install
-                            into <code>%LOCALAPPDATA%\workstation\bin</code>,
-                            deliberately ordered <em>before</em> WezTerm: it
-                            supplies the token (<code>gh auth token</code>)
-                            for WezTerm&rsquo;s private-mirror download.
+                            into <code>%LOCALAPPDATA%\workstation\bin</code>.
                             Authenticate once with
                             <code>gh auth login</code>. The pin dual-edits
                             <code>GH_VERSION</code> in
                             <code>makefile/versions.mk</code> (the Linux half
                             is the eget-installed <code>gh</code>).
-                        </li>
-                        <li>
-                            <strong>WezTerm</strong> &mdash; rides nightly via
-                            weekly mirrored snapshots: a scheduled workflow
-                            validates each nightly (sha256 digest + a config
-                            smoke test on a Windows runner), mirrors it as an
-                            immutable release asset, and opens a pin-bump PR;
-                            merging + re-running <code>bootstrap.ps1</code>
-                            (with WezTerm closed) installs it into
-                            <code>%LOCALAPPDATA%\workstation\wezterm</code>.
-                            Auth comes from the <code>gh</code> CLI
-                            (<code>gh auth token</code> &mdash; a set
-                            <code>GITHUB_TOKEN</code> takes precedence), since
-                            the mirror lives on this private repo; the script
-                            installs <code>gh</code> itself just before
-                            WezTerm in the same run.
-                            A per-user <strong>Start Menu shortcut</strong>
-                            (<code>WezTerm.lnk</code> &rarr;
-                            <code>wezterm-gui.exe</code>) is created on every run
-                            &mdash; the portable <code>.zip</code> ships none, so
-                            without it the Start menu has nothing to launch.
-                            Idempotent and duplicate-proof: the fixed filename
-                            means a re-run overwrites in place rather than adding a
-                            second copy, and a deleted shortcut is re-created on
-                            the next bootstrap. (dnGrep and LogExpert below get
-                            the same treatment &mdash; every portable GUI tool
-                            gets its own <code>.lnk</code>.)
-                            The script also registers WezTerm&rsquo;s toast
-                            <strong>AppUserModelId</strong>
-                            (<code>org.wezfurlong.wezterm</code>, HKCU, every
-                            run) &mdash; Windows only displays toast
-                            notifications from an unpackaged app when its
-                            AppUserModelId is registered, the official
-                            installer does this via its own Start Menu
-                            shortcut, and the portable <code>.zip</code> has
-                            no installer. It keeps OS toasts deliverable for
-                            escape-driven notifications (OSC 9/777 from
-                            remote or background programs) and any future
-                            toast caller; the config&rsquo;s own feedback
-                            (&ldquo;Config reloaded&rdquo;, the SSH-reconnect
-                            notice, &ldquo;Copied!&rdquo;) renders in-window
-                            in the status bar instead.
                         </li>
                         <li>
                             <strong>Starship</strong> &mdash; pinned,
@@ -3048,7 +3011,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         it&rsquo;s missing, but its chezmoi config deploys
                         regardless. <strong>zoxide</strong> is no longer
                         installed (the PowerShell profile no-ops without it).
-                        WezTerm/Starship/Helix/Nushell/dnGrep/LogExpert versions
+                        Starship/Helix/Nushell/dnGrep/LogExpert versions
                         are pinned in
                         <code>bootstrap.ps1</code> (<code>$PortableTools</code>),
                         the same self-contained pattern as
@@ -3059,12 +3022,11 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         (Helix&rsquo;s Windows config dir).
                     </p>
                     <p>
-                        <strong>Nushell is the default local shell.</strong> It
-                        replaces PowerShell as the default in WezTerm
-                        (<code>default_prog</code> in the WezTerm config&rsquo;s
-                        <code>wsl.lua</code>),
+                        <strong>Nushell remains the default local Windows
+                            shell outside Warp.</strong> It
+                        replaces PowerShell as the default in
                         Windows Terminal (the <em>Nushell</em> profile +
-                        <code>defaultProfile</code>), and Zed&rsquo;s integrated
+                        <code>defaultProfile</code>) and Zed&rsquo;s integrated
                         terminal (<code>terminal.shell.program</code>) &mdash; a
                         structured-data, cross-platform modern shell. It&rsquo;s installed as a
                         pinned portable tool to
@@ -3074,7 +3036,13 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         PowerShell profile), and the Starship prompt is generated
                         into
                         <code>%APPDATA%\nushell\vendor\autoload\starship.nu</code>.
-                        <strong>PowerShell stays installed</strong> for
+                        Warp does not yet support Nushell&rsquo;s shell-integration
+                        protocol, so Warp starts a supported
+                        <strong>AlmaLinux-9 WSL Zsh</strong> workflow instead;
+                        the generated <em>Nushell (compatibility)</em> Tab Config
+                        launches <code>nu.exe</code> from PowerShell for commands
+                        that do not need Warp blocks, completions, or prompt
+                        tracking. <strong>PowerShell stays installed</strong> for
                         .NET/COM/registry tasks and the WSL2 notify hook &mdash;
                         it&rsquo;s just no longer the default. Nushell is pre-1.0
                         and ships breaking changes every few releases, so the pin
@@ -3129,7 +3097,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         Windows Terminal / Zed / VS Code after a reboot). Per-user
                         install &mdash; no admin needed (nothing in
                         <code>bootstrap.ps1</code> requires elevation). Visible to
-                        WezTerm, Zed, VS Code, Windows Terminal, and any other
+                        Warp, Zed, VS Code, Windows Terminal, and any other
                         Windows app. Font version matches
                         <code>JETBRAINSMONO_NERD_VERSION</code> in
                         <code>makefile/versions.mk</code>.
@@ -3149,7 +3117,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
 cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
-.\bootstrap.ps1 -SkipToolInstall                 # the portable tools (chezmoi/WezTerm/Starship/&hellip;) already on PATH
+ .\bootstrap.ps1 -SkipToolInstall                 # Warp + the portable/installer tools already present
 .\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
 .\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond Compare) even if present
@@ -3175,7 +3143,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Install chezmoi + the portable tools (WezTerm, Starship, Helix, Nushell, dnGrep, LogExpert, &hellip;)</span
+                            ><span class="lbl">Install Warp + chezmoi + the portable tools (Starship, Helix, Nushell, &hellip;)</span
                             ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -3191,9 +3159,8 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl"
-                                >Set WEZTERM_CONFIG_FILE</span
-                            ><span class="note">User env var</span>
+                            ><span class="lbl">Warp Tab Configs</span
+                            ><span class="note">from hosts.conf</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -3209,7 +3176,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         (declining just skips it; suppress it entirely with
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
+                        chezmoi/Warp/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
                         CLI/dnGrep/LogExpert
                         installs, <em>and</em> the installer-class apps
                         (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond
@@ -3221,11 +3188,11 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         reinstall them even when already present. The diagram is a
                         simplified view &mdash; the script also creates the
                         Start Menu shortcuts for the portable GUI tools
-                        (WezTerm, dnGrep, LogExpert), generates the Nushell
-                        Starship prompt, seeds dnGrep&rsquo;s config redirect,
-                        and runs BurntToast and the Nerd Font
-                        install (its step 7) between
-                        <code>Set WEZTERM_CONFIG_FILE</code> and the SSH-key step.
+                        (dnGrep, LogExpert), generates the Nushell Starship
+                        prompt, seeds dnGrep&rsquo;s config redirect, removes
+                        any leftovers of the retired WezTerm install, and runs
+                        BurntToast and the Nerd Font install (its step 7)
+                        between the Warp Tab Configs and the SSH-key step.
                         <code>GITHUB_TOKEN</code> persists into
                         <code>.git/config</code> (github.com-scoped) so
                         subsequent <code>git push</code>,
@@ -3234,32 +3201,20 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         re-passing the env var.
                     </p>
                     <p class="note-row">
-                        <strong>WezTerm config model:</strong> chezmoi tracks
-                        <code>chezmoi/dot_config/wezterm/</code> (the
-                        <code>wezterm.lua</code> entry point plus its Lua
-                        modules &mdash; <code>hosts</code>,
-                        <code>appearance</code>, <code>domains</code>,
-                        <code>wsl</code>, <code>tabs</code>,
-                        <code>status</code>, <code>actions</code>,
-                        <code>keys</code>) as the canonical source, but
-                        <code>.chezmoiignore.tmpl</code> skips
-                        <code>dot_config/wezterm</code> on Windows &mdash;
-                        chezmoi <em>never</em> writes a copy to
-                        <code>%USERPROFILE%\.config\wezterm\</code>. Step 5
-                        instead sets a User-scope environment variable
-                        <code>WEZTERM_CONFIG_FILE</code> pointing directly at
-                        the chezmoi source path. The entry file prepends its
-                        own directory to Lua&rsquo;s <code>package.path</code>
-                        (WezTerm doesn&rsquo;t search the config file&rsquo;s
-                        directory on its own), so the sibling modules resolve
-                        from the repo too, and WezTerm watches
-                        <code>require</code>&rsquo;d files &mdash; edits to any
-                        module (including <code>manage-hosts.ps1 -Sync</code>
-                        rewriting <code>hosts.lua</code>&rsquo;s sentinel
-                        block) appear immediately via
-                        <code>automatically_reload_config</code>. This replaces
-                        the pre-v2 hardlink mechanism, which broke whenever
-                        chezmoi atomic-wrote the target on a content mismatch.
+                        <strong>Warp config model:</strong> chezmoi deploys the
+                        tracked Warp settings
+                        (<code>settings.toml</code> +
+                        <code>keybindings.yaml</code> under
+                        <code>%LOCALAPPDATA%\warp\Warp\config</code>, plus the
+                        Catppuccin Mocha theme under
+                        <code>%APPDATA%\warp\Warp\data\themes</code>) directly
+                        to their live locations &mdash; Warp reads them on
+                        restart. The hosts.conf-driven launch entries are the
+                        <em>generated</em>
+                        <code>workstation-*.toml</code> Tab Configs
+                        (<code>Invoke-WarpTabConfigs</code> in
+                        <code>bootstrap.ps1</code>, every run); user-created
+                        Tab Configs with other names are never touched.
                     </p>
                     <p class="note-row">
                         After bootstrap, restart your shell so the
@@ -3283,8 +3238,9 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         WSL distros are first-class managed hosts &mdash; same
                         tools, same chezmoi-tracked zshrc + starship prompt
                         + aliases as a real Linux box. They&rsquo;re accessed
-                        through wezterm&rsquo;s WSL domain mechanism, not
-                        SSH, so <code>bootstrap.sh</code> auto-detects WSL
+                        through Warp&rsquo;s native WSL session support (or
+                        <code>wsl.exe</code> from any shell), not SSH, so
+                        <code>bootstrap.sh</code> auto-detects WSL
                         (<code>$WSL_DISTRO_NAME</code> /
                         <code>/proc/version</code>) and skips the
                         <code>hosts.conf</code> self-registration step. The
@@ -3292,8 +3248,14 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         unchanged.
                     </p>
                     <p>
-                        Open a WSL tab in WezTerm (or
-                        <code>wsl.exe</code> in any shell) and run:
+                        In Warp, select <strong>AlmaLinux-9</strong> under
+                        <em>Settings &rarr; Features &rarr; Session &rarr;
+                        Startup shell for new sessions</em>. The distro&rsquo;s login
+                        shell is <code>/usr/bin/zsh</code>; use Linux-home paths
+                        for active projects where practical. The generated
+                        <em>WSL: AlmaLinux-9</em> Tab Config is the fallback if
+                        Warp&rsquo;s detected profile fails. Open that WSL session
+                        (or <code>wsl.exe</code> in any shell) and run:
                     </p>
                     <pre><code># Inside the WSL distro:
 sudo dnf install -y curl git python3 python3-pip iproute    # RHEL / AlmaLinux / Fedora
@@ -3312,62 +3274,23 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </p>
                     <p class="note-row">
                         <strong>Why WSL tabs land in <code>~</code>:</strong>
-                        Two complementary mechanisms in the WezTerm config
-                        (<code>wsl.lua</code> / <code>actions.lua</code>):
-                        (1) <code>default_cwd = '~'</code> on every WSL
-                        domain, so a <em>fresh</em> WSL tab cd&rsquo;s to
-                        the WSL user&rsquo;s home instead of inheriting
-                        wezterm&rsquo;s own cwd (typically
-                        <code>/mnt/c/Users/&lt;windows-user&gt;</code>); and
-                        (2) a <code>smart_new_tab</code> callback bound to
-                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd> that
-                        forces <code>cwd = '~'</code> for WSL panes whose
-                        cwd isn&rsquo;t tracked &mdash; otherwise
-                        <code>act.SpawnTab 'CurrentPaneDomain'</code> would
-                        fall back to wezterm&rsquo;s own cwd on every new
-                        tab. Without these, the default bash prompt renders
-                        <code>\W</code> as the literal Windows-user folder
-                        name instead of substituting <code>~</code>.
-                    </p>
-                    <p class="note-row">
-                        <strong>Cwd tracking via OSC 7:</strong> the
-                        chezmoi-tracked <code>~/.zshrc</code> (and
-                        <code>~/.bashrc</code> for bash fallback) emits an
-                        <a
-                            href="https://wezfurlong.org/wezterm/shell-integration.html"
-                            >OSC 7</a
-                        >
-                        <code>file://&lt;host&gt;/&lt;pwd&gt;</code>
-                        sequence after every prompt
-                        (<code>__wezterm_osc7</code> wired via
-                        <code>add-zsh-hook precmd</code> in
-                        <code>dot_zshrc.tmpl</code>;
-                        <code>PROMPT_COMMAND</code> append in
-                        <code>dot_bashrc.tmpl</code>). Once WSL is
-                        bootstrapped, <code>cd /tmp</code> followed by
-                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd> lands
-                        the new tab in <code>/tmp</code>, not <code>~</code>
-                        &mdash; <code>smart_new_tab</code> sees the tracked
-                        cwd and defers to wezterm&rsquo;s normal inheritance.
-                        Pre-bootstrap (default WSL bash, no OSC 7), the
-                        callback&rsquo;s fallback keeps new tabs in
-                        <code>~</code>.
+                        the generated <em>WSL: AlmaLinux-9</em> Tab Config
+                        launches
+                        <code>wsl.exe --distribution AlmaLinux-9 --cd ~</code>,
+                        so a fresh WSL tab starts in the WSL user&rsquo;s home
+                        instead of the inherited Windows cwd (typically
+                        <code>/mnt/c/Users/&lt;windows-user&gt;</code>).
+                        Warp&rsquo;s own shell integration tracks the cwd from
+                        there.
                     </p>
 
                     <p class="note-row">
                         <strong>Truecolor signaling.</strong> Every chezmoi-managed shell exports
                         <code>COLORTERM=truecolor</code> on startup (see <code>dot_zshrc.tmpl</code> /
-                        <code>dot_bashrc.tmpl</code>) and WezTerm advertises <code>TERM=wezterm</code>
-                        to every spawned PTY (<code>config.term</code> in the WezTerm
-                        config&rsquo;s <code>appearance.lua</code>).
-                        Apps querying terminfo see <code>Tc</code>, <code>Smulx</code>, and
-                        <code>Setulc</code> &mdash; full 24-bit RGB plus extended underline capabilities
-                        &mdash; via the vendored <code>wezterm.terminfo</code> at
-                        <code>chezmoi/dot_local/share/wezterm/</code>, which a chezmoi
-                        <code>run_onchange</code> script compiles into <code>~/.terminfo/</code> on
-                        every apply. Verify with <code>infocmp wezterm</code> (exit 0; lists
-                        <code>Tc</code>, <code>Smulx</code>, <code>Setulc</code>) and
-                        <code>echo $TERM</code> in a new pane (prints <code>wezterm</code>).
+                        <code>dot_bashrc.tmpl</code>), and Warp runs
+                        <code>TERM=xterm-256color</code> &mdash; full 24-bit
+                        RGB. Verify with the smooth-gradient one-liner in the
+                        Troubleshooting section (renders without banding).
                     </p>
                     <p class="note-row">
                         <strong>WSL config is tracked &amp; deployed.</strong>
@@ -3397,22 +3320,22 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         reclaim).
                     </p>
 
-                    <h3 id="setup-wezterm">WezTerm keybinds</h3>
+                    <h3 id="setup-warp">Warp keybinds</h3>
                     <p class="lede">
-                        WezTerm auto-opens a tab per host on launch and attaches
-                        to a persistent Zellij session. Press
-                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>H</kbd> inside
-                        WezTerm for a cheatsheet of keybinds, aliases, and
-                        hosts. The window draws <strong>no OS title bar</strong>
-                        &mdash; move it with
-                        <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+drag (or
-                        <kbd>WIN</kbd>+drag); <kbd>WIN</kbd>+arrow snapping and
-                        edge resizing still work as usual. The bottom status
-                        bar shows the active tab&rsquo;s line count &mdash;
-                        total scrollback lines and rows on screen (plus the
-                        cursor&rsquo;s line when a program moves it off the
-                        bottom); it&rsquo;s hidden inside full-screen apps like
-                        Zellij.
+                        Warp opens hosts through its <strong>Tab
+                        Configs</strong> &mdash; the &ldquo;+&rdquo; menu (or
+                        <kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>L</kbd>) lists the
+                        generated <em>WSL: AlmaLinux-9</em>,
+                        <em>PowerShell</em>, <em>Nushell (compatibility)</em>,
+                        and one <em>SSH: &lt;host&gt;</em> entry per
+                        <code>hosts.conf</code> row (each attaches the
+                        host&rsquo;s persistent Zellij session).
+                        The tracked <code>keybindings.yaml</code> adds these
+                        overrides on top of Warp&rsquo;s defaults &mdash; the
+                        pane mnemonics match Zellij&rsquo;s pane mode
+                        (<em>d</em> = down, <em>r</em> = right) so muscle
+                        memory transfers between local Warp panes and
+                        SSH+Zellij panes:
                     </p>
                     <table>
                         <thead>
@@ -3423,246 +3346,71 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         </thead>
                         <tbody>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >H</kbd
-                                    >
-                                </td>
-                                <td>Cheatsheet overlay</td>
+                                <td><kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>D</kbd> / <kbd>R</kbd></td>
+                                <td>Split pane down / right</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >J</kbd
-                                    >
-                                </td>
-                                <td>
-                                    Pick a host (fuzzy) and spawn a tab to it
-                                </td>
+                                <td><kbd>ALT</kbd>+<kbd>SHIFT</kbd>+arrows</td>
+                                <td>Move between panes</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >S</kbd
-                                    >
-                                </td>
-                                <td>Switch tab (fuzzy)</td>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Z</kbd></td>
+                                <td>Toggle pane maximize</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >T</kbd
-                                    >
-                                </td>
-                                <td>New tab in current domain</td>
+                                <td><kbd>CTRL</kbd>+<kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td>
+                                <td>Font size bigger / smaller / reset</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >W</kbd
-                                    >
-                                </td>
-                                <td>
-                                    Close current tab (no confirmation
-                                    prompt; remote Zellij sessions survive
-                                    and reattach). Closing the whole window
-                                    never prompts either.
-                                </td>
+                                <td><kbd>CTRL</kbd>+<kbd>R</kbd></td>
+                                <td>Command history search</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >A</kbd
-                                    >
-                                </td>
-                                <td>Copy entire scrollback to clipboard</td>
+                                <td><kbd>CTRL</kbd>+<kbd>&uarr;</kbd>/<kbd>&darr;</kbd></td>
+                                <td>Select previous / next block</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >O</kbd
-                                    >
-                                </td>
-                                <td>
-                                    Open the scrollback in Helix in a new
-                                    tab (local and WSL tabs; SSH tabs show a
-                                    toast instead &mdash; Zellij owns their
-                                    scrollback).
-                                </td>
+                                <td><kbd>ALT</kbd>+<kbd>&uarr;</kbd>/<kbd>&darr;</kbd></td>
+                                <td>Jump between bookmarked blocks</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >&uarr;</kbd
-                                    >/<kbd>&darr;</kbd>
-                                </td>
-                                <td>
-                                    Jump to the previous/next prompt in the
-                                    scrollback (WSL and local tabs &mdash;
-                                    uses the OSC 133 marks the managed shell
-                                    configs emit; inert inside Zellij tabs).
-                                </td>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>B</kbd></td>
+                                <td>Bookmark the selected block</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+triple-click
-                                </td>
-                                <td>
-                                    Select one command&rsquo;s entire output
-                                    as a unit and copy it (WSL and local
-                                    tabs; plain triple-click still selects a
-                                    line).
-                                </td>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>ALT</kbd>+<kbd>C</kbd></td>
+                                <td>Copy the selected block&rsquo;s output</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>TAB</kbd> /
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >TAB</kbd
-                                    >
-                                </td>
-                                <td>Cycle tabs</td>
+                                <td><kbd>CTRL</kbd>+<kbd>M</kbd></td>
+                                <td>Block context menu</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>ALT</kbd>+<kbd>1</kbd>..<kbd>9</kbd>
-                                </td>
-                                <td>Jump to tab N</td>
+                                <td><kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>T</kbd></td>
+                                <td>Reopen the last closed session</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>ALT</kbd>+<kbd>0</kbd>
-                                </td>
-                                <td>Return to the previously active tab</td>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>P</kbd></td>
+                                <td>Command palette</td>
                             </tr>
                             <tr>
-                                <td>&ldquo;+&rdquo; button</td>
-                                <td>
-                                    Left-click: new tab (same smart-cwd
-                                    behavior as
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >T</kbd
-                                    >); middle-click: SSH host picker;
-                                    right-click: WezTerm&rsquo;s launcher
-                                    menu, which lists every domain plus
-                                    PowerShell and cmd entries.
-                                </td>
+                                <td><kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>L</kbd></td>
+                                <td>Tab Config (launch configuration) palette</td>
                             </tr>
                             <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >F5</kbd
-                                    >
-                                </td>
-                                <td>
-                                    Reconnect current SSH pane after a broken
-                                    pipe. Spawns a new tab against the same
-                                    domain; Zellij reattaches the existing
-                                    remote session. The dead tab is left open
-                                    for scrollback &mdash; close it with
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>W</kbd>.
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                        >R</kbd
-                                    >
-                                </td>
-                                <td>Reload the WezTerm config</td>
-                            </tr>
-                            <tr>
-                                <td><kbd>SHIFT</kbd>+click</td>
-                                <td>
-                                    Open the link under the mouse. SHIFT
-                                    bypasses app mouse handling, so this is
-                                    the click that works inside Zellij and
-                                    Helix panes; bare <code>#NN</code> refs
-                                    are linkified to the workstation repo's
-                                    PR/issue pages.
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>I</kbd>
-                                </td>
-                                <td>
-                                    Quick-select an IPv4 from the screen and
-                                    open SSH to it (managed hosts attach
-                                    their Zellij session; other IPs get a
-                                    plain <code>ssh</code>).
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>G</kbd>
-                                </td>
-                                <td>
-                                    Quick-select a <code>file:line</code>
-                                    from build/grep output and open it in
-                                    Helix at that position (same domain as
-                                    the pane).
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Y</kbd>
-                                </td>
-                                <td>
-                                    Quick-select a git SHA and type it
-                                    straight into the prompt (no clipboard
-                                    round-trip).
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>D</kbd>
-                                    / <kbd>R</kbd>
-                                </td>
-                                <td>
-                                    Split the pane down / right (local and
-                                    WSL tabs &mdash; Zellij owns panes inside
-                                    SSH tabs). Navigate panes with
-                                    <kbd>ALT</kbd>+<kbd>SHIFT</kbd>+arrows;
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Z</kbd>
-                                    zooms; <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Q</kbd>
-                                    opens a letter-overlay pane picker.
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>&larr;</kbd>/<kbd>&rarr;</kbd>
-                                    now pass through to the shell, so the
-                                    word-extend selection documented under
-                                    Shell prompt selection works inside
-                                    WezTerm.
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd>
-                                </td>
-                                <td>
-                                    Resize-pane mode: arrows resize the
-                                    active pane (3 cells per press) until
-                                    <kbd>ESC</kbd> or <kbd>ENTER</kbd> exits;
-                                    a <em>RESIZE</em> badge shows in the
-                                    right status while the mode is active.
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+drag /
-                                    <kbd>WIN</kbd>+drag
-                                </td>
-                                <td>
-                                    Move the window. There is no OS title bar
-                                    to grab (and the bottom tab bar is not a
-                                    drag area), so hold the modifier and drag
-                                    anywhere in the terminal.
-                                    Drag-to-screen-edge snapping,
-                                    <kbd>WIN</kbd>+arrow snap, and edge
-                                    resizing all still work.
-                                </td>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>R</kbd></td>
+                                <td>Workflows</td>
                             </tr>
                         </tbody>
                     </table>
+                    <p class="note-row">
+                        Warp&rsquo;s own input editor handles selection,
+                        completion menus, and command search inside its
+                        Blocks; the shell-side fzf/atuin/starship wiring
+                        below is skipped when
+                        <code>TERM_PROGRAM=WarpTerminal</code> and applies
+                        unchanged in SSH+Zellij sessions.
+                    </p>
 
                     <h3 id="prompt-keys">Shell prompt selection</h3>
                     <p class="lede">
@@ -3838,14 +3586,15 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <h2>Host management</h2>
                     <p class="lede">
                         <code>hosts.conf</code> is the single source of truth.
-                        One output is regenerated from it: the
-                        <code>chezmoi/dot_config/wezterm/hosts.lua</code>
-                        SSH-domains block (in-place replace between
-                        <code>-- HOSTS:START</code> /
-                        <code>-- HOSTS:END</code> sentinels). On Linux WezTerm
-                        is irrelevant; on Windows, edits propagate live via
-                        <code>WEZTERM_CONFIG_FILE</code> &mdash; no
-                        <code>chezmoi apply</code> needed for that file.
+                        One output is regenerated from it: the managed Warp
+                        Tab Configs
+                        (<code>%APPDATA%\warp\Warp\data\tab_configs\workstation-*.toml</code>,
+                        one <em>SSH: &lt;host&gt;</em> entry per row), rebuilt
+                        by <code>bootstrap.ps1</code>&rsquo;s
+                        <code>Invoke-WarpTabConfigs</code> on every Windows
+                        run. On Linux nothing is generated &mdash; the
+                        provisioning scripts read <code>hosts.conf</code>
+                        directly.
                     </p>
                     <p>
                         <code>scripts/update-hosts.sh</code> reads
@@ -3881,7 +3630,6 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="os-card linux">
                             <span class="os-label">Linux</span>
                             <pre><code>./scripts/manage-hosts.sh                # interactive menu
-./scripts/manage-hosts.sh --sync         # regenerate inventory + wezterm
 ./scripts/manage-hosts.sh --list         # print table
 ./scripts/manage-hosts.sh --format       # re-pad hosts.conf
 ./scripts/manage-hosts.sh --add --name N --ip I \
@@ -3891,7 +3639,6 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="os-card windows">
                             <span class="os-label">Windows</span>
                             <pre><code>.\scripts\manage-hosts.ps1               # interactive menu
-.\scripts\manage-hosts.ps1 -Sync
 .\scripts\manage-hosts.ps1 -List
 .\scripts\manage-hosts.ps1 -Format
 .\scripts\manage-hosts.ps1 -Add -Name N -Ip I `
@@ -3904,7 +3651,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p>
                         After a host is registered, you still need your public
                         key in its <code>~/.ssh/authorized_keys</code> before
-                        WezTerm or <code>update-hosts.sh</code> can connect
+                        Warp or <code>update-hosts.sh</code> can connect
                         without a password.
                     </p>
                     <div class="grid-2">
@@ -4494,10 +4241,9 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                     </div>
                     <p class="note-row">
                         Self-registration appends the host to
-                        <code>hosts.conf</code> under
-                        <code>prod_machine</code> or <code>dev_machine</code>.
-                        Step 2 updates <code>hosts.ini</code> and the wezterm
-                        block everywhere.
+                        <code>hosts.conf</code>; the Warp Tab Configs pick it
+                        up on the next <code>bootstrap.ps1</code> run on
+                        Windows.
                     </p>
                 </section>
 
@@ -4507,53 +4253,12 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         <input
                             id="ts-filter"
                             type="search"
-                            placeholder="Filter entries (e.g. &lsquo;chezmoi&rsquo;, &lsquo;PATH&rsquo;, &lsquo;wezterm&rsquo;)…"
+                            placeholder="Filter entries (e.g. &lsquo;chezmoi&rsquo;, &lsquo;PATH&rsquo;, &lsquo;warp&rsquo;)…"
                             autocomplete="off"
                         />
                         <div class="filter-meta" id="ts-count"></div>
                     </div>
 
-                    <details data-ts>
-                        <summary>
-                            <code>clear</code> on a remote server says
-                            <em
-                                >&ldquo;&lsquo;wezterm&rsquo;: unknown terminal
-                                type&rdquo;</em
-                            >
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                You ssh&rsquo;d from a WezTerm terminal into a
-                                host that doesn&rsquo;t have the
-                                <code>wezterm</code> terminfo (it was never
-                                provisioned with this repo). WezTerm advertises
-                                <code>TERM=wezterm</code> and the remote ncurses
-                                can&rsquo;t resolve it.
-                            </p>
-                            <p>
-                                The <code>ssh</code> shell function handles this
-                                automatically: launched from WezTerm it probes
-                                the remote and, if it doesn&rsquo;t recognise
-                                <code>wezterm</code>, falls back to
-                                <code>xterm-256color</code> for that session.
-                                Hosts that <em>do</em> have the terminfo keep the
-                                full <code>wezterm</code> type.
-                            </p>
-                            <p>
-                                Bypass the wrapper for one call with
-                                <code>command ssh &hellip;</code>; disable it
-                                permanently by adding <code>unset -f ssh</code>
-                                to <code>~/.zshrc.local</code> (or
-                                <code>~/.bashrc.local</code>). To fix the remote
-                                itself, provision it with this repo or copy the
-                                terminfo over:
-                                <code
-                                    >infocmp -x wezterm | ssh HOST tic -x -o
-                                    ~/.terminfo -</code
-                                >.
-                            </p>
-                        </div>
-                    </details>
 
                     <details data-ts>
                         <summary>
@@ -4704,7 +4409,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
 
                     <details data-ts>
                         <summary>
-                            WezTerm SSH tab dies with
+                            SSH tab dies with
                             <em>&ldquo;client_loop: send disconnect: Broken
                                 pipe&rdquo;</em>
                             and floods the pane with garbage
@@ -4730,18 +4435,13 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                             </p>
                             <p>
                                 <strong>Recovery.</strong> When a pipe does
-                                break, press
-                                <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd
-                                    >F5</kbd
-                                >
-                                inside the dead tab. WezTerm spawns a new
-                                tab against the same SSH domain; Zellij&rsquo;s
-                                <code>attach --create main</code> (from
-                                <code>default_prog</code>) reattaches the
-                                existing remote session, so you land back
-                                exactly where you were. The dead tab is left
-                                open for scrollback &mdash; close it with
-                                <kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>W</kbd>
+                                break, open the host&rsquo;s
+                                <em>SSH: &lt;host&gt;</em> Tab Config again
+                                from Warp&rsquo;s &ldquo;+&rdquo; menu.
+                                Zellij&rsquo;s
+                                <code>attach --create main</code> reattaches
+                                the existing remote session, so you land back
+                                exactly where you were; close the dead tab
                                 once you&rsquo;ve confirmed the reconnect.
                             </p>
                             <p>
@@ -4759,85 +4459,34 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
 
                     <details data-ts>
                         <summary>
-                            WezTerm shows old config after an edit
+                            Warp shows old settings after an edit
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Normally edits to the WezTerm config under
-                                <code
-                                    >chezmoi/dot_config/wezterm/</code
-                                >
-                                are visible immediately because
-                                <code>bootstrap.ps1</code> sets a User-scope
-                                <code>WEZTERM_CONFIG_FILE</code> env var
-                                pointing directly at the chezmoi source, and
-                                WezTerm&rsquo;s
-                                <code>automatically_reload_config</code> picks
-                                up file edits live.
+                                The tracked Warp config
+                                (<code>settings.toml</code>,
+                                <code>keybindings.yaml</code>, the Catppuccin
+                                theme) deploys via chezmoi to Warp&rsquo;s
+                                live config locations &mdash; so an edit in
+                                the repo needs a <code>chezmoi apply</code>
+                                (<code>cza</code> on WSL, or
+                                <code>chezmoi apply</code> in a Windows
+                                shell) before Warp can see it, and
+                                <strong>Warp reads the files at start</strong>:
+                                restart Warp after the apply.
                             </p>
                             <p>
-                                <strong>Confirm the env var is set:</strong>
-                            </p>
-                            <pre><code>[Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')</code></pre>
-                            <p>
-                                Should print the full chezmoi-source path
-                                (something like
-                                <code
-                                    >C:\Users\you\.local\share\chezmoi\chezmoi\dot_config\wezterm\wezterm.lua</code
-                                >). If it&rsquo;s empty, the env var was never
-                                set (bootstrap didn&rsquo;t run, or it was set
-                                in System scope but cleared from User scope).
-                                If it points at a stale path, the repo was
-                                moved without re-running bootstrap.
-                            </p>
-                            <p>
-                                <strong>Restore:</strong>
-                                <code
-                                    >.\bootstrap.ps1 -SkipToolInstall
-                                    -SkipChezmoi -SkipKeyGen</code
-                                >
-                                (just re-runs the env-var step) or a full
-                                <code>bootstrap.ps1</code>. <strong>Restart any
-                                    running WezTerm instances</strong> after
-                                &mdash; the env var is read at process start.
+                                If a <em>generated</em> Tab Config
+                                (<code>workstation-*.toml</code>) is stale
+                                &mdash; e.g. a host you just added is missing
+                                &mdash; re-run <code>.\bootstrap.ps1</code>;
+                                <code>Invoke-WarpTabConfigs</code> regenerates
+                                them from <code>hosts.conf</code> on every
+                                run.
                             </p>
                         </div>
                     </details>
 
-                    <details data-ts>
-                        <summary>
-                            Roll back a bad WezTerm nightly
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                The mirror keeps the newest 8 snapshots as
-                                immutable release assets
-                                (<code>wezterm-nightly-snapshots</code>). To
-                                roll back: edit the WezTerm entry in
-                                <code>bootstrap.ps1</code>&rsquo;s
-                                <code>$PortableTools</code> &mdash; set
-                                <code>Version</code>/<code>Url</code>/<code
-                                    >Sha256</code
-                                >
-                                to any retained snapshot (or to the
-                                forever-immutable stable <code>20240203</code>
-                                upstream URL), close WezTerm, re-run
-                                <code>.\bootstrap.ps1</code>. Revert or close
-                                the offending weekly PR so the next run
-                                doesn&rsquo;t re-bump. Note: the config now
-                                uses a few nightly-only options &mdash; a
-                                rollback all the way to stable
-                                <code>20240203</code> additionally needs the
-                                <code>NIGHTLY-ONLY</code>-tagged lines removed
-                                from the WezTerm config
-                                (<code>rg NIGHTLY-ONLY
-chezmoi/dot_config/wezterm/</code>);
-                                rolling back to another nightly snapshot needs
-                                nothing.
-                            </p>
-                            <pre><code>gh release view wezterm-nightly-snapshots --json assets --jq '.assets[].name'</code></pre>
-                        </div>
-                    </details>
 
                     <details data-ts>
                         <summary>
@@ -4857,10 +4506,8 @@ chezmoi/dot_config/wezterm/</code>);
                             <p>
                                 The GitHub CLI is <em>not</em> such a
                                 prerequisite &mdash; the script installs it
-                                (pinned portable). If preflight warns about a
-                                missing GitHub token, authenticate once and
-                                re-run; the skipped WezTerm mirror download
-                                self-heals:
+                                (pinned portable); authenticate once after
+                                the bootstrap:
                             </p>
                             <pre><code>gh auth login</code></pre>
                         </div>
@@ -4875,7 +4522,7 @@ chezmoi/dot_config/wezterm/</code>);
                         <div class="ts-body">
                             <p>
                                 The portable tools
-                                (WezTerm/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
+                                (Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
                                 CLI/dnGrep/LogExpert) are pinned to a specific version
                                 <em>and</em> sha256 in
                                 <code>$PortableTools</code> inside
@@ -5083,18 +4730,16 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                         </summary>
                         <div class="ts-body">
                             <p>
-                                WezTerm renders 24-bit color, but the remote app
+                                Warp renders 24-bit color, but the remote app
                                 needs to emit truecolor sequences &mdash; it
                                 won&rsquo;t unless
                                 <code>$COLORTERM=truecolor</code> is set in the
                                 shell (via the chezmoi-managed
                                 <code>dot_zshrc.tmpl</code> /
-                                <code>dot_bashrc.tmpl</code>) or
-                                <code>~/.terminfo/w/wezterm</code> exists. Run
+                                <code>dot_bashrc.tmpl</code>). Run
                                 <code>chezmoi update &amp;&amp; chezmoi apply</code>
                                 (<code>czu &amp;&amp; cza</code>) on the affected
                                 host, then verify with
-                                <code>infocmp wezterm</code> (exit 0) and
                                 <code>echo "$COLORTERM"</code>
                                 (<code>truecolor</code> in a new shell).
                             </p>
@@ -5170,10 +4815,9 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     in apps that read the typographic name.
                                 </li>
                                 <li>
-                                    <strong>WezTerm still showing tofu:</strong>
-                                    <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>
-                                    in WezTerm reloads the config; if that
-                                    doesn&rsquo;t help, restart WezTerm. Confirm
+                                    <strong>Warp still showing tofu:</strong>
+                                    restart Warp so it re-enumerates the
+                                    installed fonts. Confirm
                                     <code>JETBRAINSMONO_NERD_VERSION</code> in
                                     <code>makefile/versions.mk</code> matches the
                                     <code>$Version</code> literal in
@@ -5186,7 +4830,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     <strong>WSL host running <code>make nerd-fonts</code>
                                     says &ldquo;skipping on WSL&rdquo;:</strong>
                                     intentional. WSL apps render via the Windows
-                                    host&rsquo;s WezTerm, which uses
+                                    host&rsquo;s terminal (Warp), which uses
                                     Windows-registered fonts. Run
                                     <code>bootstrap.ps1</code> on the Windows
                                     side instead.

@@ -49,7 +49,7 @@ style    = "bold red"
 
 [shlvl]
 # Surfaces shell-nesting depth past the outermost layer. Useful for
-# chains like `WezTerm → zellij → ssh → zsh` where it's easy to lose
+# chains like `Warp → ssh → zellij → zsh` where it's easy to lose
 # track of which shell a command will run in. Default threshold is 2
 # (renders when SHLVL >= 2 — i.e. you've sub-shelled at least once).
 # Symbol is nf-md-layers-triple (U+F0F39) — visualises nested shell

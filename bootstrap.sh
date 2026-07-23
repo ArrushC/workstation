@@ -48,7 +48,7 @@
 # Flow (both modes):
 #   1. preflight             — check curl/git/make/tar/unzip/iproute
 #   2. clone repo            — into ~/.local/share/chezmoi (or git pull if present)
-#   3. self_register         — add this host to hosts.conf + sync wezterm block
+#   3. self_register         — add this host to hosts.conf
 #                              (auto-skipped inside WSL — see is_wsl below)
 #   4. run_make              — `make MODE=<dev|prod> provision` inside makefile/
 #                              (packages + tools + shell + dotfiles in one pass)
@@ -60,7 +60,7 @@
 #   4c. set_default_shell    — `sudo usermod -s "$(command -v zsh)" "$USER"`
 #                              on --dev only. The chezmoi-tracked rc lives at
 #                              ~/.zshrc; we switch the login shell so new
-#                              WezTerm/SSH sessions land in zsh. Best-effort:
+#                              SSH/WSL sessions land in zsh. Best-effort:
 #                              prints the manual chsh command on prod or
 #                              when usermod isn't permitted.
 #   5. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
@@ -69,8 +69,8 @@
 # WSL — running inside a WSL distro is supported and treated as a managed host
 # for tools + dotfiles, but NOT as an SSH target. is_wsl() (defined below)
 # detects WSL via $WSL_DISTRO_NAME or /proc/version's microsoft marker and
-# short-circuits self_register so hosts.conf and the wezterm SSH-domain block
-# are never touched. The end-of-bootstrap copy-id tip is also suppressed.
+# short-circuits self_register so hosts.conf is never touched. The
+# end-of-bootstrap copy-id tip is also suppressed.
 #
 # Tool versions, URLs, dnf packages, PATH wiring, chezmoi orchestration —
 # everything lives under makefile/ (versions.mk, tools.mk, packages.mk,
@@ -95,10 +95,10 @@ fail() {
 }
 
 # WSL detection — used to skip hosts.conf self-registration and the SSH
-# copy-id tip. WSL distros are accessed via wezterm WSL domains (not SSH),
-# so registering them as SSH targets would pollute the inventory with an
-# IP that's only reachable from the host Windows machine and would also
-# create a redundant wezterm SSH-domain entry alongside the WSL one.
+# copy-id tip. WSL distros are launched directly by the Windows-side
+# terminal (Warp's WSL integration, `wsl.exe`), not SSH'd into, so
+# registering them as SSH targets would pollute the inventory with an IP
+# that's only reachable from the host Windows machine.
 #   - WSL_DISTRO_NAME is exported by WSL 2 inside the distro
 #   - /proc/version's "microsoft" marker is the universal backup signal
 is_wsl() {
@@ -316,13 +316,13 @@ Install via your distro's package manager, e.g.
 # 2. SELF-REGISTER — add this host to hosts.conf + regenerate inventory
 # =============================================================================
 self_register() {
-  # WSL distros are accessed via wezterm WSL domains, not SSH. Registering
-  # them in hosts.conf would (a) add an SSH-domain entry to wezterm.lua that
-  # duplicates the existing WSL domain, and (b) record a WSL-internal IP
-  # that's only reachable from the host Windows machine. Skip.
+  # WSL distros are launched directly by the Windows-side terminal (Warp's
+  # WSL integration), not SSH'd into. Registering them in hosts.conf would
+  # generate a redundant SSH Tab Config and record a WSL-internal IP that's
+  # only reachable from the host Windows machine. Skip.
   if is_wsl; then
     log "Detected WSL (${WSL_DISTRO_NAME:-via /proc/version}) — skipping hosts.conf self-registration"
-    ok "WSL is reached through wezterm WSL domains, not SSH"
+    ok "WSL is reached through the Windows terminal's WSL integration, not SSH"
     return
   fi
 
@@ -354,9 +354,9 @@ self_register() {
   fi
 
   log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
-  # --add already runs sync_all on success, so don't double-sync here —
-  # any make/chezmoi step that reads hosts.conf downstream sees the
-  # current inventory + wezterm block from the single --add pass.
+  # Any make/chezmoi step that reads hosts.conf downstream sees the current
+  # inventory from the single --add pass; the Windows-side Warp Tab Configs
+  # regenerate from it on the next bootstrap.ps1 run.
   bash "$manage_script" --add \
     --name "$host_name" \
     --ip "$host_ip" \
@@ -442,7 +442,7 @@ ensure_chezmoi_initialized() {
 # 4.7. SET DEFAULT SHELL — switch the user's login shell to zsh.
 #
 # The chezmoi-tracked rc is `dot_zshrc.tmpl` → ~/.zshrc; switching the login
-# shell is what makes new WezTerm/SSH/WSL sessions actually read it. `chsh`
+# shell is what makes new SSH/WSL sessions actually read it. `chsh`
 # isn't installed by default on AlmaLinux 9 (needs util-linux-user) and even
 # when present requires PAM auth (interactive password). `sudo usermod -s`
 # edits /etc/passwd directly — works under our existing dev-mode sudo flow.
@@ -521,21 +521,21 @@ set_default_shell() {
 }
 
 # =============================================================================
-# 5. PUSH HOST CHANGES — commit hosts.conf + wezterm sentinel block, push upstream.
+# 5. PUSH HOST CHANGES — commit hosts.conf, push upstream.
 #    Warn-don't-fail: `make provision` already succeeded by now, so we never abort here.
 # =============================================================================
 push_host_changes() {
   cd "$CHEZMOI_SOURCE"
 
   # Anything to commit (working tree OR already-staged)?
-  if git diff --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null &&
-    git diff --cached --quiet hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null; then
+  if git diff --quiet hosts.conf 2>/dev/null &&
+    git diff --cached --quiet hosts.conf 2>/dev/null; then
     log "No host-list changes to commit"
     return 0
   fi
 
   log "Committing host registration..."
-  git add hosts.conf chezmoi/dot_config/wezterm/wezterm.lua 2>/dev/null || true
+  git add hosts.conf 2>/dev/null || true
 
   # Identity priority for the auto-commit:
   #   1. GIT_USER_NAME / GIT_USER_EMAIL env vars (set in the bootstrap one-liner)
@@ -786,8 +786,8 @@ if [[ -n "$_zsh_path" && "$_login_shell" == "$_zsh_path" ]]; then
 fi
 
 if is_wsl; then
-  echo -e "Running inside WSL — opening a new WezTerm WSL tab will land you in"
-  echo -e "  ${YELLOW}~${RESET} with starship + the chezmoi-tracked aliases active."
+  echo -e "Running inside WSL — opening a new Warp tab into this distro lands you"
+  echo -e "  in ${YELLOW}~${RESET} with the chezmoi-tracked aliases active."
 else
   echo -e "Enable passwordless SSH from your client:"
   echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux)"
