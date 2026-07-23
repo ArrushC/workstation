@@ -19,7 +19,7 @@ show_panel_in_restored_windows = true
 [appearance.text]
 # Windows exposes the installed Nerd Font through its abbreviated GDI family.
 font_name = "JetBrainsMono NFM"
-font_size = 10.5
+font_size = 13.0
 font_weight = "normal"
 line_height_ratio = 1.0
 ligature_rendering_enabled = true
@@ -29,6 +29,9 @@ notebook_font_size = 14.0
 [appearance.window]
 override_opacity = 100
 override_blur_texture = false
+# Warp's UI persists zoom state here; tracking the 100% default stops every
+# chezmoi apply from flagging the file as drifted after a ctrl+=/ctrl+- zoom.
+zoom_level = 100
 
 [appearance.tabs]
 show_indicators_button = true
