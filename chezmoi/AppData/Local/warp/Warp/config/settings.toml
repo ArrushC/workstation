@@ -59,9 +59,23 @@ new_tab_placement = "after_current_tab"
 show_warning_before_quitting = true
 should_confirm_close_session = true
 link_tooltip = true
+# Warp defaults login_item to TRUE (auto-launch at Windows login) — pin the
+# choice so the default can't decide it silently.
+login_item = false
+# Warp self-updates frequently; don't pop the changelog on every update.
+show_changelog_after_update = false
 
 [general.undo_close]
 enabled = true
+
+[session]
+# AlmaLinux-9 WSL/zsh is the primary workflow (see README §setup-wsl) — make it
+# the startup shell for NEW sessions instead of the manual Settings-UI step.
+# The { custom = ... } shape bypasses the executable-path validation that
+# rejects wsl.exe paths (warpdotdev/warp#7576); same launch command as the
+# generated WSL Tab Config. If Warp flags this value after an update, it warns
+# and falls back to the system default (PowerShell) — nothing breaks.
+new_session_shell_override = { custom = "wsl.exe --distribution AlmaLinux-9 --cd ~" }
 
 [agents]
 cloud_conversation_storage_enabled = false
@@ -154,6 +168,9 @@ copy_on_select = true
 focus_reporting_enabled = true
 mouse_reporting_enabled = true
 scroll_reporting_enabled = true
+# Scrollback parity with the fleet: zellij keeps scroll_buffer_size 100000
+# (trimmed from 1M on 2026-07-09); Warp's default is 50000 rows.
+maximum_grid_size = 100000
 
 [terminal.input]
 # Universal is Warp's rich multi-line editor; AI/NL detection remains disabled.
@@ -166,6 +183,9 @@ error_underlining_enabled = true
 syntax_highlighting = true
 command_corrections = true
 alias_expansion_enabled = false
+# Left Alt as meta so Zellij/Helix Alt bindings (Alt+n, Alt+arrows) reach
+# remote TUIs in SSH panes; right Alt stays AltGr for international layouts.
+extra_meta_keys = { left_alt = true, right_alt = false }
 
 [notifications]
 toast_duration_secs = 8
