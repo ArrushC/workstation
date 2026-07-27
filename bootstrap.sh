@@ -96,7 +96,7 @@ fail() {
 
 # WSL detection — used to skip hosts.conf self-registration and the SSH
 # copy-id tip. WSL distros are launched directly by the Windows-side
-# terminal (Warp's WSL integration, `wsl.exe`), not SSH'd into, so
+# terminal (Windows Terminal's WSL profile, `wsl.exe`), not SSH'd into, so
 # registering them as SSH targets would pollute the inventory with an IP
 # that's only reachable from the host Windows machine.
 #   - WSL_DISTRO_NAME is exported by WSL 2 inside the distro
@@ -316,8 +316,8 @@ Install via your distro's package manager, e.g.
 # 2. SELF-REGISTER — add this host to hosts.conf + regenerate inventory
 # =============================================================================
 self_register() {
-  # WSL distros are launched directly by the Windows-side terminal (Warp's
-  # WSL integration), not SSH'd into. Registering them in hosts.conf would
+  # WSL distros are launched directly by the Windows-side terminal (Windows
+  # Terminal's WSL profile), not SSH'd into. Registering them in hosts.conf would
   # generate a redundant SSH Tab Config and record a WSL-internal IP that's
   # only reachable from the host Windows machine. Skip.
   if is_wsl; then
@@ -355,8 +355,8 @@ self_register() {
 
   log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
   # Any make/chezmoi step that reads hosts.conf downstream sees the current
-  # inventory from the single --add pass; the Windows-side Warp Tab Configs
-  # regenerate from it on the next bootstrap.ps1 run.
+  # inventory from the single --add pass; the Windows-side Windows Terminal
+  # SSH profiles (fragment) regenerate from it on the next bootstrap.ps1 run.
   bash "$manage_script" --add \
     --name "$host_name" \
     --ip "$host_ip" \
@@ -786,7 +786,7 @@ if [[ -n "$_zsh_path" && "$_login_shell" == "$_zsh_path" ]]; then
 fi
 
 if is_wsl; then
-  echo -e "Running inside WSL — opening a new Warp tab into this distro lands you"
+  echo -e "Running inside WSL — opening a new Windows Terminal tab into this distro lands you"
   echo -e "  in ${YELLOW}~${RESET} with the chezmoi-tracked aliases active."
 else
   echo -e "Enable passwordless SSH from your client:"

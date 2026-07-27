@@ -25,3 +25,11 @@ paths = [
   '''(^|/)README\.html$''',
   '''(^|/)CLAUDE\.md$''',
 ]
+
+# Windows Terminal keybinding chords ("keys": "alt+shift+down") trip the
+# generic-api-key heuristic. Allowlist the chord SHAPE (matched against the
+# detected secret), never the settings.json path — the config/dotfiles
+# surface must stay scanned.
+regexes = [
+  '''^(ctrl|alt|shift|win)(\+[a-zA-Z0-9=+-]+)+$''',
+]
