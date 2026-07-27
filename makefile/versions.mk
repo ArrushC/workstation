@@ -17,7 +17,7 @@
 EGET_VERSION := 1.3.4
 
 # --- Tier-0: original toolbelt -----------------------------------------------
-FZF_VERSION      := 0.74.0
+FZF_VERSION      := 0.74.1
 ZOXIDE_VERSION   := 0.10.0
 STARSHIP_VERSION := 1.26.0
 ZELLIJ_VERSION   := 0.44.3
@@ -48,14 +48,14 @@ SSH_COPY_ID_VERSION := latest
 
 # --- Second-wave expansion (2026-05) -----------------------------------------
 GITUI_VERSION      := 0.28.1
-LAZYGIT_VERSION    := 0.63.0
+LAZYGIT_VERSION    := 0.63.1
 JUJUTSU_VERSION    := 0.43.0
 YAZI_VERSION       := 26.5.6
-AST_GREP_VERSION   := 0.44.1
+AST_GREP_VERSION   := 0.45.0
 TELEVISION_VERSION := 0.15.9
-XH_VERSION         := 0.26.1
+XH_VERSION         := 0.26.2
 GPING_VERSION      := 1.20.4
-ATUIN_VERSION      := 18.17.0
+ATUIN_VERSION      := 18.17.1
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
 EZA_VERSION        := 0.23.5
@@ -63,22 +63,22 @@ SD_VERSION         := 1.1.0
 CTOP_VERSION       := 0.7.7
 K9S_VERSION        := 0.51.0
 RCLONE_VERSION     := 1.74.4
-CROC_VERSION       := 10.4.13
+CROC_VERSION       := 10.6.0
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.7.5
-UV_VERSION         := 0.11.28
+MISE_VERSION       := 2026.7.14
+UV_VERSION         := 0.11.32
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
 GH_VERSION        := 2.96.0
-SOPS_VERSION      := 3.13.2
+SOPS_VERSION      := 3.13.3
 HTMLQ_VERSION     := 0.4.0
 OUCH_VERSION      := 0.8.1
 WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
-BOTTOM_VERSION        := 0.14.4
-SYSTEMCTL_TUI_VERSION := 0.6.0
+BOTTOM_VERSION        := 0.14.6
+SYSTEMCTL_TUI_VERSION := 0.7.0
 LAZYJOURNAL_VERSION   := 0.8.6
 SYSZ_VERSION          := 1.4.3
 
@@ -107,7 +107,7 @@ NODE_VERSION := 26.5.0
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.6.9
+DOZZLE_VERSION := 10.6.12
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
@@ -133,12 +133,12 @@ CHTSH_VERSION := latest
 # gnu-glibc only (no musl build) — fine on this glibc fleet.
 NNN_VERSION      := 5.2
 FX_VERSION       := 39.2.0
-GITLOGUE_VERSION := 0.9.0
+GITLOGUE_VERSION := 0.10.0
 
 # --- (2026-06) gap-fillers: search / data / diff / network / git-extras / util
 # Added after a deep-research sweep over the toolbelt's remaining gaps. All are
 # plain EGET_TOOL single-binary installs — per-tool asset/tag notes in tools.mk.
-RIPGREP_VERSION    := 15.1.0
+RIPGREP_VERSION    := 15.2.0
 MILLER_VERSION     := 6.20.2
 CSVLENS_VERSION    := 0.15.1
 DIFFTASTIC_VERSION := 0.69.0
