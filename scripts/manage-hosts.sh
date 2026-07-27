@@ -7,9 +7,10 @@
 #
 # Provisioning consumes hosts.conf directly: bootstrap.sh self-registers
 # this host into it, scripts/update-hosts.sh iterates over it for bulk
-# multi-host updates, and on Windows bootstrap.ps1's Invoke-WarpTabConfigs
-# regenerates the managed Warp Tab Configs (workstation-*.toml) from it on
-# every run. No separate inventory file is generated.
+# multi-host updates, and on Windows bootstrap.ps1's
+# Invoke-WindowsTerminalFragments regenerates the workstation Windows
+# Terminal SSH-profile fragment from it on every run. No separate
+# inventory file is generated.
 #
 # Usage (no args opens the interactive menu):
 #   ./scripts/manage-hosts.sh
@@ -126,11 +127,12 @@ is_valid_group() {
 }
 
 # Printed after any hosts.conf change. Nothing is generated on the Linux
-# side; the Windows terminal entries (Warp Tab Configs) are regenerated from
-# hosts.conf by bootstrap.ps1's Invoke-WarpTabConfigs. PARITY: manage-hosts.ps1
-# prints the same note.
-note_warp_refresh() {
-  log "Warp Tab Configs (Windows) pick this up on the next bootstrap.ps1 run"
+# side; the Windows Terminal SSH profiles (workstation fragment) are
+# regenerated from hosts.conf by bootstrap.ps1's
+# Invoke-WindowsTerminalFragments. PARITY: manage-hosts.ps1 prints the
+# same note.
+note_terminal_refresh() {
+  log "Windows Terminal SSH profiles (workstation fragment) pick this up on the next bootstrap.ps1 run."
 }
 
 # =============================================================================
@@ -334,7 +336,7 @@ add_host() {
 
   if [[ "$skip_confirm" == true ]]; then
     # Non-interactive default: don't copy keys.
-    note_warp_refresh
+    note_terminal_refresh
     return
   fi
 
@@ -344,7 +346,7 @@ add_host() {
     copy_ssh_id "$name"
   fi
 
-  note_warp_refresh
+  note_terminal_refresh
 }
 
 remove_host() {
@@ -374,7 +376,7 @@ remove_host() {
     mv "$tmp" "$HOSTS_CONF"
     save_hosts
     ok "Host '$name' removed from hosts.conf"
-    note_warp_refresh
+    note_terminal_refresh
   else
     warn "Aborted."
   fi
@@ -437,7 +439,7 @@ edit_host() {
     mv "$tmp" "$HOSTS_CONF"
     save_hosts
     ok "Host '$name' updated"
-    note_warp_refresh
+    note_terminal_refresh
   else
     warn "Aborted."
   fi

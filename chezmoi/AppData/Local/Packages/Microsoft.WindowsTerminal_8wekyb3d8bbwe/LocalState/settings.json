@@ -19,7 +19,7 @@
             "command": 
             {
                 "action": "splitPane",
-                "split": "auto",
+                "split": "down",
                 "splitMode": "duplicate"
             },
             "id": "User.splitPane.A6751878"
@@ -27,12 +27,23 @@
         {
             "command": "find",
             "id": "User.find"
-        }
+        },
+        { "command": { "action": "splitPane", "split": "right", "splitMode": "duplicate" }, "id": "User.splitPane.right" },
+        { "command": { "action": "moveFocus", "direction": "left" }, "id": "User.moveFocus.left" },
+        { "command": { "action": "moveFocus", "direction": "right" }, "id": "User.moveFocus.right" },
+        { "command": { "action": "moveFocus", "direction": "up" }, "id": "User.moveFocus.up" },
+        { "command": { "action": "moveFocus", "direction": "down" }, "id": "User.moveFocus.down" },
+        { "command": "togglePaneZoom", "id": "User.togglePaneZoom" },
+        { "command": { "action": "adjustFontSize", "delta": 1 }, "id": "User.adjustFontSize.inc" },
+        { "command": { "action": "adjustFontSize", "delta": -1 }, "id": "User.adjustFontSize.dec" },
+        { "command": "resetFontSize", "id": "User.resetFontSize" }
     ],
     "alwaysOnTop": false,
     "copyFormatting": "none",
     "copyOnSelect": true,
     "defaultProfile": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
+    "disabledProfileSources": ["Windows.Terminal.SSH"],
+    "firstWindowPreference": "persistedWindowLayout",
     "keybindings": 
     [
         {
@@ -50,41 +61,52 @@
         {
             "id": "User.splitPane.A6751878",
             "keys": "alt+shift+d"
-        }
+        },
+        { "id": "User.splitPane.right", "keys": "alt+shift+r" },
+        { "id": "User.moveFocus.left", "keys": "alt+shift+left" },
+        { "id": "User.moveFocus.right", "keys": "alt+shift+right" },
+        { "id": "User.moveFocus.up", "keys": "alt+shift+up" },
+        { "id": "User.moveFocus.down", "keys": "alt+shift+down" },
+        { "id": "User.togglePaneZoom", "keys": "ctrl+shift+z" },
+        { "id": "User.adjustFontSize.inc", "keys": "ctrl+=" },
+        { "id": "User.adjustFontSize.dec", "keys": "ctrl+-" },
+        { "id": "User.resetFontSize", "keys": "ctrl+0" }
     ],
     "newTabMenu": 
     [
         {
-            "type": "remainingProfiles"
-        }
+            "type": "folder",
+            "name": "SSH hosts",
+            "icon": "",
+            "allowEmpty": false,
+            "entries": [ { "type": "matchProfiles", "name": "SSH: .*" } ]
+        },
+        { "type": "remainingProfiles" }
     ],
     "profiles": 
     {
         "defaults": 
         {
-            "colorScheme": "Catppuccin Mocha"
+            "antialiasingMode": "grayscale",
+            "bellStyle": ["audible", "taskbar"],
+            "colorScheme": "Catppuccin Mocha",
+            "cursorShape": "bar",
+            "font": { "face": "JetBrainsMono NFM", "size": 10.5 },
+            "historySize": 100000,
+            "padding": "8, 8, 8, 8",
+            "useAcrylic": false
         },
         "list": 
         [
             {
                 "altGrAliasing": true,
-                "antialiasingMode": "grayscale",
                 "closeOnExit": "automatic",
                 "commandline": "%LOCALAPPDATA%\\workstation\\nu\\nu.exe",
-                "cursorShape": "bar",
-                "font": 
-                {
-                    "face": "JetBrainsMono NFM",
-                    "size": 10.5
-                },
                 "guid": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
                 "hidden": false,
-                "historySize": 9001,
                 "name": "Nushell",
-                "padding": "8, 8, 8, 8",
                 "snapOnInput": true,
-                "startingDirectory": "%USERPROFILE%",
-                "useAcrylic": false
+                "startingDirectory": "%USERPROFILE%"
             },
             {
                 "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nologo",
@@ -133,57 +155,7 @@
                 "useAcrylic": false
             },
             {
-                "altGrAliasing": true,
-                "antialiasingMode": "grayscale",
-                "closeOnExit": "automatic",
-                "commandline": "ssh cbl\\arrush.chaturvedi@atc-cache-dev09",
-                "cursorShape": "bar",
-                "font": 
-                {
-                    "face": "Cascadia Mono",
-                    "size": 12
-                },
-                "guid": "{379331ae-f0d1-4adf-a213-92ca317b8114}",
-                "hidden": false,
-                "historySize": 9001,
-                "icon": "\ue839",
-                "name": "atc-cache-dev09",
-                "padding": "8, 8, 8, 8",
-                "snapOnInput": true,
-                "startingDirectory": "%USERPROFILE%",
-                "tabTitle": "atc-cache-dev09",
-                "useAcrylic": false
-            },
-            {
-                "altGrAliasing": true,
-                "antialiasingMode": "grayscale",
-                "closeOnExit": "automatic",
-                "commandline": "ssh cbl\\arrush.chaturvedi@atc-cache-dev10",
-                "cursorShape": "bar",
-                "font": 
-                {
-                    "face": "Cascadia Mono",
-                    "size": 12
-                },
-                "guid": "{e3f008a6-f184-489a-bf0f-8356b771e543}",
-                "hidden": false,
-                "historySize": 9001,
-                "icon": "\ue839",
-                "name": "atc-cache-dev10",
-                "padding": "8, 8, 8, 8",
-                "snapOnInput": true,
-                "startingDirectory": "%USERPROFILE%",
-                "tabTitle": "atc-cache-dev10",
-                "useAcrylic": false
-            },
-            {
                 "guid": "{4e55418b-7bb9-5495-8080-54bf581871fc}",
-                "hidden": false,
-                "name": "AlmaLinux-9",
-                "source": "Microsoft.WSL"
-            },
-            {
-                "guid": "{3995e1ac-6c0a-575c-9104-2c93ac523e22}",
                 "hidden": false,
                 "name": "AlmaLinux-9",
                 "source": "Microsoft.WSL"

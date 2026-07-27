@@ -189,9 +189,8 @@ export FZF_DEFAULT_OPTS="
   --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4
 "
 
-# fzf shell integration. Warp owns the input editor and documents shell-level
-# fzf bindings as incompatible; the standalone fzf command remains available.
-if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
+# fzf shell integration.
+if command -v fzf &>/dev/null; then
   eval "$(fzf --bash)"
 fi
 
@@ -230,7 +229,7 @@ if command -v mise &>/dev/null; then
 fi
 
 # --- starship prompt ---------------------------------------------------------
-if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
+if command -v starship &>/dev/null; then
   eval "$(starship init bash)"
 fi
 

@@ -29,7 +29,7 @@
 # bare-filename registrations left by older builds of this script as full paths.
 #
 # Hard-fails on download or SHA256 issues (bootstrap.ps1 aborts). Soft-fails
-# on registry-write failure (Warp/Zed/VS Code may not see the font until
+# on registry-write failure (Windows Terminal/Zed/VS Code may not see the font until
 # manual registration via Settings → Personalization → Fonts).
 #
 # Version + SHA256 are pinned in the script body — must mirror
@@ -257,7 +257,7 @@ Invoke-FontActivation
 Register-FontLogonTask
 
 if ($RegistrationFailed) {
-    Write-Warning ("Some HKCU registrations failed — Warp/Zed/VS Code may not " +
+    Write-Warning ("Some HKCU registrations failed — Windows Terminal/Zed/VS Code may not " +
         "see the font until manual registration (Settings → Personalization " +
         "→ Fonts).")
 } else {

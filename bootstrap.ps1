@@ -3,17 +3,17 @@
 #
 # The Windows host is a CLIENT — Ansible/Make run on Linux hosts only. On
 # Windows this script provisions its slice with NO admin rights: it installs a
-# small set of first-party binaries into a per-user location, seeds Warp through
-# its official WinGet package when available, then hands off to chezmoi to deploy
-# the tracked dotfiles.
+# small set of first-party binaries into a per-user location, seeds Windows
+# Terminal through its official WinGet/MSIX package when available, then hands
+# off to chezmoi to deploy the tracked dotfiles.
 #
 # Install model (everything under %LOCALAPPDATA%\workstation, added to User PATH):
 #   - chezmoi   — official get.chezmoi.io binary installer  → workstation\bin
 #   - Starship  — pinned portable .zip (sha256-verified)    → workstation\bin
 #   - Helix     — pinned portable .zip (sha256-verified)    → workstation\helix
 #                 (hx.exe + bundled runtime/; no HELIX_RUNTIME env var needed)
-#   - Warp      — latest official per-user WinGet package   → LocalAppData\Programs
-#                 (best-effort; self-updating; the PRIMARY terminal)
+#   - Windows Terminal — evergreen per-user WinGet/MSIX seed → Store-serviced
+#                 thereafter (best-effort; self-updating; the PRIMARY terminal)
 #   - SSHFS-Win — BEST-EFFORT ELEVATED (the ONE exception to no-admin): mounts
 #                 remote Unix filesystems over SSH (\\sshfs\user@host). Depends
 #                 on the WinFsp kernel driver -> machine-scope MSIs -> UAC
@@ -33,27 +33,30 @@
 #                     (pinned portable).
 #   2. tool install — chezmoi (official installer) + Starship/Helix (pinned
 #                     portable downloads), all into %LOCALAPPDATA%\workstation;
-#                     then Warp, the installer-class apps (Obsidian, Zed), and the
-#                     best-effort elevated class (SSHFS-Win — may pop UAC).
+#                     then Windows Terminal, the installer-class apps (Obsidian,
+#                     Zed), and the best-effort elevated class (SSHFS-Win — may
+#                     pop UAC).
 #   3. clone repo   — into -RepoPath (default %USERPROFILE%\.local\share\chezmoi,
 #                     matching bootstrap.sh's $HOME/.local/share/chezmoi and
 #                     chezmoi's own default source dir).
 #   4. chezmoi apply— applies chezmoi/ to %USERPROFILE% (PowerShell profile,
-#                     Warp settings, Zed/VSCode settings, etc.).
+#                     Windows Terminal settings, Zed/VSCode settings, etc.).
 #   5. profile shim — if Documents is redirected (OneDrive), drop a loader at the
 #                     real $PROFILE that sources the chezmoi canonical profile.
 #   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
 #                     tools (dnGrep/LogExpert — their .zips ship none);
 #                     idempotent + duplicate-proof.
-#   5c. warp configs — regenerate WSL/Nushell/PowerShell and hosts.conf-driven
-#                     SSH+Zellij Tab Configs (managed workstation-*.toml only).
+#   5c. windows terminal fragments — regenerate hosts.conf-driven SSH launch
+#                     profiles for Windows Terminal (managed workstation
+#                     fragment dir only; self-heals every run).
 #   5d. nushell prompt — generate the starship prompt into nushell's
 #                     vendor/autoload dir (self-heals every run).
 #   5e. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
 #                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
-#   5f. wezterm retire — remove leftovers of the retired WezTerm install
-#                     (env var, toast AppId, shortcut, portable tree + PATH
-#                     entry); cheap no-op once clean.
+#   5f. terminal retire — remove leftovers of the retired WezTerm install (env
+#                     var, toast AppId, shortcut, portable tree + PATH entry)
+#                     AND the retired Warp install (managed Tab Configs,
+#                     winget uninstall); cheap no-op once clean.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -92,13 +95,14 @@
 #   -SkipKeyGen         skip the SSH-key generation prompt
 #   -SkipToolInstall    skip the chezmoi/GitHub CLI/Starship/Helix/Nushell/jq/
 #                       OpenCode/omp/DevToys CLI/dnGrep/LogExpert
-#                       auto-installs, the Warp seed, AND the Claude Code step
+#                       auto-installs, the Windows Terminal seed, AND the Claude Code step
 #   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
 #   -ForceInstaller     re-run installer-layout tool installs (e.g. Obsidian) even
-#                       if already present. Portable tools ($PortableTools) are
-#                       unaffected — they reinstall on a version-pin bump.
+#                       if already present, AND force a re-seed of the Windows
+#                       Terminal winget install. Portable tools ($PortableTools)
+#                       are unaffected — they reinstall on a version-pin bump.
 #   -SkipElevated       skip the best-effort ELEVATED installs ($ElevatedTools:
 #                       SSHFS-Win + WinFsp). Everything else stays admin-free;
 #                       this is the only step that can pop a UAC prompt.
@@ -110,7 +114,7 @@
 #   -Doctor             read-only health report, then exit (installs nothing):
 #                       prereqs, repo git state (branch, ahead/behind, dirty),
 #                       chezmoi init + drift, portable/installer tools, fonts,
-#                       BurntToast, Start-menu shortcuts, Warp Tab Configs,
+#                       BurntToast, Start-menu shortcuts, Windows Terminal fragments,
 #                       profile shim, SSH key.
 #   -CheckForUpdates    read-only update scan, then exit: the workstation repo
 #                       first (fetch + commits-behind), then every pinned tool
@@ -469,15 +473,6 @@ $InstallerTools = @(
     }
 )
 
-# Warp's official Windows distribution is a WinGet package rather than a
-# GitHub release asset. WinGet's manifest enforces the installer hash; Warp
-# self-updates after this best-effort per-user seed.
-$WarpTool = @{
-    Name       = "Warp"
-    WingetId   = "Warp.Warp"
-    DetectName = "Warp"
-}
-
 # Elevated tools — the ONE sanctioned exception to the no-admin rule. SSHFS-Win
 # mounts remote Unix filesystems over SSH (\\sshfs\user@host UNC paths / net use
 # drive letters); it depends on WinFsp, a kernel-mode filesystem driver, so both
@@ -692,6 +687,22 @@ function Remove-FromUserPath {
     $sessionKept = @(($env:PATH).Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
         Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
     $env:PATH = $sessionKept -join ';'
+}
+
+function New-Uuid5 {
+    # RFC 4122 v5 GUID. Windows Terminal's fragment convention: name bytes are UTF-16LE
+    # (namespace {f65ddb7e-706b-4499-8a50-40313caf510a} -> app -> profile name).
+    param([Parameter(Mandatory)][Guid]$Namespace, [Parameter(Mandatory)][string]$Name)
+    $ns = $Namespace.ToByteArray()
+    [Array]::Reverse($ns, 0, 4); [Array]::Reverse($ns, 4, 2); [Array]::Reverse($ns, 6, 2)  # to big-endian
+    $nameBytes = [System.Text.Encoding]::Unicode.GetBytes($Name)
+    $sha1 = [System.Security.Cryptography.SHA1]::Create()
+    try { $hash = $sha1.ComputeHash($ns + $nameBytes) } finally { $sha1.Dispose() }
+    $b = $hash[0..15]
+    $b[6] = [byte](($b[6] -band 0x0F) -bor 0x50)   # version 5
+    $b[8] = [byte](($b[8] -band 0x3F) -bor 0x80)   # RFC 4122 variant
+    [Array]::Reverse($b, 0, 4); [Array]::Reverse($b, 4, 2); [Array]::Reverse($b, 6, 2)     # back to GUID layout
+    return [Guid]::new([byte[]]$b)
 }
 
 function Install-Chezmoi {
@@ -1184,39 +1195,35 @@ function Install-ElevatedTool {
     Write-Ok "$($Tool.Name) installed (MSI fallback)"
 }
 
-# Best-effort, per-user Warp seed. A missing WinGet or failed install must not
-# block the portable toolbelt or chezmoi; Warp's official installer self-updates.
-function Install-Warp {
-    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
-        Write-Ok "Warp already installed (use -ForceInstaller to reinstall)"
+function Install-WindowsTerminal {
+    # Evergreen MSIX seed: per-user by design (no admin), Store-serviced thereafter.
+    # No versions.mk pin — same latest-release model as the installer-class apps.
+    $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
+               (Get-Command wt.exe -ErrorAction SilentlyContinue)
+    if ($present -and -not $ForceInstaller) {
+        Write-Ok "Windows Terminal already installed (self-updates via Microsoft Store)"
         return
     }
-
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Warn "Warp not installed — winget is unavailable; install manually from https://www.warp.dev/download"
+        Write-Warn "winget not available — install Windows Terminal from the Microsoft Store: https://aka.ms/terminal"
         return
     }
-
-    Write-Log "Installing Warp (official WinGet package, per-user)..."
-    $wingetArgs = @(
-        "install", "--id", $WarpTool.WingetId, "--exact", "--scope", "user",
-        "--silent", "--accept-source-agreements", "--accept-package-agreements"
-    )
+    $wingetArgs = @("install", "--id", "Microsoft.WindowsTerminal", "--exact", "--silent",
+                    "--accept-source-agreements", "--accept-package-agreements")
     if ($ForceInstaller) { $wingetArgs += "--force" }
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     & winget @wingetArgs
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $oldEap
-    if ($code -eq 0) {
-        Write-Ok "Warp installed (winget $($WarpTool.WingetId))"
+    $ErrorActionPreference = $prevEap
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "Windows Terminal installed (self-updates via Microsoft Store)"
     } else {
-        Write-Warn "Warp: winget exited with code $code — install manually from https://www.warp.dev/download or re-run later"
+        Write-Warn "winget could not install Windows Terminal (exit $LASTEXITCODE) — install from the Microsoft Store: https://aka.ms/terminal"
     }
 }
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
         return
     }
 
@@ -1226,7 +1233,7 @@ function Invoke-ToolInstall {
 
     Install-Chezmoi
     foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
-    Install-Warp
+    Install-WindowsTerminal
     foreach ($tool in $InstallerTools) { Install-InstallerTool -Tool $tool }
 
     # Elevated class last, so a declined UAC can't interrupt the admin-free
@@ -1437,105 +1444,64 @@ function Invoke-StartMenuShortcuts {
 }
 
 # =============================================================================
-# 5c. WARP TAB CONFIGS — deterministic launch entries for the supported Windows
-#      shells plus one SSH+Zellij entry per hosts.conf row. Files beginning with
-#      workstation- are owned by this function; user-created configs are never
-#      touched. Runs every bootstrap so host removals and edits self-heal.
+# 5c. WINDOWS TERMINAL FRAGMENTS — deterministic SSH launch profiles for
+#      Windows Terminal, generated from hosts.conf via WT's dynamic profile
+#      fragment extension point (Fragments\<app>\*.json under
+#      %LOCALAPPDATA%\Microsoft\Windows Terminal). GUIDs are stable RFC 4122
+#      v5 (New-Uuid5, chained namespace -> "workstation" app -> profile name)
+#      so profile identity survives regeneration. The workstation app dir is
+#      wholly owned by this function: only *.json files inside it are wiped,
+#      never the dir itself or any other app's fragment dir. Runs every
+#      bootstrap so host removals/edits self-heal (the Warp Tab Config
+#      generator this replaced is retired — see Invoke-WarpRetire).
 # =============================================================================
-function Invoke-WarpTabConfigs {
-    if (-not (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
-        Write-Warn "Skipping Warp Tab Config generation — Warp is not installed."
-        return
-    }
-
-    $dir = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
+function Invoke-WindowsTerminalFragments {
     try {
-        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-        Get-ChildItem -Path $dir -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue |
-            Remove-Item -Force
-
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
-        $configs = @{
-            "workstation-wsl-almalinux-9.toml" = @'
-name = "WSL: AlmaLinux-9"
-title = "AlmaLinux-9"
-color = "blue"
-
-[[panes]]
-id = "main"
-type = "terminal"
-shell = "pwsh"
-commands = ['wsl.exe --distribution AlmaLinux-9 --cd ~']
-is_focused = true
-'@
-            "workstation-powershell.toml" = @'
-name = "Windows PowerShell"
-title = "PowerShell"
-color = "blue"
-
-[[panes]]
-id = "main"
-type = "terminal"
-shell = "pwsh"
-commands = []
-is_focused = true
-'@
-            "workstation-nushell-compat.toml" = @'
-name = "Nushell (compatibility)"
-title = "Nushell compatibility"
-color = "magenta"
-
-[[panes]]
-id = "main"
-type = "terminal"
-shell = "pwsh"
-commands = ['& "$env:LOCALAPPDATA\workstation\nu\nu.exe" --login']
-is_focused = true
-'@
+        $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
+                   (Get-Command wt.exe -ErrorAction SilentlyContinue)
+        if (-not $present) {
+            Write-Warn "Windows Terminal not detected — skipping SSH profile fragment generation."
+            return
         }
-        foreach ($entry in $configs.GetEnumerator()) {
-            [System.IO.File]::WriteAllText((Join-Path $dir $entry.Key), $entry.Value.Trim() + "`n", $utf8)
-        }
+        $fragDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation"
+        if (-not (Test-Path $fragDir)) { New-Item -ItemType Directory -Path $fragDir -Force | Out-Null }
+        # The 'workstation' app dir IS the managed namespace: wipe only *.json inside it.
+        Get-ChildItem -Path $fragDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
         $hostsFile = Join-Path $RepoPath "hosts.conf"
-        if (Test-Path $hostsFile) {
-            foreach ($line in Get-Content $hostsFile) {
-                $trimmed = $line.Trim()
-                if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
-                $parts = $trimmed -split '\s+'
-                if ($parts.Count -lt 4) {
-                    Write-Warn "Skipping malformed hosts.conf row: $line"
-                    continue
-                }
-                $name  = $parts[0]
-                $ip    = $parts[1]
-                $user  = $parts[2]
-                $group = $parts[3]
-                $slug  = ($name.ToLower() -replace '[^a-z0-9-]', '-')
-                $color = if ($group -eq 'dev_machine') { 'green' } else { 'cyan' }
-                $body = @"
-name = "SSH: $name"
-title = "$name"
-color = "$color"
-
-[[panes]]
-id = "main"
-type = "terminal"
-shell = "pwsh"
-commands = ['ssh -t $user@$ip zellij attach --create main']
-is_focused = true
-"@
-                [System.IO.File]::WriteAllText(
-                    (Join-Path $dir "workstation-ssh-$slug.toml"),
-                    $body.Trim() + "`n",
-                    $utf8)
-            }
-        } else {
-            Write-Warn "hosts.conf not found at $hostsFile — generated only local Warp Tab Configs."
+        if (-not (Test-Path $hostsFile)) {
+            Write-Warn "hosts.conf not found at $hostsFile — no Windows Terminal SSH profiles generated."
+            return
         }
-        Write-Ok "Warp Tab Configs regenerated from hosts.conf ($dir)"
+        $appNs = New-Uuid5 -Namespace ([Guid]"f65ddb7e-706b-4499-8a50-40313caf510a") -Name "workstation"
+        $sshIcon = [string][char]0xE839
+        $profiles = @()
+        foreach ($line in Get-Content $hostsFile) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
+            $parts = $trimmed -split '\s+'
+            if ($parts.Count -lt 4) { Write-Warn "Skipping malformed hosts.conf row: $line"; continue }
+            $hostName = $parts[0]; $ip = $parts[1]; $sshUser = $parts[2]; $group = $parts[3]
+            $tabColor = if ($group -eq "dev_machine") { "#a6e3a1" } else { "#94e2d5" }  # Mocha green / teal
+            $profileName = "SSH: $hostName"
+            $profiles += [ordered]@{
+                guid        = (New-Uuid5 -Namespace $appNs -Name $profileName).ToString("B")
+                name        = $profileName
+                commandline = "ssh -t $sshUser@$ip zellij attach --create main"
+                tabTitle    = $hostName
+                tabColor    = $tabColor
+                icon        = $sshIcon
+            }
+        }
+        $json = ConvertTo-Json -InputObject ([ordered]@{ profiles = $profiles }) -Depth 5
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        # PS 5.1's ConvertTo-Json joins lines with CRLF; normalize to pure LF
+        # (with one trailing newline) so the fragment matches the repo's
+        # LF-terminated convention for generated JSON.
+        [System.IO.File]::WriteAllText((Join-Path $fragDir "hosts.json"), (($json -replace "`r`n", "`n") + "`n"), $utf8)
+        Write-Ok "Windows Terminal SSH profiles regenerated from hosts.conf ($($profiles.Count) host(s), $fragDir) — restart Windows Terminal to pick them up"
     } catch {
-        Write-Warn "Could not generate Warp Tab Configs: $($_.Exception.Message)"
+        Write-Warn "Could not generate Windows Terminal SSH profile fragment: $($_.Exception.Message)"
     }
 }
 
@@ -1646,7 +1612,7 @@ function Invoke-DnGrepConfig {
 
 # =============================================================================
 # 5f. WEZTERM RETIRE — migration cleanup for the retired WezTerm install
-#    (the fleet's terminal is Warp as of 2026-07). Earlier bootstraps set a
+#    (Warp was the terminal then; Windows Terminal since 2026-07). Earlier bootstraps set a
 #    User-scope WEZTERM_CONFIG_FILE env var, registered the
 #    org.wezfurlong.wezterm toast AppUserModelId (HKCU), created a Start Menu
 #    shortcut, and installed the portable tree at workstation\wezterm on the
@@ -1697,6 +1663,41 @@ function Invoke-WeztermRetire {
         Write-Warn "Could not remove the WezTerm portable tree (still running?): $($_.Exception.Message)"
         Write-Warn "  Close WezTerm and re-run .\bootstrap.ps1 — this step self-heals."
     }
+}
+
+# 5f (cont'd). WARP RETIRE — migration cleanup for the retired Warp install
+#    (Windows Terminal is the terminal now). Earlier bootstraps seeded Warp
+#    per-user via winget and generated managed workstation-*.toml Tab Configs;
+#    this step mirrors Invoke-WeztermRetire's shape — independent,
+#    existence-guarded, best-effort blocks — to remove both. User-created Tab
+#    Configs and %APPDATA%\warp user data are never touched. Wired immediately
+#    after Invoke-WeztermRetire in MAIN; a cheap no-op once a machine is clean.
+function Invoke-WarpRetire {
+    # Managed Tab Configs (prefix-scoped: user-created Tab Configs are never touched)
+    try {
+        $warpTabs = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
+        if (Test-Path $warpTabs) {
+            $managed = @(Get-ChildItem -Path $warpTabs -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue)
+            if ($managed.Count -gt 0) {
+                $managed | Remove-Item -Force
+                Write-Ok "Warp retired: removed $($managed.Count) managed Tab Config(s)"
+            }
+        }
+    } catch { Write-Warn "Could not remove managed Warp Tab Configs: $($_.Exception.Message)" }
+    # App uninstall — best-effort, never Write-Fail; deliberately leaves %APPDATA%\warp user data alone
+    try {
+        if (Test-InstallerPresent -DisplayName "Warp") {
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+                & winget uninstall --id Warp.Warp --silent --accept-source-agreements
+                $ErrorActionPreference = $prevEap
+                if ($LASTEXITCODE -eq 0) { Write-Ok "Warp retired: uninstalled via winget" }
+                else { Write-Warn "winget could not uninstall Warp (exit $LASTEXITCODE) — remove via Settings > Apps if desired" }
+            } else {
+                Write-Warn "Warp still installed and winget unavailable — remove via Settings > Apps if desired"
+            }
+        }
+    } catch { Write-Warn "Could not uninstall Warp: $($_.Exception.Message)" }
 }
 
 # =============================================================================
@@ -2069,13 +2070,10 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Installer apps + extras"
-    if (Test-InstallerPresent -DisplayName $WarpTool.DetectName) {
-        $warpVer = Get-InstalledAppVersion -DisplayName $WarpTool.DetectName
-        $warpText = if ($warpVer) { " $warpVer" } else { "" }
-        Write-Ok "Warp$warpText installed (self-updates; official WinGet package)"
-    } else {
-        Write-Bad "Warp not installed — re-run .\bootstrap.ps1 or: winget install Warp.Warp"
-    }
+    $wtPkg = Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue
+    if ($wtPkg) { Write-Ok "Windows Terminal $($wtPkg.Version) installed (self-updates via Microsoft Store)" }
+    elseif (Get-Command wt.exe -ErrorAction SilentlyContinue) { Write-Ok "Windows Terminal installed (wt.exe on PATH)" }
+    else { Write-Bad "Windows Terminal not installed — re-run .\bootstrap.ps1 or: winget install Microsoft.WindowsTerminal" }
     foreach ($tool in $InstallerTools) {
         if (Test-InstallerPresent -DisplayName $tool.DetectName) {
             $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
@@ -2133,7 +2131,7 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Environment"
-    # WezTerm was retired 2026-07 (Warp is the terminal) — flag any leftovers
+    # WezTerm was retired 2026-07 (Warp was the terminal then, itself since retired) — flag any leftovers
     # the retire step hasn't cleaned up yet.
     $wezLeftovers = @()
     if ([Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')) { $wezLeftovers += 'WEZTERM_CONFIG_FILE' }
@@ -2144,6 +2142,18 @@ function Invoke-Doctor {
     } else {
         Write-Ok "no retired-WezTerm leftovers"
     }
+    # Warp was retired 2026-07 (Windows Terminal is the terminal) — flag any
+    # leftovers the retire step hasn't cleaned up yet.
+    $warpLeftovers = @()
+    if (Test-InstallerPresent -DisplayName "Warp") { $warpLeftovers += "app installed" }
+    $warpManagedTabs = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
+    if ((Test-Path $warpManagedTabs) -and
+        @(Get-ChildItem -Path $warpManagedTabs -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue).Count -gt 0) {
+        $warpLeftovers += "managed Tab Configs"
+    }
+    if ($warpLeftovers.Count -gt 0) {
+        Write-Warn ("retired-Warp leftovers present (" + ($warpLeftovers -join ", ") + ") — re-run .\bootstrap.ps1 (the retire step removes them)")
+    } else { Write-Ok "no retired-Warp leftovers" }
     foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
         $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
         if (Test-Path $lnk) { Write-Ok "$($tool.Name) Start Menu shortcut present" }
@@ -2158,10 +2168,13 @@ function Invoke-Doctor {
     if (Test-Path $dnGrepCfg) { Write-Ok "dnGrep config seeded ($dnGrepCfg)" }
     else { Write-Warn "dnGrep config not seeded — settings would die with a pin bump; re-run .\bootstrap.ps1 (re-seeds it)" }
 
-    $warpTabs = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
-    $managedWarpTabs = @(Get-ChildItem -Path $warpTabs -Filter "workstation-*.toml" -ErrorAction SilentlyContinue)
-    if ($managedWarpTabs.Count -gt 0) { Write-Ok "$($managedWarpTabs.Count) managed Warp Tab Config(s) present" }
-    else { Write-Warn "managed Warp Tab Configs missing — re-run .\bootstrap.ps1 (regenerates them)" }
+    $fragFile = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation\hosts.json"
+    if (Test-Path $fragFile) {
+        try {
+            $fragCount = ((Get-Content $fragFile -Raw | ConvertFrom-Json).profiles | Measure-Object).Count
+            Write-Ok "$fragCount Windows Terminal SSH profile(s) in the workstation fragment"
+        } catch { Write-Warn "Windows Terminal fragment unreadable — re-run .\bootstrap.ps1" }
+    } else { Write-Warn "Windows Terminal SSH fragment missing — re-run .\bootstrap.ps1" }
 
     $realDocs    = [Environment]::GetFolderPath("MyDocuments")
     $literalDocs = Join-Path $env:USERPROFILE "Documents"
@@ -2223,12 +2236,13 @@ function Invoke-CheckForUpdates {
     Write-Host ""
 
     Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
-    if (Test-InstallerPresent -DisplayName $WarpTool.DetectName) {
-        $warpVer = Get-InstalledAppVersion -DisplayName $WarpTool.DetectName
-        $warpText = if ($warpVer) { " $warpVer" } else { "" }
-        Write-Ok "Warp$warpText installed (self-updates; check with: winget upgrade Warp.Warp)"
+    $wtPkg = Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue
+    if ($wtPkg) {
+        Write-Ok "Windows Terminal $($wtPkg.Version) installed (self-updates via Store; check with: winget upgrade Microsoft.WindowsTerminal)"
+    } elseif (Get-Command wt.exe -ErrorAction SilentlyContinue) {
+        Write-Ok "Windows Terminal installed (self-updates via Store; check with: winget upgrade Microsoft.WindowsTerminal)"
     } else {
-        Write-Warn "Warp not installed — re-run .\bootstrap.ps1 or: winget install Warp.Warp"
+        Write-Warn "Windows Terminal not installed — re-run .\bootstrap.ps1 or: winget install Microsoft.WindowsTerminal"
     }
     foreach ($tool in $InstallerTools) {
         $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
@@ -2325,10 +2339,11 @@ Invoke-CloneRepo
 Invoke-Chezmoi
 Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
-Invoke-WarpTabConfigs     # regenerate WSL/Nushell/PowerShell + hosts.conf SSH/Zellij launch entries
+Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
 Invoke-WeztermRetire      # remove retired-WezTerm leftovers (env var, AppId, shortcut, portable tree)
+Invoke-WarpRetire         # remove retired-Warp leftovers (managed Tab Configs, winget uninstall)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
@@ -2340,10 +2355,9 @@ Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
 Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset},"
 Write-Host "${Bold}$WsNu${Reset}) and the chezmoi-applied configs pick up — starship prompt,"
-Write-Host "chezmoi/git aliases, etc. Warp is the terminal and AlmaLinux-9 is its"
-Write-Host "recommended default; Nushell remains available through the compatibility"
-Write-Host "Tab Config. Restart Warp if it was running — it reloads the tracked"
-Write-Host "settings on restart."
+Write-Host "chezmoi/git aliases, etc. Windows Terminal is the terminal — pick a host from"
+Write-Host "the SSH hosts folder in the new-tab dropdown; Nushell is the default profile."
+Write-Host "Restart Windows Terminal if it was running (fragments are read at launch)."
 Write-Host ""
 Write-Host "Not installed by this script (install yourself if you want it):"
 Write-Host "  VSCode  — its chezmoi config is already deployed."
@@ -2366,7 +2380,7 @@ Write-Host "       .\scripts\manage-hosts.ps1     # interactive menu"
 Write-Host "  2. Copy your SSH key to a registered host:"
 Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -Name <host-name>"
 Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -All     # or, bulk to every host"
-Write-Host "  3. Launch Warp — choose a generated SSH host or WSL Tab Config from the + menu."
+Write-Host "  3. Launch Windows Terminal — pick a generated SSH host from the + menu dropdown."
 Write-Host ""
 Write-Host "Editing dotfiles:"
 Write-Host "  cze   # chezmoi edit (opens the file in chezmoi's source)"

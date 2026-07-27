@@ -6,8 +6,13 @@
 #
 # WezTerm retirement (2026-07): the vendored terminfo source this repo
 # deployed to ~/.local/share/wezterm, plus the ~/.terminfo entry + stamp that
-# run_install-wezterm-terminfo.sh tic-compiled from it. Warp runs
+# run_install-wezterm-terminfo.sh tic-compiled from it. The Windows terminal runs
 # TERM=xterm-256color, so no host needs the wezterm terminfo entry anymore.
 .local/share/wezterm
 .terminfo/w/wezterm
 .terminfo/.wezterm.srchash
+
+# Warp retirement (2026-07): chezmoi-deployed Warp configs; user-created Warp data is not touched.
+AppData/Local/warp/Warp/config/settings.toml
+AppData/Local/warp/Warp/config/keybindings.yaml
+AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml

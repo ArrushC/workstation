@@ -20,7 +20,7 @@
 
 # --- Terminal capability gate ------------------------------------------------
 # dircolors only emits LS_COLORS when a TERM directive matches $TERM. The
-# fleet runs TERM=xterm-256color (Warp) or a screen/tmux TERM inside
+# fleet runs TERM=xterm-256color (Windows Terminal) or a screen/tmux TERM inside
 # multiplexers — all matched by the GNU default globs below. (Verified on
 # coreutils 8.32: `COLORTERM ?*` does NOT rescue an unmatched TERM; it's kept
 # only as a harmless secondary catch-all for newer coreutils, not relied upon.)

@@ -18,7 +18,7 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 
 ## Auto-installed by bootstrap.ps1
 
-- Warp (the terminal; official per-user WinGet seed)
+- Windows Terminal (the terminal; evergreen per-user WinGet/Store seed)
 - Starship
 - Nushell (default local Windows shell)
 - Obsidian
