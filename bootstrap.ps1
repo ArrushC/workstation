@@ -53,10 +53,8 @@
 #                     vendor/autoload dir (self-heals every run).
 #   5e. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
 #                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
-#   5f. terminal retire — remove leftovers of the retired WezTerm install (env
-#                     var, toast AppId, shortcut, portable tree + PATH entry)
-#                     AND the retired Warp install (managed Tab Configs,
-#                     winget uninstall); cheap no-op once clean.
+#   5f. warp retire — remove leftovers of the retired Warp install (managed
+#                     Tab Configs, winget uninstall); cheap no-op once clean.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -666,27 +664,6 @@ function Add-ToUserPath {
     if (-not $inSession) {
         $env:PATH = "$(($env:PATH).TrimEnd(';'));$Dir"
     }
-}
-
-function Remove-FromUserPath {
-    # Inverse of Add-ToUserPath (same case/trailing-slash-insensitive match) —
-    # used by the WezTerm retire step. Idempotent: absent entries are a no-op.
-    param([string]$Dir)
-
-    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    if ($userPath) {
-        $entries = $userPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries)
-        $kept    = @($entries | Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
-        if ($kept.Count -ne $entries.Count) {
-            [Environment]::SetEnvironmentVariable("PATH", ($kept -join ';'), "User")
-            Write-Ok "Removed $Dir from User PATH"
-        }
-    }
-
-    # Drop it from the in-session PATH too so later steps don't resolve it.
-    $sessionKept = @(($env:PATH).Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
-        Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
-    $env:PATH = $sessionKept -join ';'
 }
 
 function New-Uuid5 {
@@ -1611,67 +1588,14 @@ function Invoke-DnGrepConfig {
 }
 
 # =============================================================================
-# 5f. WEZTERM RETIRE — migration cleanup for the retired WezTerm install
-#    (Warp was the terminal then; Windows Terminal since 2026-07). Earlier bootstraps set a
-#    User-scope WEZTERM_CONFIG_FILE env var, registered the
-#    org.wezfurlong.wezterm toast AppUserModelId (HKCU), created a Start Menu
-#    shortcut, and installed the portable tree at workstation\wezterm on the
-#    User PATH. None of that is provisioned anymore, so this step removes
-#    whatever is still present. Every action is independent and best-effort
-#    (warn-and-continue — e.g. the tree wipe throws if wezterm-gui.exe is
-#    still running); once a machine is clean the whole step is a cheap no-op.
-# =============================================================================
-function Invoke-WeztermRetire {
-    # User-scope env var (pointed at the now-deleted repo config).
-    try {
-        if ([Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')) {
-            [Environment]::SetEnvironmentVariable('WEZTERM_CONFIG_FILE', $null, 'User')
-            Remove-Item Env:WEZTERM_CONFIG_FILE -ErrorAction SilentlyContinue
-            Write-Ok "WezTerm retired: WEZTERM_CONFIG_FILE (User) removed"
-        }
-    } catch { Write-Warn "Could not remove WEZTERM_CONFIG_FILE: $($_.Exception.Message)" }
-
-    # Toast AppUserModelId registration (HKCU).
-    try {
-        $key = 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm'
-        if (Test-Path $key) {
-            Remove-Item -Path $key -Recurse -Force
-            Write-Ok "WezTerm retired: toast AppUserModelId unregistered"
-        }
-    } catch { Write-Warn "Could not remove the WezTerm AppUserModelId key: $($_.Exception.Message)" }
-
-    # Start Menu shortcut.
-    try {
-        $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "WezTerm.lnk"
-        if (Test-Path $lnk) {
-            Remove-Item $lnk -Force
-            Write-Ok "WezTerm retired: Start Menu shortcut removed"
-        }
-    } catch { Write-Warn "Could not remove the WezTerm Start Menu shortcut: $($_.Exception.Message)" }
-
-    # Portable tree + its User PATH entry + install stamps.
-    $dir = Join-Path $WsRoot "wezterm"
-    try {
-        Remove-FromUserPath $dir
-        if (Test-Path $dir) {
-            Remove-Item -Recurse -Force $dir
-            Write-Ok "WezTerm retired: portable tree removed ($dir)"
-        }
-        Get-ChildItem -Path $WsStamps -Filter "wezterm.*.stamp" -ErrorAction SilentlyContinue |
-            Remove-Item -Force
-    } catch {
-        Write-Warn "Could not remove the WezTerm portable tree (still running?): $($_.Exception.Message)"
-        Write-Warn "  Close WezTerm and re-run .\bootstrap.ps1 — this step self-heals."
-    }
-}
-
-# 5f (cont'd). WARP RETIRE — migration cleanup for the retired Warp install
+# 5f. WARP RETIRE — migration cleanup for the retired Warp install
 #    (Windows Terminal is the terminal now). Earlier bootstraps seeded Warp
 #    per-user via winget and generated managed workstation-*.toml Tab Configs;
-#    this step mirrors Invoke-WeztermRetire's shape — independent,
-#    existence-guarded, best-effort blocks — to remove both. User-created Tab
-#    Configs and %APPDATA%\warp user data are never touched. Wired immediately
-#    after Invoke-WeztermRetire in MAIN; a cheap no-op once a machine is clean.
+#    this step removes both via independent, existence-guarded, best-effort
+#    blocks (warn-and-continue). User-created Tab Configs and %APPDATA%\warp
+#    user data are never touched; once a machine is clean the whole step is a
+#    cheap no-op.
+# =============================================================================
 function Invoke-WarpRetire {
     # Managed Tab Configs (prefix-scoped: user-created Tab Configs are never touched)
     try {
@@ -2131,17 +2055,6 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Environment"
-    # WezTerm was retired 2026-07 (Warp was the terminal then, itself since retired) — flag any leftovers
-    # the retire step hasn't cleaned up yet.
-    $wezLeftovers = @()
-    if ([Environment]::GetEnvironmentVariable('WEZTERM_CONFIG_FILE', 'User')) { $wezLeftovers += 'WEZTERM_CONFIG_FILE' }
-    if (Test-Path 'HKCU:\SOFTWARE\Classes\AppUserModelId\org.wezfurlong.wezterm') { $wezLeftovers += 'toast AppUserModelId' }
-    if (Test-Path (Join-Path $WsRoot "wezterm")) { $wezLeftovers += 'portable tree' }
-    if ($wezLeftovers.Count -gt 0) {
-        Write-Warn "retired-WezTerm leftovers present ($($wezLeftovers -join ', ')) — re-run .\bootstrap.ps1 (the retire step removes them)"
-    } else {
-        Write-Ok "no retired-WezTerm leftovers"
-    }
     # Warp was retired 2026-07 (Windows Terminal is the terminal) — flag any
     # leftovers the retire step hasn't cleaned up yet.
     $warpLeftovers = @()
@@ -2342,7 +2255,6 @@ Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools
 Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
-Invoke-WeztermRetire      # remove retired-WezTerm leftovers (env var, AppId, shortcut, portable tree)
 Invoke-WarpRetire         # remove retired-Warp leftovers (managed Tab Configs, winget uninstall)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
