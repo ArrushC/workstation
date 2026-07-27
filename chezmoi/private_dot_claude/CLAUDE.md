@@ -53,7 +53,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `eget` 1.3.4
 
 ### Tier-0: original toolbelt
-- `fzf` 0.74.0
+- `fzf` 0.74.1
 - `zoxide` 0.10.0
 - `starship` 1.26.0
 - `zellij` 0.44.3
@@ -84,14 +84,14 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Second-wave expansion (2026-05)
 - `gitui` 0.28.1
-- `lazygit` 0.63.0
+- `lazygit` 0.63.1
 - `jj` 0.43.0
 - `yazi` 26.5.6
-- `ast-grep` 0.44.1
+- `ast-grep` 0.45.0
 - `television` 0.15.9
-- `xh` 0.26.1
+- `xh` 0.26.2
 - `gping` 1.20.4
-- `atuin` 18.17.0
+- `atuin` 18.17.1
 - `delta` 0.19.2
 - `micro` 2.0.15
 - `eza` 0.23.5
@@ -99,22 +99,22 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.74.4
-- `croc` 10.4.13
+- `croc` 10.6.0
 - `hyperfine` 1.20.0
-- `mise` 2026.7.5
-- `uv` 0.11.28
+- `mise` 2026.7.14
+- `uv` 0.11.32
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
 - `gh` 2.96.0
-- `sops` 3.13.2
+- `sops` 3.13.3
 - `htmlq` 0.4.0
 - `ouch` 0.8.1
 - `watchexec` 2.5.1
 
 ### Service / journal / cgroup observability
-- `bottom` 0.14.4
-- `systemctl-tui` 0.6.0
+- `bottom` 0.14.6
+- `systemctl-tui` 0.7.0
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
 
@@ -132,7 +132,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `node` 26.5.0
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.6.9
+- `dozzle` 10.6.12
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.4.0
@@ -144,8 +144,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### (2026-06) interactive explorers + git replay
 - `nnn` 5.2
 - `fx` 39.2.0
-- `gitlogue` 0.9.0
-- `rg` 15.1.0
+- `gitlogue` 0.10.0
+- `rg` 15.2.0
 - `mlr` 6.20.2
 - `csvlens` 0.15.1
 - `difft` 0.69.0
