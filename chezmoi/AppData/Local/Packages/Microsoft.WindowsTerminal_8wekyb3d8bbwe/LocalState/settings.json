@@ -12,8 +12,20 @@
             "id": "User.copy.644BA8F2"
         },
         {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "right"
+            },
+            "id": "User.moveFocus.right"
+        },
+        {
             "command": "paste",
             "id": "User.paste"
+        },
+        {
+            "command": "find",
+            "id": "User.find"
         },
         {
             "command": 
@@ -25,30 +37,89 @@
             "id": "User.splitPane.A6751878"
         },
         {
-            "command": "find",
-            "id": "User.find"
+            "command": 
+            {
+                "action": "splitPane",
+                "split": "right",
+                "splitMode": "duplicate"
+            },
+            "id": "User.splitPane.right"
         },
-        { "command": { "action": "splitPane", "split": "right", "splitMode": "duplicate" }, "id": "User.splitPane.right" },
-        { "command": { "action": "moveFocus", "direction": "left" }, "id": "User.moveFocus.left" },
-        { "command": { "action": "moveFocus", "direction": "right" }, "id": "User.moveFocus.right" },
-        { "command": { "action": "moveFocus", "direction": "up" }, "id": "User.moveFocus.up" },
-        { "command": { "action": "moveFocus", "direction": "down" }, "id": "User.moveFocus.down" },
-        { "command": "togglePaneZoom", "id": "User.togglePaneZoom" },
-        { "command": { "action": "adjustFontSize", "delta": 1 }, "id": "User.adjustFontSize.inc" },
-        { "command": { "action": "adjustFontSize", "delta": -1 }, "id": "User.adjustFontSize.dec" },
-        { "command": "resetFontSize", "id": "User.resetFontSize" }
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "up"
+            },
+            "id": "User.moveFocus.up"
+        },
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "left"
+            },
+            "id": "User.moveFocus.left"
+        },
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "down"
+            },
+            "id": "User.moveFocus.down"
+        },
+        {
+            "command": "togglePaneZoom",
+            "id": "User.togglePaneZoom"
+        },
+        {
+            "command": 
+            {
+                "action": "adjustFontSize",
+                "delta": 1
+            },
+            "id": "User.adjustFontSize.inc"
+        },
+        {
+            "command": 
+            {
+                "action": "adjustFontSize",
+                "delta": -1
+            },
+            "id": "User.adjustFontSize.dec"
+        },
+        {
+            "command": "resetFontSize",
+            "id": "User.resetFontSize"
+        }
     ],
     "alwaysOnTop": false,
     "copyFormatting": "none",
     "copyOnSelect": true,
     "defaultProfile": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
-    "disabledProfileSources": ["Windows.Terminal.SSH"],
+    "disabledProfileSources": 
+    [
+        "Windows.Terminal.SSH"
+    ],
     "firstWindowPreference": "persistedWindowLayout",
     "keybindings": 
     [
         {
             "id": "User.copy.644BA8F2",
             "keys": "ctrl+c"
+        },
+        {
+            "id": "User.moveFocus.up",
+            "keys": "alt+shift+up"
+        },
+        {
+            "id": "User.splitPane.right",
+            "keys": "alt+shift+r"
+        },
+        {
+            "id": "User.togglePaneZoom",
+            "keys": "ctrl+shift+z"
         },
         {
             "id": "User.paste",
@@ -59,39 +130,73 @@
             "keys": "ctrl+shift+f"
         },
         {
+            "id": "User.adjustFontSize.dec",
+            "keys": "ctrl+minus"
+        },
+        {
+            "id": "User.adjustFontSize.inc",
+            "keys": "ctrl+plus"
+        },
+        {
             "id": "User.splitPane.A6751878",
             "keys": "alt+shift+d"
         },
-        { "id": "User.splitPane.right", "keys": "alt+shift+r" },
-        { "id": "User.moveFocus.left", "keys": "alt+shift+left" },
-        { "id": "User.moveFocus.right", "keys": "alt+shift+right" },
-        { "id": "User.moveFocus.up", "keys": "alt+shift+up" },
-        { "id": "User.moveFocus.down", "keys": "alt+shift+down" },
-        { "id": "User.togglePaneZoom", "keys": "ctrl+shift+z" },
-        { "id": "User.adjustFontSize.inc", "keys": "ctrl+=" },
-        { "id": "User.adjustFontSize.dec", "keys": "ctrl+-" },
-        { "id": "User.resetFontSize", "keys": "ctrl+0" }
+        {
+            "id": "User.moveFocus.left",
+            "keys": "alt+shift+left"
+        },
+        {
+            "id": "User.moveFocus.right",
+            "keys": "alt+shift+right"
+        },
+        {
+            "id": "User.moveFocus.down",
+            "keys": "alt+shift+down"
+        },
+        {
+            "id": "User.resetFontSize",
+            "keys": "ctrl+0"
+        }
     ],
     "newTabMenu": 
     [
         {
-            "type": "folder",
-            "name": "SSH hosts",
-            "icon": "",
             "allowEmpty": false,
-            "entries": [ { "type": "matchProfiles", "name": "SSH: .*" } ]
+            "entries": 
+            [
+                {
+                    "commandline": null,
+                    "name": "SSH: .*",
+                    "source": null,
+                    "type": "matchProfiles"
+                }
+            ],
+            "icon": null,
+            "inline": "never",
+            "name": "SSH hosts",
+            "type": "folder"
         },
-        { "type": "remainingProfiles" }
+        {
+            "type": "remainingProfiles"
+        }
     ],
     "profiles": 
     {
         "defaults": 
         {
             "antialiasingMode": "grayscale",
-            "bellStyle": ["audible", "taskbar"],
+            "bellStyle": 
+            [
+                "audible",
+                "taskbar"
+            ],
             "colorScheme": "Catppuccin Mocha",
             "cursorShape": "bar",
-            "font": { "face": "JetBrainsMono NFM", "size": 10.5 },
+            "font": 
+            {
+                "face": "JetBrainsMono NFM",
+                "size": 10.5
+            },
             "historySize": 100000,
             "padding": "8, 8, 8, 8",
             "useAcrylic": false
@@ -165,6 +270,60 @@
                 "hidden": false,
                 "name": "PowerShell",
                 "source": "Windows.Terminal.PowershellCore"
+            },
+            {
+                "guid": "{74a12389-00d3-5ded-aed2-e4548631211d}",
+                "hidden": false,
+                "name": "SSH: atc-cache-dev09",
+                "source": "workstation"
+            },
+            {
+                "guid": "{e85621f7-87ca-5095-ad8d-f5663b1b3165}",
+                "hidden": false,
+                "name": "SSH: atc-cache-dev10",
+                "source": "workstation"
+            },
+            {
+                "guid": "{2ba247de-501d-5257-8aa3-df2609b732a0}",
+                "hidden": false,
+                "name": "SSH: SLO-LT-4CWHKL3",
+                "source": "workstation"
+            },
+            {
+                "guid": "{d1e7937d-df8c-54bf-8510-6e6d350cd7de}",
+                "hidden": false,
+                "name": "SSH: cache-apl",
+                "source": "workstation"
+            },
+            {
+                "guid": "{05fb2ab1-232a-5f7a-b419-abd95b6bc86f}",
+                "hidden": false,
+                "name": "SSH: cache-bur1",
+                "source": "workstation"
+            },
+            {
+                "guid": "{97ed416c-3f69-5d3a-9a91-430fc009e789}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa1",
+                "source": "workstation"
+            },
+            {
+                "guid": "{d28f93f5-de53-582e-8ee6-2caedcaef74c}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa2",
+                "source": "workstation"
+            },
+            {
+                "guid": "{6587cffa-3a15-50fe-93e6-3d984660d531}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa3",
+                "source": "workstation"
+            },
+            {
+                "guid": "{5d227924-471f-5978-92ea-ef6f6ac9b2c8}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa4",
+                "source": "workstation"
             }
         ]
     },
