@@ -94,7 +94,7 @@ CHEZIT_VERSION := 0.3.0
 
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
-CCSTATUSLINE_VERSION := 2.2.22
+CCSTATUSLINE_VERSION := 2.2.27
 NODE_VERSION := 26.5.0
 
 # --- Service / web admin (dev_machine only) ---------------------------------

@@ -16,7 +16,7 @@
 {{- $enforced := `{
   "statusLine": {
     "type": "command",
-    "command": "npx -y ccstatusline@2.2.22",
+    "command": "npx -y ccstatusline@2.2.27",
     "refreshInterval": 10
   },
   "skipAutoPermissionPrompt": true,

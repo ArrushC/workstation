@@ -128,7 +128,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Claude Code CLI
 - `claude` latest
-- `ccstatusline` 2.2.22
+- `ccstatusline` 2.2.27
 - `node` 26.5.0
 
 ### Service / web admin (dev_machine only)
