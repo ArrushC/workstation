@@ -4,7 +4,4 @@
 # that doesn't exist is a no-op, so entries here are safe fleet-wide and
 # self-heal stale hosts without a bespoke cleanup script.
 #
-# Warp retirement (2026-07): chezmoi-deployed Warp configs; user-created Warp data is not touched.
-AppData/Local/warp/Warp/config/settings.toml
-AppData/Local/warp/Warp/config/keybindings.yaml
-AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml
+# (No active entries — past migration cleanups completed and were removed.)

@@ -2647,8 +2647,7 @@ make -C makefile check-updates MODE=dev</code></pre>
                             package lists. On Windows it covers the portable
                             and installer-class tools, Windows Terminal, Nerd
                             Fonts, BurntToast, the Start Menu shortcuts, the
-                            workstation SSH-profile fragment,
-                            retired-Warp leftovers, the dnGrep config
+                            workstation SSH-profile fragment, the dnGrep config
                             seed, the profile shim, and the SSH key.
                         </p>
                         <p>
@@ -3200,9 +3199,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         simplified view &mdash; the script also creates the
                         Start Menu shortcuts for the portable GUI tools
                         (dnGrep, LogExpert), generates the Nushell Starship
-                        prompt, seeds dnGrep&rsquo;s config redirect, removes
-                        any leftovers of the retired Warp install,
-                        and runs
+                        prompt, seeds dnGrep&rsquo;s config redirect, and runs
                         BurntToast and the Nerd Font install (its step 7)
                         between the SSH-profile fragment and the SSH-key step.
                         <code>GITHUB_TOKEN</code> persists into
@@ -3411,21 +3408,6 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                             </tr>
                         </tbody>
                     </table>
-                    <p class="note-row">
-                        <strong>Coming from Warp?</strong> The shell-side
-                        wiring described below &mdash; fzf, atuin, starship,
-                        shift-select, fzf-tab &mdash; is <strong>active
-                        again</strong> in WSL and SSH sessions: Warp shipped
-                        its own input editor, so the rc files used to suppress
-                        those under <code>TERM_PROGRAM=WarpTerminal</code>, and
-                        those guards are gone. Going the other way, Warp&rsquo;s
-                        Blocks, block bookmarks, and Workflows have
-                        <strong>no Windows Terminal equivalent</strong> &mdash;
-                        scrollback search (<kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>F</kbd>),
-                        atuin (<kbd>CTRL</kbd>+<kbd>R</kbd>), and zellij are the
-                        replacements.
-                    </p>
-
                     <h3 id="prompt-keys">Shell prompt selection</h3>
                     <p class="lede">
                         At the <code>zsh</code> prompt, <kbd>SHIFT</kbd>+arrow
