@@ -53,8 +53,6 @@
 #                     vendor/autoload dir (self-heals every run).
 #   5e. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
 #                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
-#   5f. warp retire — remove leftovers of the retired Warp install (managed
-#                     Tab Configs, winget uninstall); cheap no-op once clean.
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -1429,8 +1427,7 @@ function Invoke-StartMenuShortcuts {
 #      so profile identity survives regeneration. The workstation app dir is
 #      wholly owned by this function: only *.json files inside it are wiped,
 #      never the dir itself or any other app's fragment dir. Runs every
-#      bootstrap so host removals/edits self-heal (the Warp Tab Config
-#      generator this replaced is retired — see Invoke-WarpRetire).
+#      bootstrap so host removals/edits self-heal.
 # =============================================================================
 function Invoke-WindowsTerminalFragments {
     try {
@@ -1585,43 +1582,6 @@ function Invoke-DnGrepConfig {
     } catch {
         Write-Warn "Could not seed the dnGrep config: $($_.Exception.Message)"
     }
-}
-
-# =============================================================================
-# 5f. WARP RETIRE — migration cleanup for the retired Warp install
-#    (Windows Terminal is the terminal now). Earlier bootstraps seeded Warp
-#    per-user via winget and generated managed workstation-*.toml Tab Configs;
-#    this step removes both via independent, existence-guarded, best-effort
-#    blocks (warn-and-continue). User-created Tab Configs and %APPDATA%\warp
-#    user data are never touched; once a machine is clean the whole step is a
-#    cheap no-op.
-# =============================================================================
-function Invoke-WarpRetire {
-    # Managed Tab Configs (prefix-scoped: user-created Tab Configs are never touched)
-    try {
-        $warpTabs = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
-        if (Test-Path $warpTabs) {
-            $managed = @(Get-ChildItem -Path $warpTabs -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue)
-            if ($managed.Count -gt 0) {
-                $managed | Remove-Item -Force
-                Write-Ok "Warp retired: removed $($managed.Count) managed Tab Config(s)"
-            }
-        }
-    } catch { Write-Warn "Could not remove managed Warp Tab Configs: $($_.Exception.Message)" }
-    # App uninstall — best-effort, never Write-Fail; deliberately leaves %APPDATA%\warp user data alone
-    try {
-        if (Test-InstallerPresent -DisplayName "Warp") {
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-                & winget uninstall --id Warp.Warp --silent --accept-source-agreements
-                $ErrorActionPreference = $prevEap
-                if ($LASTEXITCODE -eq 0) { Write-Ok "Warp retired: uninstalled via winget" }
-                else { Write-Warn "winget could not uninstall Warp (exit $LASTEXITCODE) — remove via Settings > Apps if desired" }
-            } else {
-                Write-Warn "Warp still installed and winget unavailable — remove via Settings > Apps if desired"
-            }
-        }
-    } catch { Write-Warn "Could not uninstall Warp: $($_.Exception.Message)" }
 }
 
 # =============================================================================
@@ -2055,18 +2015,6 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Environment"
-    # Warp was retired 2026-07 (Windows Terminal is the terminal) — flag any
-    # leftovers the retire step hasn't cleaned up yet.
-    $warpLeftovers = @()
-    if (Test-InstallerPresent -DisplayName "Warp") { $warpLeftovers += "app installed" }
-    $warpManagedTabs = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
-    if ((Test-Path $warpManagedTabs) -and
-        @(Get-ChildItem -Path $warpManagedTabs -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue).Count -gt 0) {
-        $warpLeftovers += "managed Tab Configs"
-    }
-    if ($warpLeftovers.Count -gt 0) {
-        Write-Warn ("retired-Warp leftovers present (" + ($warpLeftovers -join ", ") + ") — re-run .\bootstrap.ps1 (the retire step removes them)")
-    } else { Write-Ok "no retired-Warp leftovers" }
     foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
         $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
         if (Test-Path $lnk) { Write-Ok "$($tool.Name) Start Menu shortcut present" }
@@ -2255,7 +2203,6 @@ Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools
 Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
-Invoke-WarpRetire         # remove retired-Warp leftovers (managed Tab Configs, winget uninstall)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)

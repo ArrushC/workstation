@@ -42,8 +42,8 @@ On the Windows host after `bootstrap.ps1` + `chezmoi apply`, restart WT, then:
 - A hand-made profile in settings.json AND a foreign-named fragment file
   (`Fragments\other-app\x.json`) both survive a bootstrap re-run; only
   `Fragments\workstation\*.json` regenerates.
-- Doctor: WT present, fragment count == hosts.conf rows, "no retired-Warp leftovers".
-- In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes (the Warp
-  guards are gone); check a remote zellij pane for exactly one OSC 133 prompt-zone set.
+- Doctor: WT present, fragment count == hosts.conf rows.
+- In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes;
+  check a remote zellij pane for exactly one OSC 133 prompt-zone set.
 - `$env:WT_SESSION` non-empty in a pwsh tab; scroll a long output to confirm the effective
   historySize (record the real ceiling in file-care.md if WT clamps below 100000).
