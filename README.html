@@ -3403,11 +3403,45 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                                 <td>Find in the scrollback (regex)</td>
                             </tr>
                             <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>&uarr;</kbd> / <kbd>&darr;</kbd></td>
+                                <td>Jump to the previous / next prompt mark in the scrollback (shell integration)</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>B</kbd></td>
+                                <td>Broadcast input &mdash; type into every pane in the tab at once</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd></td>
+                                <td>Suggestions palette &mdash; fuzzy-search the tracked snippets + recent commands</td>
+                            </tr>
+                            <tr>
                                 <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>T</kbd> / <kbd>W</kbd></td>
                                 <td>New tab (Nushell, the default profile) / close &mdash; built-in defaults, listed for completeness</td>
                             </tr>
                         </tbody>
                     </table>
+                    <p>
+                        Shell integration lights the rest up: local
+                        <em>Nushell</em> and WSL <em>AlmaLinux-9</em> tabs emit
+                        prompt marks (OSC 133), so the scrollbar shows one
+                        exit-code-colored mark per command and
+                        <kbd>CTRL</kbd>+<kbd>&uarr;</kbd>/<kbd>&darr;</kbd>
+                        jump between them; duplicating a tab or pane reopens
+                        the current directory (OSC 9;9); and long-running
+                        commands (<code>make</code>, <code>cza</code>/<code>czu</code>,
+                        <code>dnf</code>, <code>cargo</code>, <code>npm</code>,
+                        <code>uv</code>, git network verbs) show indeterminate
+                        progress on the taskbar icon (OSC 9;4) until the next
+                        prompt. SSH tabs attach to Zellij, which composites its
+                        own panes, so marks intentionally stop there. The
+                        Suggestions palette
+                        (<kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd>)
+                        fuzzy-searches eight tracked snippets
+                        (<code>cza</code>/<code>czu</code>/<code>czd</code>/<code>czs</code>,
+                        full provision, lint, fleet update,
+                        <code>zellij attach</code>) plus recent commands &mdash;
+                        snippets insert editable text and never auto-execute.
+                    </p>
                     <h3 id="prompt-keys">Shell prompt selection</h3>
                     <p class="lede">
                         At the <code>zsh</code> prompt, <kbd>SHIFT</kbd>+arrow

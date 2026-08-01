@@ -92,6 +92,111 @@
         {
             "command": "resetFontSize",
             "id": "User.resetFontSize"
+        },
+        {
+            "command": 
+            {
+                "action": "scrollToMark",
+                "direction": "previous"
+            },
+            "id": "User.scrollToMark.prev"
+        },
+        {
+            "command": 
+            {
+                "action": "scrollToMark",
+                "direction": "next"
+            },
+            "id": "User.scrollToMark.next"
+        },
+        {
+            "command": "toggleBroadcastInput",
+            "id": "User.toggleBroadcastInput"
+        },
+        {
+            "command": 
+            {
+                "action": "showSuggestions",
+                "source": 
+                [
+                    "tasks",
+                    "recentCommands"
+                ],
+                "useCommandline": true
+            },
+            "id": "User.showSuggestions"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "cza"
+            },
+            "id": "User.snippet.cza",
+            "name": "Snippet: chezmoi apply"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "czu"
+            },
+            "id": "User.snippet.czu",
+            "name": "Snippet: chezmoi update (pull+apply)"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "czd"
+            },
+            "id": "User.snippet.czd",
+            "name": "Snippet: chezmoi diff"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "czs"
+            },
+            "id": "User.snippet.czs",
+            "name": "Snippet: chezmoi status"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "make -C ~/.local/share/chezmoi dev"
+            },
+            "id": "User.snippet.makedev",
+            "name": "Snippet: full dev provision (WSL)"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "make -C ~/.local/share/chezmoi lint MODE=prod"
+            },
+            "id": "User.snippet.lint",
+            "name": "Snippet: lint + invariants (WSL)"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "bash ~/.local/share/chezmoi/scripts/update-hosts.sh"
+            },
+            "id": "User.snippet.updatehosts",
+            "name": "Snippet: fleet update (WSL)"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "zellij attach --create main"
+            },
+            "id": "User.snippet.zellij",
+            "name": "Snippet: zellij attach main"
         }
     ],
     "alwaysOnTop": false,
@@ -156,6 +261,22 @@
         {
             "id": "User.resetFontSize",
             "keys": "ctrl+0"
+        },
+        {
+            "id": "User.scrollToMark.prev",
+            "keys": "ctrl+up"
+        },
+        {
+            "id": "User.scrollToMark.next",
+            "keys": "ctrl+down"
+        },
+        {
+            "id": "User.toggleBroadcastInput",
+            "keys": "alt+shift+b"
+        },
+        {
+            "id": "User.showSuggestions",
+            "keys": "alt+shift+s"
         }
     ],
     "newTabMenu": 
@@ -184,7 +305,9 @@
     {
         "defaults": 
         {
+            "adjustIndistinguishableColors": "indexed",
             "antialiasingMode": "grayscale",
+            "autoMarkPrompts": true,
             "bellStyle": 
             [
                 "audible",
@@ -199,6 +322,7 @@
             },
             "historySize": 100000,
             "padding": "8, 8, 8, 8",
+            "showMarksOnScrollbar": true,
             "useAcrylic": false
         },
         "list": 
@@ -361,7 +485,7 @@
             "tab": 
             {
                 "background": "#1E1E2EFF",
-                "iconStyle": "default",
+                "iconStyle": "monochrome",
                 "showCloseButton": "always",
                 "unfocusedBackground": null
             },

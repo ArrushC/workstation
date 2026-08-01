@@ -5,6 +5,11 @@
 # This file is rendered from chezmoi/Documents/PowerShell/<name>.tmpl on apply.
 # For per-machine overrides that aren't tracked, drop the same logic into
 # Microsoft.PowerShell_profile.local.ps1 next to this file (sourced last).
+#
+# PARITY NOTE (Windows Terminal shell integration): config.nu carries
+# reedline-specific WT hooks (OSC 9;4 taskbar progress + osc9_9 cwd
+# reporting). Those are Nushell-only by design — this profile's parity
+# obligation with config.nu covers the cz*/g* aliases below, not the hooks.
 # =============================================================================
 
 # --- Encoding (UTF-8 in/out so emoji and ANSI render correctly) -------------

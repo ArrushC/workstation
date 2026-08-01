@@ -233,6 +233,33 @@ if command -v starship &>/dev/null; then
   eval "$(starship init bash)"
 fi
 
+# --- Windows Terminal shell integration (WSL tabs) ---------------------------
+# Prompt-side half of the zsh block (see dot_zshrc.tmpl): OSC 133 A/D marks
+# (scrollbar marks + ctrl+up/down jumps, exit-code colored), OSC 9;9 cwd
+# (duplicate-tab reopens here — Windows path via wslpath -w), OSC 9;4;0
+# progress clear. Runs FIRST in PROMPT_COMMAND and returns the original $? so
+# starship's exit-code module still sees the real status.
+# PARITY NOTE (WT preexec): zsh additionally emits OSC 133;C + OSC 9;4;3
+# (output-start mark, in-flight taskbar progress) from a preexec hook. bash has
+# no preexec without bash-preexec, and starship owns bash's DEBUG trap — so
+# this fallback shell deliberately skips the preexec half (same precedent as
+# atuin above). Marks still appear and color by exit code; there is just no
+# in-flight taskbar progress.
+if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
+  _wt_prompt_cmd() {
+    local _wt_status=$?
+    printf '\e]133;D;%s\a' "$_wt_status"
+    if command -v wslpath &>/dev/null; then
+      printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
+    fi
+    printf '\e]133;A\a'
+    printf '\e]9;4;0;0\a'
+    return "$_wt_status"
+  }
+  # Re-source guard: don't register twice (matches starship's own convention).
+  [[ $PROMPT_COMMAND == *_wt_prompt_cmd* ]] || PROMPT_COMMAND="_wt_prompt_cmd${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
+fi
+
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
 export NB_DIR="$HOME/notes"

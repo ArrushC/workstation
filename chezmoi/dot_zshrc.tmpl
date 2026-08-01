@@ -190,6 +190,50 @@ if command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
 fi
 
+# --- Windows Terminal shell integration (WSL tabs) ---------------------------
+# Emits the FTCS/ConEmu sequences Windows Terminal turns into UI: OSC 133 A/C/D
+# prompt marks (scrollbar marks + ctrl+up/down prompt jumps, exit-code colored),
+# OSC 9;9 cwd (duplicate-tab/split reopens the current directory — WT needs a
+# WINDOWS path, hence wslpath -w), and OSC 9;4 taskbar progress (indeterminate
+# while a curated long-runner executes; cleared at the next prompt). Gated hard:
+# WT_SESSION crosses WSL interop only in local Windows Terminal tabs (unset over
+# SSH), and $ZELLIJ excludes multiplexed shells — zellij composites panes, so
+# the sequences would be swallowed there. _wt_precmd is PREPENDED to
+# precmd_functions so it reads the real $? before other hooks run, and it
+# returns that status so starship's exit-code module still sees it. bash gets
+# the prompt-side half only (see the PARITY NOTE in dot_bashrc.tmpl).
+if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
+  _wt_precmd() {
+    local _wt_status=$?
+    # Previous command's mark: D;<exit> colors it green/red on the scrollbar.
+    printf '\e]133;D;%s\a' "$_wt_status"
+    # CWD for duplicate-tab/split (Windows path form).
+    if command -v wslpath &>/dev/null; then
+      printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
+    fi
+    # Prompt-start mark, then clear any taskbar progress.
+    printf '\e]133;A\a'
+    printf '\e]9;4;0;0\a'
+    return "$_wt_status"
+  }
+  _wt_preexec() {
+    # Output-start mark for the command about to run.
+    printf '\e]133;C\a'
+    # Indeterminate taskbar progress for curated long-runners.
+    case "${1%% *}" in
+      make | cza | czu | dnf | cargo | npm | uv) printf '\e]9;4;3;0\a' ;;
+      git)
+        case "$1" in
+          git\ push* | git\ pull* | git\ fetch* | git\ clone*) printf '\e]9;4;3;0\a' ;;
+        esac
+        ;;
+    esac
+  }
+  # Re-source guard: don't register twice (matches zoxide/starship convention).
+  (( ${precmd_functions[(I)_wt_precmd]} )) || precmd_functions=(_wt_precmd "${precmd_functions[@]}")
+  (( ${preexec_functions[(I)_wt_preexec]} )) || preexec_functions+=(_wt_preexec)
+fi
+
 # --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
 # Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
 # / Shift+Home/End) extend a visible highlight; typing replaces it; Backspace/
