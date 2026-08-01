@@ -45,5 +45,14 @@ On the Windows host after `bootstrap.ps1` + `chezmoi apply`, restart WT, then:
 - Doctor: WT present, fragment count == hosts.conf rows.
 - In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes;
   check a remote zellij pane for exactly one OSC 133 prompt-zone set.
+- Marks: in a WSL zsh tab run `true` then `false` — two scrollbar marks (success/error colored);
+  ctrl+up / ctrl+down jump between prompts; duplicate pane (alt+shift+d) reopens the same WSL dir.
+- alt+shift+b: broadcast icon appears on every pane in the tab; typing reaches all panes.
+- alt+shift+s: Suggestions palette lists the 8 "Snippet: …" entries; picking one inserts
+  the text WITHOUT executing. (If stable WT lacks showSuggestions — MS docs banner still says
+  Preview — drop the action + README row per the 2026-07-31 spec's documented fallback.)
+- Taskbar: run `make -C ~/.local/share/chezmoi lint MODE=prod` in a WSL tab — indeterminate
+  progress on the WT taskbar icon, cleared at the next prompt (needs Windows accessibility
+  "Show animations" ON; same for a `cargo`/`npm`/`uv`/git-network command in a Nushell tab).
 - `$env:WT_SESSION` non-empty in a pwsh tab; scroll a long output to confirm the effective
   historySize (record the real ceiling in file-care.md if WT clamps below 100000).
