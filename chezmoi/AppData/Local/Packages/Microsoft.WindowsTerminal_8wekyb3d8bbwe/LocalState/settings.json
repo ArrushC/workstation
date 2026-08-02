@@ -120,7 +120,7 @@
                 "source": 
                 [
                     "tasks",
-                    "recentCommands"
+                    "commandHistory"
                 ],
                 "useCommandline": true
             },
