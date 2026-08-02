@@ -129,3 +129,7 @@ Prompt-side only, via a function **prepended** to `PROMPT_COMMAND` (before stars
 ## Amendment (2026-08-01, final whole-branch review)
 
 `showSuggestions` rebound `ctrl+shift+space` → `alt+shift+s` (user decision): the original chord shadows Windows Terminal's default `openNewTabDropdown` binding — the keyboard route to the SSH-hosts dropdown. alt+shift+s joins the existing alt+shift mnemonic family with no WT-default collision.
+
+## Amendment 2 (2026-08-02, live rollout)
+
+The "Known risk (Suggestions UI)" resolved with a twist: stable WT DOES support `showSuggestions` (the preview banner was stale as suspected), but the live schema's `source` enum is `none|tasks|snippets|commandHistory|directoryHistory|quickFix|all` — the MS-docs value `recentCommands` is invalid, and one invalid enum made WT reject the entire settings.json ("Temporarily using the Windows Terminal default settings"). Hotfixed `recentCommands` → `commandHistory` in the tracked file + doc surfaces. Lesson recorded in the changelog row: trust the live schema error over learn.microsoft.com.
