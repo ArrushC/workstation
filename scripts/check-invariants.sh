@@ -121,6 +121,24 @@ check_version_pins() {
     bad "gh drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
+  v=$(mkval UV_VERSION)
+  ref=$(grep -oE 'astral-sh/uv/releases/download/[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/##')
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "uv @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "uv drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
+  v=$(mkval PYTHON_VERSION)
+  ref=$(grep -oE '^\$PythonEnvVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 |
+    grep -oE '[0-9][0-9.]+' | head -1)
+  if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+    ok "python-env @ $v  (versions.mk == bootstrap.ps1)"
+  else
+    bad "python-env drift: versions.mk='$v' bootstrap.ps1='$ref'"
+  fi
+
   # shfmt + gitleaks are enforced below (check_shfmt / check_gitleaks). CI
   # (.github/workflows/lint.yml) installs these exact versions so the checks
   # actually run there, so the pins dual-edit with lint.yml's `SHFMT=`/`GITLEAKS=`.
@@ -392,6 +410,26 @@ check_completion_parity() {
     "$(_nu_completion_flags workstation_manage_hosts_flags)"
 }
 
+# --- python-env lib-list parity ----------------------------------------------
+# The blessed-env library list is defined twice (Make never runs on Windows):
+# PY_LIBS in makefile/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
+# are one-line arrays by contract (comments at each site) so single-line greps
+# can extract them. Order-insensitive compare (sort) — content is the contract.
+check_python_env_parity() {
+  hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
+  local sh_libs ps_libs
+  sh_libs=$(grep -oE '^PY_LIBS=\([^)]*\)' makefile/lib/python-env.sh |
+    sed 's/^PY_LIBS=(//; s/)$//' | tr ' ' '\n' | grep -v '^$' | sort)
+  ps_libs=$(grep -oE '^\$PythonLibs *= *@\([^)]*\)' bootstrap.ps1 |
+    sed 's/.*@(//; s/)$//' | tr -d '",' | tr ' ' '\n' | grep -v '^$' | sort)
+  if [ -n "$sh_libs" ] && [ "$sh_libs" = "$ps_libs" ]; then
+    ok "$(printf '%s\n' "$sh_libs" | wc -l) libs match"
+  else
+    bad "lib-list drift (<:python-env.sh  >:bootstrap.ps1):"
+    diff <(printf '%s\n' "$sh_libs") <(printf '%s\n' "$ps_libs") | sed 's/^/       /'
+  fi
+}
+
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -457,6 +495,7 @@ check_tools_block
 check_lsp_plugin
 check_chezmoiignore_targets
 check_completion_parity
+check_python_env_parity
 check_shellcheck
 check_shfmt
 check_gitleaks

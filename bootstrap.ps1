@@ -182,6 +182,7 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 #   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
 #   workstation\dngrep       — the dnGrep portable GUI tree          → on User PATH
 #   workstation\logexpert    — the LogExpert portable GUI tree       → on User PATH
+#   workstation\uv           — the uv portable tree (CPython/venvs)  → on User PATH
 #   workstation\stamps       — "<exe>.<version>.stamp" idempotency markers
 $WsRoot       = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin        = Join-Path $WsRoot "bin"
@@ -190,6 +191,7 @@ $WsNu         = Join-Path $WsRoot "nu"
 $WsDevToysCli = Join-Path $WsRoot "devtoys-cli"
 $WsDnGrep     = Join-Path $WsRoot "dngrep"
 $WsLogExpert  = Join-Path $WsRoot "logexpert"
+$WsUv         = Join-Path $WsRoot "uv"
 $WsStamps     = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
@@ -274,6 +276,22 @@ $PortableTools = @(
         Repo       = "jqlang/jq"
         TagPrefix  = "jq-"
         UpdateHint = "dual-edit: `$PortableTools here AND JQ_VERSION in makefile/versions.mk (jq powers the Claude Code hooks' JSON parsing on Windows)"
+    },
+    @{
+        # uv — Python front door for Invoke-PythonEnv (pinned CPython + the
+        # blessed scripting env). Zip is FLAT (uv.exe + uvw.exe + uvx.exe) —
+        # 'tree' into its OWN dir: tree-extract WIPES Dest, so $WsBin is off
+        # limits (nu/helix precedent).
+        Name       = "uv"
+        Exe        = "uv"
+        Version    = "0.11.32"
+        Url        = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-x86_64-pc-windows-msvc.zip"
+        Sha256     = "acfde570451cfdb8689fa159a138ee805ba4e241c466432750302c86254b0984"
+        Layout     = "tree"
+        Dest       = $WsUv
+        Repo       = "astral-sh/uv"
+        TagPrefix  = ""
+        UpdateHint = "dual-edit: `$PortableTools here AND UV_VERSION in makefile/versions.mk"
     },
     @{
         # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
@@ -369,6 +387,14 @@ $PortableTools = @(
         Shortcut   = @{ Target = "LogExpert"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
     }
 )
+
+# --- Blessed Python scripting env (Invoke-PythonEnv) -------------------------
+# DUAL-EDIT: $PythonEnvVersion pairs with PYTHON_VERSION in makefile/versions.mk;
+# $PythonLibs pairs with PY_LIBS in makefile/lib/python-env.sh. KEEP EACH ON ONE
+# LINE — scripts/check-invariants.sh parses both with single-line greps.
+$PythonEnvVersion = "3.14.6"
+$PythonLibs = @("textual", "textual-dev", "click", "rich", "httpx", "pydantic", "typer", "polars", "duckdb")
+$WsPythonEnv = Join-Path $WsRoot "python-env"
 
 # Installer-layout tools — apps that publish a silent, admin-free installer (.exe)
 # instead of a portable zip. Unlike $PortableTools these are NOT version-pinned:
@@ -1198,7 +1224,7 @@ function Install-WindowsTerminal {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/uv/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; Python env not built"
         return
     }
 
@@ -1667,6 +1693,78 @@ function Invoke-InstallClaudeCode {
 }
 
 # =============================================================================
+# 6c. PYTHON SCRIPTING ENV — the blessed uv-built venv (Windows half of the
+#    Linux `python-env` Make target). uv installs the pinned CPython
+#    (python-build-standalone, per-user) and rebuilds the env from scratch,
+#    then wpy/textual/typer .cmd shims land in $WsBin. Libs track LATEST at
+#    install time; stamp bakes the pin + the lib list, so a bump or list edit
+#    rebuilds on the next bootstrap and a lib upgrade is "delete the stamp,
+#    re-run" (Linux: make python-env-rebuild). Per-user, no admin;
+#    warn-and-continue (standard tool-step posture).
+# =============================================================================
+# Get-PythonEnvStamp — the exact stamp path Invoke-PythonEnv writes on a
+# successful build (pin + a hash of the lib list, the Linux cksum analog).
+# Doctor calls this SAME helper so its "already built" check can never drift
+# onto a stale, different-version stamp left behind by an older pin (a
+# version-agnostic `python-env.*.stamp` glob would false-positive on it after
+# a bump — the old stamp still matches, so Doctor would report the NEW
+# version as built when only the OLD one actually is).
+function Get-PythonEnvStamp {
+    $libBytes = [System.Text.Encoding]::UTF8.GetBytes(($PythonLibs -join ' '))
+    $libStream = New-Object System.IO.MemoryStream (,$libBytes)
+    $libHash = (Get-FileHash -InputStream $libStream -Algorithm SHA256).Hash.Substring(0, 8).ToLower()
+    return Join-Path $WsStamps "python-env.$PythonEnvVersion.$libHash.stamp"
+}
+
+function Invoke-PythonEnv {
+    if ($SkipToolInstall) {
+        Write-Log "Python env skipped (-SkipToolInstall)"
+        return
+    }
+    $uvExe = Join-Path $WsUv "uv.exe"
+    if (-not (Test-Path $uvExe)) {
+        Write-Warn "Python env skipped — uv not installed at $uvExe (portable-tool step failed?)"
+        return
+    }
+
+    # Stamp bakes pin + lib list (the Linux stamp's cksum analog); shared with
+    # Doctor via Get-PythonEnvStamp so the two checks can't drift apart.
+    $stamp = Get-PythonEnvStamp
+    $wpyShim = Join-Path $WsBin "wpy.cmd"
+    if ((Test-Path $stamp) -and (Test-Path $wpyShim)) {
+        Write-Ok "Python env $PythonEnvVersion already built ($WsPythonEnv)"
+        return
+    }
+
+    Write-Log "Building Python scripting env $PythonEnvVersion ($($PythonLibs.Count) libs)..."
+    try {
+        & $uvExe python install $PythonEnvVersion
+        if ($LASTEXITCODE -ne 0) { throw "uv python install exited $LASTEXITCODE" }
+        if (Test-Path $WsPythonEnv) { Remove-Item -Recurse -Force $WsPythonEnv }
+        & $uvExe venv --python $PythonEnvVersion $WsPythonEnv
+        if ($LASTEXITCODE -ne 0) { throw "uv venv exited $LASTEXITCODE" }
+        $envPy = Join-Path $WsPythonEnv "Scripts\python.exe"
+        & $uvExe pip install --python $envPy --upgrade $PythonLibs
+        if ($LASTEXITCODE -ne 0) { throw "uv pip install exited $LASTEXITCODE" }
+
+        # Launcher shims — wpy calls the env python; textual/typer call the
+        # env's entry-point exes. $WsBin is already on the User PATH.
+        $scripts = Join-Path $WsPythonEnv "Scripts"
+        Set-Content -Path $wpyShim -Value "@echo off`r`n`"$envPy`" %*" -Encoding Ascii
+        Set-Content -Path (Join-Path $WsBin "textual.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'textual.exe')`" %*" -Encoding Ascii
+        Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
+
+        if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
+        Get-ChildItem -Path $WsStamps -Filter "python-env.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
+        New-Item -ItemType File -Force -Path $stamp | Out-Null
+        Write-Ok "Python env $PythonEnvVersion built ($WsPythonEnv; launchers: wpy, textual, typer)"
+    } catch {
+        Write-Warn "Python env build failed: $($_.Exception.Message)"
+        Write-Warn "  Re-run .\bootstrap.ps1 to retry (no stamp was written)."
+    }
+}
+
+# =============================================================================
 # 7. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user. Required by
 #    chezmoi-tracked configs that assume Nerd Font glyphs (starship, eza --icons,
 #    lazygit, k9s, yazi, broot, helix, ccstatusline, Claude Code TUI). Invokes
@@ -2025,6 +2123,16 @@ function Invoke-Doctor {
     if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
     else { Write-Warn "Nushell starship prompt missing — re-run .\bootstrap.ps1 (regenerates it)" }
 
+    $wpyShim = Join-Path $WsBin "wpy.cmd"
+    $pyStamp = Get-PythonEnvStamp
+    if ((Test-Path $wpyShim) -and (Test-Path $pyStamp)) {
+        Write-Ok "Python env $PythonEnvVersion built (wpy/textual/typer in $WsBin)"
+    } elseif (Test-Path $wpyShim) {
+        Write-Warn "Python env shims present but pin or lib list moved — next bootstrap rebuilds"
+    } else {
+        Write-Bad "Python env not built — re-run .\bootstrap.ps1"
+    }
+
     $dnGrepCfg = Join-Path $WsDnGrep "dnGrep.config.xml"
     if (Test-Path $dnGrepCfg) { Write-Ok "dnGrep config seeded ($dnGrepCfg)" }
     else { Write-Warn "dnGrep config not seeded — settings would die with a pin bump; re-run .\bootstrap.ps1 (re-seeds it)" }
@@ -2168,6 +2276,8 @@ function Invoke-CheckForUpdates {
     } else {
         Write-Warn "Nerd Fonts not stamped — re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
     }
+    $latestPy = Get-LatestGitTag -Repo 'python/cpython' -TagPrefix 'v'
+    Write-UpdateStatus -Name 'Python env (CPython)' -Pinned $PythonEnvVersion -Latest $latestPy -Hint 'dual-edit: $PythonEnvVersion here AND PYTHON_VERSION in makefile/versions.mk; check cp-wheel coverage first (see versions.mk comment)'
     $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
           Sort-Object Version -Descending | Select-Object -First 1
     if ($bt) { Write-Ok "BurntToast $($bt.Version) installed — update via: Update-Module BurntToast" }
@@ -2206,6 +2316,7 @@ Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dn
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
+Invoke-PythonEnv          # blessed uv-built Python scripting env (wpy/textual/typer shims)
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
 Invoke-EnsureSshKey
 

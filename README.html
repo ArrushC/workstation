@@ -1475,6 +1475,18 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                 <span
                                     class="chip"
                                     tabindex="0"
+                                    data-tip="Blessed uv-built Python env — wpy launcher + Textual/Click/rich/httpx/pydantic/typer/polars/duckdb"
+                                    >python-env <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — blessed uv-managed Python scripting
+                                        environment with Textual, Click and
+                                        friends, reached via the wpy launcher
+                                        (dev_machine only)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
                                     data-tip="Go toolchain from go.dev (dev_machine only — make go-runtime MODE=dev)"
                                     >go <small>(dev)</small
                                     ><span class="sr-only">
@@ -2871,6 +2883,27 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             with <code>makefile/versions.mk</code>).
                         </li>
                         <li>
+                            <strong>uv</strong> &mdash; the Python front
+                            door; pinned, sha256-verified portable tree into
+                            its own <code>%LOCALAPPDATA%\workstation\uv</code>
+                            directory (never <code>workstation\bin</code>
+                            &mdash; a <code>tree</code>-layout install wipes
+                            its destination on every re-pin). The pin
+                            dual-edits <code>UV_VERSION</code> in
+                            <code>makefile/versions.mk</code> (the Linux
+                            half is the eget-installed <code>uv</code>, both
+                            dev_machine and prod_machine). A bespoke,
+                            <strong>dev_machine-only</strong> step then
+                            builds the blessed Python scripting env at
+                            <code>%LOCALAPPDATA%\workstation\python-env</code>
+                            &mdash; a pinned CPython plus
+                            Textual/Click/rich/httpx/pydantic/typer/polars/duckdb
+                            &mdash; dropping
+                            <code>wpy</code>/<code>textual</code>/<code>typer</code>
+                            shims into
+                            <code>%LOCALAPPDATA%\workstation\bin</code>.
+                        </li>
+                        <li>
                             <strong>dnGrep</strong> &mdash; search/replace GUI
                             (&ldquo;grep for Windows&rdquo;); pinned,
                             sha256-verified portable <code>.zip</code> into
@@ -3184,9 +3217,10 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
                         chezmoi/Windows
-                        Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
+                        Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/uv/DevToys
                         CLI/dnGrep/LogExpert
-                        installs, <em>and</em> the installer-class apps
+                        installs and the Python scripting env build,
+                        <em>and</em> the installer-class apps
                         (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond
                         Compare) and the native
                         <strong>Claude Code</strong> install entirely
@@ -3902,6 +3936,34 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </p>
 
                     <h3>
+                        <span class="badge dev">dev</span> Python scripting env
+                    </h3>
+                    <p>
+                        Ad-hoc scripts get a blessed uv-built environment
+                        &mdash; <code>wpy script.py</code> (or
+                        <code>#!/usr/bin/env wpy</code>) has
+                        <strong>Textual, Click, rich, httpx, pydantic,
+                        typer, polars, duckdb</strong> preinstalled;
+                        <code>textual</code> and <code>typer</code> CLIs
+                        are on PATH too.
+                    </p>
+                    <pre><code>make python-env-rebuild MODE=dev   # upgrade to latest libs</code></pre>
+                    <p class="note-row">
+                        Libraries track latest at install time; only the
+                        Python runtime itself is pinned
+                        (<code>PYTHON_VERSION</code> in
+                        <code>versions.mk</code>). Windows upgrade: delete
+                        the <code>python-env.*.stamp</code> under
+                        <code>%LOCALAPPDATA%\workstation\stamps</code> and
+                        re-run <code>bootstrap.ps1</code>. One-off
+                        additions:
+                        <code>uv pip install -p
+                        ~/.local/share/workstation-python
+                        &lt;pkg&gt;</code>
+                        &mdash; they last until the next rebuild.
+                    </p>
+
+                    <h3>
                         Make &mdash; remote (control machine &rarr; all
                         hosts via SSH)
                     </h3>
@@ -4581,7 +4643,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         <div class="ts-body">
                             <p>
                                 The portable tools
-                                (Starship/Helix/Nushell/jq/OpenCode/omp/DevToys
+                                (Starship/Helix/Nushell/jq/OpenCode/omp/uv/DevToys
                                 CLI/dnGrep/LogExpert) are pinned to a specific version
                                 <em>and</em> sha256 in
                                 <code>$PortableTools</code> inside
@@ -5137,6 +5199,37 @@ make -C makefile MODE=dev packages</code></pre>
                                 (~20&ndash;50&times;) for everyday checks; keep
                                 Valgrind for unmodified binaries and
                                 uninitialized-read detection ASan misses.
+                            </p>
+                        </div>
+                    </details>
+                    <details data-ts>
+                        <summary>
+                            <code>wpy</code> not found, or
+                            <code>import textual</code> fails in it
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The blessed Python env is
+                                dev_machine-only and built by
+                                provisioning. Rebuild it from scratch:
+                            </p>
+                            <p>
+                                <strong>Linux:</strong>
+                                <code>make python-env-rebuild MODE=dev</code>
+                            </p>
+                            <p>
+                                <strong>Windows:</strong> delete
+                                <code>%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp</code>
+                                and re-run <code>.\bootstrap.ps1</code>.
+                            </p>
+                            <p>
+                                The same rebuild upgrades the
+                                latest-tracking libraries. If
+                                <code>wpy</code> resolves but an import
+                                fails, an ad-hoc
+                                <code>uv pip install</code> likely broke
+                                a dependency &mdash; the rebuild resets
+                                the env to the canonical nine libraries.
                             </p>
                         </div>
                     </details>
