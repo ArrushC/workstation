@@ -182,6 +182,40 @@ check_version_pins() {
   fi
 }
 
+# Every dual-edit version pin verified by check_version_pins must also sit in
+# scripts/bump-versions.sh's EXCLUDE list — otherwise the weekly bumper edits
+# the versions.mk half alone and this script fails the bump workflow on its
+# own PR (version-bumps run #9: gh 2.97.0, added as a dual-edit in #94 without
+# the exclusion). The pin set is derived from check_version_pins' own source
+# (its mkval calls), so a new dual-edit pin check added there is asserted here
+# automatically — no second list to drift. One-directional: extra EXCLUDE
+# entries (NCDU's 404-prone binary) are fine.
+check_bumper_exclude() {
+  hdr "bump-versions.sh EXCLUDE covers dual-edit pins"
+  local exclude pins var missing="" n=0
+  exclude=$(grep -m1 -E '^EXCLUDE=' scripts/bump-versions.sh |
+    sed -E 's/^EXCLUDE="//; s/"[[:space:]]*$//')
+  if [ -z "$exclude" ]; then
+    bad "scripts/bump-versions.sh: EXCLUDE= line not found"
+    return
+  fi
+  pins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
+    grep -oE 'mkval [A-Z_]+_VERSION' | awk '{print $2}' | sort -u)
+  while read -r var; do
+    [ -n "$var" ] || continue
+    n=$((n + 1))
+    case " $exclude " in
+    *" $var "*) ;;
+    *) missing="$missing $var" ;;
+    esac
+  done <<<"$pins"
+  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
+    ok "all $n dual-edit pins in bumper EXCLUDE (bump-versions.sh)"
+  else
+    bad "dual-edit pin(s) missing from bump-versions.sh EXCLUDE:${missing:- <none derived>} — the weekly bumper would auto-edit versions.mk alone and fail the pin check"
+  fi
+}
+
 check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
@@ -488,6 +522,7 @@ check_gitleaks() {
 
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
+check_bumper_exclude
 check_line_endings_and_mode
 check_bom
 check_sentinels
