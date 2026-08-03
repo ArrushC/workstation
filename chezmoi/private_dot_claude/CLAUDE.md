@@ -53,7 +53,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `eget` 1.3.4
 
 ### Tier-0: original toolbelt
-- `fzf` 0.74.1
+- `fzf` 0.74.2
 - `zoxide` 0.10.0
 - `starship` 1.26.0
 - `zellij` 0.44.3
@@ -91,17 +91,17 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `television` 0.15.9
 - `xh` 0.26.2
 - `gping` 1.20.4
-- `atuin` 18.17.1
+- `atuin` 18.18.1
 - `delta` 0.19.2
 - `micro` 2.0.15
 - `eza` 0.23.5
 - `sd` 1.1.0
 - `ctop` 0.7.7
 - `k9s` 0.51.0
-- `rclone` 1.74.4
-- `croc` 10.6.0
+- `rclone` 1.75.0
+- `croc` 11.0.1
 - `hyperfine` 1.20.0
-- `mise` 2026.7.14
+- `mise` 2026.8.0
 - `uv` 0.11.32
 - `dsq` 0.23.0
 
@@ -113,8 +113,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `watchexec` 2.5.1
 
 ### Service / journal / cgroup observability
-- `bottom` 0.14.6
-- `systemctl-tui` 0.7.0
+- `bottom` 0.14.7
+- `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
 
@@ -129,10 +129,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Claude Code CLI
 - `claude` latest
 - `ccstatusline` 2.2.27
-- `node` 26.5.0
+- `node` 26.6.0
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.6.12
+- `dozzle` 10.6.14
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.4.0
@@ -171,8 +171,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### (2026-06) C / C++ development & debugging toolchain
 - `nnd` 0.80
-- `pwndbg` 2026.02.18
-- `vcpkg` 2026.06.24
+- `pwndbg` 2026.07.29
+- `vcpkg` 2026.07.29
 
 ### (2026-06) Language servers (LSP) + runtimes
 - `go` 1.24.4
