@@ -204,6 +204,11 @@ check_bespoke() {
   vcpkg)
     check_component vcpkg vcpkg vcpkg "$DEST" "$version"
     ;;
+  python-env)
+    # $version is "<PYTHON_VERSION>-<cksum-of-lib/python-env.sh>" — matches the
+    # stamp suffix, so a pin bump OR lib-list edit shows as "pin moved".
+    check_component python-env python-env wpy "$HOME/.local/bin" "$version"
+    ;;
   *)
     row_warn "$name" "doctor.sh has no check for this bespoke target — add one"
     ;;

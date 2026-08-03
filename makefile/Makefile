@@ -361,6 +361,48 @@ clean-vcpkg:
 	@$(SUDO) rm -rf $(VCPKG_ROOT_DIR)
 
 # -----------------------------------------------------------------------------
+# python-env — blessed Python scripting env (dev_machine only). uv installs the
+# pinned CPython and builds ~/.local/share/workstation-python with the ad-hoc
+# scripting libs (Textual/Click/&c — canonical list in lib/python-env.sh),
+# then installs launchers in ~/.local/bin (wpy WRAPPER SCRIPT — a symlink
+# would lose the venv; textual/typer symlinks). USER-LEVEL like pip.sh —
+# never $(SUDO). Stamp bakes PYTHON_VERSION + a cksum of lib/python-env.sh
+# (lsp-servers hash precedent), so bumping the pin OR editing the lib list
+# rebuilds on the next provision; upgrading the latest-tracking libs is
+# `make python-env-rebuild` (see that target below — a combined
+# `clean-python-env python-env` goal list races under -j$(nproc)). Order-only
+# dep on uv's stamp FILE (never the phony — EGET_TOOL stamp-on-stamp
+# invariant). No WSL skip (useful in a WSL dev guest, like pwndbg). Windows
+# half: Invoke-PythonEnv in bootstrap.ps1 ($PythonEnvVersion/$PythonLibs —
+# check-invariants pairs).
+# -----------------------------------------------------------------------------
+PYTHON_ENV_STAMP := $(shell cksum $(LIB)/python-env.sh | cut -d' ' -f1)
+.PHONY: python-env clean-python-env
+ifeq ($(MODE),dev)
+python-env: $(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done
+$(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done: | $(STAMP)/uv-$(UV_VERSION).done
+	@printf '==> python-env %s\n' "$(PYTHON_VERSION)"
+	@$(LIB)/python-env.sh $(PYTHON_VERSION)
+	@mkdir -p $(@D) && touch $@
+else
+python-env:
+	@echo "python-env is a dev_machine target — skipping (MODE=$(MODE))"
+endif
+clean-python-env:
+	@rm -f $(STAMP)/python-env-*.done
+	@rm -rf $(HOME)/.local/share/workstation-python
+	@rm -f $(HOME)/.local/bin/wpy $(HOME)/.local/bin/textual $(HOME)/.local/bin/typer
+
+# python-env-rebuild — the upgrade path for the latest-tracking libs. MUST be
+# a serialized two-phase wrapper: a combined `clean-python-env python-env`
+# goal list races under the default -j$(nproc) (python-env stats the stamp
+# before clean's rm runs — env deleted, nothing rebuilt).
+.PHONY: python-env-rebuild
+python-env-rebuild:
+	+@$(MAKE) --no-print-directory clean-python-env
+	+@$(MAKE) --no-print-directory python-env
+
+# -----------------------------------------------------------------------------
 # devtoys-cli — DevToys CLI (dev_machine only): scriptable command-line
 # versions of the DevToys developer tools (json<->yaml, base64, hash, jwt).
 # NOT an EGET_TOOL: the single-file DevToys.CLI executable requires its
@@ -726,7 +768,7 @@ user-tools: $(USER_TOOLS)
 PROVISION_FANOUT := tools user-tools shell wsl-config
 ifeq ($(MODE),dev)
 PROVISION_FANOUT += claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers devtoys-cli
+PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers devtoys-cli python-env
 endif
 
 provision-fanout: $(PROVISION_FANOUT)
@@ -773,6 +815,7 @@ DOCTOR_ROWS += bespoke|vcpkg|$(VCPKG_VERSION)
 DOCTOR_ROWS += bespoke|go-runtime|$(GO_VERSION)
 DOCTOR_ROWS += bespoke|devtoys-cli|$(DEVTOYS_CLI_VERSION)
 DOCTOR_ROWS += bespoke|lsp-servers|-
+DOCTOR_ROWS += bespoke|python-env|$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP)
 
 # NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe
 # (via $(foreach …,'…')) or the shell parses every row as a pipeline and
@@ -852,6 +895,7 @@ list:
 	@printf '  (nnd debugger is a scope-tool above; gcc/clang/gdb/valgrind/... come from dnf)\n'
 	@printf '\nLanguage servers (provisioned on MODE=dev only): lsp-servers (+ go-runtime)\n'
 	@printf '  (rust-analyzer/marksman/taplo are scope-tools above; clangd from clang-tools-extra)\n'
+	@printf '\npython-env (provisioned on MODE=dev only): blessed Python scripting env (uv-managed CPython + venv)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
 
 clean:
@@ -873,6 +917,7 @@ help:
 	@echo "  make rsyslog-service  install local-routing drop-in + enable rsyslog (dev only, non-WSL)"
 	@echo "  make pwndbg           install the pwndbg GDB front-end, portable build (dev only)"
 	@echo "  make vcpkg            install the vcpkg C/C++ package manager (dev only)"
+	@echo "  make python-env       build the blessed Python scripting env (dev only)"
 	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"
 	@echo "  make <tool>       install just one tool, e.g. make gitui"
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"

@@ -187,6 +187,20 @@ NND_VERSION    := 0.80
 PWNDBG_VERSION := 2026.02.18
 VCPKG_VERSION  := 2026.06.24
 
+# --- Blessed Python scripting env (dev_machine only) -------------------------
+# python-env — uv-managed CPython + one venv (~/.local/share/workstation-python)
+# with the ad-hoc-scripting libs (Textual/Click/&c). Canonical lib list lives in
+# lib/python-env.sh (PY_LIBS — parity pair with $PythonLibs in bootstrap.ps1).
+# Libs track LATEST at install time; only the interpreter is pinned. DUAL-EDIT:
+# $PythonEnvVersion in bootstrap.ps1 (Make never runs on Windows — Helix
+# precedent; check-invariants.sh verifies). Bump only to a CPython with full
+# wheel coverage for the lib set on BOTH platforms (cp/abi3 check on PyPI —
+# duckdb + pydantic-core are the usual laggards). Registered in UPDATE_SPECS
+# (python/cpython tags, tools.mk) but EXCLUDEd from auto-bump in
+# bump-versions.sh — dual-edit + wheel-coverage check required, so `make
+# check-updates` reports drift but the pin is bumped by hand.
+PYTHON_VERSION := 3.14.6
+
 # --- (2026-06) Language servers (LSP) + runtimes ------------------------------
 # All dev_machine only (navigation is a dev activity; Claude Code is dev-only-
 # deployed). Three are single-binary EGET_TOOL static servers (tools.mk,

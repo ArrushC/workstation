@@ -535,3 +535,9 @@ UPDATE_SPECS += nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)|ryanoasis/nerd-fonts|v$
 # (tag == version, so check-updates uses an empty glob prefix → matches all).
 UPDATE_SPECS += pwndbg|$(PWNDBG_VERSION)|pwndbg/pwndbg|$(PWNDBG_VERSION)
 UPDATE_SPECS += vcpkg|$(VCPKG_VERSION)|microsoft/vcpkg|$(VCPKG_VERSION)
+# python-env — dev-only bespoke target (Makefile), report-only like its
+# siblings above: PYTHON_VERSION is EXCLUDEd from bump-versions.sh's auto-edit
+# (dual-edits bootstrap.ps1's $PythonEnvVersion + needs a wheel-coverage
+# check), so `make check-updates` surfaces drift but never auto-bumps it.
+# CPython release tags DO carry a `v` prefix (v3.14.6), unlike pwndbg/vcpkg.
+UPDATE_SPECS += python-env|$(PYTHON_VERSION)|python/cpython|v$(PYTHON_VERSION)

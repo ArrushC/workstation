@@ -22,10 +22,14 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #      lockstep; JQ + SHFMT + GITLEAKS are guarded by check-invariants.sh (the
 #      latter two dual-edit .github/workflows/lint.yml's pinned install step), so
 #      an auto-bump in versions.mk alone would fail the workflow's own invariant step.
+#      UV joins the list because its pin now dual-edits bootstrap.ps1's
+#      $PortableTools (Windows half of the Python env). PYTHON_VERSION joins
+#      too — it dual-edits bootstrap.ps1's $PythonEnvVersion and a bump needs
+#      a wheel-coverage check (duckdb/pydantic-core lag new CPython releases).
 #  (2) NCDU — its linux-x86_64 binary is published at dev.yorhel.nl for only SOME
 #      releases (2.9.1 has one; 2.9.2 returns 404), so a bump must be verified by
 #      hand against the download URL before landing or it 404s the install.
-EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION"
+EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
