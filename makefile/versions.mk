@@ -17,7 +17,7 @@
 EGET_VERSION := 1.3.4
 
 # --- Tier-0: original toolbelt -----------------------------------------------
-FZF_VERSION      := 0.74.1
+FZF_VERSION      := 0.74.2
 ZOXIDE_VERSION   := 0.10.0
 STARSHIP_VERSION := 1.26.0
 ZELLIJ_VERSION   := 0.44.3
@@ -55,17 +55,17 @@ AST_GREP_VERSION   := 0.45.0
 TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.26.2
 GPING_VERSION      := 1.20.4
-ATUIN_VERSION      := 18.17.1
+ATUIN_VERSION      := 18.18.1
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
 EZA_VERSION        := 0.23.5
 SD_VERSION         := 1.1.0
 CTOP_VERSION       := 0.7.7
 K9S_VERSION        := 0.51.0
-RCLONE_VERSION     := 1.74.4
-CROC_VERSION       := 10.6.0
+RCLONE_VERSION     := 1.75.0
+CROC_VERSION       := 11.0.1
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.7.14
+MISE_VERSION       := 2026.8.0
 UV_VERSION         := 0.11.32
 DSQ_VERSION        := 0.23.0
 
@@ -77,8 +77,8 @@ OUCH_VERSION      := 0.8.1
 WATCHEXEC_VERSION := 2.5.1
 
 # --- Service / journal / cgroup observability -------------------------------
-BOTTOM_VERSION        := 0.14.6
-SYSTEMCTL_TUI_VERSION := 0.7.0
+BOTTOM_VERSION        := 0.14.7
+SYSTEMCTL_TUI_VERSION := 0.8.0
 LAZYJOURNAL_VERSION   := 0.8.6
 SYSZ_VERSION          := 1.4.3
 
@@ -95,7 +95,7 @@ CHEZIT_VERSION := 0.3.0
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.27
-NODE_VERSION := 26.5.0
+NODE_VERSION := 26.6.0
 
 # --- Service / web admin (dev_machine only) ---------------------------------
 # Dozzle is run as a Docker container via systemd (no native binary —
@@ -107,7 +107,7 @@ NODE_VERSION := 26.5.0
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.6.12
+DOZZLE_VERSION := 10.6.14
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
@@ -184,8 +184,8 @@ GUM_VERSION      := 0.17.0
 # ~/.gdbinit), rolling upstream with no release tags — pinned by commit in its
 # .vendor sidecar, so it has NO versions.mk entry (cf. batpipe / cht.sh).
 NND_VERSION    := 0.80
-PWNDBG_VERSION := 2026.02.18
-VCPKG_VERSION  := 2026.06.24
+PWNDBG_VERSION := 2026.07.29
+VCPKG_VERSION  := 2026.07.29
 
 # --- Blessed Python scripting env (dev_machine only) -------------------------
 # python-env — uv-managed CPython + one venv (~/.local/share/workstation-python)
