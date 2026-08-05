@@ -33,6 +33,8 @@ Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 # pueued's systemd user unit is meaningless on Windows.
 .config/systemd
 .config/tealdeer
+# Linux Zed settings — the Windows Zed config lives at AppData/Roaming/Zed.
+.config/zed
 .config/zellij
 .config/zsh
 # ~/.local holds the vendored batpipe bash script (.local/bin) — useless on
@@ -68,6 +70,9 @@ re-bootstrap), the gate engages correctly.
 .config/gdb
 # herdr is the dev_machine-only agent multiplexer; its config is inert on prod.
 .config/herdr
+# Zed settings serve desktop Zed and its SSH remote server on dev hosts
+# (atc-cache-dev*); Zed never runs on the headless prod boxes.
+.config/zed
 {{ end }}
 
 {{/*
