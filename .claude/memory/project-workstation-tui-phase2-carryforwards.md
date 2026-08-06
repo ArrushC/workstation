@@ -1,17 +1,17 @@
 ---
 name: workstation-tui-phase2-carryforwards
-description: Deferred items from TUI Phase 1 (PR #116) that Phase 2+ must pick up, with the final-review rulings
+description: Deferred items for TUI Phase 3+ (dashboard/panels), updated after Phase 2 (headless CLI) closed the Phase-1 blockers
 metadata:
   type: project
 ---
 
-Phase 1 of the workstation TUI (spec `docs/superpowers/specs/2026-08-05-workstation-tui-design.md`, PR #116, 2026-08-05) merged with these deliberately deferred items. Address them in the phase that touches the area:
+Updated 2026-08-06 after Phase 2 (headless CLI, branch `feat/workstation-tui-phase2`). Phase 2 CLOSED the Phase-1 blockers: `read_hosts` never-raises, `_detect_group` failure branches tested, `tui/pyrightconfig.json` added, `tui/uv.lock` dropped+gitignored, plus final-review hardenings (loud failure on invalid `WORKSTATION_REPO`, `provision` rejects `VAR=value` args, `dotfiles apply` gates on diff rc).
 
-**Why:** the final whole-branch review triaged all as non-blocking for Phase 1, but two become real bugs the moment Phase 2's CLI consumes the readers.
+**Why:** Phase 2's final review triaged the rest as non-blocking; two matter when Phase 3+ touches their area.
 
-**How to apply:**
-- **Before any CLI/panel consumes them (Phase 2, blocking):** `read_hosts` still raises on missing/undecodable hosts.conf — align with `read_inventory`'s never-raise `(rows, errors)` contract; add tests for `_detect_group`'s failure branches (rc!=0, malformed JSON, non-string group).
-- Phase 2 CLI work: add `tui/pyrightconfig.json` (venv `.venv`, extraPaths `src`) to silence repo-level basedpyright noise; decide `tui/uv.lock` keep-vs-drop (if kept, CI should use `uv run --locked` — currently the lock enforces nothing).
-- Windows: `bootstrap.ps1` `-Doctor` python-env block gates on wpy shim only and omits `workstation.cmd` from message (Invoke-PythonEnv self-heals, so cosmetic).
-- Cosmetics: unused `MagicMock` import in test_makeiface.py; python-env recipe's tab-indented comment line echoes on rebuild (not `@`-prefixed); `versions.py` docstring cites a pin contract versions.mk's header doesn't state; parity-reminder hook's new python-env.sh/bootstrap.ps1 cases have no test-hooks assertions.
-- Fleet-wide design question flagged by the final review: `dot_bashrc.tmpl`'s interactive-guard sits ABOVE its `~/.local/bin` PATH export, so NO user-level tool is reachable over non-interactive ssh on prod (python-env recipe now works around it via a DEST PATH-prepend). Phase 2's fleet push/probe features will hit this again — consider moving the export above the guard (parity pair: zshrc↔bashrc).
+**How to apply (Phase 3+ — address in the phase that touches the area):**
+- **Windows CLI degradation:** `doctor`/`updates`/`provision` on Windows emit raw `command not found: make` (rc 127) instead of the spec's "not available here: <reason>" honesty — gate on `HostContext.has_make` when the platform-gating phase lands.
+- **Docs drift:** `docs/claude/file-care.md`'s completions entry predates `_workstation` — add its Click-generated/parity-EXEMPT note (CLAUDE.md already has it).
+- **Small hardening/polish:** document in `core/chezmoi.py` that chezmoi surfaces deliberately ignore `WORKSTATION_REPO` (mutations target the user's real chezmoi config); `hosts list` prints nothing for empty list (add a "no hosts" line); `read_status` timeout message lacks read_inventory's timeout-specific text; `_capture` helper duplicated across two CLI test files (conftest candidate); provision detected-mode fallback branch untested.
+- **Windows Doctor cosmetics:** `bootstrap.ps1` `-Doctor` python-env block gates on wpy shim only, omits `workstation.cmd` (Invoke-PythonEnv self-heals; cosmetic).
+- **Still-open fleet design question:** `dot_bashrc.tmpl`'s interactive-guard sits ABOVE its `~/.local/bin` PATH export, so no user-level tool is reachable over non-interactive ssh on prod (python-env recipe works around it via DEST PATH-prepend). Phase 5's fleet push/probe will hit it — consider moving the export above the guard (parity pair: zshrc↔bashrc).

@@ -47,3 +47,27 @@ class HostContext(BaseModel):
     has_chezmoi: bool
     has_systemctl: bool
     has_sudo: bool
+
+
+class PendingChange(BaseModel):
+    """One `XY path` row of `chezmoi status`."""
+
+    code: str  # two-char chezmoi status code, e.g. "MM", " A"
+    path: str
+
+
+class Summary(BaseModel):
+    """Dashboard rollup consumed by `workstation status` (and the Phase 3 dashboard)."""
+
+    context: HostContext
+    tools_total: int
+    tools_fresh: int
+    tools_stale: int
+    tools_missing: int
+    inventory_errors: list[str]
+    dotfiles_pending: int
+    dotfiles_errors: list[str]
+    hosts_total: int
+    hosts_dev: int
+    hosts_prod: int
+    hosts_errors: list[str]

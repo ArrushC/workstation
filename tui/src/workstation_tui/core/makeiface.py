@@ -5,7 +5,8 @@
 consumes. Parsing versions.mk variable names instead is a trap: the var→tool
 mapping is not derivable (TEALDEER_VERSION → tldr).
 
-Mutation command *builders* join this module in a later phase.
+Mutation command builders (make_command, provision_command, doctor_command,
+check_updates_command) construct make command lists for subprocess use.
 """
 
 import os
@@ -15,6 +16,25 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from workstation_tui.core.models import InventoryRow
+
+
+def make_command(repo_root: Path, goals: list[str], mode: str) -> list[str]:
+    return [
+        "make", "--no-print-directory", "-C", str(repo_root / "makefile"),
+        *goals, f"MODE={mode}",
+    ]
+
+
+def provision_command(repo_root: Path, tools: list[str], mode: str) -> list[str]:
+    return make_command(repo_root, tools, mode)
+
+
+def doctor_command(repo_root: Path, mode: str) -> list[str]:
+    return make_command(repo_root, ["doctor"], mode)
+
+
+def check_updates_command(repo_root: Path, mode: str) -> list[str]:
+    return make_command(repo_root, ["check-updates"], mode)
 
 
 def parse_inventory(text: str) -> tuple[list[InventoryRow], list[str]]:
@@ -45,8 +65,7 @@ def read_inventory(repo_root: Path, mode: str) -> tuple[list[InventoryRow], list
         env = {k: v for k, v in os.environ.items()
                if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")}
         proc = subprocess.run(
-            ["make", "--no-print-directory", "-C", str(repo_root / "makefile"),
-             "inventory", f"MODE={mode}"],
+            make_command(repo_root, ["inventory"], mode),
             capture_output=True, text=True, timeout=30, env=env,
         )
         if proc.returncode != 0:

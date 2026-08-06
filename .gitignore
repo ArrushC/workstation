@@ -20,6 +20,7 @@ __pycache__/
 .pytest_cache/
 tui/.venv/
 tui/dist/
+tui/uv.lock
 
 # OS
 .DS_Store
