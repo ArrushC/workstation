@@ -14,7 +14,7 @@
 #   .\scripts\manage-hosts.ps1
 #   .\scripts\manage-hosts.ps1 -List
 #   .\scripts\manage-hosts.ps1 -Format
-#   .\scripts\manage-hosts.ps1 -Remove
+#   .\scripts\manage-hosts.ps1 -Remove [-Name N -SkipConfirm]
 #   .\scripts\manage-hosts.ps1 -Add  -Name N -Ip I -User U -Group G [-SkipConfirm]
 #   .\scripts\manage-hosts.ps1 -CopyId [-Name N]
 #   .\scripts\manage-hosts.ps1 -CopyId -All [-SkipConfirm]
@@ -300,22 +300,45 @@ function Add-Host {
 }
 
 function Remove-HostEntry {
-    Write-Header "Remove a host"
-    Show-Hosts
+    # Supports two calling modes (mirrors Add-Host):
+    #
+    #   Interactive (menu or -Remove with no -Name):
+    #     Remove-HostEntry
+    #
+    #   Non-interactive (from bootstrap.ps1 or the TUI):
+    #     Remove-HostEntry -HostName dev-01 -NoConfirm $true
+    param(
+        [string]$HostName = "",
+        [bool]$NoConfirm  = $false
+    )
 
-    $hosts = Read-Hosts
-    if (-not $hosts) { return }
+    if (-not $HostName) {
+        # A flag-sourced -SkipConfirm never applies to an interactively-entered
+        # name -- the "cannot be undone" prompt must always fire here.
+        $NoConfirm = $false
 
-    $HostName = Read-Host "  Host name to remove"
-    if (-not $HostName) { return }
+        Write-Header "Remove a host"
+        Show-Hosts
 
-    if (-not (Test-HostExists $HostName)) {
+        $hosts = Read-Hosts
+        if (-not $hosts) { return }
+
+        $HostName = Read-Host "  Host name to remove"
+        if (-not $HostName) { return }
+
+        if (-not (Test-HostExists $HostName)) {
+            Write-Warn "Host '$HostName' not found."
+            return
+        }
+    } elseif (-not (Test-HostExists $HostName)) {
         Write-Warn "Host '$HostName' not found."
-        return
+        exit 1
     }
 
-    $confirm = Read-Host "  Remove '$HostName'? This cannot be undone. [y/N]"
-    if ($confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
+    if (-not $NoConfirm) {
+        $confirm = Read-Host "  Remove '$HostName'? This cannot be undone. [y/N]"
+        if ($confirm -notmatch '^[Yy]') { Write-Warn "Aborted."; return }
+    }
 
     $remaining = [System.Collections.Generic.List[PSCustomObject]](Read-Hosts | Where-Object { $_.Name -ne $HostName })
     Save-Hosts $remaining
@@ -573,7 +596,10 @@ if (-not (Test-Path $HostsConf)) { Write-Fail "hosts.conf not found at $HostsCon
 
 if ($Format) { Invoke-FormatHosts; exit 0 }
 if ($List)   { Show-Hosts; exit 0 }
-if ($Remove) { Remove-HostEntry; exit 0 }
+if ($Remove) {
+    Remove-HostEntry -HostName $Name -NoConfirm $SkipConfirm.IsPresent
+    exit 0
+}
 if ($CopyId) {
     if ($All.IsPresent) {
         # -All wins over -Name if both are passed

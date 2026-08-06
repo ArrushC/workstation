@@ -1,5 +1,6 @@
 """Provision panel: tool table + filter + streamed task log."""
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, Input, RichLog, Static
@@ -101,8 +102,12 @@ class ProvisionPanel(Static):
         for t in self.tools:
             if needle and needle not in t.name.lower():
                 continue
-            table.add_row(icon(t.state.value, STAMP_ICONS), t.name, t.kind,
-                          t.version, key=t.name)
+            # DataTable markup-parses str cells (default_cell_formatter) —
+            # Text(...) is the markup=False of tables. name/kind/version
+            # are tame today (inventory rows), but the fleet panel lands
+            # next on user-typed values, so the convention must be uniform.
+            table.add_row(icon(t.state.value, STAMP_ICONS), Text(t.name),
+                          Text(t.kind), Text(t.version), key=t.name)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "provision-filter":

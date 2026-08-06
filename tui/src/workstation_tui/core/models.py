@@ -80,3 +80,12 @@ class TaskResult(BaseModel):
     returncode: int
     duration_secs: float
     cancelled: bool = False
+
+
+class GitState(BaseModel):
+    """Source-repo git state for the Dotfiles panel."""
+
+    branch: str
+    dirty: bool
+    ahead: int
+    behind: int
