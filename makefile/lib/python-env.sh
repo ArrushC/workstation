@@ -38,6 +38,14 @@ rm -rf "$env_dir"
 uv venv --python "$version" "$env_dir"
 uv pip install --python "$env_dir/bin/python" --upgrade "${PY_LIBS[@]}"
 
+# The workstation TUI installs EDITABLE from this repo checkout, so
+# `chezmoi update` / `git pull` updates it fleet-wide with no reinstall.
+# Dependency changes in tui/pyproject.toml are the one case needing
+# `make python-env-rebuild`. PARITY: Invoke-PythonEnv in bootstrap.ps1
+# carries the Windows half (check-invariants.sh check_tui_install_parity).
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+uv pip install --python "$env_dir/bin/python" -e "$repo_root/tui"
+
 # Launchers: wpy is a tiny WRAPPER SCRIPT, not a symlink — a symlink from
 # outside the venv to bin/python loses the venv (CPython resolves the full
 # symlink chain to the uv base interpreter and never finds pyvenv.cfg, so
@@ -53,6 +61,7 @@ EOF
 chmod 0755 "$bin_dir/wpy"
 ln -sf "$env_dir/bin/textual" "$bin_dir/textual"
 ln -sf "$env_dir/bin/typer" "$bin_dir/typer"
+ln -sf "$env_dir/bin/workstation" "$bin_dir/workstation"
 
-printf 'python-env: CPython %s + %d libs at %s (launchers: wpy, textual, typer)\n' \
+printf 'python-env: CPython %s + %d libs + workstation-tui at %s (launchers: wpy, textual, typer, workstation)\n' \
   "$version" "${#PY_LIBS[@]}" "$env_dir"

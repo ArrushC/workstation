@@ -361,7 +361,7 @@ clean-vcpkg:
 	@$(SUDO) rm -rf $(VCPKG_ROOT_DIR)
 
 # -----------------------------------------------------------------------------
-# python-env — blessed Python scripting env (dev_machine only). uv installs the
+# python-env — blessed Python scripting env (BOTH scopes — the workstation TUI ships in it). uv installs the
 # pinned CPython and builds ~/.local/share/workstation-python with the ad-hoc
 # scripting libs (Textual/Click/&c — canonical list in lib/python-env.sh),
 # then installs launchers in ~/.local/bin (wpy WRAPPER SCRIPT — a symlink
@@ -378,20 +378,16 @@ clean-vcpkg:
 # -----------------------------------------------------------------------------
 PYTHON_ENV_STAMP := $(shell cksum $(LIB)/python-env.sh | cut -d' ' -f1)
 .PHONY: python-env clean-python-env
-ifeq ($(MODE),dev)
 python-env: $(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done
 $(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done: | $(STAMP)/uv-$(UV_VERSION).done
 	@printf '==> python-env %s\n' "$(PYTHON_VERSION)"
-	@$(LIB)/python-env.sh $(PYTHON_VERSION)
+	# non-interactive ssh (update-hosts.sh) lacks ~/.local/bin on PATH on prod; prepend DEST so the script's uv calls resolve.
+	@PATH="$(DEST):$$PATH" $(LIB)/python-env.sh $(PYTHON_VERSION)
 	@mkdir -p $(@D) && touch $@
-else
-python-env:
-	@echo "python-env is a dev_machine target — skipping (MODE=$(MODE))"
-endif
 clean-python-env:
 	@rm -f $(STAMP)/python-env-*.done
 	@rm -rf $(HOME)/.local/share/workstation-python
-	@rm -f $(HOME)/.local/bin/wpy $(HOME)/.local/bin/textual $(HOME)/.local/bin/typer
+	@rm -f $(HOME)/.local/bin/wpy $(HOME)/.local/bin/textual $(HOME)/.local/bin/typer $(HOME)/.local/bin/workstation
 
 # python-env-rebuild — the upgrade path for the latest-tracking libs. MUST be
 # a serialized two-phase wrapper: a combined `clean-python-env python-env`
@@ -741,7 +737,7 @@ include dotfiles.mk
 #   shell.yml     → shell
 #   dotfiles.yml  → dotfiles
 # -----------------------------------------------------------------------------
-.PHONY: provision provision-fanout dev prod all tools user-tools list clean help doctor check-updates
+.PHONY: provision provision-fanout dev prod all tools user-tools list clean help doctor check-updates inventory
 
 tools: $(SCOPE_TOOLS)
 user-tools: $(USER_TOOLS)
@@ -766,9 +762,12 @@ user-tools: $(USER_TOOLS)
 # New provision-phase targets join PROVISION_FANOUT (or, if they must be
 # ordered, get an explicit edge) — see the parallel-provisioning invariant.
 PROVISION_FANOUT := tools user-tools shell wsl-config
+# both-scopes since the workstation TUI ships in the env — the dev-gated
+# block below keeps the genuinely dev-only targets.
+PROVISION_FANOUT += python-env
 ifeq ($(MODE),dev)
 PROVISION_FANOUT += claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers devtoys-cli python-env
+PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers devtoys-cli
 endif
 
 provision-fanout: $(PROVISION_FANOUT)
@@ -829,7 +828,13 @@ doctor:
 check-updates:
 	@printf '%s\n' $(foreach s,$(UPDATE_SPECS),'$(s)') | $(LIB)/check-updates.sh
 
-.PHONY: lint install-hooks
+# inventory — machine-readable DOCTOR_ROWS dump (kind|name|version, one row
+# per line) for the workstation TUI's read layer (tui/…/core/makeiface.py).
+# Same single-quoting contract as doctor: rows contain `|`.
+inventory:
+	@printf '%s\n' $(foreach r,$(DOCTOR_ROWS),'$(r)')
+
+.PHONY: lint install-hooks tui-test
 
 # lint — run the mechanical invariant checks (version pins, line-endings/mode,
 # BOM, sentinels, chezmoiignore target-paths, shellcheck). Same script the
@@ -844,6 +849,13 @@ install-hooks:
 	@git -C $(REPO_ROOT) config core.hooksPath .githooks
 	@printf 'installed: git hooks now run from .githooks/ (pre-commit -> check-invariants.sh)\n'
 	@printf 'bypass one commit with: git commit --no-verify\n'
+
+# tui-test — run the workstation-tui suite the same way CI's tui-tests job
+# does (uv-managed ephemeral env, NOT the blessed env). MAKEFLAGS= clears
+# inherited jobserver-auth flags so nested make inventory subprocess ignores
+# them and respects --no-print-directory (inherited flags defeat that flag).
+tui-test:
+	@cd $(REPO_ROOT)/tui && MAKEFLAGS= uv run pytest -q
 
 .PHONY: ps-lint
 
@@ -895,7 +907,7 @@ list:
 	@printf '  (nnd debugger is a scope-tool above; gcc/clang/gdb/valgrind/... come from dnf)\n'
 	@printf '\nLanguage servers (provisioned on MODE=dev only): lsp-servers (+ go-runtime)\n'
 	@printf '  (rust-analyzer/marksman/taplo are scope-tools above; clangd from clang-tools-extra)\n'
-	@printf '\npython-env (provisioned on MODE=dev only): blessed Python scripting env (uv-managed CPython + venv)\n'
+	@printf '\npython-env (both scopes): blessed Python scripting env (uv-managed CPython + venv)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
 
 clean:
@@ -917,7 +929,7 @@ help:
 	@echo "  make rsyslog-service  install local-routing drop-in + enable rsyslog (dev only, non-WSL)"
 	@echo "  make pwndbg           install the pwndbg GDB front-end, portable build (dev only)"
 	@echo "  make vcpkg            install the vcpkg C/C++ package manager (dev only)"
-	@echo "  make python-env       build the blessed Python scripting env (dev only)"
+	@echo "  make python-env       build the blessed Python scripting env (both scopes)"
 	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"
 	@echo "  make <tool>       install just one tool, e.g. make gitui"
 	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"
@@ -927,6 +939,9 @@ help:
 	@echo "Health / updates (read-only — nothing is installed or changed):"
 	@echo "  make doctor MODE=dev|prod         report installed/missing/stale tools, services, stamps"
 	@echo "  make check-updates MODE=dev|prod  compare versions.mk pins against upstream release tags"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make tui-test         run the workstation TUI test suite (uv + pytest)"
 	@echo ""
 	@echo "Sub-targets (rarely invoked directly):"
 	@echo "  make packages     dnf core + EPEL + optional (MODE=dev only)"

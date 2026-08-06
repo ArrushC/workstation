@@ -187,7 +187,7 @@ NND_VERSION    := 0.80
 PWNDBG_VERSION := 2026.07.29
 VCPKG_VERSION  := 2026.07.29
 
-# --- Blessed Python scripting env (dev_machine only) -------------------------
+# --- Blessed Python scripting env --------------------------------------------
 # python-env — uv-managed CPython + one venv (~/.local/share/workstation-python)
 # with the ad-hoc-scripting libs (Textual/Click/&c). Canonical lib list lives in
 # lib/python-env.sh (PY_LIBS — parity pair with $PythonLibs in bootstrap.ps1).

@@ -1731,7 +1731,8 @@ function Invoke-PythonEnv {
     # Doctor via Get-PythonEnvStamp so the two checks can't drift apart.
     $stamp = Get-PythonEnvStamp
     $wpyShim = Join-Path $WsBin "wpy.cmd"
-    if ((Test-Path $stamp) -and (Test-Path $wpyShim)) {
+    $workstationShim = Join-Path $WsBin "workstation.cmd"
+    if ((Test-Path $stamp) -and (Test-Path $wpyShim) -and (Test-Path $workstationShim)) {
         Write-Ok "Python env $PythonEnvVersion already built ($WsPythonEnv)"
         return
     }
@@ -1747,17 +1748,23 @@ function Invoke-PythonEnv {
         & $uvExe pip install --python $envPy --upgrade $PythonLibs
         if ($LASTEXITCODE -ne 0) { throw "uv pip install exited $LASTEXITCODE" }
 
-        # Launcher shims — wpy calls the env python; textual/typer call the
-        # env's entry-point exes. $WsBin is already on the User PATH.
+        # Editable install of the repo's workstation TUI (PARITY: python-env.sh
+        # carries the Linux half; check-invariants check_tui_install_parity).
+        & $uvExe pip install --python $envPy -e (Join-Path $PSScriptRoot "tui")
+        if ($LASTEXITCODE -ne 0) { throw "uv pip install tui exited $LASTEXITCODE" }
+
+        # Launcher shims — wpy calls the env python; textual/typer/workstation
+        # call the env's entry-point exes. $WsBin is already on the User PATH.
         $scripts = Join-Path $WsPythonEnv "Scripts"
         Set-Content -Path $wpyShim -Value "@echo off`r`n`"$envPy`" %*" -Encoding Ascii
         Set-Content -Path (Join-Path $WsBin "textual.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'textual.exe')`" %*" -Encoding Ascii
         Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
+        Set-Content -Path (Join-Path $WsBin "workstation.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'workstation.exe')`" %*" -Encoding Ascii
 
         if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
         Get-ChildItem -Path $WsStamps -Filter "python-env.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
         New-Item -ItemType File -Force -Path $stamp | Out-Null
-        Write-Ok "Python env $PythonEnvVersion built ($WsPythonEnv; launchers: wpy, textual, typer)"
+        Write-Ok "Python env $PythonEnvVersion built ($WsPythonEnv; launchers: wpy, textual, typer, workstation)"
     } catch {
         Write-Warn "Python env build failed: $($_.Exception.Message)"
         Write-Warn "  Re-run .\bootstrap.ps1 to retry (no stamp was written)."

@@ -14,6 +14,13 @@ dot_bashrc.local
 # chezmoi cache
 .chezmoicache/
 
+# Python (tui/ package)
+__pycache__/
+*.pyc
+.pytest_cache/
+tui/.venv/
+tui/dist/
+
 # OS
 .DS_Store
 Thumbs.db

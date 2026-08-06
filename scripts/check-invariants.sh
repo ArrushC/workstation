@@ -464,6 +464,23 @@ check_python_env_parity() {
   fi
 }
 
+# The tui/ editable install is a parity pair: makefile/lib/python-env.sh
+# (Linux) and bootstrap.ps1 Invoke-PythonEnv (Windows) must both install the
+# repo's tui/ package into the blessed env, or one platform silently ships
+# without the workstation TUI.
+check_tui_install_parity() {
+  hdr "tui editable-install parity (python-env.sh == bootstrap.ps1)"
+  local sh_ok=1 ps_ok=1
+  grep -qE '^uv pip install .*-e "\$repo_root/tui"' makefile/lib/python-env.sh || sh_ok=0
+  grep -qE '^[[:space:]]*& \$uvExe pip install --python \$envPy -e \(Join-Path \$PSScriptRoot "tui"\)' bootstrap.ps1 || ps_ok=0
+  if [ "$sh_ok" = 1 ] && [ "$ps_ok" = 1 ]; then
+    ok "editable tui/ install present in both halves"
+  else
+    [ "$sh_ok" = 1 ] || bad "python-env.sh: editable tui/ install line missing"
+    [ "$ps_ok" = 1 ] || bad "bootstrap.ps1: editable tui/ install line missing"
+  fi
+}
+
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -531,6 +548,7 @@ check_lsp_plugin
 check_chezmoiignore_targets
 check_completion_parity
 check_python_env_parity
+check_tui_install_parity
 check_shellcheck
 check_shfmt
 check_gitleaks

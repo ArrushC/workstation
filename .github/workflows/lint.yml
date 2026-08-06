@@ -1,7 +1,7 @@
 name: lint
 on: [push, pull_request]
 
-# All three jobs only read the checkout — pin the token to least privilege.
+# All jobs only read the checkout — pin the token to least privilege.
 permissions:
   contents: read
 
@@ -57,3 +57,10 @@ jobs:
           nu --version
       - name: Render + syntax-check templates
         run: PATH="$HOME/.local/bin:$PATH" bash scripts/check-templates.sh
+  tui-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - name: Run workstation-tui test suite
+        run: cd tui && uv run pytest -q
