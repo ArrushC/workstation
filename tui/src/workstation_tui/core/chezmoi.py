@@ -4,6 +4,7 @@ Reads never raise (rc!=0 / missing binary / timeout become error strings).
 Mutations are BUILDERS only — the CLI/TUI streams them via proc.run_passthrough,
 always after an in-band diff + explicit confirm, hence the hard-wired --force
 (chezmoi's own overwrite prompts hang non-interactive runs; repo memory).
+Chezmoi surfaces deliberately ignore WORKSTATION_REPO: reads and mutations always target the user's real chezmoi-configured source, never an override.
 """
 
 import re
