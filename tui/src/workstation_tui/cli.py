@@ -1,4 +1,4 @@
-"""Click entry point. Bare invocation will launch the Textual app (later phase)."""
+"""Click entry point. Bare invocation launches the Textual app (TTY-gated); subcommands run headless."""
 
 import json as _json
 import sys
@@ -25,13 +25,37 @@ from workstation_tui.core.summary import gather_summary
 from workstation_tui.repo import find_repo_root
 
 
+def _is_interactive() -> bool:
+    # Seam: CliRunner swaps sys.stdin/sys.stdout during invoke, so the TTY
+    # check must read them at call time AND be patchable as
+    # cli._is_interactive in tests. Both streams must be TTYs — LinuxDriver
+    # reads sys.__stdin__ for input, so a redirected stdin (e.g.
+    # `workstation < /dev/null` on a real terminal) would launch a
+    # keyboard-deaf UI if only stdout were checked.
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _launch_tui() -> None:
+    # Lazy import: headless subcommands never pay the textual import.
+    from workstation_tui.app.app import WorkstationApp
+
+    WorkstationApp().run()
+
+
 @click.group(invoke_without_command=True)
 @click.version_option(__version__, prog_name="workstation")
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Workstation control panel — TUI + headless subcommands."""
     if ctx.invoked_subcommand is None:
-        click.echo("workstation: the TUI arrives in a later phase — see --help.")
+        if not _is_interactive():
+            click.echo(
+                "workstation: the TUI needs a terminal — "
+                "see --help for headless commands.",
+                err=True,
+            )
+            sys.exit(1)
+        _launch_tui()
 
 
 def _require_repo() -> Path:

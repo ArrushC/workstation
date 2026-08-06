@@ -172,3 +172,4 @@ When you ship a change that affects user-facing surface, append a row here in th
 | python-env promoted dev-only → both scopes (workstation TUI substrate) | Yes | §stack card lost the `(dev)` tag; rebuild snippets note MODE=dev\|prod |
 | workstation TUI Phase 1: tui/ package, editable install into python-env, `workstation` launcher (Linux+Windows), tui-tests CI | Minimal | launcher named in python-env card/launcher lists; full §tui section deferred to the TUI's final phase |
 | workstation TUI Phase 2: headless CLI (status/doctor/updates/provision/hosts list/dotfiles) + Click-generated zsh completions | No | README §tui still lands with the TUI's final phase; CLI is documented in-tool via --help until then |
+| workstation TUI Phase 3: Textual shell (mocha theme port, sidebar rail, live dashboard); bare `workstation` now launches the TUI on a TTY | No | README §tui still lands with the final phase; headless CLI unchanged |

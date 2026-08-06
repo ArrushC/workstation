@@ -16,4 +16,7 @@ build-backend = "hatchling.build"
 packages = ["src/workstation_tui"]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
