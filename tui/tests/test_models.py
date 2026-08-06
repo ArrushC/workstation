@@ -45,3 +45,10 @@ def test_pending_change_and_summary_round_trip() -> None:
         hosts_total=9, hosts_dev=3, hosts_prod=6, hosts_errors=[],
     )
     assert '"tools_fresh":100' in s.model_dump_json()
+
+
+def test_task_result_defaults() -> None:
+    from workstation_tui.core.models import TaskResult
+
+    r = TaskResult(command=["make", "fzf"], returncode=0, duration_secs=1.5)
+    assert r.cancelled is False

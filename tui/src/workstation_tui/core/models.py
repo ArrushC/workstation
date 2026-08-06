@@ -71,3 +71,12 @@ class Summary(BaseModel):
     hosts_dev: int
     hosts_prod: int
     hosts_errors: list[str]
+
+
+class TaskResult(BaseModel):
+    """Outcome of one runner task."""
+
+    command: list[str]
+    returncode: int
+    duration_secs: float
+    cancelled: bool = False
