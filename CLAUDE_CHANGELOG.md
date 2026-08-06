@@ -174,3 +174,5 @@ When you ship a change that affects user-facing surface, append a row here in th
 | workstation TUI Phase 2: headless CLI (status/doctor/updates/provision/hosts list/dotfiles) + Click-generated zsh completions | No | README §tui still lands with the TUI's final phase; CLI is documented in-tool via --help until then |
 | workstation TUI Phase 3: Textual shell (mocha theme port, sidebar rail, live dashboard); bare `workstation` now launches the TUI on a TTY | No | README §tui still lands with the final phase; headless CLI unchanged |
 | workstation TUI Phase 4: async runner (stream/refuse/cancel), in-TUI sudo overlay + keepalive, live Provision panel (table/filter/log, run/clean/updates/full) | No | README §tui still lands with the final phase |
+| manage-hosts non-interactive remove: --remove --name N --skip-confirm (.sh + .ps1 parity) — TUI fleet panel substrate | Yes | §hosts CLI docs gained the remove form |
+| workstation TUI Phase 5: Dotfiles panel (pending/diff/git, apply-update-re-add) + Fleet panel (probes/ssh/push/add-edit-remove via manage-hosts) | No | §hosts remove form documented in phase-5 Task 1; README §tui still lands with the final phase |

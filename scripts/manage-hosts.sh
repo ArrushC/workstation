@@ -16,7 +16,7 @@
 #   ./scripts/manage-hosts.sh
 #   ./scripts/manage-hosts.sh --list
 #   ./scripts/manage-hosts.sh --format
-#   ./scripts/manage-hosts.sh --remove
+#   ./scripts/manage-hosts.sh --remove [--name N --skip-confirm]
 #   ./scripts/manage-hosts.sh --add  --name N --ip I --user U --group G [--skip-confirm]
 #   ./scripts/manage-hosts.sh --copy-id [--name N]
 #   ./scripts/manage-hosts.sh --copy-id --all [--skip-confirm]
@@ -350,36 +350,56 @@ add_host() {
 }
 
 remove_host() {
-  header "Remove a host"
-  print_hosts
+  # Supports two calling modes (mirrors add_host):
+  #
+  #   Interactive (menu or --remove with no --name):
+  #     remove_host
+  #
+  #   Non-interactive (from bootstrap.sh, update-hosts.sh, or the TUI):
+  #     remove_host dev-01 true
+  local name="${1:-}" skip_confirm="${2:-false}"
 
-  local hosts
-  hosts=$(read_hosts)
-  [[ -z "$hosts" ]] && return
+  if [[ -z "$name" ]]; then
+    # A flag-sourced --skip-confirm never applies to an interactively-entered
+    # name — the "cannot be undone" prompt must always fire here.
+    skip_confirm=false
 
-  read -rp "  Host name to remove: " name
-  [[ -z "$name" ]] && return
+    header "Remove a host"
+    print_hosts
 
-  if ! host_exists "$name"; then
+    local hosts
+    hosts=$(read_hosts)
+    [[ -z "$hosts" ]] && return
+
+    read -rp "  Host name to remove: " name
+    [[ -z "$name" ]] && return
+
+    if ! host_exists "$name"; then
+      warn "Host '$name' not found."
+      return
+    fi
+  elif ! host_exists "$name"; then
     warn "Host '$name' not found."
-    return
+    return 1
   fi
 
-  read -rp "  Remove '$name'? This cannot be undone. [y/N]: " confirm
-  confirm="${confirm:-N}"
-
-  if [[ "$confirm" =~ ^[Yy]$ ]]; then
-    # Remove matching data line then reformat
-    local tmp
-    tmp=$(mktemp)
-    grep -v "^${name}[[:space:]]" "$HOSTS_CONF" >"$tmp"
-    mv "$tmp" "$HOSTS_CONF"
-    save_hosts
-    ok "Host '$name' removed from hosts.conf"
-    note_terminal_refresh
-  else
-    warn "Aborted."
+  if [[ "$skip_confirm" != true ]]; then
+    read -rp "  Remove '$name'? This cannot be undone. [y/N]: " confirm
+    confirm="${confirm:-N}"
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      warn "Aborted."
+      return
+    fi
   fi
+
+  # Remove matching data line then reformat
+  local tmp
+  tmp=$(mktemp)
+  grep -v "^${name}[[:space:]]" "$HOSTS_CONF" >"$tmp"
+  mv "$tmp" "$HOSTS_CONF"
+  save_hosts
+  ok "Host '$name' removed from hosts.conf"
+  note_terminal_refresh
 }
 
 edit_host() {
@@ -671,7 +691,26 @@ case "${1:-}" in
   exit 0
   ;;
 --remove)
-  remove_host
+  shift
+  rm_name=""
+  rm_skip_confirm=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --name)
+      rm_name="$2"
+      shift 2
+      ;;
+    --skip-confirm)
+      rm_skip_confirm=true
+      shift
+      ;;
+    *)
+      warn "Unknown flag: $1"
+      shift
+      ;;
+    esac
+  done
+  remove_host "$rm_name" "$rm_skip_confirm" || exit 1
   exit 0
   ;;
 --copy-id)
@@ -710,7 +749,8 @@ case "${1:-}" in
   done
   ;;
 *)
-  echo "Usage: $0 [--list | --format | --remove"
+  echo "Usage: $0 [--list | --format"
+  echo "          | --remove [--name N --skip-confirm]"
   echo "          | --add [--name N --ip I --user U --group G --skip-confirm]"
   echo "          | --copy-id [--name N | --all [--skip-confirm]]]"
   exit 1

@@ -1,7 +1,9 @@
 """WorkstationApp — the sidebar-rail shell (spec layout A)."""
 
 import asyncio
-from typing import Callable, Literal
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Coroutine, Literal
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -9,13 +11,25 @@ from textual.markup import escape
 from textual.widgets import ContentSwitcher, Static
 
 from workstation_tui.app.panels.dashboard import DashboardPanel
+from workstation_tui.app.panels.dotfiles import DotfilesPanel
+from workstation_tui.app.panels.fleet import FleetPanel
 from workstation_tui.app.panels.placeholder import PlaceholderPanel
 from workstation_tui.app.panels.provision import ProvisionPanel
 from workstation_tui.app.theme import M, MOCHA_CSS, kb
 from workstation_tui.app.widgets.sudo_modal import SudoModal
+from workstation_tui.core.chezmoi import read_status, target_diff
 from workstation_tui.core.context import detect_context
+from workstation_tui.core.fleet import probe_all
+from workstation_tui.core.gitstate import read_git_state
+from workstation_tui.core.hostsfile import read_hosts
 from workstation_tui.core.makeiface import make_command, read_inventory
-from workstation_tui.core.models import Summary, ToolStatus
+from workstation_tui.core.models import (
+    GitState,
+    HostEntry,
+    PendingChange,
+    Summary,
+    ToolStatus,
+)
 from workstation_tui.core.runner import Runner, TaskBusyError
 from workstation_tui.core.stamps import DEFAULT_STAMP_DIR, scan
 from workstation_tui.core.sudo import sudo_status, sudo_validate
@@ -87,6 +101,15 @@ class WorkstationApp(App):
         sudo_status_fn: Callable[[], Literal["valid", "needs_password", "no_sudo"]]
         | None = None,
         sudo_validate_fn: Callable[[str], bool] | None = None,
+        pending_provider: Callable[[], tuple[list[PendingChange], list[str]]]
+        | None = None,
+        git_state_provider: Callable[[Path], tuple[GitState | None, list[str]]]
+        | None = None,
+        target_diff_fn: Callable[[str], tuple[str, str | None]] | None = None,
+        probe_all_fn: Callable[[list[HostEntry]], Coroutine[Any, Any, dict[str, str]]]
+        | None = None,
+        hosts_provider: Callable[[], tuple[list[HostEntry], list[str]]] | None = None,
+        ssh_fn: Callable[[HostEntry], None] | None = None,
     ) -> None:
         super().__init__()
         self.summary_provider = summary_provider or _default_provider
@@ -96,6 +119,18 @@ class WorkstationApp(App):
         self.sudo_status_fn = sudo_status_fn or sudo_status
         self.sudo_validate_fn = sudo_validate_fn or sudo_validate
         self.sudo_keepalive_secs = 60.0
+        # Panel data providers for the Dotfiles/Fleet panels (Tasks 6-7) —
+        # wired here so the constructor surface is stable across those
+        # tasks; nothing in this task calls them yet. Defaults are the real
+        # core readers (hosts_provider wraps read_hosts with a resolved repo
+        # root, matching the zero-arg calling convention the others share
+        # natively); tests inject fakes/recorders.
+        self.pending_provider = pending_provider or read_status
+        self.git_state_provider = git_state_provider or read_git_state
+        self.target_diff_fn = target_diff_fn or target_diff
+        self.probe_all_fn = probe_all_fn or probe_all
+        self.hosts_provider = hosts_provider or self._default_hosts
+        self.ssh_fn = ssh_fn
         # Guards the sudo-gate window (status check + modal) — the runner
         # isn't busy yet during that window, so a second launch_task() call
         # (e.g. a double "r" press) would otherwise slip past the
@@ -112,8 +147,8 @@ class WorkstationApp(App):
             with ContentSwitcher(initial="dashboard", id="content"):
                 yield DashboardPanel(id="dashboard")
                 yield ProvisionPanel(id="provision")
-                yield PlaceholderPanel("Dotfiles", id="dotfiles")
-                yield PlaceholderPanel("Fleet", id="fleet")
+                yield DotfilesPanel(id="dotfiles")
+                yield FleetPanel(id="fleet")
                 yield PlaceholderPanel("Health", id="health")
         yield Static(
             kb(("1-5", "Panels"), ("g", "Refresh"), ("q", "Quit")),
@@ -161,6 +196,12 @@ class WorkstationApp(App):
         rows, errs = read_inventory(root, mode)
         return scan(DEFAULT_STAMP_DIR, rows), errs
 
+    def _default_hosts(self) -> tuple[list[HostEntry], list[str]]:
+        root = find_repo_root()
+        if root is None:
+            return [], ["workstation repo not found"]
+        return read_hosts(root)
+
     def _apply_tools(self, tools: list[ToolStatus], errors: list[str]) -> None:
         self.query_one("#provision", ProvisionPanel).set_tools(tools, errors)
 
@@ -185,6 +226,27 @@ class WorkstationApp(App):
                 "provisioning not available here — make is absent "
                 "(Windows hosts provision via bootstrap.ps1)"
             )
+        dotfiles_panel = self.query_one("#dotfiles", DotfilesPanel)
+        if c.has_chezmoi:
+            # Same reset-on-availability-change rationale as provision_panel
+            # above; refresh_panel() itself is safe to call every refresh
+            # (it re-fetches pending + git state, not a one-shot log line).
+            dotfiles_panel.unavailable = False
+            dotfiles_panel.refresh_panel()
+        elif not dotfiles_panel.unavailable:
+            # Guarded so the unavailable message logs once per availability
+            # CHANGE, not once per refresh (the Phase-4 parked lesson —
+            # set_unavailable() itself appends a log line).
+            dotfiles_panel.set_unavailable(
+                "dotfiles not available here — chezmoi is absent"
+            )
+        # Fleet has no availability gate (hosts.conf is always readable via
+        # the same repo checkout that ships make/chezmoi) — unlike
+        # provision/dotfiles above, refresh unconditionally on every cycle
+        # (panel mount is itself the first cycle, i.e. "on panel entry";
+        # every subsequent action_refresh() call, e.g. `g` or a completed
+        # task, is the "+ refresh" half).
+        self.query_one("#fleet", FleetPanel).refresh_panel()
 
     def _show_header_error(self, message: str) -> None:
         # message may contain arbitrary exception text (e.g. a path like
@@ -223,7 +285,32 @@ class WorkstationApp(App):
         needs_sudo = mode == "dev" and not user_kind
         self.launch_task(cmd, needs_sudo=needs_sudo)
 
-    def launch_task(self, command: list[str], *, needs_sudo: bool = False) -> None:
+    def ssh_to(self, entry: HostEntry) -> None:
+        """SSH to a fleet host.
+
+        A plain (non-worker) method — `self.suspend()` must run on the
+        actual app event loop, not inside a background worker. Tests
+        inject `ssh_fn` as a recorder; the real path requires a genuine
+        TTY (Textual's suspend() needs a real driver), so it's never
+        exercised headlessly.
+        """
+        if self.ssh_fn is not None:
+            self.ssh_fn(entry)
+            return
+        with self.suspend():
+            # `--` stops option injection from hostile stored entries (e.g.
+            # a user/address value crafted to start with '-' being parsed
+            # as an ssh flag instead of part of the destination).
+            subprocess.run(["ssh", "--", f"{entry.user}@{entry.address}"])
+
+    def launch_task(
+        self,
+        command: list[str],
+        *,
+        needs_sudo: bool = False,
+        log_to: Callable[[str], None] | None = None,
+        on_done: Callable[[], None] | None = None,
+    ) -> None:
         # _task_inflight covers the gate window (status check + modal)
         # where self._runner.busy is still False — without it a second
         # launch_task() call (e.g. a double "r" press) slips past the busy
@@ -238,41 +325,62 @@ class WorkstationApp(App):
         # single-flights this group; a stray group-wide cancel must never
         # be able to reach the running make via this worker.
         self.run_worker(
-            self._task_flow(command, needs_sudo), exclusive=False, group="task"
+            self._task_flow(command, needs_sudo, log_to, on_done),
+            exclusive=False, group="task",
         )
 
-    async def _task_flow(self, command: list[str], needs_sudo: bool) -> None:
+    async def _sudo_gate(self, needs_sudo: bool, command: list[str] | None = None) -> bool:
+        """Returns True when it's OK to proceed, False when the caller
+        should abort (already notified). `command` is only used to name the
+        exact command in the timestamp_timeout=0 fallback message — sequences
+        never pass needs_sudo=True in this phase, so they never need it.
+        """
+        context = self.summary.context if self.summary else detect_context()
+        if not (needs_sudo and context.os == "linux"):
+            return True
+        status = await asyncio.to_thread(self.sudo_status_fn)
+        if status == "no_sudo":
+            self.notify("sudo not available", severity="error")
+            return False
+        if status == "needs_password":
+            ok = await self.push_screen_wait(SudoModal(validator=self.sudo_validate_fn))
+            if not ok:
+                self.notify("cancelled", severity="warning")
+                return False
+            status = await asyncio.to_thread(self.sudo_status_fn)
+            if status == "needs_password":
+                # timestamp_timeout=0 sudoers: the validated password
+                # doesn't cache, so the command still can't run
+                # unattended. Fall back to naming the exact command for
+                # the user to run themselves in a terminal (the full
+                # app-suspend flow is deferred to the phase that needs
+                # it).
+                joined = " ".join(command) if command else ""
+                self.notify(
+                    "sudo timestamp caching disabled — run in a "
+                    f"terminal: {joined}",
+                    severity="error", markup=False,
+                )
+                return False
+        return True
+
+    def _resolve_log(self, log_to: Callable[[str], None] | None) -> Callable[[str], None]:
+        if log_to is not None:
+            return log_to
+        return self.query_one("#provision", ProvisionPanel).append_log
+
+    async def _task_flow(
+        self,
+        command: list[str],
+        needs_sudo: bool,
+        log_to: Callable[[str], None] | None = None,
+        on_done: Callable[[], None] | None = None,
+    ) -> None:
         try:
-            context = self.summary.context if self.summary else detect_context()
-            if needs_sudo and context.os == "linux":
-                status = await asyncio.to_thread(self.sudo_status_fn)
-                if status == "no_sudo":
-                    self.notify("sudo not available", severity="error")
-                    return
-                if status == "needs_password":
-                    ok = await self.push_screen_wait(
-                        SudoModal(validator=self.sudo_validate_fn)
-                    )
-                    if not ok:
-                        self.notify("cancelled", severity="warning")
-                        return
-                    status = await asyncio.to_thread(self.sudo_status_fn)
-                    if status == "needs_password":
-                        # timestamp_timeout=0 sudoers: the validated password
-                        # doesn't cache, so the command still can't run
-                        # unattended. Fall back to naming the exact command for
-                        # the user to run themselves in a terminal (the full
-                        # app-suspend flow is deferred to the phase that needs
-                        # it).
-                        joined = " ".join(command)
-                        self.notify(
-                            "sudo timestamp caching disabled — run in a "
-                            f"terminal: {joined}",
-                            severity="error", markup=False,
-                        )
-                        return
-            panel = self.query_one("#provision", ProvisionPanel)
-            panel.append_log("$ " + " ".join(command))
+            if not await self._sudo_gate(needs_sudo, command):
+                return
+            log = self._resolve_log(log_to)
+            log("$ " + " ".join(command))
             keepalive: asyncio.Task | None = None
             if needs_sudo:
                 async def _keepalive() -> None:
@@ -282,7 +390,7 @@ class WorkstationApp(App):
                 keepalive = asyncio.create_task(_keepalive())
             try:
                 try:
-                    result = await self._runner.run(command, panel.append_log)
+                    result = await self._runner.run(command, log)
                 except TaskBusyError:
                     self.notify("task running", severity="warning")
                     return
@@ -302,6 +410,73 @@ class WorkstationApp(App):
                 severity = "error" if result.returncode != 0 else "information"
                 self.notify(f"done (rc={result.returncode})", severity=severity)
             self.action_refresh()
+            if on_done is not None:
+                on_done()
+        finally:
+            self._task_inflight = False
+
+    def run_task_sequence(
+        self,
+        commands: list[list[str]],
+        *,
+        log_to: Callable[[str], None] | None = None,
+        on_done: Callable[[], None] | None = None,
+    ) -> None:
+        # Same busy/_task_inflight refusal machinery as launch_task —
+        # _task_inflight is held for the WHOLE sequence, not per-command, so
+        # a second launch_task()/run_task_sequence() call can't interleave
+        # with an in-progress sequence.
+        if self._task_inflight or self._runner.busy:
+            self.notify("task running", severity="warning")
+            return
+        self._task_inflight = True
+        self.run_worker(
+            self._sequence_flow(commands, log_to, on_done),
+            exclusive=False, group="task",
+        )
+
+    async def _sequence_flow(
+        self,
+        commands: list[list[str]],
+        log_to: Callable[[str], None] | None,
+        on_done: Callable[[], None] | None,
+    ) -> None:
+        try:
+            # Sequences are never sudo in this phase — gate with
+            # needs_sudo=False, which returns True immediately.
+            if not await self._sudo_gate(False):
+                return
+            log = self._resolve_log(log_to)
+            # Tracks whether the loop ran every command to completion
+            # (never cancelled, never a non-zero rc) — only that case earns
+            # the "done" toast below; the cancelled/aborted branches already
+            # notify their own outcome.
+            completed = True
+            for command in commands:
+                log("$ " + " ".join(command))
+                try:
+                    result = await self._runner.run(command, log)
+                except TaskBusyError:
+                    self.notify("task running", severity="warning")
+                    return
+                except Exception as exc:  # surface, never die silently in the worker
+                    self.notify(f"task failed: {type(exc).__name__}: {exc}",
+                                severity="error", markup=False)
+                    return
+                if result.cancelled:
+                    self.notify("cancelled", severity="warning")
+                    completed = False
+                    break
+                if result.returncode != 0:
+                    self.notify(f"sequence aborted (rc={result.returncode})",
+                                severity="error", markup=False)
+                    completed = False
+                    break
+            if completed:
+                self.notify("done", severity="information")
+            self.action_refresh()
+            if on_done is not None:
+                on_done()
         finally:
             self._task_inflight = False
 

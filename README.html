@@ -3698,7 +3698,8 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
 ./scripts/manage-hosts.sh --format       # re-pad hosts.conf
 ./scripts/manage-hosts.sh --add --name N --ip I \
     --user U --group dev_machine --skip-confirm
-./scripts/manage-hosts.sh --remove</code></pre>
+./scripts/manage-hosts.sh --remove         # interactive
+./scripts/manage-hosts.sh --remove --name N --skip-confirm</code></pre>
                         </div>
                         <div class="os-card windows">
                             <span class="os-label">Windows</span>
@@ -3707,7 +3708,8 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
 .\scripts\manage-hosts.ps1 -Format
 .\scripts\manage-hosts.ps1 -Add -Name N -Ip I `
     -User U -Group prod_machine -SkipConfirm
-.\scripts\manage-hosts.ps1 -Remove</code></pre>
+.\scripts\manage-hosts.ps1 -Remove         # interactive
+.\scripts\manage-hosts.ps1 -Remove -Name N -SkipConfirm</code></pre>
                         </div>
                     </div>
 

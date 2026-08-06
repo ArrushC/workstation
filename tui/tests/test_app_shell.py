@@ -1,5 +1,8 @@
+import contextlib
+import subprocess
+
 from workstation_tui.app.app import PANELS, WorkstationApp
-from workstation_tui.core.models import HostContext, Summary
+from workstation_tui.core.models import HostContext, HostEntry, Summary
 
 FAKE_SUMMARY = Summary(
     context=HostContext(
@@ -39,11 +42,15 @@ async def test_number_keys_switch_panels() -> None:
 
 
 async def test_placeholder_panels_name_their_phase() -> None:
+    # Fleet (panel "4") got its real FleetPanel in Phase 5 Task 7 and no
+    # longer speaks PlaceholderPanel's render_str_content() API — Health
+    # ("5") is the last panel still on the placeholder, so it's the
+    # representative check until that phase lands.
     app = WorkstationApp(summary_provider=fake_provider)
     async with app.run_test() as pilot:
         await pilot.pause()
-        await pilot.press("3")
-        text = app.query_one("#dotfiles").render_str_content()
+        await pilot.press("5")
+        text = app.query_one("#health").render_str_content()
         assert "later phase" in text
 
 
@@ -75,6 +82,23 @@ async def test_provider_error_surfaces_in_header() -> None:
         await pilot.pause()
         header_text = str(app.query_one("#app-header").content)
         assert "workstation repo not found" in header_text
+
+
+async def test_ssh_to_real_path_uses_double_dash(monkeypatch) -> None:
+    # Finding 2 (ssh hardening): no ssh_fn injected here — this exercises
+    # the REAL subprocess.run path (tests elsewhere inject ssh_fn as a
+    # recorder). ssh_to's docstring notes the genuine suspend()+TTY path
+    # can't be driven headlessly, so suspend() is monkeypatched to a no-op
+    # context manager (same "swap the instance attribute, not the class"
+    # trick as test_makeiface.py's subprocess.run patches) purely to let
+    # this synchronous method run and let us inspect the argv it builds.
+    calls: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd: calls.append(cmd))
+    app = WorkstationApp(summary_provider=fake_provider)
+    monkeypatch.setattr(app, "suspend", contextlib.nullcontext)
+    entry = HostEntry(name="alpha", address="10.0.0.1", user="me", group="dev_machine")
+    app.ssh_to(entry)
+    assert calls == [["ssh", "--", "me@10.0.0.1"]]
 
 
 async def test_provider_error_with_markup_text_does_not_crash() -> None:

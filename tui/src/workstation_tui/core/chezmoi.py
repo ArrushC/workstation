@@ -50,3 +50,20 @@ def apply_command() -> list[str]:
 
 def update_command() -> list[str]:
     return ["chezmoi", "update", "--force"]
+
+
+def target_diff(path: str, *, run=subprocess.run) -> tuple[str, str | None]:
+    try:
+        proc = run(
+            ["chezmoi", "diff", path],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "", f"chezmoi diff failed: {exc}"
+    if proc.returncode != 0:
+        return "", f"chezmoi diff failed (rc={proc.returncode}): {proc.stderr.strip()}"
+    return proc.stdout, None
+
+
+def re_add_command(path: str) -> list[str]:
+    return ["chezmoi", "re-add", path]
