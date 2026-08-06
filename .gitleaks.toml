@@ -24,6 +24,11 @@ paths = [
   '''\.md$''',
   '''(^|/)README\.html$''',
   '''(^|/)CLAUDE\.md$''',
+  # Brainstorming visual-companion session scratch (git-excluded via
+  # .git/info/exclude, but `gitleaks dir` scans untracked files too). Its
+  # server-info/server.log carry the companion's own localhost session key —
+  # a per-session browser-access token, not a repo credential.
+  '''(^|/)\.superpowers/''',
 ]
 
 # Windows Terminal keybinding chords ("keys": "alt+shift+down") trip the

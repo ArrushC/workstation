@@ -59,6 +59,12 @@ if [ -z "$msg" ]; then
   modify_private_settings.json)
     msg="If you changed the ccstatusline@ pin here, mirror it in CCSTATUSLINE_VERSION in makefile/versions.mk (dual-edit, no bridge)."
     ;;
+  python-env.sh)
+    msg="Parity pair: python-env.sh (PY_LIBS list + the tui/ editable install) mirrors Invoke-PythonEnv in bootstrap.ps1 (\$PythonLibs + the tui/ editable install). Change both in the same commit. See CLAUDE.md."
+    ;;
+  bootstrap.ps1)
+    msg="If you touched Invoke-PythonEnv (the \$PythonLibs list or the tui/ editable install), mirror it in makefile/lib/python-env.sh (PY_LIBS / the repo tui/ editable install). Change both in the same commit. See CLAUDE.md."
+    ;;
   esac
 fi
 [ -n "$msg" ] || exit 0
