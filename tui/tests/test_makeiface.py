@@ -1,7 +1,6 @@
 import shutil
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -81,3 +80,18 @@ def test_read_inventory_scrubs_inherited_makeflags(repo_root: Path, monkeypatch)
     names = {r.name for r in rows}
     assert {"fzf", "chezmoi", "python-env"} <= names
     assert len(rows) > 90
+
+
+def test_command_builders(tmp_path: Path) -> None:
+    from workstation_tui.core.makeiface import (
+        check_updates_command,
+        doctor_command,
+        make_command,
+        provision_command,
+    )
+
+    base = ["make", "--no-print-directory", "-C", str(tmp_path / "makefile")]
+    assert make_command(tmp_path, ["fzf", "zellij"], "dev") == [*base, "fzf", "zellij", "MODE=dev"]
+    assert provision_command(tmp_path, ["node-runtime"], "prod") == [*base, "node-runtime", "MODE=prod"]
+    assert doctor_command(tmp_path, "dev") == [*base, "doctor", "MODE=dev"]
+    assert check_updates_command(tmp_path, "prod") == [*base, "check-updates", "MODE=prod"]

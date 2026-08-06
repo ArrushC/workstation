@@ -56,3 +56,28 @@ def test_windows(tmp_path: Path) -> None:
     )
     assert ctx.os == "windows"
     assert ctx.is_wsl is False
+
+
+def test_group_none_when_chezmoi_fails(tmp_path: Path) -> None:
+    def run_rc1(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")
+    ctx = detect_context(which=which_all, run=run_rc1,
+                         proc_version=tmp_path / "absent", platform="linux")
+    assert ctx.group is None
+    assert ctx.mode == "prod"
+
+
+def test_group_none_on_malformed_json(tmp_path: Path) -> None:
+    def run_garbage(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="not json{", stderr="")
+    ctx = detect_context(which=which_all, run=run_garbage,
+                         proc_version=tmp_path / "absent", platform="linux")
+    assert ctx.group is None
+
+
+def test_group_none_on_non_string_group(tmp_path: Path) -> None:
+    def run_int_group(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout='{"group": 7}', stderr="")
+    ctx = detect_context(which=which_all, run=run_int_group,
+                         proc_version=tmp_path / "absent", platform="linux")
+    assert ctx.group is None

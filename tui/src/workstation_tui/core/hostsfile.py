@@ -1,4 +1,4 @@
-"""Parse hosts.conf (READ-ONLY — every write goes through manage-hosts).
+"""Parse hosts.conf (READ-ONLY — every write goes through manage-hosts; never raises).
 
 Format (manage-hosts re-pads on save): one host per line,
 `name  address  user  group`, whitespace-separated; blank lines and
@@ -33,4 +33,10 @@ def parse_hosts_text(text: str) -> tuple[list[HostEntry], list[str]]:
 
 
 def read_hosts(repo_root: Path) -> tuple[list[HostEntry], list[str]]:
-    return parse_hosts_text((repo_root / "hosts.conf").read_text(encoding="utf-8"))
+    try:
+        text = (repo_root / "hosts.conf").read_text(encoding="utf-8")
+    except OSError as exc:
+        return [], [f"hosts.conf unreadable: {exc}"]
+    except UnicodeDecodeError as exc:
+        return [], [f"hosts.conf undecodable: {exc}"]
+    return parse_hosts_text(text)

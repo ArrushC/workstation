@@ -1,0 +1,12 @@
+#compdef workstation
+# First-party zsh completion for the workstation CLI (tui/). Unlike the
+# sibling _*.sh completions there is NO hand-maintained flag list here:
+# Click generates the completer at eval time from the installed CLI, so this
+# stub is EXEMPT from the script-flag<->completion parity invariant.
+# Degrades silently when the CLI isn't installed yet (mid-bootstrap).
+if (( $+commands[workstation] )); then
+  eval "$(_WORKSTATION_COMPLETE=zsh_source workstation 2>/dev/null)"
+  # zsh_source defines + compdef-registers _workstation_completion for future
+  # attempts; invoke it directly to serve THIS attempt too.
+  (( $+functions[_workstation_completion] )) && _workstation_completion "$@"
+fi
