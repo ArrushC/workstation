@@ -13,14 +13,16 @@ from textual.widgets import ContentSwitcher, Static
 from workstation_tui.app.panels.dashboard import DashboardPanel
 from workstation_tui.app.panels.dotfiles import DotfilesPanel
 from workstation_tui.app.panels.fleet import FleetPanel
-from workstation_tui.app.panels.placeholder import PlaceholderPanel
+from workstation_tui.app.panels.health import HealthPanel
 from workstation_tui.app.panels.provision import ProvisionPanel
 from workstation_tui.app.theme import M, MOCHA_CSS, kb
+from workstation_tui.app.widgets.help_screen import HelpScreen
 from workstation_tui.app.widgets.sudo_modal import SudoModal
 from workstation_tui.core.chezmoi import read_status, target_diff
 from workstation_tui.core.context import detect_context
 from workstation_tui.core.fleet import probe_all
 from workstation_tui.core.gitstate import read_git_state
+from workstation_tui.core.health import read_services, read_wsl_interop
 from workstation_tui.core.hostsfile import read_hosts
 from workstation_tui.core.makeiface import make_command, read_inventory
 from workstation_tui.core.models import (
@@ -28,6 +30,7 @@ from workstation_tui.core.models import (
     HostEntry,
     PendingChange,
     Summary,
+    TaskResult,
     ToolStatus,
 )
 from workstation_tui.core.runner import Runner, TaskBusyError
@@ -90,6 +93,7 @@ class WorkstationApp(App):
           for i, (pid, label) in enumerate(PANELS)],
         ("g", "refresh", "Refresh"),
         ("q", "quit", "Quit"),
+        ("?", "help", "Help"),
     ]
 
     def __init__(
@@ -110,6 +114,9 @@ class WorkstationApp(App):
         | None = None,
         hosts_provider: Callable[[], tuple[list[HostEntry], list[str]]] | None = None,
         ssh_fn: Callable[[HostEntry], None] | None = None,
+        health_cache_path: Path | None = None,
+        services_reader: Callable[[], dict[str, str]] | None = None,
+        interop_reader: Callable[[], str] | None = None,
     ) -> None:
         super().__init__()
         self.summary_provider = summary_provider or _default_provider
@@ -131,6 +138,15 @@ class WorkstationApp(App):
         self.probe_all_fn = probe_all_fn or probe_all
         self.hosts_provider = hosts_provider or self._default_hosts
         self.ssh_fn = ssh_fn
+        # Health panel providers (Phase 6 Task 2) — same injectable-default
+        # convention as the providers above; health_cache_path defaults to
+        # the standard XDG-ish per-user cache location (this is the only
+        # file the TUI itself writes — checks otherwise run unprivileged).
+        self.health_cache_path = (
+            health_cache_path or Path.home() / ".cache/workstation-tui/health.json"
+        )
+        self.services_reader = services_reader or read_services
+        self.interop_reader = interop_reader or read_wsl_interop
         # Guards the sudo-gate window (status check + modal) — the runner
         # isn't busy yet during that window, so a second launch_task() call
         # (e.g. a double "r" press) would otherwise slip past the
@@ -149,9 +165,9 @@ class WorkstationApp(App):
                 yield ProvisionPanel(id="provision")
                 yield DotfilesPanel(id="dotfiles")
                 yield FleetPanel(id="fleet")
-                yield PlaceholderPanel("Health", id="health")
+                yield HealthPanel(id="health")
         yield Static(
-            kb(("1-5", "Panels"), ("g", "Refresh"), ("q", "Quit")),
+            kb(("1-5", "Panels"), ("g", "Refresh"), ("q", "Quit"), ("?", "Help")),
             id="key-bar", markup=True,
         )
 
@@ -165,6 +181,9 @@ class WorkstationApp(App):
 
     def action_switch(self, panel_id: str) -> None:
         self.switch_panel(panel_id)
+
+    def action_help(self) -> None:
+        self.push_screen(HelpScreen())
 
     def action_refresh(self) -> None:
         # Isolated in its own worker group ("summary") so that this
@@ -247,6 +266,10 @@ class WorkstationApp(App):
         # every subsequent action_refresh() call, e.g. `g` or a completed
         # task, is the "+ refresh" half).
         self.query_one("#fleet", FleetPanel).refresh_panel()
+        # Health has no host-level availability gate either (individual
+        # checks gate themselves via check_available() at run time) —
+        # unconditional refresh every cycle, same rationale as fleet above.
+        self.query_one("#health", HealthPanel).refresh_panel()
 
     def _show_header_error(self, message: str) -> None:
         # message may contain arbitrary exception text (e.g. a path like
@@ -309,6 +332,7 @@ class WorkstationApp(App):
         *,
         needs_sudo: bool = False,
         log_to: Callable[[str], None] | None = None,
+        on_result: Callable[[TaskResult], None] | None = None,
         on_done: Callable[[], None] | None = None,
     ) -> None:
         # _task_inflight covers the gate window (status check + modal)
@@ -325,7 +349,7 @@ class WorkstationApp(App):
         # single-flights this group; a stray group-wide cancel must never
         # be able to reach the running make via this worker.
         self.run_worker(
-            self._task_flow(command, needs_sudo, log_to, on_done),
+            self._task_flow(command, needs_sudo, log_to, on_result, on_done),
             exclusive=False, group="task",
         )
 
@@ -374,6 +398,7 @@ class WorkstationApp(App):
         command: list[str],
         needs_sudo: bool,
         log_to: Callable[[str], None] | None = None,
+        on_result: Callable[[TaskResult], None] | None = None,
         on_done: Callable[[], None] | None = None,
     ) -> None:
         try:
@@ -404,6 +429,16 @@ class WorkstationApp(App):
             finally:
                 if keepalive is not None:
                     keepalive.cancel()
+            # Minimal, backward-compatible addition (optional, keyword-only,
+            # defaults to None — every pre-existing call site is unchanged):
+            # hands the TaskResult (incl. returncode) to the caller before
+            # on_done, the same "before on_done" ordering on_done itself
+            # already has relative to action_refresh() below. The health
+            # panel is the first consumer — it needs the rc to record a
+            # CheckResult, which neither on_done's zero-arg signature nor
+            # the streamed log lines alone can give it.
+            if on_result is not None:
+                on_result(result)
             if result.cancelled:
                 self.notify("cancelled", severity="warning")
             else:

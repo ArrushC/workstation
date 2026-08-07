@@ -102,6 +102,15 @@ class DotfilesPanel(Static):
         # True when this host has no chezmoi — the panel degrades honestly
         # instead of pretending dotfiles management works here.
         self.unavailable = False
+        # Last logged in-sync state: None = never logged, True = in sync,
+        # False = not in sync. Guards the "dotfiles in sync" log line so it
+        # logs only once per CHANGE, not once per refresh (the Phase-4
+        # parked lesson — mirrors the unavailable-message guard pattern above).
+        self._last_in_sync_state: bool | None = None
+        # Last logged warning set: an empty tuple initially means no warnings
+        # have been logged yet. Guards warning lines so they log only once
+        # per CHANGE to the error set (e.g. new error appears, or error clears).
+        self._last_warnings: tuple[str, ...] = ()
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -206,10 +215,20 @@ class DotfilesPanel(Static):
         self.git_state = git_state
         self._render_rows()
         self._render_git_line()
-        for err in [*errors, *git_errors]:
-            self.append_log(f"warning  {err}")
-        if not pending:
-            self.append_log("dotfiles in sync — nothing pending")
+        # Guard warning lines so they log once per CHANGE to the error set,
+        # not once per refresh (same pattern as the "in sync" guard below).
+        warnings = tuple(f"warning  {err}" for err in [*errors, *git_errors])
+        if warnings != self._last_warnings:
+            for warning in warnings:
+                self.append_log(warning)
+            self._last_warnings = warnings
+        # Guard the "in sync" message so it logs once per CHANGE, not once
+        # per refresh — mirrors the unavailable-message guard pattern above.
+        in_sync = not pending
+        if in_sync != self._last_in_sync_state:
+            if in_sync:
+                self.append_log("dotfiles in sync — nothing pending")
+            self._last_in_sync_state = in_sync
 
     # -- diff pane (cursor-driven) ---------------------------------------
 

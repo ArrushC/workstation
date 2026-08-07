@@ -41,19 +41,6 @@ async def test_number_keys_switch_panels() -> None:
         assert app.query_one("#content").current == "dashboard"
 
 
-async def test_placeholder_panels_name_their_phase() -> None:
-    # Fleet (panel "4") got its real FleetPanel in Phase 5 Task 7 and no
-    # longer speaks PlaceholderPanel's render_str_content() API — Health
-    # ("5") is the last panel still on the placeholder, so it's the
-    # representative check until that phase lands.
-    app = WorkstationApp(summary_provider=fake_provider)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        await pilot.press("5")
-        text = app.query_one("#health").render_str_content()
-        assert "later phase" in text
-
-
 async def test_q_quits() -> None:
     app = WorkstationApp(summary_provider=fake_provider)
     async with app.run_test() as pilot:
