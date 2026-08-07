@@ -83,3 +83,50 @@ def test_read_wsl_interop_states(tmp_path: Path, monkeypatch) -> None:
     assert read_wsl_interop() == "enabled"
     p.write_text("disabled\n")
     assert read_wsl_interop() == "disabled"
+
+
+def test_build_health_rollup_states_and_gating() -> None:
+    import time as _time
+
+    from workstation_tui.core.health import build_health_rollup
+    from workstation_tui.core.models import CheckResult
+
+    cache = {
+        "doctor": CheckResult(check_id="doctor", ok=True, summary="ok",
+                              finished_at=_time.time(), returncode=0),
+        "invariants": CheckResult(check_id="invariants", ok=False, summary="bad",
+                                  finished_at=_time.time(), returncode=1),
+    }
+    calls: list[str] = []
+
+    def services_reader():
+        calls.append("services")
+        return {"docker": "active", "dozzle": "active",
+                "cockpit": "inactive", "rsyslog": "active"}
+
+    # WSL dev context → services gated, reader NOT called, interop read.
+    rollup = build_health_rollup(cache, CTX, services_reader, lambda: "enabled")
+    assert rollup.checks == {"doctor": True, "check-updates": None,
+                             "invariants": False, "templates": None}
+    assert rollup.services == "n/a on WSL"
+    assert rollup.interop == "enabled"
+    assert calls == []
+
+    # Non-WSL dev context → live services count, no interop.
+    ctx = CTX.model_copy(update={"is_wsl": False})
+    rollup = build_health_rollup(cache, ctx, services_reader, lambda: "enabled")
+    assert rollup.services == "3/4 active"
+    assert rollup.interop is None
+    assert calls == ["services"]
+
+    # Prod context → dev-only reason, reader still not called again.
+    ctx = CTX.model_copy(update={"is_wsl": False, "mode": "prod"})
+    rollup = build_health_rollup(cache, ctx, services_reader, lambda: "enabled")
+    assert rollup.services == "dev-machine-only"
+    assert calls == ["services"]
+
+    # No systemctl (non-WSL dev) → its reason, reader still not called again.
+    ctx = CTX.model_copy(update={"is_wsl": False, "has_systemctl": False})
+    rollup = build_health_rollup(cache, ctx, services_reader, lambda: "enabled")
+    assert rollup.services == "systemctl not available"
+    assert calls == ["services"]

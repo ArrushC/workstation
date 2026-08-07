@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from workstation_tui.core.makeiface import make_command
-from workstation_tui.core.models import CheckResult, HealthCheck, HostContext
+from workstation_tui.core.models import CheckResult, HealthCheck, HealthRollup, HostContext
 
 # Module-level constant for WSL interop path (monkeypatchable for testing)
 _INTEROP_PATH = Path("/proc/sys/fs/binfmt_misc/WSLInterop")
@@ -142,6 +142,57 @@ def read_services(*, run: Callable = subprocess.run) -> dict[str, str]:
         except Exception:
             states[service_name] = "unknown"
     return states
+
+
+def build_health_rollup(
+    cache: dict[str, CheckResult],
+    ctx: HostContext,
+    services_reader: Callable[[], dict[str, str]],
+    interop_reader: Callable[[], str],
+) -> HealthRollup:
+    """Build the dashboard's live health-quadrant rollup.
+
+    checks come from the CHECKS registry order (cached result -> ok/failed,
+    no entry -> never-ran/None). services is gated FIRST — is_wsl / not
+    has_systemctl / mode != "dev" each short-circuit to a reason string
+    WITHOUT calling services_reader, so the reader only runs when the
+    services line will actually be live (closes the phase-6 deferred
+    wasted-subprocess minor at the core level). interop_reader is only
+    called when ctx.is_wsl. Never raises.
+    """
+    try:
+        checks: dict[str, bool | None] = {}
+        for check in CHECKS:
+            entry = cache.get(check.check_id)
+            checks[check.check_id] = entry.ok if entry is not None else None
+
+        if ctx.is_wsl:
+            services = "n/a on WSL"
+        elif not ctx.has_systemctl:
+            services = "systemctl not available"
+        elif ctx.mode != "dev":
+            services = "dev-machine-only"
+        else:
+            try:
+                states = services_reader()
+                total = len(states)
+                active = sum(1 for state in states.values() if state == "active")
+                services = f"{active}/{total} active" if total else "no services"
+            except Exception:
+                services = "services unavailable"
+
+        interop: str | None = None
+        if ctx.is_wsl:
+            try:
+                interop = interop_reader()
+            except Exception:
+                interop = "absent"
+
+        return HealthRollup(checks=checks, services=services, interop=interop)
+    except Exception:
+        # Never raises — a malformed cache/ctx degrades to an empty rollup
+        # rather than crashing the summary-load worker.
+        return HealthRollup(checks={}, services="health rollup unavailable", interop=None)
 
 
 def read_wsl_interop() -> str:

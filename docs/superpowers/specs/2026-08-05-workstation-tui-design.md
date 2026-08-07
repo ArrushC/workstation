@@ -320,7 +320,7 @@ against the code, not this spec, so these are the differences to trust the code 
   Dashboard bullet specs a "health: doctor/lint/services rollup" card. `Summary` (in
   `core/models.py`) carries no health fields at all, and `DashboardPanel.update_summary`
   renders `card-health` as a fixed "open the Health panel (5) — checks · services ·
-  interop" pointer rather than any live rollup. Follow-up.
+  interop" pointer rather than any live rollup. Follow-up. (closed by the dashboard-polish change, 2026-08-07)
 - **Windows Health column shipped as "none", not "chezmoi + interop checks".** §The
   platform-gating table lists Windows Health as "chezmoi + interop checks". All four
   Health registry checks (`doctor.sh`, check-updates, invariants+lint, template render)

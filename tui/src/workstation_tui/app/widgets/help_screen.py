@@ -46,6 +46,8 @@ class HelpScreen(ModalScreen[None]):
             # Global keys
             heading("Global Keys"),
             action_line("1-5", "Panels"),
+            action_line("←→↑↓", "Cards", "move between dashboard cards"),
+            action_line("ctrl+←/→", "Cycle", "previous/next panel"),
             action_line("g", "Refresh"),
             action_line("q", "Quit"),
             action_line("?", "Help"),

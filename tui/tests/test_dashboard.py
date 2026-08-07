@@ -47,3 +47,41 @@ async def test_refresh_calls_provider_again() -> None:
         await pilot.press("g")
         await pilot.pause()
         assert len(calls) > first
+
+
+async def test_health_card_renders_rollup(tmp_path) -> None:
+    import time as _time
+
+    from workstation_tui.core.health import save_cache
+    from workstation_tui.core.models import CheckResult
+
+    save_cache(tmp_path / "health.json", {
+        "doctor": CheckResult(check_id="doctor", ok=True, summary="31/31 ok",
+                              finished_at=_time.time(), returncode=0),
+    })
+    app = WorkstationApp(
+        summary_provider=fake_provider,
+        health_cache_path=tmp_path / "health.json",
+        interop_reader=lambda: "enabled",
+    )
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        text = app.query_one("#dashboard").summary_text()
+        assert "doctor" in text
+        assert "enabled" in text          # interop (FAKE_SUMMARY is WSL)
+        assert "n/a on WSL" in text       # services gating reason
+
+
+async def test_cards_fill_area_equally() -> None:
+    app = WorkstationApp(summary_provider=fake_provider)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        cards = list(app.query(".card"))
+        assert len(cards) == 4
+        widths = {c.region.width for c in cards}
+        heights = {c.region.height for c in cards}
+        assert len(widths) == 1, f"unequal widths: {widths}"
+        assert len(heights) == 1, f"unequal heights: {heights}"
+        # full-bleed: the grid claims most of the content height
+        grid = app.query_one("#cards")
+        assert grid.region.height >= 30
