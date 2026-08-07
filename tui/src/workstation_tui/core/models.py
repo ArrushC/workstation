@@ -108,3 +108,11 @@ class HealthCheck(BaseModel):
     label: str
     kind: Literal["make", "script"]
     goals: list[str]  # make goals or script argv relative to repo root
+
+
+class HealthRollup(BaseModel):
+    """Dashboard health-quadrant rollup — the live `card-health` content."""
+
+    checks: dict[str, bool | None]  # True ok / False failed / None never-ran, by check_id
+    services: str  # e.g. "3/4 active", or a gating reason
+    interop: str | None  # None when the host isn't WSL

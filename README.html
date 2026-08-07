@@ -4367,7 +4367,9 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                     <p>
                         Four live cards &mdash; Provision (fresh/stale/missing
                         tool counts), Dotfiles (pending file count), Fleet
-                        (host counts by total/dev/prod), and Health &mdash;
+                        (host counts by total/dev/prod), and Health (check
+                        glyphs: ✓ pass / ✗ fail / — never-ran; services count
+                        or gating reason; interop state on WSL) &mdash;
                         refreshed on launch and on every <kbd>g</kbd>. Tab to
                         a focused card and press <kbd>Enter</kbd> to jump
                         straight into that panel.
@@ -4524,6 +4526,10 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                     <kbd>?</kbd> to close)
                                 </td>
                             </tr>
+                            <tr>
+                                <td><kbd>Ctrl-←</kbd> / <kbd>Ctrl-→</kbd></td>
+                                <td>Previous / next panel</td>
+                            </tr>
                         </tbody>
                     </table>
                     <p>Per panel:</p>
@@ -4625,6 +4631,11 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 <td>Health</td>
                                 <td><kbd>o</kbd></td>
                                 <td>Open full health log</td>
+                            </tr>
+                            <tr>
+                                <td>Dashboard</td>
+                                <td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td>
+                                <td>Move focus between cards</td>
                             </tr>
                         </tbody>
                     </table>

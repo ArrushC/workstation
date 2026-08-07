@@ -7,6 +7,7 @@ from typing import Any, Callable, Coroutine, Literal
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.markup import escape
 from textual.widgets import ContentSwitcher, Static
 
@@ -22,11 +23,17 @@ from workstation_tui.core.chezmoi import read_status, target_diff
 from workstation_tui.core.context import detect_context
 from workstation_tui.core.fleet import probe_all
 from workstation_tui.core.gitstate import read_git_state
-from workstation_tui.core.health import read_services, read_wsl_interop
+from workstation_tui.core.health import (
+    build_health_rollup,
+    load_cache,
+    read_services,
+    read_wsl_interop,
+)
 from workstation_tui.core.hostsfile import read_hosts
 from workstation_tui.core.makeiface import make_command, read_inventory
 from workstation_tui.core.models import (
     GitState,
+    HealthRollup,
     HostEntry,
     PendingChange,
     Summary,
@@ -94,6 +101,8 @@ class WorkstationApp(App):
         ("g", "refresh", "Refresh"),
         ("q", "quit", "Quit"),
         ("?", "help", "Help"),
+        ("ctrl+left", "cycle_panel(-1)", "Prev panel"),
+        ("ctrl+right", "cycle_panel(1)", "Next panel"),
     ]
 
     def __init__(
@@ -174,13 +183,25 @@ class WorkstationApp(App):
     def on_mount(self) -> None:
         self._mark_active("dashboard")
         self.action_refresh()
+        try:
+            self.query_one("#dashboard", DashboardPanel).focus_first_card()
+        except NoMatches:
+            pass
 
     def switch_panel(self, panel_id: str) -> None:
         self.query_one("#content", ContentSwitcher).current = panel_id
         self._mark_active(panel_id)
+        if panel_id == "dashboard":
+            self.query_one("#dashboard", DashboardPanel).focus_first_card()
 
     def action_switch(self, panel_id: str) -> None:
         self.switch_panel(panel_id)
+
+    def action_cycle_panel(self, delta: int) -> None:
+        ids = [pid for pid, _ in PANELS]
+        current = self.query_one("#content", ContentSwitcher).current
+        idx = ids.index(current) if current in ids else 0
+        self.switch_panel(ids[(idx + delta) % len(ids)])
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -203,7 +224,15 @@ class WorkstationApp(App):
                 self._show_header_error, f"{type(exc).__name__}: {exc}"
             )
             return
-        self.call_from_thread(self._apply_summary, summary)
+        # Runs on this worker's own thread already (thread=True above), so
+        # the blocking cache read + the gating-first services/interop reads
+        # inside build_health_rollup happen here, same as tools_provider()
+        # below — never on the event loop.
+        cache = load_cache(self.health_cache_path)
+        rollup = build_health_rollup(
+            cache, summary.context, self.services_reader, self.interop_reader
+        )
+        self.call_from_thread(self._apply_summary, summary, rollup)
         tools, errors = self.tools_provider()
         self.call_from_thread(self._apply_tools, tools, errors)
 
@@ -224,7 +253,7 @@ class WorkstationApp(App):
     def _apply_tools(self, tools: list[ToolStatus], errors: list[str]) -> None:
         self.query_one("#provision", ProvisionPanel).set_tools(tools, errors)
 
-    def _apply_summary(self, summary: Summary) -> None:
+    def _apply_summary(self, summary: Summary, rollup: HealthRollup) -> None:
         self.summary = summary
         c = summary.context
         wsl = " · WSL" if c.is_wsl else ""
@@ -233,7 +262,9 @@ class WorkstationApp(App):
             f"[{M['subtext0']}]— {c.os} · group={c.group or '?'} · "
             f"mode={c.mode}{wsl}[/]"
         )
-        self.query_one("#dashboard", DashboardPanel).update_summary(summary)
+        dashboard_panel = self.query_one("#dashboard", DashboardPanel)
+        dashboard_panel.update_summary(summary)
+        dashboard_panel.update_health(rollup)
         provision_panel = self.query_one("#provision", ProvisionPanel)
         if c.has_make:
             # Reset in case an earlier refresh (different host/context, or

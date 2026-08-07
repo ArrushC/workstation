@@ -10,6 +10,7 @@ Updated 2026-08-06 after Phase 2 (headless CLI, branch `feat/workstation-tui-pha
 **PROJECT STATUS (2026-08-07):** all six phases merged — the TUI is v1-complete (README §tui is the user doc; the spec has an as-built-deltas section). Items below are the POST-V1 backlog, all triaged non-blocking.
 
 **Phase-6 additions:** real dashboard health rollup (card is a static pointer; Summary has no health fields); per-command result hook on run_task_sequence if run-all recording is wanted; health-write interleave under rapid runs (self-heals); unavailable-with-stale-cache rows keep last glyph; services_reader called when line renders a reason; health run-one dev-mode fallback pre-summary; $-echo can become cached summary; interop check lacks the spec powershell.exe probe.
+**Dashboard-polish additions (2026-08-07):** one services read per refresh cycle (rollup + health panel each read; panel read still ungated); rollup build serializes summary apply behind cache/services I-O (split call_from_thread if latency shows); ctrl+arrows lose to focused Inputs (word-move) — help/README present as global; plan-doc Step-1 snippets kept pre-fix reason strings (historical); Textual 8.2.8 fact: display/visible do NOT reflect ancestor display:none — is_on_screen is the compositor-backed check (dashboard Card guards rely on it).
 
 **Why kept:** each was ruled cosmetic/deferrable at its final review; none block daily use.
 
