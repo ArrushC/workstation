@@ -96,7 +96,7 @@ class DashboardPanel(Static):
             f"[{M['subtext0']}]{s.hosts_dev} dev · {s.hosts_prod} prod[/]",
             fleet_plain,
         )
-        health_plain = "checks arrive in a later phase"
+        health_plain = "open the Health panel (5) — checks · services · interop"
         self._card("card-health").set_content(
             heading("Health") + "\n" + muted(health_plain),
             health_plain,

@@ -263,3 +263,66 @@ workstation --version / --help
 - CLAUDE.md: python-env invariant line updated (both scopes + editable TUI install);
   parity-pair list gains the editable-install dual-edit; conventions note that
   `workstation` completions are Click-generated (exempt from flag-parity checks).
+
+## As-built deltas (2026-08-07)
+
+Recorded deviations between this design and the shipped Phase 6 implementation
+(`tui/src/workstation_tui/`), found while writing README §tui — the doc was written
+against the code, not this spec, so these are the differences to trust the code over:
+
+- **Identity line moved to the header, and dropped hostname/EL family.** §The five
+  screens above specs "Global footer: host identity (`host · group · MODE · WSL · EL
+  family`)". The shipped `WorkstationApp.compose()` renders identity in a `#app-header`
+  `Static` at the TOP of the layout (`os · group=… · mode=… [· WSL]`) — there is no
+  hostname and no EL-family field anywhere in `HostContext`. The bottom `#key-bar` is
+  global-keys-only (`1-5`/`g`/`q`); it never carried per-screen key hints — those live
+  inside each panel instead (e.g. `#provision-keys`).
+- **`timestamp_timeout=0` gets a named-command message, not app-suspend.** §Execution
+  engine specs "offer app-suspend and run the command in the raw terminal instead" for
+  sudoers with `timestamp_timeout=0`. The shipped `_sudo_gate` in `app.py` instead
+  notifies with the exact command to run in a real terminal and aborts the task —
+  the full app-suspend fallback is explicitly deferred ("the full app-suspend flow is
+  deferred to the phase that needs it", per the in-code comment). No phase implemented
+  it since.
+- **Fleet edit is remove-then-add, not an in-place rename.** §The five screens
+  describes `[a]/[e]/[x]` generically as "add/edit/remove via form modals". The shipped
+  `_edit_flow` in `fleet.py` runs `manage_hosts_remove_command` followed by
+  `manage_hosts_add_command` as a `run_task_sequence` — there is no in-place edit verb
+  in `manage-hosts.sh`/`.ps1`, so a rename-collision guard (`_name_collision`) runs
+  first to keep a bad rename from silently dropping the old host with no replacement.
+- **Health `[R]` (run-all) does not record per-row results.** §The five screens lists
+  `[R]` as "run all" alongside `[enter]` "re-run one" with no distinction drawn. The
+  shipped `action_run_all` uses `run_task_sequence`, which streams combined output but
+  exposes no per-command return code — so a run-all pass leaves every row's cached
+  result untouched (still whatever the last individual `[enter]` recorded, or "never").
+  Documented in `health.py`'s module docstring as "a deliberate v1 scope decision, not
+  an oversight."
+- **Windows elevation was never built — no elevated Windows action exists.** §Execution
+  engine specs `Start-Process -Verb RunAs` / native UAC popup for privileged Windows
+  actions, and the platform-gating table lists a Windows "UAC popup (on demand)" row.
+  No phase implemented this: `rg -i "RunAs|UAC|elevat"` over `tui/src/` returns nothing.
+  In practice this is moot for v1 — the one panel that would need elevation
+  (Provision) is fully `unavailable` on Windows (`has_make` is `False` there), so no
+  code path currently needs a Windows elevation prompt at all.
+- **`[?]` help landed in Phase 6, not earlier.** The keymap (`[1-5]`/`[g]`/`[q]`/`[?]`)
+  was specified from Phase 3 onward, but both the `"?"` binding itself and
+  `HelpScreen` (`app/widgets/help_screen.py`), the overlay it opens, were added
+  together in the same commit alongside the Health panel (`feat(tui): help overlay +
+  dotfiles log dedup`) — confirmed via `git log -S '"?", "help"'`. Before that commit
+  `?` did nothing; there was no earlier partial binding.
+- **WSL interop check reads only the binfmt file.** §The five screens' Health bullet
+  specs "WSL interop (binfmt handler present, powershell.exe reachable)". The shipped
+  `read_wsl_interop` in `core/health.py` only checks
+  `/proc/sys/fs/binfmt_misc/WSLInterop` — there is no `powershell.exe` reachability
+  probe. The `session-context.sh` hook's static probe (jq/shfmt/gitleaks readiness,
+  never spawning a Windows process) is the precedent this follows.
+- **The Dashboard health card is a static pointer, not a rollup.** §The five screens'
+  Dashboard bullet specs a "health: doctor/lint/services rollup" card. `Summary` (in
+  `core/models.py`) carries no health fields at all, and `DashboardPanel.update_summary`
+  renders `card-health` as a fixed "open the Health panel (5) — checks · services ·
+  interop" pointer rather than any live rollup. Follow-up.
+- **Windows Health column shipped as "none", not "chezmoi + interop checks".** §The
+  platform-gating table lists Windows Health as "chezmoi + interop checks". All four
+  Health registry checks (`doctor.sh`, check-updates, invariants+lint, template render)
+  are make/bash-side and gated unavailable on Windows — no chezmoi or interop check
+  variant was implemented for that platform.

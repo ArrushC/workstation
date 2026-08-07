@@ -1,13 +1,17 @@
 ---
 name: workstation-tui-phase2-carryforwards
-description: Deferred items for TUI Phase 3+ (dashboard/panels), updated after Phase 2 (headless CLI) closed the Phase-1 blockers
+description: Post-v1 backlog for the SHIPPED workstation TUI (all 6 phases merged 2026-08-07) — deferred polish + follow-ups with final-review rulings
 metadata:
   type: project
 ---
 
 Updated 2026-08-06 after Phase 2 (headless CLI, branch `feat/workstation-tui-phase2`). Phase 2 CLOSED the Phase-1 blockers: `read_hosts` never-raises, `_detect_group` failure branches tested, `tui/pyrightconfig.json` added, `tui/uv.lock` dropped+gitignored, plus final-review hardenings (loud failure on invalid `WORKSTATION_REPO`, `provision` rejects `VAR=value` args, `dotfiles apply` gates on diff rc).
 
-**Why:** Phase 2's final review triaged the rest as non-blocking; two matter when Phase 3+ touches their area.
+**PROJECT STATUS (2026-08-07):** all six phases merged — the TUI is v1-complete (README §tui is the user doc; the spec has an as-built-deltas section). Items below are the POST-V1 backlog, all triaged non-blocking.
+
+**Phase-6 additions:** real dashboard health rollup (card is a static pointer; Summary has no health fields); per-command result hook on run_task_sequence if run-all recording is wanted; health-write interleave under rapid runs (self-heals); unavailable-with-stale-cache rows keep last glyph; services_reader called when line renders a reason; health run-one dev-mode fallback pre-summary; $-echo can become cached summary; interop check lacks the spec powershell.exe probe.
+
+**Why kept:** each was ruled cosmetic/deferrable at its final review; none block daily use.
 
 **How to apply (Phase 3+ — address in the phase that touches the area):**
 - **Phase 4+ (from Phase 3 final review):** adopt worker `is_cancelled` checks + named worker groups as the standard pattern when more workers land; harden `test_refresh_calls_provider_again` with `await app.workers.wait_for_complete()`; give dashboard cards an error state (they stay "loading…" on provider failure); reconcile spec-vs-implementation drift in the final phase (identity line lives in header not footer, no hostname/EL family, no `[?]` help binding); keep `markup=False` for subprocess-derived strings and `escape()` for exception-derived strings as the rendering precedent.

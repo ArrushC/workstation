@@ -89,3 +89,22 @@ class GitState(BaseModel):
     dirty: bool
     ahead: int
     behind: int
+
+
+class CheckResult(BaseModel):
+    """Outcome of a health check run."""
+
+    check_id: str
+    ok: bool
+    summary: str
+    finished_at: float  # epoch timestamp
+    returncode: int
+
+
+class HealthCheck(BaseModel):
+    """Definition of a health check to run."""
+
+    check_id: str
+    label: str
+    kind: Literal["make", "script"]
+    goals: list[str]  # make goals or script argv relative to repo root
