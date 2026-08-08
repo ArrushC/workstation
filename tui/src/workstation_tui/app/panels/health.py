@@ -32,7 +32,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, RichLog, Static
 
-from workstation_tui.app.theme import M, icon, kb, muted
+from workstation_tui.app.theme import M, icon, muted
 from workstation_tui.app.widgets.text_view import TextViewScreen
 from workstation_tui.core.health import (
     CHECKS,
@@ -60,10 +60,6 @@ HealthPanel {{
     height: 1;
     padding: 0 1;
     background: {M['mantle']};
-}}
-#health-keys {{
-    height: 1;
-    color: {M['subtext0']};
 }}
 #health-log {{
     height: 12;
@@ -152,8 +148,6 @@ class HealthPanel(Static):
                             zebra_stripes=True)
             yield Static("", id="health-services", markup=True)
             yield Static("", id="health-interop", markup=True)
-            yield Static(kb(("enter", "Run"), ("R", "Run all"), ("o", "Open log")),
-                         id="health-keys", markup=True)
             yield RichLog(id="health-log", markup=False, wrap=False,
                           max_lines=self.MAX_LOG_LINES)
 
@@ -182,7 +176,7 @@ class HealthPanel(Static):
             # provision.py/dotfiles.py/fleet.py).
             table.add_row(
                 icon(state, HEALTH_ICONS), Text(check.label), Text(age),
-                Text(summary), key=check.check_id,
+                Text(summary.strip(), no_wrap=True, overflow="ellipsis"), key=check.check_id,
             )
 
     def _render_services_line(self) -> None:
@@ -328,7 +322,13 @@ class HealthPanel(Static):
             # already has (possibly nothing) rather than persisting a
             # bogus ok=False row for a run that never actually finished.
             return
-        summary = next((line for line in reversed(lines) if line.strip()), "")[:80]
+        # Pick last non-empty line after strip, skip lines starting with "$ " (command echoes),
+        # truncate to 80 chars. This filters out command prompts while preserving real output.
+        summary = next(
+            (line.strip()[:80] for line in reversed(lines)
+             if line.strip() and not line.strip().startswith("$ ")),
+            ""
+        )
         res = CheckResult(
             check_id=check_id, ok=result.returncode == 0, summary=summary,
             finished_at=time.time(), returncode=result.returncode,

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from workstation_tui.app.app import WorkstationApp
 from workstation_tui.app.panels.dotfiles import _assemble_full_diff
 from workstation_tui.core.models import GitState, PendingChange
@@ -91,7 +93,7 @@ async def test_re_add_selected() -> None:
         await pilot.press("y")
         for _ in range(4):
             await pilot.pause()
-    assert ["chezmoi", "re-add", ".zshrc"] in runner.commands
+    assert ["chezmoi", "re-add", str(Path.home() / ".zshrc")] in runner.commands
 
 
 async def test_in_sync_message() -> None:

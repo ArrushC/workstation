@@ -18,7 +18,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, RichLog, Static
 
-from workstation_tui.app.theme import HOST_ICONS, M, icon, kb
+from workstation_tui.app.theme import HOST_ICONS, M, SETUP_ICONS, icon
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
 from workstation_tui.app.widgets.host_form import HostFormModal
 from workstation_tui.core.fleet import (
@@ -35,10 +35,6 @@ FleetPanel {{
 }}
 #fleet-table {{
     height: 1fr;
-}}
-#fleet-keys {{
-    height: 1;
-    color: {M['subtext0']};
 }}
 #fleet-log {{
     height: 12;
@@ -68,9 +64,10 @@ class FleetPanel(Static):
         super().__init__(id=id)
         self.hosts: list[HostEntry] = []
         self.errors: list[str] = []
-        # name -> "up"/"down"; a host absent from this dict (not yet
-        # probed) renders "unknown" via HOST_ICONS.
-        self.probe_states: dict[str, str] = {}
+        # name -> (reachability, setup) e.g. ("up", "setup") / ("down",
+        # None); a host absent from this dict (not yet probed) renders
+        # "unknown"/"unknown" via HOST_ICONS/SETUP_ICONS.
+        self.probe_states: dict[str, tuple[str, str | None]] = {}
         self.log_lines: list[str] = []
         self.can_focus = True
 
@@ -78,15 +75,13 @@ class FleetPanel(Static):
         with Vertical():
             yield DataTable(id="fleet-table", cursor_type="row",
                             zebra_stripes=True)
-            yield Static(kb(("s", "SSH"), ("p", "Push"), ("P", "Push all"),
-                            ("a", "Add"), ("e", "Edit"), ("x", "Remove")),
-                         id="fleet-keys", markup=True)
             yield RichLog(id="fleet-log", markup=False, wrap=False,
                           max_lines=self.MAX_LOG_LINES)
 
     def on_mount(self) -> None:
         table = self.query_one("#fleet-table", DataTable)
-        table.add_column("", key="state", width=3)
+        table.add_column("net", key="state", width=3)
+        table.add_column("repo", key="setup", width=4)
         table.add_column("name", key="name", width=18)
         table.add_column("address", key="address", width=16)
         table.add_column("user", key="user", width=12)
@@ -98,14 +93,16 @@ class FleetPanel(Static):
         table = self.query_one("#fleet-table", DataTable)
         table.clear()
         for entry in self.hosts:
-            state = self.probe_states.get(entry.name, "unknown")
+            state, setup_state = self.probe_states.get(entry.name, ("unknown", None))
             # DataTable markup-parses str cells (default_cell_formatter) —
             # Text(...) is the markup=False of tables. name/address/user/
             # group are USER-TYPED via the add/edit form, not our own
             # controlled markup, so they must render as literal text
             # (icon() already returns a Text).
             table.add_row(
-                icon(state, HOST_ICONS), Text(entry.name), Text(entry.address),
+                icon(state, HOST_ICONS),
+                icon(setup_state or "unknown", SETUP_ICONS),
+                Text(entry.name), Text(entry.address),
                 Text(entry.user), Text(entry.group), key=entry.name,
             )
 
@@ -193,12 +190,47 @@ class FleetPanel(Static):
 
     async def _probe_worker(self) -> None:
         try:
-            states = await self.app.probe_all_fn(self.hosts)  # type: ignore[attr-defined]
+            # Finding 4 (ssh probe storm): stage 2 (the ssh setup probe) is
+            # only worth its cost while a human is actually looking at the
+            # Fleet table. `is_on_screen` is the same compositor-backed
+            # "actually visible right now" check Dashboard's Card already
+            # relies on (see dashboard.py's Card.action_open/action_move
+            # comment) — every refresh from ANY panel, including Dashboard,
+            # otherwise escalated to up-to-9 concurrent ssh connections.
+            states = await self.app.probe_all_fn(  # type: ignore[attr-defined]
+                self.hosts, include_setup=self.is_on_screen
+            )
         except Exception as exc:  # surface, never crash the worker
             self.append_log(f"probe failed: {type(exc).__name__}: {exc}")
             return
-        self.probe_states.update(states)
+        self._merge_probe_states(states)
         self._render_rows()
+
+    def _merge_probe_states(
+        self, new_states: dict[str, tuple[str, str | None]]
+    ) -> None:
+        """Apply a probe cycle's results without regressing a previously
+        known setup state to unknown.
+
+        Finding 4 CRITICAL detail: when the Fleet panel isn't on screen,
+        `probe_all_fn` runs with `include_setup=False` — reachable hosts
+        come back `("up", None)`, where `None` means "stage 2 didn't run
+        this cycle", not "unknown/never probed". A plain
+        `self.probe_states.update(new_states)` would blow away a setup
+        glyph (✓/○/✗) a PRIOR visible-panel cycle already established,
+        flickering it back to the dim unknown dash on every off-screen
+        refresh even though nothing about the host's setup state actually
+        changed. So: for a host that's still "up" with no fresh setup
+        result, keep whatever setup state is already on record. A host that
+        genuinely went down is NOT covered by this carry-forward — its
+        `state` is "down", not "up", so the dash it renders reflects reality
+        (unreachable), not a stale setup memory.
+        """
+        for name, (state, setup_state) in new_states.items():
+            if state == "up" and setup_state is None:
+                _, prior_setup = self.probe_states.get(name, ("unknown", None))
+                setup_state = prior_setup
+            self.probe_states[name] = (state, setup_state)
 
     # -- actions delegate to the app (which owns runner + providers) -----
 

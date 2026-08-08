@@ -4433,9 +4433,19 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                     <h4>Fleet</h4>
                     <p>
                         The <code>hosts.conf</code> table (name / address /
-                        user / group), with a TCP-connect reachability probe
-                        against every host's address on each refresh.
-                        <kbd>s</kbd> SSHes to the selected host (suspends the
+                        user / group), with a two-stage reachability probe
+                        against every host on each refresh: a TCP connect
+                        first, and &mdash; only if that succeeds &mdash; a
+                        second, <code>BatchMode</code> ssh (never prompts,
+                        short connect timeout) checking for the
+                        <code>.local/share/chezmoi</code> checkout directory.
+                        A dedicated setup column shows the result: setup (repo
+                        checked out), missing (host reachable but no
+                        checkout), ssh-failed (ssh itself couldn't complete
+                        &mdash; auth, host key, or a non-BatchMode-compatible
+                        host), or a dim dash when the host is down or not yet
+                        probed (stage two never ran). <kbd>s</kbd> SSHes to the selected
+                        host (suspends the
                         TUI into a real <code>ssh</code> session), <kbd>p</kbd>
                         pushes just that host and <kbd>P</kbd> pushes every
                         host (both run <code>scripts/update-hosts.sh</code>,
@@ -4639,6 +4649,14 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             </tr>
                         </tbody>
                     </table>
+                    <p class="note-row">
+                        The bottom key bar is dynamic: it always shows the
+                        global keys above first, then the
+                        <strong>active panel's own</strong> keys appended
+                        after &mdash; swapped in on every panel switch, so
+                        switching panels changes what's listed at the bottom
+                        without you needing to open the help overlay.
+                    </p>
 
                     <h3>Platform matrix</h3>
                     <p>What actually differs by host, as shipped:</p>
@@ -5942,6 +5960,41 @@ make -C makefile MODE=dev packages</code></pre>
                                 under a different <code>MODE</code> on the
                                 same host won't show as fresh until the next
                                 <kbd>g</kbd>.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>workstation</code> tab-completion isn't
+                            offering subcommands
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The zsh completion stub
+                                (<code
+                                    >~/.config/zsh/completions/_workstation</code
+                                >) deploys like any other dotfile &mdash; via
+                                chezmoi, not automatically the moment the
+                                source file lands in this repo.
+                                <code>czs</code> shows it
+                                <code>A</code> (pending add) until you run
+                                <code>cza</code> (or any
+                                <code>chezmoi apply</code> /
+                                <code>dotfiles apply</code>). Once applied,
+                                <strong>new</strong> shells pick it up on
+                                their next <code>compinit</code> rebuild
+                                &mdash; the repo's <code>compinit -C</code>
+                                trades a per-launch freshness check for
+                                speed (see the comment above it in
+                                <code>dot_zshrc.tmpl</code>), so a shell
+                                whose cached <code>~/.zcompdump</code>
+                                predates the deploy won't see it either,
+                                until that cache is rebuilt (same caveat as
+                                the existing <code>_bootstrap.sh</code> /
+                                <code>_manage-hosts.sh</code> /
+                                <code>_update-hosts.sh</code> completions):
+                                <code>rm -f ~/.zcompdump && exec zsh</code>.
                             </p>
                         </div>
                     </details>

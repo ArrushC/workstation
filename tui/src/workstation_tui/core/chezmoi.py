@@ -9,6 +9,7 @@ Chezmoi surfaces deliberately ignore WORKSTATION_REPO: reads and mutations alway
 
 import re
 import subprocess
+from pathlib import Path
 
 from workstation_tui.core.models import PendingChange
 
@@ -53,9 +54,17 @@ def update_command() -> list[str]:
 
 
 def target_diff(path: str, *, run=subprocess.run) -> tuple[str, str | None]:
+    """Run chezmoi diff on a target path (relative to $HOME).
+
+    Converts path to absolute (Path.home() / path) because chezmoi resolves
+    relative target paths against CWD, not destDir; `chezmoi status` outputs
+    destDir-relative paths, so a relative argv would fail "not managed" when
+    called from non-$HOME cwd (reproduced live 2026-08-07).
+    """
+    abs_path = str(Path.home() / path)
     try:
         proc = run(
-            ["chezmoi", "diff", path],
+            ["chezmoi", "diff", abs_path],
             capture_output=True, text=True, timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as exc:
@@ -66,4 +75,12 @@ def target_diff(path: str, *, run=subprocess.run) -> tuple[str, str | None]:
 
 
 def re_add_command(path: str) -> list[str]:
-    return ["chezmoi", "re-add", path]
+    """Build a chezmoi re-add command for a target path (relative to $HOME).
+
+    Converts path to absolute (Path.home() / path) because chezmoi resolves
+    relative target paths against CWD, not destDir; `chezmoi status` outputs
+    destDir-relative paths, so a relative argv would fail "not managed" when
+    called from non-$HOME cwd (reproduced live 2026-08-07).
+    """
+    abs_path = str(Path.home() / path)
+    return ["chezmoi", "re-add", abs_path]

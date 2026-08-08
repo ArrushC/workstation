@@ -54,6 +54,31 @@ PANELS: list[tuple[str, str]] = [
     ("health", "Health"),
 ]
 
+#: Per-panel key hints shown in the footer key bar (#key-bar) — swapped in
+#: on switch_panel so the footer always reflects the ACTIVE panel's own
+#: bindings instead of a static, panel-agnostic hint line living inside
+#: each panel's compose() (the old #provision-keys/#dotfiles-keys/
+#: #fleet-keys/#health-keys Statics this registry replaces).
+PANEL_KEYS: dict[str, list[tuple[str, str]]] = {
+    "dashboard": [("←→↑↓", "Move"), ("enter", "Open")],
+    "provision": [
+        ("r", "Run"), ("c", "Clean"), ("u", "Updates"),
+        ("R", "Provision"), ("x", "Cancel"),
+    ],
+    "dotfiles": [("a", "Apply"), ("U", "Update"), ("A", "Re-add"), ("d", "Diff")],
+    "fleet": [
+        ("s", "SSH"), ("p", "Push"), ("P", "Push all"),
+        ("a", "Add"), ("e", "Edit"), ("x", "Remove"),
+    ],
+    "health": [("enter", "Run"), ("R", "Run all"), ("o", "Log")],
+}
+
+#: Bindings shown in the footer regardless of the active panel.
+GLOBAL_KEYS: list[tuple[str, str]] = [
+    ("1-5", "Panels"), ("ctrl+←/→", "Cycle"), ("g", "Refresh"),
+    ("q", "Quit"), ("?", "Help"),
+]
+
 APP_CSS = f"""
 #sidebar {{
     width: 14;
@@ -119,7 +144,9 @@ class WorkstationApp(App):
         git_state_provider: Callable[[Path], tuple[GitState | None, list[str]]]
         | None = None,
         target_diff_fn: Callable[[str], tuple[str, str | None]] | None = None,
-        probe_all_fn: Callable[[list[HostEntry]], Coroutine[Any, Any, dict[str, str]]]
+        probe_all_fn: Callable[
+            [list[HostEntry]], Coroutine[Any, Any, dict[str, tuple[str, str | None]]]
+        ]
         | None = None,
         hosts_provider: Callable[[], tuple[list[HostEntry], list[str]]] | None = None,
         ssh_fn: Callable[[HostEntry], None] | None = None,
@@ -175,22 +202,32 @@ class WorkstationApp(App):
                 yield DotfilesPanel(id="dotfiles")
                 yield FleetPanel(id="fleet")
                 yield HealthPanel(id="health")
-        yield Static(
-            kb(("1-5", "Panels"), ("g", "Refresh"), ("q", "Quit"), ("?", "Help")),
-            id="key-bar", markup=True,
-        )
+        yield Static("", id="key-bar", markup=True)
 
     def on_mount(self) -> None:
         self._mark_active("dashboard")
+        self._render_key_bar("dashboard")
         self.action_refresh()
         try:
             self.query_one("#dashboard", DashboardPanel).focus_first_card()
         except NoMatches:
             pass
 
+    def _render_key_bar(self, panel_id: str) -> None:
+        # Panel keys FIRST, global keys last — #key-bar is height:1 and a
+        # narrow terminal (~140 cols) truncates the tail of the line, so the
+        # panel-specific hints (the actually-new information for whatever
+        # you're looking at) must not be the part that gets clipped.
+        # `.get(panel_id, [])` also means an unregistered panel_id renders
+        # global-only instead of raising KeyError.
+        self.query_one("#key-bar", Static).update(
+            kb(*PANEL_KEYS.get(panel_id, []), *GLOBAL_KEYS)
+        )
+
     def switch_panel(self, panel_id: str) -> None:
         self.query_one("#content", ContentSwitcher).current = panel_id
         self._mark_active(panel_id)
+        self._render_key_bar(panel_id)
         if panel_id == "dashboard":
             self.query_one("#dashboard", DashboardPanel).focus_first_card()
 

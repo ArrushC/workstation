@@ -5,7 +5,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, Input, RichLog, Static
 
-from workstation_tui.app.theme import M, STAMP_ICONS, icon, kb
+from workstation_tui.app.theme import M, STAMP_ICONS, icon
 from workstation_tui.core.models import ToolStatus
 
 PROVISION_CSS = f"""
@@ -22,10 +22,6 @@ ProvisionPanel {{
     height: 12;
     background: {M['mantle']};
     border-top: solid {M['surface1']};
-}}
-#provision-keys {{
-    height: 1;
-    color: {M['subtext0']};
 }}
 """
 
@@ -61,10 +57,6 @@ class ProvisionPanel(Static):
             yield Input(placeholder="filter tools…", id="provision-filter")
             yield DataTable(id="provision-table", cursor_type="row",
                             zebra_stripes=True)
-            yield Static(kb(("r", "Run"), ("c", "Clean+reinstall"),
-                            ("u", "Updates"), ("R", "Full provision"),
-                            ("x", "Cancel")),
-                         id="provision-keys", markup=True)
             yield RichLog(id="provision-log", markup=False, wrap=False,
                           max_lines=self.MAX_LOG_LINES)
 
