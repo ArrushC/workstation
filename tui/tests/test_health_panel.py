@@ -116,3 +116,61 @@ async def test_cancelled_check_not_recorded(tmp_path: Path) -> None:
         for _ in range(5):
             await pilot.pause()
     assert load_cache(tmp_path / "health.json") == {}  # nothing recorded
+
+
+async def test_summary_skips_command_echo_and_strips(tmp_path: Path) -> None:
+    from workstation_tui.core.health import load_cache
+    from workstation_tui.core.models import TaskResult
+
+    class EchoRunner(FakeRunner):
+        async def run(self, command, on_line):
+            self.commands.append(command)
+            on_line("  padded real output  ")
+            on_line("")                      # trailing blank
+            return TaskResult(command=command, returncode=0, duration_secs=0.1)
+
+    app = make_app(tmp_path, EchoRunner())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("5")
+        for _ in range(3):
+            await pilot.pause()
+        app.query_one("#health-table").focus()
+        await pilot.press("enter")
+        for _ in range(6):
+            await pilot.pause()
+    cached = load_cache(tmp_path / "health.json")
+    assert cached["doctor"].summary == "padded real output"   # stripped, not "$ ..." echo
+
+
+async def test_summary_empty_when_only_echo_line_emitted(tmp_path: Path) -> None:
+    """Fix-before-merge pin (Finding 5): a runner that emits NOTHING but the
+    "$ " command echo (plus a trailing blank) must record an EMPTY summary
+    — `_record_result`'s echo-skip filter refuses to fall back to the echo
+    line itself when it's the only candidate. This is the unpinned branch:
+    remove the `not line.strip().startswith("$ ")` guard from
+    `_record_result` and this test fails (the echo becomes the summary
+    instead of "").
+    """
+    from workstation_tui.core.health import load_cache
+    from workstation_tui.core.models import TaskResult
+
+    class EchoOnlyRunner(FakeRunner):
+        async def run(self, command, on_line):
+            self.commands.append(command)
+            on_line("$ make doctor")
+            on_line("")  # trailing blank — no real output at all
+            return TaskResult(command=command, returncode=0, duration_secs=0.1)
+
+    app = make_app(tmp_path, EchoOnlyRunner())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("5")
+        for _ in range(3):
+            await pilot.pause()
+        app.query_one("#health-table").focus()
+        await pilot.press("enter")
+        for _ in range(6):
+            await pilot.pause()
+    cached = load_cache(tmp_path / "health.json")
+    assert cached["doctor"].summary == ""

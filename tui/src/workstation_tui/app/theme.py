@@ -293,6 +293,15 @@ HOST_ICONS: Dict[str, Tuple[str, str]] = {
     "unknown": ("—", M["overlay0"]),
 }
 
+# Fleet stage-2 (ssh) setup-probe vocabulary — keys match probe_setup's
+# Literal return values plus "unknown" for not-yet-probed/skipped-stage rows.
+SETUP_ICONS: Dict[str, Tuple[str, str]] = {
+    "setup":      ("✓", M["green"]),
+    "missing":    ("○", M["yellow"]),
+    "ssh-failed": ("✗", M["red"]),
+    "unknown":    ("—", M["overlay0"]),
+}
+
 SEL_ON = ("●", M["blue"])
 SEL_OFF = ("·", M["overlay0"])
 

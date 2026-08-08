@@ -15,7 +15,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import DataTable, RichLog, Static
 
-from workstation_tui.app.theme import M, kb, muted
+from workstation_tui.app.theme import M, muted
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
 from workstation_tui.app.widgets.text_view import TextViewScreen
 from workstation_tui.core.chezmoi import apply_command, re_add_command, update_command
@@ -45,10 +45,6 @@ DotfilesPanel {{
     height: 1;
     padding: 0 1;
     background: {M['mantle']};
-}}
-#dotfiles-keys {{
-    height: 1;
-    color: {M['subtext0']};
 }}
 #dotfiles-log {{
     height: 12;
@@ -120,9 +116,6 @@ class DotfilesPanel(Static):
                 with VerticalScroll(id="dotfiles-diff-pane"):
                     yield Static("", id="dotfiles-diff", markup=False)
             yield Static(muted("loading…"), id="dotfiles-git", markup=True)
-            yield Static(kb(("a", "Apply"), ("U", "Update"),
-                            ("A", "Re-add"), ("d", "Full diff")),
-                         id="dotfiles-keys", markup=True)
             yield RichLog(id="dotfiles-log", markup=False, wrap=False,
                           max_lines=self.MAX_LOG_LINES)
 

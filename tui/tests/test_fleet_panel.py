@@ -11,7 +11,10 @@ HOSTS = [
 
 
 async def fake_probe_all(entries, **kwargs):
-    return {e.name: ("up" if e.name == "alpha" else "down") for e in entries}
+    return {
+        e.name: (("up", "setup") if e.name == "alpha" else ("down", None))
+        for e in entries
+    }
 
 
 def make_app(runner=None, ssh_calls=None):
@@ -33,6 +36,14 @@ async def test_table_lists_hosts_with_probe_glyphs() -> None:
             await pilot.pause()
         table = app.query_one("#fleet-table")
         assert table.row_count == 2
+        # reachability + setup glyph columns, ahead of name/address/user/group.
+        assert len(table.ordered_columns) == 6
+        alpha_row = table.get_row("alpha")
+        beta_row = table.get_row("beta")
+        # alpha: up + setup ("✓" glyph in the setup column, index 1).
+        assert alpha_row[1].plain == "✓"
+        # beta: down -> setup stage never runs -> unprobed dim "—".
+        assert beta_row[1].plain == "—"
 
 
 async def test_ssh_selected() -> None:
@@ -224,6 +235,41 @@ async def test_push_blocked_on_windows_context() -> None:
         await pilot.press("p")
         await pilot.pause()
     assert runner.commands == []
+
+
+# -- Finding 4: probe merge keeps prior setup state, doesn't overwrite ---
+
+
+def test_probe_merge_keeps_prior_setup_state_when_stage_two_skipped() -> None:
+    """When a probe cycle skips stage 2 (Fleet panel off-screen), a still-
+    "up" host arrives as `("up", None)` — that None must not blow away a
+    setup glyph a PRIOR visible-panel cycle already established. A host
+    that genuinely goes down is NOT covered by the carry-forward: its state
+    is "down", not "up", so its dash reflects reality instead of a stale
+    setup memory."""
+    panel = FleetPanel(id="fleet")
+
+    # up -> up with stage 2 skipped: keep the prior setup state.
+    panel.probe_states = {"alpha": ("up", "setup")}
+    panel._merge_probe_states({"alpha": ("up", None)})
+    assert panel.probe_states["alpha"] == ("up", "setup")
+
+    # up -> down: setup state resets, never inherits the stale "setup".
+    panel.probe_states = {"alpha": ("up", "setup")}
+    panel._merge_probe_states({"alpha": ("down", None)})
+    assert panel.probe_states["alpha"] == ("down", None)
+
+    # never probed before -> up with stage 2 skipped: stays unknown (None),
+    # not a crash / KeyError on the never-seen host name.
+    panel.probe_states = {}
+    panel._merge_probe_states({"beta": ("up", None)})
+    assert panel.probe_states["beta"] == ("up", None)
+
+    # up -> up WITH a fresh stage-2 result: the fresh result always wins,
+    # never shadowed by whatever was on record before.
+    panel.probe_states = {"alpha": ("up", "missing")}
+    panel._merge_probe_states({"alpha": ("up", "setup")})
+    assert panel.probe_states["alpha"] == ("up", "setup")
 
 
 # -- minor fold: duplicate hosts.conf rows don't crash the table ---------

@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 from workstation_tui.core.chezmoi import (
     apply_command,
@@ -52,7 +53,7 @@ def test_target_diff_success_and_failure() -> None:
     from workstation_tui.core.chezmoi import re_add_command, target_diff
 
     def ok_run(cmd, **kwargs):
-        assert cmd == ["chezmoi", "diff", ".zshrc"]
+        assert cmd == ["chezmoi", "diff", str(Path.home() / ".zshrc")]
         return subprocess.CompletedProcess(cmd, 0, stdout="-old\n+new\n", stderr="")
 
     text, err = target_diff(".zshrc", run=ok_run)
@@ -63,4 +64,20 @@ def test_target_diff_success_and_failure() -> None:
 
     text, err = target_diff(".zshrc", run=bad_run)
     assert text == "" and "chezmoi diff failed" in err
-    assert re_add_command(".zshrc") == ["chezmoi", "re-add", ".zshrc"]
+    assert re_add_command(".zshrc") == ["chezmoi", "re-add", str(Path.home() / ".zshrc")]
+
+
+def test_target_paths_absolutized_against_home() -> None:
+    from workstation_tui.core.chezmoi import re_add_command, target_diff
+
+    captured = {}
+
+    def run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    target_diff(".claude/settings.json", run=run)
+    assert captured["cmd"][2] == str(Path.home() / ".claude/settings.json")
+    assert re_add_command(".claude/settings.json")[2] == str(
+        Path.home() / ".claude/settings.json"
+    )
