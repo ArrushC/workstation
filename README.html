@@ -4391,6 +4391,24 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the running task. Output streams into the log pane
                         below the table.
                     </p>
+                    <p>
+                        <strong>Multi-select.</strong> <kbd>space</kbd>
+                        marks or unmarks the cursor row (a &bull; in the
+                        table's mark column) and <kbd>Esc</kbd> clears every
+                        mark; a <code>N marked</code> indicator appears next
+                        to the filter box once at least one row is marked.
+                        Marks are name-keyed, not row-keyed, so they survive
+                        typing into the filter. With one or more tools
+                        marked, <kbd>r</kbd> runs <strong>all</strong> of
+                        them in a <strong>single</strong>
+                        <code>make</code> invocation (table order, not mark
+                        order) instead of just the cursor row &mdash; the
+                        sudo overlay still gates the whole run if any marked
+                        tool is non-user-kind. Marks clear automatically
+                        after a successful (non-cancelled, rc=0) marked run,
+                        but persist on failure or cancellation so you can
+                        retry without re-selecting.
+                    </p>
                     <p class="note-row">
                         <strong>Sudo overlay.</strong> On a
                         <span class="badge dev">dev</span> Linux host, a
@@ -4415,8 +4433,12 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         table on the left, a live diff of whichever row is
                         highlighted on the right, plus a source-repo git line
                         (branch &middot; clean/dirty &middot; ahead/behind).
-                        <kbd>a</kbd> applies every pending change (confirm,
-                        then <code>chezmoi apply --force</code>),
+                        <kbd>Enter</kbd> on a pending row applies just that
+                        file (confirm, then
+                        <code>chezmoi apply --force &lt;abs path&gt;</code>
+                        for that file alone), <kbd>a</kbd> applies every
+                        pending change (confirm, then
+                        <code>chezmoi apply --force</code>),
                         <kbd>U</kbd> pulls and applies from git (confirm,
                         then <code>chezmoi update --force</code>),
                         <kbd>A</kbd> re-adds the highlighted file
@@ -4502,6 +4524,21 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         overlay. All four checks run unprivileged &mdash;
                         Health never triggers the sudo overlay.
                     </p>
+                    <p class="note-row">
+                        <strong>Desktop notifications.</strong> Every
+                        completed task (a single tool run, a marked-tool
+                        batch, a full provision, a dotfiles apply&hellip;)
+                        can fire an OS toast via the same
+                        <code>~/.claude/notify.sh</code> the Claude Code
+                        hooks use. A failed task (non-zero exit) always
+                        notifies; a successful one only notifies when it ran
+                        at least 10 seconds &mdash; long enough that you
+                        plausibly tabbed away; a cancelled task never
+                        notifies (the in-app &ldquo;cancelled&rdquo; toast
+                        already covers it). The notify call is
+                        fire-and-forget and silently does nothing if
+                        <code>notify.sh</code> isn't present on the host.
+                    </p>
 
                     <h3>Keys</h3>
                     <p>Global, from any panel:</p>
@@ -4525,6 +4562,10 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 <td>Refresh every panel's data</td>
                             </tr>
                             <tr>
+                                <td><kbd>w</kbd></td>
+                                <td>Toggle watch mode (auto-refresh)</td>
+                            </tr>
+                            <tr>
                                 <td><kbd>q</kbd></td>
                                 <td>Quit</td>
                             </tr>
@@ -4542,6 +4583,19 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             </tr>
                         </tbody>
                     </table>
+                    <p class="note-row">
+                        <strong>Watch mode.</strong> <kbd>w</kbd> toggles an
+                        auto-refresh timer (every 30 seconds by default) that
+                        runs the same refresh <kbd>g</kbd> triggers manually
+                        &mdash; the header grows a
+                        <code>&middot; watch 30s</code> suffix while it's on.
+                        A tick is skipped whenever a task is already running
+                        (or the sudo-gate window is open), so watch mode never
+                        competes with an in-flight <kbd>r</kbd>/<kbd>R</kbd>/
+                        etc. run; toggling <kbd>w</kbd> off pauses the timer
+                        without discarding it, so turning it back on resumes
+                        the same cadence instead of restarting the interval.
+                    </p>
                     <p>Per panel:</p>
                     <table>
                         <thead>
@@ -4576,6 +4630,16 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 <td>Provision</td>
                                 <td><kbd>x</kbd></td>
                                 <td>Cancel running task</td>
+                            </tr>
+                            <tr>
+                                <td>Provision</td>
+                                <td><kbd>space</kbd></td>
+                                <td>Mark/unmark the cursor row</td>
+                            </tr>
+                            <tr>
+                                <td>Dotfiles</td>
+                                <td><kbd>Enter</kbd></td>
+                                <td>Apply just the cursor-selected file</td>
                             </tr>
                             <tr>
                                 <td>Dotfiles</td>

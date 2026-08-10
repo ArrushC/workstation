@@ -9,6 +9,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.markup import escape
+from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
 
 from workstation_tui.app.panels.dashboard import DashboardPanel
@@ -63,9 +64,12 @@ PANEL_KEYS: dict[str, list[tuple[str, str]]] = {
     "dashboard": [("←→↑↓", "Move"), ("enter", "Open")],
     "provision": [
         ("r", "Run"), ("c", "Clean"), ("u", "Updates"),
-        ("R", "Provision"), ("x", "Cancel"),
+        ("R", "Provision"), ("x", "Cancel"), ("space", "Mark"),
     ],
-    "dotfiles": [("a", "Apply"), ("U", "Update"), ("A", "Re-add"), ("d", "Diff")],
+    "dotfiles": [
+        ("enter", "Apply file"), ("a", "Apply"), ("U", "Update"),
+        ("A", "Re-add"), ("d", "Diff"),
+    ],
     "fleet": [
         ("s", "SSH"), ("p", "Push"), ("P", "Push all"),
         ("a", "Add"), ("e", "Edit"), ("x", "Remove"),
@@ -76,7 +80,7 @@ PANEL_KEYS: dict[str, list[tuple[str, str]]] = {
 #: Bindings shown in the footer regardless of the active panel.
 GLOBAL_KEYS: list[tuple[str, str]] = [
     ("1-5", "Panels"), ("ctrl+←/→", "Cycle"), ("g", "Refresh"),
-    ("q", "Quit"), ("?", "Help"),
+    ("w", "Watch"), ("q", "Quit"), ("?", "Help"),
 ]
 
 APP_CSS = f"""
@@ -108,6 +112,60 @@ def _default_provider() -> Summary:
     return gather_summary(root)
 
 
+def _command_summary(argv: list[str]) -> str:
+    """Build a short, human-meaningful label for an OS toast from a task's
+    argv (spec §4 example: `"make fzf — done (rc=0, 42s)"`).
+
+    `" ".join(argv[:2])` (the prior formula) degenerates for every
+    make-built command: `make_command()` (core/makeiface.py) always starts
+    `["make", "--no-print-directory", "-C", <path>, *goals, "MODE=<mode>"]`,
+    so argv[:2] is the byte-identical, tool-less `"make
+    --no-print-directory"` for EVERY provision-panel task. Instead, keep
+    argv[0] (the program) and pair it with the first subsequent token that
+    isn't option-shaped: not `-`-prefixed, not `-C`'s path argument, and
+    not a `VAR=value` assignment (`MODE=dev`). That yields `"make fzf"`,
+    `"chezmoi apply"`, etc. Falls back to just argv[0] when nothing
+    qualifies (e.g. the degenerate `["make", "--no-print-directory", "-C",
+    "makefile", "MODE=dev"]` — no goals at all).
+    """
+    if not argv:
+        return ""
+    program = argv[0]
+    skip_next = False
+    for tok in argv[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok == "-C":
+            skip_next = True
+            continue
+        if tok.startswith("-"):
+            continue
+        name, sep, _value = tok.partition("=")
+        if sep and name.isidentifier():
+            continue
+        return f"{program} {tok}"
+    return program
+
+
+def _default_notifier(title: str, msg: str) -> None:
+    # Fire-and-forget OS toast via the repo's existing notify.sh (WSL→Windows
+    # toast already handled inside it). Popen, not run — must never block
+    # the event loop; the ENTIRE body (including resolving/probing the
+    # script path) is wrapped so a missing/broken script (or a host with no
+    # notify.sh at all, e.g. non-workstation checkouts) never raises into
+    # the caller.
+    try:
+        script = Path.home() / ".claude/notify.sh"
+        if not script.exists():
+            return
+        subprocess.Popen(
+            [str(script), title, msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except Exception:
+        pass
+
+
 class NavItem(Static):
     def __init__(self, panel_id: str, label: str) -> None:
         super().__init__(f" {label}", classes="nav-item")
@@ -124,6 +182,7 @@ class WorkstationApp(App):
         *[(str(i + 1), f"switch('{pid}')", label)
           for i, (pid, label) in enumerate(PANELS)],
         ("g", "refresh", "Refresh"),
+        ("w", "toggle_watch", "Watch"),
         ("q", "quit", "Quit"),
         ("?", "help", "Help"),
         ("ctrl+left", "cycle_panel(-1)", "Prev panel"),
@@ -153,6 +212,8 @@ class WorkstationApp(App):
         health_cache_path: Path | None = None,
         services_reader: Callable[[], dict[str, str]] | None = None,
         interop_reader: Callable[[], str] | None = None,
+        notifier: Callable[[str, str], None] | None = None,
+        watch_interval_secs: float = 30.0,
     ) -> None:
         super().__init__()
         self.summary_provider = summary_provider or _default_provider
@@ -183,6 +244,20 @@ class WorkstationApp(App):
         )
         self.services_reader = services_reader or read_services
         self.interop_reader = interop_reader or read_wsl_interop
+        # Desktop notifications (spec §4) — injectable so tests never spawn
+        # a real Popen; notify_threshold_secs is a plain post-construction
+        # attribute (not a ctor param) so tests can tweak it per-test the
+        # same way sudo_keepalive_secs above is tweaked.
+        self.notifier = notifier or _default_notifier
+        self.notify_threshold_secs = 10.0
+        # Auto-refresh watch mode (spec §1) — `w` toggles; the interval
+        # timer is created LAZILY on first enable (never in __init__/
+        # on_mount, so app boot never pays for a timer nobody asked for)
+        # and paused/resumed thereafter — never recreated, so the ticking
+        # cadence a test (or a user) set up survives repeated toggles.
+        self.watch_interval_secs = watch_interval_secs
+        self.watch_enabled = False
+        self._watch_timer: Timer | None = None
         # Guards the sudo-gate window (status check + modal) — the runner
         # isn't busy yet during that window, so a second launch_task() call
         # (e.g. a double "r" press) would otherwise slip past the
@@ -290,15 +365,54 @@ class WorkstationApp(App):
     def _apply_tools(self, tools: list[ToolStatus], errors: list[str]) -> None:
         self.query_one("#provision", ProvisionPanel).set_tools(tools, errors)
 
-    def _apply_summary(self, summary: Summary, rollup: HealthRollup) -> None:
-        self.summary = summary
-        c = summary.context
+    def _render_header(self) -> None:
+        # Extracted so BOTH the normal post-refresh path (_apply_summary)
+        # and the watch-mode toggle (action_toggle_watch) can push a fresh
+        # header line — the toggle must reflect its new state IMMEDIATELY,
+        # not wait for the next action_refresh() cycle. Handles the
+        # pre-first-summary case (nothing loaded yet, e.g. `w` pressed
+        # before boot's initial refresh lands) by rendering the bare title
+        # instead of crashing on a None summary.
+        if self.summary is None:
+            self.query_one("#app-header", Static).update(
+                f"[bold {M['mauve']}]workstation[/]"
+            )
+            return
+        c = self.summary.context
         wsl = " · WSL" if c.is_wsl else ""
+        watch = (
+            f" · watch {int(self.watch_interval_secs)}s" if self.watch_enabled else ""
+        )
         self.query_one("#app-header", Static).update(
             f"[bold {M['mauve']}]workstation[/] "
             f"[{M['subtext0']}]— {c.os} · group={c.group or '?'} · "
-            f"mode={c.mode}{wsl}[/]"
+            f"mode={c.mode}{wsl}{watch}[/]"
         )
+
+    def action_toggle_watch(self) -> None:
+        self.watch_enabled = not self.watch_enabled
+        if self.watch_enabled:
+            if self._watch_timer is None:
+                self._watch_timer = self.set_interval(
+                    self.watch_interval_secs, self._watch_tick, pause=False
+                )
+            else:
+                self._watch_timer.resume()
+        elif self._watch_timer is not None:
+            self._watch_timer.pause()
+        self._render_header()
+
+    def _watch_tick(self) -> None:
+        # Never compete with an in-flight task (sudo gate window OR an
+        # actual running command) — same guard vocabulary launch_task uses.
+        if self._task_inflight or self._runner.busy:
+            return
+        self.action_refresh()
+
+    def _apply_summary(self, summary: Summary, rollup: HealthRollup) -> None:
+        self.summary = summary
+        c = summary.context
+        self._render_header()
         dashboard_panel = self.query_one("#dashboard", DashboardPanel)
         dashboard_panel.update_summary(summary)
         dashboard_panel.update_health(rollup)
@@ -351,7 +465,13 @@ class WorkstationApp(App):
         for item in self.query(NavItem):
             item.set_class(item.panel_id == panel_id, "active")
 
-    def run_make_goals(self, goals: list[str], *, user_kind: bool) -> None:
+    def run_make_goals(
+        self,
+        goals: list[str],
+        *,
+        user_kind: bool,
+        on_result: Callable[[TaskResult], None] | None = None,
+    ) -> None:
         # Resolve mode from the cached summary only — never a synchronous
         # detect_context() fallback here. detect_context() shells out to
         # chezmoi/which and is meant for off-loop use (see _task_flow's
@@ -374,7 +494,12 @@ class WorkstationApp(App):
         cmd = make_command(root, goals, mode)
         # _task_flow gates this on a valid sudo timestamp before launching.
         needs_sudo = mode == "dev" and not user_kind
-        self.launch_task(cmd, needs_sudo=needs_sudo)
+        # Minimal, backward-compatible passthrough (optional, keyword-only,
+        # defaults to None — every pre-existing call site is unchanged): lets
+        # a caller (the Provision panel's marked-run path) observe the
+        # TaskResult without duplicating launch_task's sudo-gate/keepalive/
+        # notify plumbing.
+        self.launch_task(cmd, needs_sudo=needs_sudo, on_result=on_result)
 
     def ssh_to(self, entry: HostEntry) -> None:
         """SSH to a fleet host.
@@ -461,6 +586,25 @@ class WorkstationApp(App):
             return log_to
         return self.query_one("#provision", ProvisionPanel).append_log
 
+    def _maybe_notify(self, result: TaskResult) -> None:
+        # cancelled: never notify (the in-app "cancelled" toast already
+        # covers it, and the user just triggered the cancel themselves —
+        # an OS toast on top would be noise, not news).
+        if result.cancelled:
+            return
+        summary = _command_summary(result.command)
+        if result.returncode != 0:
+            # failure: ALWAYS notify, regardless of duration.
+            self.notifier("workstation", f"{summary} — failed (rc={result.returncode})")
+            return
+        # success: only worth a toast if it ran long enough that the user
+        # plausibly tabbed away.
+        if result.duration_secs >= self.notify_threshold_secs:
+            self.notifier(
+                "workstation",
+                f"{summary} — done (rc=0, {round(result.duration_secs)}s)",
+            )
+
     async def _task_flow(
         self,
         command: list[str],
@@ -512,6 +656,7 @@ class WorkstationApp(App):
             else:
                 severity = "error" if result.returncode != 0 else "information"
                 self.notify(f"done (rc={result.returncode})", severity=severity)
+            self._maybe_notify(result)
             self.action_refresh()
             if on_done is not None:
                 on_done()
@@ -555,6 +700,18 @@ class WorkstationApp(App):
             # the "done" toast below; the cancelled/aborted branches already
             # notify their own outcome.
             completed = True
+            # Sequence notification policy (spec §4): ONE desktop notify per
+            # sequence, not one per command — a marked-tool run of N tools
+            # firing N toasts would be spam, not signal. We track only the
+            # LAST TaskResult seen (whichever command the loop stopped on,
+            # by completion or by break) and hand just that one to
+            # _maybe_notify after the loop: a completed run notifies on the
+            # last command's own success/duration; an aborted run notifies
+            # the failing command's rc (_maybe_notify's normal failure
+            # path); a cancelled run's last result has cancelled=True, which
+            # _maybe_notify already no-ops on — so "cancelled → no notify"
+            # falls out of the shared helper for free, no extra branch here.
+            last_result: TaskResult | None = None
             for command in commands:
                 log("$ " + " ".join(command))
                 try:
@@ -566,6 +723,7 @@ class WorkstationApp(App):
                     self.notify(f"task failed: {type(exc).__name__}: {exc}",
                                 severity="error", markup=False)
                     return
+                last_result = result
                 if result.cancelled:
                     self.notify("cancelled", severity="warning")
                     completed = False
@@ -577,6 +735,8 @@ class WorkstationApp(App):
                     break
             if completed:
                 self.notify("done", severity="information")
+            if last_result is not None:
+                self._maybe_notify(last_result)
             self.action_refresh()
             if on_done is not None:
                 on_done()

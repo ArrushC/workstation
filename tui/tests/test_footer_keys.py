@@ -101,6 +101,14 @@ def test_panel_keys_are_real_bindings_on_their_panel() -> None:
     (surfaced to HealthPanel via `on_data_table_row_selected`, not a
     HealthPanel BINDINGS entry) — so DataTable's own bindings are folded in
     for that one panel only.
+
+    Dotfiles' "enter" hint (per-file apply) follows the exact same shape —
+    `DotfilesPanel.on_data_table_row_selected` dispatches to
+    `action_apply_selected`, with no panel-level "enter" Binding, because
+    DataTable's own `enter -> select_cursor` (not a priority binding) is
+    what actually fires while the table holds focus; a same-key
+    panel-level binding is unreachable in that state (confirmed live via
+    Pilot). Same DataTable-bindings-folded-in carve-out as health.
     """
     panel_classes: dict[str, type] = {
         "provision": ProvisionPanel,
@@ -110,7 +118,7 @@ def test_panel_keys_are_real_bindings_on_their_panel() -> None:
     }
     for panel_id, panel_cls in panel_classes.items():
         available = _binding_keys(panel_cls)
-        if panel_id == "health":
+        if panel_id in ("health", "dotfiles"):
             available |= _binding_keys(DataTable)
         for key, label in PANEL_KEYS[panel_id]:
             assert key in available, (

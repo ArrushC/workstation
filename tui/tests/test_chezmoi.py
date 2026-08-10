@@ -81,3 +81,14 @@ def test_target_paths_absolutized_against_home() -> None:
     assert re_add_command(".claude/settings.json")[2] == str(
         Path.home() / ".claude/settings.json"
     )
+
+
+def test_apply_target_command_absolutized_and_forced() -> None:
+    from workstation_tui.core.chezmoi import apply_target_command
+
+    assert apply_target_command(".zshrc") == [
+        "chezmoi", "apply", "--force", str(Path.home() / ".zshrc"),
+    ]
+    assert apply_target_command(".claude/settings.json") == [
+        "chezmoi", "apply", "--force", str(Path.home() / ".claude/settings.json"),
+    ]
