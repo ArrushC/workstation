@@ -74,6 +74,21 @@ def target_diff(path: str, *, run=subprocess.run) -> tuple[str, str | None]:
     return proc.stdout, None
 
 
+def apply_target_command(path: str) -> list[str]:
+    """Build a chezmoi apply command for a single target path (relative to $HOME).
+
+    Converts path to absolute (Path.home() / path) for the same CWD-safety
+    reason as target_diff/re_add_command: chezmoi resolves relative target
+    paths against CWD, not destDir, and `chezmoi status` outputs
+    destDir-relative paths, so a relative argv would fail "not managed" when
+    called from non-$HOME cwd (reproduced live 2026-08-07). `--force` per
+    this module's prompts-never-fire policy — the TUI shows the diff in the
+    pane and the user confirms in-app before this ever runs.
+    """
+    abs_path = str(Path.home() / path)
+    return ["chezmoi", "apply", "--force", abs_path]
+
+
 def re_add_command(path: str) -> list[str]:
     """Build a chezmoi re-add command for a target path (relative to $HOME).
 

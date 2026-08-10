@@ -96,6 +96,62 @@ async def test_re_add_selected() -> None:
     assert ["chezmoi", "re-add", str(Path.home() / ".zshrc")] in runner.commands
 
 
+async def test_apply_selected_enter_confirm_launches_exact_argv() -> None:
+    runner = FakeRunner()
+    app = make_app(runner)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("3")
+        for _ in range(3):
+            await pilot.pause()
+        app.query_one("#dotfiles-table").focus()
+        await pilot.press("enter")          # cursor row 0 == ".zshrc"
+        await pilot.pause()
+        await pilot.press("y")              # ConfirmModal
+        for _ in range(4):
+            await pilot.pause()
+    assert ["chezmoi", "apply", "--force", str(Path.home() / ".zshrc")] in runner.commands
+
+
+async def test_apply_selected_declined_never_runs() -> None:
+    runner = FakeRunner()
+    app = make_app(runner)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("3")
+        for _ in range(3):
+            await pilot.pause()
+        app.query_one("#dotfiles-table").focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("escape")         # decline
+        for _ in range(3):
+            await pilot.pause()
+    assert runner.commands == []
+
+
+async def test_apply_selected_no_selection_guard_notifies(monkeypatch) -> None:
+    """Empty table -> DataTable itself never posts RowSelected (Textual
+    short-circuits `_post_selected_message` when `len(self._data) == 0`),
+    so this exercises action_apply_selected's own guard directly rather
+    than via a keypress — the guard is defensive code for exactly this:
+    no crash, just a notify."""
+    runner = FakeRunner()
+    app = make_app(runner, pending=[])
+    calls: list[tuple[tuple, dict]] = []
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("3")
+        for _ in range(3):
+            await pilot.pause()
+        panel = app.query_one("#dotfiles")
+        monkeypatch.setattr(app, "notify", lambda *a, **k: calls.append((a, k)))
+        panel.action_apply_selected()
+        await pilot.pause()
+    assert runner.commands == []
+    assert calls and calls[0][0][0] == "no file selected"
+
+
 async def test_in_sync_message() -> None:
     app = make_app(pending=[])
     async with app.run_test() as pilot:

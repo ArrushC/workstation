@@ -18,7 +18,12 @@ from textual.widgets import DataTable, RichLog, Static
 from workstation_tui.app.theme import M, muted
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
 from workstation_tui.app.widgets.text_view import TextViewScreen
-from workstation_tui.core.chezmoi import apply_command, re_add_command, update_command
+from workstation_tui.core.chezmoi import (
+    apply_command,
+    apply_target_command,
+    re_add_command,
+    update_command,
+)
 from workstation_tui.core.models import GitState, PendingChange
 from workstation_tui.repo import find_repo_root
 
@@ -245,6 +250,15 @@ class DotfilesPanel(Static):
         widget = self.query_one("#dotfiles-diff", Static)
         widget.update(f"error: {err}" if err else text)
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """`enter` on the pending table -> per-file apply (health.py
+        precedent: DataTable posts its own RowSelected on `enter`, which
+        is the actual dispatch point — see action_apply_selected's
+        docstring for why this isn't a panel-level BINDINGS entry)."""
+        if event.data_table.id != "dotfiles-table":
+            return
+        self.action_apply_selected()
+
     # -- actions delegate to the app (which owns runner + providers) -----
 
     def _unavailable_notify(self) -> None:
@@ -278,6 +292,30 @@ class DotfilesPanel(Static):
             return
         self.run_worker(
             self._confirm_and_run("update dotfiles from git?", update_command()),
+            exclusive=False, group="dotfiles-confirm",
+        )
+
+    def action_apply_selected(self) -> None:
+        """Apply just the cursor-selected pending file.
+
+        Bound via `on_data_table_row_selected` below, NOT an `enter` entry
+        in BINDINGS: DataTable owns `enter -> select_cursor` itself (not a
+        priority binding), and Textual resolves key bindings starting at
+        the FOCUSED widget — with the table focused, a same-key panel-level
+        binding would never be reached. Same shape as health.py's `enter`
+        (DataTable's own RowSelected, no HealthPanel BINDINGS entry);
+        verified live via Pilot (a panel-level "enter" binding never fired
+        while the table held focus).
+        """
+        if self.unavailable:
+            self._unavailable_notify()
+            return
+        path = self.selected_path()
+        if path is None:
+            self.app.notify("no file selected", severity="warning")  # type: ignore[attr-defined]
+            return
+        self.run_worker(
+            self._confirm_and_run(f"apply {path}?", apply_target_command(path)),
             exclusive=False, group="dotfiles-confirm",
         )
 

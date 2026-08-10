@@ -179,3 +179,4 @@ When you ship a change that affects user-facing surface, append a row here in th
 | workstation TUI Phase 5: Dotfiles panel (pending/diff/git, apply-update-re-add) + Fleet panel (probes/ssh/push/add-edit-remove via manage-hosts) | No | §hosts remove form documented in phase-5 Task 1; README §tui still lands with the final phase |
 | workstation TUI Phase 6: Health panel (check rows/cache ages/services+interop), help overlay, README §tui (full TUI + CLI + platform matrix documented) | Yes | new §tui section after §daily; troubleshooting entries for TTY gate, sudo fallback, stale table |
 | TUI dashboard polish: arrow-key card walk + ctrl+arrow panel cycling, live health quadrant, full-bleed equal card grid | Yes | §tui keys table + Dashboard block updated |
+| TUI Phase A: watch mode (w), provision multi-select (space), per-file dotfiles apply (enter), desktop notifications via notify.sh | Yes | §tui keys + behavior sentences |

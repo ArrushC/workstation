@@ -1,19 +1,42 @@
-"""Provision panel: tool table + filter + streamed task log."""
+"""Provision panel: tool table + filter + streamed task log.
+
+Multi-select (spec §2): `self.marked` is a name-keyed set of tool names,
+independent of the DataTable's rows — it survives `_render_rows()` rebuilds
+(filtering, refreshes) because membership is checked fresh against
+`t.name`, not stored on the row itself. `action_toggle_mark`/
+`action_clear_marks` update the mark column via `DataTable.update_cell`
+rather than a full `_render_rows()` so the cursor position is never
+disturbed by marking (a full re-render resets `cursor_coordinate` to
+(0, 0) — see `DataTable.clear()` — which would fight arrow-key navigation
+mid mark-and-move).
+"""
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Input, RichLog, Static
+from textual.widgets.data_table import CellDoesNotExist
 
-from workstation_tui.app.theme import M, STAMP_ICONS, icon
-from workstation_tui.core.models import ToolStatus
+from workstation_tui.app.theme import M, STAMP_ICONS, icon, sel_marker
+from workstation_tui.core.models import TaskResult, ToolStatus
 
 PROVISION_CSS = f"""
 ProvisionPanel {{
     padding: 0 1;
 }}
+#provision-filter-row {{
+    height: 3;
+}}
 #provision-filter {{
     margin: 0;
+    width: 1fr;
+}}
+#provision-marks {{
+    width: auto;
+    min-width: 10;
+    padding: 0 1;
+    color: {M['blue']};
+    content-align: right middle;
 }}
 #provision-table {{
     height: 1fr;
@@ -35,6 +58,8 @@ class ProvisionPanel(Static):
         ("u", "updates", "Check updates"),
         ("R", "full_provision", "Full provision"),
         ("x", "cancel_task", "Cancel task"),
+        ("space", "toggle_mark", "Mark"),
+        ("escape", "clear_marks", "Clear marks"),
     ]
 
     #: Bound on retained log lines — a long-running `provision` can emit far
@@ -51,10 +76,17 @@ class ProvisionPanel(Static):
         # True when this host has no make (e.g. Windows) — the panel
         # degrades honestly instead of pretending provisioning works here.
         self.unavailable = False
+        # Marked tool names (spec §2) — name-keyed, not row-keyed, so marks
+        # survive a filtered/rebuilt table. Cleared on `esc`, on a
+        # successful (rc==0, not cancelled) marked run, and toggled by
+        # `space` on the cursor row.
+        self.marked: set[str] = set()
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Input(placeholder="filter tools…", id="provision-filter")
+            with Horizontal(id="provision-filter-row"):
+                yield Input(placeholder="filter tools…", id="provision-filter")
+                yield Static("", id="provision-marks", markup=False)
             yield DataTable(id="provision-table", cursor_type="row",
                             zebra_stripes=True)
             yield RichLog(id="provision-log", markup=False, wrap=False,
@@ -62,6 +94,7 @@ class ProvisionPanel(Static):
 
     def on_mount(self) -> None:
         table = self.query_one("#provision-table", DataTable)
+        table.add_column("", key="mark", width=2)
         table.add_column("", key="state", width=3)
         table.add_column("tool", key="tool", width=24)
         table.add_column("kind", key="kind", width=8)
@@ -98,7 +131,11 @@ class ProvisionPanel(Static):
             # Text(...) is the markup=False of tables. name/kind/version
             # are tame today (inventory rows), but the fleet panel lands
             # next on user-typed values, so the convention must be uniform.
-            table.add_row(icon(t.state.value, STAMP_ICONS), Text(t.name),
+            # Mark state is looked up fresh against `self.marked` on every
+            # render — that's what makes marks survive filtering/refreshes
+            # instead of being tied to a specific row instance.
+            table.add_row(sel_marker(t.name in self.marked),
+                          icon(t.state.value, STAMP_ICONS), Text(t.name),
                           Text(t.kind), Text(t.version), key=t.name)
 
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -124,12 +161,50 @@ class ProvisionPanel(Static):
                 return t.kind
         return "scope"
 
+    def _update_marks_indicator(self) -> None:
+        n = len(self.marked)
+        self.query_one("#provision-marks", Static).update(
+            f"{n} marked" if n > 0 else ""
+        )
+
+    def _on_run_result(self, result: TaskResult) -> None:
+        # Clear-on-success (spec §2): only a clean, non-cancelled run earns
+        # a fresh slate — a failed or cancelled run leaves the marks in
+        # place so the user can retry without re-selecting.
+        if result.returncode == 0 and not result.cancelled:
+            self.action_clear_marks()
+
     # -- actions delegate to the app (which owns runner + repo/mode) ----------
 
     def action_run_tool(self) -> None:
         if self.unavailable:
             self.app.notify(  # type: ignore[attr-defined]
                 "provisioning not available on this host", severity="warning")
+            return
+        if self.marked:
+            # Marked run: ALL marked tools in ONE make invocation, in table
+            # order (not mark order) — iterate self.tools, not self.marked,
+            # since a set has no stable order and self.tools already IS the
+            # canonical table order.
+            ordered = [t.name for t in self.tools if t.name in self.marked]
+            if not ordered:
+                # Transient: a watch tick or refresh can repopulate
+                # self.tools with [] (e.g. `make inventory` failing/
+                # timing out) while self.marked (name-keyed, independent
+                # of the table) still holds stale names. Without this
+                # guard, `ordered` would be [] and `all(<empty>) == True`
+                # (vacuous truth) would hand run_make_goals a user_kind
+                # bypass for a goal-less `make` invocation (runs make's
+                # .DEFAULT_GOAL under no sudo gate). Refuse instead, and
+                # leave the marks alone so the user can retry once the
+                # inventory recovers.
+                self.app.notify(  # type: ignore[attr-defined]
+                    "marked tools not found in current inventory — "
+                    "refresh and retry", severity="warning")
+                return
+            user_kind = all(self._tool_kind(n) == "user" for n in ordered)
+            self.app.run_make_goals(  # type: ignore[attr-defined]
+                ordered, user_kind=user_kind, on_result=self._on_run_result)
             return
         tool = self.selected_tool()
         if tool is None:
@@ -167,3 +242,38 @@ class ProvisionPanel(Static):
 
     def action_cancel_task(self) -> None:
         self.app.cancel_task()  # type: ignore[attr-defined]
+
+    def action_toggle_mark(self) -> None:
+        if self.unavailable:
+            self.app.notify(  # type: ignore[attr-defined]
+                "provisioning not available on this host", severity="warning")
+            return
+        tool = self.selected_tool()
+        if tool is None:
+            self.app.notify("no tool selected", severity="warning")  # type: ignore[attr-defined]
+            return
+        if tool in self.marked:
+            self.marked.discard(tool)
+        else:
+            self.marked.add(tool)
+        table = self.query_one("#provision-table", DataTable)
+        try:
+            table.update_cell(tool, "mark", sel_marker(tool in self.marked))
+        except CellDoesNotExist:
+            pass
+        self._update_marks_indicator()
+
+    def action_clear_marks(self) -> None:
+        if not self.marked:
+            return
+        cleared = self.marked
+        self.marked = set()
+        table = self.query_one("#provision-table", DataTable)
+        for name in cleared:
+            try:
+                table.update_cell(name, "mark", sel_marker(False))
+            except CellDoesNotExist:
+                # The tool may have been filtered out (marks survive
+                # filtering even though the row isn't currently rendered).
+                pass
+        self._update_marks_indicator()
