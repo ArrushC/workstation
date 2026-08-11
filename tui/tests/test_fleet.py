@@ -200,8 +200,9 @@ async def test_probe_all_include_setup_false_skips_stage_two() -> None:
 
 
 def test_push_command(tmp_path: Path) -> None:
-    assert push_command(tmp_path, "build-01")[-2:] == ["--name", "build-01"]
-    assert push_command(tmp_path, None)[-1].endswith("update-hosts.sh")
+    cmd = push_command(tmp_path, "build-01")
+    assert cmd[-2:] == ["--name", "build-01"]
+    assert cmd[0] == str(tmp_path / "scripts" / "update-hosts.sh")
 
 
 def test_manage_hosts_commands(tmp_path: Path) -> None:

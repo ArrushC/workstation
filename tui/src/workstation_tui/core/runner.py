@@ -18,6 +18,18 @@ from workstation_tui.core.models import TaskResult
 _SCRUB = ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
 
 
+def scrubbed_env() -> dict[str, str]:
+    """os.environ minus make's jobserver variables (`_SCRUB`).
+
+    Any subprocess spawned from inside a `make` recipe (as this TUI often
+    is, e.g. via a health-check goal) inherits `MAKEFLAGS`'s jobserver fds;
+    passing those through unscrubbed lets a child `make` invocation try to
+    talk to a jobserver pipe that isn't actually connected to it, hanging
+    or erroring. Shared by `Runner` and `MultiRunner`.
+    """
+    return {k: v for k, v in os.environ.items() if k not in _SCRUB}
+
+
 class TaskBusyError(RuntimeError):
     def __init__(self) -> None:
         super().__init__("task running")
@@ -45,7 +57,7 @@ class Runner:
         self._inflight = True
         self._cancelled = False
         try:
-            env = {k: v for k, v in os.environ.items() if k not in _SCRUB}
+            env = scrubbed_env()
             start = time.monotonic()
             try:
                 proc = await asyncio.create_subprocess_exec(

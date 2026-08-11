@@ -9,7 +9,7 @@ from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from workstation_tui.app.theme import M, action_line, heading, kb
+from workstation_tui.app.theme import M, action_line, heading, kb, muted
 
 
 class HelpScreen(ModalScreen[None]):
@@ -79,6 +79,11 @@ class HelpScreen(ModalScreen[None]):
             action_line("a", "Add", "add new host"),
             action_line("e", "Edit", "edit selected host"),
             action_line("x", "Remove", "remove host"),
+            action_line("↵", "Stats", "view host quick-stats"),
+            action_line("k", "Keys", "guided key distribution"),
+            muted("  push dashboard: enter log · x cancel · esc close"),
+            muted("  last push: ✓ done  ✗ failed  – cancelled  (– never pushed)"),
+            muted("  host stats: R refresh · esc close"),
             "",
             # Health panel
             heading("Health"),

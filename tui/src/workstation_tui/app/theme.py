@@ -302,6 +302,16 @@ SETUP_ICONS: Dict[str, Tuple[str, str]] = {
     "unknown":    ("—", M["overlay0"]),
 }
 
+# PushScreen (spec §1) per-host row state vocabulary — keys match
+# HostRun.state values (core/multirun.py).
+PUSH_ICONS: Dict[str, Tuple[str, str]] = {
+    "queued":    ("·", M["overlay0"]),
+    "running":   ("●", M["blue"]),
+    "done":      ("✓", M["green"]),
+    "failed":    ("✗", M["red"]),
+    "cancelled": ("–", M["yellow"]),
+}
+
 SEL_ON = ("●", M["blue"])
 SEL_OFF = ("·", M["overlay0"])
 

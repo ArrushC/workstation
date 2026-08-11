@@ -11,6 +11,7 @@ here too, so every DataTable cell is wrapped in Text(...) (the probe glyph
 via theme.icon() already returns one).
 """
 
+import time
 from pathlib import Path
 
 from rich.text import Text
@@ -18,16 +19,26 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, RichLog, Static
 
-from workstation_tui.app.theme import HOST_ICONS, M, SETUP_ICONS, icon
+from workstation_tui.app.theme import HOST_ICONS, M, PUSH_ICONS, SETUP_ICONS, icon
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
 from workstation_tui.app.widgets.host_form import HostFormModal
+from workstation_tui.app.widgets.host_stats import HostStatsScreen
+from workstation_tui.app.widgets.keydist_modal import KeyDistModal
+from workstation_tui.app.widgets.push_screen import PushScreen
 from workstation_tui.core.fleet import (
     manage_hosts_add_command,
     manage_hosts_remove_command,
     push_command,
+    rel_age,
 )
 from workstation_tui.core.models import HostEntry
 from workstation_tui.repo import find_repo_root
+
+# `rel_age` lives in core/fleet.py (textual-free pure helper) and is
+# re-exported here (the `rel_age` name above is that import, not a
+# redefinition) so existing panel-side references and `from
+# workstation_tui.app.panels.fleet import rel_age` test imports keep
+# working unchanged.
 
 FLEET_CSS = f"""
 FleetPanel {{
@@ -54,6 +65,7 @@ class FleetPanel(Static):
         ("a", "add_host", "Add"),
         ("e", "edit_host", "Edit"),
         ("x", "remove_host", "Remove"),
+        ("k", "distribute_keys", "Keys"),
     ]
 
     #: Same rationale as ProvisionPanel/DotfilesPanel.MAX_LOG_LINES — a long
@@ -70,6 +82,15 @@ class FleetPanel(Static):
         self.probe_states: dict[str, tuple[str, str | None]] = {}
         self.log_lines: list[str] = []
         self.can_focus = True
+        # name -> (state, unix timestamp) for the most recent push outcome
+        # (spec §1 "last_push" column) — a host absent from this dict has
+        # never been pushed this session and renders a dim "–". Stamped by
+        # `_apply_push_outcomes`; read by `_render_rows`/`_render_push_cell`.
+        self.last_push: dict[str, tuple[str, float]] = {}
+        # Time injection seam for tests (cheaper than threading a `now`
+        # param through every render call) — tests monkeypatch this
+        # attribute directly to freeze/advance the clock.
+        self._now_fn = time.time
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -82,6 +103,7 @@ class FleetPanel(Static):
         table = self.query_one("#fleet-table", DataTable)
         table.add_column("net", key="state", width=3)
         table.add_column("repo", key="setup", width=4)
+        table.add_column("push", key="push", width=7)
         table.add_column("name", key="name", width=18)
         table.add_column("address", key="address", width=16)
         table.add_column("user", key="user", width=12)
@@ -89,9 +111,22 @@ class FleetPanel(Static):
 
     # -- rendering ------------------------------------------------------
 
+    def _render_push_cell(self, name: str, now: float) -> Text:
+        """`icon(state, PUSH_ICONS) + " <rel_age>"` as ONE assembled Text
+        (spec §1) — a host that's never been pushed this session renders a
+        dim "–" instead."""
+        record = self.last_push.get(name)
+        if record is None:
+            return Text("–", style=M["overlay0"])
+        state, ts = record
+        cell = icon(state, PUSH_ICONS).copy()
+        cell.append(f" {rel_age(now - ts)}", style=M["overlay0"])
+        return cell
+
     def _render_rows(self) -> None:
         table = self.query_one("#fleet-table", DataTable)
         table.clear()
+        now = self._now_fn()
         for entry in self.hosts:
             state, setup_state = self.probe_states.get(entry.name, ("unknown", None))
             # DataTable markup-parses str cells (default_cell_formatter) —
@@ -102,6 +137,7 @@ class FleetPanel(Static):
             table.add_row(
                 icon(state, HOST_ICONS),
                 icon(setup_state or "unknown", SETUP_ICONS),
+                self._render_push_cell(entry.name, now),
                 Text(entry.name), Text(entry.address),
                 Text(entry.user), Text(entry.group), key=entry.name,
             )
@@ -121,6 +157,23 @@ class FleetPanel(Static):
         if name is None:
             return None
         return next((e for e in self.hosts if e.name == name), None)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """`enter` on a fleet row -> read-only quick-stats drill-in
+        (health/dotfiles precedent: DataTable owns `enter -> select_cursor`
+        itself, not a priority binding, so this is never a FleetPanel-level
+        BINDINGS entry — see dotfiles.py's `action_apply_selected`
+        docstring for the full "confirmed live via Pilot" rationale)."""
+        if event.data_table.id != "fleet-table":
+            return
+        row_key = event.row_key
+        name = str(row_key.value) if row_key and row_key.value else None
+        if name is None:
+            return
+        entry = next((e for e in self.hosts if e.name == name), None)
+        if entry is None:
+            return
+        self.app.push_screen(HostStatsScreen(entry))  # type: ignore[attr-defined]
 
     def _os_name(self) -> str:
         summary = self.app.summary  # type: ignore[attr-defined]
@@ -242,6 +295,32 @@ class FleetPanel(Static):
             command, log_to=self.append_log, on_done=self.refresh_panel,
         )
 
+    async def _push_flow(self, message: str, commands: dict[str, list[str]]) -> None:
+        """Confirm, then drive the `PushScreen` dashboard (Task 2) instead of
+        `_confirm_and_run`'s single `launch_task` — a push is per-host
+        parallel work (MultiRunner), not the single-flight `Runner` every
+        other fleet action uses.
+        """
+        ok = await self.app.push_screen_wait(ConfirmModal(message))  # type: ignore[attr-defined]
+        if not ok:
+            return
+        outcomes = await self.app.push_screen_wait(  # type: ignore[attr-defined]
+            PushScreen(commands)
+        )
+        self._apply_push_outcomes(outcomes)
+
+    def _apply_push_outcomes(self, outcomes: dict[str, str] | None) -> None:
+        # `outcomes` is None only if PushScreen's push_screen_wait somehow
+        # never dismisses with a dict (e.g. the screen stack unwinds via an
+        # app-level abort) — stamping nothing is the safe degrade, same as
+        # the Task 2 stub's behavior in that case.
+        if outcomes:
+            now = self._now_fn()
+            for name, state in outcomes.items():
+                self.last_push[name] = (state, now)
+            self._render_rows()
+        self.refresh_panel()
+
     def _name_collision(self, old_name: str | None, new_name: str) -> bool:
         """True when `new_name` collides with a DIFFERENT existing host.
 
@@ -330,6 +409,20 @@ class FleetPanel(Static):
             return
         self.app.ssh_to(entry)  # type: ignore[attr-defined]
 
+    def _local_task_gate(self) -> bool:
+        """True when it's OK to open the PushScreen dashboard.
+
+        A running local task (sudo-gate window OR an actual running
+        command — same vocabulary as `_task_inflight`/`_runner.busy`
+        elsewhere) blocks a push from opening at all, checked BEFORE the
+        ConfirmModal so the user never even sees a confirm prompt for a
+        push that can't start yet.
+        """
+        if self.app._task_inflight or self.app._runner.busy:  # type: ignore[attr-defined]
+            self.app.notify("task running", severity="warning")  # type: ignore[attr-defined]
+            return False
+        return True
+
     def action_push_selected(self) -> None:
         if not self._linux_only_gate():
             return
@@ -337,10 +430,12 @@ class FleetPanel(Static):
         if entry is None:
             self.app.notify("no host selected", severity="warning")  # type: ignore[attr-defined]
             return
+        if not self._local_task_gate():
+            return
         root = find_repo_root() or Path.cwd()
         self.run_worker(
-            self._confirm_and_run(
-                f"push {entry.name}?", push_command(root, entry.name)
+            self._push_flow(
+                f"push {entry.name}?", {entry.name: push_command(root, entry.name)}
             ),
             exclusive=False, group="fleet-confirm",
         )
@@ -351,9 +446,14 @@ class FleetPanel(Static):
         if not self.hosts:
             self.app.notify("no hosts", severity="information")  # type: ignore[attr-defined]
             return
+        if not self._local_task_gate():
+            return
         root = find_repo_root() or Path.cwd()
         self.run_worker(
-            self._confirm_and_run("push ALL hosts?", push_command(root, None)),
+            self._push_flow(
+                f"push ALL {len(self.hosts)} host(s)?",
+                {e.name: push_command(root, e.name) for e in self.hosts},
+            ),
             exclusive=False, group="fleet-confirm",
         )
 
@@ -383,4 +483,67 @@ class FleetPanel(Static):
                 ),
             ),
             exclusive=False, group="fleet-confirm",
+        )
+
+    # -- guided key distribution (Task 6, spec §3) -----------------------
+
+    def action_distribute_keys(self) -> None:
+        if not self._linux_only_gate():
+            return
+        if not self.hosts:
+            self.app.notify("no hosts", severity="information")  # type: ignore[attr-defined]
+            return
+        self.run_worker(
+            self._keydist_flow(), exclusive=False, group="fleet-confirm"
+        )
+
+    async def _keydist_flow(self) -> None:
+        try:
+            key_present = (Path.home() / ".ssh" / "id_ed25519.pub").exists()
+        except Exception:
+            key_present = False
+        selected = await self.app.push_screen_wait(  # type: ignore[attr-defined]
+            KeyDistModal(self.hosts, self.probe_states, key_present)
+        )
+        if not selected:
+            # None (escape) or an empty list (shouldn't happen — the modal
+            # itself refuses to dismiss on a zero-selection confirm — but
+            # treated the same either way: nothing to do).
+            return
+        # Gate checked HERE, after the modal returns, not before it opens —
+        # a user is free to browse/select while a push or task happens to
+        # be running; only the actual distribution needs the machine idle.
+        if self.app._push_inflight:  # type: ignore[attr-defined]
+            self.app.notify("push running", severity="warning")  # type: ignore[attr-defined]
+            return
+        if self.app._task_inflight:  # type: ignore[attr-defined]
+            self.app.notify("task running", severity="warning")  # type: ignore[attr-defined]
+            return
+        names = set(selected)
+        # Resolve in TABLE order (self.hosts), not selection order — the
+        # order a user happened to toggle rows in is not a meaningful
+        # distribution order, but the table's own order is stable and
+        # predictable (and is what `copy_id_fn` test doubles assert on).
+        entries = [entry for entry in self.hosts if entry.name in names]
+        self.app.distribute_keys(entries)  # type: ignore[attr-defined]
+
+    def _apply_copy_id_results(self, results: list[tuple[str, int]]) -> None:
+        """Resume-flow renderer `distribute_keys` (app.py) hands its
+        `(name, rc)` results to, once the copy (injected or real suspend
+        path) has finished. Per-host lines carry host names (the log is
+        markup=False RichLog); the one toast at the end is counts-only —
+        never a host name (the user was just present at the terminal doing
+        password entry, so this is a summary, not new information)."""
+        n_ok = 0
+        n_failed = 0
+        for name, rc in results:
+            if rc == 0:
+                n_ok += 1
+                self.append_log(f"copy-id {name}: ok")
+            else:
+                n_failed += 1
+                self.append_log(f"copy-id {name}: failed (rc={rc})")
+        self.refresh_panel()  # re-probe heals ssh-failed glyphs
+        self.app.notify(  # type: ignore[attr-defined]
+            f"key distribution — {n_ok} ok, {n_failed} failed"
         )
