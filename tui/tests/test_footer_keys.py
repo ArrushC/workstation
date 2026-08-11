@@ -109,6 +109,11 @@ def test_panel_keys_are_real_bindings_on_their_panel() -> None:
     what actually fires while the table holds focus; a same-key
     panel-level binding is unreachable in that state (confirmed live via
     Pilot). Same DataTable-bindings-folded-in carve-out as health.
+
+    Fleet's "enter" hint (host quick-stats drill-in, Task 5) is the same
+    shape again — `FleetPanel.on_data_table_row_selected` routes straight
+    to `self.app.push_screen(HostStatsScreen(entry))`, no panel-level
+    "enter" Binding to find.
     """
     panel_classes: dict[str, type] = {
         "provision": ProvisionPanel,
@@ -118,7 +123,7 @@ def test_panel_keys_are_real_bindings_on_their_panel() -> None:
     }
     for panel_id, panel_cls in panel_classes.items():
         available = _binding_keys(panel_cls)
-        if panel_id in ("health", "dotfiles"):
+        if panel_id in ("health", "dotfiles", "fleet"):
             available |= _binding_keys(DataTable)
         for key, label in PANEL_KEYS[panel_id]:
             assert key in available, (

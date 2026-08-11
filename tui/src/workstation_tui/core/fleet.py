@@ -14,6 +14,37 @@ from typing import Literal
 
 from workstation_tui.core.models import HostEntry
 
+#: Coarse boundaries (seconds) for `rel_age` below — chosen so a fresh push
+#: reads in seconds, a same-session push in minutes, a same-day push in
+#: hours, and anything older in whole days.
+_AGE_MINUTE = 60
+_AGE_HOUR = 3600
+_AGE_DAY = 86400
+
+
+def rel_age(delta_secs: float) -> str:
+    """Coarse relative-age label for a `last_push` timestamp (spec §1):
+    `<60s` -> `"42s"`, `<3600s` -> `"7m"`, `<86400s` -> `"3h"`, else ->
+    `"2d"` (int floor throughout — never rounds up past a boundary).
+
+    Pure function, module-level (not a method) so the Fleet table's push
+    column, HostStatsScreen's stamp-age field, and any future consumer
+    (e.g. a health/last-run column) can import it directly without
+    touching a `FleetPanel` instance. Lives in `core/` (textual-free) —
+    `panels/fleet.py` re-exports it for backward-compatible imports, and
+    `widgets/host_stats.py` imports it directly, avoiding the
+    panels<->widgets import cycle a `panels.fleet` import would create
+    (`panels/fleet.py` imports `widgets/host_stats.py` for routing).
+    """
+    secs = int(delta_secs)
+    if secs < _AGE_MINUTE:
+        return f"{secs}s"
+    if secs < _AGE_HOUR:
+        return f"{secs // _AGE_MINUTE}m"
+    if secs < _AGE_DAY:
+        return f"{secs // _AGE_HOUR}h"
+    return f"{secs // _AGE_DAY}d"
+
 
 async def probe_host(
     address: str, *, port: int = 22, timeout: float = 3.0
@@ -135,12 +166,29 @@ async def probe_all(
     return dict(results)
 
 
-def push_command(repo_root: Path, name: str | None) -> list[str]:
-    """Build the `update-hosts.sh` argv: bare pushes all hosts, --name scopes one."""
-    cmd = [str(repo_root / "scripts" / "update-hosts.sh")]
-    if name is not None:
-        cmd += ["--name", name]
-    return cmd
+def push_command(repo_root: Path, name: str) -> list[str]:
+    """Build the `update-hosts.sh --name` argv for a single host.
+
+    The bare (all-hosts) form is gone (Task 2 tightening) — a PushScreen
+    run always builds one command per host (fleet.py's action_push_all
+    builds one `--name`-scoped command per entry, run in parallel via
+    MultiRunner, rather than shelling out to a single bare invocation).
+    """
+    return [str(repo_root / "scripts" / "update-hosts.sh"), "--name", name]
+
+
+def copy_id_command(repo_root: Path, name: str) -> list[str]:
+    """Build the manage-hosts `--copy-id --name` argv for a single host
+    (Task 6, spec §3).
+
+    Linux-only, unlike `manage_hosts_add_command`/`manage_hosts_remove_
+    command` above — there is no Windows branch because `manage-hosts.ps1`
+    has no `-CopyId` equivalent, and the Fleet panel's `_linux_only_gate`
+    already keeps the `k` action from ever reaching a Windows host in the
+    first place.
+    """
+    script = repo_root / "scripts" / "manage-hosts.sh"
+    return ["bash", str(script), "--copy-id", "--name", name]
 
 
 def manage_hosts_add_command(

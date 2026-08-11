@@ -180,3 +180,4 @@ When you ship a change that affects user-facing surface, append a row here in th
 | workstation TUI Phase 6: Health panel (check rows/cache ages/services+interop), help overlay, README §tui (full TUI + CLI + platform matrix documented) | Yes | new §tui section after §daily; troubleshooting entries for TTY gate, sudo fallback, stale table |
 | TUI dashboard polish: arrow-key card walk + ctrl+arrow panel cycling, live health quadrant, full-bleed equal card grid | Yes | §tui keys table + Dashboard block updated |
 | TUI Phase A: watch mode (w), provision multi-select (space), per-file dotfiles apply (enter), desktop notifications via notify.sh | Yes | §tui keys + behavior sentences |
+| TUI Phase B: push dashboard (p/P, per-host parallel), host quick-stats (enter), guided key distribution (k) | Yes | §tui keys + behavior paragraphs |

@@ -4466,13 +4466,20 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         checkout), ssh-failed (ssh itself couldn't complete
                         &mdash; auth, host key, or a non-BatchMode-compatible
                         host), or a dim dash when the host is down or not yet
-                        probed (stage two never ran). <kbd>s</kbd> SSHes to the selected
-                        host (suspends the
-                        TUI into a real <code>ssh</code> session), <kbd>p</kbd>
-                        pushes just that host and <kbd>P</kbd> pushes every
-                        host (both run <code>scripts/update-hosts.sh</code>,
-                        confirmed first), <kbd>a</kbd> adds and <kbd>e</kbd>
-                        edits a host through a form modal that shells out to
+                        probed (stage two never ran). A push column shows the
+                        outcome of the most recent push <em>this
+                            session</em> &mdash; a glyph (&#10003; done /
+                        &#10007; failed / &ndash; cancelled &mdash; outcomes
+                        land only after the dashboard settles, so queued/
+                        running never appear here) plus a relative age
+                        (<code>42s</code> / <code>7m</code> /
+                        <code>3h</code> / <code>2d</code>), or a dim dash for
+                        a host never pushed since the TUI started &mdash; it
+                        resets on restart, nothing is persisted to disk.
+                        <kbd>s</kbd> SSHes to the selected host (suspends the
+                        TUI into a real <code>ssh</code> session),
+                        <kbd>a</kbd> adds and <kbd>e</kbd> edits a host
+                        through a form modal that shells out to
                         <code>manage-hosts.sh --add</code> /
                         <code>--remove --skip-confirm</code> &mdash; edit is
                         a remove-then-add sequence, guarded against renaming
@@ -4482,13 +4489,81 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         <code
                             >manage-hosts.sh --remove --name &lt;n&gt;
                             --skip-confirm</code
-                        >). SSH and push are Linux-only: on Windows both are
-                        refused (&ldquo;pushes/ssh are Linux-side&rdquo;), but
-                        add/edit/remove still work, via
-                        <code>manage-hosts.ps1</code>. A hand-edited
+                        >). SSH, push, and key distribution are Linux-only:
+                        on Windows they're refused (&ldquo;pushes/ssh are
+                        Linux-side&rdquo;), but add/edit/remove still work,
+                        via <code>manage-hosts.ps1</code>. A hand-edited
                         <code>hosts.conf</code> with a duplicate name keeps
                         the first row and logs a warning for the rest,
                         instead of crashing the panel.
+                    </p>
+                    <p class="note-row">
+                        <strong>Push dashboard.</strong> <kbd>p</kbd> opens a
+                        push dashboard scoped to just the selected host,
+                        <kbd>P</kbd> one scoped to every host &mdash; both
+                        confirm first, then run each host's own
+                        <code>scripts/update-hosts.sh --name &lt;host&gt;</code>
+                        in parallel, up to 4 at a time. Each row tracks
+                        state / elapsed time / last output line live as the
+                        runs progress; <kbd>Enter</kbd> on a row opens that
+                        host's full scrollback, <kbd>x</kbd> cancels the
+                        whole run (confirmed), and <kbd>Esc</kbd> closes the
+                        dashboard &mdash; guarded (&ldquo;push still running
+                        &mdash; cancel and close?&rdquo;) while any host is
+                        still queued or running, immediate once everything
+                        has settled. Closing stamps every host's outcome
+                        into the Fleet table's push column. A push and a
+                        local task (a Provision or Dotfiles run) are
+                        mutually exclusive &mdash; starting one refuses the
+                        other with a &ldquo;task running&rdquo; /
+                        &ldquo;push running&rdquo; toast &mdash; and a
+                        completed run fires exactly one OS toast, counts
+                        only (<code>N ok, N failed (Ns)</code>), never host
+                        names.
+                    </p>
+                    <p class="note-row">
+                        <strong>Quick-stats.</strong> <kbd>Enter</kbd> on a
+                        Fleet row opens a read-only quick-stats overlay for
+                        that host: a single <code>BatchMode</code> ssh
+                        (15-second timeout) collecting four sections &mdash;
+                        Vitals (uptime / mem / disk / kernel / os),
+                        Workstation (repo / commit / branch / dirty / stamp
+                        age / drift), Session (users / names / latency), and
+                        Tools (chezmoi / git / make) &mdash; plus the
+                        round-trip latency measured from the initial TCP
+                        probe. A host that's down, or reachable but where
+                        ssh itself fails, degrades to a one-line unreachable
+                        banner instead of the sections &mdash; ssh is never
+                        even attempted against a host that's already down.
+                        <kbd>R</kbd> re-runs both probe stages from scratch;
+                        there's no caching, so closing (<kbd>Esc</kbd> /
+                        <kbd>q</kbd>) and reopening does the same.
+                    </p>
+                    <p class="note-row">
+                        <strong>Guided key distribution.</strong>
+                        <kbd>k</kbd> opens a host picker (a
+                        <code>SelectionList</code>) pre-checking whichever
+                        hosts most need it &mdash; those whose last setup
+                        probe came back ssh-failed &mdash; with a header
+                        line showing whether your local
+                        <code>~/.ssh/id_ed25519.pub</code> is present.
+                        <kbd>a</kbd> toggles select all / none,
+                        <kbd>Enter</kbd> confirms (refusing an empty
+                        selection), <kbd>Esc</kbd> cancels. The TUI then
+                        suspends into your terminal and runs
+                        <code
+                            >manage-hosts.sh --copy-id --name
+                            &lt;host&gt;</code
+                        >
+                        once per selected host, in table order, one at a
+                        time &mdash; each may need an interactive password,
+                        and the script offers to generate an
+                        <code>ed25519</code> key first if you don't have one
+                        &mdash; printing a banner between hosts so it's
+                        clear whose prompt is on screen. On resume, the
+                        Fleet panel re-probes (healing ssh-failed glyphs for
+                        hosts that now accept the key) and a single toast
+                        reports counts (<code>N ok, N failed</code>).
                     </p>
 
                     <h4>Health</h4>
@@ -4669,12 +4744,12 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <tr>
                                 <td>Fleet</td>
                                 <td><kbd>p</kbd></td>
-                                <td>Push to selected host</td>
+                                <td>Open push dashboard for selected host</td>
                             </tr>
                             <tr>
                                 <td>Fleet</td>
                                 <td><kbd>P</kbd></td>
-                                <td>Push to all hosts</td>
+                                <td>Open push dashboard for all hosts</td>
                             </tr>
                             <tr>
                                 <td>Fleet</td>
@@ -4690,6 +4765,16 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 <td>Fleet</td>
                                 <td><kbd>x</kbd></td>
                                 <td>Remove host</td>
+                            </tr>
+                            <tr>
+                                <td>Fleet</td>
+                                <td><kbd>Enter</kbd></td>
+                                <td>Open quick-stats for selected host</td>
+                            </tr>
+                            <tr>
+                                <td>Fleet</td>
+                                <td><kbd>k</kbd></td>
+                                <td>Guided key distribution</td>
                             </tr>
                             <tr>
                                 <td>Health</td>

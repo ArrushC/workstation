@@ -36,8 +36,9 @@ async def test_table_lists_hosts_with_probe_glyphs() -> None:
             await pilot.pause()
         table = app.query_one("#fleet-table")
         assert table.row_count == 2
-        # reachability + setup glyph columns, ahead of name/address/user/group.
-        assert len(table.ordered_columns) == 6
+        # reachability + setup + push glyph columns, ahead of
+        # name/address/user/group (push column added in Task 3).
+        assert len(table.ordered_columns) == 7
         alpha_row = table.get_row("alpha")
         beta_row = table.get_row("beta")
         # alpha: up + setup ("✓" glyph in the setup column, index 1).
@@ -60,7 +61,20 @@ async def test_ssh_selected() -> None:
     assert calls and calls[0].name == "alpha"
 
 
-async def test_push_selected_confirms_then_runs() -> None:
+async def test_push_selected_confirms_then_opens_push_screen(monkeypatch) -> None:
+    """Task 2 rewire: `p` no longer runs directly via `self.app.launch_task`
+    (the pre-Task-2 flow this test used to assert on, via `runner.commands`)
+    — after confirming, it opens a `PushScreen` scoped to just the selected
+    host instead. `PushScreen`'s own MultiRunner-driven rendering is covered
+    by tests/test_push_screen.py; this test only checks the fleet-panel-
+    level wiring (which host reaches the screen), so `PushScreen` is
+    monkeypatched to a tiny recorder + auto-dismiss double — no real
+    MultiRunner/subprocess is ever constructed here.
+    """
+    import workstation_tui.app.panels.fleet as fleet_mod
+    from tests.test_push_screen import _RecordingPushScreen
+
+    monkeypatch.setattr(fleet_mod, "PushScreen", _RecordingPushScreen)
     runner = FakeRunner()
     app = make_app(runner)
     async with app.run_test() as pilot:
@@ -74,7 +88,10 @@ async def test_push_selected_confirms_then_runs() -> None:
         await pilot.press("y")
         for _ in range(4):
             await pilot.pause()
-    assert runner.commands and runner.commands[0][-2:] == ["--name", "alpha"]
+    assert _RecordingPushScreen.captured is not None
+    assert _RecordingPushScreen.captured["alpha"][-2:] == ["--name", "alpha"]
+    # The old single-flight Runner is never touched by a push anymore.
+    assert runner.commands == []
 
 
 async def test_push_all_declined() -> None:

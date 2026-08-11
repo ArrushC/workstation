@@ -22,7 +22,7 @@ from workstation_tui.app.widgets.help_screen import HelpScreen
 from workstation_tui.app.widgets.sudo_modal import SudoModal
 from workstation_tui.core.chezmoi import read_status, target_diff
 from workstation_tui.core.context import detect_context
-from workstation_tui.core.fleet import probe_all
+from workstation_tui.core.fleet import copy_id_command, probe_all
 from workstation_tui.core.gitstate import read_git_state
 from workstation_tui.core.health import (
     build_health_rollup,
@@ -72,7 +72,8 @@ PANEL_KEYS: dict[str, list[tuple[str, str]]] = {
     ],
     "fleet": [
         ("s", "SSH"), ("p", "Push"), ("P", "Push all"),
-        ("a", "Add"), ("e", "Edit"), ("x", "Remove"),
+        ("a", "Add"), ("e", "Edit"), ("x", "Remove"), ("enter", "Stats"),
+        ("k", "Keys"),
     ],
     "health": [("enter", "Run"), ("R", "Run all"), ("o", "Log")],
 }
@@ -209,6 +210,7 @@ class WorkstationApp(App):
         | None = None,
         hosts_provider: Callable[[], tuple[list[HostEntry], list[str]]] | None = None,
         ssh_fn: Callable[[HostEntry], None] | None = None,
+        copy_id_fn: Callable[[list[HostEntry]], list[tuple[str, int]]] | None = None,
         health_cache_path: Path | None = None,
         services_reader: Callable[[], dict[str, str]] | None = None,
         interop_reader: Callable[[], str] | None = None,
@@ -235,6 +237,10 @@ class WorkstationApp(App):
         self.probe_all_fn = probe_all_fn or probe_all
         self.hosts_provider = hosts_provider or self._default_hosts
         self.ssh_fn = ssh_fn
+        # Guided key distribution (Task 6) — same injectable-default seam as
+        # ssh_fn above; None means "use the real _default_copy_id suspend
+        # flow" (distribute_keys resolves which one to call).
+        self.copy_id_fn = copy_id_fn
         # Health panel providers (Phase 6 Task 2) — same injectable-default
         # convention as the providers above; health_cache_path defaults to
         # the standard XDG-ish per-user cache location (this is the only
@@ -264,6 +270,15 @@ class WorkstationApp(App):
         # `self._runner.busy` check and stack a second modal. Set True
         # before the task worker starts, cleared in _task_flow's finally.
         self._task_inflight = False
+        # Push mutual exclusion (spec §1): PushScreen sets this True the
+        # instant its run worker starts, and clears it in a `finally` when
+        # `run()` returns — NOT when the screen closes, so a finished push
+        # dashboard left open never blocks a local task. launch_task/
+        # run_task_sequence/_watch_tick all refuse while a push is in
+        # flight, mirroring the _task_inflight/_runner.busy vocabulary
+        # above with a distinct "push running" toast so the user knows
+        # which kind of work is in the way.
+        self._push_inflight = False
 
     def compose(self) -> ComposeResult:
         yield Static("", id="app-header", markup=True)
@@ -404,8 +419,9 @@ class WorkstationApp(App):
 
     def _watch_tick(self) -> None:
         # Never compete with an in-flight task (sudo gate window OR an
-        # actual running command) — same guard vocabulary launch_task uses.
-        if self._task_inflight or self._runner.busy:
+        # actual running command) OR a push dashboard — same guard
+        # vocabulary launch_task uses.
+        if self._task_inflight or self._runner.busy or self._push_inflight:
             return
         self.action_refresh()
 
@@ -519,6 +535,44 @@ class WorkstationApp(App):
             # as an ssh flag instead of part of the destination).
             subprocess.run(["ssh", "--", f"{entry.user}@{entry.address}"])
 
+    def distribute_keys(self, entries: list[HostEntry]) -> None:
+        """Guided key-distribution resume flow (Task 6).
+
+        A plain (non-worker) method — mirrors `ssh_to` exactly, for the
+        same reason: the default path's `self.suspend()` (inside
+        `_default_copy_id`) must run on the actual app event loop, not
+        inside a background worker. Tests inject `copy_id_fn` as a
+        recorder; the real suspend path requires a genuine TTY, so it's
+        never exercised headlessly. The Fleet worker that calls this
+        (`FleetPanel._keydist_flow`) already resolved the `entries` list
+        in table order and checked the `_task_inflight`/`_push_inflight`
+        gate before calling — this method just runs the copy (injected or
+        default) and hands the results straight to the Fleet panel's
+        resume-flow renderer.
+        """
+        if self.copy_id_fn is not None:
+            results = self.copy_id_fn(entries)
+        else:
+            results = self._default_copy_id(entries)
+        self.query_one("#fleet", FleetPanel)._apply_copy_id_results(results)
+
+    def _default_copy_id(self, entries: list[HostEntry]) -> list[tuple[str, int]]:
+        """Real (uninjected) copy-id path: suspend the TUI, run
+        `manage-hosts.sh --copy-id --name <host>` once per entry IN ORDER
+        (sequential, not parallel — each may need interactive password
+        entry at the terminal), printing a banner between hosts so the
+        user can tell which host's prompt they're looking at.
+        """
+        root = find_repo_root() or Path.cwd()
+        results: list[tuple[str, int]] = []
+        with self.suspend():
+            n = len(entries)
+            for i, entry in enumerate(entries, start=1):
+                print(f"=== {entry.name} ({i}/{n}) ===")
+                rc = subprocess.run(copy_id_command(root, entry.name)).returncode
+                results.append((entry.name, rc))
+        return results
+
     def launch_task(
         self,
         command: list[str],
@@ -528,6 +582,12 @@ class WorkstationApp(App):
         on_result: Callable[[TaskResult], None] | None = None,
         on_done: Callable[[], None] | None = None,
     ) -> None:
+        # A running push dashboard (MultiRunner) refuses local tasks too —
+        # checked FIRST so the toast names the actual blocker instead of
+        # the generic "task running".
+        if self._push_inflight:
+            self.notify("push running", severity="warning")
+            return
         # _task_inflight covers the gate window (status check + modal)
         # where self._runner.busy is still False — without it a second
         # launch_task() call (e.g. a double "r" press) slips past the busy
@@ -670,6 +730,11 @@ class WorkstationApp(App):
         log_to: Callable[[str], None] | None = None,
         on_done: Callable[[], None] | None = None,
     ) -> None:
+        # Same push-inflight refusal as launch_task — checked first so the
+        # toast names the actual blocker.
+        if self._push_inflight:
+            self.notify("push running", severity="warning")
+            return
         # Same busy/_task_inflight refusal machinery as launch_task —
         # _task_inflight is held for the WHOLE sequence, not per-command, so
         # a second launch_task()/run_task_sequence() call can't interleave
