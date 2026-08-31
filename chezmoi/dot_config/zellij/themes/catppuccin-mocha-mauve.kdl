@@ -1,0 +1,159 @@
+// ~/.config/zellij/themes/catppuccin-mocha-mauve.kdl — managed by chezmoi
+//
+// Catppuccin Mocha, re-accented from GREEN to MAUVE (#cba6f7) so zellij's chrome
+// matches the accent every other surface in this repo already uses: Warp's
+// tracked catppuccin-mocha.yaml (accent + cursor), the Windows Terminal scheme,
+// and the FZF_DEFAULT_OPTS block in dot_zshrc.tmpl (info + prompt).
+//
+// Derived from zellij 0.44.3's BUILT-IN catppuccin-mocha, which is compiled into
+// the binary rather than shipped as a file — recover it with
+//   strings -n 6 /usr/local/bin/zellij | grep -A 120 'catppuccin-mocha.kdl'
+// Every deviation from that upstream theme is marked "CHANGED"; everything else
+// is verbatim. Re-derive the same way when bumping ZELLIJ_VERSION, in case
+// upstream restyles the theme underneath us.
+//
+// DUAL-EDIT: the block name below must match `theme "…"` in ../config.kdl.
+// scripts/check-invariants.sh asserts this — a dangling theme name is otherwise
+// silent (zellij falls back to its built-in default with no error).
+//
+// Two colours are deliberately NOT re-accented: exit_code_success stays green
+// and exit_code_error stays red, so a finished pane's status still reads at a
+// glance. Re-accenting those would trade meaning for prettiness.
+//
+// Palette (Catppuccin Mocha): mauve #cba6f7 · lavender #b4befe · text #cdd6f4
+// subtext0 #a6adc8 · base #1e1e2e · mantle #181825 · surface2 #585b70
+// green #a6e3a1 · red #f38ba8 · peach #fab387 · pink #f5c2e7 · blue #89b4fa
+// yellow #f9e2af · sky #89dceb
+//
+// NOTE: `frame_unselected` is a field of zellij's Styling struct but is NOT read
+// by the KDL theme parser — the parser's own "Missing colors for …" key list
+// omits it. Adding it here does nothing. Don't.
+
+themes {
+    catppuccin-mocha-mauve {
+        text_unselected {
+            base       205 214 244   // text
+            background 30 30 46      // CHANGED mantle -> base, to match terminal bg
+            emphasis_0 250 179 135   // peach
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231   // pink
+        }
+        text_selected {
+            base       205 214 244
+            background 88 91 112     // surface2
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231
+        }
+        // The pills in the tab-bar and status-bar. ribbon_selected is THE accent:
+        // it paints the active tab and the current mode indicator.
+        ribbon_selected {
+            base       24 24 37      // mantle — dark text on a light pill
+            background 203 166 247   // CHANGED green -> MAUVE
+            emphasis_0 243 139 168   // red
+            emphasis_1 250 179 135   // peach
+            emphasis_2 245 194 231   // pink
+            emphasis_3 137 180 250   // blue
+        }
+        ribbon_unselected {
+            base       24 24 37
+            background 166 173 200   // CHANGED text -> subtext0, so the mauve
+                                     // active pill pops. Lavender was rejected
+                                     // here: too close to mauve to tell selected
+                                     // from unselected at a glance.
+            emphasis_0 243 139 168
+            emphasis_1 24 24 37
+            emphasis_2 137 180 250
+            emphasis_3 245 194 231
+        }
+        table_title {
+            base       203 166 247   // CHANGED green -> mauve
+            background 0
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231
+        }
+        table_cell_selected {
+            base       205 214 244
+            background 88 91 112
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231
+        }
+        table_cell_unselected {
+            base       205 214 244
+            background 30 30 46      // CHANGED mantle -> base
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231
+        }
+        list_selected {
+            base       205 214 244
+            background 88 91 112
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231
+        }
+        list_unselected {
+            base       205 214 244
+            background 30 30 46      // CHANGED mantle -> base
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 180 190 254   // CHANGED green -> lavender
+            emphasis_3 245 194 231
+        }
+        // Focused pane border — the single most visible accent on screen.
+        frame_selected {
+            base       203 166 247   // CHANGED green -> MAUVE
+            background 0
+            emphasis_0 250 179 135
+            emphasis_1 203 166 247   // CHANGED sky -> mauve
+            emphasis_2 245 194 231
+            emphasis_3 0
+        }
+        // Transient frame states (renaming a pane, an active search). Left PEACH
+        // on purpose so it stays distinguishable from the now-mauve focused frame.
+        frame_highlight {
+            base       250 179 135
+            background 0
+            emphasis_0 245 194 231
+            emphasis_1 250 179 135
+            emphasis_2 250 179 135
+            emphasis_3 250 179 135
+        }
+        exit_code_success {
+            base       166 227 161   // green — NOT re-accented, semantic
+            background 0
+            emphasis_0 203 166 247   // CHANGED sky -> mauve
+            emphasis_1 24 24 37
+            emphasis_2 245 194 231
+            emphasis_3 137 180 250
+        }
+        exit_code_error {
+            base       243 139 168   // red — NOT re-accented, semantic
+            background 0
+            emphasis_0 249 226 175
+            emphasis_1 0
+            emphasis_2 0
+            emphasis_3 0
+        }
+        multiplayer_user_colors {
+            player_1 203 166 247     // CHANGED pink -> mauve (you are player 1)
+            player_2 137 180 250
+            player_3 0
+            player_4 249 226 175
+            player_5 137 220 235
+            player_6 0
+            player_7 243 139 168
+            player_8 0
+            player_9 0
+            player_10 0
+        }
+    }
+}

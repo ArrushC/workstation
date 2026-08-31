@@ -240,6 +240,32 @@ if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
   (( ${preexec_functions[(I)_wt_preexec]} )) || preexec_functions+=(_wt_preexec)
 fi
 
+# --- zellij: name the tab after the current directory -------------------------
+# Zero-install equivalent of the `zellij-tabula` plugin: rename the active tab
+# to the current directory's basename on every `cd`. `zellij action rename-tab`
+# measures 10-20ms and chpwd only fires when the directory actually changes, so
+# this runs synchronously — no background job, no job-control noise.
+#
+# $ZELLIJ is set only inside a zellij session, so this is inert everywhere else
+# (including the local Windows terminals). Opt out with
+# WORKSTATION_ZELLIJ_TAB_NAMES=0 in ~/.zshrc.local.
+#
+# Known and accepted: a tab holds several panes with independent directories, so
+# whichever pane you last cd'd in wins, and a manual rename (Ctrl+t r) is
+# overwritten on your next cd. That is inherent to naming a tab from a cwd.
+if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
+  _zj_tab_name() {
+    local n="${PWD##*/}"
+    [[ "$PWD" == "$HOME" ]] && n="~"
+    [[ -z "$n" ]] && n="/"
+    zellij action rename-tab "$n" 2>/dev/null
+  }
+  autoload -Uz add-zsh-hook
+  # Re-source guard: don't register twice (matches the _wt_precmd convention).
+  (( ${chpwd_functions[(I)_zj_tab_name]} )) || add-zsh-hook chpwd _zj_tab_name
+  _zj_tab_name
+fi
+
 # --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
 # Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
 # / Shift+Home/End) extend a visible highlight; typing replaces it; Backspace/
@@ -579,10 +605,39 @@ fssh() {
   [[ -n "$host" ]] && ssh "$host"
 }
 
-# Start or attach to a named zellij session
+# Start or attach to a named zellij session: zs [session] [layout]
+# A layout applies only when the session is being CREATED — `zellij attach
+# --create` accepts no --layout, hence the branch. Layouts live in
+# ~/.config/zellij/layouts: `dev` (editor + terminal + run) and `ops` (btop +
+# journal + shell). With no layout you get config.kdl's default_layout, which is
+# zellij's built-in single-pane `default`.
+# list-sessions lists resurrectable EXITED sessions too, which is deliberate:
+# a named session that already exists is always attached, never recreated.
+#
+# The layout flag is --new-session-with-layout, NOT --layout: with --session,
+# --layout means "add this layout to that session as new tabs" and fails with
+# "Session '<name>' not found" when it doesn't exist yet.
 zs() {
-  local session="${1:-main}"
-  zellij attach --create "$session"
+  local session="${1:-main}" layout="${2:-}"
+  if [ -n "$layout" ] && ! zellij list-sessions --short 2>/dev/null | grep -qx "$session"; then
+    zellij --session "$session" --new-session-with-layout "$layout"
+  else
+    zellij attach --create "$session"
+  fi
+}
+
+# Run a command in a floating zellij pane: zr btop / zr lazygit / zr
+# The floating pane overlays the layout instead of resizing it, so it is the
+# right shape for a glance-and-dismiss command (Alt+f toggles floating panes
+# back into view, Ctrl+p e embeds one into the layout if you want to keep it).
+# With no arguments you get a floating shell. Covers what the `ghost` plugin
+# does, with nothing to install.
+zr() {
+  if [ "$#" -eq 0 ]; then
+    zellij run --floating --close-on-exit -- "${SHELL:-/bin/sh}"
+  else
+    zellij run --floating -- "$@"
+  fi
 }
 
 # Quick note with nb

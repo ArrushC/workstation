@@ -81,7 +81,8 @@
       "Bash(grep -iA2 -E 'wezterm|terminfo')",
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:zellij.dev)"
     ]
   }
 }
