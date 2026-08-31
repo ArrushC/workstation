@@ -7,10 +7,11 @@
 #
 # Provisioning consumes hosts.conf directly: bootstrap.sh self-registers
 # this host into it, scripts/update-hosts.sh iterates over it for bulk
-# multi-host updates, and on Windows bootstrap.ps1's
-# Invoke-WindowsTerminalFragments regenerates the workstation Windows
-# Terminal SSH-profile fragment from it on every run. No separate
-# inventory file is generated.
+# multi-host updates, and on Windows bootstrap.ps1 regenerates BOTH managed
+# terminals' launch surfaces from it on every run —
+# Invoke-WindowsTerminalFragments (the workstation Windows Terminal
+# SSH-profile fragment) and Invoke-WarpTabConfigs (the workstation-*.toml
+# Warp Tab Configs). No separate inventory file is generated.
 #
 # Usage (no args opens the interactive menu):
 #   ./scripts/manage-hosts.sh
@@ -127,12 +128,12 @@ is_valid_group() {
 }
 
 # Printed after any hosts.conf change. Nothing is generated on the Linux
-# side; the Windows Terminal SSH profiles (workstation fragment) are
-# regenerated from hosts.conf by bootstrap.ps1's
-# Invoke-WindowsTerminalFragments. PARITY: manage-hosts.ps1 prints the
-# same note.
+# side; both Windows terminals' SSH launchers are regenerated from
+# hosts.conf by bootstrap.ps1 — Invoke-WarpTabConfigs (Warp Tab Configs)
+# and Invoke-WindowsTerminalFragments (the workstation Windows Terminal
+# fragment). PARITY: manage-hosts.ps1 prints the same note.
 note_terminal_refresh() {
-  log "Windows Terminal SSH profiles (workstation fragment) pick this up on the next bootstrap.ps1 run."
+  log "Warp Tab Configs and Windows Terminal SSH profiles pick this up on the next bootstrap.ps1 run."
 }
 
 # =============================================================================

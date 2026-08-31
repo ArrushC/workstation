@@ -1651,6 +1651,12 @@ section.dimmed {
 .stack-grid .stack-card:nth-child(8) {
     animation-delay: 350ms;
 }
+.stack-grid .stack-card:nth-child(9) {
+    animation-delay: 450ms;
+}
+.stack-grid .stack-card:nth-child(10) {
+    animation-delay: 500ms;
+}
 
 /* ---------- Focus-visible — comprehensive neon ring ----------
    Single source of truth. Covers: TOC links, control buttons (.ctl),

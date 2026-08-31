@@ -537,6 +537,57 @@ check_gitleaks() {
   fi
 }
 
+# --- Warp rc guards: correct scope, and never over the plugin chain ----------
+# The rc files skip fzf/atuin/starship/shift-select/fzf-tab under Warp
+# (TERM_PROGRAM=WarpTerminal) because Warp owns the input editor. Commit
+# c9709cf records what happens when such a guard's `fi` is allowed to drift:
+# the fzf-tab guard swallowed the whole plugin-load section and silently
+# disabled zsh-autosuggestions, zsh-syntax-highlighting, zsh-you-should-use and
+# zsh-history-substring-search under Warp. Nothing caught it for months.
+#
+# The contract this enforces: a Warp guard may only be folded into a
+# pre-existing `if` condition, or open a SHORT block; and the four plugin
+# sources must never sit inside one. Guard counts are asserted too, so a
+# dropped or duplicated guard is a failure rather than a silent behavior change.
+check_warp_guards() {
+  hdr "Warp TERM_PROGRAM guards (scope + plugin-chain safety)"
+  local zsh=chezmoi/dot_zshrc.tmpl bash=chezmoi/dot_bashrc.tmpl
+  local n_zsh n_bash out
+  n_zsh=$(grep -c 'TERM_PROGRAM:-.* != WarpTerminal' "$zsh" || true)
+  n_bash=$(grep -c 'TERM_PROGRAM:-.* != WarpTerminal' "$bash" || true)
+  if [ "$n_zsh" -eq 6 ]; then
+    ok "dot_zshrc.tmpl: 6 Warp guards (fzf, atuin, starship, shift-select, zstyles, fzf-tab)"
+  else
+    bad "dot_zshrc.tmpl: $n_zsh Warp guards, want 6 — a guard was added, dropped, or reworded"
+  fi
+  if [ "$n_bash" -eq 2 ]; then
+    ok "dot_bashrc.tmpl: 2 Warp guards (fzf, starship)"
+  else
+    bad "dot_bashrc.tmpl: $n_bash Warp guards, want 2 — parity pair with dot_zshrc.tmpl"
+  fi
+
+  # Depth-track top-level if/fi and report any plugin source loaded while
+  # inside a Warp guard. Single-line `if ...; then ...; fi` bodies (the
+  # fzf-preview zstyle contains one) never open a block here because the
+  # close pattern only matches a line that IS an `fi`.
+  out=$(awk '
+    /WarpTerminal/ && /;[[:space:]]*then[[:space:]]*$/ { warp[depth+1] = 1 }
+    /;[[:space:]]*then[[:space:]]*$/                   { depth++; next }
+    /^[[:space:]]*fi([[:space:]]|$)/ { if (depth > 0) { warp[depth] = 0; depth-- } ; next }
+    /zsh-autosuggestions\.zsh|zsh-syntax-highlighting\.zsh|you-should-use\.plugin\.zsh|zsh-history-substring-search\.zsh/ {
+      for (d = 1; d <= depth; d++)
+        if (warp[d]) { printf "line %d inside a Warp guard: %s\n", NR, $0; break }
+    }
+    END { if (depth != 0) printf "unbalanced if/fi at EOF (depth %d)\n", depth }
+  ' "$zsh")
+  if [ -z "$out" ]; then
+    ok "no plugin source sits inside a Warp guard (c9709cf regression blocked)"
+  else
+    bad "Warp guard scope regression — a guard's fi has been widened:"
+    printf '%s\n' "$out" | sed 's/^/       /'
+  fi
+}
+
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
 check_bumper_exclude
@@ -547,6 +598,7 @@ check_tools_block
 check_lsp_plugin
 check_chezmoiignore_targets
 check_completion_parity
+check_warp_guards
 check_python_env_parity
 check_tui_install_parity
 check_shellcheck

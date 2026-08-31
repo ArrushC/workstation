@@ -18,7 +18,8 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 
 ## Auto-installed by bootstrap.ps1
 
-- Windows Terminal (the terminal; evergreen per-user WinGet/Store seed)
+- Warp (the primary terminal; evergreen per-user WinGet seed — opens into AlmaLinux-9 WSL zsh)
+- Windows Terminal (the compatibility terminal + Windows' default terminal app; evergreen per-user WinGet/Store seed)
 - Starship
 - Nushell (default local Windows shell)
 - Obsidian

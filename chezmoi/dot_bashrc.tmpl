@@ -189,8 +189,11 @@ export FZF_DEFAULT_OPTS="
   --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4
 "
 
-# fzf shell integration.
-if command -v fzf &>/dev/null; then
+# fzf shell integration. Skipped under Warp: Warp owns the input editor and
+# documents shell-level fzf bindings as incompatible (the standalone `fzf`
+# command still works there). Runtime-only guard — Windows Terminal / SSH / WSL
+# sessions are unaffected. PARITY NOTE: mirrors the zsh guard in dot_zshrc.tmpl.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
   eval "$(fzf --bash)"
 fi
 
@@ -229,7 +232,9 @@ if command -v mise &>/dev/null; then
 fi
 
 # --- starship prompt ---------------------------------------------------------
-if command -v starship &>/dev/null; then
+# Skipped under Warp: Warp renders its own prompt (settings.toml keeps
+# `honor_ps1 = false`), so a starship PS1 would double up.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
   eval "$(starship init bash)"
 fi
 

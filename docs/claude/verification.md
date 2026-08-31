@@ -33,7 +33,46 @@ After changes:
 - After touching the doctor/check-updates surface (`bootstrap.sh` report modes, `make doctor`/`make check-updates`, `lib/doctor.sh`, `lib/check-updates.sh`, the `DOCTOR_ROWS`/`UPDATE_SPECS` registrations): `cd makefile && make doctor MODE=dev` — header shows the right MODE/DEST/WSL, scope-tools count matches `make list` (63 today), every line is `✓`/`!`/`✗`/`·` with a `make` repair command on the non-✓ ones, summary counts add up. `make check-updates MODE=dev` — summary's four counts must sum to the spec total (71 today) with **0 unchecked** on a networked host; a missing tool means its worker died (the `set -eo pipefail` + last-tag-fails-regex trap) or its `UPDATE_SPECS` line is absent. `./bootstrap.sh --dev --doctor` and `--dev --check-for-updates` — repo section prints FIRST (fetch, branch, ahead/behind, dirty), both exit 0 without provisioning anything; `--doctor` without `--dev`/`--prod` must error; combining with `--reinstall` must error. Windows: `.\bootstrap.ps1 -Doctor` / `-CheckForUpdates` — same shape; `-Doctor -CheckForUpdates` must error.
 - After editing `chezmoi/dot_local/bin/executable_winterop`: on a WSL host `winterop selftest` prints `selftest: PASS` (env detect + powershell run + path convert + env read); `winterop` (no args) reports `environment : wsl2` with the interop-channel table; `winterop clip set X` then `winterop clip get` round-trips; `winterop host` / `winterop run '(Get-Date).Year'` reach the Windows side. Must be shellcheck-clean (it's in `check-invariants.sh`'s shellcheck `targets`) and LF + 100755. In a non-WSL VM, `winterop` prints the SSH / shared-folder / RDP guidance and live subcommands refuse with that pointer (by design — no live driving).
 
-## Windows Terminal
+## Warp (the primary Windows terminal)
+On the Windows host after `bootstrap.ps1` + `chezmoi apply`, restart Warp, then:
+- Warp opens straight into **AlmaLinux-9 (WSL zsh)** — `new_session_shell_override`. Catppuccin
+  Mocha renders (custom theme picked up from the relative path) and the font is JetBrainsMono NFM.
+- The `+` menu lists the generated Tab Configs: `WSL: AlmaLinux-9`, `Windows PowerShell`,
+  `Nushell (compatibility)`, and one `SSH: <host>` per hosts.conf row (green dev / cyan prod).
+  Picking a host lands in the remote zellij session.
+- `alt+shift+d` / `alt+shift+r` split; `alt+shift+arrows` move focus; `ctrl+shift+z` zooms —
+  the same Zellij mnemonics as WT, so muscle memory transfers.
+- **Guard check — run this FIRST; it decides whether the rc guards are live or dead code.**
+  In a Warp WSL tab: `echo $TERM_PROGRAM; env | grep -iE 'WARP|TERM_PROGRAM'; echo "$WSLENV"`.
+  The pre-retirement recipe for this same host asserted `WarpTerminal` here
+  (`git show 19b3b75^:docs/claude/verification.md`), and Warp is understood to inject its own
+  `WSLENV` (carrying `TERM_PROGRAM`, `WARP_IS_LOCAL_SHELL_SESSION`, `WARP_HONOR_PS1`) when it
+  opens a WSL shell — but that is a year of Warp releases ago, so **treat the probe as the
+  source of truth, not this sentence.**
+  - **`WarpTerminal` printed** → guards are live. Confirm: **no** starship prompt (Warp renders
+    its own), **no** fzf Ctrl-T/Ctrl-R, **no** atuin Ctrl-R, **no** fzf-tab menu — *but*
+    zsh-autosuggestions, zsh-syntax-highlighting, zsh-you-should-use and
+    zsh-history-substring-search MUST all still work. That quartet is the `c9709cf` regression
+    surface; if any of them is dead, a guard's `fi` has been widened again (and
+    `check_warp_guards` in `check-invariants.sh` should have caught it — fix that too).
+  - **Empty** → the guards never fire in the primary session. Fallback ladder, cheapest first:
+    (a) widen the guard predicate to whichever `WARP_*` variable the probe shows *does* cross;
+    (b) put the value in the launch command itself —
+    `new_session_shell_override = { custom = "wsl.exe --distribution AlmaLinux-9 --cd ~ -- env TERM_PROGRAM=WarpTerminal zsh -l" }`
+    (deterministic, same distro and cwd; a config change, so get sign-off);
+    (c) drop the guards rather than ship dead code. Note that setting a user-scope `WSLENV`
+    yourself is **not** on this ladder — Warp is reported to overwrite `WSLENV` rather than
+    merge it (warpdotdev/Warp#6241), which would defeat exactly that fix. Whatever the probe
+    shows, record the answer in the spec + this file so the next person doesn't re-derive it.
+- A hand-made Tab Config (any name NOT starting with `workstation-`) survives a bootstrap
+  re-run; every `workstation-*.toml` is rewritten. Doctor reports the managed count and the
+  SSH subset, and the SSH subset equals the hosts.conf row count.
+- `chezmoi status` on `settings.toml` after poking Warp's Settings panel → re-capture with
+  `chezmoi re-add` (expected drift, not a bug).
+- Nushell in Warp is knowingly degraded: the compat Tab Config launches nu via pwsh and Warp
+  shows its unsupported-shell banner. That is the documented trade — Nushell's home is WT.
+
+## Windows Terminal (the compatibility path — must stay fully working)
 On the Windows host after `bootstrap.ps1` + `chezmoi apply`, restart WT, then:
 - Catppuccin Mocha chrome + scheme; JetBrainsMono NFM 10.5; bar cursor (defaults, all profiles).
 - CTRL+SHIFT+T lands in Nushell (defaultProfile); new-tab dropdown shows an "SSH hosts" folder
@@ -44,7 +83,10 @@ On the Windows host after `bootstrap.ps1` + `chezmoi apply`, restart WT, then:
   (`Fragments\other-app\x.json`) both survive a bootstrap re-run; only
   `Fragments\workstation\*.json` regenerates.
 - Doctor: WT present, fragment count == hosts.conf rows.
-- In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes;
+- In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes — this is THE
+  regression check for the Warp rc guards (they are `TERM_PROGRAM`-conditional, so a WT session
+  must behave exactly as it did before Warp returned; if anything here is missing, a guard is
+  firing where it shouldn't);
   check a remote zellij pane for exactly one OSC 133 prompt-zone set.
 - Marks: in a WSL zsh tab run `true` then `false` — two scrollbar marks (success/error colored);
   ctrl+up / ctrl+down jump between prompts; duplicate pane (alt+shift+d) reopens the same WSL dir.

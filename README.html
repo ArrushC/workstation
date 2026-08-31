@@ -96,6 +96,9 @@
                             </li>
                             <li><a href="#setup-windows">On Windows</a></li>
                             <li>
+                                <a href="#setup-warp">Warp keybinds</a>
+                            </li>
+                            <li>
                                 <a href="#setup-windows-terminal">Windows Terminal keybinds</a>
                             </li>
                             <li>
@@ -133,7 +136,7 @@
                             ></span><span class="tag">dev env</span></h1>
                         <p class="lede">
                             Dev-environment provisioning for Linux hosts, plus
-                            Windows Terminal as the Windows terminal.
+                            Warp and Windows Terminal on Windows.
                             A single <code>Makefile</code> under
                             <code>makefile/</code> drives everything &mdash;
                             system packages, PATH, tool installs, and the chezmoi
@@ -210,8 +213,8 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             </h3>
                             <p class="qs-sub">
                                 <strong>No admin needed.</strong> Install Git
-                                first, then this installs Windows Terminal,
-                                chezmoi,
+                                first, then this installs Warp, Windows
+                                Terminal, chezmoi,
                                 and Starship under your user profile, applies
                                 dotfiles, and deploys the terminal configs.
                             </p>
@@ -307,10 +310,18 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                         <article class="stack-card tilt">
                             <div class="layer-label">Terminal</div>
                             <h3>
+                                <span class="ico" aria-hidden="true">⚡</span>
+                                Warp
+                            </h3>
+                            <p>The day-to-day Windows terminal — opens into AlmaLinux-9 (WSL zsh); per-host SSH+Zellij launchers regenerate from hosts.conf as Tab Configs.</p>
+                        </article>
+                        <article class="stack-card tilt">
+                            <div class="layer-label">Terminal</div>
+                            <h3>
                                 <span class="ico" aria-hidden="true">🖥️</span>
                                 Windows Terminal
                             </h3>
-                            <p>The terminal — WSL, SSH+Zellij hosts, and local shells all launch from its profiles; per-host SSH profiles regenerate from hosts.conf as a JSON fragment.</p>
+                            <p>The compatibility terminal, kept fully configured — Nushell's home, Windows' default terminal app; per-host SSH profiles regenerate from hosts.conf as a JSON fragment.</p>
                         </article>
                     </div>
 
@@ -2265,6 +2276,14 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                                                     (Catppuccin Mocha)</span
                                                 >
                                             </li>
+                                            <li>
+                                                warp/Warp/config/settings.toml,
+                                                keybindings.yaml
+                                                <span class="note"
+                                                    >&mdash; Warp (theme lives
+                                                    in AppData/Roaming)</span
+                                                >
+                                            </li>
                                         </ul>
                                     </details>
                                     <details>
@@ -2659,10 +2678,11 @@ make -C makefile check-updates MODE=dev</code></pre>
                             (docker/dozzle/cockpit/rsyslog &mdash; active or
                             inactive), <code>wsl-config</code>, and the dnf
                             package lists. On Windows it covers the portable
-                            and installer-class tools, Windows Terminal, Nerd
-                            Fonts, BurntToast, the Start Menu shortcuts, the
-                            workstation SSH-profile fragment, the dnGrep config
-                            seed, the profile shim, and the SSH key.
+                            and installer-class tools, Warp, Windows Terminal,
+                            Nerd Fonts, BurntToast, the Start Menu shortcuts,
+                            the workstation SSH-profile fragment, the managed
+                            Warp Tab Configs, the dnGrep config seed, the
+                            profile shim, and the SSH key.
                         </p>
                         <p>
                             <strong><code>--check-for-updates</code></strong>
@@ -2812,8 +2832,44 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                     </p>
                     <ul>
                         <li>
-                            <strong>Windows Terminal</strong> &mdash; the
+                            <strong>Warp</strong> &mdash; the day-to-day
                             Windows terminal, seeded from the official
+                            <code>Warp.Warp</code> WinGet package at user
+                            scope (<code>--scope user</code> &rarr; the
+                            installer&rsquo;s per-user mode, so <strong>no
+                            UAC</strong>). The seed is <strong>evergreen, not
+                            pinned</strong> &mdash; Warp self-updates, so
+                            there is no <code>versions.mk</code> entry.
+                            Best-effort: without WinGet the script warns and
+                            points at
+                            <a href="https://www.warp.dev/download"
+                               target="_blank" rel="noopener">warp.dev/download</a>.
+                            Chezmoi owns three tracked files &mdash;
+                            <code>settings.toml</code> and
+                            <code>keybindings.yaml</code> under
+                            <code>%LOCALAPPDATA%\warp\Warp\config\</code>,
+                            plus the Catppuccin Mocha theme under
+                            <code>%APPDATA%\warp\Warp\data\themes\</code>
+                            &mdash; and bootstrap regenerates only the
+                            <code>workstation-*.toml</code> Tab Configs
+                            (<code>%APPDATA%\warp\Warp\data\tab_configs\</code>:
+                            the local shells plus one
+                            <em>SSH: &lt;host&gt;</em> entry per
+                            <code>hosts.conf</code> row running
+                            <code>ssh -t &lt;user&gt;@&lt;ip&gt; zellij attach
+                            --create main</code>). Tab Configs you create
+                            yourself are never touched &mdash; the
+                            <code>workstation-</code> prefix is the managed
+                            namespace. Warp opens into AlmaLinux-9 (WSL zsh);
+                            see <a href="#setup-warp">Warp keybinds</a> for
+                            why it can&rsquo;t be Nushell.
+                        </li>
+                        <li>
+                            <strong>Windows Terminal</strong> &mdash; the
+                            compatibility terminal, kept fully configured (and
+                            still Windows&rsquo; <em>default terminal
+                            application</em>, a role Warp cannot take),
+                            seeded from the official
                             <code>Microsoft.WindowsTerminal</code> WinGet
                             package at user scope. The seed is
                             <strong>evergreen, not pinned</strong>: it is a
@@ -3063,7 +3119,10 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             shell.</strong> It
                         replaces PowerShell as the default in
                         Windows Terminal (the <em>Nushell</em> profile +
-                        <code>defaultProfile</code>) and Zed&rsquo;s integrated
+                        <code>defaultProfile</code> &mdash; Windows Terminal is
+                        Nushell&rsquo;s first-class home, because
+                        <a href="#setup-warp">Warp cannot run it</a>) and
+                        Zed&rsquo;s integrated
                         terminal (<code>terminal.shell.program</code>) &mdash; a
                         structured-data, cross-platform modern shell. It&rsquo;s installed as a
                         pinned portable tool to
@@ -3184,7 +3243,7 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Install Windows Terminal + chezmoi + the portable tools (Starship, Helix, Nushell, &hellip;)</span
+                            ><span class="lbl">Install Warp + Windows Terminal + chezmoi + the portable tools (Starship, Helix, Nushell, &hellip;)</span
                             ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -3200,8 +3259,8 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl">Windows Terminal SSH-profile fragment</span
-                            ><span class="note">from hosts.conf</span>
+                            ><span class="lbl">Windows Terminal SSH-profile fragment + Warp Tab Configs</span
+                            ><span class="note">both from hosts.conf</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -3243,6 +3302,25 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <code>chezmoi update</code>, and
                         <code>manage-hosts.ps1</code> ops authenticate without
                         re-passing the env var.
+                    </p>
+                    <p class="note-row">
+                        <strong>Warp config model:</strong> chezmoi deploys
+                        <code>settings.toml</code> + <code>keybindings.yaml</code>
+                        to <code>%LOCALAPPDATA%\warp\Warp\config\</code> and
+                        the theme to
+                        <code>%APPDATA%\warp\Warp\data\themes\</code> &mdash;
+                        Warp splits machine-local config from roaming data, and
+                        the tracked paths mirror that split. Warp
+                        <strong>hot-reloads</strong> <code>settings.toml</code>,
+                        so an apply lands in open windows immediately; the
+                        generated <code>workstation-*.toml</code> Tab Configs
+                        need a Warp restart. Warp&rsquo;s Settings panel writes
+                        back to <code>settings.toml</code>, so re-sync the repo
+                        with <code>chezmoi re-add</code> after changing things
+                        there &mdash; the same sync-from-host pattern as Windows
+                        Terminal below. (Warp&rsquo;s own cloud settings-sync is
+                        deliberately off, so it can&rsquo;t fight chezmoi for
+                        authorship.)
                     </p>
                     <p class="note-row">
                         <strong>Windows Terminal config model:</strong> chezmoi
@@ -3376,10 +3454,129 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         reclaim).
                     </p>
 
+                    <h3 id="setup-warp">Warp keybinds</h3>
+                    <p class="lede">
+                        <strong>Warp is the day-to-day Windows terminal.</strong>
+                        It opens straight into <em>AlmaLinux-9</em> (WSL zsh),
+                        and it launches everything else through its
+                        <strong>Tab Configs</strong> &mdash; the
+                        &ldquo;+&rdquo; menu (or
+                        <kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>L</kbd>) lists the
+                        generated <em>WSL: AlmaLinux-9</em>,
+                        <em>Windows PowerShell</em>,
+                        <em>Nushell (compatibility)</em>, and one
+                        <em>SSH: &lt;host&gt;</em> entry per
+                        <code>hosts.conf</code> row (each attaches the
+                        host&rsquo;s persistent Zellij session). The tracked
+                        <code>keybindings.yaml</code> adds these overrides on
+                        top of Warp&rsquo;s defaults &mdash; the pane mnemonics
+                        match Zellij&rsquo;s pane mode (<em>d</em> = down,
+                        <em>r</em> = right) so muscle memory transfers between
+                        local Warp panes, Windows Terminal panes, and
+                        SSH+Zellij panes:
+                    </p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Bind</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>D</kbd> / <kbd>R</kbd></td>
+                                <td>Split pane down / right</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>SHIFT</kbd>+arrows</td>
+                                <td>Move between panes</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>Z</kbd></td>
+                                <td>Toggle pane maximize</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td>
+                                <td>Font size bigger / smaller / reset</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>R</kbd></td>
+                                <td>Command history search</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>&uarr;</kbd>/<kbd>&darr;</kbd></td>
+                                <td>Select previous / next block</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>&uarr;</kbd>/<kbd>&darr;</kbd></td>
+                                <td>Jump between bookmarked blocks</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>B</kbd></td>
+                                <td>Bookmark the selected block</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>ALT</kbd>+<kbd>C</kbd></td>
+                                <td>Copy the selected block&rsquo;s output</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>M</kbd></td>
+                                <td>Block context menu</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>T</kbd></td>
+                                <td>Reopen the last closed session</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>P</kbd></td>
+                                <td>Command palette</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>L</kbd></td>
+                                <td>Tab Config (launch configuration) palette</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>SHIFT</kbd>+<kbd>R</kbd></td>
+                                <td>Workflows</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="note-row">
+                        <strong>Warp does not run Nushell.</strong> Its
+                        supported shells are PowerShell&nbsp;7,
+                        PowerShell&nbsp;5, WSL2 and Git Bash; anything else
+                        gets an &ldquo;unsupported shell&rdquo; banner and
+                        falls back to PowerShell. That is why Warp opens into
+                        AlmaLinux-9 zsh, why the <em>Nushell
+                        (compatibility)</em> Tab Config launches
+                        <code>nu.exe</code> as a PowerShell child (Blocks and
+                        completions degrade there), and why Nushell stays
+                        <a href="#setup-windows-terminal">Windows
+                        Terminal&rsquo;s</a> default profile. Warp also
+                        can&rsquo;t register as Windows&rsquo; <em>default
+                        terminal application</em> &mdash; Windows Terminal
+                        keeps that job, which is one more reason it stays
+                        fully configured rather than retired.
+                    </p>
+                    <p class="note-row">
+                        Warp&rsquo;s own input editor handles selection,
+                        completion menus, and command search inside its
+                        Blocks, so the shell-side fzf / atuin / starship /
+                        shift-select / fzf-tab wiring is skipped when
+                        <code>TERM_PROGRAM=WarpTerminal</code>. Those guards
+                        are <strong>runtime-only</strong>: the exact same
+                        shells keep all of it in Windows Terminal, over SSH,
+                        and in plain WSL sessions.
+                    </p>
+
                     <h3 id="setup-windows-terminal">Windows Terminal keybinds</h3>
                     <p class="lede">
-                        Windows Terminal opens hosts through its
-                        <strong>profiles</strong> &mdash; the dropdown next to
+                        Windows Terminal stays <strong>fully configured</strong>
+                        alongside <a href="#setup-warp">Warp</a> &mdash; it is
+                        Nushell&rsquo;s home, it keeps Windows&rsquo;
+                        <em>default terminal application</em> role, and nothing
+                        here was traded away for Warp. It opens hosts through
+                        its <strong>profiles</strong> &mdash; the dropdown next to
                         the &ldquo;+&rdquo; new-tab button lists an
                         <strong>SSH hosts</strong> folder first, holding one
                         <em>SSH: &lt;host&gt;</em> entry per
@@ -3651,15 +3848,36 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                     <h2>Host management</h2>
                     <p class="lede">
                         <code>hosts.conf</code> is the single source of truth.
-                        One output is regenerated from it: the workstation
-                        SSH-profile fragment for Windows Terminal
-                        (<code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\hosts.json</code>,
-                        one <em>SSH: &lt;host&gt;</em> profile per row), rebuilt
-                        by <code>bootstrap.ps1</code>&rsquo;s
-                        <code>Invoke-WindowsTerminalFragments</code> on every
-                        Windows run. On Linux nothing is generated &mdash; the
-                        provisioning scripts read <code>hosts.conf</code>
-                        directly.
+                        <strong>Two</strong> outputs are regenerated from it, one
+                        per managed terminal, both on every Windows
+                        <code>bootstrap.ps1</code> run:
+                    </p>
+                    <ul>
+                        <li>
+                            the Warp <strong>Tab Configs</strong>
+                            (<code>%APPDATA%\warp\Warp\data\tab_configs\workstation-ssh-&lt;host&gt;.toml</code>,
+                            one per row) &mdash;
+                            <code>Invoke-WarpTabConfigs</code>;
+                        </li>
+                        <li>
+                            the workstation <strong>SSH-profile fragment</strong>
+                            for Windows Terminal
+                            (<code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\hosts.json</code>,
+                            one <em>SSH: &lt;host&gt;</em> profile per row)
+                            &mdash;
+                            <code>Invoke-WindowsTerminalFragments</code>.
+                        </li>
+                    </ul>
+                    <p>
+                        Both run the same
+                        <code>ssh -t &lt;user&gt;@&lt;ip&gt; zellij attach
+                        --create main</code>, so a host opened in either
+                        terminal attaches the <em>same</em> remote session
+                        &mdash; that&rsquo;s zellij working as designed, not a
+                        conflict. Each generator owns only its own prefix, so
+                        launch entries you create yourself survive. On Linux
+                        nothing is generated &mdash; the provisioning scripts
+                        read <code>hosts.conf</code> directly.
                     </p>
                     <p>
                         <code>scripts/update-hosts.sh</code> reads
@@ -5044,10 +5262,13 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                     </div>
                     <p class="note-row">
                         Self-registration appends the host to
-                        <code>hosts.conf</code>; the Windows Terminal SSH
-                        profiles pick it up on the next
-                        <code>bootstrap.ps1</code> run on Windows (restart
-                        Windows Terminal &mdash; fragments are read at launch).
+                        <code>hosts.conf</code>; both terminals&rsquo; launchers
+                        pick it up on the next <code>bootstrap.ps1</code> run on
+                        Windows &mdash; the Warp Tab Configs and the Windows
+                        Terminal SSH profiles. Restart the terminal afterwards
+                        (Windows Terminal reads fragments at launch; Warp reads
+                        Tab Configs at launch too, though it hot-reloads
+                        <code>settings.toml</code>).
                     </p>
                 </section>
 
@@ -5259,6 +5480,93 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 top, so per-host overrides win over the
                                 global <code>Host *</code> defaults.
                             </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Warp: missing Tab Configs, wrong theme, or it
+                            opened PowerShell instead of AlmaLinux-9
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Warp <strong>hot-reloads</strong>
+                                <code>settings.toml</code>, so a theme or font
+                                change lands as soon as chezmoi applies it
+                                (<code>cza</code> on WSL, or
+                                <code>chezmoi apply</code> in a Windows shell).
+                                <strong>Tab Configs are the exception</strong>
+                                &mdash; Warp reads
+                                <code>%APPDATA%\warp\Warp\data\tab_configs\</code>
+                                at launch, so a regenerated set needs a full
+                                Warp restart before new
+                                <em>SSH: &lt;host&gt;</em> entries appear in the
+                                &ldquo;+&rdquo; menu.
+                            </p>
+                            <p>If something is still wrong:</p>
+                            <ul>
+                                <li>
+                                    <strong>No <em>SSH: &lt;host&gt;</em>
+                                    entries</strong> &mdash; re-run
+                                    <code>.\bootstrap.ps1</code>;
+                                    <code>Invoke-WarpTabConfigs</code> rebuilds
+                                    them from <code>hosts.conf</code> every run.
+                                    <code>.\bootstrap.ps1 -Doctor</code> counts
+                                    them. If it says <em>Warp is not
+                                    installed</em> while Warp clearly is, the
+                                    Uninstall-registry <code>DisplayName</code>
+                                    changed &mdash; the generator keys off it.
+                                </li>
+                                <li>
+                                    <strong>Theme reverted to a stock
+                                    one</strong> &mdash; the theme is referenced
+                                    by the <em>relative</em> filename
+                                    <code>catppuccin-mocha.yaml</code>, and it
+                                    must exist under
+                                    <code>%APPDATA%\warp\Warp\data\themes\</code>.
+                                    A chezmoi apply restores it.
+                                </li>
+                                <li>
+                                    <strong>Opened PowerShell, not
+                                    AlmaLinux-9</strong> &mdash; Warp warns and
+                                    falls back to the system default when it
+                                    rejects
+                                    <code>new_session_shell_override</code>.
+                                    Use the <em>WSL: AlmaLinux-9</em> Tab Config
+                                    to get back in, then re-check the key
+                                    against Warp&rsquo;s current settings
+                                    schema.
+                                </li>
+                                <li>
+                                    <strong>Your edits keep coming
+                                    back</strong> &mdash; chezmoi owns
+                                    <code>settings.toml</code>. Change it in the
+                                    Settings panel if you like, then re-sync the
+                                    repo with <code>chezmoi re-add</code>.
+                                    <strong>Don&rsquo;t enable Warp&rsquo;s
+                                    settings sync</strong>
+                                    (<code>is_settings_sync_enabled</code>);
+                                    cloud sync and chezmoi will fight over the
+                                    file.
+                                </li>
+                                <li>
+                                    <strong>The same host opened in both
+                                    terminals mirrors itself</strong> &mdash;
+                                    expected. Both launchers run
+                                    <code>zellij attach --create main</code>, so
+                                    they attach the <em>same</em> remote
+                                    session and zellij sizes it to the smallest
+                                    client. Detach one, or start a
+                                    differently-named session by hand.
+                                </li>
+                                <li>
+                                    <strong>Nushell looks broken in
+                                    Warp</strong> &mdash; it is, knowingly. See
+                                    <a href="#setup-warp">Warp keybinds</a>:
+                                    Warp doesn&rsquo;t support Nushell, so use
+                                    Windows Terminal for it.
+                                </li>
+                            </ul>
                         </div>
                     </details>
 
