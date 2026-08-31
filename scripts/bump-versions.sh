@@ -30,10 +30,20 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #      Windows halves of the Linux EGET_TOOLs — gh's addition without this
 #      exclusion is what failed run #9); DEVTOYS_CLI dual-edits $PortableTools
 #      too and joins defensively (bespoke target, not yet in UPDATE_SPECS).
+#      GO + GOPLS join for a different reason: they are a COUPLED PAIR. gopls
+#      declares a hard toolchain floor in its own go.mod (0.20.0 needs go
+#      1.24.2, 0.21.0 needs 1.25, 0.23.0 needs 1.26.0) and lib/lsp.sh installs
+#      it via `go install` using the PINNED Go, so bumping gopls past the
+#      current Go's ceiling makes GOTOOLCHAIN=auto silently fetch a second
+#      toolchain mid-provision — and hard-fails under GOTOOLCHAIN=local or a
+#      restricted GOPROXY. Bump both together, deliberately. PYTHON_VERSION is
+#      coupled the same way to UV_VERSION: `uv python install` resolves
+#      interpreters from uv's own bundled metadata, so uv 0.11.32 tops out at
+#      CPython 3.14.6 and 3.14.7 needs uv 0.12.7 in the same commit.
 #  (2) NCDU — its linux-x86_64 binary is published at dev.yorhel.nl for only SOME
 #      releases (2.9.1 has one; 2.9.2 returns 404), so a bump must be verified by
 #      hand against the download URL before landing or it 404s the install.
-EXCLUDE="HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
+EXCLUDE="GO_VERSION GOPLS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
@@ -50,14 +60,30 @@ declare -A ALIAS=(
   ["difft"]=DIFFTASTIC_VERSION
   ["trip"]=TRIPPY_VERSION
   ["pueued"]=PUEUE_VERSION # shares pueue's pin (one release covers both)
+  # Spec is named python-env (the make target) but the pin is PYTHON_VERSION.
+  # Without this the bumper derived PYTHON_ENV_VERSION, found no such line, and
+  # reported "skipped — could not map safely", silently dropping a real CPython
+  # bump every week.
+  ["python-env"]=PYTHON_VERSION
+  # Names whose derived var would be wrong: "cht.sh" -> CHT.SH_VERSION and
+  # "claude-cli" -> CLAUDE_CLI_VERSION. Both are rolling `latest` pins so no
+  # bump is ever produced, but mapping them keeps spec coverage complete and
+  # lets check_update_spec_coverage assert 1:1 without an exemption list.
+  ["cht.sh"]=CHTSH_VERSION
+  ["claude-cli"]=CLAUDE_VERSION
 )
 
 bumped=""
 manual=""
 skipped=""
 
+# MODE=dev, not prod: the dev-only block in tools.mk registers herdr, opencode
+# and omp, and MODE=prod never defines them — so the bumper could not see those
+# three at all (99 specs under prod vs 102 under dev). Their presence in EXCLUDE
+# above was moot while they were invisible. dev is a superset of prod here, so
+# nothing is lost by widening.
 updates=$(CHECK_UPDATES_PORCELAIN=1 \
-  make -s --no-print-directory -C makefile check-updates MODE=prod 2>/dev/null |
+  make -s --no-print-directory -C makefile check-updates MODE=dev 2>/dev/null |
   grep '^update|' || true)
 
 while IFS='|' read -r _ name detail; do

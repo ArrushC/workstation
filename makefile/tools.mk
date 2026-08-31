@@ -156,7 +156,7 @@ $(eval $(call EGET_TOOL,delta,$(DELTA_VERSION),dandavison/delta,$(DELTA_VERSION)
 
 # micro — publishes linux64.tar.gz AND linux64-static.tar.gz. We want the
 # static one for portability (matches our musl preference everywhere else).
-$(eval $(call EGET_TOOL,micro,$(MICRO_VERSION),zyedidia/micro,,--asset static))
+$(eval $(call EGET_TOOL,micro,$(MICRO_VERSION),micro-editor/micro,,--asset static))
 # eza — both .tar.gz and .zip variants published per arch; pick tarball.
 $(eval $(call EGET_TOOL,eza,$(EZA_VERSION),eza-community/eza,,--asset musl --asset .tar.gz))
 $(eval $(call EGET_TOOL,sd,$(SD_VERSION),chmln/sd,,--asset musl))
@@ -352,7 +352,7 @@ $(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--
 # dev-only machine-memory TOOLS block still lists all three.)
 # =============================================================================
 ifeq ($(MODE),dev)
-$(eval $(call EGET_TOOL,herdr,$(HERDR_VERSION),ogulcancelik/herdr))
+$(eval $(call EGET_TOOL,herdr,$(HERDR_VERSION),herdrdev/herdr))
 $(eval $(call EGET_TOOL,opencode,$(OPENCODE_VERSION),anomalyco/opencode,,--asset '^musl' --asset '^baseline' --asset '^desktop'))
 $(eval $(call EGET_TOOL,omp,$(OMP_VERSION),can1357/oh-my-pi,,--to $(DEST)/omp))
 else
@@ -553,3 +553,27 @@ UPDATE_SPECS += vcpkg|$(VCPKG_VERSION)|microsoft/vcpkg|$(VCPKG_VERSION)
 # check), so `make check-updates` surfaces drift but never auto-bumps it.
 # CPython release tags DO carry a `v` prefix (v3.14.6), unlike pwndbg/vcpkg.
 UPDATE_SPECS += python-env|$(PYTHON_VERSION)|python/cpython|v$(PYTHON_VERSION)
+
+# Dev-only bespoke targets (go-runtime, lsp-servers). These had NO spec at all
+# until 2026-08-31, so `check-updates` emitted no line for them — not even a `?`
+# — and the weekly bumper inherited the blind spot. Seven of the nine were stale
+# when first checked; marksman-style silence is the worst failure mode this
+# registry has, so keep every versions.mk pin represented here.
+#
+# Tag families are NOT uniform upstream and several obvious choices are WRONG:
+#   - golang/go tags are `go1.27.0`, so the prefix is a bare `go`.
+#   - gopls ships from golang/tools under `gopls/v*`; the repo's own newest tags
+#     are x/tools' `v0.49.0`, which would be reported as a gopls version.
+#   - bash-language-server's newest tags are `vscode-client-*` (the editor
+#     extension); the SERVER family is `server-*`.
+#   - yaml-language-server publishes NO usable tags (`untagged-<sha>` junk plus a
+#     stray v0.0.1) — npm is its only source of truth, hence the npm: kind.
+UPDATE_SPECS += go|$(GO_VERSION)|golang/go|go$(GO_VERSION)
+UPDATE_SPECS += gopls|$(GOPLS_VERSION)|golang/tools|gopls/v$(GOPLS_VERSION)
+UPDATE_SPECS += lua-ls|$(LUA_LS_VERSION)|LuaLS/lua-language-server|$(LUA_LS_VERSION)
+UPDATE_SPECS += basedpyright|$(BASEDPYRIGHT_VERSION)|DetachHead/basedpyright|v$(BASEDPYRIGHT_VERSION)
+UPDATE_SPECS += typescript-ls|$(TYPESCRIPT_LS_VERSION)|typescript-language-server/typescript-language-server|v$(TYPESCRIPT_LS_VERSION)
+UPDATE_SPECS += bash-ls|$(BASH_LS_VERSION)|bash-lsp/bash-language-server|server-$(BASH_LS_VERSION)
+UPDATE_SPECS += yaml-ls|$(YAML_LS_VERSION)|npm:yaml-language-server|$(YAML_LS_VERSION)
+UPDATE_SPECS += vscode-langservers|$(VSCODE_LANGSERVERS_VERSION)|hrsh7th/vscode-langservers-extracted|v$(VSCODE_LANGSERVERS_VERSION)
+UPDATE_SPECS += devtoys-cli|$(DEVTOYS_CLI_VERSION)|DevToys-app/DevToys|v$(DEVTOYS_CLI_VERSION)

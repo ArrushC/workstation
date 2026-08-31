@@ -48,6 +48,28 @@ if (($# == 1)); then
     exit 0
   fi
 
+  # npm source kind: `npm:<package>`. Some upstreams publish ONLY to npm and
+  # their GitHub tags are unusable — yaml-language-server's tag list is
+  # `untagged-<sha>` junk plus a stray v0.0.1, so a git-tag check there would be
+  # permanently wrong. Read dist-tags.latest, never the full version list: that
+  # registry carries hundreds of `X.Y.Z-<sha>.0` prerelease snapshots and a
+  # "highest version" scrape would happily pick one.
+  if [[ "$repo" == npm:* ]]; then
+    pkg="${repo#npm:}"
+    latest=$(timeout 30 curl -fsSL "https://registry.npmjs.org/$pkg" 2>/dev/null |
+      sed -n 's/.*"dist-tags":{[^}]*"latest":"\([^"]*\)".*/\1/p' | head -1) || latest=""
+    if [[ -z "$latest" ]]; then
+      echo "unknown|$name|npm registry lookup failed for $pkg (offline?)"
+    elif [[ "$latest" == "$version" ]]; then
+      echo "ok|$name|$version"
+    elif [[ "$(printf '%s\n%s\n' "$version" "$latest" | sort -V | tail -1)" == "$latest" ]]; then
+      echo "update|$name|$version → $latest"
+    else
+      echo "ahead|$name|pin $version is newer than npm's latest $latest"
+    fi
+    exit 0
+  fi
+
   url="$repo"
   [[ "$url" != *://* ]] && url="https://github.com/$repo.git"
 
@@ -67,10 +89,24 @@ if (($# == 1)); then
     # The filter must be an `if` (not `[[ ]] &&`): when the LAST tag fails
     # the regex, the && form makes the while segment exit 1, and under
     # `set -eo pipefail` that kills the worker with no output at all.
+    # Two tag families exist in this fleet: numeric (1.2.3) and ISO date
+    # (2026-08-31, used by rust-analyzer and marksman). Choose the family from
+    # the PINNED version's own shape so we never compare across families.
+    #
+    # The numeric-only filter this replaces silently blinded every date-tagged
+    # tool: 0 of rust-analyzer's 360 tags and 0 of marksman's 59 matched, so both
+    # reported `?` forever and could never offer a bump — marksman sat ~14 months
+    # stale that way. sort -V already orders ISO dates correctly, so only the
+    # filter needed changing.
+    if [[ "$version" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+      tag_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    else
+      tag_re='^[0-9]+(\.[0-9]+)*$'
+    fi
     latest=$(while IFS=$'\t' read -r _sha ref; do
       v="${ref#refs/tags/}"
       v="${v#"$prefix"}"
-      if [[ "$v" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then printf '%s\n' "$v"; fi
+      if [[ "$v" =~ $tag_re ]]; then printf '%s\n' "$v"; fi
     done <<<"$refs" | sort -V | tail -1)
   fi
 
