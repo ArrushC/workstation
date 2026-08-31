@@ -210,8 +210,8 @@ PYTHON_VERSION := 3.14.6
 # JS runtime); the four *-language-server npm packages via node-runtime's npm;
 # gopls via `go install` against the new go-runtime. clangd is provisioned
 # separately (clang-tools-extra, packages.mk) and only VERIFIED by lsp-servers.
-GO_VERSION                 := 1.24.4
-GOPLS_VERSION              := 0.18.1
+GO_VERSION                 := 1.27.0
+GOPLS_VERSION              := 0.23.0
 RUST_ANALYZER_VERSION      := 2026-08-31
 MARKSMAN_VERSION           := 2026-02-08
 TAPLO_VERSION              := 0.10.0

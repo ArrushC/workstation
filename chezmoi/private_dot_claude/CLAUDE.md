@@ -175,8 +175,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `vcpkg` 2026.07.29
 
 ### (2026-06) Language servers (LSP) + runtimes
-- `go` 1.24.4
-- `gopls` 0.18.1
+- `go` 1.27.0
+- `gopls` 0.23.0
 - `rust-analyzer` 2026-08-31
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
