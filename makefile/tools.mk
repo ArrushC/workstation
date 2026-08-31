@@ -381,9 +381,15 @@ $(eval $(call TOOL,tldr,$(TEALDEER_VERSION),\
 $(eval $(call TOOL,witr,$(WITR_VERSION),\
   $(LIB)/direct.sh witr https://github.com/pranshuparmar/witr/releases/download/v$(WITR_VERSION)/witr-linux-amd64,witr))
 
-# broot has no version pinning — upstream always serves "latest" at this URL
+# broot has no version pinning — upstream always serves "latest" at this URL.
+# The path is a RUST TARGET TRIPLE and upstream renamed it: the old
+# .../download/x86_64-linux/broot began returning HTTP 404 (caught 2026-08-31 by
+# a sandbox install, which fails HARD here — direct.sh has no fallback, so a
+# fresh `make provision` on a new host died on this target). If broot installs
+# start 404ing again, curl the download index and re-check the triple rather
+# than assuming the tool moved to GitHub releases.
 $(eval $(call TOOL,broot,$(BROOT_VERSION),\
-  $(LIB)/direct.sh broot https://dystroy.org/broot/download/x86_64-linux/broot,broot))
+  $(LIB)/direct.sh broot https://dystroy.org/broot/download/x86_64-unknown-linux-musl/broot,broot))
 
 $(eval $(call TOOL,ctop,$(CTOP_VERSION),\
   $(LIB)/direct.sh ctop https://github.com/bcicen/ctop/releases/download/v$(CTOP_VERSION)/ctop-$(CTOP_VERSION)-linux-amd64,ctop))
