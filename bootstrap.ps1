@@ -239,9 +239,9 @@ $PortableTools = @(
     @{
         Name       = "GitHub CLI"
         Exe        = "gh"
-        Version    = "2.96.0"
-        Url        = "https://github.com/cli/cli/releases/download/v2.96.0/gh_2.96.0_windows_amd64.zip"
-        Sha256     = "c2d6acc935cd2f00e2144d7e036d5cd82e6b6bd5594e8c75aa75ef2a4ed6aac3"
+        Version    = "2.98.0"
+        Url        = "https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_windows_amd64.zip"
+        Sha256     = "c28c7b3b584967a05b74d9eaf7481bff24ddc34930bf2d6e442c148236561eb1"
         Layout     = "single"
         Dest       = $WsBin
         Repo       = "cli/cli"
@@ -312,9 +312,9 @@ $PortableTools = @(
         # (any CPU since ~2013).
         Name       = "OpenCode"
         Exe        = "opencode"
-        Version    = "1.17.18"
-        Url        = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-windows-x64.zip"
-        Sha256     = "7d489fd9b314e25bccf9c5dd2f17ef2774902c7b7db9aa34f46b0aab4715c70c"
+        Version    = "1.18.25"
+        Url        = "https://github.com/anomalyco/opencode/releases/download/v1.18.25/opencode-windows-x64.zip"
+        Sha256     = "831e213e5f454d6e8b26f0fb24c7b3d42b40e47d73d154672a9192702eb08416"
         Layout     = "single"   # zip contains exactly one opencode.exe (starship precedent)
         Dest       = $WsBin
         Repo       = "anomalyco/opencode"

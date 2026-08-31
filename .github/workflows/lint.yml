@@ -18,7 +18,7 @@ jobs:
       # enforce in CI (check-invariants soft-skips a missing tool).
       - name: Install shfmt + gitleaks (pinned)
         run: |
-          SHFMT=3.13.1
+          SHFMT=3.14.0
           GITLEAKS=8.30.1
           sudo curl -fsSL "https://github.com/mvdan/sh/releases/download/v${SHFMT}/shfmt_v${SHFMT}_linux_amd64" -o /usr/local/bin/shfmt
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS}/gitleaks_${GITLEAKS}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks

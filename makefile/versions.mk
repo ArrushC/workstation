@@ -54,7 +54,7 @@ YAZI_VERSION       := 26.8.15
 AST_GREP_VERSION   := 0.45.3
 TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.26.2
-GPING_VERSION      := 1.20.4
+GPING_VERSION      := 1.21.0
 ATUIN_VERSION      := 18.20.1
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
@@ -70,7 +70,7 @@ UV_VERSION         := 0.11.32
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
-GH_VERSION        := 2.96.0
+GH_VERSION        := 2.98.0
 SOPS_VERSION      := 3.13.3
 HTMLQ_VERSION     := 0.4.0
 OUCH_VERSION      := 0.8.2
@@ -115,7 +115,7 @@ DOZZLE_VERSION := 10.8.0
 # makefile/lib/font.sh (per-version case branch) and mirrored in the Windows
 # installer script (scripts/install-nerd-fonts.ps1) — bumping the pin requires
 # editing all three. See the triple-edit invariant in CLAUDE.md.
-JETBRAINSMONO_NERD_VERSION := 3.4.0
+JETBRAINSMONO_NERD_VERSION := 3.5.1
 
 # --- Cheatsheets (cheat + cht.sh) -------------------------------------------
 # cheat — offline cheatsheet CLI (cheat/cheat). Non-v tag; release assets are
@@ -159,7 +159,7 @@ JLESS_VERSION      := 0.9.0
 # check actually enforces there (check-invariants soft-skips a missing tool).
 # check-invariants.sh verifies the two stay in sync. procs is gnu-only (upstream
 # publishes no musl build) but runs fine on the glibc-2.34 fleet.
-SHFMT_VERSION    := 3.13.1
+SHFMT_VERSION    := 3.14.0
 GITLEAKS_VERSION := 8.30.1
 PROCS_VERSION    := 0.14.12
 DUST_VERSION     := 1.2.5
@@ -212,14 +212,14 @@ PYTHON_VERSION := 3.14.6
 # separately (clang-tools-extra, packages.mk) and only VERIFIED by lsp-servers.
 GO_VERSION                 := 1.24.4
 GOPLS_VERSION              := 0.18.1
-RUST_ANALYZER_VERSION      := 2026-06-15
-MARKSMAN_VERSION           := 2024-12-18
+RUST_ANALYZER_VERSION      := 2026-08-31
+MARKSMAN_VERSION           := 2026-02-08
 TAPLO_VERSION              := 0.10.0
-LUA_LS_VERSION             := 3.13.0
-BASEDPYRIGHT_VERSION       := 1.29.0
-TYPESCRIPT_LS_VERSION      := 4.3.4
-BASH_LS_VERSION            := 5.4.3
-YAML_LS_VERSION            := 1.15.0
+LUA_LS_VERSION             := 3.19.1
+BASEDPYRIGHT_VERSION       := 1.39.10
+TYPESCRIPT_LS_VERSION      := 6.0.0
+BASH_LS_VERSION            := 5.6.0
+YAML_LS_VERSION            := 1.24.0
 VSCODE_LANGSERVERS_VERSION := 4.10.0
 
 # --- (2026-07) agent multiplexer (dev_machine only) --------------------------
@@ -233,7 +233,7 @@ VSCODE_LANGSERVERS_VERSION := 4.10.0
 # replace zellij (kept as the general multiplexer); herdr is the agent-aware
 # addition. NOTE: pre-1.0 and dual-licensed AGPL-3.0/commercial — bump the pin
 # deliberately (breaking changes are likely before 1.0).
-HERDR_VERSION := 0.7.1
+HERDR_VERSION := 0.8.2
 
 # --- (2026-07) AI coding agents (dev_machine only) ----------------------------
 # Two terminal coding agents joining claude-cli (the bespoke Makefile target) in
@@ -252,7 +252,7 @@ HERDR_VERSION := 0.7.1
 #   per-platform binary assets; eget names the download after the REPO
 #   (oh-my-pi), so the tools.mk entry passes a trailing `--to $(DEST)/omp` to
 #   force the command name (verified: the later --to wins).
-OPENCODE_VERSION := 1.17.18
+OPENCODE_VERSION := 1.18.25
 OMP_VERSION      := 16.4.4
 
 # --- (2026-07) DevToys CLI (dev_machine only) ---------------------------------
