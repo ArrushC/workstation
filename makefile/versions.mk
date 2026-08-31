@@ -253,7 +253,7 @@ HERDR_VERSION := 0.8.2
 #   (oh-my-pi), so the tools.mk entry passes a trailing `--to $(DEST)/omp` to
 #   force the command name (verified: the later --to wins).
 OPENCODE_VERSION := 1.18.25
-OMP_VERSION      := 16.4.4
+OMP_VERSION      := 18.0.11
 
 # --- (2026-07) DevToys CLI (dev_machine only) ---------------------------------
 # devtoys.cli — scriptable command-line half of DevToys (DevToys-app/DevToys):

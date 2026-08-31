@@ -354,7 +354,13 @@ $(eval $(call EGET_TOOL,taplo,$(TAPLO_VERSION),tamasfe/taplo,$(TAPLO_VERSION),--
 ifeq ($(MODE),dev)
 $(eval $(call EGET_TOOL,herdr,$(HERDR_VERSION),herdrdev/herdr))
 $(eval $(call EGET_TOOL,opencode,$(OPENCODE_VERSION),anomalyco/opencode,,--asset '^musl' --asset '^baseline' --asset '^desktop'))
-$(eval $(call EGET_TOOL,omp,$(OMP_VERSION),can1357/oh-my-pi,,--to $(DEST)/omp))
+# omp 18.x ADDED musl assets (omp-linux-musl-x64 / -arm64) that 16.x did not
+# publish, which left eget with two x64 candidates and made it abort
+# non-interactively — the same failure that zellij 0.44's no-web asset caused.
+# The `^musl` anti-match keeps the glibc build this repo has always installed
+# (a Bun binary requiring AVX2); switching to musl would be a behaviour change,
+# not a version bump.
+$(eval $(call EGET_TOOL,omp,$(OMP_VERSION),can1357/oh-my-pi,,--asset '^musl' --to $(DEST)/omp))
 else
 .PHONY: herdr opencode omp
 herdr opencode omp:

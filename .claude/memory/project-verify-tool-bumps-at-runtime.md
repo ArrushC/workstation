@@ -23,6 +23,14 @@ review for all tools yet failed at runtime:
    The config itself was fine; only the *installer* broke. Fixed with
    `--asset '^no-web'` in `tools.mk`.
 
+**Asset ambiguity has now recurred (2026-08-31, omp 16.4.4 → 18.0.11):** omp 18.x
+added `omp-linux-musl-*` assets 16.x never published, leaving two x64 candidates
+and the same non-interactive eget abort ("2 candidates found for asset chain").
+Treat this as the DEFAULT failure mode of any EGET_TOOL major bump, not a
+one-off — run the real `make <tool>` for every eget tool crossing a major, and
+when adding an anti-match prefer the build already installed (omp kept glibc via
+`--asset '^musl'`) so a bump doesn't smuggle in a behaviour change.
+
 **Why:** upstream shared-lib deps and release-asset churn don't show up in
 changelogs — only running the binary / running the real install reveals them.
 

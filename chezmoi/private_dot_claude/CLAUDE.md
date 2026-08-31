@@ -192,7 +192,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### (2026-07) AI coding agents (dev_machine only)
 - `opencode` 1.18.25
-- `omp` 16.4.4
+- `omp` 18.0.11
 
 ### (2026-07) DevToys CLI (dev_machine only)
 - `devtoys.cli` 2.0.9.0

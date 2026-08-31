@@ -324,9 +324,9 @@ $PortableTools = @(
     @{
         Name       = "Oh My Pi"
         Exe        = "omp"
-        Version    = "16.4.4"
-        Url        = "https://github.com/can1357/oh-my-pi/releases/download/v16.4.4/omp-windows-x64.exe"
-        Sha256     = "d7c07164b357d787493781a13a5370941f98b3c8df617b428ab8009d117fc83d"
+        Version    = "18.0.11"
+        Url        = "https://github.com/can1357/oh-my-pi/releases/download/v18.0.11/omp-windows-x64.exe"
+        Sha256     = "3402325fff22ab8972d890af28ca4ea6670bfc43aa5a9042b9b02b7ab93e6f6a"
         Layout     = "exe"      # bare single-.exe release asset (jq precedent)
         Dest       = $WsBin
         Repo       = "can1357/oh-my-pi"
