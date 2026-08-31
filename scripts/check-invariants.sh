@@ -656,6 +656,49 @@ check_zellij_config() {
   fi
 }
 
+check_update_spec_coverage() {
+  hdr "every versions.mk pin is reachable by check-updates"
+  local specs pins alias_lines covered missing="" n_pins=0 n_specs=0 var
+
+  # MODE=dev deliberately: the dev-only block in tools.mk registers herdr,
+  # opencode and omp, and MODE=prod never defines them. Checking under prod is
+  # exactly the bug this guard exists to prevent recurring.
+  specs=$(make -s --no-print-directory -C makefile -p MODE=dev 2>/dev/null |
+    grep -E '^UPDATE_SPECS :?=' | head -1 | tr ' ' '\n' | grep '|' | cut -d'|' -f1 | sort -u)
+  pins=$(grep -oE '^[A-Z][A-Z0-9_]*_VERSION' makefile/versions.mk | sort -u)
+  if [ -z "$specs" ] || [ -z "$pins" ]; then
+    bad "could not read UPDATE_SPECS or versions.mk pins"
+    return
+  fi
+
+  # Spec names normally derive to their pin var (uppercase, - => _, +_VERSION).
+  # Where they don't, bump-versions.sh's ALIAS map is the single source of truth
+  # for the mapping — parse it rather than duplicating the list here.
+  alias_lines=$(sed -n 's/^[[:space:]]*\["\([^"]*\)"\]=\([A-Z0-9_]*\).*/\1 \2/p' scripts/bump-versions.sh)
+
+  covered=$(
+    while read -r spec; do
+      [ -n "$spec" ] || continue
+      var=$(printf '%s\n' "$alias_lines" | awk -v s="$spec" '$1 == s {print $2; exit}')
+      [ -n "$var" ] || var=$(printf '%s' "$spec" | tr '[:lower:].-' '[:upper:]__')_VERSION
+      printf '%s\n' "$var"
+    done <<<"$specs" | sort -u
+  )
+
+  while read -r pin; do
+    [ -n "$pin" ] || continue
+    n_pins=$((n_pins + 1))
+    grep -qxF "$pin" <<<"$covered" || missing="$missing $pin"
+  done <<<"$pins"
+  n_specs=$(printf '%s\n' "$specs" | grep -c .)
+
+  if [ -z "$missing" ]; then
+    ok "all $n_pins pins covered by $n_specs update specs"
+  else
+    bad "versions.mk pin(s) with no UPDATE_SPECS entry:${missing} — check-updates emits NO line for these (not even '?') and the weekly bumper inherits the blind spot; add a spec in tools.mk's registry block"
+  fi
+}
+
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
 check_bumper_exclude
@@ -668,6 +711,7 @@ check_chezmoiignore_targets
 check_completion_parity
 check_warp_guards
 check_zellij_config
+check_update_spec_coverage
 check_python_env_parity
 check_tui_install_parity
 check_shellcheck
