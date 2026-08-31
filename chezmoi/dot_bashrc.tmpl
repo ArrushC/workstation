@@ -265,6 +265,25 @@ if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
   [[ $PROMPT_COMMAND == *_wt_prompt_cmd* ]] || PROMPT_COMMAND="_wt_prompt_cmd${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
 fi
 
+# --- zellij: name the tab after the current directory -------------------------
+# PARITY NOTE: zsh registers this on chpwd, which fires only when the directory
+# changes. bash has no chpwd, so it hooks PROMPT_COMMAND and guards on $PWD
+# itself — otherwise it would re-issue the rename on every single prompt.
+# Behaviour and opt-out (WORKSTATION_ZELLIJ_TAB_NAMES=0) are identical; see the
+# fuller comment in dot_zshrc.tmpl.
+if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
+  _zj_tab_name() {
+    [[ "$PWD" == "$_ZJ_LAST_PWD" ]] && return
+    _ZJ_LAST_PWD="$PWD"
+    local n="${PWD##*/}"
+    [[ "$PWD" == "$HOME" ]] && n="~"
+    [[ -z "$n" ]] && n="/"
+    zellij action rename-tab "$n" 2>/dev/null
+  }
+  # Re-source guard: don't register twice (matches the _wt_prompt_cmd convention).
+  [[ $PROMPT_COMMAND == *_zj_tab_name* ]] || PROMPT_COMMAND="_zj_tab_name${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
+fi
+
 # --- nb (notes) --------------------------------------------------------------
 export NBRC_PATH="$HOME/.nbrc"
 export NB_DIR="$HOME/notes"
@@ -414,10 +433,39 @@ fssh() {
   [[ -n "$host" ]] && ssh "$host"
 }
 
-# Start or attach to a named zellij session
+# Start or attach to a named zellij session: zs [session] [layout]
+# A layout applies only when the session is being CREATED — `zellij attach
+# --create` accepts no --layout, hence the branch. Layouts live in
+# ~/.config/zellij/layouts: `dev` (editor + terminal + run) and `ops` (btop +
+# journal + shell). With no layout you get config.kdl's default_layout, which is
+# zellij's built-in single-pane `default`.
+# list-sessions lists resurrectable EXITED sessions too, which is deliberate:
+# a named session that already exists is always attached, never recreated.
+#
+# The layout flag is --new-session-with-layout, NOT --layout: with --session,
+# --layout means "add this layout to that session as new tabs" and fails with
+# "Session '<name>' not found" when it doesn't exist yet.
 zs() {
-  local session="${1:-main}"
-  zellij attach --create "$session"
+  local session="${1:-main}" layout="${2:-}"
+  if [ -n "$layout" ] && ! zellij list-sessions --short 2>/dev/null | grep -qx "$session"; then
+    zellij --session "$session" --new-session-with-layout "$layout"
+  else
+    zellij attach --create "$session"
+  fi
+}
+
+# Run a command in a floating zellij pane: zr btop / zr lazygit / zr
+# The floating pane overlays the layout instead of resizing it, so it is the
+# right shape for a glance-and-dismiss command (Alt+f toggles floating panes
+# back into view, Ctrl+p e embeds one into the layout if you want to keep it).
+# With no arguments you get a floating shell. Covers what the `ghost` plugin
+# does, with nothing to install.
+zr() {
+  if [ "$#" -eq 0 ]; then
+    zellij run --floating --close-on-exit -- "${SHELL:-/bin/sh}"
+  else
+    zellij run --floating -- "$@"
+  fi
 }
 
 # Quick note with nb

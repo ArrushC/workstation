@@ -588,6 +588,74 @@ check_warp_guards() {
   fi
 }
 
+check_zellij_config() {
+  hdr "zellij config (theme dual-edit, OSC 52, KDL parse)"
+  local dir=chezmoi/dot_config/zellij
+  local cfg="$dir/config.kdl"
+  local theme hits bad_hash tmp
+
+  # 1. theme "<name>" in config.kdl must name a theme block in themes/*.kdl.
+  #    Nothing upstream catches a dangling name: `zellij setup --check` reports
+  #    "Well defined" for a bogus theme and zellij then falls back to its
+  #    built-in default at runtime, silently, with the wrong accent colour.
+  theme=$(sed -nE 's/^[[:space:]]*theme[[:space:]]+"([^"]+)".*/\1/p' "$cfg" | head -1)
+  if [ -z "$theme" ]; then
+    bad "$cfg: no theme \"...\" line found"
+  elif grep -qE "^[[:space:]]*${theme}[[:space:]]*\{" "$dir"/themes/*.kdl 2>/dev/null; then
+    ok "theme \"$theme\" is defined in $dir/themes/"
+  else
+    bad "theme \"$theme\" in $cfg has no matching block in $dir/themes/*.kdl"
+  fi
+
+  # 2. KDL comments are //, never #. A single '#' line invalidates the WHOLE
+  #    file and zellij falls back to built-in defaults with no error at all —
+  #    theme, keybinds and scroll_buffer_size all dropped silently.
+  bad_hash=$(grep -lE '^[[:space:]]*#' "$cfg" "$dir"/layouts/*.kdl "$dir"/themes/*.kdl 2>/dev/null || true)
+  if [ -z "$bad_hash" ]; then
+    ok "no '#' comment lines in any tracked .kdl (KDL needs //)"
+  else
+    bad "'#' comment line(s) invalidate these KDL files:"
+    printf '%s\n' "$bad_hash" | sed 's/^/       /'
+  fi
+
+  # 3. copy_command must stay UNSET — it overrides OSC 52 with a binary that
+  #    runs on the REMOTE host, where there is no display. Regressed until
+  #    2026-08-31 (ad444df); every yank in a remote session went nowhere.
+  hits=$(grep -nE '^[[:space:]]*copy_command' "$cfg" || true)
+  if [ -z "$hits" ]; then
+    ok "copy_command unset — OSC 52 clipboard path intact (ad444df)"
+  else
+    bad "$cfg sets copy_command, which kills OSC 52 over SSH:"
+    printf '%s\n' "$hits" | sed 's/^/       /'
+  fi
+
+  # 4. Web server pinned off. The installed build is web-CAPABLE: tools.mk
+  #    excludes the no-web asset, so these are not redundant with upstream.
+  if grep -qE '^[[:space:]]*web_server[[:space:]]+false' "$cfg" &&
+    grep -qE '^[[:space:]]*web_sharing[[:space:]]+"disabled"' "$cfg"; then
+    ok "web_server false + web_sharing \"disabled\" pinned"
+  else
+    bad "$cfg must pin web_server false AND web_sharing \"disabled\" (build is web-capable)"
+  fi
+
+  # 5. Real parse, when zellij is available. Soft-skip in CI, where it is not
+  #    installed — same posture as the other optional-checker skips.
+  if command -v zellij >/dev/null 2>&1; then
+    tmp=$(mktemp -d)
+    # Stage layouts/ and themes/ alongside: default_layout and theme are both
+    # resolved relative to the config dir, and a missing dir is a false failure.
+    cp "$cfg" "$tmp/" && cp -r "$dir/layouts" "$dir/themes" "$tmp/"
+    if ZELLIJ_CONFIG_DIR="$tmp" zellij setup --check 2>&1 | grep -q 'CONFIG FILE.*Well defined'; then
+      ok "zellij setup --check: config file well defined"
+    else
+      bad "zellij setup --check rejected $cfg"
+    fi
+    rm -rf "$tmp"
+  else
+    note "zellij not on PATH — skipped the live 'setup --check' parse"
+  fi
+}
+
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
 check_bumper_exclude
@@ -599,6 +667,7 @@ check_lsp_plugin
 check_chezmoiignore_targets
 check_completion_parity
 check_warp_guards
+check_zellij_config
 check_python_env_parity
 check_tui_install_parity
 check_shellcheck

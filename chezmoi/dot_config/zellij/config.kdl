@@ -1,13 +1,38 @@
 // ~/.config/zellij/config.kdl — managed by chezmoi
 
-// Start with the default layout
-default_layout "dev"
+// Start with zellij's BUILT-IN "default" layout: one full-width pane plus the
+// tab-bar/status-bar chrome. Deliberately not our own layouts/dev.kdl — this is
+// the layout every session gets, including each `ssh -t <host> zellij attach
+// --create main` from a Warp Tab Config or a Windows Terminal fragment, and
+// landing in a three-way editor/terminal/run split to read one log on a prod
+// host is the wrong default. `dev` is one flag away: `zellij -l dev`, or the
+// `zs main dev` helper in the rc files.
+//
+// Using the BUILT-IN default rather than shipping a layouts/default.kdl is also
+// deliberate: a custom layout replaces zellij's built-in *swap layouts*, which
+// auto_layout cycles with Alt+[ / Alt+] as you add panes. Hand-rolling those
+// would silently lose them.
+default_layout "default"
 
 // Don't show tip of the day
 show_startup_tips false
 
-// Use compact mode — cleaner look
-simplified_ui true
+// Don't open a release-notes pane on the first run of a new version — without
+// this, every fleet-wide ZELLIJ_VERSION bump greets you with one on every host.
+show_release_notes false
+
+// Powerline arrow separators in the tab/status bars. Safe across the fleet
+// because the glyphs are rendered by the *client* terminal's font, not by
+// anything on the host zellij runs on: both managed Windows terminals are
+// configured for JetBrainsMono NFM. Set this back to true if you ever attach
+// from a terminal without a Nerd Font and see tofu in the bars.
+simplified_ui false
+
+ui {
+    pane_frames {
+        rounded_corners true
+    }
+}
 
 // Mouse support
 mouse_mode true
@@ -20,6 +45,36 @@ mouse_mode true
 // capped at this ceiling. Read at session creation: an already-running 'main'
 // session won't pick up a change until it's recreated (zellij kill-session main).
 scroll_buffer_size 100000
+
+// Session resurrection. `session_serialization` already defaults to true, so
+// zellij was ALREADY writing each session's tabs/panes/cwds/commands under
+// ~/.cache/zellij/<version>/. These two lines add the pane *contents* to that
+// snapshot, so a session survives a reboot with its scrollback intact — the
+// point being that zellij lives on the remote fleet hosts, which reboot without
+// you.
+//
+// TRADEOFF, stated deliberately: this writes up to scrollback_lines_to_serialize
+// lines of real terminal output per pane to disk on that host. Terminal output
+// can contain secrets. The cache dir is user-owned and mode 700, which is the
+// only thing protecting it. If that's not a trade you want on a given host, drop
+// these two lines — everything else here is unaffected.
+serialize_pane_viewport true
+scrollback_lines_to_serialize 10000
+
+// Web server / session sharing: OFF, explicitly.
+//
+// Not redundant with the upstream defaults (false / "off"). makefile/tools.mk
+// installs zellij with `--asset musl --asset '^no-web'`, and that `^` is eget's
+// ANTI-match — it EXCLUDES the no-web tarball, i.e. the build on every fleet host
+// has the web-server capability compiled in. That makes "a shell served over
+// HTTP" one config key away on machines we don't sit at, so the value is pinned
+// here rather than inherited.
+//
+// "disabled" is strictly stronger than the "off" default: "off" merely means the
+// server won't share sessions unless they opt in, while "disabled" refuses the
+// opt-in too.
+web_server false
+web_sharing "disabled"
 
 // Copy to system clipboard — via OSC 52, which is zellij's DEFAULT when
 // copy_command is unset. Do NOT set copy_command here: it overrides OSC 52 with
@@ -38,14 +93,61 @@ scroll_buffer_size 100000
 // program in any pane, including one on a remote host, read the local clipboard.
 copy_on_select false
 
-// Theme
-theme "catppuccin-mocha"
+// Theme. DUAL-EDIT: this name must match the theme block in
+// themes/catppuccin-mocha-mauve.kdl. A dangling name is silent — zellij falls
+// back to its built-in default with no error — so scripts/check-invariants.sh
+// asserts the two agree.
+//
+// The built-in "catppuccin-mocha" is NOT used: it accents its chrome with green
+// (#a6e3a1), which clashes with the mauve (#cba6f7) that Warp, Windows Terminal
+// and fzf all use here.
+theme "catppuccin-mocha-mauve"
 
-// Ctrl+s enters Session mode (session manager / detach). Overrides zellij's
-// default Ctrl+s = Scroll mode; Session mode's default key is Ctrl+o.
 keybinds {
     normal {
-        // Quick session switching
+        // Ctrl+s enters Session mode (session manager / detach). Overrides zellij's
+        // default Ctrl+s = Scroll mode; Session mode's default key is Ctrl+o.
         bind "Ctrl s" { SwitchToMode "Session"; }
+    }
+
+    // Restores a direct route into Scroll mode, where "/" searches the
+    // scrollback. The `normal` override above shadows zellij's own
+    // `shared_except "scroll" "locked" { bind "Ctrl s" -> Scroll }`, so from
+    // Normal mode there was no way into Scroll at all (it survived only from
+    // other modes, e.g. Ctrl+p then Ctrl+s) and scrollback search was
+    // effectively unreachable.
+    //
+    // Alt+s is unbound in zellij's defaults AND absent from Warp's tracked
+    // keybindings.yaml, so nothing fights over it.
+    shared_except "scroll" "locked" {
+        bind "Alt s" { SwitchToMode "Scroll"; }
+    }
+
+    // Direct tab jumps — zellij binds no Alt+<digit> by default, and neither
+    // managed Windows terminal claims them (Warp's keybindings.yaml uses
+    // alt-shift-*/alt-arrows; Windows Terminal uses alt+shift+b/s).
+    //
+    // Alt+e also lives here: it opens `strider`, zellij's BUILT-IN file browser.
+    // Strider ships with every zellij and is bound to NOTHING by default, so it
+    // is free capability that was simply unreachable. Floating so it overlays
+    // the panes instead of resizing them, and move_to_focused_tab so one
+    // instance follows you between tabs rather than spawning per tab.
+    shared_except "locked" {
+        bind "Alt 1" { GoToTab 1; }
+        bind "Alt 2" { GoToTab 2; }
+        bind "Alt 3" { GoToTab 3; }
+        bind "Alt 4" { GoToTab 4; }
+        bind "Alt 5" { GoToTab 5; }
+        bind "Alt 6" { GoToTab 6; }
+        bind "Alt 7" { GoToTab 7; }
+        bind "Alt 8" { GoToTab 8; }
+        bind "Alt 9" { GoToTab 9; }
+        bind "Alt e" {
+            LaunchOrFocusPlugin "strider" {
+                floating true
+                move_to_focused_tab true
+            };
+            SwitchToMode "Normal"
+        }
     }
 }

@@ -1,29 +1,38 @@
 // ~/.config/zellij/layouts/dev.kdl — managed by chezmoi
-// Default dev layout: editor left, terminal right, status bars
+// Dev layout: editor left, terminal + run stacked right.
+//
+// Opt-in, not the default — `zellij -l dev`, or `zs <session> dev`. See the
+// default_layout comment in ../config.kdl for why.
+//
+// The bars live in default_tab_template, NOT at the layout root. Root-level
+// plugin panes become members of tab 1's pane tree (focusable, closeable, and
+// absent from every tab you open later); the template makes them chrome that
+// every tab in the session gets.
 
 layout {
-    // Top tab bar
-    pane size=1 borderless=true {
-        plugin location="zellij:tab-bar"
-    }
-
-    // Main working area
-    pane split_direction="vertical" {
-        // Primary editor pane (60% width)
-        pane size="60%" name="editor" {
-            // Opens helix — remove if you prefer a blank terminal
-            // command "hx"
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
         }
-
-        // Right side: stacked terminal + optional monitor
-        pane split_direction="horizontal" {
-            pane name="terminal" size="70%"
-            pane name="run" size="30%"
+        children
+        pane size=2 borderless=true {
+            plugin location="zellij:status-bar"
         }
     }
 
-    // Bottom status bar
-    pane size=2 borderless=true {
-        plugin location="zellij:status-bar"
+    tab name="dev" {
+        pane split_direction="vertical" {
+            // Primary editor pane (60% width)
+            pane size="60%" name="editor" {
+                // Opens helix — uncomment if you want it to autostart
+                // command "hx"
+            }
+
+            // Right side: stacked terminal + run/monitor
+            pane split_direction="horizontal" {
+                pane name="terminal" size="70%"
+                pane name="run"      size="30%"
+            }
+        }
     }
 }

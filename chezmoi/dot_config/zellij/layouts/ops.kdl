@@ -1,0 +1,37 @@
+// ~/.config/zellij/layouts/ops.kdl — managed by chezmoi
+// Fleet triage layout: resources on top, journal + a shell below.
+//
+// Opt-in: `zellij -l ops`, or `zs <session> ops`.
+//
+// Built only from BOTH-SCOPES tools (btop and lazyjournal both sit outside the
+// `ifeq ($(MODE),dev)` block in makefile/tools.mk), so this works on a prod host
+// — which is where you actually want it.
+//
+// If lazyjournal lacks journal permissions on a given host it errors inside its
+// pane and the pane stays; that's a degraded pane, not a broken layout.
+
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+        pane size=2 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+
+    tab name="ops" {
+        pane split_direction="horizontal" {
+            pane size="60%" name="resources" {
+                command "btop"
+            }
+            pane split_direction="vertical" {
+                pane size="55%" name="journal" {
+                    command "lazyjournal"
+                }
+                pane name="shell"
+            }
+        }
+    }
+}

@@ -114,6 +114,11 @@
                         <a href="#daily">Daily workflows</a>
                         <ol class="sub">
                             <li>
+                                <a href="#daily-zellij"
+                                    >Zellij</a
+                                >
+                            </li>
+                            <li>
                                 <a href="#daily-services"
                                     >Services</a
                                 >
@@ -4280,6 +4285,204 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         a fully serial run when debugging a flaky install.
                     </p>
 
+                    <h3 id="daily-zellij">Zellij</h3>
+                    <p>
+                        Zellij is the persistence layer: it runs on the
+                        <em>remote</em> host, so a dropped SSH tab never takes
+                        your work with it. Every generated Warp Tab Config and
+                        Windows Terminal profile lands you in
+                        <code>zellij attach --create main</code>.
+                    </p>
+                    <p>
+                        A new session opens as a <strong>single full-width
+                        pane</strong> with the tab and status bars &mdash;
+                        zellij&rsquo;s built-in <code>default</code> layout. The
+                        two repo layouts are opt-in:
+                    </p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Command</th>
+                                <th>What you get</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>zs</code></td>
+                                <td>
+                                    Attach to (or create) the
+                                    <code>main</code> session
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>zs &lt;session&gt;</code></td>
+                                <td>Same, for a named session</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <code>zs &lt;session&gt; dev</code> or
+                                    <code>zellij -l dev</code>
+                                </td>
+                                <td>
+                                    Editor pane (60%) left; terminal + run
+                                    stacked right
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <code>zs &lt;session&gt; ops</code> or
+                                    <code>zellij -l ops</code>
+                                </td>
+                                <td>
+                                    <code>btop</code> on top; a
+                                    <code>lazyjournal</code> pane and a shell
+                                    below &mdash; both tools ship to prod hosts
+                                    too
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="note-row">
+                        The layout argument only applies when the session is
+                        being <em>created</em>. Naming an existing session always
+                        attaches to it, so you can never clobber running work by
+                        passing the wrong layout.
+                    </p>
+                    <p>Keys worth knowing (on top of zellij&rsquo;s defaults):</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Bind</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>S</kbd></td>
+                                <td>Session mode &mdash; session manager, detach</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>S</kbd></td>
+                                <td>
+                                    Scroll mode, then <kbd>/</kbd> to search the
+                                    scrollback
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>1</kbd>&hellip;<kbd>9</kbd></td>
+                                <td>Jump straight to that tab</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>N</kbd></td>
+                                <td>New pane (zellij default)</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>H</kbd>/<kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd></td>
+                                <td>Move focus between panes (zellij default)</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>[</kbd> / <kbd>]</kbd></td>
+                                <td>
+                                    Cycle swap layouts as you add panes (zellij
+                                    default)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><kbd>ALT</kbd>+<kbd>E</kbd></td>
+                                <td>
+                                    Floating file browser
+                                    (<code>strider</code>, built in)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>G</kbd></td>
+                                <td>
+                                    Lock / unlock &mdash; passes every key
+                                    through to the running program (zellij
+                                    default)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><kbd>CTRL</kbd>+<kbd>T</kbd> then <kbd>S</kbd></td>
+                                <td>
+                                    Broadcast input to every pane in the tab
+                                    (zellij default)
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="note-row">
+                        <strong>Why <kbd>ALT</kbd>+<kbd>S</kbd> exists:</strong>
+                        <kbd>CTRL</kbd>+<kbd>S</kbd> is remapped to Session mode,
+                        which shadows zellij&rsquo;s own
+                        <kbd>CTRL</kbd>+<kbd>S</kbd>&nbsp;&rarr;&nbsp;Scroll. That
+                        left scrollback search with no way in from Normal mode;
+                        <kbd>ALT</kbd>+<kbd>S</kbd> restores it and collides with
+                        nothing in either Windows terminal.
+                    </p>
+                    <p class="note-row">
+                        <strong>Editing in a pane?
+                        <kbd>CTRL</kbd>+<kbd>G</kbd> locks zellij.</strong>
+                        Helix and zellij both want
+                        <kbd>CTRL</kbd>+<kbd>O</kbd>,
+                        <kbd>CTRL</kbd>+<kbd>S</kbd>,
+                        <kbd>CTRL</kbd>+<kbd>B</kbd>/<kbd>F</kbd> and
+                        <kbd>CTRL</kbd>+<kbd>N</kbd>/<kbd>P</kbd>. Locked mode
+                        hands every keystroke to the program in the pane;
+                        <kbd>CTRL</kbd>+<kbd>G</kbd> again returns. The
+                        community plugin that automates this
+                        (<code>zellij-autolock</code>) is
+                        <em>not</em> installed &mdash; it is broken on zellij
+                        0.44 and unmaintained; see the note in
+                        <code>docs/claude/file-care.md</code>.
+                    </p>
+                    <p class="note-row">
+                        <strong>Tabs name themselves after the directory.</strong>
+                        Both rc files rename the active tab to the current
+                        folder&rsquo;s basename on every <code>cd</code>
+                        (<code>~</code> for home), so a row of tabs reads as a
+                        row of projects. A tab holds several panes with
+                        independent directories, so whichever pane you last
+                        <code>cd</code>&rsquo;d in wins, and a manual rename
+                        (<kbd>CTRL</kbd>+<kbd>T</kbd> then <kbd>R</kbd>) is
+                        replaced on your next <code>cd</code>. Opt out with
+                        <code>WORKSTATION_ZELLIJ_TAB_NAMES=0</code> in
+                        <code>~/.zshrc.local</code>.
+                    </p>
+                    <p class="note-row">
+                        <strong>Floating panes:</strong> <code>zr &lt;cmd&gt;</code>
+                        runs a command in one (<code>zr lazygit</code>,
+                        <code>zr btop</code>; bare <code>zr</code> gives a
+                        floating shell). It overlays the layout instead of
+                        resizing it &mdash; <kbd>ALT</kbd>+<kbd>F</kbd> toggles
+                        floating panes back into view, and
+                        <kbd>CTRL</kbd>+<kbd>P</kbd> then <kbd>E</kbd> embeds
+                        one into the layout to keep it.
+                    </p>
+                    <p class="note-row">
+                        <strong>Sessions survive a reboot.</strong> Zellij
+                        serializes each session &mdash; tabs, panes, working
+                        directories, and (newly) up to 10&nbsp;000 lines of pane
+                        scrollback &mdash; under
+                        <code>~/.cache/zellij/</code> <em>on the host it runs
+                        on</em>, so <code>zellij attach main</code> after a
+                        restart brings the session back with its output intact.
+                        The tradeoff is deliberate and called out in the tracked
+                        <code>config.kdl</code>: terminal output can contain
+                        secrets, and that cache is protected only by being
+                        user-owned and mode&nbsp;700. Drop
+                        <code>serialize_pane_viewport</code> if that is not a
+                        trade you want on a given host.
+                    </p>
+                    <p class="note-row">
+                        <strong>Config changes need a fresh session.</strong>
+                        Zellij reads <code>config.kdl</code> when a session is
+                        <em>created</em>, so
+                        <code>chezmoi apply</code> alone changes nothing about a
+                        running <code>main</code> &mdash;
+                        <code>zellij kill-session main</code>, then reattach.
+                    </p>
+
                     <h3 id="daily-services">Services</h3>
                     <p>
                         The web-admin trio below (Docker engine, Cockpit,
@@ -5484,6 +5687,69 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                     built-in defaults.
                                 </li>
                             </ul>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Zellij&rsquo;s tabs and pane borders are
+                            <em>green</em>, not mauve
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Green is zellij&rsquo;s <em>built-in</em>
+                                <code>catppuccin-mocha</code> showing through.
+                                The repo ships its own
+                                <code>catppuccin-mocha-mauve</code> theme (in
+                                <code>~/.config/zellij/themes/</code>) that
+                                re-accents the chrome to the same mauve
+                                <code>#cba6f7</code> Warp, Windows Terminal and
+                                fzf use. Seeing green means that theme
+                                isn&rsquo;t in effect. Two causes, in order of
+                                likelihood:
+                            </p>
+                            <ul>
+                                <li>
+                                    <strong>The session predates the
+                                    change.</strong> Zellij reads its config
+                                    when a session is <em>created</em>, so
+                                    <code>chezmoi apply</code> does nothing to a
+                                    running <code>main</code>. Run
+                                    <code>zellij kill-session main</code> and
+                                    reattach.
+                                </li>
+                                <li>
+                                    <strong>The theme file didn&rsquo;t
+                                    deploy.</strong> Check
+                                    <code>ls ~/.config/zellij/themes/</code> on
+                                    the host <em>zellij runs on</em> &mdash;
+                                    that&rsquo;s the remote box, not your
+                                    laptop. If it&rsquo;s missing,
+                                    <code>chezmoi update &amp;&amp; chezmoi apply</code>
+                                    there.
+                                </li>
+                            </ul>
+                            <p>
+                                Note that <code>zellij setup --check</code> is
+                                <em>no help here</em>: it reports
+                                <em>Well defined</em> even when
+                                <code>theme</code> names a theme that
+                                doesn&rsquo;t exist, and zellij then falls back
+                                to the built-in one silently. That gap is why
+                                <code>scripts/check-invariants.sh</code> matches
+                                the <code>theme "&lt;name&gt;"</code> line
+                                against the block names in
+                                <code>themes/*.kdl</code> &mdash; run
+                                <code>make lint MODE=prod</code> if you suspect
+                                the config itself.
+                            </p>
+                            <p>
+                                Green in <em>one</em> place is correct and
+                                deliberate: a pane&rsquo;s success exit code.
+                                Success stays green and failure stays red so
+                                status still reads at a glance &mdash; only the
+                                chrome went mauve.
+                            </p>
                         </div>
                     </details>
 
