@@ -17,45 +17,45 @@
 EGET_VERSION := 1.3.4
 
 # --- Tier-0: original toolbelt -----------------------------------------------
-FZF_VERSION      := 0.74.2
+FZF_VERSION      := 0.74.3
 ZOXIDE_VERSION   := 0.10.0
 STARSHIP_VERSION := 1.26.0
-ZELLIJ_VERSION   := 0.44.3
-GLOW_VERSION     := 2.1.2
+ZELLIJ_VERSION   := 0.45.1
+GLOW_VERSION     := 3.0.0
 NB_VERSION       := latest
 HELIX_VERSION    := 25.07.1
 CHEZMOI_VERSION  := latest
 
 # --- Tier-1: static-binary toolbelt ------------------------------------------
-FD_VERSION         := 10.4.2
+FD_VERSION         := 10.5.0
 BAT_VERSION        := 0.26.1
 BTOP_VERSION       := 1.4.7
 NCDU_VERSION       := 2.9.1
 BANDWHICH_VERSION  := 0.23.1
 JQ_VERSION         := 1.8.2
-YQ_VERSION         := 4.53.3
-TEALDEER_VERSION   := 1.8.1
+YQ_VERSION         := 4.53.6
+TEALDEER_VERSION   := 1.9.0
 WITR_VERSION       := 0.3.3
 BROOT_VERSION      := latest
 USQL_VERSION       := 0.21.4
 LAZYDOCKER_VERSION := 0.25.2
 DIVE_VERSION       := 0.13.1
 LNAV_VERSION       := 0.14.0
-GOPASS_VERSION     := 1.16.1
-AGE_VERSION        := 1.3.1
-FASTFETCH_VERSION  := 2.66.0
+GOPASS_VERSION     := 1.17.0
+AGE_VERSION        := 1.3.2
+FASTFETCH_VERSION  := 2.67.1
 SSH_COPY_ID_VERSION := latest
 
 # --- Second-wave expansion (2026-05) -----------------------------------------
 GITUI_VERSION      := 0.28.1
-LAZYGIT_VERSION    := 0.63.1
-JUJUTSU_VERSION    := 0.43.0
-YAZI_VERSION       := 26.5.6
-AST_GREP_VERSION   := 0.45.0
+LAZYGIT_VERSION    := 0.64.1
+JUJUTSU_VERSION    := 0.44.0
+YAZI_VERSION       := 26.8.15
+AST_GREP_VERSION   := 0.45.3
 TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.26.2
 GPING_VERSION      := 1.20.4
-ATUIN_VERSION      := 18.18.1
+ATUIN_VERSION      := 18.20.1
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
 EZA_VERSION        := 0.23.5
@@ -63,9 +63,9 @@ SD_VERSION         := 1.1.0
 CTOP_VERSION       := 0.7.7
 K9S_VERSION        := 0.51.0
 RCLONE_VERSION     := 1.75.0
-CROC_VERSION       := 11.0.1
+CROC_VERSION       := 11.3.6
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.8.0
+MISE_VERSION       := 2026.8.16
 UV_VERSION         := 0.11.32
 DSQ_VERSION        := 0.23.0
 
@@ -73,11 +73,11 @@ DSQ_VERSION        := 0.23.0
 GH_VERSION        := 2.96.0
 SOPS_VERSION      := 3.13.3
 HTMLQ_VERSION     := 0.4.0
-OUCH_VERSION      := 0.8.1
-WATCHEXEC_VERSION := 2.5.1
+OUCH_VERSION      := 0.8.2
+WATCHEXEC_VERSION := 2.7.0
 
 # --- Service / journal / cgroup observability -------------------------------
-BOTTOM_VERSION        := 0.14.7
+BOTTOM_VERSION        := 0.14.9
 SYSTEMCTL_TUI_VERSION := 0.8.0
 LAZYJOURNAL_VERSION   := 0.8.6
 SYSZ_VERSION          := 1.4.3
@@ -95,7 +95,7 @@ CHEZIT_VERSION := 0.3.0
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
 CCSTATUSLINE_VERSION := 2.2.27
-NODE_VERSION := 26.6.0
+NODE_VERSION := 26.8.1
 
 # --- Service / web admin (dev_machine only) ---------------------------------
 # Dozzle is run as a Docker container via systemd (no native binary —
@@ -107,7 +107,7 @@ NODE_VERSION := 26.6.0
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.6.14
+DOZZLE_VERSION := 10.8.0
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
@@ -131,24 +131,24 @@ CHTSH_VERSION := latest
 # fx — interactive JSON viewer (antonmedv/fx). Non-v tag; raw-binary assets.
 # gitlogue — cinematic git commit-replay TUI (unhappychoice/gitlogue).
 # gnu-glibc only (no musl build) — fine on this glibc fleet.
-NNN_VERSION      := 5.2
+NNN_VERSION      := 5.3
 FX_VERSION       := 39.2.0
-GITLOGUE_VERSION := 0.10.0
+GITLOGUE_VERSION := 0.11.0
 
 # --- (2026-06) gap-fillers: search / data / diff / network / git-extras / util
 # Added after a deep-research sweep over the toolbelt's remaining gaps. All are
 # plain EGET_TOOL single-binary installs — per-tool asset/tag notes in tools.mk.
 RIPGREP_VERSION    := 15.2.0
-MILLER_VERSION     := 6.20.2
+MILLER_VERSION     := 6.21.0
 CSVLENS_VERSION    := 0.15.1
-DIFFTASTIC_VERSION := 0.69.0
+DIFFTASTIC_VERSION := 0.70.0
 TRIPPY_VERSION     := 0.13.0
-DOGGO_VERSION      := 1.2.0
-SCC_VERSION        := 3.7.0
+DOGGO_VERSION      := 1.3.0
+SCC_VERSION        := 4.0.0
 GIT_ABSORB_VERSION := 0.9.0
 MINISERVE_VERSION  := 0.35.0
-NUMBAT_VERSION     := 1.23.0
-QSV_VERSION        := 21.1.0
+NUMBAT_VERSION     := 1.24.0
+QSV_VERSION        := 22.0.1
 GREX_VERSION       := 1.4.6
 JLESS_VERSION      := 0.9.0
 
@@ -162,10 +162,10 @@ JLESS_VERSION      := 0.9.0
 SHFMT_VERSION    := 3.13.1
 GITLEAKS_VERSION := 8.30.1
 PROCS_VERSION    := 0.14.12
-DUST_VERSION     := 1.2.4
+DUST_VERSION     := 1.2.5
 HEXYL_VERSION    := 0.17.0
 PUEUE_VERSION    := 4.0.4
-GUM_VERSION      := 0.17.0
+GUM_VERSION      := 2.0.0
 
 # --- (2026-06) C / C++ development & debugging toolchain ----------------------
 # Most of the toolchain is dnf packages (see packages.mk: gcc-c++ / clang /

@@ -53,45 +53,45 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `eget` 1.3.4
 
 ### Tier-0: original toolbelt
-- `fzf` 0.74.2
+- `fzf` 0.74.3
 - `zoxide` 0.10.0
 - `starship` 1.26.0
-- `zellij` 0.44.3
-- `glow` 2.1.2
+- `zellij` 0.45.1
+- `glow` 3.0.0
 - `nb` latest
 - `helix` 25.07.1
 - `chezmoi` latest
 
 ### Tier-1: static-binary toolbelt
-- `fd` 10.4.2
+- `fd` 10.5.0
 - `bat` 0.26.1
 - `btop` 1.4.7
 - `ncdu` 2.9.1
 - `bandwhich` 0.23.1
 - `jq` 1.8.2
-- `yq` 4.53.3
-- `tldr` 1.8.1
+- `yq` 4.53.6
+- `tldr` 1.9.0
 - `witr` 0.3.3
 - `broot` latest
 - `usql` 0.21.4
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
 - `lnav` 0.14.0
-- `gopass` 1.16.1
-- `age` 1.3.1
-- `fastfetch` 2.66.0
+- `gopass` 1.17.0
+- `age` 1.3.2
+- `fastfetch` 2.67.1
 - `ssh-copy-id` latest
 
 ### Second-wave expansion (2026-05)
 - `gitui` 0.28.1
-- `lazygit` 0.63.1
-- `jj` 0.43.0
-- `yazi` 26.5.6
-- `ast-grep` 0.45.0
+- `lazygit` 0.64.1
+- `jj` 0.44.0
+- `yazi` 26.8.15
+- `ast-grep` 0.45.3
 - `television` 0.15.9
 - `xh` 0.26.2
 - `gping` 1.20.4
-- `atuin` 18.18.1
+- `atuin` 18.20.1
 - `delta` 0.19.2
 - `micro` 2.0.15
 - `eza` 0.23.5
@@ -99,9 +99,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.75.0
-- `croc` 11.0.1
+- `croc` 11.3.6
 - `hyperfine` 1.20.0
-- `mise` 2026.8.0
+- `mise` 2026.8.16
 - `uv` 0.11.32
 - `dsq` 0.23.0
 
@@ -109,11 +109,11 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gh` 2.96.0
 - `sops` 3.13.3
 - `htmlq` 0.4.0
-- `ouch` 0.8.1
-- `watchexec` 2.5.1
+- `ouch` 0.8.2
+- `watchexec` 2.7.0
 
 ### Service / journal / cgroup observability
-- `bottom` 0.14.7
+- `bottom` 0.14.9
 - `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
 - `sysz` 1.4.3
@@ -129,10 +129,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Claude Code CLI
 - `claude` latest
 - `ccstatusline` 2.2.27
-- `node` 26.6.0
+- `node` 26.8.1
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.6.14
+- `dozzle` 10.8.0
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.4.0
@@ -142,20 +142,20 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `cht.sh` latest
 
 ### (2026-06) interactive explorers + git replay
-- `nnn` 5.2
+- `nnn` 5.3
 - `fx` 39.2.0
-- `gitlogue` 0.10.0
+- `gitlogue` 0.11.0
 - `rg` 15.2.0
-- `mlr` 6.20.2
+- `mlr` 6.21.0
 - `csvlens` 0.15.1
-- `difft` 0.69.0
+- `difft` 0.70.0
 - `trip` 0.13.0
-- `doggo` 1.2.0
-- `scc` 3.7.0
+- `doggo` 1.3.0
+- `scc` 4.0.0
 - `git-absorb` 0.9.0
 - `miniserve` 0.35.0
-- `numbat` 1.23.0
-- `qsv` 21.1.0
+- `numbat` 1.24.0
+- `qsv` 22.0.1
 - `grex` 1.4.6
 - `jless` 0.9.0
 
@@ -163,11 +163,11 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `shfmt` 3.13.1
 - `gitleaks` 8.30.1
 - `procs` 0.14.12
-- `dust` 1.2.4
+- `dust` 1.2.5
 - `hexyl` 0.17.0
 - `pueue` 4.0.4
 - `pueued` 4.0.4
-- `gum` 0.17.0
+- `gum` 2.0.0
 
 ### (2026-06) C / C++ development & debugging toolchain
 - `nnd` 0.80
