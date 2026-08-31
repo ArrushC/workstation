@@ -142,8 +142,11 @@ export FZF_DEFAULT_OPTS="
   --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4
 "
 
-# fzf shell integration (Ctrl+T, Ctrl+R, Alt+C).
-if command -v fzf &>/dev/null; then
+# fzf shell integration (Ctrl+T, Ctrl+R, Alt+C). Skipped under Warp: Warp owns
+# the input editor and documents fzf's ZLE integration as incompatible (the
+# standalone `fzf` command still works there). Guard is runtime-only, so
+# Windows Terminal / SSH / WSL sessions are unaffected.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
   eval "$(fzf --zsh)"
 fi
 
@@ -159,8 +162,9 @@ fi
 # Sourced AFTER fzf above so atuin owns Ctrl-R; `--disable-up-arrow` leaves ↑/↓
 # free for zsh-history-substring-search (plugins block below). Local-only by
 # default — no account/sync unless you run `atuin login`. First run on a host
-# imports existing history via `atuin import auto`.
-if command -v atuin &>/dev/null; then
+# imports existing history via `atuin import auto`. Skipped under Warp — Warp
+# binds Ctrl-R to its own command search and owns the input editor.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v atuin &>/dev/null; then
   eval "$(atuin init zsh --disable-up-arrow)"
 fi
 
@@ -186,7 +190,9 @@ if command -v mise &>/dev/null; then
 fi
 
 # --- starship prompt ---------------------------------------------------------
-if command -v starship &>/dev/null; then
+# Skipped under Warp: Warp renders its own prompt (settings.toml keeps
+# `honor_ps1 = false`), so a starship PS1 would double up.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
 fi
 
@@ -247,7 +253,9 @@ fi
 # bash gets movement-only parity (no highlight — readline limitation); the two
 # rc files are a parity pair, so the bash side lives in dot_bashrc.tmpl.
 zmodload zsh/parameter zsh/zleparameter 2>/dev/null
-if [[ -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
+# Skipped under Warp — Warp's input editor handles shift-selection natively and
+# its ZLE is not ours to rebind.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
   source "$HOME/.config/zsh/plugins/zsh-shift-select.zsh"
 
   # Supplement 1 — replace-on-type. The vendored plugin's deselect-and-input
@@ -300,9 +308,18 @@ fi
 # the picker inherit the Catppuccin theme set above. `menu no` stops zsh's own
 # menu from racing fzf-tab; the descriptions `format` turns on completion groups
 # that `<` / `>` switch between.
-zstyle ':completion:*' menu no
-zstyle ':completion:*:descriptions' format '[%d]'
-if [[ -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
+#
+# Both are skipped under Warp (Warp supplies its own completion UI, and `menu no`
+# without fzf-tab would leave plain zsh with no completion menu at all). SCOPE
+# WARNING: this guard covers ONLY the two zstyles and closes immediately below —
+# do NOT widen it. Commit c9709cf documents the last time its `fi` was allowed to
+# swallow the plugin-load section, silently disabling zsh-autosuggestions,
+# zsh-syntax-highlighting, zsh-you-should-use and zsh-history-substring-search.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]]; then
+  zstyle ':completion:*' menu no
+  zstyle ':completion:*:descriptions' format '[%d]'
+fi  # <- ends the zstyle-only guard; nothing else belongs inside it
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
   source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh"
   zstyle ':fzf-tab:*' use-fzf-default-opts yes
   zstyle ':fzf-tab:*' switch-group '<' '>'
