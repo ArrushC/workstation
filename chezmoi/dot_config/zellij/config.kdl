@@ -99,8 +99,10 @@ copy_on_select false
 // asserts the two agree.
 //
 // The built-in "catppuccin-mocha" is NOT used: it accents its chrome with green
-// (#a6e3a1), which clashes with the mauve (#cba6f7) that Warp, Windows Terminal
-// and fzf all use here.
+// (#a6e3a1), which clashes with the mauve (#cba6f7) that Warp (accent + cursor)
+// and fzf use here. Windows Terminal is NOT part of that set — its Catppuccin
+// Mocha scheme has no mauve at all (ANSI purple maps to pink #f5c2e7); it needs
+// no change.
 theme "catppuccin-mocha-mauve"
 
 keybinds {

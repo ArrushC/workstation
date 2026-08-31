@@ -5703,10 +5703,15 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 <code>catppuccin-mocha-mauve</code> theme (in
                                 <code>~/.config/zellij/themes/</code>) that
                                 re-accents the chrome to the same mauve
-                                <code>#cba6f7</code> Warp, Windows Terminal and
-                                fzf use. Seeing green means that theme
-                                isn&rsquo;t in effect. Two causes, in order of
-                                likelihood:
+                                <code>#cba6f7</code> that Warp (its
+                                <code>accent</code> and <code>cursor</code>) and
+                                fzf use. Windows Terminal is deliberately not
+                                part of that set &mdash; its Catppuccin Mocha
+                                scheme carries no mauve at all (ANSI purple maps
+                                to pink <code>#f5c2e7</code>), so there is
+                                nothing to change there. Seeing green means the
+                                zellij theme isn&rsquo;t in effect. Two causes,
+                                in order of likelihood:
                             </p>
                             <ul>
                                 <li>
