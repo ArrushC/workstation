@@ -5434,6 +5434,61 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
 
                     <details data-ts>
                         <summary>
+                            Copying inside a remote Zellij session doesn&rsquo;t
+                            reach the Windows clipboard
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Zellij runs on the <em>remote</em> host, so it
+                                cannot touch your local clipboard directly. The
+                                only mechanism that crosses an SSH connection is
+                                the <strong>OSC&nbsp;52</strong> escape
+                                sequence, which zellij uses <em>by default</em>
+                                &mdash; but only while
+                                <code>copy_command</code> is <strong>unset</strong>
+                                in
+                                <code>~/.config/zellij/config.kdl</code>.
+                                Setting it (to <code>xclip</code>,
+                                <code>wl-copy</code>, <code>pbcopy</code>, &hellip;)
+                                overrides OSC&nbsp;52 with a program that runs on
+                                the remote box, where there is no display and
+                                usually no such binary &mdash; so every yank
+                                silently goes nowhere. The tracked config
+                                deliberately leaves it unset and says so in a
+                                comment; don&rsquo;t re-add it.
+                            </p>
+                            <p>
+                                Both managed terminals accept OSC&nbsp;52 writes
+                                &mdash; Warp via
+                                <code>osc52_clipboard_access = "write_only"</code>
+                                in its tracked <code>settings.toml</code>,
+                                Windows Terminal natively. If copy still
+                                doesn&rsquo;t land:
+                            </p>
+                            <ul>
+                                <li>
+                                    Re-apply and reconnect &mdash; zellij reads
+                                    its config when the session is
+                                    <em>created</em>, so an already-running
+                                    <code>main</code> keeps the old behavior
+                                    until <code>zellij kill-session main</code>
+                                    (or a fresh host).
+                                </li>
+                                <li>
+                                    Check the config actually parsed:
+                                    <code>zellij setup --check</code> must say
+                                    <em>Well defined</em>. KDL comments are
+                                    <code>//</code> &mdash; a single
+                                    <code>#</code> line invalidates the whole
+                                    file and zellij silently falls back to
+                                    built-in defaults.
+                                </li>
+                            </ul>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
                             SSH tab dies with
                             <em>&ldquo;client_loop: send disconnect: Broken
                                 pipe&rdquo;</em>

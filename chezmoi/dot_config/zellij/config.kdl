@@ -21,8 +21,21 @@ mouse_mode true
 // session won't pick up a change until it's recreated (zellij kill-session main).
 scroll_buffer_size 100000
 
-// Copy to system clipboard
-copy_command "xclip -selection clipboard"
+// Copy to system clipboard — via OSC 52, which is zellij's DEFAULT when
+// copy_command is unset. Do NOT set copy_command here: it overrides OSC 52 with
+// a program that runs on whatever machine zellij itself is on, and zellij lives
+// on the REMOTE SSH hosts in this fleet. OSC 52 is the only mechanism that can
+// reach the clipboard of the machine you are sitting at.
+//
+// This line used to read `copy_command "xclip -selection clipboard"`, which was
+// dead in two ways at once: xclip is installed by nothing in this repo, and a
+// headless prod host has no X display to talk to anyway. Every yank in a remote
+// session silently went nowhere. Both managed Windows terminals accept OSC 52
+// writes (Warp via osc52_clipboard_access = "write_only"; Windows Terminal
+// natively), so unsetting it is what makes copy work at all.
+//
+// Deliberately NOT set: dangerously_enable_paste_buffer_read — it would let any
+// program in any pane, including one on a remote host, read the local clipboard.
 copy_on_select false
 
 // Theme
