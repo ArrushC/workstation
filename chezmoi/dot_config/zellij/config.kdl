@@ -28,6 +28,20 @@ show_release_notes false
 // from a terminal without a Nerd Font and see tofu in the bars.
 simplified_ui false
 
+// Full frames around every pane, not just a title line.
+//
+// zellij 0.45 changed the default: pane_frame_style is new there and defaults to
+// "titles" (a title line above each pane) where 0.44 always drew a full frame.
+// Without this line the 0.45 upgrade silently flattens the UI — a painted 0.45.1
+// session drops rounded frames entirely and the mauve accent collapses, because
+// frame_selected (the focused-pane border) has no border left to draw.
+//
+// Safe to carry on BOTH versions: zellij 0.44.3 ignores the unknown key at
+// runtime rather than rejecting the file (verified — frames still drawn, theme
+// still applied, no fallback to the built-in green theme), so this can deploy
+// ahead of, or behind, the binary bump on any given host.
+pane_frame_style "full"
+
 ui {
     pane_frames {
         rounded_corners true
