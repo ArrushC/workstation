@@ -141,6 +141,32 @@ The live file has no `[session]` table, so Warp currently opens the system defau
 after the apply it opens AlmaLinux-9 WSL zsh. That is the intended change, and it is the most
 visible one on first launch.
 
+## Follow-up: settings sweep (2026-08-31, post-merge)
+
+The tracked `settings.toml` was swept against Warp's all-settings reference in 2026-07 (#104),
+but Warp has since added whole tables that the sweep could not have covered. Re-running it
+found the AI-off decision was resting on defaults in two places that now default **on**:
+`agents.voice.voice_input_enabled` (microphone) and `code.indexing.agent_mode_codebase_context`.
+Both are now set explicitly, along with `agents.mcp_servers.file_based_mcp_enabled`,
+`cloud_agent_computer_use_enabled` and `should_force_disable_cloud_handoff` — several of which
+merely restate a current default, deliberately, because the lesson here is that an
+agent-adjacent default can flip.
+
+Two workflow settings joined at the same time: `terminal.smart_select.word_char_allowlist`
+(adds `_` and `:` so a double-click grabs a whole `user@host` / `host:port` / snake_case token)
+and `appearance.full_screen_apps.alt_screen_padding = 0.0` (zellij/helix/btop/lazygit/k9s all
+live in the alt screen; a border wastes rows and misaligns zellij's pane frames).
+
+**Deliberately not adopted:** `[system] prefer_low_power_gpu` / `preferred_graphics_backend`.
+The host is a laptop so it is tempting, but per-host GPU/rendering tuning is a standing
+prohibition — tried and A/B-reverted twice in the WezTerm era, and the restraint was carried
+forward explicitly by the 2026-07-26 WT migration spec. Also inert and therefore skipped:
+`warpify.ssh.reuse_existing_control_master` (SSH multiplexing is gated off on Windows —
+Windows OpenSSH cannot multiplex).
+
+All additions stay TOML **v1.0**-parseable (single-line inline tables), preserving the property
+recorded in `docs/claude/file-care.md`.
+
 ## Out of scope
 
 - Making Warp Windows' default terminal application (it cannot register).
