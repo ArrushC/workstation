@@ -102,7 +102,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `croc` 11.3.6
 - `hyperfine` 1.20.0
 - `mise` 2026.8.16
-- `uv` 0.11.32
+- `uv` 0.12.7
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
