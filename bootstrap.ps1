@@ -296,9 +296,9 @@ $PortableTools = @(
         # limits (nu/helix precedent).
         Name       = "uv"
         Exe        = "uv"
-        Version    = "0.11.32"
-        Url        = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-x86_64-pc-windows-msvc.zip"
-        Sha256     = "acfde570451cfdb8689fa159a138ee805ba4e241c466432750302c86254b0984"
+        Version    = "0.12.7"
+        Url        = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-pc-windows-msvc.zip"
+        Sha256     = "bf1518af459a3915511a11fdc6e2f43ef9a2afa138b9d498eeb9642fe9d85218"
         Layout     = "tree"
         Dest       = $WsUv
         Repo       = "astral-sh/uv"
@@ -404,7 +404,7 @@ $PortableTools = @(
 # DUAL-EDIT: $PythonEnvVersion pairs with PYTHON_VERSION in makefile/versions.mk;
 # $PythonLibs pairs with PY_LIBS in makefile/lib/python-env.sh. KEEP EACH ON ONE
 # LINE — scripts/check-invariants.sh parses both with single-line greps.
-$PythonEnvVersion = "3.14.6"
+$PythonEnvVersion = "3.14.7"
 $PythonLibs = @("textual", "textual-dev", "click", "rich", "httpx", "pydantic", "typer", "polars", "duckdb")
 $WsPythonEnv = Join-Path $WsRoot "python-env"
 

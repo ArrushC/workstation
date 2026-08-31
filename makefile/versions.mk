@@ -66,7 +66,7 @@ RCLONE_VERSION     := 1.75.0
 CROC_VERSION       := 11.3.6
 HYPERFINE_VERSION  := 1.20.0
 MISE_VERSION       := 2026.8.16
-UV_VERSION         := 0.11.32
+UV_VERSION         := 0.12.7
 DSQ_VERSION        := 0.23.0
 
 # --- Robustness gap-fillers (universal static binaries) ---------------------
@@ -199,7 +199,7 @@ VCPKG_VERSION  := 2026.07.29
 # (python/cpython tags, tools.mk) but EXCLUDEd from auto-bump in
 # bump-versions.sh — dual-edit + wheel-coverage check required, so `make
 # check-updates` reports drift but the pin is bumped by hand.
-PYTHON_VERSION := 3.14.6
+PYTHON_VERSION := 3.14.7
 
 # --- (2026-06) Language servers (LSP) + runtimes ------------------------------
 # All dev_machine only (navigation is a dev activity; Claude Code is dev-only-
