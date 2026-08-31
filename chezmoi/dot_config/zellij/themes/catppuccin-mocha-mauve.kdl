@@ -1,9 +1,20 @@
 // ~/.config/zellij/themes/catppuccin-mocha-mauve.kdl — managed by chezmoi
 //
 // Catppuccin Mocha, re-accented from GREEN to MAUVE (#cba6f7) so zellij's chrome
-// matches the accent every other surface in this repo already uses: Warp's
-// tracked catppuccin-mocha.yaml (accent + cursor), the Windows Terminal scheme,
-// and the FZF_DEFAULT_OPTS block in dot_zshrc.tmpl (info + prompt).
+// matches the mauve accent Warp and fzf already use: Warp's tracked
+// catppuccin-mocha.yaml (accent + cursor) and the FZF_DEFAULT_OPTS block in
+// dot_zshrc.tmpl (info + prompt).
+//
+// NOT Windows Terminal — it has no mauve anywhere (`grep -c cba6f7` over its
+// settings.json returns 0). WT's scheme format carries only the 16 ANSI colours
+// plus bg/fg/cursor/selection and has no chrome-accent concept, and the standard
+// Catppuccin ANSI mapping puts PINK #f5c2e7 on purple/brightPurple with rosewater
+// #f5e0dc on the cursor. So WT is not part of this alignment and needs no change;
+// don't "fix" its scheme to match.
+//
+// There is no separate "mocha mauve" palette to match, either: Catppuccin Mocha
+// is one 26-colour palette and mauve is a colour inside it. All that differs
+// between apps is which palette colour each picks as its accent.
 //
 // Derived from zellij 0.44.3's BUILT-IN catppuccin-mocha, which is compiled into
 // the binary rather than shipped as a file — recover it with
