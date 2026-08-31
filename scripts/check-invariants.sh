@@ -699,6 +699,37 @@ check_update_spec_coverage() {
   fi
 }
 
+check_go_gopls_coupling() {
+  hdr "gopls <-> Go toolchain floor"
+  local gov goplsv floor
+  gov=$(mkval GO_VERSION)
+  goplsv=$(mkval GOPLS_VERSION)
+  if [ -z "$gov" ] || [ -z "$goplsv" ]; then
+    bad "could not read GO_VERSION / GOPLS_VERSION from versions.mk"
+    return
+  fi
+
+  # gopls declares its minimum toolchain in its OWN go.mod, and lib/lsp.sh builds
+  # it with `go install` using the PINNED Go. Mismatch is not loud: lsp.sh ends
+  # that line with `|| warn "gopls install failed — skipping"`, so provisioning
+  # continues and the host silently keeps a stale gopls (or none at all).
+  # Verified both directions on 2026-08-31: gopls 0.23.0 + go 1.24.4 fails with
+  # "requires go >= 1.26.0", and gopls 0.23.0 + go 1.27.0 builds under
+  # GOTOOLCHAIN=local (i.e. without silently fetching a second toolchain).
+  floor=$(curl -fsSL --max-time 15 \
+    "https://raw.githubusercontent.com/golang/tools/gopls/v${goplsv}/gopls/go.mod" 2>/dev/null |
+    awk '/^go /{print $2; exit}')
+  if [ -z "$floor" ]; then
+    note "offline or tag missing — skipped the gopls go.mod floor check"
+    return
+  fi
+  if [ "$(printf '%s\n%s\n' "$floor" "$gov" | sort -V | tail -1)" = "$gov" ]; then
+    ok "gopls $goplsv needs go >= $floor; pinned go is $gov"
+  else
+    bad "gopls $goplsv requires go >= $floor but GO_VERSION is $gov — lsp.sh would warn-and-skip, leaving gopls stale or absent; bump both together"
+  fi
+}
+
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
 check_bumper_exclude
@@ -712,6 +743,7 @@ check_completion_parity
 check_warp_guards
 check_zellij_config
 check_update_spec_coverage
+check_go_gopls_coupling
 check_python_env_parity
 check_tui_install_parity
 check_shellcheck
