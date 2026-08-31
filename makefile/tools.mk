@@ -381,15 +381,22 @@ $(eval $(call TOOL,tldr,$(TEALDEER_VERSION),\
 $(eval $(call TOOL,witr,$(WITR_VERSION),\
   $(LIB)/direct.sh witr https://github.com/pranshuparmar/witr/releases/download/v$(WITR_VERSION)/witr-linux-amd64,witr))
 
-# broot has no version pinning — upstream always serves "latest" at this URL.
-# The path is a RUST TARGET TRIPLE and upstream renamed it: the old
-# .../download/x86_64-linux/broot began returning HTTP 404 (caught 2026-08-31 by
-# a sandbox install, which fails HARD here — direct.sh has no fallback, so a
-# fresh `make provision` on a new host died on this target). If broot installs
-# start 404ing again, curl the download index and re-check the triple rather
-# than assuming the tool moved to GitHub releases.
-$(eval $(call TOOL,broot,$(BROOT_VERSION),\
-  $(LIB)/direct.sh broot https://dystroy.org/broot/download/x86_64-unknown-linux-musl/broot,broot))
+# broot — real version pin via GitHub releases, NOT the unversioned
+# dystroy.org URL it used until 2026-08-31.
+#
+# That URL was both unpinned and fragile: upstream renamed its path (a Rust
+# target triple) and the old one began returning HTTP 404, breaking `make
+# provision` on fresh hosts. Correcting the URL alone was NOT enough — with
+# `BROOT_VERSION := latest` the stamp is `broot-latest.done` forever, so make
+# considers the tool current and an already-provisioned host can never pick up
+# a URL change. A real pin makes the stamp `broot-<ver>.done`, so bumps
+# reinstall like every other tool and the weekly bumper can track it.
+#
+# The release asset is ONE multi-arch zip with a `broot` binary per target
+# triple, so --file must name the triple explicitly; without it eget has ~8
+# equally-named candidates to choose between. verify-binary.sh is the backstop
+# (it checks ELF arch), but don't rely on that to catch a wrong triple.
+$(eval $(call EGET_TOOL,broot,$(BROOT_VERSION),Canop/broot,,--file 'x86_64-unknown-linux-musl/broot'))
 
 $(eval $(call TOOL,ctop,$(CTOP_VERSION),\
   $(LIB)/direct.sh ctop https://github.com/bcicen/ctop/releases/download/v$(CTOP_VERSION)/ctop-$(CTOP_VERSION)-linux-amd64,ctop))
@@ -523,7 +530,6 @@ UPDATE_SPECS += helix|$(HELIX_VERSION)|helix-editor/helix|$(HELIX_VERSION)
 # nb/broot/cht.sh/ssh-copy-id/chezmoi/claude track latest; the pip user-tools
 # upgrade through pip itself.
 UPDATE_SPECS += nb|$(NB_VERSION)|-|-
-UPDATE_SPECS += broot|$(BROOT_VERSION)|-|-
 UPDATE_SPECS += cht.sh|$(CHTSH_VERSION)|-|-
 UPDATE_SPECS += ssh-copy-id|$(SSH_COPY_ID_VERSION)|-|-
 UPDATE_SPECS += chezmoi|$(CHEZMOI_VERSION)|-|-

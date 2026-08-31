@@ -72,7 +72,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `yq` 4.53.6
 - `tldr` 1.9.0
 - `witr` 0.3.3
-- `broot` latest
+- `broot` 1.59.0
 - `usql` 0.21.4
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
