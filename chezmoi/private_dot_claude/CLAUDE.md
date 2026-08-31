@@ -90,7 +90,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ast-grep` 0.45.3
 - `television` 0.15.9
 - `xh` 0.26.2
-- `gping` 1.20.4
+- `gping` 1.21.0
 - `atuin` 18.20.1
 - `delta` 0.19.2
 - `micro` 2.0.15
@@ -106,7 +106,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `dsq` 0.23.0
 
 ### Robustness gap-fillers (universal static binaries)
-- `gh` 2.96.0
+- `gh` 2.98.0
 - `sops` 3.13.3
 - `htmlq` 0.4.0
 - `ouch` 0.8.2
@@ -135,7 +135,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `dozzle` 10.8.0
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
-- `nerd-fonts` 3.4.0
+- `nerd-fonts` 3.5.1
 
 ### Cheatsheets (cheat + cht.sh)
 - `cheat` 5.1.0
@@ -160,7 +160,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `jless` 0.9.0
 
 ### (2026-06) tier-1 lint/security + system/util gap-fillers
-- `shfmt` 3.13.1
+- `shfmt` 3.14.0
 - `gitleaks` 8.30.1
 - `procs` 0.14.12
 - `dust` 1.2.5
@@ -177,21 +177,21 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### (2026-06) Language servers (LSP) + runtimes
 - `go` 1.24.4
 - `gopls` 0.18.1
-- `rust-analyzer` 2026-06-15
-- `marksman` 2024-12-18
+- `rust-analyzer` 2026-08-31
+- `marksman` 2026-02-08
 - `taplo` 0.10.0
-- `lua-language-server` 3.13.0
-- `basedpyright` 1.29.0
-- `typescript-language-server` 4.3.4
-- `bash-language-server` 5.4.3
-- `yaml-language-server` 1.15.0
+- `lua-language-server` 3.19.1
+- `basedpyright` 1.39.10
+- `typescript-language-server` 6.0.0
+- `bash-language-server` 5.6.0
+- `yaml-language-server` 1.24.0
 - `vscode-langservers-extracted` 4.10.0
 
 ### (2026-07) agent multiplexer (dev_machine only)
-- `herdr` 0.7.1
+- `herdr` 0.8.2
 
 ### (2026-07) AI coding agents (dev_machine only)
-- `opencode` 1.17.18
+- `opencode` 1.18.25
 - `omp` 16.4.4
 
 ### (2026-07) DevToys CLI (dev_machine only)

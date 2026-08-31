@@ -31,6 +31,7 @@ STAMP="$3"
 # and verifying against the upstream SHA-256.txt:
 #   curl -sL https://github.com/ryanoasis/nerd-fonts/releases/download/v<VER>/SHA-256.txt | grep JetBrainsMono.tar.xz
 case "$VERSION" in
+3.5.1) EXPECT_SHA='04d5e8f903693f9dd13e16f867e994834e681eb3c72c0d337a770dcda09010cf' ;;
 3.4.0) EXPECT_SHA='ef552a3e638f25125c6ad4c51176a6adcdce295ab1d2ffacf0db060caf8c1582' ;;
 *)
   printf 'font.sh: no SHA256 pinned for v%s — add a case branch and verify against upstream\n' "$VERSION" >&2

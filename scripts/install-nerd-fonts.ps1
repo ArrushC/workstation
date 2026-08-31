@@ -43,8 +43,8 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$Version = '3.4.0'
-$Sha256  = '76f05ff3ace48a464a6ca57977998784ff7bdbb65a6d915d7e401cd3927c493c'
+$Version = '3.5.1'
+$Sha256  = 'fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e'
 
 $FontFamily = 'JetBrainsMonoNerdFontMono'
 $FontDir    = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
