@@ -144,7 +144,8 @@ file; screen shows cache then re-renders on rc 0; failure banner on
 rc ≠ 0; sort cycling; dashboard line); history (store append/load/prune/
 read_log + never-raise on unwritable root; task/sequence/push/keydist
 entries recorded with logs; screen rows + log view + re-run through the
-sudo gate + non-re-runnable toast). Suite enters at 264.
+sudo gate + non-re-runnable toast). Suite enters at 266 (Phase B's 264
+plus the two #141 deferred-initial-refresh tests).
 
 ## Docs
 
