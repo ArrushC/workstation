@@ -72,6 +72,11 @@ class ProvisionPanel(Static):
         self.tools: list[ToolStatus] = []
         self.errors: list[str] = []
         self.log_lines: list[str] = []
+        # False until compose()'s children are mounted. The app starts its
+        # loader worker in App.on_mount, so set_tools()/append_log() can be
+        # called BEFORE this panel's widget tree exists — every method that
+        # touches the tree checks this and lets on_mount() replay the state.
+        self._composed = False
         self.can_focus = True
         # True when this host has no make (e.g. Windows) — the panel
         # degrades honestly instead of pretending provisioning works here.
@@ -99,6 +104,15 @@ class ProvisionPanel(Static):
         table.add_column("tool", key="tool", width=24)
         table.add_column("kind", key="kind", width=8)
         table.add_column("version", key="version", width=20)
+        # Children exist from here on. Anything that arrived while the tree was
+        # still being composed lives in self.tools / self.log_lines / self.marked
+        # rather than having been dropped, so draw it now.
+        self._composed = True
+        self._render_rows()
+        self._update_marks_indicator()
+        log = self.query_one("#provision-log", RichLog)
+        for line in self.log_lines:
+            log.write(line)
 
     def set_tools(self, tools: list[ToolStatus], errors: list[str]) -> None:
         if self.unavailable:
@@ -117,10 +131,13 @@ class ProvisionPanel(Static):
         self.unavailable = True
         self.tools = []
         self.errors = []
-        self.query_one("#provision-table", DataTable).clear()
+        if self._composed:
+            self.query_one("#provision-table", DataTable).clear()
         self.append_log(message)
 
     def _render_rows(self) -> None:
+        if not self._composed:
+            return  # on_mount() renders once the widget tree exists
         table = self.query_one("#provision-table", DataTable)
         table.clear()
         needle = self.query_one("#provision-filter", Input).value.strip().lower()
@@ -146,6 +163,8 @@ class ProvisionPanel(Static):
         self.log_lines.append(line)
         if len(self.log_lines) > self.MAX_LOG_LINES:
             del self.log_lines[: -self.MAX_LOG_LINES]
+        if not self._composed:
+            return  # on_mount() replays self.log_lines
         self.query_one("#provision-log", RichLog).write(line)
 
     def selected_tool(self) -> str | None:
@@ -162,6 +181,8 @@ class ProvisionPanel(Static):
         return "scope"
 
     def _update_marks_indicator(self) -> None:
+        if not self._composed:
+            return  # on_mount() renders the indicator
         n = len(self.marked)
         self.query_one("#provision-marks", Static).update(
             f"{n} marked" if n > 0 else ""
