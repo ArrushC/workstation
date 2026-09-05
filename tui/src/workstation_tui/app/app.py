@@ -297,7 +297,16 @@ class WorkstationApp(App):
     def on_mount(self) -> None:
         self._mark_active("dashboard")
         self._render_key_bar("dashboard")
-        self.action_refresh()
+        # DEFERRED, not called directly: App.on_mount fires before the panels
+        # inside #content have finished mounting their own compose() children.
+        # action_refresh() starts a thread worker whose call_from_thread
+        # callbacks (_apply_summary / _apply_tools) query deep into those
+        # panels, so a fast provider could win the race and raise NoMatches
+        # *inside the worker* — surfacing as WorkerFailed and intermittently
+        # reddening unrelated tests (seen on #provision-table and
+        # #health-table). call_after_refresh runs after the next render pass,
+        # by which point every panel's tree exists.
+        self.call_after_refresh(self.action_refresh)
         try:
             self.query_one("#dashboard", DashboardPanel).focus_first_card()
         except NoMatches:

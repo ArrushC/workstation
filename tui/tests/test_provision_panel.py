@@ -1,6 +1,7 @@
 import asyncio
 
 from workstation_tui.app.app import WorkstationApp
+from workstation_tui.app.panels.provision import ProvisionPanel
 from workstation_tui.core.models import StampState, TaskResult, ToolStatus
 from tests.test_app_shell import FAKE_SUMMARY, fake_provider
 
@@ -217,3 +218,50 @@ async def test_task_failure_with_markup_text_notifies_without_crash() -> None:
         for _ in range(4):
             await pilot.pause()
         assert app.is_running  # toast rendered without MarkupError
+
+
+async def test_set_tools_before_children_mount_does_not_raise() -> None:
+    """Data can arrive before compose() children exist — it must not raise.
+
+    WorkstationApp.on_mount starts a thread worker immediately, and its
+    call_from_thread(_apply_tools, ...) can land on the event loop before
+    ProvisionPanel's compose() children have been mounted. When it did,
+    _render_rows' query_one("#provision-table") raised NoMatches *inside the
+    worker*, which surfaced as WorkerFailed and intermittently reddened
+    test_app_boots_and_shows_sidebar in CI.
+
+    Provision loses that race and the dashboard does not because provision is
+    the second panel in the ContentSwitcher (so it mounts later) and
+    _apply_tools runs after _apply_summary.
+    """
+    app = WorkstationApp(summary_provider=fake_provider, tools_provider=tools_provider)
+    async with app.run_test():
+        # A panel that was never mounted stands in for "children not composed
+        # yet" — the exact state the worker callback can catch the real one in.
+        panel = ProvisionPanel(id="provision-unmounted")
+        panel.set_tools(TOOLS, ["some warning"])
+        panel.set_unavailable("no make here")
+        # State is retained even though nothing could be drawn yet.
+        assert panel.log_lines[-1] == "no make here"
+
+
+async def test_tools_delivered_before_mount_are_rendered_on_mount() -> None:
+    """State that arrived pre-mount must appear once the widget tree exists."""
+    from textual.app import App, ComposeResult
+    from textual.widgets import DataTable, RichLog
+
+    panel = ProvisionPanel(id="provision")
+    panel.set_tools(TOOLS, [])          # arrives BEFORE the panel is mounted
+    panel.append_log("early line")
+
+    class Host(App):
+        def compose(self) -> ComposeResult:
+            yield panel
+
+    async with Host().run_test() as pilot:
+        await pilot.pause()
+        table = panel.query_one("#provision-table", DataTable)
+        assert table.row_count == len(TOOLS), "pre-mount tools never rendered"
+        assert panel.query_one("#provision-log", RichLog) is not None
+        assert "early line" in panel.log_lines
+
