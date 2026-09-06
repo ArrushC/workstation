@@ -119,7 +119,14 @@ def doctor() -> None:
 def updates() -> None:
     """Check every version pin against upstream (make check-updates)."""
     ctx = detect_context()
-    sys.exit(run_passthrough(check_updates_command(_require_repo(), ctx.mode)))
+    # porcelain=False: this is the human-readable passthrough (banner +
+    # colorized report + summary from check-updates.sh) — the porcelain
+    # `status|name|detail`-only branch is for the Task 2 UpdatesScreen.
+    sys.exit(
+        run_passthrough(
+            check_updates_command(_require_repo(), ctx.mode, porcelain=False)
+        )
+    )
 
 
 @main.command()

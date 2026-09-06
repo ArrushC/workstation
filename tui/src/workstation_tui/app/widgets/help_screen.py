@@ -45,23 +45,27 @@ class HelpScreen(ModalScreen[None]):
         content = "\n".join([
             # Global keys
             heading("Global Keys"),
+            action_line("ctrl+p", "Palette", "command palette — actions, entities, history"),
             action_line("1-5", "Panels"),
             action_line("←→↑↓", "Cards", "move between dashboard cards"),
             action_line("ctrl+←/→", "Cycle", "previous/next panel"),
             action_line("g", "Refresh"),
             action_line("w", "Watch", "toggle auto-refresh"),
+            action_line("H", "History", "task history browser"),
             action_line("q", "Quit"),
             action_line("?", "Help"),
+            muted("  task history: enter view log · r re-run · esc close"),
             "",
             # Provision panel
             heading("Provision"),
             action_line("r", "Run", "run selected tool"),
             action_line("c", "Clean", "clean and reinstall"),
-            action_line("u", "Updates", "check for updates"),
+            action_line("u", "Updates", "updates table"),
             action_line("R", "Full", "full provision"),
             action_line("x", "Cancel", "cancel task"),
             action_line("space", "Mark", "toggle mark on cursor row"),
             action_line("escape", "Clear", "clear all marks"),
+            muted("  updates table: s sort · R re-check · esc close"),
             "",
             # Dotfiles panel
             heading("Dotfiles"),

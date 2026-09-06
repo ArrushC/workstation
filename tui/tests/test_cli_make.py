@@ -27,6 +27,10 @@ def test_updates(repo_root, monkeypatch) -> None:
     result = CliRunner().invoke(main, ["updates"])
     assert result.exit_code == 0
     assert "check-updates" in calls[0]
+    # Pin porcelain=False: the CLI's human-readable passthrough output must
+    # stay unchanged by the new porcelain argv (default porcelain=True is
+    # for the Task 2 UpdatesScreen, not this CLI command).
+    assert "CHECK_UPDATES_PORCELAIN=1" not in calls[0]
 
 
 def test_provision_tools_and_mode_override(repo_root, monkeypatch) -> None:

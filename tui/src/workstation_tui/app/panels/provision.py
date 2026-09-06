@@ -15,9 +15,10 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Input, RichLog, Static
-from textual.widgets.data_table import CellDoesNotExist
+from textual.widgets.data_table import CellDoesNotExist, RowDoesNotExist
 
 from workstation_tui.app.theme import M, STAMP_ICONS, icon, sel_marker
+from workstation_tui.app.widgets.updates_screen import UpdatesScreen
 from workstation_tui.core.models import TaskResult, ToolStatus
 
 PROVISION_CSS = f"""
@@ -114,6 +115,16 @@ class ProvisionPanel(Static):
         for line in self.log_lines:
             log.write(line)
 
+    def on_unmount(self) -> None:
+        # `_composed` was only ever set True (on mount) and never reset —
+        # a render/log callback (set_tools/append_log, both reachable from
+        # background workers via call_from_thread/on_result) landing AFTER
+        # this panel's tree was torn down (app exit, test teardown) would
+        # still see `_composed is True` and crash with NoMatches trying to
+        # query an unmounted widget. Reset it here so the guards below
+        # correctly treat "was composed, now torn down" as not-renderable.
+        self._composed = False
+
     def set_tools(self, tools: list[ToolStatus], errors: list[str]) -> None:
         if self.unavailable:
             # Host has no make — stay on the unavailable message rather
@@ -131,13 +142,13 @@ class ProvisionPanel(Static):
         self.unavailable = True
         self.tools = []
         self.errors = []
-        if self._composed:
+        if self._composed and self.is_attached:
             self.query_one("#provision-table", DataTable).clear()
         self.append_log(message)
 
     def _render_rows(self) -> None:
-        if not self._composed:
-            return  # on_mount() renders once the widget tree exists
+        if not (self._composed and self.is_attached):
+            return  # on_mount() renders once the widget tree exists; torn-down tree ignores
         table = self.query_one("#provision-table", DataTable)
         table.clear()
         needle = self.query_one("#provision-filter", Input).value.strip().lower()
@@ -163,8 +174,8 @@ class ProvisionPanel(Static):
         self.log_lines.append(line)
         if len(self.log_lines) > self.MAX_LOG_LINES:
             del self.log_lines[: -self.MAX_LOG_LINES]
-        if not self._composed:
-            return  # on_mount() replays self.log_lines
+        if not (self._composed and self.is_attached):
+            return  # on_mount() replays self.log_lines; torn-down tree ignores
         self.query_one("#provision-log", RichLog).write(line)
 
     def selected_tool(self) -> str | None:
@@ -174,6 +185,28 @@ class ProvisionPanel(Static):
         row_key = table.coordinate_to_cell_key((table.cursor_row, 0)).row_key
         return str(row_key.value) if row_key and row_key.value else None
 
+    def select_row(self, key: str) -> bool:
+        """Move the cursor to the row keyed `key` (a tool name).
+
+        Command palette (Phase C Task 6) seam: an EntitiesProvider "run
+        <tool>"/"clean <tool>" hit calls this before the existing
+        `action_run_tool`/`action_clean_tool` so the action's own
+        `selected_tool()` lookup lands on the right row. Returns False —
+        never raises — when the table isn't composed yet or `key` names
+        no current row (e.g. a stale palette hit for a tool the filter/a
+        refresh since dropped); `RowDoesNotExist` is exactly that "no
+        such row" case, per `DataTable.get_row_index`.
+        """
+        if not (self._composed and self.is_attached):
+            return False
+        table = self.query_one("#provision-table", DataTable)
+        try:
+            idx = table.get_row_index(key)
+        except RowDoesNotExist:
+            return False
+        table.move_cursor(row=idx)
+        return True
+
     def _tool_kind(self, name: str) -> str:
         for t in self.tools:
             if t.name == name:
@@ -181,8 +214,8 @@ class ProvisionPanel(Static):
         return "scope"
 
     def _update_marks_indicator(self) -> None:
-        if not self._composed:
-            return  # on_mount() renders the indicator
+        if not (self._composed and self.is_attached):
+            return  # on_mount() renders the indicator; torn-down tree ignores
         n = len(self.marked)
         self.query_one("#provision-marks", Static).update(
             f"{n} marked" if n > 0 else ""
@@ -252,7 +285,15 @@ class ProvisionPanel(Static):
             self.app.notify(  # type: ignore[attr-defined]
                 "provisioning not available on this host", severity="warning")
             return
-        self.app.run_make_goals(["check-updates"], user_kind=True)  # type: ignore[attr-defined]
+        # F6: reachable a second time from the palette's "check updates"
+        # command while UpdatesScreen is already the top screen (the
+        # panel's own `u` binding is inert under a ModalScreen, but the
+        # palette's priority `ctrl+p` binding still fires) — without this
+        # guard that stacks a second, identical UpdatesScreen instead of
+        # just leaving the one already open in place.
+        if isinstance(self.app.screen, UpdatesScreen):  # type: ignore[attr-defined]
+            return
+        self.app.push_screen(UpdatesScreen())  # type: ignore[attr-defined]
 
     def action_full_provision(self) -> None:
         if self.unavailable:

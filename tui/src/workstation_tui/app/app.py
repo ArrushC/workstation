@@ -2,23 +2,28 @@
 
 import asyncio
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Literal
+from typing import Any, Callable, Coroutine, Iterable, Literal
 
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.markup import escape
+from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
 
+from workstation_tui.app.palette import ActionsProvider, EntitiesProvider, HistoryProvider
 from workstation_tui.app.panels.dashboard import DashboardPanel
 from workstation_tui.app.panels.dotfiles import DotfilesPanel
 from workstation_tui.app.panels.fleet import FleetPanel
 from workstation_tui.app.panels.health import HealthPanel
 from workstation_tui.app.panels.provision import ProvisionPanel
 from workstation_tui.app.theme import M, MOCHA_CSS, kb
+from workstation_tui.app.widgets.confirm_modal import ConfirmModal
 from workstation_tui.app.widgets.help_screen import HelpScreen
+from workstation_tui.app.widgets.history_screen import HistoryScreen
 from workstation_tui.app.widgets.sudo_modal import SudoModal
 from workstation_tui.core.chezmoi import read_status, target_diff
 from workstation_tui.core.context import detect_context
@@ -30,6 +35,7 @@ from workstation_tui.core.health import (
     read_services,
     read_wsl_interop,
 )
+from workstation_tui.core.history import HistoryEntry, HistoryStore, new_entry_id, outcome_for
 from workstation_tui.core.hostsfile import read_hosts
 from workstation_tui.core.makeiface import make_command, read_inventory
 from workstation_tui.core.models import (
@@ -78,10 +84,18 @@ PANEL_KEYS: dict[str, list[tuple[str, str]]] = {
     "health": [("enter", "Run"), ("R", "Run all"), ("o", "Log")],
 }
 
-#: Bindings shown in the footer regardless of the active panel.
+#: Bindings shown in the footer regardless of the active panel. "ctrl+p"
+#: is FIRST (Phase C Task 6, spec §1) — Textual's own COMMAND_PALETTE_
+#: BINDING, injected into App._bindings at __init__ time (ENABLE_COMMAND_
+#: PALETTE defaults True) rather than listed in WorkstationApp.BINDINGS,
+#: so there's no class-level Binding entry to point at here; it's still
+#: real and live (test_app_shell-style: `pilot.press("ctrl+p")` opens the
+#: palette). test_footer_keys.py's drift guard only walks PANEL_KEYS, not
+#: this list, so no exemption/carve-out is needed for it.
 GLOBAL_KEYS: list[tuple[str, str]] = [
+    ("ctrl+p", "Palette"),
     ("1-5", "Panels"), ("ctrl+←/→", "Cycle"), ("g", "Refresh"),
-    ("w", "Watch"), ("q", "Quit"), ("?", "Help"),
+    ("w", "Watch"), ("H", "History"), ("q", "Quit"), ("?", "Help"),
 ]
 
 APP_CSS = f"""
@@ -102,6 +116,19 @@ APP_CSS = f"""
 }}
 #content {{
     padding: 0 1;
+}}
+CommandPalette > Vertical {{
+    background: {M['mantle']};
+}}
+CommandPalette #--input {{
+    border: hkey {M['surface1']};
+}}
+CommandPalette > .command-palette--highlight {{
+    color: {M['mauve']};
+    text-style: bold;
+}}
+CommandPalette > .command-palette--help-text {{
+    color: {M['overlay0']};
 }}
 """
 
@@ -149,6 +176,54 @@ def _command_summary(argv: list[str]) -> str:
     return program
 
 
+def _default_updates_cache_path() -> Path:
+    # Same XDG-ish per-user cache convention as health_cache_path above —
+    # a sibling file in the same `workstation-tui` cache directory. A
+    # module-level function (not inlined in __init__'s default) so tests'
+    # autouse fixture can monkeypatch it wholesale (same shape as
+    # `_no_real_notifier` patching `_default_notifier`), keeping every
+    # un-injected test off the real `~/.cache`.
+    return Path.home() / ".cache/workstation-tui/updates.json"
+
+
+def _default_history_root() -> Path:
+    # Same per-user cache convention + monkeypatch-for-tests shape as
+    # _default_updates_cache_path above — a sibling directory in the same
+    # workstation-tui cache tree, resolved lazily so the autouse test
+    # fixture can redirect every un-injected test off the real
+    # ~/.cache/workstation-tui/history.
+    return Path.home() / ".cache/workstation-tui/history"
+
+
+#: Cap on captured log lines tee'd into a history entry per task/sequence
+#: command — mirrors MultiRunner's own `_LINE_CAP` (core/multirun.py),
+#: dropping the oldest line once the cap is exceeded rather than growing
+#: unbounded on a chatty/looping command.
+_HISTORY_LOG_CAP = 5000
+
+
+def _tee_log(
+    log_target: Callable[[str], None]
+) -> tuple[Callable[[str], None], list[str]]:
+    """Wrap `log_target` with a capped capture buffer.
+
+    Returns `(log, captured)`: `log` forwards every line to `log_target`
+    (so callers can substitute it in place of the original with no
+    behavior change) while also appending it to `captured`, dropping the
+    oldest line once `_HISTORY_LOG_CAP` is exceeded. `captured` is the
+    live list — read it after the run completes.
+    """
+    captured: list[str] = []
+
+    def log(line: str) -> None:
+        captured.append(line)
+        if len(captured) > _HISTORY_LOG_CAP:
+            del captured[0]
+        log_target(line)
+
+    return log, captured
+
+
 def _default_notifier(title: str, msg: str) -> None:
     # Fire-and-forget OS toast via the repo's existing notify.sh (WSL→Windows
     # toast already handled inside it). Popen, not run — must never block
@@ -179,11 +254,19 @@ class NavItem(Static):
 class WorkstationApp(App):
     CSS = MOCHA_CSS + APP_CSS
     TITLE = "workstation"
+    #: Command palette providers (Phase C Task 6, spec §1) — `App.COMMANDS`
+    #: is a set containing ONLY `get_system_commands_provider` (the lazy
+    #: factory for `SystemCommandsProvider`, which calls back into
+    #: `get_system_commands` below) — unioned, not replaced, so that
+    #: curated Quit-only list still shows alongside the three providers
+    #: here.
+    COMMANDS = App.COMMANDS | {ActionsProvider, EntitiesProvider, HistoryProvider}
     BINDINGS = [
         *[(str(i + 1), f"switch('{pid}')", label)
           for i, (pid, label) in enumerate(PANELS)],
         ("g", "refresh", "Refresh"),
         ("w", "toggle_watch", "Watch"),
+        ("H", "history", "History"),
         ("q", "quit", "Quit"),
         ("?", "help", "Help"),
         ("ctrl+left", "cycle_panel(-1)", "Prev panel"),
@@ -212,6 +295,8 @@ class WorkstationApp(App):
         ssh_fn: Callable[[HostEntry], None] | None = None,
         copy_id_fn: Callable[[list[HostEntry]], list[tuple[str, int]]] | None = None,
         health_cache_path: Path | None = None,
+        updates_cache_path: Path | None = None,
+        history_store: HistoryStore | None = None,
         services_reader: Callable[[], dict[str, str]] | None = None,
         interop_reader: Callable[[], str] | None = None,
         notifier: Callable[[str, str], None] | None = None,
@@ -248,6 +333,18 @@ class WorkstationApp(App):
         self.health_cache_path = (
             health_cache_path or Path.home() / ".cache/workstation-tui/health.json"
         )
+        # UpdatesScreen (Phase C) + the dashboard's provision-card 4th line
+        # share this one cache — same injectable-default convention as
+        # health_cache_path above, resolved lazily via a module-level
+        # function (not a bare default expression) so the autouse test
+        # fixture can monkeypatch it wholesale.
+        self.updates_cache_path = updates_cache_path or _default_updates_cache_path()
+        # Task/sequence/push/keydist recording (Phase C Task 4) — same
+        # injectable-default convention as the caches above, resolved
+        # lazily via a module-level function so the autouse test fixture
+        # can monkeypatch it wholesale (tests never touch the real
+        # ~/.cache/workstation-tui/history).
+        self.history_store = history_store or HistoryStore(_default_history_root())
         self.services_reader = services_reader or read_services
         self.interop_reader = interop_reader or read_wsl_interop
         # Desktop notifications (spec §4) — injectable so tests never spawn
@@ -279,6 +376,12 @@ class WorkstationApp(App):
         # above with a distinct "push running" toast so the user knows
         # which kind of work is in the way.
         self._push_inflight = False
+        # F3: an unwritable/broken history store used to drop every
+        # record silently (spec says "the app logs a warning line"). One
+        # warning toast per session is enough to tell the user something
+        # is wrong without spamming one per run — set True the first time
+        # `record_history`'s background write comes back False.
+        self._history_warned = False
 
     def compose(self) -> ComposeResult:
         yield Static("", id="app-header", markup=True)
@@ -339,8 +442,31 @@ class WorkstationApp(App):
         idx = ids.index(current) if current in ids else 0
         self.switch_panel(ids[(idx + delta) % len(ids)])
 
+    def get_system_commands(self, screen: Screen[Any]) -> Iterable[SystemCommand]:
+        """Curated system-commands list for the palette (Phase C Task 6):
+        Quit only — deliberately NOT calling `super().get_system_commands`,
+        which would also surface Textual's generic "Theme"/"Keys" commands
+        that don't apply to this app's fixed Catppuccin-Mocha theme/no
+        help-panel model. Everything else the palette needs (panel
+        switches, refresh/watch/history/help, entities, history re-runs)
+        comes from `ActionsProvider`/`EntitiesProvider`/`HistoryProvider`
+        in `COMMANDS` above, not this system-commands hook.
+        """
+        yield SystemCommand("Quit", "Quit the application", self.action_quit)
+
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
+
+    def action_history(self) -> None:
+        # F6: reachable a second time from the palette's "task history"
+        # command while HistoryScreen is already the top screen (the
+        # global `H` binding is inert under a ModalScreen, but the
+        # palette's own priority binding still fires) — without this
+        # guard that stacks a second, identical HistoryScreen instead of
+        # just leaving the one already open in place.
+        if isinstance(self.screen, HistoryScreen):
+            return
+        self.push_screen(HistoryScreen())
 
     def action_refresh(self) -> None:
         # Isolated in its own worker group ("summary") so that this
@@ -490,6 +616,27 @@ class WorkstationApp(App):
         for item in self.query(NavItem):
             item.set_class(item.panel_id == panel_id, "active")
 
+    def _make_context(self) -> tuple[Path, str]:
+        """Resolve the repo root + active mode shared by every make-goal
+        launcher (`run_make_goals` below, and `UpdatesScreen._start_check`).
+
+        Extracted from `run_make_goals`'s own resolution (pure refactor —
+        behavior there is unchanged). Never a synchronous `detect_context()`
+        fallback for the ROOT half — `find_repo_root()` is a cheap path
+        probe, not a subprocess — but `detect_context()` covers the same
+        "summary hasn't loaded yet" case `_sudo_gate` already handles, for
+        callers (UpdatesScreen) that may run before the first summary
+        lands. Raises `RuntimeError("workstation repo not found")` — the
+        exact message `run_make_goals` used to notify directly — when the
+        repo can't be located, so its caller's error text/severity survive
+        the extraction unchanged.
+        """
+        root = find_repo_root()
+        if root is None:
+            raise RuntimeError("workstation repo not found")
+        mode = self.summary.context.mode if self.summary is not None else detect_context().mode
+        return root, mode
+
     def run_make_goals(
         self,
         goals: list[str],
@@ -511,11 +658,11 @@ class WorkstationApp(App):
         if not self.summary.context.has_make:
             self.notify("make not available on this host", severity="warning")
             return
-        root = find_repo_root()
-        if root is None:
-            self.notify("workstation repo not found", severity="error")
+        try:
+            root, mode = self._make_context()
+        except RuntimeError as exc:
+            self.notify(str(exc), severity="error")
             return
-        mode = self.summary.context.mode
         cmd = make_command(root, goals, mode)
         # _task_flow gates this on a valid sudo timestamp before launching.
         needs_sudo = mode == "dev" and not user_kind
@@ -674,6 +821,142 @@ class WorkstationApp(App):
                 f"{summary} — done (rc=0, {round(result.duration_secs)}s)",
             )
 
+    def _history_entry(
+        self,
+        kind: str,
+        command: list[str],
+        result: TaskResult,
+        needs_sudo: bool,
+        started_at: datetime,
+    ) -> HistoryEntry:
+        """Build a `task`/`sequence` `HistoryEntry` from a settled
+        `TaskResult` (push/keydist entries are assembled inline at their
+        own call sites — they have no single `TaskResult` to draw from).
+        """
+        return HistoryEntry(
+            id=new_entry_id(started_at),
+            started_at=started_at.isoformat(),
+            kind=kind,
+            command=command,
+            summary=_command_summary(command),
+            returncode=result.returncode,
+            duration_secs=result.duration_secs,
+            cancelled=result.cancelled,
+            outcome=outcome_for(result.returncode, result.cancelled),
+            needs_sudo=needs_sudo,
+        )
+
+    def record_history(self, entry: HistoryEntry, log_lines: list[str]) -> None:
+        """Fire-and-forget history write (spec §3) — never blocks the
+        caller and never raises. `HistoryStore.record` does file I/O, so
+        it's pushed to a thread via a background task when an event loop
+        is running (the normal case: every call site is inside a worker);
+        with no running loop (e.g. a plain unit test calling this
+        directly) it just runs synchronously instead. Either way, a
+        `False` result (F3: e.g. an unwritable/broken cache directory)
+        surfaces ONE warning toast per session via
+        `_warn_history_write_failed`, instead of the record silently
+        vanishing with no visible sign anything went wrong.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is None:
+            try:
+                ok = self.history_store.record(entry, list(log_lines))
+            except Exception:
+                ok = False
+            if not ok:
+                self._warn_history_write_failed()
+            return
+        try:
+            task = asyncio.create_task(
+                asyncio.to_thread(self.history_store.record, entry, list(log_lines))
+            )
+        except Exception:
+            return
+        task.add_done_callback(self._on_history_recorded)
+
+    def _on_history_recorded(self, task: "asyncio.Task[bool]") -> None:
+        """Done-callback for `record_history`'s background write —
+        surfaces the one-warning-per-session toast on a `False`/raised
+        result (F3). Never itself raises: a cancelled task or one whose
+        `to_thread` call somehow raised both count as "not recorded".
+        """
+        try:
+            ok = task.result()
+        except Exception:
+            ok = False
+        if not ok:
+            self._warn_history_write_failed()
+
+    def _warn_history_write_failed(self) -> None:
+        if self._history_warned:
+            return
+        self._history_warned = True
+        self.notify(
+            "history write failed — see ~/.cache/workstation-tui/history",
+            severity="warning", markup=False,
+        )
+
+    def rerun_history_entry(self, entry: HistoryEntry) -> bool:
+        """Re-run a history entry — the SINGLE entry point for both
+        `HistoryScreen`'s "r" binding and the palette's `re-run: <summary>`
+        hit (`palette.py`'s `_rerun` callback calls this directly), so
+        every caller confirms through the exact same `ConfirmModal` before
+        anything launches (Finding F1: the palette used to call
+        `launch_task` straight through with no confirm at all — a
+        `re-run:` hit for a Fleet host remove or a `chezmoi apply` ran
+        immediately on Enter).
+
+        Only `task`/`sequence` entries with a recorded `command` are
+        re-runnable from here (`push`/`keydist` runs have no single
+        command — see `_history_entry`/push_screen.py/fleet.py, which all
+        record `command=None` for those kinds); anything else degrades to
+        a toast pointing at the panel that actually owns that kind of
+        re-run — no confirm shown, nothing routed. Returns True once the
+        request has been ROUTED to a background confirm+launch worker
+        (group "history-confirm") — the confirm may still be declined, and
+        the eventual `launch_task` call may still itself refuse (task/push
+        already running) with its own toast; either is fine, since the
+        caller (HistoryScreen) only uses the return value to decide
+        whether to dismiss itself, and dismissing once the request has
+        been routed is correct regardless of how the worker's confirm
+        resolves.
+
+        `push_screen_wait` needs a running screen stack and must be
+        awaited, so the confirm+launch pair runs in its own worker rather
+        than blocking this (synchronous) method — `run_worker` returns
+        immediately, matching the "routed, not necessarily run" contract
+        above.
+        """
+        if entry.kind in ("task", "sequence") and entry.command is not None:
+            self.run_worker(
+                self._rerun_confirm_flow(entry),
+                exclusive=False, group="history-confirm",
+            )
+            return True
+        self.notify("re-run from the Fleet panel", severity="warning")
+        return False
+
+    async def _rerun_confirm_flow(self, entry: HistoryEntry) -> None:
+        """`ConfirmModal` -> `launch_task`, for a `rerun_history_entry`
+        request already known re-runnable (`command is not None`). Body
+        is two lines — `re-run <summary>?` then the joined argv — so an
+        ambiguous summary (add/remove both summarize to the same
+        `manage-hosts.sh` invocation, apply-one/apply-all both to
+        `chezmoi apply`) still shows the user the EXACT command about to
+        run; `ConfirmModal` is `markup=False`, so a hostile argv token
+        can't inject markup into either line.
+        """
+        assert entry.command is not None  # guarded by the caller above
+        body = f"re-run {entry.summary}?\n" + " ".join(entry.command)
+        ok = await self.push_screen_wait(ConfirmModal(body))
+        if not ok:
+            return
+        self.launch_task(entry.command, needs_sudo=entry.needs_sudo)
+
     async def _task_flow(
         self,
         command: list[str],
@@ -685,7 +968,11 @@ class WorkstationApp(App):
         try:
             if not await self._sudo_gate(needs_sudo, command):
                 return
-            log = self._resolve_log(log_to)
+            started_at = datetime.now(UTC)
+            # Tee the resolved log AFTER resolution so the "$ cmd" echo
+            # written through it just below is captured too, not just the
+            # runner's own streamed lines.
+            log, captured = _tee_log(self._resolve_log(log_to))
             log("$ " + " ".join(command))
             keepalive: asyncio.Task | None = None
             if needs_sudo:
@@ -710,6 +997,15 @@ class WorkstationApp(App):
             finally:
                 if keepalive is not None:
                     keepalive.cancel()
+            # A TaskResult exists now — including the cancelled case — so
+            # this is the one place a "task" entry is recorded. The
+            # sudo-gate refusal, TaskBusyError, and spawn-exception
+            # branches above all `return` before this point, deliberately
+            # NOT recording anything (no TaskResult was ever produced).
+            self.record_history(
+                self._history_entry("task", command, result, needs_sudo, started_at),
+                captured,
+            )
             # Minimal, backward-compatible addition (optional, keyword-only,
             # defaults to None — every pre-existing call site is unchanged):
             # hands the TaskResult (incl. returncode) to the caller before
@@ -768,7 +1064,7 @@ class WorkstationApp(App):
             # needs_sudo=False, which returns True immediately.
             if not await self._sudo_gate(False):
                 return
-            log = self._resolve_log(log_to)
+            log_target = self._resolve_log(log_to)
             # Tracks whether the loop ran every command to completion
             # (never cancelled, never a non-zero rc) — only that case earns
             # the "done" toast below; the cancelled/aborted branches already
@@ -787,6 +1083,12 @@ class WorkstationApp(App):
             # falls out of the shared helper for free, no extra branch here.
             last_result: TaskResult | None = None
             for command in commands:
+                # A fresh tee per command — its own capped `captured` list
+                # feeds that command's own "sequence" history entry, same
+                # "wrap after resolution" ordering as _task_flow so the
+                # per-command "$ cmd" echo is captured too.
+                started_at = datetime.now(UTC)
+                log, captured = _tee_log(log_target)
                 log("$ " + " ".join(command))
                 try:
                     result = await self._runner.run(command, log)
@@ -797,6 +1099,15 @@ class WorkstationApp(App):
                     self.notify(f"task failed: {type(exc).__name__}: {exc}",
                                 severity="error", markup=False)
                     return
+                # As in _task_flow: recorded only here, where a TaskResult
+                # actually exists — the TaskBusyError/exception branches
+                # above return before this, recording nothing for that
+                # attempt (earlier commands' entries, if any, already
+                # landed on their own iterations).
+                self.record_history(
+                    self._history_entry("sequence", command, result, False, started_at),
+                    captured,
+                )
                 last_result = result
                 if result.cancelled:
                     self.notify("cancelled", severity="warning")

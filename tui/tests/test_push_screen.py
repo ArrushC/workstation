@@ -93,6 +93,12 @@ class Host(App):
         self.notifier = lambda title, msg: None
         self.notify_threshold_secs = 10.0
         self._push_inflight = False
+        # Task 4 added PushScreen's dependency on app.record_history (the
+        # push-completion history entry, spec §3) — same reasoning as the
+        # attrs above: a no-op here, the actual recording behavior is
+        # covered against a real WorkstationApp in
+        # test_history_recording.py.
+        self.record_history = lambda entry, log_lines: None
 
     def on_mount(self) -> None:
         self.run_worker(self._ask())

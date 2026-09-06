@@ -14,6 +14,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import DataTable, RichLog, Static
+from textual.widgets.data_table import RowDoesNotExist
 
 from workstation_tui.app.theme import M, muted
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
@@ -100,6 +101,15 @@ class DotfilesPanel(Static):
         self.git_state: GitState | None = None
         self.log_lines: list[str] = []
         self.can_focus = True
+        # False until compose()'s children are mounted, and reset False
+        # again on_unmount — generalized #141 shape (see provision.py):
+        # _render_rows/_render_git_line/append_log/_apply_diff are all
+        # reachable from background workers (refresh_panel's thread worker,
+        # the diff worker's call_from_thread) that can land either before
+        # this panel's tree exists OR after it's been torn down (app exit,
+        # test teardown); the guards on those methods check this alongside
+        # `self.is_attached` before touching the tree.
+        self._composed = False
         # True when this host has no chezmoi — the panel degrades honestly
         # instead of pretending dotfiles management works here.
         self.unavailable = False
@@ -128,10 +138,16 @@ class DotfilesPanel(Static):
         table = self.query_one("#dotfiles-table", DataTable)
         table.add_column("code", key="code", width=6)
         table.add_column("path", key="path")
+        self._composed = True
+
+    def on_unmount(self) -> None:
+        self._composed = False
 
     # -- rendering ------------------------------------------------------
 
     def _render_rows(self) -> None:
+        if not (self._composed and self.is_attached):
+            return  # torn-down tree ignores a stray render callback
         table = self.query_one("#dotfiles-table", DataTable)
         table.clear()
         for change in self.pending:
@@ -142,6 +158,8 @@ class DotfilesPanel(Static):
             table.add_row(Text(change.code), Text(change.path), key=change.path)
 
     def _render_git_line(self) -> None:
+        if not (self._composed and self.is_attached):
+            return  # torn-down tree ignores a stray render callback
         widget = self.query_one("#dotfiles-git", Static)
         if self.git_state is None:
             widget.update(muted("git state unavailable"))
@@ -158,6 +176,8 @@ class DotfilesPanel(Static):
         self.log_lines.append(line)
         if len(self.log_lines) > self.MAX_LOG_LINES:
             del self.log_lines[: -self.MAX_LOG_LINES]
+        if not (self._composed and self.is_attached):
+            return  # torn-down tree ignores a stray log callback
         self.query_one("#dotfiles-log", RichLog).write(line)
 
     def selected_path(self) -> str | None:
@@ -167,6 +187,28 @@ class DotfilesPanel(Static):
         row_key = table.coordinate_to_cell_key((table.cursor_row, 0)).row_key
         return str(row_key.value) if row_key and row_key.value else None
 
+    def select_row(self, key: str) -> bool:
+        """Move the cursor to the row keyed `key` (a pending file path).
+
+        Command palette (Phase C Task 6) seam — same shape as
+        ProvisionPanel.select_row: an EntitiesProvider "apply/diff
+        <path>" hit calls this before the existing `action_apply_
+        selected` (or, for diff, on its own — the diff pane already
+        follows the cursor via `on_data_table_row_highlighted`). Returns
+        False — never raises — when the table isn't composed yet or
+        `key` names no current row (e.g. a stale hit for a file that's
+        since been applied/re-added).
+        """
+        if not (self._composed and self.is_attached):
+            return False
+        table = self.query_one("#dotfiles-table", DataTable)
+        try:
+            idx = table.get_row_index(key)
+        except RowDoesNotExist:
+            return False
+        table.move_cursor(row=idx)
+        return True
+
     # -- availability + refresh -----------------------------------------
 
     def set_unavailable(self, message: str) -> None:
@@ -175,8 +217,9 @@ class DotfilesPanel(Static):
         self.pending = []
         self.errors = []
         self.git_state = None
-        self.query_one("#dotfiles-table", DataTable).clear()
-        self.query_one("#dotfiles-diff", Static).update("")
+        if self._composed and self.is_attached:
+            self.query_one("#dotfiles-table", DataTable).clear()
+            self.query_one("#dotfiles-diff", Static).update("")
         self._render_git_line()
         self.append_log(message)
 
@@ -247,6 +290,8 @@ class DotfilesPanel(Static):
         self.app.call_from_thread(self._apply_diff, text, err)  # type: ignore[attr-defined]
 
     def _apply_diff(self, text: str, err: str | None) -> None:
+        if not (self._composed and self.is_attached):
+            return  # torn-down tree ignores a stray diff-worker callback
         widget = self.query_one("#dotfiles-diff", Static)
         widget.update(f"error: {err}" if err else text)
 

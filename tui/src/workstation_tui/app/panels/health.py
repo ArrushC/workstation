@@ -31,6 +31,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, RichLog, Static
+from textual.widgets.data_table import RowDoesNotExist
 
 from workstation_tui.app.theme import M, icon, muted
 from workstation_tui.app.widgets.text_view import TextViewScreen
@@ -140,6 +141,18 @@ class HealthPanel(Static):
         self.log_lines: list[str] = []
         self._services_plain = ""
         self._interop_plain = ""
+        # False until compose()'s children are mounted. refresh_panel() (via
+        # its "health-refresh" thread worker's call_from_thread) and
+        # append_log() (via launch_task/run_task_sequence's log_to callback)
+        # are public and reachable from other async paths BEFORE this
+        # panel's widget tree exists — same _composed discipline as
+        # ProvisionPanel (#141), applied here since HealthPanel has its own
+        # independent worker chain (refresh_panel -> _refresh_worker ->
+        # call_from_thread(_apply_refresh)) sitting downstream of the app's
+        # startup call_after_refresh guard, so it isn't covered by that
+        # guard alone. Every method that touches the tree checks this and
+        # lets on_mount() replay the accumulated state instead.
+        self._composed = False
         self.can_focus = True
 
     def compose(self) -> ComposeResult:
@@ -157,10 +170,34 @@ class HealthPanel(Static):
         table.add_column("check", key="label", width=16)
         table.add_column("age", key="age", width=12)
         table.add_column("summary", key="summary")
+        # Children exist from here on. Anything that arrived while the tree
+        # was still being composed lives in self.cache/self.services/
+        # self.interop/self.log_lines rather than having been dropped, so
+        # draw it now.
+        self._composed = True
+        self._render_rows()
+        self._render_services_line()
+        self._render_interop_line()
+        log = self.query_one("#health-log", RichLog)
+        for line in self.log_lines:
+            log.write(line)
+
+    def on_unmount(self) -> None:
+        # `_composed` was only ever set True (on mount) and never reset —
+        # a render/log callback landing AFTER this panel's tree was torn
+        # down (app exit, test teardown) — refresh_panel's thread worker
+        # and _run_check's on_result both reach this panel via
+        # call_from_thread/launch_task well after the key that triggered
+        # them was pressed — would still see `_composed is True` and crash
+        # with NoMatches. Reset it here so the guards below correctly
+        # treat "was composed, now torn down" as not-renderable.
+        self._composed = False
 
     # -- rendering ------------------------------------------------------
 
     def _render_rows(self) -> None:
+        if not (self._composed and self.is_attached):
+            return  # on_mount() renders once the widget tree exists; torn-down tree ignores
         table = self.query_one("#health-table", DataTable)
         table.clear()
         for check in CHECKS:
@@ -180,6 +217,8 @@ class HealthPanel(Static):
             )
 
     def _render_services_line(self) -> None:
+        if not (self._composed and self.is_attached):
+            return  # on_mount() renders once the widget tree exists; torn-down tree ignores
         widget = self.query_one("#health-services", Static)
         ctx = self._host_context()
         if ctx is not None and ctx.has_systemctl and not ctx.is_wsl and ctx.mode == "dev":
@@ -200,6 +239,8 @@ class HealthPanel(Static):
             self._services_plain = reason
 
     def _render_interop_line(self) -> None:
+        if not (self._composed and self.is_attached):
+            return  # on_mount() renders once the widget tree exists; torn-down tree ignores
         widget = self.query_one("#health-interop", Static)
         ctx = self._host_context()
         if ctx is not None and ctx.is_wsl:
@@ -234,6 +275,8 @@ class HealthPanel(Static):
         self.log_lines.append(line)
         if len(self.log_lines) > self.MAX_LOG_LINES:
             del self.log_lines[: -self.MAX_LOG_LINES]
+        if not (self._composed and self.is_attached):
+            return  # on_mount() replays self.log_lines; torn-down tree ignores
         self.query_one("#health-log", RichLog).write(line)
 
     def _host_context(self) -> HostContext | None:
@@ -246,6 +289,26 @@ class HealthPanel(Static):
         # named `_context`. Lesson learned the hard way — keep this name.
         summary = self.app.summary  # type: ignore[attr-defined]
         return summary.context if summary else None
+
+    def select_row(self, key: str) -> bool:
+        """Move the cursor to the row keyed `key` (a `check_id`).
+
+        Command palette (Phase C Task 6) seam — same shape as
+        ProvisionPanel.select_row: an EntitiesProvider "run check <label>"
+        hit calls this before the existing `_run_check(check_id)` (the
+        same call `on_data_table_row_selected` makes on `enter`). Returns
+        False — never raises — when the table isn't composed yet or
+        `key` names no current row.
+        """
+        if not (self._composed and self.is_attached):
+            return False
+        table = self.query_one("#health-table", DataTable)
+        try:
+            idx = table.get_row_index(key)
+        except RowDoesNotExist:
+            return False
+        table.move_cursor(row=idx)
+        return True
 
     # -- refresh (called by the app on entry/refresh cycles) -------------
 

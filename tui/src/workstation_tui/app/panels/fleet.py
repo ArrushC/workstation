@@ -12,12 +12,14 @@ via theme.icon() already returns one).
 """
 
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import DataTable, RichLog, Static
+from textual.widgets.data_table import RowDoesNotExist
 
 from workstation_tui.app.theme import HOST_ICONS, M, PUSH_ICONS, SETUP_ICONS, icon
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
@@ -31,6 +33,7 @@ from workstation_tui.core.fleet import (
     push_command,
     rel_age,
 )
+from workstation_tui.core.history import HistoryEntry, new_entry_id
 from workstation_tui.core.models import HostEntry
 from workstation_tui.repo import find_repo_root
 
@@ -91,6 +94,14 @@ class FleetPanel(Static):
         # param through every render call) — tests monkeypatch this
         # attribute directly to freeze/advance the clock.
         self._now_fn = time.time
+        # False until compose()'s children are mounted, and reset False
+        # again on_unmount — generalized #141 shape (see provision.py):
+        # _render_rows/append_log are reachable from background workers
+        # (refresh_worker/probe_worker's call_from_thread/on-loop callbacks)
+        # that can land either before this panel's tree exists OR after
+        # it's been torn down (app exit, test teardown); their guards check
+        # this alongside `self.is_attached` before touching the tree.
+        self._composed = False
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -108,6 +119,10 @@ class FleetPanel(Static):
         table.add_column("address", key="address", width=16)
         table.add_column("user", key="user", width=12)
         table.add_column("group", key="group", width=14)
+        self._composed = True
+
+    def on_unmount(self) -> None:
+        self._composed = False
 
     # -- rendering ------------------------------------------------------
 
@@ -124,6 +139,8 @@ class FleetPanel(Static):
         return cell
 
     def _render_rows(self) -> None:
+        if not (self._composed and self.is_attached):
+            return  # torn-down tree ignores a stray render callback
         table = self.query_one("#fleet-table", DataTable)
         table.clear()
         now = self._now_fn()
@@ -146,6 +163,8 @@ class FleetPanel(Static):
         self.log_lines.append(line)
         if len(self.log_lines) > self.MAX_LOG_LINES:
             del self.log_lines[: -self.MAX_LOG_LINES]
+        if not (self._composed and self.is_attached):
+            return  # torn-down tree ignores a stray log callback
         self.query_one("#fleet-log", RichLog).write(line)
 
     def selected_entry(self) -> HostEntry | None:
@@ -174,6 +193,26 @@ class FleetPanel(Static):
         if entry is None:
             return
         self.app.push_screen(HostStatsScreen(entry))  # type: ignore[attr-defined]
+
+    def select_row(self, key: str) -> bool:
+        """Move the cursor to the row keyed `key` (a host name).
+
+        Command palette (Phase C Task 6) seam — same shape as
+        ProvisionPanel.select_row: an EntitiesProvider "push/ssh/stats
+        <name>" hit calls this before the existing action (or, for
+        stats, the same `HostStatsScreen` push `enter` uses) so it
+        operates on the right row. Returns False — never raises — when
+        the table isn't composed yet or `key` names no current row.
+        """
+        if not (self._composed and self.is_attached):
+            return False
+        table = self.query_one("#fleet-table", DataTable)
+        try:
+            idx = table.get_row_index(key)
+        except RowDoesNotExist:
+            return False
+        table.move_cursor(row=idx)
+        return True
 
     def _os_name(self) -> str:
         summary = self.app.summary  # type: ignore[attr-defined]
@@ -533,17 +572,40 @@ class FleetPanel(Static):
         path) has finished. Per-host lines carry host names (the log is
         markup=False RichLog); the one toast at the end is counts-only —
         never a host name (the user was just present at the terminal doing
-        password entry, so this is a summary, not new information)."""
+        password entry, so this is a summary, not new information).
+
+        Also records one "keydist" history entry (spec §3) — same
+        counts-only summary as the toast, but its own log (below) DOES
+        carry the per-host `copy-id <name>: ok|failed (rc=N)` lines (the
+        on-disk history log, not an OS toast — see push_screen.py's
+        `_record_push_history` for the same distinction)."""
         n_ok = 0
         n_failed = 0
+        log_lines: list[str] = []
         for name, rc in results:
             if rc == 0:
                 n_ok += 1
-                self.append_log(f"copy-id {name}: ok")
+                line = f"copy-id {name}: ok"
             else:
                 n_failed += 1
-                self.append_log(f"copy-id {name}: failed (rc={rc})")
+                line = f"copy-id {name}: failed (rc={rc})"
+            self.append_log(line)
+            log_lines.append(line)
         self.refresh_panel()  # re-probe heals ssh-failed glyphs
         self.app.notify(  # type: ignore[attr-defined]
             f"key distribution — {n_ok} ok, {n_failed} failed"
         )
+        now = datetime.now(UTC)
+        entry = HistoryEntry(
+            id=new_entry_id(now),
+            started_at=now.isoformat(),
+            kind="keydist",
+            command=None,
+            summary=f"key distribution — {n_ok} ok, {n_failed} failed",
+            returncode=None,
+            duration_secs=0.0,
+            cancelled=False,
+            outcome="failed" if n_failed else "ok",
+            needs_sudo=False,
+        )
+        self.app.record_history(entry, log_lines)  # type: ignore[attr-defined]

@@ -1,12 +1,16 @@
 """Read-only dashboard: one live summary card per domain."""
 
+from datetime import UTC, datetime
+
 from textual.app import ComposeResult
 from textual.containers import Grid
 from textual.widgets import Static
 
 from workstation_tui.app.theme import M, STAMP_ICONS, heading, muted
+from workstation_tui.core.fleet import rel_age
 from workstation_tui.core.health import CHECKS
 from workstation_tui.core.models import HealthRollup, Summary
+from workstation_tui.core.updates import load_updates_cache
 
 CARD_TARGETS = {
     "card-provision": "provision",
@@ -26,6 +30,30 @@ _HEALTH_CARD_LABELS: dict[str, str] = {
     "invariants": "invariants",
     "templates": "templates",
 }
+
+
+def _updates_age(checked_at: str) -> str:
+    """`rel_age()` of an ISO-8601 `checked_at`, or `"?"` on any parse/
+    computation failure — same degrade-on-bad-input discipline as
+    `widgets/updates_screen.py`'s own `_age_text` (this is a deliberate
+    small duplication, not a shared import — the dashboard card and the
+    UpdatesScreen are separate files per the Phase C task split). Caller
+    only reaches this when `checked_at is not None`.
+
+    F9: the WHOLE computation, including the tz-aware subtraction, is
+    guarded — a naive/tz-less `checked_at` parses fine via
+    `fromisoformat` but raises `TypeError` (not `ValueError`) against
+    `datetime.now(UTC)` below, which used to escape this function and
+    crash `update_summary` (an event-loop call on every refresh) instead
+    of degrading like every other malformed-timestamp path in this app.
+    """
+    try:
+        checked_dt = datetime.fromisoformat(checked_at)
+        delta = (datetime.now(UTC) - checked_dt).total_seconds()
+    except Exception:
+        return "?"
+    return rel_age(max(delta, 0.0))
+
 
 DASHBOARD_CSS = f"""
 DashboardPanel {{
@@ -126,13 +154,30 @@ class DashboardPanel(Static):
         fresh_icon, fresh_col = STAMP_ICONS["fresh"]
         stale_icon, stale_col = STAMP_ICONS["stale"]
         miss_icon, miss_col = STAMP_ICONS["missing"]
+        # Updates line (Phase C): a 4th provision-card line reading the same
+        # cache UpdatesScreen writes (self.app.updates_cache_path) — read
+        # once per update_summary() call, never per-render inside a loop.
+        cache = load_updates_cache(self.app.updates_cache_path)  # type: ignore[attr-defined]
+        n_updates = sum(1 for r in cache.rows if r.status == "update")
+        if cache.checked_at is not None:
+            age = _updates_age(cache.checked_at)
+            updates_plain = f"↑ {n_updates} updates · checked {age}"
+            if n_updates > 0:
+                updates_line = f"[{M['yellow']}]{updates_plain}[/]"
+            else:
+                updates_line = muted(updates_plain)
+        else:
+            updates_plain = "updates: never checked"
+            updates_line = muted(updates_plain)
         prov_plain = (f"{s.tools_fresh}/{s.tools_total} fresh · "
-                      f"{s.tools_stale} stale · {s.tools_missing} missing")
+                      f"{s.tools_stale} stale · {s.tools_missing} missing · "
+                      f"{updates_plain}")
         self._card("card-provision").set_content(
             heading("Provision") + "\n"
             f"[{fresh_col}]{fresh_icon} {s.tools_fresh}/{s.tools_total} fresh[/]\n"
             f"[{stale_col}]{stale_icon} {s.tools_stale} stale[/] · "
-            f"[{miss_col}]{miss_icon} {s.tools_missing} missing[/]",
+            f"[{miss_col}]{miss_icon} {s.tools_missing} missing[/]\n"
+            f"{updates_line}",
             prov_plain,
         )
         dot_plain = f"{s.dotfiles_pending} pending"

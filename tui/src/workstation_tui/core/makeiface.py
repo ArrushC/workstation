@@ -33,8 +33,22 @@ def doctor_command(repo_root: Path, mode: str) -> list[str]:
     return make_command(repo_root, ["doctor"], mode)
 
 
-def check_updates_command(repo_root: Path, mode: str) -> list[str]:
-    return make_command(repo_root, ["check-updates"], mode)
+def check_updates_command(repo_root: Path, mode: str, *, porcelain: bool = True) -> list[str]:
+    """Build the `make check-updates` argv.
+
+    `porcelain=True` (the default, for the Task 2 UpdatesScreen) appends
+    `CHECK_UPDATES_PORCELAIN=1` as the LAST argv token — GNU make exports a
+    command-line `VAR=value` assignment into the recipe environment, and
+    `makefile/lib/check-updates.sh` (lines ~138-148) takes its porcelain
+    branch whenever that env var is non-empty, printing only
+    `status|name|detail` lines (no banner/summary/ANSI). Callers that want
+    the human-readable report (the `workstation updates` CLI passthrough)
+    must pass `porcelain=False` explicitly to omit it.
+    """
+    cmd = make_command(repo_root, ["check-updates"], mode)
+    if porcelain:
+        cmd.append("CHECK_UPDATES_PORCELAIN=1")
+    return cmd
 
 
 def parse_inventory(text: str) -> tuple[list[InventoryRow], list[str]]:

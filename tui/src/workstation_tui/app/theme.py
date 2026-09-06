@@ -312,6 +312,24 @@ PUSH_ICONS: Dict[str, Tuple[str, str]] = {
     "cancelled": ("–", M["yellow"]),
 }
 
+# HistoryScreen (Phase C Task 5) row-outcome vocabulary — keys match
+# core/history.py's `outcome_for` return values.
+OUTCOME_ICONS: Dict[str, Tuple[str, str]] = {
+    "ok":        ("✓", M["green"]),
+    "failed":    ("✗", M["red"]),
+    "cancelled": ("–", M["yellow"]),
+}
+
+# UpdatesScreen (Phase C) row-status vocabulary — keys match
+# core/updates.py's `_KNOWN_STATUSES` / `UpdateRow.status`.
+UPDATE_ICONS: Dict[str, Tuple[str, str]] = {
+    "update":  ("↑", M["yellow"]),
+    "ok":      ("✓", M["green"]),
+    "ahead":   ("!", M["yellow"]),
+    "rolling": ("·", M["overlay0"]),
+    "unknown": ("?", M["red"]),
+}
+
 SEL_ON = ("●", M["blue"])
 SEL_OFF = ("·", M["overlay0"])
 

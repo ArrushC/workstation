@@ -4806,8 +4806,8 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         by name. <kbd>r</kbd> runs the selected tool,
                         <kbd>c</kbd> clean-reinstalls it (<code>-j1
                             clean-&lt;tool&gt; &lt;tool&gt;</code>, forced
-                        serial), <kbd>u</kbd> runs
-                        <code>make check-updates</code>, <kbd>R</kbd> runs a
+                        serial), <kbd>u</kbd> opens the updates table
+                        (below), <kbd>R</kbd> runs a
                         full <code>make provision</code>, <kbd>x</kbd> cancels
                         the running task. Output streams into the log pane
                         below the table.
@@ -4846,6 +4846,39 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         &mdash; prod's own <code>$(SUDO)</code> is empty. The
                         whole panel is unavailable on Windows (see the
                         platform matrix), so the overlay never applies there.
+                    </p>
+                    <p class="note-row">
+                        <strong>Updates table.</strong> <kbd>u</kbd> opens a
+                        parsed, sortable table of a
+                        <code>make check-updates</code> run &mdash; one row
+                        per tool with a status glyph (<code>&uarr;</code>
+                        update available / <code>&#10003;</code> ok /
+                        <code>!</code> ahead of its pin /
+                        <code>&middot;</code> rolling (latest-tracking) /
+                        <code>?</code> unknown), the pinned and latest
+                        versions, and the raw detail line. It's cache-first:
+                        whatever's already cached at
+                        <code>~/.cache/workstation-tui/updates.json</code>
+                        renders immediately (instant even offline), then a
+                        fresh check kicks off in the background via
+                        <code>make check-updates
+                            CHECK_UPDATES_PORCELAIN=1</code> (the porcelain
+                        flag switches <code>check-updates.sh</code> to plain
+                        <code>status|name|detail</code> lines, no banner or
+                        ANSI) and overwrites the cache on success &mdash; if
+                        a task is already running it shows a &ldquo;task
+                        running &mdash; showing cached results&rdquo; banner
+                        instead of queuing a second check. The same cache
+                        backs a fourth line on the Dashboard's Provision card
+                        (<code>&uarr; N updates &middot; checked
+                            &lt;age&gt;</code>, or &ldquo;updates: never
+                        checked&rdquo; before the first run). <kbd>s</kbd>
+                        toggles the sort key (status-first, or name),
+                        <kbd>R</kbd> forces a re-check, <kbd>Esc</kbd> /
+                        <kbd>q</kbd> closes. The table is read-only by
+                        design &mdash; like the CLI scan above, updating a
+                        pin is still the manual edit in
+                        <code>makefile/versions.mk</code>.
                     </p>
 
                     <h4>Dotfiles</h4>
@@ -5006,7 +5039,10 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         >). <kbd>Enter</kbd> runs the selected check and
                         records its result to
                         <code>~/.cache/workstation-tui/health.json</code>
-                        &mdash; the only file the TUI itself writes.
+                        &mdash; one of three per-user caches the TUI writes
+                        under <code>~/.cache/workstation-tui/</code>,
+                        alongside the updates table's cache and the task
+                        history log (both documented below).
                         <kbd>R</kbd> runs every currently-available check as
                         one streamed sequence, but &mdash; because that
                         sequence exposes no per-command return code back to
@@ -5036,6 +5072,119 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         <code>notify.sh</code> isn't present on the host.
                     </p>
 
+                    <h3>Command palette</h3>
+                    <p>
+                        <kbd>Ctrl-P</kbd>, from any panel, opens Textual's
+                        built-in fuzzy-search command palette. Three sources
+                        feed it. Every whole-app / whole-panel action &mdash;
+                        one <code>go to &lt;panel&gt;</code> per panel,
+                        <code>refresh</code>, <code>toggle watch</code>,
+                        <code>check updates</code>, <code>task
+                            history</code>, <code>help</code>,
+                        <code>quit</code>, and each panel's own &ldquo;do it
+                        to everything&rdquo; command
+                        (<code>provision all</code>, <code>apply all
+                            pending</code>, <code>push all hosts</code>,
+                        <code>run all health checks</code>,
+                        <code>distribute keys</code>) &mdash; is a fixed,
+                        static list shown in full before you type anything.
+                        One command per live row in whichever panel's own
+                        data currently holds it &mdash;
+                        <code>run &lt;tool&gt;</code> /
+                        <code>clean &lt;tool&gt;</code> (Provision),
+                        <code>push &lt;host&gt;</code> /
+                        <code>ssh &lt;host&gt;</code> /
+                        <code>stats &lt;host&gt;</code> (Fleet),
+                        <code>apply &lt;path&gt;</code> /
+                        <code>diff &lt;path&gt;</code> (Dotfiles),
+                        <code>run check &lt;label&gt;</code> (Health)
+                        &mdash; is built fresh from every tool, host,
+                        pending file, and health check on each keystroke, so
+                        these appear only once you start typing (dumped in
+                        full up front, this list would be the whole app's
+                        data on screen at zero keystrokes). And the
+                        most recent re-runnable task/sequence entries from
+                        task history, shown as
+                        <code>re-run: &lt;summary&gt; (&lt;age&gt;, rc
+                            &lt;rc&gt;)</code> &mdash; push and
+                        key-distribution runs have no single command to
+                        replay and never appear here.
+                    </p>
+                    <p class="note-row">
+                        Every palette command routes through the exact same
+                        panel action a key press or table row would &mdash;
+                        the same confirm modals, sudo gate, and
+                        busy-refusal toasts apply, nothing is reimplemented
+                        for the palette. Picking a vanished
+                        <code>run &lt;tool&gt;</code> /
+                        <code>clean &lt;tool&gt;</code>,
+                        <code>push &lt;host&gt;</code> /
+                        <code>ssh &lt;host&gt;</code>, or
+                        <code>apply &lt;path&gt;</code> hit aborts with a
+                        &ldquo;&lt;name&gt; no longer available&rdquo; toast
+                        instead of acting on the wrong row;
+                        <code>stats &lt;host&gt;</code> and
+                        <code>diff &lt;path&gt;</code> simply no-op if the
+                        row is gone, <code>run check &lt;label&gt;</code>
+                        always runs (checks are a fixed list, never a
+                        vanishing one), and a
+                        <code>re-run: &lt;summary&gt;</code> hit carries its
+                        own recorded command, so there's no
+                        &ldquo;target that moved&rdquo; case for it at all.
+                        The palette's own system-commands list is curated down
+                        to just <code>Quit</code> &mdash; Textual's generic
+                        Theme/Keys entries don't apply to this app's fixed
+                        Catppuccin&nbsp;Mocha theme.
+                    </p>
+
+                    <h3>Task history</h3>
+                    <p>
+                        <kbd>H</kbd>, from any panel, opens a read-only
+                        browser over every recorded run: Provision/Dotfiles
+                        tool tasks (a marked-tool batch runs and records as
+                        ONE make invocation, not a sequence),
+                        panel-level command sequences (Health's
+                        <code>run all health checks</code>, a Fleet host
+                        edit's remove-then-add), Fleet pushes, and guided
+                        key-distribution runs &mdash; up to the 200 most
+                        recent, newest first, each row showing a relative
+                        age, an outcome glyph (<code>&#10003;</code> ok /
+                        <code>&#10007;</code> failed / <code>&ndash;</code>
+                        cancelled), kind, summary, return code, and
+                        duration. <kbd>Enter</kbd> opens that entry's full
+                        captured log in the same scrollable overlay other
+                        log views use; <kbd>r</kbd> re-runs the cursor
+                        entry &mdash; for a re-runnable task/sequence entry
+                        (one recorded with a command) this confirms first,
+                        then routes through the very same sudo-gate /
+                        busy-refusal path a fresh <kbd>r</kbd>/<kbd>R</kbd>
+                        press would (a <em>sequence</em> entry replays just
+                        that one recorded command as a single task, not the
+                        whole original sequence); push and key-distribution
+                        rows (and any task/sequence recorded with no
+                        command) have no single command to replay, so
+                        <kbd>r</kbd> on one skips the confirm and shows a
+                        &ldquo;re-run from the Fleet panel&rdquo; toast
+                        instead. <kbd>Esc</kbd> / <kbd>q</kbd> closes.
+                    </p>
+                    <p class="note-row">
+                        Entries persist to
+                        <code>~/.cache/workstation-tui/history/</code> (an
+                        append-only <code>index.jsonl</code> plus one
+                        <code>&lt;id&gt;.log</code> file per entry) and are
+                        pruned to the newest 200 after every write &mdash;
+                        older entries and their log files are deleted, not
+                        just hidden. A history write is fire-and-forget and
+                        never blocks or fails the run it's recording; on a
+                        write failure the app shows one warning toast per
+                        session rather than silently dropping the record.
+                        Re-running the <code>make check-updates</code>
+                        history entry streams its output to the log like
+                        any other re-run, but does not refresh the
+                        Provision panel's updates table or cache &mdash;
+                        use <kbd>u</kbd> for that.
+                    </p>
+
                     <h3>Keys</h3>
                     <p>Global, from any panel:</p>
                     <table>
@@ -5046,6 +5195,10 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             </tr>
                         </thead>
                         <tbody>
+                            <tr>
+                                <td><kbd>Ctrl-P</kbd></td>
+                                <td>Open the command palette</td>
+                            </tr>
                             <tr>
                                 <td><kbd>1</kbd>&ndash;<kbd>5</kbd></td>
                                 <td>
@@ -5060,6 +5213,10 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <tr>
                                 <td><kbd>w</kbd></td>
                                 <td>Toggle watch mode (auto-refresh)</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>H</kbd></td>
+                                <td>Open the task history browser</td>
                             </tr>
                             <tr>
                                 <td><kbd>q</kbd></td>
@@ -5115,7 +5272,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                             <tr>
                                 <td>Provision</td>
                                 <td><kbd>u</kbd></td>
-                                <td>Check for updates</td>
+                                <td>Open the updates table</td>
                             </tr>
                             <tr>
                                 <td>Provision</td>

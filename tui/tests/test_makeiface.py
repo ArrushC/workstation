@@ -94,4 +94,10 @@ def test_command_builders(tmp_path: Path) -> None:
     assert make_command(tmp_path, ["fzf", "zellij"], "dev") == [*base, "fzf", "zellij", "MODE=dev"]
     assert provision_command(tmp_path, ["node-runtime"], "prod") == [*base, "node-runtime", "MODE=prod"]
     assert doctor_command(tmp_path, "dev") == [*base, "doctor", "MODE=dev"]
-    assert check_updates_command(tmp_path, "prod") == [*base, "check-updates", "MODE=prod"]
+    # check_updates_command now defaults to porcelain=True (Task 1): the
+    # CHECK_UPDATES_PORCELAIN=1 var is appended as the LAST argv token.
+    # Porcelain-argv specifics (default True, porcelain=False omission) are
+    # pinned in test_updates.py; this assertion is adjusted, not dropped.
+    assert check_updates_command(tmp_path, "prod") == [
+        *base, "check-updates", "MODE=prod", "CHECK_UPDATES_PORCELAIN=1",
+    ]
