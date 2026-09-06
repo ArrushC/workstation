@@ -4931,7 +4931,14 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         a host never pushed since the TUI started &mdash; it
                         resets on restart, nothing is persisted to disk.
                         <kbd>s</kbd> SSHes to the selected host (suspends the
-                        TUI into a real <code>ssh</code> session),
+                        TUI into a real <code>ssh</code> session);
+                        <kbd>z</kbd> suspends instead into
+                        <code>ssh -t &hellip; zellij attach --create
+                            main</code> &mdash; the same session the Windows
+                        Terminal and Warp profiles attach to &mdash; while
+                        <kbd>s</kbd> stays plain ssh, and a missing remote
+                        <code>zellij</code> surfaces as a warning toast
+                        naming the exit code.
                         <kbd>a</kbd> adds and <kbd>e</kbd> edits a host
                         through a form modal that shells out to
                         <code>manage-hosts.sh --add</code> /
@@ -5318,6 +5325,11 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 <td>Fleet</td>
                                 <td><kbd>s</kbd></td>
                                 <td>SSH to selected host</td>
+                            </tr>
+                            <tr>
+                                <td>Fleet</td>
+                                <td><kbd>z</kbd></td>
+                                <td>SSH + remote <code>zellij attach --create main</code></td>
                             </tr>
                             <tr>
                                 <td>Fleet</td>

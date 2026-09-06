@@ -166,6 +166,24 @@ async def probe_all(
     return dict(results)
 
 
+def zellij_ssh_command(entry: HostEntry) -> list[str]:
+    """Build the ssh argv for the Fleet panel's `z` action: ssh in and
+    attach (creating if absent) a remote zellij session named "main".
+
+    The `--` before the destination is the same established option-
+    injection hardening `probe_setup`/`ssh_to` use — a user/address value
+    crafted to start with '-' can't be parsed as an ssh flag instead of
+    part of the destination. The remote tokens (`zellij attach --create
+    main`) match bootstrap.ps1's Windows Terminal fragment and Warp tab
+    config generators EXACTLY, so a host behaves identically whether it's
+    reached from this TUI, Windows Terminal, or Warp.
+    """
+    return [
+        "ssh", "-t", "--", f"{entry.user}@{entry.address}",
+        "zellij", "attach", "--create", "main",
+    ]
+
+
 def push_command(repo_root: Path, name: str) -> list[str]:
     """Build the `update-hosts.sh --name` argv for a single host.
 

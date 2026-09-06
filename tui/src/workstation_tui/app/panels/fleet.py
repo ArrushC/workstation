@@ -63,6 +63,7 @@ class FleetPanel(Static):
 
     BINDINGS = [
         ("s", "ssh_selected", "SSH"),
+        ("z", "zellij_selected", "Zellij"),
         ("p", "push_selected", "Push"),
         ("P", "push_all", "Push all"),
         ("a", "add_host", "Add"),
@@ -447,6 +448,15 @@ class FleetPanel(Static):
             self.app.notify("no host selected", severity="warning")  # type: ignore[attr-defined]
             return
         self.app.ssh_to(entry)  # type: ignore[attr-defined]
+
+    def action_zellij_selected(self) -> None:
+        if not self._linux_only_gate():
+            return
+        entry = self.selected_entry()
+        if entry is None:
+            self.app.notify("no host selected", severity="warning")  # type: ignore[attr-defined]
+            return
+        self.app.zellij_to(entry)  # type: ignore[attr-defined]
 
     def _local_task_gate(self) -> bool:
         """True when it's OK to open the PushScreen dashboard.
