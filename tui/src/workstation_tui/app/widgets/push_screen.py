@@ -19,6 +19,7 @@ same-key Screen-level BINDINGS entry would never be reached.
 import contextlib
 import time
 from collections import Counter
+from datetime import UTC, datetime
 
 from rich.text import Text
 from textual.app import ComposeResult
@@ -29,7 +30,8 @@ from textual.worker import Worker, WorkerCancelled, WorkerFailed
 from workstation_tui.app.theme import M, PUSH_ICONS, icon
 from workstation_tui.app.widgets.confirm_modal import ConfirmModal
 from workstation_tui.app.widgets.text_view import TextViewScreen
-from workstation_tui.core.multirun import MultiRunner
+from workstation_tui.core.history import HistoryEntry, new_entry_id
+from workstation_tui.core.multirun import HostRun, MultiRunner
 
 PUSH_SCREEN_CSS = f"""
 #push-table {{
@@ -85,6 +87,12 @@ class PushScreen(Screen[dict[str, str] | None]):
         yield Static("", id="push-summary", markup=False)
 
     def on_mount(self) -> None:
+        # Wall-clock start of the whole push (spec §3 recording) — the
+        # per-host HostRun.started/finished timestamps below are
+        # time.monotonic() (elapsed-duration math only, never a real
+        # clock), so the history entry's started_at needs its own wall
+        # clock captured here, at the earliest point this run exists.
+        self._started_at = datetime.now(UTC)
         table = self.query_one("#push-table", DataTable)
         table.add_column("st", key="st", width=2)
         table.add_column("host", key="host", width=18)
@@ -136,6 +144,11 @@ class PushScreen(Screen[dict[str, str] | None]):
         confirm the user just answered already covers it).
         """
         runs = list(self._runner.runs.values())
+        # Recorded unconditionally — including the all-cancelled case the
+        # toast logic below skips entirely (that's a notification-noise
+        # decision, not a "nothing happened" one; the browser (Task 5)
+        # still wants a cancelled entry to show).
+        self._record_push_history(runs)
         if runs and all(run.state == "cancelled" for run in runs):
             return
         n_ok = sum(1 for run in runs if run.state == "done")
@@ -148,6 +161,44 @@ class PushScreen(Screen[dict[str, str] | None]):
             self.app.notifier("workstation", message)  # type: ignore[attr-defined]
         elif duration >= self.app.notify_threshold_secs:  # type: ignore[attr-defined]
             self.app.notifier("workstation", message)  # type: ignore[attr-defined]
+
+    def _record_push_history(self, runs: list[HostRun]) -> None:
+        """Record one "push" history entry (spec §3) for the whole run.
+
+        Same counts (`n_ok`/`n_failed`) and duration math as
+        `_notify_completion` above, plus `n_cancelled` for the outcome
+        rule: any failure wins outcome="failed"; else outcome="cancelled"
+        only when EVERY host was cancelled; else "ok". The summary line is
+        counts-only (never a host name, mirroring the toast policy above)
+        but the log this entry stores DOES carry host names, one `===
+        <name> (<state>, rc=<rc>) ===` banner per host followed by that
+        host's captured lines — it's the markup=False on-disk log a user
+        opts into reading later (Task 5's browser), not an OS toast.
+        """
+        n_ok = sum(1 for run in runs if run.state == "done")
+        n_failed = sum(1 for run in runs if run.state == "failed")
+        n_cancelled = sum(1 for run in runs if run.state == "cancelled")
+        started = [run.started for run in runs if run.started is not None]
+        finished = [run.finished for run in runs if run.finished is not None]
+        duration = (max(finished) - min(started)) if started else 0.0
+        outcome = "failed" if n_failed else ("cancelled" if n_cancelled == len(runs) else "ok")
+        entry = HistoryEntry(
+            id=new_entry_id(self._started_at),
+            started_at=self._started_at.isoformat(),
+            kind="push",
+            command=None,
+            summary=f"push — {n_ok} ok, {n_failed} failed",
+            returncode=None,
+            duration_secs=duration,
+            cancelled=outcome == "cancelled",
+            outcome=outcome,
+            needs_sudo=False,
+        )
+        lines: list[str] = []
+        for run in runs:
+            lines.append(f"=== {run.name} ({run.state}, rc={run.rc}) ===")
+            lines.extend(run.lines)
+        self.app.record_history(entry, lines)  # type: ignore[attr-defined]
 
     # -- rendering (same event loop as MultiRunner — direct widget access) --
 

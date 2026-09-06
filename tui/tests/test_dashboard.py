@@ -85,3 +85,28 @@ async def test_cards_fill_area_equally() -> None:
         # full-bleed: the grid claims most of the content height
         grid = app.query_one("#cards")
         assert grid.region.height >= 30
+
+
+async def test_naive_checked_at_in_updates_cache_renders_question_mark(
+    tmp_path,
+) -> None:
+    """F9: a naive (tz-less) `checked_at` in the updates cache used to
+    raise `TypeError` OUTSIDE `_updates_age`'s try (a naive datetime
+    parses fine but can't subtract against `datetime.now(UTC)`), which
+    escaped `update_summary` on every refresh. It must now degrade to
+    `"?"` like any other malformed-timestamp path.
+    """
+    from workstation_tui.core.updates import UpdateRow, UpdatesCache, save_updates_cache
+
+    save_updates_cache(tmp_path / "updates.json", UpdatesCache(
+        checked_at="2026-01-01T00:00:00",  # no tzinfo
+        rows=[UpdateRow(status="ok", name="fzf", detail="0.74.3")],
+    ))
+    app = WorkstationApp(
+        summary_provider=fake_provider,
+        updates_cache_path=tmp_path / "updates.json",
+    )
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        text = app.query_one("#dashboard").summary_text()  # never crashed
+        assert "checked ?" in text
