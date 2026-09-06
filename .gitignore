@@ -14,13 +14,10 @@ dot_bashrc.local
 # chezmoi cache
 .chezmoicache/
 
-# Python (tui/ package)
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
-tui/.venv/
-tui/dist/
-tui/uv.lock
 
 # OS
 .DS_Store
