@@ -361,7 +361,7 @@ clean-vcpkg:
 	@$(SUDO) rm -rf $(VCPKG_ROOT_DIR)
 
 # -----------------------------------------------------------------------------
-# python-env — blessed Python scripting env (BOTH scopes — the workstation TUI ships in it). uv installs the
+# python-env — blessed Python scripting env (BOTH scopes — every host gets the ad-hoc scripting venv). uv installs the
 # pinned CPython and builds ~/.local/share/workstation-python with the ad-hoc
 # scripting libs (Textual/Click/&c — canonical list in lib/python-env.sh),
 # then installs launchers in ~/.local/bin (wpy WRAPPER SCRIPT — a symlink
@@ -762,7 +762,7 @@ user-tools: $(USER_TOOLS)
 # New provision-phase targets join PROVISION_FANOUT (or, if they must be
 # ordered, get an explicit edge) — see the parallel-provisioning invariant.
 PROVISION_FANOUT := tools user-tools shell wsl-config
-# both-scopes since the workstation TUI ships in the env — the dev-gated
+# both-scopes for the ad-hoc scripting venv every host gets — the dev-gated
 # block below keeps the genuinely dev-only targets.
 PROVISION_FANOUT += python-env
 ifeq ($(MODE),dev)
@@ -829,12 +829,12 @@ check-updates:
 	@printf '%s\n' $(foreach s,$(UPDATE_SPECS),'$(s)') | $(LIB)/check-updates.sh
 
 # inventory — machine-readable DOCTOR_ROWS dump (kind|name|version, one row
-# per line) for the workstation TUI's read layer (tui/…/core/makeiface.py).
+# per line) for external tooling to consume.
 # Same single-quoting contract as doctor: rows contain `|`.
 inventory:
 	@printf '%s\n' $(foreach r,$(DOCTOR_ROWS),'$(r)')
 
-.PHONY: lint install-hooks tui-test
+.PHONY: lint install-hooks
 
 # lint — run the mechanical invariant checks (version pins, line-endings/mode,
 # BOM, sentinels, chezmoiignore target-paths, shellcheck). Same script the
@@ -849,13 +849,6 @@ install-hooks:
 	@git -C $(REPO_ROOT) config core.hooksPath .githooks
 	@printf 'installed: git hooks now run from .githooks/ (pre-commit -> check-invariants.sh)\n'
 	@printf 'bypass one commit with: git commit --no-verify\n'
-
-# tui-test — run the workstation-tui suite the same way CI's tui-tests job
-# does (uv-managed ephemeral env, NOT the blessed env). MAKEFLAGS= clears
-# inherited jobserver-auth flags so nested make inventory subprocess ignores
-# them and respects --no-print-directory (inherited flags defeat that flag).
-tui-test:
-	@cd $(REPO_ROOT)/tui && MAKEFLAGS= uv run pytest -q
 
 .PHONY: ps-lint
 
@@ -939,9 +932,6 @@ help:
 	@echo "Health / updates (read-only — nothing is installed or changed):"
 	@echo "  make doctor MODE=dev|prod         report installed/missing/stale tools, services, stamps"
 	@echo "  make check-updates MODE=dev|prod  compare versions.mk pins against upstream release tags"
-	@echo ""
-	@echo "Testing:"
-	@echo "  make tui-test         run the workstation TUI test suite (uv + pytest)"
 	@echo ""
 	@echo "Sub-targets (rarely invoked directly):"
 	@echo "  make packages     dnf core + EPEL + optional (MODE=dev only)"
