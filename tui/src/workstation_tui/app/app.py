@@ -27,7 +27,7 @@ from workstation_tui.app.widgets.history_screen import HistoryScreen
 from workstation_tui.app.widgets.sudo_modal import SudoModal
 from workstation_tui.core.chezmoi import read_status, target_diff
 from workstation_tui.core.context import detect_context
-from workstation_tui.core.fleet import copy_id_command, probe_all
+from workstation_tui.core.fleet import copy_id_command, probe_all, zellij_ssh_command
 from workstation_tui.core.gitstate import read_git_state
 from workstation_tui.core.health import (
     build_health_rollup,
@@ -77,7 +77,7 @@ PANEL_KEYS: dict[str, list[tuple[str, str]]] = {
         ("A", "Re-add"), ("d", "Diff"),
     ],
     "fleet": [
-        ("s", "SSH"), ("p", "Push"), ("P", "Push all"),
+        ("s", "SSH"), ("z", "Zellij"), ("p", "Push"), ("P", "Push all"),
         ("a", "Add"), ("e", "Edit"), ("x", "Remove"), ("enter", "Stats"),
         ("k", "Keys"),
     ],
@@ -293,6 +293,7 @@ class WorkstationApp(App):
         | None = None,
         hosts_provider: Callable[[], tuple[list[HostEntry], list[str]]] | None = None,
         ssh_fn: Callable[[HostEntry], None] | None = None,
+        zellij_fn: Callable[[HostEntry], None] | None = None,
         copy_id_fn: Callable[[list[HostEntry]], list[tuple[str, int]]] | None = None,
         health_cache_path: Path | None = None,
         updates_cache_path: Path | None = None,
@@ -322,6 +323,7 @@ class WorkstationApp(App):
         self.probe_all_fn = probe_all_fn or probe_all
         self.hosts_provider = hosts_provider or self._default_hosts
         self.ssh_fn = ssh_fn
+        self.zellij_fn = zellij_fn
         # Guided key distribution (Task 6) — same injectable-default seam as
         # ssh_fn above; None means "use the real _default_copy_id suspend
         # flow" (distribute_keys resolves which one to call).
@@ -690,6 +692,28 @@ class WorkstationApp(App):
             # a user/address value crafted to start with '-' being parsed
             # as an ssh flag instead of part of the destination).
             subprocess.run(["ssh", "--", f"{entry.user}@{entry.address}"])
+
+    def zellij_to(self, entry: HostEntry) -> None:
+        """SSH to a fleet host and attach (creating if absent) its remote
+        zellij "main" session.
+
+        Mirrors `ssh_to` exactly, for the same reason: a plain (non-worker)
+        method, since `self.suspend()` must run on the actual app event
+        loop, not inside a background worker. Tests inject `zellij_fn` as
+        a recorder; the real path requires a genuine TTY (Textual's
+        suspend() needs a real driver), so it's never exercised
+        headlessly.
+        """
+        if self.zellij_fn is not None:
+            self.zellij_fn(entry)
+            return
+        with self.suspend():
+            rc = subprocess.run(zellij_ssh_command(entry)).returncode
+        if rc != 0:
+            self.notify(
+                f"zellij exited rc={rc} on {entry.name} — not installed there?",
+                severity="warning", markup=False,
+            )
 
     def distribute_keys(self, entries: list[HostEntry]) -> None:
         """Guided key-distribution resume flow (Task 6).

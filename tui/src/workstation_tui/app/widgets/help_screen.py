@@ -78,6 +78,7 @@ class HelpScreen(ModalScreen[None]):
             # Fleet panel
             heading("Fleet"),
             action_line("s", "SSH", "ssh to selected host"),
+            action_line("z", "Zellij", "ssh + zellij attach main"),
             action_line("p", "Push", "push to selected host"),
             action_line("P", "Push all", "push to all hosts"),
             action_line("a", "Add", "add new host"),

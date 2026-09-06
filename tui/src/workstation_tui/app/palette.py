@@ -302,6 +302,10 @@ def _entities(app) -> list[tuple[str, str, Callable[[], None]]]:
             _row_action(app, "fleet", name, "action_ssh_selected"),
         ))
         out.append((
+            f"zellij {name}", "fleet: ssh + remote zellij attach main",
+            _row_action(app, "fleet", name, "action_zellij_selected"),
+        ))
+        out.append((
             f"stats {name}", "fleet: view quick stats for this host",
             _fleet_stats(app, name),
         ))
