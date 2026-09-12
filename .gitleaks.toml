@@ -29,6 +29,10 @@ paths = [
   # server-info/server.log carry the companion's own localhost session key —
   # a per-session browser-access token, not a repo credential.
   '''(^|/)\.superpowers/''',
+  # CI-only jsdom install for scripts/check-readme.mjs (gitignored, never
+  # repo content) — `gitleaks dir` scans untracked files, and third-party
+  # test fixtures are exactly the secret-shaped noise this gate exists for.
+  '''(^|/)node_modules/''',
 ]
 
 # Windows Terminal keybinding chords ("keys": "alt+shift+down") trip the
