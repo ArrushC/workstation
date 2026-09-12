@@ -22,3 +22,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Node (CI-only jsdom for scripts/check-readme.mjs; never committed)
+node_modules/

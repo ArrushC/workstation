@@ -1,164 +1,113 @@
 <!doctype html>
-<html lang="en" data-theme="auto">
+<html lang="en" data-theme="dark">
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
-        <title>workstation</title>
+        <meta name="description" content="One reproducible developer environment. Provision Linux hosts, configure Windows terminals, and keep your tools and dotfiles in sync." />
+        <title>workstation — Developer environment handbook</title>
         <link rel="stylesheet" href="docs/README/README.css" />
     </head>
     <body>
-        <div class="grid-world" aria-hidden="true">
-          <div class="gw-void"></div>
-          <div class="gw-stars"></div>
-          <div class="gw-floorwrap"><div class="gw-floor"></div></div>
-          <div class="gw-horizon"></div>
-          <div class="gw-glow"></div>
-        </div>
-        <canvas class="gl-grid" id="gl-grid" aria-hidden="true"></canvas>
-        <canvas class="fx-canvas" id="fx-canvas" aria-hidden="true"></canvas>
-
-        <noscript>
-            <div
-                style="
-                    padding: 0.7rem 1rem;
-                    margin: 0.5rem;
-                    background: #fff8c5;
-                    color: #1f2328;
-                    border-left: 3px solid #9a6700;
-                    border-radius: 6px;
-                    font-family:
-                        -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;,
-                        system-ui, sans-serif;
-                    font-size: 0.92rem;
-                "
-            >
-                <strong>JavaScript is disabled.</strong> Copy-to-clipboard,
-                search, scroll-spy, theme toggle, and the
-                toolbelt/troubleshooting filters are inactive. All content is
-                still readable below.
+        <a class="skip-link" href="#main">Skip to documentation</a>
+        <header class="app-header">
+            <a class="brand" href="#intro" aria-label="workstation overview"><span class="logo" aria-hidden="true">w<span>.</span></span><strong>workstation</strong><span class="brand-divider"></span><span class="brand-caption">Developer platform</span></a>
+            <nav class="header-nav" aria-label="Quick navigation"><a href="#intro">Workspace</a><a href="#toolbelt">Tool directory</a><a href="#setup">Setup guide <span aria-hidden="true">↗</span></a></nav>
+            <div class="header-actions">
+                <div class="search-wrap" hidden>
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+                    <input id="global-search" type="search" placeholder="Search documentation…" aria-label="Search documentation" role="combobox" aria-autocomplete="list" aria-controls="search-results" aria-expanded="false" autocomplete="off" />
+                    <kbd class="search-key" aria-hidden="true">/</kbd>
+                    <div class="search-panel" id="search-panel" hidden>
+                        <div class="search-summary" id="toc-search-meta" role="status"></div>
+                        <div id="search-results" role="listbox" aria-label="Search results"></div>
+                        <div class="search-footer"><span>↑ ↓ navigate &nbsp; ↵ open</span><span>esc to close</span></div>
+                    </div>
+                </div>
+                <button class="ctl" id="theme-toggle" aria-label="Theme: system" title="Theme: system" hidden><span id="theme-icon" aria-hidden="true">◐</span></button>
+                <a class="github-link" href="https://github.com/ArrushC/workstation" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
             </div>
-        </noscript>
-
+        </header>
+        <noscript><div class="noscript-note">All documentation is available below. Enable JavaScript for search, filters, theme controls, and copying commands.</div></noscript>
         <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
-
-        <div class="controls">
-          <button class="ctl" id="theme-toggle" aria-label="Toggle theme (auto / light / dark)" title="Theme"><span id="theme-icon">◐</span></button>
-          <button class="ctl" id="motion-toggle" aria-label="Toggle motion &amp; effects" aria-pressed="true" title="Motion / FX">◉</button>
-          <button class="ctl" id="sound-toggle" aria-label="Toggle background music &amp; sound" aria-pressed="false" title="Music / sound">♪</button>
-        </div>
+        <div class="sr-only" id="interaction-status" role="status" aria-live="polite"></div>
 
         <div class="layout">
             <nav class="toc" aria-label="Table of contents" id="toc">
-                <div class="brand">
-                    <span class="logo" aria-hidden="true">w</span>
-                    <b>workstation</b>
-                </div>
-                <button
-                    class="toc-collapse-ctrl"
-                    id="toc-collapse-ctrl"
-                    aria-expanded="true"
-                >
-                    Contents
-                </button>
-                <div class="toc-search">
-                    <input
-                        id="global-search"
-                        type="search"
-                        placeholder="Search the docs"
-                        aria-label="Search the docs"
-                        autocomplete="off"
-                    />
-                    <span class="key" aria-hidden="true">/</span>
-                    <div class="kbd-hint">
-                        Press <kbd>/</kbd> to focus &middot; <kbd>Esc</kbd> to
-                        clear
-                    </div>
-                </div>
-                <div class="toc-search-meta" id="toc-search-meta"></div>
-                <h2>Contents</h2>
+                <a class="workspace-card" href="#intro"><span class="workspace-icon" aria-hidden="true">⌘</span><span><strong>Personal workspace</strong><small>Make it yours.</small></span><span aria-hidden="true">⌄</span></a>
+                <div class="sidebar-heading"><span class="eyebrow">Explore the handbook</span><span class="sidebar-edition">01—09</span></div>
+                <button class="toc-collapse-ctrl" id="toc-collapse-ctrl" aria-expanded="true" aria-controls="toc-list" hidden>Contents <span aria-hidden="true">⌄</span></button>
+
                 <ol id="toc-list">
-                    <li><a href="#intro">Overview &amp; quickstart</a></li>
-                    <li>
-                        <a href="#stack">Stack</a>
-                        <ol class="sub">
-                            <li><a href="#toolbelt">Toolbelt</a></li>
-                        </ol>
-                    </li>
-                    <li><a href="#machines">Machine types</a></li>
-                    <li><a href="#layout">Repo layout</a></li>
-                    <li>
-                        <a href="#setup">Setup</a>
-                        <ol class="sub">
+                    <li class="nav-group"><span>Getting started</span><ol>
+                        <li><a href="#intro"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10 12 3l9 7v11h-6v-7H9v7H3z"/></svg>Overview</a></li>
+                        <li><a href="#setup"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg>Installation</a><ol class="sub">
                             <li><a href="#setup-config">Configure once</a></li>
-                            <li>
-                                <a href="#setup-linux">On each Linux host</a>
-                            </li>
-                            <li><a href="#setup-windows">On Windows</a></li>
-                            <li>
-                                <a href="#setup-warp">Warp keybinds</a>
-                            </li>
-                            <li>
-                                <a href="#setup-windows-terminal">Windows Terminal keybinds</a>
-                            </li>
-                            <li>
-                                <a href="#prompt-keys">Shell prompt selection</a>
-                            </li>
-                            <li>
-                                <a href="#completion">Completion &amp; suggestions</a>
-                            </li>
-                        </ol>
-                    </li>
-                    <li><a href="#hosts">Host management</a></li>
-                    <li>
-                        <a href="#daily">Daily workflows</a>
-                        <ol class="sub">
-                            <li>
-                                <a href="#daily-zellij"
-                                    >Zellij</a
-                                >
-                            </li>
-                            <li>
-                                <a href="#daily-services"
-                                    >Services</a
-                                >
-                            </li>
-                        </ol>
-                    </li>
-                    <li><a href="#adding">Adding tools / hosts</a></li>
-                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                            <li><a href="#setup-linux">Linux</a></li>
+                            <li><a href="#setup-windows">Windows</a></li>
+                            <li><a href="#setup-wsl">WSL</a></li>
+                        </ol></li>
+                    </ol></li>
+                    <li class="nav-group"><span>Reference</span><ol>
+                        <li><a href="#stack"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8zM2 12l10 5 10-5M2 16l10 5 10-5"/></svg>The stack</a></li>
+                        <li><a href="#toolbelt"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v14H4zM8 7V3h8v4M4 12h16m-10 0v3h4v-3"/></svg>Toolbelt</a></li>
+                        <li><a href="#machines"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v12H3zM8 21h8m-4-5v5"/></svg>Machine types</a></li>
+                        <li><a href="#layout"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3"/></svg>Repository layout</a></li>
+                        <li><a href="#setup-warp">Warp keybinds</a></li>
+                        <li><a href="#setup-windows-terminal">Windows Terminal</a></li>
+                        <li><a href="#prompt-keys">Shell prompts</a></li>
+                        <li><a href="#completion">Completions</a></li>
+                    </ol></li>
+                    <li class="nav-group"><span>Operations</span><ol>
+                        <li><a href="#hosts"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h16v7H4zm0 11h16v7H4zM7 6h1m-1 11h1"/></svg>Host management</a></li>
+                        <li><a href="#daily"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l3-8 4 16 3-8h3"/></svg>Daily workflows</a><ol class="sub">
+                            <li><a href="#daily-zellij">Zellij</a></li>
+                            <li><a href="#daily-services">Services</a></li>
+                        </ol></li>
+                        <li><a href="#adding"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>Adding tools &amp; hosts</a></li>
+                        <li><a href="#troubleshooting"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 4m0 3v1M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></svg>Troubleshooting</a></li>
+                    </ol></li>
                 </ol>
+                <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> One config. Every machine.<a href="#setup">Set up your workstation <span aria-hidden="true">↗</span></a></div>
             </nav>
 
-            <main id="main">
+            <main id="main" tabindex="-1">
+                <div class="page-breadcrumb"><span>Handbook</span><span aria-hidden="true">/</span><span id="current-section">Overview</span><span class="page-kind"><span class="status-dot" aria-hidden="true"></span> MAKE + CHEZMOI</span></div>
                 <header id="intro">
                     <div class="hero-scene">
-                        <div class="hero-disc" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-                        <h1 class="hero-title">workstation<span
-                                class="cursor"
-                                aria-hidden="true"
-                            ></span><span class="tag">dev env</span></h1>
-                        <p class="lede">
-                            Dev-environment provisioning for Linux hosts, plus
-                            Warp and Windows Terminal on Windows.
-                            A single <code>Makefile</code> under
-                            <code>makefile/</code> drives everything &mdash;
-                            system packages, PATH, tool installs, and the chezmoi
-                            handoff for dotfiles. <code>bootstrap.sh</code> is a
-                            thin seed that runs <code>make MODE=dev|prod
-                            provision</code>. Adding a tool is a two-line edit.
-                        </p>
+                        <div class="hero-copy">
+                        <div class="eyebrow hero-eyebrow"><span class="status-dot" aria-hidden="true"></span> YOUR WORKSPACE. YOUR RULES.</div>
+                        <h1 class="hero-title">Build once.<br />Feel at home.<br /><span>Anywhere.</span></h1>
+                        <p class="hero-description">Your tools, your terminal, your flow. Turn a fresh machine into <em>your</em> machine with one reproducible developer environment.</p>
+                        <div class="cta">
+                            <a class="btn primary" href="#launchpad">Build your workspace <span aria-hidden="true">↗</span></a>
+                            <a class="btn" href="#toolbelt">Explore the tools <span aria-hidden="true">→</span></a>
+                        </div>
+                        <div class="hero-platforms">Linux <span> / </span> Windows <span> / </span> WSL</div>
+                        </div>
 
-                        <div class="term" data-typed>
+
+                        <div class="workspace-visual">
+                            <div class="visual-caption"><span>ONE SOURCE. EVERY HOST.</span><span aria-hidden="true">↗</span></div>
+                            <div class="architecture" role="img" aria-label="One workstation repository connects Make provisioning, chezmoi dotfiles, Linux hosts, and Windows terminals.">
+                                <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+                                <svg class="architecture-lines" viewBox="0 0 440 300" fill="none" aria-hidden="true"><path d="M220 150H95V62M220 150H355V68M220 150H100V243M220 150H350V237" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 6"/><circle cx="220" cy="150" r="5" fill="currentColor"/></svg>
+                                <div class="architecture-core" aria-hidden="true"><span>w<span>.</span></span><small>workstation</small></div>
+                                <div class="architecture-node node-linux" aria-hidden="true"><span class="node-symbol">&gt;_</span><span><b>Linux</b><small>dev + prod hosts</small></span></div>
+                                <div class="architecture-node node-windows" aria-hidden="true"><span class="node-symbol">⊞</span><span><b>Windows</b><small>your terminal, configured</small></span></div>
+                                <div class="architecture-node node-make" aria-hidden="true"><span class="node-symbol">⌘</span><span><b>Make</b><small>provision everything</small></span></div>
+                                <div class="architecture-node node-dotfiles" aria-hidden="true"><span class="node-symbol">~/</span><span><b>chezmoi</b><small>dotfiles that travel</small></span></div>
+                            </div>
+                        <div class="term">
                             <div class="bar">
                                 <span class="dot r" aria-hidden="true"></span>
                                 <span class="dot y" aria-hidden="true"></span>
                                 <span class="dot g" aria-hidden="true"></span>
                                 <span class="title"
-                                    ><span class="who">arrush@workstation</span>:
+                                    ><span class="who">provision.sh — preview</span>:
                                     ~/.local/share/chezmoi</span
                                 >
-                                <span class="badge-dev">DEV ENV</span>
+                                <span class="badge-dev"><span class="status-dot" aria-hidden="true"></span> EXAMPLE OUTPUT</span>
                             </div>
                             <div class="body">
                                 <!-- prettier-ignore -->
@@ -170,30 +119,48 @@
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="ok">&#10003;</span> chezmoi handoff &rarr; dotfiles <span class="mut">&middot;&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="mut"># adding a tool is a two-line edit in</span> <span class="acc">makefile/</span><span class="caret" aria-hidden="true"></span></div>
-                                <div class="cta">
-                                    <a class="btn primary lin" href="#setup-linux"
-                                        >&#9656; Linux quickstart</a
-                                    >
-                                    <a class="btn win" href="#setup-windows"
-                                        >&#129443; Windows quickstart</a
-                                    >
-                                    <a
-                                        class="btn"
-                                        href="https://github.com/ArrushC/workstation"
-                                        target="_blank"
-                                        rel="noopener"
-                                        >&#8599; View on GitHub</a
-                                    >
-                                </div>
+                                <div class="ln"><span class="mut"># adding a tool is a two-line edit in</span> <span class="acc">makefile/</span></div>
+
                             </div>
+                        </div>
                         </div>
                     </div>
 
-                    <div class="hero-quickstart">
-                        <article class="qs-card linux">
+                    <div class="feature-bento">
+                        <a class="feature-card feature-tools" href="#toolbelt"><div class="feature-top"><span class="eyebrow">THE TOOL DIRECTORY</span><span class="feature-arrow" aria-hidden="true">↗</span></div><div class="feature-number"><span data-tool-total>146</span><span>tools.<br />All in your corner.</span></div><div class="mini-chips" aria-hidden="true"><span>fzf</span><span>zellij</span><span>helix</span><span>+ more</span></div></a>
+                        <a class="feature-card feature-scope" href="#machines"><div class="feature-top"><span class="eyebrow">INSTALL ON YOUR TERMS</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Your machine.<br />Your scope.</h2><div class="scope-pills"><span><i aria-hidden="true"></i> DEV <small>system-wide</small></span><span><i aria-hidden="true"></i> PROD <small>user-wide</small></span></div></a>
+                        <a class="feature-card feature-flow" href="#daily"><div class="feature-top"><span class="eyebrow">FIND YOUR FLOW</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Less setup.<br />More making.</h2><div class="flow-keys" aria-hidden="true"><kbd>cze</kbd><span>→</span><kbd>cza</kbd><span>→</span><span class="flow-check">✓</span></div></a>
+                    </div>
+                        <p class="overview-note">
+                            Dev-environment provisioning for Linux hosts, plus
+                            Warp and Windows Terminal on Windows.
+                            A single <code>Makefile</code> under
+                            <code>makefile/</code> drives everything &mdash;
+                            system packages, PATH, tool installs, and the chezmoi
+                            handoff for dotfiles. <code>bootstrap.sh</code> is a
+                            thin seed that runs <code>make MODE=dev|prod
+                            provision</code>. Adding a tool is a two-line edit.
+                        </p>
+                    <div class="section-heading" id="launchpad"><div><span class="eyebrow">01 / LIFT OFF</span><h2>Your next machine starts here.</h2></div><span class="section-caption">Three steps to a familiar workspace.</span></div>
+                    <div class="setup-launchpad">
+                        <aside class="setup-journey" aria-label="Installation steps">
+                            <a class="journey-step" href="#setup-config"><span class="journey-number">01</span><span><b>Make it personal</b><small>Set your identity and access token.</small></span><span aria-hidden="true">↗</span></a>
+                            <a class="journey-step current" href="#quickstart-panels"><span class="journey-number">02</span><span><b>Choose your platform</b><small>Start with the bootstrap below.</small></span><span aria-hidden="true">↘</span></a>
+                            <a class="journey-step" href="#daily"><span class="journey-number">03</span><span><b>Settle into your flow</b><small>Learn the everyday shortcuts.</small></span><span aria-hidden="true">↗</span></a>
+                            <div class="journey-note"><span aria-hidden="true">✳</span><p>One repository.<br /><strong>A workspace that goes with you.</strong></p></div>
+                        </aside>
+                        <div class="quickstart-workbench">
+                            <div class="platform-tabs" hidden>
+                                <div class="platform-tab-buttons" role="tablist" aria-label="Quickstart platform">
+                                <button id="platform-linux" type="button" role="tab" aria-selected="true" aria-controls="quickstart-linux" data-platform="linux">&gt;_ <span>Linux</span></button>
+                                <button id="platform-windows" type="button" role="tab" aria-selected="false" aria-controls="quickstart-windows" data-platform="windows" tabindex="-1">⊞ <span>Windows</span></button>
+                                </div>
+                                <a href="#setup-wsl">Using WSL? ↗</a>
+                            </div>
+                            <div class="hero-quickstart" id="quickstart-panels">
+                        <article class="qs-card linux" id="quickstart-linux">
                             <h3>
-                                <span class="qs-icon">🐧</span> First-time setup
+                                <span class="qs-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-5 3 2-16"/></svg></span> First-time setup
                                 on a Linux host
                             </h3>
                             <p class="qs-sub">
@@ -210,9 +177,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh \
   | bash -s -- --prod</code></pre>
                         </article>
-                        <article class="qs-card windows">
+                        <article class="qs-card windows" id="quickstart-windows">
                             <h3>
-                                <span class="qs-icon">🪟</span> First-time setup
+                                <span class="qs-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg></span> First-time setup
                                 on Windows
                             </h3>
                             <p class="qs-sub">
@@ -239,6 +206,8 @@ try {
 }</code></pre>
                         </article>
                     </div>
+                        </div>
+                    </div>
                     <p class="hero-help">
                         Already set up? Jump to
                         <a href="#daily">Daily workflows</a> &middot;
@@ -254,10 +223,10 @@ try {
                         across the whole setup.
                     </p>
                     <div class="stack-grid">
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Provisioning</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">⚙️</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM8 9l3 3-3 3m5 0h4"/></svg></span>
                                 Make
                             </h3>
                             <p>
@@ -265,81 +234,81 @@ try {
                                 all under <code>makefile/</code>.
                             </p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Dotfiles</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">📂</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 18 2-6L17 2l5 5-10 10-7 1Zm2-6 5 5M4 22h16"/></svg></span>
                                 chezmoi
                             </h3>
                             <p>Personal shell config, templated per machine.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Shell prompt</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">✨</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v16H3zM3 9h18M10 9v11"/></svg></span>
                                 starship
                             </h3>
                             <p>The prompt itself.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Multiplexer</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">🪟</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4zm0 10h16v6H4zm3-7h1m-1 10h1"/></svg></span>
                                 zellij
                             </h3>
                             <p>Persistent sessions, layouts.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Fuzzy find</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">🔍</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-5 3 2-16"/></svg></span>
                                 fzf
                             </h3>
                             <p>History, files, SSH hosts.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Jump</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">🚀</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3"/></svg></span>
                                 zoxide
                             </h3>
                             <p>Smarter <code>cd</code> via frecency.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Editor</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">📝</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM8 9l3 3-3 3m5 0h4"/></svg></span>
                                 helix
                             </h3>
                             <p>Modal editor, zero config.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Notes</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">📓</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 18 2-6L17 2l5 5-10 10-7 1Zm2-6 5 5M4 22h16"/></svg></span>
                                 nb + glow
                             </h3>
                             <p>CLI notes, markdown preview.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Terminal</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">⚡</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v16H3zM3 9h18M10 9v11"/></svg></span>
                                 Warp
                             </h3>
                             <p>The day-to-day Windows terminal — opens into AlmaLinux-9 (WSL zsh); per-host SSH+Zellij launchers regenerate from hosts.conf as Tab Configs.</p>
                         </article>
-                        <article class="stack-card tilt">
+                        <article class="stack-card">
                             <div class="layer-label">Terminal</div>
                             <h3>
-                                <span class="ico" aria-hidden="true">🖥️</span>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4zm0 10h16v6H4zm3-7h1m-1 10h1"/></svg></span>
                                 Windows Terminal
                             </h3>
                             <p>The compatibility terminal, kept fully configured — Nushell's home, Windows' default terminal app; per-host SSH profiles regenerate from hosts.conf as a JSON fragment.</p>
                         </article>
                     </div>
 
-                    <h3 id="toolbelt">Toolbelt</h3>
+                    <div class="directory-heading"><div><span class="eyebrow">THE GOOD STUFF, ALL HERE</span><h3 id="toolbelt">Meet your toolbelt<span class="directory-total" data-tool-total>146</span></h3></div><span class="directory-subtitle">Small tools. Extraordinary possibilities.</span></div>
                     <p class="lede">
                         CLI tools installed on every host via
                         <code>makefile/Makefile</code> (invoked by
@@ -356,17 +325,21 @@ try {
                         bespoke installer (portable build / git clone).
                         Hover any chip for a one-line purpose.
                     </p>
-                    <div class="filter-bar">
+                    <div class="filter-bar" hidden>
                         <input
-                            id="tool-filter"
+                            id="tool-filter" aria-label="Filter tools"
                             type="search"
                             placeholder="Filter tools (try &ldquo;jq&rdquo;, &ldquo;docker&rdquo;, &ldquo;git&rdquo;)…"
                             autocomplete="off"
                         />
-                        <div class="filter-meta" id="tool-filter-meta"></div>
+                        <div class="filter-meta" id="tool-filter-meta" role="status"></div>
+                    </div>
+                    <div class="directory-controls" hidden>
+                        <div class="category-pills" aria-label="Popular tool searches"><button type="button" data-tool-query="" aria-pressed="true">All tools</button><button type="button" data-tool-query="git" aria-pressed="false">Git &amp; versioning</button><button type="button" data-tool-query="terminal" aria-pressed="false">Terminal</button><button type="button" data-tool-query="docker" aria-pressed="false">Containers</button><button type="button" data-tool-query="lsp" aria-pressed="false">Language servers</button></div>
+                        <div class="directory-options"><label class="sr-only" for="tool-category">Tool category</label><select id="tool-category"><option value="">Every category</option></select><div class="view-switch" role="group" aria-label="Tool directory layout"><button type="button" data-tool-view="grid" aria-label="Grid layout" aria-pressed="true">▦</button><button type="button" data-tool-view="list" aria-label="List layout" aria-pressed="false">☷</button></div></div>
                     </div>
                     <div class="toolbelt-grid" id="toolbelt-grid">
-                        <article class="tool-card tilt cat-files" data-cat="files">
+                        <article class="tool-card cat-files" data-cat="files">
                             <h4>File ops &amp; viewing</h4>
                             <div class="chips">
                                 <span
@@ -457,7 +430,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-editors"
+                            class="tool-card cat-editors"
                             data-cat="editors"
                         >
                             <h4>Editors</h4>
@@ -483,7 +456,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-search" data-cat="search">
+                        <article class="tool-card cat-search" data-cat="search">
                             <h4>Search / grep</h4>
                             <div class="chips">
                                 <span
@@ -515,7 +488,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-monitor"
+                            class="tool-card cat-monitor"
                             data-cat="monitor"
                         >
                             <h4>System monitor</h4>
@@ -626,7 +599,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-services"
+                            class="tool-card cat-services"
                             data-cat="services"
                         >
                             <h4>Services &amp; logs</h4>
@@ -692,7 +665,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-network"
+                            class="tool-card cat-network"
                             data-cat="network"
                         >
                             <h4>Network</h4>
@@ -793,7 +766,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-transfer"
+                            class="tool-card cat-transfer"
                             data-cat="transfer"
                         >
                             <h4>File transfer</h4>
@@ -883,7 +856,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-archive"
+                            class="tool-card cat-archive"
                             data-cat="archive"
                         >
                             <h4>Archive / compression</h4>
@@ -900,7 +873,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-vcs" data-cat="vcs">
+                        <article class="tool-card cat-vcs" data-cat="vcs">
                             <h4>Git TUIs / VCS</h4>
                             <div class="chips">
                                 <span
@@ -967,7 +940,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-containers"
+                            class="tool-card cat-containers"
                             data-cat="containers"
                         >
                             <h4>Containers</h4>
@@ -1018,7 +991,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-containers"
+                            class="tool-card cat-containers"
                             data-cat="containers"
                         >
                             <h4>Web admin (dev_machine only)</h4>
@@ -1047,7 +1020,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-data" data-cat="data">
+                        <article class="tool-card cat-data" data-cat="data">
                             <h4>Data / SQL</h4>
                             <div class="chips">
                                 <span
@@ -1160,7 +1133,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-security"
+                            class="tool-card cat-security"
                             data-cat="security"
                         >
                             <h4>Security</h4>
@@ -1204,7 +1177,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-quality"
+                            class="tool-card cat-quality"
                             data-cat="quality"
                         >
                             <h4>Quality / linting</h4>
@@ -1223,7 +1196,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-profiling"
+                            class="tool-card cat-profiling"
                             data-cat="profiling"
                         >
                             <h4>Profiling / debug</h4>
@@ -1290,7 +1263,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-cdev" data-cat="cdev">
+                        <article class="tool-card cat-cdev" data-cat="cdev">
                             <h4>C / C++ dev</h4>
                             <div class="chips">
                                 <span
@@ -1477,7 +1450,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-lang" data-cat="lang">
+                        <article class="tool-card cat-lang" data-cat="lang">
                             <h4>Lang managers</h4>
                             <div class="chips">
                                 <span
@@ -1525,7 +1498,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-lsp" data-cat="lsp">
+                        <article class="tool-card cat-lsp" data-cat="lsp">
                             <h4>Code intelligence (LSP)</h4>
                             <div class="chips">
                                 <span
@@ -1660,7 +1633,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-shellaug"
+                            class="tool-card cat-shellaug"
                             data-cat="shellaug"
                         >
                             <h4>Shell augmentation</h4>
@@ -1715,7 +1688,7 @@ try {
                         </article>
 
                         <article
-                            class="tool-card tilt cat-shellutil"
+                            class="tool-card cat-shellutil"
                             data-cat="shellutil"
                         >
                             <h4>Shell &amp; dev utilities</h4>
@@ -1897,7 +1870,7 @@ try {
                             </div>
                         </article>
 
-                        <article class="tool-card tilt cat-ai" data-cat="ai">
+                        <article class="tool-card cat-ai" data-cat="ai">
                             <h4>AI</h4>
                             <div class="chips">
                                 <span
@@ -1966,7 +1939,7 @@ try {
                         provisioning <code>MODE</code> &mdash; no separate
                         scope flag.
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Group</th>
@@ -2005,7 +1978,7 @@ try {
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p class="note-row">
                         Scope values live in <code>makefile/scope.mk</code>,
                         keyed off <code>MODE=dev|prod</code>.
@@ -2362,7 +2335,7 @@ try {
                     </p>
 
                     <h4>Env vars to set before running</h4>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Var</th>
@@ -2407,7 +2380,7 @@ try {
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p class="note-row">
                         Keep these in a password manager (1Password, Bitwarden,
                         KeePass) so the token and identity travel together.
@@ -3515,7 +3488,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         local Warp panes, Windows Terminal panes, and
                         SSH+Zellij panes:
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Bind</th>
@@ -3580,7 +3553,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 <td>Workflows</td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p class="note-row">
                         <strong>Warp does not run Nushell.</strong> Its
                         supported shells are PowerShell&nbsp;7,
@@ -3642,7 +3615,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         memory transfers between local panes and SSH+Zellij
                         panes:
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Bind</th>
@@ -3691,7 +3664,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                                 <td>New tab (Nushell, the default profile) / close &mdash; built-in defaults, listed for completeness</td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p>
                         Shell integration lights the rest up: local
                         <em>Nushell</em> and WSL <em>AlmaLinux-9</em> tabs emit
@@ -3725,7 +3698,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <code>bash</code> maps the same keys to plain cursor
                         movement (no highlight — a readline limitation).
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Bind</th>
@@ -3781,7 +3754,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
 
                     <h3 id="completion">Completion &amp; suggestions</h3>
                     <p class="lede">
@@ -3794,7 +3767,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <strong>broot</strong>, <strong>yazi</strong> — round
                         out history search and directory navigation.
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Plugin</th>
@@ -3866,7 +3839,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p>
                         Resulting prompt key map:
                         <kbd>Ctrl-R</kbd> atuin history search ·
@@ -4064,7 +4037,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <code>dot_bashrc.tmpl</code> (Linux) and the templated
                         PowerShell profile (Windows):
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Alias</th>
@@ -4125,7 +4098,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p>To push changes back to the repo:</p>
                     <pre><code>cd ~/.local/share/chezmoi   # or wherever the source state lives
 git add -A && git commit -m "update zshrc" && git push</code></pre>
@@ -4334,7 +4307,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         zellij&rsquo;s built-in <code>default</code> layout. The
                         two repo layouts are opt-in:
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Command</th>
@@ -4376,7 +4349,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p class="note-row">
                         The layout argument only applies when the session is
                         being <em>created</em>. Naming an existing session always
@@ -4384,7 +4357,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         passing the wrong layout.
                     </p>
                     <p>Keys worth knowing (on top of zellij&rsquo;s defaults):</p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Bind</th>
@@ -4445,7 +4418,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p class="note-row">
                         <strong>Why <kbd>ALT</kbd>+<kbd>S</kbd> exists:</strong>
                         <kbd>CTRL</kbd>+<kbd>S</kbd> is remapped to Session mode,
@@ -4618,7 +4591,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         plain VM it points you at SSH / shared-folder / RDP
                         instead of pretending WSL interop exists.
                     </p>
-                    <table>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Command</th>
@@ -4661,7 +4634,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                                 <td>Windows version / user / profile dirs</td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                     <p>
                         Full subcommand list: <code>winterop help</code> (also
                         <code>exe</code>, <code>notify</code>,
@@ -4804,15 +4777,15 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                 </section>
 
                 <section id="troubleshooting">
-                    <h2>Troubleshooting</h2>
-                    <div class="filter-bar">
+                    <div class="support-heading"><div><span class="eyebrow">LET’S GET YOU UNSTUCK</span><h2>Troubleshooting</h2></div><div class="disclosure-actions" hidden><button type="button" data-disclosures="open">Expand results <span aria-hidden="true">+</span></button><button type="button" data-disclosures="close">Collapse all <span aria-hidden="true">−</span></button></div></div>
+                    <div class="filter-bar" hidden>
                         <input
-                            id="ts-filter"
+                            id="ts-filter" aria-label="Filter troubleshooting entries"
                             type="search"
                             placeholder="Filter entries (e.g. &lsquo;chezmoi&rsquo;, &lsquo;PATH&rsquo;, &lsquo;terminal&rsquo;)…"
                             autocomplete="off"
                         />
-                        <div class="filter-meta" id="ts-count"></div>
+                        <div class="filter-meta" id="ts-count" role="status"></div>
                     </div>
 
 
@@ -5973,18 +5946,10 @@ make -C makefile MODE=dev packages</code></pre>
                         </div>
                     </details>
                 </section>
+                <footer class="page-footer"><a class="brand" href="#intro"><span class="logo" aria-hidden="true">w<span>.</span></span><strong>workstation</strong></a><span>A familiar workspace. On every machine.</span><a href="#intro">Back to top ↑</a></footer>
             </main>
         </div>
 
-        <!-- Vendored Three.js (r137 classic build) + bloom postprocessing — file://-safe global THREE.* (provenance: docs/README/vendor/three/.vendor) -->
-        <script src="docs/README/vendor/three/three.min.js"></script>
-        <script src="docs/README/vendor/three/CopyShader.js"></script>
-        <script src="docs/README/vendor/three/LuminosityHighPassShader.js"></script>
-        <script src="docs/README/vendor/three/EffectComposer.js"></script>
-        <script src="docs/README/vendor/three/RenderPass.js"></script>
-        <script src="docs/README/vendor/three/MaskPass.js"></script>
-        <script src="docs/README/vendor/three/ShaderPass.js"></script>
-        <script src="docs/README/vendor/three/UnrealBloomPass.js"></script>
         <script src="docs/README/README.js"></script>
     </body>
 </html>

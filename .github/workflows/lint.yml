@@ -51,6 +51,17 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-curl.ps1
+  # jsdom here is a CI-ONLY behavioural check for README.html + README.js
+  # (search titles, filter/anchor interaction, history) — NOT a fleet tool: no
+  # versions.mk entry, same precedent as the nushell syntax checker below.
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install jsdom (pinned, CI-only)
+        run: npm install --no-save --no-package-lock --no-audit --no-fund jsdom@30.0.1
+      - name: Behavioural check of README.html + README.js
+        run: node scripts/check-readme.mjs
   templates:
     runs-on: ubuntu-latest
     steps:
