@@ -72,36 +72,36 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `yq` 4.53.6
 - `tldr` 1.9.0
 - `witr` 0.3.3
-- `broot` 1.59.0
+- `broot` 1.60.0
 - `usql` 0.21.4
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
-- `lnav` 0.14.0
+- `lnav` 0.14.1
 - `gopass` 1.17.0
 - `age` 1.3.2
-- `fastfetch` 2.67.1
+- `fastfetch` 2.68.1
 - `ssh-copy-id` latest
 
 ### Second-wave expansion (2026-05)
 - `gitui` 0.28.1
-- `lazygit` 0.64.1
-- `jj` 0.44.0
-- `yazi` 26.8.15
+- `lazygit` 0.65.0
+- `jj` 0.45.1
+- `yazi` 26.9.1
 - `ast-grep` 0.45.3
 - `television` 0.15.9
 - `xh` 0.26.2
 - `gping` 1.21.0
-- `atuin` 18.20.1
+- `atuin` 18.21.0
 - `delta` 0.19.2
 - `micro` 2.0.15
 - `eza` 0.23.5
 - `sd` 1.1.0
 - `ctop` 0.7.7
 - `k9s` 0.51.0
-- `rclone` 1.75.0
-- `croc` 11.3.6
+- `rclone` 1.75.1
+- `croc` 11.5.0
 - `hyperfine` 1.20.0
-- `mise` 2026.8.16
+- `mise` 2026.9.1
 - `uv` 0.12.7
 - `dsq` 0.23.0
 
@@ -110,7 +110,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `sops` 3.13.3
 - `htmlq` 0.4.0
 - `ouch` 0.8.2
-- `watchexec` 2.7.0
+- `watchexec` 2.7.2
 
 ### Service / journal / cgroup observability
 - `bottom` 0.14.9
@@ -124,7 +124,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `harlequin` latest
 
 ### Chezmoi TUI
-- `chezit` 0.3.0
+- `chezit` 0.4.0
 
 ### Claude Code CLI
 - `claude` latest
@@ -132,7 +132,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `node` 26.8.1
 
 ### Service / web admin (dev_machine only)
-- `dozzle` 10.8.0
+- `dozzle` 10.10.0
 
 ### Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts)
 - `nerd-fonts` 3.5.1
@@ -150,7 +150,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `csvlens` 0.15.1
 - `difft` 0.70.0
 - `trip` 0.13.0
-- `doggo` 1.3.0
+- `doggo` 1.4.0
 - `scc` 4.0.0
 - `git-absorb` 0.9.0
 - `miniserve` 0.35.0
@@ -177,7 +177,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### (2026-06) Language servers (LSP) + runtimes
 - `go` 1.27.0
 - `gopls` 0.23.0
-- `rust-analyzer` 2026-08-31
+- `rust-analyzer` 2026-09-07
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
 - `lua-language-server` 3.19.1
