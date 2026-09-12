@@ -464,6 +464,23 @@ check_python_env_parity() {
   fi
 }
 
+check_curl_helper_parity() {
+  hdr "curl helper parity (Invoke-CurlRequest: bootstrap.ps1 == install-nerd-fonts.ps1)"
+  local a b
+  a=$(awk '/^function Invoke-CurlRequest \{/,/^\}/' bootstrap.ps1)
+  b=$(awk '/^function Invoke-CurlRequest \{/,/^\}/' scripts/install-nerd-fonts.ps1)
+  if [ -z "$a" ]; then
+    bad "Invoke-CurlRequest not found in bootstrap.ps1"
+  elif [ -z "$b" ]; then
+    bad "Invoke-CurlRequest not found in scripts/install-nerd-fonts.ps1"
+  elif [ "$a" = "$b" ]; then
+    ok "$(printf '%s\n' "$a" | wc -l)-line helper is byte-identical in both scripts"
+  else
+    bad "Invoke-CurlRequest drift (<:bootstrap.ps1  >:install-nerd-fonts.ps1):"
+    diff <(printf '%s\n' "$a") <(printf '%s\n' "$b") | sed 's/^/       /'
+  fi
+}
+
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -728,6 +745,7 @@ check_zellij_config
 check_update_spec_coverage
 check_go_gopls_coupling
 check_python_env_parity
+check_curl_helper_parity
 check_shellcheck
 check_shfmt
 check_gitleaks

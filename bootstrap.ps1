@@ -34,7 +34,7 @@
 #   installed (the PowerShell profile no-ops without it).
 #
 # Flow:
-#   1. preflight    — require git on PATH (hard-fail w/ install link); warn
+#   1. preflight    — require git + curl.exe on PATH (hard-fail w/ install link); warn
 #                     (never fail) if ssh-keygen / Zed / VSCode are missing.
 #                     gh itself is NOT a prerequisite — step 2 installs it
 #                     (pinned portable).
@@ -80,13 +80,23 @@
 # .git/config (http.https://github.com/.extraheader, scoped to github.com) so
 # subsequent push/pull and manage-hosts.ps1 ops work without re-passing it.
 #
-# One-liner from a fresh Windows machine (NO elevation needed):
+# Bootstrap from a fresh Windows machine (NO elevation needed):
 #
 #   $env:GITHUB_TOKEN   = '<your-PAT>'
 #   $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
 #   $env:GIT_USER_EMAIL = 'contact@arrushc.com'
-#   irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
-#     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex
+#   $bootstrapFile = [System.IO.Path]::GetTempFileName()
+#   try {
+#       $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+#       & $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
+#         --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+#         https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
+#       if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
+#       $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
+#       & ([scriptblock]::Create($bootstrap))
+#   } finally {
+#       Remove-Item -LiteralPath $bootstrapFile -Force
+#   }
 #
 # Or clone manually + run:
 #
@@ -164,6 +174,65 @@ function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
 function Write-Bad    { param($msg) Write-Host "${Red} ✗${Reset} $msg" }  # Write-Fail minus the exit — -Doctor reports, never aborts
+
+# Kept self-contained: bootstrap also runs from memory before the repo exists.
+# The font script carries the same helper for its independent execution context.
+function Invoke-CurlRequest {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [hashtable]$Headers = @{},
+        [string]$OutFile
+    )
+
+    # Get-Command lists EVERY curl.exe on PATH (System32 + Git's mingw64\bin is
+    # the everyday case) - take the first, i.e. the one a bare `curl.exe` runs.
+    $curl = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $curl) {
+        throw 'curl.exe is required on PATH. Restore the Windows system curl or install it from https://curl.se/windows/ and reopen your shell.'
+    }
+
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    $headerFile = $null
+    try {
+        # --speed-limit/--speed-time: a connected-but-stalled transfer aborts
+        # (exit 28, which --retry treats as transient) instead of hanging forever.
+        $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location',
+            '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30',
+            '--speed-limit', '1', '--speed-time', '60',
+            '--output', $tempFile)
+        if ($Headers.Count -gt 0) {
+            # Headers travel via a file, never argv: a PAT on a command line is
+            # visible to process auditing. One header per line; no BOM, or curl
+            # would send it as part of the first header name.
+            $headerFile = [System.IO.Path]::GetTempFileName()
+            $headerLines = @(foreach ($key in $Headers.Keys) { '{0}: {1}' -f $key, $Headers[$key] })
+            [System.IO.File]::WriteAllLines($headerFile, [string[]]$headerLines, [System.Text.UTF8Encoding]::new($false))
+            $curlArgs += @('--header', "@$headerFile")
+        }
+        $curlArgs += @('--url', $Uri)
+        # PS 5.1 can turn redirected native stderr into PowerShell errors;
+        # PS 7 can optionally throw on native exit codes. Handle both ourselves.
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+        $curlOutput = & $curl.Source @curlArgs 2>&1
+        $curlExitCode = $LASTEXITCODE
+        if ($curlExitCode -ne 0) {
+            # --silent --show-error leaves only curl's own diagnostic on stderr
+            # (e.g. "curl: (22) The requested URL returned error: 404"); surface it.
+            $detail = ((@($curlOutput) | ForEach-Object { "$_".Trim() }) -join ' ').Trim()
+            throw "curl.exe request failed (exit $curlExitCode): $Uri [$detail]"
+        }
+        if ($OutFile) {
+            Move-Item -LiteralPath $tempFile -Destination $OutFile -Force -ErrorAction Stop
+        } else {
+            [System.IO.File]::ReadAllText($tempFile, [System.Text.Encoding]::UTF8)
+        }
+    } finally {
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+        if ($headerFile) { Remove-Item -LiteralPath $headerFile -Force -ErrorAction SilentlyContinue }
+    }
+}
 
 function Test-AgeIdentity {
     if (-not $env:WORKSTATION_AGE_RECIPIENT) { return }
@@ -594,17 +663,16 @@ function Invoke-Reinstall {
     Write-Host ""
 
     # Self-deletion guard: if this script is being run from inside the path we're
-    # about to delete, refuse. Use the curl|iex one-liner instead, which runs
+    # about to delete, refuse. Use the checked curl.exe download form instead, which runs
     # from memory and isn't backed by a file on disk. $PSCommandPath is $null
-    # when the script is executed from a string (iex/irm-pipe).
+    # when the script is executed from a string (a scriptblock).
     if ($PSCommandPath -and $PSCommandPath.StartsWith($RepoPath, [StringComparison]::OrdinalIgnoreCase)) {
         Write-Fail @"
 Refusing to reinstall — the running script is inside $RepoPath, which would
 be deleted, leaving this invocation orphaned. Either:
 
-  1. Use the curl-pipe form from any directory (script runs from memory):
-       irm -Headers @{Authorization="token `$env:GITHUB_TOKEN"} ``
-         https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex
+  1. Use the checked curl.exe download from README.html with -Reinstall.
+     It runs from memory after the complete download succeeds.
 
   2. Copy this script somewhere outside the repo first, then re-run:
        Copy-Item $PSCommandPath `$env:TEMP\bootstrap.ps1
@@ -648,6 +716,11 @@ be deleted, leaving this invocation orphaned. Either:
 # =============================================================================
 function Invoke-Preflight {
     Write-Log "Checking prerequisites..."
+    $curlCmd = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $curlCmd) {
+        Write-Fail 'curl.exe is required on PATH. Restore the Windows system curl or install it from https://curl.se/windows/ and reopen your shell.'
+    }
+    Write-Ok "curl.exe found ($($curlCmd.Source))"
 
     # Git is a hard prerequisite — you install it yourself. Needed for the clone
     # and for chezmoi's git operations. This script does NOT install Git.
@@ -749,9 +822,7 @@ function Install-Chezmoi {
 
     Write-Log "Installing chezmoi (official get.chezmoi.io binary installer → $WsBin)..."
     try {
-        [System.Net.ServicePointManager]::SecurityProtocol = `
-            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        $installer = Invoke-RestMethod -UseBasicParsing -Uri 'https://get.chezmoi.io/ps1'
+        $installer = Invoke-CurlRequest -Uri 'https://get.chezmoi.io/ps1'
         & ([scriptblock]::Create($installer)) -BinDir $WsBin
     } catch {
         if ($SkipChezmoi) {
@@ -809,9 +880,7 @@ function Install-PortableTool {
     $tmpDir = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version)"
 
     try {
-        [System.Net.ServicePointManager]::SecurityProtocol = `
-            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        Invoke-WebRequest -Uri $Tool.Url -OutFile $tmpZip -UseBasicParsing
+        Invoke-CurlRequest -Uri $Tool.Url -OutFile $tmpZip
     } catch {
         Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
         Write-Warn "  Skipping — install it manually or re-run later."
@@ -912,9 +981,6 @@ function Install-InstallerTool {
 
     Write-Log "Installing $($Tool.Name) (latest, installer)..."
 
-    [System.Net.ServicePointManager]::SecurityProtocol = `
-        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-
     # Two resolver paths produce the same four facts for the shared
     # download/verify/install tail below:
     #   $downloadUrl    where the installer .exe comes from
@@ -960,7 +1026,7 @@ function Install-InstallerTool {
             $manifestUrl   = $Tool.HashManifest.Replace('{VERSION}', $version)
             $noHashWarning = "$($Tool.Name): winget manifest fetch failed for $version (not published there yet?) — skipping hash verification."
             try {
-                $manifest = (Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing).Content
+                $manifest = (Invoke-CurlRequest -Uri $manifestUrl)
                 # komac-emitted manifests put InstallerUrl before its
                 # InstallerSha256 within each installer entry; the lazy match
                 # pairs each URL with the nearest FOLLOWING hash.
@@ -994,21 +1060,18 @@ function Install-InstallerTool {
             if ($Tool.ContainsKey('IncludePrerelease') -and $Tool.IncludePrerelease) {
                 # /releases/latest excludes prereleases, and some repos (DevToys)
                 # flag EVERY release prerelease:true — take the newest non-draft
-                # entry of /releases instead (the list is newest-first). NOTE:
-                # the assignment is deliberately BARE — PS 5.1's Invoke-RestMethod
-                # returns a JSON array as ONE Object[] (not pipeline-unrolled),
-                # so @(...) would NEST it and Where-Object would test the whole
-                # list as a single item (DevToys then warn-skipped instead of
-                # installing; caught + fixed 2026-07-14).
-                $releases = Invoke-RestMethod `
+                # entry of /releases instead (the list is newest-first).
+                # Parse the complete JSON string; bare assignment avoids nesting
+                # JSON arrays on PS 5.1. Do not wrap this assignment in @(...).
+                $releases = Invoke-CurlRequest `
                     -Uri "https://api.github.com/repos/$($Tool.Repo)/releases?per_page=10" `
-                    -Headers $headers -UseBasicParsing
+                    -Headers $headers | ConvertFrom-Json -ErrorAction Stop
                 $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
                 if (-not $release) { throw "no non-draft release among the newest $(@($releases).Count)" }
             } else {
-                $release = Invoke-RestMethod `
+                $release = Invoke-CurlRequest `
                     -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
-                    -Headers $headers -UseBasicParsing
+                    -Headers $headers | ConvertFrom-Json -ErrorAction Stop
             }
         } catch {
             Write-Warn "$($Tool.Name): GitHub API lookup failed: $($_.Exception.Message)"
@@ -1042,7 +1105,7 @@ function Install-InstallerTool {
     $tmpExe = Join-Path $env:TEMP "ws-$($Tool.Name)-installer.exe"
 
     try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpExe -UseBasicParsing
+        Invoke-CurlRequest -Uri $downloadUrl -OutFile $tmpExe
     } catch {
         Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
         Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
@@ -1100,16 +1163,13 @@ function Install-ElevatedMsi {
         return $true
     }
 
-    [System.Net.ServicePointManager]::SecurityProtocol = `
-        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-
     $headers = @{ "User-Agent" = "workstation-bootstrap" }
     if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
 
     try {
-        $release = Invoke-RestMethod `
+        $release = Invoke-CurlRequest `
             -Uri "https://api.github.com/repos/$($Msi.Repo)/releases/latest" `
-            -Headers $headers -UseBasicParsing
+            -Headers $headers | ConvertFrom-Json -ErrorAction Stop
     } catch {
         Write-Warn "$($Msi.Name): GitHub API lookup failed: $($_.Exception.Message)"
         return $false
@@ -1127,7 +1187,7 @@ function Install-ElevatedMsi {
     $tmpMsi = Join-Path $env:TEMP "ws-$($Msi.Name).msi"
 
     try {
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpMsi -UseBasicParsing
+        Invoke-CurlRequest -Uri $asset.browser_download_url -OutFile $tmpMsi
     } catch {
         Remove-Item $tmpMsi -Force -ErrorAction SilentlyContinue
         Write-Warn "$($Msi.Name) download failed: $($_.Exception.Message)"
@@ -1334,7 +1394,7 @@ function Invoke-ToolInstall {
 function Invoke-CloneRepo {
     # HTTP Basic with base64-encoded "x-access-token:<PAT>" — same scheme
     # actions/checkout uses. "Authorization: bearer" works for the REST/raw API
-    # (how irm fetches bootstrap.ps1) but is NOT accepted by git's smart-HTTP
+    # (how curl.exe fetches bootstrap.ps1) but is NOT accepted by git's smart-HTTP
     # endpoint on github.com — git silently falls through to credential
     # prompting, breaking any non-interactive clone.
     $headerVal = ""
@@ -1862,17 +1922,15 @@ function Invoke-InstallClaudeCode {
     Write-Log "Installing Claude Code (official installer, manifest-verified)..."
     $tmp = Join-Path $env:TEMP "claude-install-$PID.ps1"
     try {
-        # Download-then-run (never `irm | iex`) — auditable, same posture as
+        # Download-then-run with checked curl.exe status — same posture as
         # the Linux side's pipe.sh.
-        [System.Net.ServicePointManager]::SecurityProtocol = `
-            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        Invoke-WebRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp -UseBasicParsing -ErrorAction Stop
+        Invoke-CurlRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp
         if ($LASTEXITCODE -ne 0) { throw "installer exited with code $LASTEXITCODE" }
         Write-Ok "Claude Code installed (launcher in ~\.local\bin; self-updates)"
     } catch {
         Write-Warn "Claude Code install failed: $_"
-        Write-Warn "  Retry manually:  irm https://claude.ai/install.ps1 | iex"
+        Write-Warn "  Retry by re-running bootstrap.ps1 (leave -SkipToolInstall unset)."
     } finally {
         Remove-Item -Force $tmp -ErrorAction SilentlyContinue
     }
@@ -2124,9 +2182,9 @@ function Get-LatestWingetVersion {
     $headers = @{ "User-Agent" = "workstation-bootstrap" }
     if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
     try {
-        $entries = Invoke-RestMethod `
+        $entries = Invoke-CurlRequest `
             -Uri "https://api.github.com/repos/microsoft/winget-pkgs/contents/$Path" `
-            -Headers $headers -UseBasicParsing
+            -Headers $headers | ConvertFrom-Json -ErrorAction Stop
     } catch {
         return $null
     }
@@ -2190,6 +2248,9 @@ function Invoke-Doctor {
     Write-Host ""
 
     Write-Log "Prerequisites"
+    $curlCmd = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($curlCmd) { Write-Ok "curl.exe ($($curlCmd.Source))" }
+    else { Write-Bad "curl.exe missing (hard prerequisite) — https://curl.se/windows/" }
     $gitCmd = Get-Command git -ErrorAction SilentlyContinue
     if ($gitCmd) { Write-Ok "git ($($gitCmd.Source))" }
     else         { Write-Bad "git missing (hard prerequisite) — https://git-scm.com/download/win or: winget install Git.Git" }
