@@ -36,36 +36,36 @@ JQ_VERSION         := 1.8.2
 YQ_VERSION         := 4.53.6
 TEALDEER_VERSION   := 1.9.0
 WITR_VERSION       := 0.3.3
-BROOT_VERSION      := 1.59.0
+BROOT_VERSION      := 1.60.0
 USQL_VERSION       := 0.21.4
 LAZYDOCKER_VERSION := 0.25.2
 DIVE_VERSION       := 0.13.1
-LNAV_VERSION       := 0.14.0
+LNAV_VERSION       := 0.14.1
 GOPASS_VERSION     := 1.17.0
 AGE_VERSION        := 1.3.2
-FASTFETCH_VERSION  := 2.67.1
+FASTFETCH_VERSION  := 2.68.1
 SSH_COPY_ID_VERSION := latest
 
 # --- Second-wave expansion (2026-05) -----------------------------------------
 GITUI_VERSION      := 0.28.1
-LAZYGIT_VERSION    := 0.64.1
-JUJUTSU_VERSION    := 0.44.0
-YAZI_VERSION       := 26.8.15
+LAZYGIT_VERSION    := 0.65.0
+JUJUTSU_VERSION    := 0.45.1
+YAZI_VERSION       := 26.9.1
 AST_GREP_VERSION   := 0.45.3
 TELEVISION_VERSION := 0.15.9
 XH_VERSION         := 0.26.2
 GPING_VERSION      := 1.21.0
-ATUIN_VERSION      := 18.20.1
+ATUIN_VERSION      := 18.21.0
 DELTA_VERSION      := 0.19.2
 MICRO_VERSION      := 2.0.15
 EZA_VERSION        := 0.23.5
 SD_VERSION         := 1.1.0
 CTOP_VERSION       := 0.7.7
 K9S_VERSION        := 0.51.0
-RCLONE_VERSION     := 1.75.0
-CROC_VERSION       := 11.3.6
+RCLONE_VERSION     := 1.75.1
+CROC_VERSION       := 11.5.0
 HYPERFINE_VERSION  := 1.20.0
-MISE_VERSION       := 2026.8.16
+MISE_VERSION       := 2026.9.1
 UV_VERSION         := 0.12.7
 DSQ_VERSION        := 0.23.0
 
@@ -74,7 +74,7 @@ GH_VERSION        := 2.98.0
 SOPS_VERSION      := 3.13.3
 HTMLQ_VERSION     := 0.4.0
 OUCH_VERSION      := 0.8.2
-WATCHEXEC_VERSION := 2.7.0
+WATCHEXEC_VERSION := 2.7.2
 
 # --- Service / journal / cgroup observability -------------------------------
 BOTTOM_VERSION        := 0.14.9
@@ -90,7 +90,7 @@ HARLEQUIN_VERSION := latest
 # --- Chezmoi TUI ------------------------------------------------------------
 # chezit (Go binary, EGET_TOOL). cheznav was tried first but its pip
 # package requires Python 3.14 which isn't in AlmaLinux 9's modules.
-CHEZIT_VERSION := 0.3.0
+CHEZIT_VERSION := 0.4.0
 
 # --- Claude Code CLI --------------------------------------------------------
 CLAUDE_VERSION := latest
@@ -107,7 +107,7 @@ NODE_VERSION := 26.8.1
 # bumping invalidates the dozzle-service stamp so the next `make dev`
 # re-renders the env file, re-pulls the image, and restarts the unit.
 # Cockpit comes from dnf (see packages.mk) and isn't versioned here.
-DOZZLE_VERSION := 10.8.0
+DOZZLE_VERSION := 10.10.0
 
 # --- Fonts (dev_machine only, makefile target deposits to ~/.local/share/fonts) -
 # JetBrainsMono Nerd Font Mono — the six Mono-variant TTFs from the
@@ -143,7 +143,7 @@ MILLER_VERSION     := 6.21.0
 CSVLENS_VERSION    := 0.15.1
 DIFFTASTIC_VERSION := 0.70.0
 TRIPPY_VERSION     := 0.13.0
-DOGGO_VERSION      := 1.3.0
+DOGGO_VERSION      := 1.4.0
 SCC_VERSION        := 4.0.0
 GIT_ABSORB_VERSION := 0.9.0
 MINISERVE_VERSION  := 0.35.0
@@ -212,7 +212,7 @@ PYTHON_VERSION := 3.14.7
 # separately (clang-tools-extra, packages.mk) and only VERIFIED by lsp-servers.
 GO_VERSION                 := 1.27.0
 GOPLS_VERSION              := 0.23.0
-RUST_ANALYZER_VERSION      := 2026-08-31
+RUST_ANALYZER_VERSION      := 2026-09-07
 MARKSMAN_VERSION           := 2026-02-08
 TAPLO_VERSION              := 0.10.0
 LUA_LS_VERSION             := 3.19.1
