@@ -55,6 +55,65 @@ $RegPath    = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts'
 $Variants  = @('Regular', 'Italic', 'Bold', 'BoldItalic', 'Medium', 'MediumItalic')
 $FontFiles = $Variants | ForEach-Object { "$FontFamily-$_.ttf" }
 
+# Kept self-contained: bootstrap also runs from memory before the repo exists.
+# The font script carries the same helper for its independent execution context.
+function Invoke-CurlRequest {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [hashtable]$Headers = @{},
+        [string]$OutFile
+    )
+
+    # Get-Command lists EVERY curl.exe on PATH (System32 + Git's mingw64\bin is
+    # the everyday case) - take the first, i.e. the one a bare `curl.exe` runs.
+    $curl = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $curl) {
+        throw 'curl.exe is required on PATH. Restore the Windows system curl or install it from https://curl.se/windows/ and reopen your shell.'
+    }
+
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    $headerFile = $null
+    try {
+        # --speed-limit/--speed-time: a connected-but-stalled transfer aborts
+        # (exit 28, which --retry treats as transient) instead of hanging forever.
+        $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location',
+            '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30',
+            '--speed-limit', '1', '--speed-time', '60',
+            '--output', $tempFile)
+        if ($Headers.Count -gt 0) {
+            # Headers travel via a file, never argv: a PAT on a command line is
+            # visible to process auditing. One header per line; no BOM, or curl
+            # would send it as part of the first header name.
+            $headerFile = [System.IO.Path]::GetTempFileName()
+            $headerLines = @(foreach ($key in $Headers.Keys) { '{0}: {1}' -f $key, $Headers[$key] })
+            [System.IO.File]::WriteAllLines($headerFile, [string[]]$headerLines, [System.Text.UTF8Encoding]::new($false))
+            $curlArgs += @('--header', "@$headerFile")
+        }
+        $curlArgs += @('--url', $Uri)
+        # PS 5.1 can turn redirected native stderr into PowerShell errors;
+        # PS 7 can optionally throw on native exit codes. Handle both ourselves.
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+        $curlOutput = & $curl.Source @curlArgs 2>&1
+        $curlExitCode = $LASTEXITCODE
+        if ($curlExitCode -ne 0) {
+            # --silent --show-error leaves only curl's own diagnostic on stderr
+            # (e.g. "curl: (22) The requested URL returned error: 404"); surface it.
+            $detail = ((@($curlOutput) | ForEach-Object { "$_".Trim() }) -join ' ').Trim()
+            throw "curl.exe request failed (exit $curlExitCode): $Uri [$detail]"
+        }
+        if ($OutFile) {
+            Move-Item -LiteralPath $tempFile -Destination $OutFile -Force -ErrorAction Stop
+        } else {
+            [System.IO.File]::ReadAllText($tempFile, [System.Text.Encoding]::UTF8)
+        }
+    } finally {
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+        if ($headerFile) { Remove-Item -LiteralPath $headerFile -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 function Test-Installed {
     if (-not (Test-Path $StampFile)) { return $false }
     foreach ($f in $FontFiles) {
@@ -201,7 +260,7 @@ New-Item -ItemType Directory -Path $TmpDir | Out-Null
 
 $Archive = Join-Path $TmpDir 'JetBrainsMono.zip'
 Write-Host "  downloading $Url"
-Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Archive -Headers $Headers
+Invoke-CurlRequest -Uri $Url -OutFile $Archive -Headers $Headers
 
 # Verify SHA256.
 $Actual = (Get-FileHash -Algorithm SHA256 -Path $Archive).Hash.ToLower()

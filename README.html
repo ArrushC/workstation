@@ -216,7 +216,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 on Windows
                             </h3>
                             <p class="qs-sub">
-                                <strong>No admin needed.</strong> Install Git
+                                <strong>No admin needed.</strong> Install Git and ensure <code>curl.exe</code> is on PATH
                                 first, then this installs Warp, Windows
                                 Terminal, chezmoi,
                                 and Starship under your user profile, applies
@@ -225,8 +225,18 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             <pre><code>$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
 $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
 $env:GIT_USER_EMAIL = 'contact@arrushc.com'
-irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
+$bootstrapFile = [System.IO.Path]::GetTempFileName()
+try {
+    $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    &amp; $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
+      --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+      https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
+    if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
+    $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
+    &amp; ([scriptblock]::Create($bootstrap))
+} finally {
+    Remove-Item -LiteralPath $bootstrapFile -Force
+}</code></pre>
                         </article>
                     </div>
                     <p class="hero-help">
@@ -2609,8 +2619,18 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 .\bootstrap.ps1 -Reinstall -Yes     # skip prompt
 
 # From outside the repo:
-irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
+$bootstrapFile = [System.IO.Path]::GetTempFileName()
+try {
+    $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    &amp; $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
+      --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+      https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
+    if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
+    $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
+    &amp; ([scriptblock]::Create($bootstrap)) -Reinstall
+} finally {
+    Remove-Item -LiteralPath $bootstrapFile -Force
+}</code></pre>
                             </div>
                         </div>
                         <p>
@@ -2632,7 +2652,7 @@ irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
                             <code>.\bootstrap.ps1 -Reinstall</code> from inside
                             the repo would delete the script while executing.
                             Both scripts detect this and refuse with a clear
-                            message &mdash; use the curl/irm-pipe form or copy
+                            message &mdash; use the checked curl.exe download (Windows) or curl-pipe form (Linux) or copy
                             the script outside first.
                         </div>
                     </details>
@@ -3206,13 +3226,30 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         <code>makefile/versions.mk</code>.
                     </p>
 
-                    <h4>One-liner (no elevation needed)</h4>
+                    <p>Windows HTTP downloads and API requests use <code>curl.exe</code>
+                        explicitly, with redirects, retries, and checked exit codes.
+                        Ensure <code>curl.exe --version</code> succeeds before starting.
+                        If missing, restore the Windows system curl or install it from
+                        <a href="https://curl.se/windows/">curl for Windows</a> and reopen
+                        your shell. PowerShell 5.1 and 7 are supported; upstream installers,
+                        Git, WinGet, and PowerShell Gallery manage their own networking.</p>
+                    <h4>Download and run (no elevation needed)</h4>
                     <pre><code># === Bootstrap: Windows client ===
 $env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
 $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
 $env:GIT_USER_EMAIL = 'contact@arrushc.com'
-irm -Headers @{Authorization="token $env:GITHUB_TOKEN"} `
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1 | iex</code></pre>
+$bootstrapFile = [System.IO.Path]::GetTempFileName()
+try {
+    $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    &amp; $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
+      --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+      https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
+    if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
+    $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
+    &amp; ([scriptblock]::Create($bootstrap))
+} finally {
+    Remove-Item -LiteralPath $bootstrapFile -Force
+}</code></pre>
 
                     <h4>Or after cloning manually</h4>
                     <pre><code>git clone https://github.com/ArrushC/workstation.git `

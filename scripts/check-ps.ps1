@@ -11,6 +11,7 @@ $targets = @(
     'bootstrap.ps1',
     'scripts/manage-hosts.ps1',
     'scripts/install-nerd-fonts.ps1',
+    'scripts/test-curl.ps1',
     'scripts/check-ps.ps1'
 ) | ForEach-Object { Join-Path $repoRoot $_ }
 

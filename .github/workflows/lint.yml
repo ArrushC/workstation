@@ -36,6 +36,21 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: ./scripts/check-ps.ps1
+  # Both Windows shells on one runner. `shell:` does NOT accept expressions
+  # (a `${{ matrix.shell }}` matrix fails workflow validation with zero jobs),
+  # so the two legs are explicit steps; `if: always()` makes the pwsh leg
+  # report even when the 5.1 leg fails.
+  windows-http:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test curl HTTP transport (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./scripts/test-curl.ps1
+      - name: Test curl HTTP transport (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-curl.ps1
   templates:
     runs-on: ubuntu-latest
     steps:
