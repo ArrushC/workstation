@@ -4366,7 +4366,7 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         the tabs, numbered to match
                         <kbd>ALT</kbd>+<kbd>1</kbd>&hellip;<kbd>9</kbd>, and the
                         session name on the right. It is a plugin
-                        (<code>~/.config/zellij/plugins/zjstatus.wasm</code>,
+                        (<code>~/.local/share/zellij/plugins/zjstatus.wasm</code>,
                         installed by provisioning like any other tool) that
                         replaces only the top bar &mdash; the bottom bar is
                         still zellij&rsquo;s own, because it prints the key
@@ -5988,8 +5988,13 @@ make -C makefile MODE=dev packages</code></pre>
                                 A <strong>plain built-in bar</strong> with no
                                 request means the plugin file is missing on
                                 that host &mdash;
-                                <code>~/.config/zellij/plugins/zjstatus.wasm</code>
-                                is installed by provisioning, not by chezmoi:
+                                <code>~/.local/share/zellij/plugins/zjstatus.wasm</code>
+                                is installed by provisioning, not by chezmoi
+                                (an <em>&ldquo;ERROR IN PLUGIN&rdquo;</em> bar
+                                means the same thing &mdash; the file is not
+                                where zellij looks; the log at
+                                <code>/tmp/zellij-&lt;uid&gt;/zellij-log/zellij.log</code>
+                                says which path it tried):
                             </p>
                             <pre><code>make zjstatus MODE=prod      # or MODE=dev; user-level, no sudo
 zellij kill-session main       # config and plugins load when a session is created</code></pre>

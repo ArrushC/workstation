@@ -20,11 +20,12 @@ deployable to every fleet host through the existing provisioning paths.
    hints from this config (CTRL+S = Session, ALT+S = Scroll). zjstatus-hints
    shows zellij's stock hints, which are wrong here.
 3. **Install = `USER_TOOL zjstatus`** in `tools.mk` → `lib/zellij-plugin.sh`
-   → `~/.config/zellij/plugins/zjstatus.wasm`. User-level (never sudo), WASM
-   magic checked before install, 0644. `~/.config/zellij` is chezmoi's target
-   dir; chezmoi leaves the unmanaged `plugins/` alone.
+   → `~/.local/share/zellij/plugins/zjstatus.wasm` — zellij's DATA dir, the
+   `[PLUGIN DIR]` that `zellij setup --check` prints and that the installer
+   asks for. User-level (never sudo), WASM magic checked before install, 0644.
+   Nothing under `~/.local/share` is chezmoi-managed.
 4. **The alias stays the RELATIVE `file:zjstatus.wasm`.** zellij resolves it
-   against `~/.config/zellij/plugins/` and keeps the relative string as the
+   against `/usr/share/zellij/plugins`, then its data dir, and keeps the relative string as the
    plugin identity, including the `~/.cache/zellij/permissions.kdl` key.
    `file:~/…` expands to an absolute path at load (verified), which would make
    the one-time permission grant host-specific. `check_zellij_config` asserts
@@ -49,6 +50,17 @@ deployable to every fleet host through the existing provisioning paths.
    layout file replaces the built-in swap layouts, so `zellij -l dev` had lost
    ALT+[ / ALT+] cycling.
 
+## Correction (2026-09-13, same day)
+
+The first cut installed to `~/.config/zellij/plugins/`, which zellij never
+searches (it tries `/usr/share/zellij/plugins`, then the data dir, then the
+bare name). Every session showed "ERROR IN PLUGIN" while the headless probe
+looked fine — `zellij action dump-layout` echoes the location string whether
+or not the file was found. The probe now judges by the log (`Loaded plugin`
+vs `No such file`), the installer asks zellij for `[PLUGIN DIR]`, and
+`scripts/test-zellij-plugin.sh` (run by check-invariants) guards the
+destination offline.
+
 ## Deferred, deliberately
 
 - **`default_mode "locked"`.** Locked mode passes every key through except
@@ -66,7 +78,7 @@ deployable to every fleet host through the existing provisioning paths.
 - `make lint MODE=prod` (new checks: `zjstatus <-> zellij plugin-ABI floor`,
   `tab-bar alias -> file:zjstatus.wasm`).
 - Sandbox install: `make zjstatus MODE=prod HOME=/tmp/zj-home STAMP=/tmp/zj-stamps DEST=/tmp/zj-bin`
-  → `\0asm` magic at `/tmp/zj-home/.config/zellij/plugins/zjstatus.wasm`.
+  → `\0asm` magic at `/tmp/zj-home/.local/share/zellij/plugins/zjstatus.wasm`.
 - Headless probes with the repo config (recipe in `docs/claude/verification.md`).
 - On this box after merge: `cza`, `zellij kill-session main`, reattach, press
   `y` once.

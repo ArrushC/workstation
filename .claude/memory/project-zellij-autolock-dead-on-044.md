@@ -26,5 +26,5 @@ plugin's **absolute path** — a genuine fleet-deployment problem, since that pa
 differs per host; and `zellij setup --check` says "Well defined" for a config
 whose plugin is completely non-functional. The built-in `Ctrl+g` Locked mode is
 the working substitute for the Helix/zellij Ctrl-key conflicts and is documented
-in README §daily-zellij. Re-test only if a release newer than 0.2.2 appears.
+in README §daily-zellij. Re-test only if a release newer than 0.2.2 appears. **Judge any plugin load by the LOG** — `/tmp/zellij-<uid>/zellij-log/zellij.log` says `Loaded plugin '<name>'` or `No such file` with the paths tried; `zellij action dump-layout` echoes the configured location string either way (that is how the zjstatus first cut, installed to `~/.config/zellij/plugins/` which zellij never searches, passed review on 2026-09-13). Relative `file:` plugins resolve against `/usr/share/zellij/plugins`, then the data dir `~/.local/share/zellij/plugins` (`zellij setup --check` → `[PLUGIN DIR]`).
 Relates to [[project-verify-tool-bumps-at-runtime]].

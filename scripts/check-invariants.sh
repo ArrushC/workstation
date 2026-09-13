@@ -472,6 +472,21 @@ check_zjstatus_zellij_coupling() {
   fi
 }
 
+check_zellij_plugin_installer() {
+  hdr "zellij plugin installer (lib/zellij-plugin.sh lands in zellij's data dir)"
+  local out
+  # Offline behavioural test: fake \0asm module over file://, scratch HOME.
+  # Guards the 2026-09-13 regression — plugin installed to ~/.config/zellij/
+  # plugins, which zellij never searches, so every session showed
+  # "ERROR IN PLUGIN" while dump-layout looked fine.
+  if out=$(bash scripts/test-zellij-plugin.sh 2>&1); then
+    ok "${out#PASS: }"
+  else
+    bad "scripts/test-zellij-plugin.sh failed:"
+    printf '%s\n' "$out" | sed 's/^/       /' | head -10
+  fi
+}
+
 check_python_env_parity() {
   hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
   local sh_libs ps_libs
@@ -662,8 +677,10 @@ check_zellij_config() {
   fi
 
   # 5. The tab-bar alias must point at the RELATIVE plugin path. zellij resolves
-  #    `file:<name>.wasm` against ~/.config/zellij/plugins/ — where tools.mk's
-  #    USER_TOOL zjstatus installs it — and keeps that relative string as the
+  #    `file:<name>.wasm` against its DATA dir, ~/.local/share/zellij/plugins/
+  #    (after /usr/share/zellij/plugins; NOT ~/.config/zellij/plugins — that
+  #    mistake shipped once, 2026-09-13) — where tools.mk's USER_TOOL zjstatus
+  #    installs it — and keeps that relative string as the
   #    plugin's identity, including the ~/.cache/zellij/permissions.kdl key.
   #    An absolute or ~ path expands per host (verified on 0.45.1: "file:~/x"
   #    dumps as "file:/home/<user>/x"), so the one-time permission grant would
@@ -781,6 +798,7 @@ check_zellij_config
 check_update_spec_coverage
 check_go_gopls_coupling
 check_zjstatus_zellij_coupling
+check_zellij_plugin_installer
 check_python_env_parity
 check_curl_helper_parity
 check_shellcheck
