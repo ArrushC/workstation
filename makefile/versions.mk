@@ -21,6 +21,15 @@ FZF_VERSION      := 0.74.3
 ZOXIDE_VERSION   := 0.10.0
 STARSHIP_VERSION := 1.26.0
 ZELLIJ_VERSION   := 0.45.1
+# zjstatus (the zellij tab bar) is a WASM plugin compiled against zellij's
+# plugin ABI: each release states the zellij floor it needs (v0.25.0: ">= 0.45.0
+# required"). ZJSTATUS_ZELLIJ_FLOOR records that floor next to the pin, and
+# check-invariants.sh asserts ZELLIJ_VERSION meets it — a mismatch is silent at
+# runtime (the bar pane renders nothing useful; `zellij setup --check` still says
+# Well defined). Bump the pin AND the floor together, from the release notes;
+# that is why ZJSTATUS_VERSION sits in bump-versions.sh's EXCLUDE (gopls precedent).
+ZJSTATUS_VERSION := 0.25.0
+ZJSTATUS_ZELLIJ_FLOOR := 0.45.0
 GLOW_VERSION     := 3.0.0
 NB_VERSION       := latest
 HELIX_VERSION    := 25.07.1

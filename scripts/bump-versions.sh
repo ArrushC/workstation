@@ -43,7 +43,11 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #  (2) NCDU — its linux-x86_64 binary is published at dev.yorhel.nl for only SOME
 #      releases (2.9.1 has one; 2.9.2 returns 404), so a bump must be verified by
 #      hand against the download URL before landing or it 404s the install.
-EXCLUDE="GO_VERSION GOPLS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
+#   - ZJSTATUS_VERSION is ABI-coupled to ZELLIJ_VERSION: every zjstatus release
+#     states its zellij floor, recorded as ZJSTATUS_ZELLIJ_FLOOR next to the pin
+#     and asserted by check-invariants. A blind bump would raise the floor
+#     silently; bump pin + floor by hand from the release notes.
+EXCLUDE="GO_VERSION GOPLS_VERSION ZJSTATUS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs

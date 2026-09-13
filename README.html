@@ -4303,9 +4303,11 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                     </p>
                     <p>
                         A new session opens as a <strong>single full-width
-                        pane</strong> with the tab and status bars &mdash;
-                        zellij&rsquo;s built-in <code>default</code> layout. The
-                        two repo layouts are opt-in:
+                        pane</strong> between the tab bar and the status bar
+                        &mdash; zellij&rsquo;s built-in <code>default</code>
+                        layout. The two repo layouts are opt-in (and keep
+                        zellij&rsquo;s swap layouts, so <kbd>ALT</kbd>+<kbd>[</kbd>
+                        / <kbd>]</kbd> still cycle as you add panes):
                     </p>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
@@ -4355,6 +4357,26 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
                         being <em>created</em>. Naming an existing session always
                         attaches to it, so you can never clobber running work by
                         passing the wrong layout.
+                    </p>
+                    <p class="note-row">
+                        <strong>The top bar is zjstatus.</strong> Rounded
+                        Catppuccin pills: a mode badge on the left (mauve
+                        <em>NORMAL</em> means zellij is listening; red
+                        <em>LOCKED</em> means every key goes to the pane), then
+                        the tabs, numbered to match
+                        <kbd>ALT</kbd>+<kbd>1</kbd>&hellip;<kbd>9</kbd>, and the
+                        session name on the right. It is a plugin
+                        (<code>~/.config/zellij/plugins/zjstatus.wasm</code>,
+                        installed by provisioning like any other tool) that
+                        replaces only the top bar &mdash; the bottom bar is
+                        still zellij&rsquo;s own, because it prints the key
+                        hints from <em>this</em> config.
+                        <strong>The first session on a host asks once for
+                        permission:</strong> the bar shows the request; click
+                        it (or <kbd>CTRL</kbd>+<kbd>P</kbd> then
+                        <kbd>&uarr;</kbd> to focus it) and press <kbd>Y</kbd>.
+                        The answer is cached in
+                        <code>~/.cache/zellij/permissions.kdl</code>.
                     </p>
                     <p>Keys worth knowing (on top of zellij&rsquo;s defaults):</p>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
@@ -5942,6 +5964,41 @@ make -C makefile MODE=dev packages</code></pre>
                                 <code>net use X: \\sshfs\user@host</code> or
                                 browse <code>\\sshfs\user@host</code> directly
                                 in Explorer.
+                            </p>
+                        </div>
+                    </details>
+                    <details data-ts>
+                        <summary>
+                            Zellij&rsquo;s top bar is plain, shows a
+                            <em>&ldquo;permission&rdquo;</em> request, or
+                            renders boxes instead of rounded pills
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The top bar is the <code>zjstatus</code> plugin.
+                                A <strong>permission request</strong> in the
+                                bar is the one-time first-run prompt on that
+                                host: click the bar (or
+                                <kbd>CTRL</kbd>+<kbd>P</kbd> then
+                                <kbd>&uarr;</kbd> to focus it) and press
+                                <kbd>Y</kbd>. The grant is cached in
+                                <code>~/.cache/zellij/permissions.kdl</code>.
+                            </p>
+                            <p>
+                                A <strong>plain built-in bar</strong> with no
+                                request means the plugin file is missing on
+                                that host &mdash;
+                                <code>~/.config/zellij/plugins/zjstatus.wasm</code>
+                                is installed by provisioning, not by chezmoi:
+                            </p>
+                            <pre><code>make zjstatus MODE=prod      # or MODE=dev; user-level, no sudo
+zellij kill-session main       # config and plugins load when a session is created</code></pre>
+                            <p>
+                                <strong>Boxes instead of pills</strong> mean the
+                                terminal you are attaching from is not using a
+                                Nerd Font: the half-circle glyphs come from
+                                JetBrainsMono NFM on the client side, like the
+                                powerline arrows in the bottom bar.
                             </p>
                         </div>
                     </details>

@@ -449,6 +449,29 @@ check_completion_parity() {
 # PY_LIBS in makefile/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
 # are one-line arrays by contract (comments at each site) so single-line greps
 # can extract them. Order-insensitive compare (sort) — content is the contract.
+check_zjstatus_zellij_coupling() {
+  hdr "zjstatus <-> zellij plugin-ABI floor"
+  local zj zjs floor
+  zj=$(mkval ZELLIJ_VERSION)
+  zjs=$(mkval ZJSTATUS_VERSION)
+  floor=$(mkval ZJSTATUS_ZELLIJ_FLOOR)
+  if [ -z "$zj" ] || [ -z "$zjs" ] || [ -z "$floor" ]; then
+    bad "could not read ZELLIJ_VERSION / ZJSTATUS_VERSION / ZJSTATUS_ZELLIJ_FLOOR from versions.mk"
+    return
+  fi
+  # zjstatus is compiled against zellij-tile, and each release states the
+  # zellij floor it needs (v0.25.0: ">= 0.45.0 required" — it fixed frame
+  # flicker that 0.45.0 introduced). The floor is recorded next to the pin
+  # rather than fetched: the release notes are prose, and this check must
+  # pass offline. A mismatch is silent at runtime — the bar pane just fails
+  # to render — and `zellij setup --check` still reports Well defined.
+  if [ "$(printf '%s\n%s\n' "$floor" "$zj" | sort -V | tail -1)" = "$zj" ]; then
+    ok "zjstatus $zjs needs zellij >= $floor; pinned zellij is $zj"
+  else
+    bad "zjstatus $zjs needs zellij >= $floor but ZELLIJ_VERSION is $zj — bump zellij, or pin the zjstatus release built for $zj (and its floor)"
+  fi
+}
+
 check_python_env_parity() {
   hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
   local sh_libs ps_libs
@@ -638,7 +661,20 @@ check_zellij_config() {
     bad "$cfg must pin web_server false AND web_sharing \"disabled\" (build is web-capable)"
   fi
 
-  # 5. Real parse, when zellij is available. Soft-skip in CI, where it is not
+  # 5. The tab-bar alias must point at the RELATIVE plugin path. zellij resolves
+  #    `file:<name>.wasm` against ~/.config/zellij/plugins/ — where tools.mk's
+  #    USER_TOOL zjstatus installs it — and keeps that relative string as the
+  #    plugin's identity, including the ~/.cache/zellij/permissions.kdl key.
+  #    An absolute or ~ path expands per host (verified on 0.45.1: "file:~/x"
+  #    dumps as "file:/home/<user>/x"), so the one-time permission grant would
+  #    stop matching across the fleet and every host would prompt again.
+  if grep -qE '^[[:space:]]*tab-bar[[:space:]]+location="file:zjstatus\.wasm"' "$cfg"; then
+    ok "tab-bar alias -> file:zjstatus.wasm (relative: host-independent permission key)"
+  else
+    bad "$cfg: plugins { tab-bar location=\"file:zjstatus.wasm\" ... } missing, or the path is not the relative form"
+  fi
+
+  # 6. Real parse, when zellij is available. Soft-skip in CI, where it is not
   #    installed — same posture as the other optional-checker skips.
   if command -v zellij >/dev/null 2>&1; then
     tmp=$(mktemp -d)
@@ -744,6 +780,7 @@ check_warp_guards
 check_zellij_config
 check_update_spec_coverage
 check_go_gopls_coupling
+check_zjstatus_zellij_coupling
 check_python_env_parity
 check_curl_helper_parity
 check_shellcheck
