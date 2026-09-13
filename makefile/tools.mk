@@ -474,17 +474,21 @@ $(eval $(call USER_TOOL,harlequin,$(HARLEQUIN_VERSION),\
   $(LIB)/pip.sh harlequin))
 
 # zjstatus — the zellij tab bar (dj95/zjstatus). A WASM plugin, not a binary:
-# lands in ~/.config/zellij/plugins/zjstatus.wasm, where zellij resolves the
-# RELATIVE `file:zjstatus.wasm` alias in chezmoi/dot_config/zellij/config.kdl
-# (the built-in default layout's tab-bar slot picks the alias up — no custom
-# layout, swap layouts intact). USER_TOOL because the plugin dir is per-user
-# (never sudo). ABI-coupled to ZELLIJ_VERSION via ZJSTATUS_ZELLIJ_FLOOR in
+# lands in zellij's DATA dir, ~/.local/share/zellij/plugins/zjstatus.wasm
+# (lib/zellij-plugin.sh asks `zellij setup --check` for [PLUGIN DIR], falling
+# back to that path), which is where zellij resolves the RELATIVE
+# `file:zjstatus.wasm` alias in chezmoi/dot_config/zellij/config.kdl — NOT
+# ~/.config/zellij/plugins, which it never searches (the built-in default
+# layout's tab-bar slot picks the alias up — no custom layout, swap layouts
+# intact). USER_TOOL because the plugin dir is per-user (never sudo). Order-
+# only dep on zellij's stamp FILE below so the dir query has a zellij to ask. ABI-coupled to ZELLIJ_VERSION via ZJSTATUS_ZELLIJ_FLOOR in
 # versions.mk (check-invariants asserts it). Loaded only when zellij starts a
 # session, so there is nothing for verify-binary.sh to execute; the lib checks
 # the WASM magic instead. First load on a host asks once for permissions.
 $(eval $(call USER_TOOL,zjstatus,$(ZJSTATUS_VERSION),\
   $(LIB)/zellij-plugin.sh zjstatus https://github.com/dj95/zjstatus/releases/download/v$(ZJSTATUS_VERSION)/zjstatus.wasm))
 UPDATE_SPECS += zjstatus|$(ZJSTATUS_VERSION)|dj95/zjstatus|v$(ZJSTATUS_VERSION)
+$(STAMP)/zjstatus-$(ZJSTATUS_VERSION).done: | $(STAMP)/zellij-$(ZELLIJ_VERSION).done
 
 # chezit — TUI for chezmoi (Go single-binary). Launched via the `czt`
 # alias. cheznav (Python) was tried first but its pip package requires

@@ -136,15 +136,19 @@ theme "catppuccin-mocha-mauve"
 // keeps the built-in default layout AND its swap layouts (see the default_layout
 // comment above), which a custom layout file would have replaced. Verified on
 // 0.45.1: `zellij action dump-layout` shows the override in the tab-bar slot of
-// every tab, including the swap layouts.
+// every tab, including the swap layouts (and the log confirms the load).
 //
 // The plugin file is installed by makefile/tools.mk (USER_TOOL zjstatus →
-// ~/.config/zellij/plugins/zjstatus.wasm; pin + zellij floor in versions.mk).
-// The location MUST stay the RELATIVE `file:zjstatus.wasm`: zellij resolves it
-// against ~/.config/zellij/plugins/ and keeps the relative string as the
-// plugin's identity, including the key in ~/.cache/zellij/permissions.kdl. An
-// absolute or ~ path expands per host, so each host would prompt again.
-// scripts/check-invariants.sh asserts the relative form.
+// ~/.local/share/zellij/plugins/zjstatus.wasm, zellij's DATA dir; pin + zellij
+// floor in versions.mk). The location MUST stay the RELATIVE
+// `file:zjstatus.wasm`: zellij resolves it against /usr/share/zellij/plugins,
+// then that data dir — never ~/.config/zellij/plugins — and keeps the relative
+// string as the plugin's identity, including the key in
+// ~/.cache/zellij/permissions.kdl. An absolute or ~ path expands per host, so
+// each host would prompt again. scripts/check-invariants.sh asserts the
+// relative form. A missing file shows as "ERROR IN PLUGIN" in the bar; the
+// truth is in /tmp/zellij-<uid>/zellij-log/zellij.log ("Loaded plugin" vs
+// "No such file") — `zellij action dump-layout` echoes the location either way.
 //
 // First load on a host asks once for permissions (ReadApplicationState): the
 // bar shows the request; click it (or CTRL+P then ↑ to focus it) and press y.
