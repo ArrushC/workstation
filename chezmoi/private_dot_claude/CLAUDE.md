@@ -57,6 +57,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `zoxide` 0.10.0
 - `starship` 1.26.0
 - `zellij` 0.45.1
+- `zjstatus` 0.25.0
 - `glow` 3.0.0
 - `nb` latest
 - `helix` 25.07.1

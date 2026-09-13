@@ -45,11 +45,23 @@ pane_frame_style "full"
 ui {
     pane_frames {
         rounded_corners true
+        // The top frame otherwise reads "Zellij (main) - <tab>". Every session in
+        // this fleet is called main (the Warp / Windows Terminal launchers all
+        // run `zellij attach --create main`), so the name is noise; the tab bar
+        // below shows it in a pill anyway.
+        hide_session_name true
     }
 }
 
 // Mouse support
 mouse_mode true
+
+// Pass OSC 8 hyperlinks through to the client terminal (default false). The
+// `l*` eza aliases in both rc files emit them (--hyperlink), and both managed
+// Windows terminals render them, but without this line zellij strips them and
+// every link in a remote pane is dead. https:// links open on the machine you
+// sit at; file:// links point at the REMOTE path and will not resolve there.
+osc8_hyperlinks true
 
 // Scrollback depth, per pane. Default is 10000; 100000 keeps deep scrollback
 // without unbounded growth — trimmed from 1000000 on 2026-07-09
@@ -118,6 +130,78 @@ copy_on_select false
 // Mocha scheme has no mauve at all (ANSI purple maps to pink #f5c2e7); it needs
 // no change.
 theme "catppuccin-mocha-mauve"
+
+// The tab bar is zjstatus (dj95/zjstatus), swapped in by OVERRIDING the bare
+// `tab-bar` alias that zellij's BUILT-IN default layout references — so this
+// keeps the built-in default layout AND its swap layouts (see the default_layout
+// comment above), which a custom layout file would have replaced. Verified on
+// 0.45.1: `zellij action dump-layout` shows the override in the tab-bar slot of
+// every tab, including the swap layouts.
+//
+// The plugin file is installed by makefile/tools.mk (USER_TOOL zjstatus →
+// ~/.config/zellij/plugins/zjstatus.wasm; pin + zellij floor in versions.mk).
+// The location MUST stay the RELATIVE `file:zjstatus.wasm`: zellij resolves it
+// against ~/.config/zellij/plugins/ and keeps the relative string as the
+// plugin's identity, including the key in ~/.cache/zellij/permissions.kdl. An
+// absolute or ~ path expands per host, so each host would prompt again.
+// scripts/check-invariants.sh asserts the relative form.
+//
+// First load on a host asks once for permissions (ReadApplicationState): the
+// bar shows the request; click it (or CTRL+P then ↑ to focus it) and press y.
+// That grant is what the permission-cache key above protects.
+//
+// The built-in status-bar stays in the bottom slot on purpose: it renders the
+// keybinding hints from THIS config (CTRL+S = Session, ALT+S = Scroll), whereas
+// zjstatus-hints shows zellij's stock defaults and would be wrong here.
+//
+// Look: Catppuccin Mocha over the theme's mantle (#181825), mauve (#cba6f7)
+// for the active tab and Normal mode — the same accent Warp, fzf and the pane
+// frames use. Rounded pills are the Nerd Font half-circles U+E0B6 / U+E0B4,
+// rendered by the CLIENT terminal's font like the powerline arrows above
+// (simplified_ui). Tab numbers come first so they read as the ALT+<n> key.
+plugins {
+    tab-bar location="file:zjstatus.wasm" {
+        format_left   "{mode}#[bg=#181825] {tabs}"
+        format_center ""
+        format_right  "{swap_layout}#[fg=#b4befe,bg=#181825]#[bg=#b4befe,fg=#11111b,bold] {session} #[fg=#b4befe,bg=#181825]"
+        format_space  "#[bg=#181825]"
+        format_precedence "lrc"
+        format_hide_on_overlength "true"
+
+        border_enabled "false"
+        hide_frame_for_single_pane "false"
+
+        // Mode pill — the colour says who is listening. Mauve: zellij (Normal).
+        // Red: LOCKED, every key goes to the program in the pane (CTRL+G).
+        mode_normal        "#[fg=#cba6f7,bg=#181825]#[bg=#cba6f7,fg=#11111b,bold]NORMAL#[fg=#cba6f7,bg=#181825]"
+        mode_locked        "#[fg=#f38ba8,bg=#181825]#[bg=#f38ba8,fg=#11111b,bold]LOCKED#[fg=#f38ba8,bg=#181825]"
+        mode_pane          "#[fg=#89b4fa,bg=#181825]#[bg=#89b4fa,fg=#11111b,bold]PANE#[fg=#89b4fa,bg=#181825]"
+        mode_tab           "#[fg=#f9e2af,bg=#181825]#[bg=#f9e2af,fg=#11111b,bold]TAB#[fg=#f9e2af,bg=#181825]"
+        mode_resize        "#[fg=#fab387,bg=#181825]#[bg=#fab387,fg=#11111b,bold]RESIZE#[fg=#fab387,bg=#181825]"
+        mode_move          "#[fg=#94e2d5,bg=#181825]#[bg=#94e2d5,fg=#11111b,bold]MOVE#[fg=#94e2d5,bg=#181825]"
+        mode_scroll        "#[fg=#89dceb,bg=#181825]#[bg=#89dceb,fg=#11111b,bold]SCROLL#[fg=#89dceb,bg=#181825]"
+        mode_enter_search  "#[fg=#89dceb,bg=#181825]#[bg=#89dceb,fg=#11111b,bold]SEARCH#[fg=#89dceb,bg=#181825]"
+        mode_search        "#[fg=#89dceb,bg=#181825]#[bg=#89dceb,fg=#11111b,bold]SEARCH#[fg=#89dceb,bg=#181825]"
+        mode_session       "#[fg=#f5c2e7,bg=#181825]#[bg=#f5c2e7,fg=#11111b,bold]SESSION#[fg=#f5c2e7,bg=#181825]"
+        mode_rename_tab    "#[fg=#f9e2af,bg=#181825]#[bg=#f9e2af,fg=#11111b,bold]RENAME#[fg=#f9e2af,bg=#181825]"
+        mode_rename_pane   "#[fg=#89b4fa,bg=#181825]#[bg=#89b4fa,fg=#11111b,bold]RENAME#[fg=#89b4fa,bg=#181825]"
+        mode_prompt        "#[fg=#f2cdcd,bg=#181825]#[bg=#f2cdcd,fg=#11111b,bold]PROMPT#[fg=#f2cdcd,bg=#181825]"
+        mode_tmux          "#[fg=#b4befe,bg=#181825]#[bg=#b4befe,fg=#11111b,bold]TMUX#[fg=#b4befe,bg=#181825]"
+        mode_default_to_mode "normal"
+
+        // Tabs: "1 chezmoi" dimmed, the active one as a mauve pill.
+        tab_normal   "#[fg=#6c7086,bg=#181825] {index} {name}{fullscreen_indicator}{sync_indicator}{floating_indicator} "
+        tab_active   "#[fg=#cba6f7,bg=#181825]#[bg=#cba6f7,fg=#11111b,bold] {index} {name}{fullscreen_indicator}{sync_indicator}{floating_indicator} #[fg=#cba6f7,bg=#181825]"
+        tab_separator            ""
+        tab_fullscreen_indicator " □"
+        tab_sync_indicator       " ⇄"
+        tab_floating_indicator   " ⬚"
+
+        // Name of the swap layout in force (ALT+[ / ALT+]), dimmed, right side.
+        swap_layout_format        "#[fg=#6c7086,bg=#181825]{name} "
+        swap_layout_hide_if_empty "true"
+    }
+}
 
 keybinds {
     normal {
