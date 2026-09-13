@@ -691,7 +691,21 @@ check_zellij_config() {
     bad "$cfg: plugins { tab-bar location=\"file:zjstatus.wasm\" ... } missing, or the path is not the relative form"
   fi
 
-  # 6. Real parse, when zellij is available. Soft-skip in CI, where it is not
+  # 6. The zjstatus pills are Nerd Font half-circles, U+E0B6 (left) and U+E0B4
+  #    (right), sitting between the style tags. They are invisible in most
+  #    editors and were silently dropped once (2026-09-13: the bar shipped as
+  #    square colour blocks). Every pill must open and close, so the two
+  #    counts must match and be non-zero.
+  local lc rc
+  lc=$(grep -o $'\xee\x82\xb6' "$cfg" | wc -l)
+  rc=$(grep -o $'\xee\x82\xb4' "$cfg" | wc -l)
+  if [ "$lc" -gt 0 ] && [ "$lc" -eq "$rc" ]; then
+    ok "zjstatus pills: $lc rounded-left (U+E0B6) + $rc rounded-right (U+E0B4) glyphs present"
+  else
+    bad "$cfg: zjstatus pill glyphs missing or unbalanced (U+E0B6 x$lc, U+E0B4 x$rc) — the bar renders square blocks"
+  fi
+
+  # 7. Real parse, when zellij is available. Soft-skip in CI, where it is not
   #    installed — same posture as the other optional-checker skips.
   if command -v zellij >/dev/null 2>&1; then
     tmp=$(mktemp -d)
