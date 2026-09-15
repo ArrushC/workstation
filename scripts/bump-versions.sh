@@ -32,7 +32,7 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #      too and joins defensively (bespoke target, not yet in UPDATE_SPECS).
 #      GO + GOPLS join for a different reason: they are a COUPLED PAIR. gopls
 #      declares a hard toolchain floor in its own go.mod (0.20.0 needs go
-#      1.24.2, 0.21.0 needs 1.25, 0.23.0 needs 1.26.0) and lib/lsp.sh installs
+#      1.24.2, 0.21.0 needs 1.25, 0.23.0 needs 1.26.0) and mise's go: backend builds
 #      it via `go install` using the PINNED Go, so bumping gopls past the
 #      current Go's ceiling makes GOTOOLCHAIN=auto silently fetch a second
 #      toolchain mid-provision — and hard-fails under GOTOOLCHAIN=local or a
@@ -43,11 +43,14 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #  (2) NCDU — its linux-x86_64 binary is published at dev.yorhel.nl for only SOME
 #      releases (2.9.1 has one; 2.9.2 returns 404), so a bump must be verified by
 #      hand against the download URL before landing or it 404s the install.
+#  (3) TYPESCRIPT_VERSION — coupled to TYPESCRIPT_LS_VERSION: ts-ls 6.x needs
+#      typescript/lib/tsserver.js, gone in TS 7; a blind bump to 7.x breaks the
+#      TypeScript LSP silently (asserted by check_tsls_typescript_coupling).
 #   - ZJSTATUS_VERSION is ABI-coupled to ZELLIJ_VERSION: every zjstatus release
 #     states its zellij floor, recorded as ZJSTATUS_ZELLIJ_FLOOR next to the pin
 #     and asserted by check-invariants. A blind bump would raise the floor
 #     silently; bump pin + floor by hand from the release notes.
-EXCLUDE="GO_VERSION GOPLS_VERSION ZJSTATUS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
+EXCLUDE="GO_VERSION GOPLS_VERSION TYPESCRIPT_VERSION ZJSTATUS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
@@ -119,15 +122,16 @@ while IFS='|' read -r _ name detail; do
   fi
 done <<<"$updates"
 
-# Keep the machine-memory TOOLS block in sync with the pins we just bumped.
-# This script runs in CI (and locally) where the Claude Code sync-tool-memory.sh
-# hook never fires, so regenerate the block here — otherwise the bumped
-# versions.mk and the <!-- TOOLS --> block in chezmoi/private_dot_claude/CLAUDE.md
-# drift, and check-invariants.sh ("machine-memory TOOLS block in sync") fails on
-# merge (the bumped pin reinstalls, but the verify step the workflow runs before
-# opening the PR — and lint.yml on merge — go red).
+# Keep the two GENERATED artifacts in sync with the pins we just bumped: the
+# machine-memory TOOLS block (chezmoi/private_dot_claude/CLAUDE.md) and the mise
+# conf.d tool declarations (chezmoi/dot_config/mise/conf.d/). This script runs
+# in CI (and locally) where the Claude Code sync-tool-memory.sh hook never
+# fires, so regenerate here — otherwise the bumped versions.mk and the
+# generated files drift, and check-invariants.sh ("TOOLS block in sync" /
+# "mise conf.d in sync") fails on merge.
 if [ -n "$bumped" ]; then
   scripts/gen-tool-memory.sh >/dev/null
+  scripts/gen-mise-config.sh >/dev/null
 fi
 
 {

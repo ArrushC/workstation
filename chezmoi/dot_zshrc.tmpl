@@ -181,10 +181,11 @@ if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function zsh)"
 fi
 
-# --- mise (per-project tool versions: node/python/go from mise.toml) ---------
-# `mise activate` installs a precmd/chpwd hook that puts the active project's
-# tools on PATH as you cd. Without it the mise binary is inert outside an
-# explicit `mise exec` — installed-but-not-wired (caught by `make doctor`).
+# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
+# The global pins live in ~/.config/mise/conf.d/ (generated from versions.mk,
+# installed by `make mise-runtimes`). `mise activate` installs a precmd/chpwd
+# hook that puts the real bin dirs on PATH (in front of the shims from
+# ~/.zshenv) and layers any project mise.toml on top as you cd.
 if command -v mise &>/dev/null; then
   eval "$(mise activate zsh)"
 fi

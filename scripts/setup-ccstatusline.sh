@@ -32,7 +32,7 @@ CCSTATUSLINE_VERSION="${CCSTATUSLINE_VERSION:-2.2.19}"
 preflight() {
   if ! command -v npx >/dev/null 2>&1; then
     printf '%bnpx not found.%b ccstatusline runs via npx; install Node.js first:\n' "$YELLOW" "$RESET"
-    printf '  Recommended: %bmake -C makefile node-runtime MODE=dev%b (this repo, pinned LTS)\n' "$YELLOW" "$RESET"
+    printf '  Recommended: %bmake -C makefile mise-runtimes MODE=dev%b (this repo; node is mise-managed, pinned in versions.mk)\n' "$YELLOW" "$RESET"
     printf '  Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
     exit 0
   fi
@@ -48,7 +48,7 @@ preflight() {
     printf '%bnpx resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$npx_path" "$RESET"
     printf 'Windows node cannot run from a WSL working directory (UNC path failure).\n'
     printf 'Install Linux-native Node.js inside this WSL distro:\n'
-    printf '  %bmake -C makefile node-runtime MODE=dev%b\n' "$YELLOW" "$RESET"
+    printf '  %bmake -C makefile mise-runtimes MODE=dev%b\n' "$YELLOW" "$RESET"
     printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
     exit 0
     ;;

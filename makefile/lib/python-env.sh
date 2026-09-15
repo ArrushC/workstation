@@ -8,7 +8,7 @@
 #                    versions.mk; dual-edits $PythonEnvVersion in
 #                    bootstrap.ps1 — check-invariants.sh verifies).
 #
-# uv (the EGET_TOOL already on PATH) downloads the pinned CPython
+# uv (mise-managed — the Makefile prepends mise's shims dir) downloads the pinned CPython
 # (python-build-standalone, user-level under ~/.local/share/uv) and builds
 # the venv at ~/.local/share/workstation-python. USER-LEVEL like pip.sh —
 # never run under sudo. The env is recreated from scratch every run
@@ -29,7 +29,7 @@ bin_dir="$HOME/.local/bin"
 PY_LIBS=(textual textual-dev click rich httpx pydantic typer polars duckdb)
 
 if ! command -v uv >/dev/null 2>&1; then
-  printf 'python-env.sh: uv not on PATH — run `make uv` first\n' >&2
+  printf 'python-env.sh: uv not on PATH — run `make mise-runtimes` first (uv is mise-managed)\n' >&2
   exit 1
 fi
 

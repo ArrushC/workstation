@@ -3,6 +3,22 @@
 # Machine: {{ .chezmoi.hostname }} | User: {{ .chezmoi.username }}
 # =============================================================================
 
+# --- NON-interactive PATH (ABOVE the guard): ~/.local/bin + mise shims -------
+# The bash sshd spawns for `ssh host cmd` reads ~/.bashrc but is NOT
+# interactive, so both prepends must precede the return below (the
+# interactive-only ~/.local/bin export further down stays for readability).
+# Shims go in front of ~/.local/bin; interactive shells layer `mise activate
+# bash` (further down) on top. PARITY: dot_zshenv is the zsh twin (zsh reads
+# .zshenv for every invocation instead).
+case ":$PATH:" in
+*":$HOME/.local/bin:"*) ;;
+*) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+case ":$PATH:" in
+*":$HOME/.local/share/mise/shims:"*) ;;
+*) export PATH="$HOME/.local/share/mise/shims:$PATH" ;;
+esac
+
 # Not running interactively? Stop here.
 [[ $- != *i* ]] && return
 
@@ -224,9 +240,10 @@ if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function bash)"
 fi
 
-# --- mise (per-project tool versions: node/python/go from mise.toml) ---------
-# `mise activate` hooks PROMPT_COMMAND to put the active project's tools on
-# PATH as you cd. Without it the mise binary is inert outside `mise exec`.
+# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
+# Global pins in ~/.config/mise/conf.d/ (generated from versions.mk, installed
+# by `make mise-runtimes`). `mise activate` hooks PROMPT_COMMAND to put the
+# real bin dirs on PATH (in front of the shims exported above the guard).
 if command -v mise &>/dev/null; then
   eval "$(mise activate bash)"
 fi

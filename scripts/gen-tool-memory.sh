@@ -30,6 +30,8 @@ done <"$MK/tools.mk"
 
 # ...plus bespoke / non-macro tools (installed by Makefile targets or npm/uv/go).
 NAMES[EGET_VERSION]="eget"
+NAMES[UV_VERSION]="uv"                 # installed via mise-runtimes (not a tools.mk macro)
+NAMES[TYPESCRIPT_VERSION]="typescript" # tsserver behind typescript-language-server (mise node postinstall)
 NAMES[NODE_VERSION]="node"
 NAMES[GO_VERSION]="go"
 NAMES[GOPLS_VERSION]="gopls"

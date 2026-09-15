@@ -18,8 +18,9 @@
 # ~/.gdbinit), and the two front-ends never collide: `gdb` → GEF, `pwndbg` →
 # pwndbg.
 #
-# Layout mirrors lib/node.sh: extract the whole tree to $DEST/_pwndbg-<ver>/,
-# strip any older _pwndbg-* trees first (idempotent re-install), then symlink
+# Layout (tree-extract + sweep, the pattern lib/node.sh used before mise):
+# extract the whole tree to $DEST/_pwndbg-<ver>/, strip any older _pwndbg-*
+# trees first (idempotent re-install), then symlink
 # $DEST/pwndbg -> the bundled launcher. Sudo is the Makefile's job (the SUDO
 # wrapper from scope.mk); this script assumes it can write $DEST and reads DEST
 # from env.

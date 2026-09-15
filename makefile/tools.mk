@@ -172,12 +172,6 @@ $(eval $(call EGET_TOOL,hyperfine,$(HYPERFINE_VERSION),sharkdp/hyperfine,,--asse
 # narrows to the right libc variant.
 $(eval $(call EGET_TOOL,mise,$(MISE_VERSION),jdx/mise,,--asset musl --asset .tar.gz))
 
-# uv — multi-binary tarball (uv + uvx) with no other files. Non-v tag.
-# --all extracts both binaries cleanly; verified the archive doesn't
-# contain extras that would pollute $(DEST).
-# Note: clean-uv only removes uv — `uvx` lingers in $(DEST).
-$(eval $(call EGET_TOOL,uv,$(UV_VERSION),astral-sh/uv,$(UV_VERSION),--asset musl --all))
-
 $(eval $(call EGET_TOOL,dsq,$(DSQ_VERSION),multiprocessio/dsq))
 
 # --- Robustness gap-fillers --------------------------------------------------
@@ -563,6 +557,9 @@ UPDATE_SPECS += harlequin|$(HARLEQUIN_VERSION)|-|-
 
 # Bespoke / non-tool pins from versions.mk:
 UPDATE_SPECS += node|$(NODE_VERSION)|nodejs/node|v$(NODE_VERSION)
+# uv — mise-managed on both scopes (mise-runtimes; declared in the generated
+# conf.d), so no EGET_TOOL registers it. Tags are bare (0.12.7, no v).
+UPDATE_SPECS += uv|$(UV_VERSION)|astral-sh/uv|$(UV_VERSION)
 UPDATE_SPECS += ccstatusline|$(CCSTATUSLINE_VERSION)|sirmalloc/ccstatusline|v$(CCSTATUSLINE_VERSION)
 UPDATE_SPECS += dozzle|$(DOZZLE_VERSION)|amir20/dozzle|v$(DOZZLE_VERSION)
 UPDATE_SPECS += nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)|ryanoasis/nerd-fonts|v$(JETBRAINSMONO_NERD_VERSION)
@@ -577,7 +574,7 @@ UPDATE_SPECS += vcpkg|$(VCPKG_VERSION)|microsoft/vcpkg|$(VCPKG_VERSION)
 # CPython release tags DO carry a `v` prefix (v3.14.6), unlike pwndbg/vcpkg.
 UPDATE_SPECS += python-env|$(PYTHON_VERSION)|python/cpython|v$(PYTHON_VERSION)
 
-# Dev-only bespoke targets (go-runtime, lsp-servers). These had NO spec at all
+# Dev-only mise-managed runtimes + servers (mise-runtimes). These had NO spec at all
 # until 2026-08-31, so `check-updates` emitted no line for them — not even a `?`
 # — and the weekly bumper inherited the blind spot. Seven of the nine were stale
 # when first checked; marksman-style silence is the worst failure mode this
@@ -596,6 +593,7 @@ UPDATE_SPECS += gopls|$(GOPLS_VERSION)|golang/tools|gopls/v$(GOPLS_VERSION)
 UPDATE_SPECS += lua-ls|$(LUA_LS_VERSION)|LuaLS/lua-language-server|$(LUA_LS_VERSION)
 UPDATE_SPECS += basedpyright|$(BASEDPYRIGHT_VERSION)|DetachHead/basedpyright|v$(BASEDPYRIGHT_VERSION)
 UPDATE_SPECS += typescript-ls|$(TYPESCRIPT_LS_VERSION)|typescript-language-server/typescript-language-server|v$(TYPESCRIPT_LS_VERSION)
+UPDATE_SPECS += typescript|$(TYPESCRIPT_VERSION)|microsoft/TypeScript|v$(TYPESCRIPT_VERSION)
 UPDATE_SPECS += bash-ls|$(BASH_LS_VERSION)|bash-lsp/bash-language-server|server-$(BASH_LS_VERSION)
 UPDATE_SPECS += yaml-ls|$(YAML_LS_VERSION)|npm:yaml-language-server|$(YAML_LS_VERSION)
 UPDATE_SPECS += vscode-langservers|$(VSCODE_LANGSERVERS_VERSION)|hrsh7th/vscode-langservers-extracted|v$(VSCODE_LANGSERVERS_VERSION)
