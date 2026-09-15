@@ -123,6 +123,11 @@ printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$ST/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$ROOT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "versions.mk -> cza nudge" has 'cza'
 ok "block regenerated (stale gone)" bash -c '! grep -q stale "'"$ST"'/CLAUDE.md"'
+mkdir -p "$ST/conf.d"
+printf 'stale\n' >"$ST/conf.d/workstation.toml"
+OUT="$(printf '%s' "$(j --arg f "$ROOT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" OUTDIR="$ST/conf.d" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
+ok "versions.mk -> mise conf.d nudge" has 'conf.d'
+ok "mise conf.d regenerated (stale gone)" bash -c 'grep -q "^uv = " "'"$ST"'/conf.d/workstation.toml" && grep -q "^node = " "'"$ST"'/conf.d/workstation-dev.toml"'
 run "$RH/sync-tool-memory.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated path -> silent" empty
 run "$RH/sync-tool-memory.sh" 'not json at all'
@@ -131,12 +136,13 @@ ok "malformed input -> fail-open silent" empty
 # memory file even when CLAUDE_PROJECT_DIR points at this (main) one.
 WT="$(mktemp -d)"
 mkdir -p "$WT/scripts" "$WT/makefile" "$WT/chezmoi/private_dot_claude"
-cp "$ROOT/scripts/gen-tool-memory.sh" "$WT/scripts/"
+cp "$ROOT/scripts/gen-tool-memory.sh" "$ROOT/scripts/gen-mise-config.sh" "$WT/scripts/"
 cp "$ROOT/makefile/versions.mk" "$ROOT/makefile/tools.mk" "$ROOT/makefile/packages.mk" "$WT/makefile/"
 printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/chezmoi/private_dot_claude/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$WT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | CLAUDE_PROJECT_DIR="$ROOT" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "worktree edit -> cza nudge" has 'cza'
 ok "worktree's own memory regenerated" bash -c '! grep -q stale "'"$WT"'/chezmoi/private_dot_claude/CLAUDE.md"'
+ok "worktree's own mise conf.d generated" test -f "$WT/chezmoi/dot_config/mise/conf.d/workstation-dev.toml"
 rm -rf "$WT"
 rm -rf "$ST"
 

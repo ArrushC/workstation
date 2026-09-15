@@ -7,7 +7,7 @@
 #   scope|<name>|<version>     TOOL/EGET_TOOL registrations  → binary in $DEST
 #   user|<name>|<version>      USER_TOOL registrations       → ~/.local/bin (pip)
 #   bespoke|<name>|<version>   bespoke Makefile targets (claude-cli,
-#                              node-runtime, nerd-fonts, docker-engine,
+#                              mise-runtimes, nerd-fonts, docker-engine,
 #                              dozzle-service, cockpit-service, rsyslog-service,
 #                              wsl-config)
 #
@@ -96,17 +96,41 @@ svc_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
 
 check_bespoke() {
   local name=$1 version=$2
-  # Everything in this section except wsl-config is dev_machine-only.
-  if [[ "$MODE" != dev && "$name" != wsl-config ]]; then
-    row_skip "$name" "dev_machine only (MODE=$MODE)"
-    return
-  fi
+  # Everything in this section is dev_machine-only except the three both-scopes
+  # rows: wsl-config, mise-runtimes (uv on prod) and python-env.
+  case "$name" in
+  wsl-config | mise-runtimes | python-env) ;;
+  *)
+    if [[ "$MODE" != dev ]]; then
+      row_skip "$name" "dev_machine only (MODE=$MODE)"
+      return
+    fi
+    ;;
+  esac
   case "$name" in
   claude-cli)
     check_component claude-cli claude claude "$HOME/.local/bin" "$version"
     ;;
-  node-runtime)
-    check_component node-runtime node node "$DEST" "$version"
+  mise-runtimes)
+    # $version is the cksum of the consumed conf.d file(s) (the stamp suffix),
+    # so a pin change shows as "pins moved". Presence = one shim per tool the
+    # config declares for this scope; mise's own binary is a scope-tool row.
+    local shims="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims" want b missing=()
+    if [[ "$MODE" == dev ]]; then
+      want="node npm npx go gofmt uv uvx gopls lua-language-server basedpyright-langserver typescript-language-server bash-language-server yaml-language-server vscode-json-language-server"
+    else
+      want="uv uvx"
+    fi
+    for b in $want; do
+      [[ -x "$shims/$b" ]] || missing+=("$b")
+    done
+    if [[ -f "$STAMP/mise-runtimes-$version.done" ]] && ((${#missing[@]} == 0)); then
+      row_ok "$name" "all shims present ($shims)"
+    elif ((${#missing[@]} == 0)); then
+      row_warn "$name" "shims present, but no $version stamp — pins moved? next 'make provision' reinstalls"
+    else
+      row_bad "$name" "missing shims: ${missing[*]} — install: make mise-runtimes MODE=$MODE"
+    fi
     ;;
   nerd-fonts)
     if [[ "${IS_WSL:-false}" == true ]]; then
@@ -260,6 +284,17 @@ check_wiring() {
     fi
   else
     row_skip "mise" "not installed"
+  fi
+
+  # mise shims — non-interactive shells (`ssh host cmd`, Make over
+  # update-hosts.sh, IDE/LSP spawns) only see mise-managed tools through the
+  # shims dir: ~/.zshenv (chezmoi dot_zshenv) and ~/.bashrc above its guard.
+  if command -v mise >/dev/null 2>&1; then
+    if grep -q 'mise/shims' "$HOME/.zshenv" 2>/dev/null; then
+      row_ok "mise-shims" "on PATH via ~/.zshenv (non-interactive shells)"
+    else
+      row_warn "mise-shims" "no shims line in ~/.zshenv — run: chezmoi apply"
+    fi
   fi
 
   # pueued — every pueue command fails until the daemon runs.

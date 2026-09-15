@@ -22,6 +22,7 @@ Documents/WindowsPowerShell/Microsoft.PowerShell_profile.local.ps1
 # --- On Windows, ignore Linux-only dotfiles ---------------------------------
 .bashrc
 .zshrc
+.zshenv
 .nbrc
 .dircolors
 .gdbinit
@@ -73,6 +74,10 @@ re-bootstrap), the gate engages correctly.
 # Zed settings serve desktop Zed and its SSH remote server on dev hosts
 # (atc-cache-dev*); Zed never runs on the headless prod boxes.
 .config/zed
+# mise's dev-only tool set (node/go/gopls/LSP servers) — generated from
+# versions.mk by scripts/gen-mise-config.sh; prod hosts get only the
+# both-scopes .config/mise/conf.d/workstation.toml (uv).
+.config/mise/conf.d/workstation-dev.toml
 {{ end }}
 
 {{/*

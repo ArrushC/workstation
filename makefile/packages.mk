@@ -16,7 +16,7 @@
 # Anything that fails here aborts the build (no `|| true` on the install line).
 #
 # `libatomic` is the runtime shared lib the Node.js >=25 binary links against
-# (node-runtime is dev-only, and this file only runs on dev). Node 24 did NOT
+# (node is mise-managed and dev-only, and this file only runs on dev). Node 24 did NOT
 # need it, and `gcc` ships only the dev `.so` (a linker script, not the runtime
 # SONAME), so without the package `node`/`npx` die at startup with
 # "libatomic.so.1: cannot open shared object file" — which breaks the

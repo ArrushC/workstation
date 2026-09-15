@@ -75,6 +75,8 @@ RCLONE_VERSION     := 1.75.1
 CROC_VERSION       := 11.5.0
 HYPERFINE_VERSION  := 1.20.0
 MISE_VERSION       := 2026.9.1
+# uv — consumed by scripts/gen-mise-config.sh (installed via mise-runtimes on
+# both scopes, NOT eget). Dual-edits bootstrap.ps1's $PortableTools until PR 2.
 UV_VERSION         := 0.12.7
 DSQ_VERSION        := 0.23.0
 
@@ -213,12 +215,19 @@ PYTHON_VERSION := 3.14.7
 # --- (2026-06) Language servers (LSP) + runtimes ------------------------------
 # All dev_machine only (navigation is a dev activity; Claude Code is dev-only-
 # deployed). Three are single-binary EGET_TOOL static servers (tools.mk,
-# both-scope). The rest install via the bespoke `lsp-servers` target (Makefile):
-# lua-language-server is a multi-file TREE (not a single binary, so NOT eget);
-# basedpyright via `uv tool install` (self-contained PyPI build, bundles its own
-# JS runtime); the four *-language-server npm packages via node-runtime's npm;
-# gopls via `go install` against the new go-runtime. clangd is provisioned
-# separately (clang-tools-extra, packages.mk) and only VERIFIED by lsp-servers.
+# both-scope). Everything else here is installed by mise (the `mise-runtimes`
+# target, Makefile): scripts/gen-mise-config.sh renders these pins into
+# chezmoi/dot_config/mise/conf.d/workstation-dev.toml — node carries the npm
+# servers as its postinstall (typescript-language-server needs `typescript` as
+# a global sibling), gopls via the go: backend against the pinned Go, lua-
+# language-server via mise's registry (aqua), basedpyright via pipx: (uv tool
+# install; mise never declares python). clangd is provisioned separately
+# (clang-tools-extra, packages.mk) and only VERIFIED by lsp-servers.
+# TYPESCRIPT_VERSION is the tsserver typescript-language-server drives (was
+# unpinned `latest` before mise). MUST stay on the 5.x line: TypeScript 7
+# (the native compiler) ships no lib/tsserver.js, so ts-ls 6.0.0 fails
+# `initialize` against it (verified 2026-09-13). Bumper-EXCLUDEd;
+# check_tsls_typescript_coupling in check-invariants.sh asserts the major.
 GO_VERSION                 := 1.27.0
 GOPLS_VERSION              := 0.23.0
 RUST_ANALYZER_VERSION      := 2026-09-07
@@ -227,6 +236,7 @@ TAPLO_VERSION              := 0.10.0
 LUA_LS_VERSION             := 3.19.1
 BASEDPYRIGHT_VERSION       := 1.39.10
 TYPESCRIPT_LS_VERSION      := 6.0.0
+TYPESCRIPT_VERSION         := 5.9.3
 BASH_LS_VERSION            := 5.6.0
 YAML_LS_VERSION            := 1.24.0
 VSCODE_LANGSERVERS_VERSION := 4.10.0

@@ -184,6 +184,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lua-language-server` 3.19.1
 - `basedpyright` 1.39.10
 - `typescript-language-server` 6.0.0
+- `typescript` 5.9.3
 - `bash-language-server` 5.6.0
 - `yaml-language-server` 1.24.0
 - `vscode-langservers-extracted` 4.10.0

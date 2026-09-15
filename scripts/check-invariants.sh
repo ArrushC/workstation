@@ -306,6 +306,56 @@ check_tools_block() {
   rm -f "$tmp"
 }
 
+check_mise_config() {
+  hdr "mise conf.d (generated from versions.mk) in sync + parseable"
+  local dir="chezmoi/dot_config/mise/conf.d" tmp f py
+  for f in workstation.toml workstation-dev.toml; do
+    if [ ! -f "$dir/$f" ]; then
+      bad "missing: $dir/$f — run: scripts/gen-mise-config.sh"
+      return
+    fi
+  done
+  tmp="$(mktemp -d)"
+  if OUTDIR="$tmp" scripts/gen-mise-config.sh >/dev/null 2>&1; then
+    if diff -q "$dir/workstation.toml" "$tmp/workstation.toml" >/dev/null &&
+      diff -q "$dir/workstation-dev.toml" "$tmp/workstation-dev.toml" >/dev/null; then
+      ok "conf.d matches gen-mise-config.sh output"
+    else
+      bad "conf.d stale — run: scripts/gen-mise-config.sh"
+      diff -r "$dir" "$tmp" | sed 's/^/       /' | head -30
+    fi
+  else
+    bad "gen-mise-config.sh failed against a temp OUTDIR"
+  fi
+  rm -rf "$tmp"
+  # TOML parse: EL9's python3 is 3.9 (no tomllib); prefer the python-env wpy
+  # (3.14) when present, soft-skip otherwise (CI's python3 is 3.11+).
+  py=""
+  for f in wpy python3; do
+    if command -v "$f" >/dev/null 2>&1 && "$f" -c 'import tomllib' 2>/dev/null; then
+      py="$f"
+      break
+    fi
+  done
+  if [ -z "$py" ]; then
+    note "no python with tomllib — TOML parse check skipped locally (CI enforces)"
+    return
+  fi
+  if "$py" - "$dir/workstation.toml" "$dir/workstation-dev.toml" <<'PY' 2>/dev/null
+import sys, tomllib
+for p in sys.argv[1:]:
+    with open(p, "rb") as fh:
+        d = tomllib.load(fh)
+    if not d.get("tools"):
+        raise SystemExit(f"{p}: no [tools]")
+PY
+  then
+    ok "both files parse (tomllib) and declare [tools]"
+  else
+    bad "conf.d TOML parse failed (tomllib) — regenerate: scripts/gen-mise-config.sh"
+  fi
+}
+
 check_lsp_plugin() {
   hdr "workstation-lsp plugin manifest"
   local src="chezmoi/private_dot_claude/skills/workstation-lsp"
@@ -483,6 +533,18 @@ check_zellij_plugin_installer() {
     ok "${out#PASS: }"
   else
     bad "scripts/test-zellij-plugin.sh failed:"
+    printf '%s\n' "$out" | sed 's/^/       /' | head -10
+  fi
+}
+
+check_mise_lib() {
+  hdr "mise runtimes lib (lib/mise.sh seed / install / sweeps / uninstall)"
+  local out
+  # Offline behavioural test with a fake `mise` on PATH and a scratch HOME.
+  if out=$(bash scripts/test-mise.sh 2>&1); then
+    ok "${out#PASS: }"
+  else
+    bad "scripts/test-mise.sh failed:"
     printf '%s\n' "$out" | sed 's/^/       /' | head -10
   fi
 }
@@ -776,10 +838,10 @@ check_go_gopls_coupling() {
     return
   fi
 
-  # gopls declares its minimum toolchain in its OWN go.mod, and lib/lsp.sh builds
-  # it with `go install` using the PINNED Go. Mismatch is not loud: lsp.sh ends
-  # that line with `|| warn "gopls install failed — skipping"`, so provisioning
-  # continues and the host silently keeps a stale gopls (or none at all).
+  # gopls declares its minimum toolchain in its OWN go.mod, and mise's go: backend builds
+  # it with `go install` using the PINNED Go (mise-runtimes). A mismatch fails
+  # that one tool; the others still install and the stamp stays unwritten, so
+  # the host keeps a stale gopls (or none) until the pins agree.
   # Verified both directions on 2026-08-31: gopls 0.23.0 + go 1.24.4 fails with
   # "requires go >= 1.26.0", and gopls 0.23.0 + go 1.27.0 builds under
   # GOTOOLCHAIN=local (i.e. without silently fetching a second toolchain).
@@ -793,7 +855,30 @@ check_go_gopls_coupling() {
   if [ "$(printf '%s\n%s\n' "$floor" "$gov" | sort -V | tail -1)" = "$gov" ]; then
     ok "gopls $goplsv needs go >= $floor; pinned go is $gov"
   else
-    bad "gopls $goplsv requires go >= $floor but GO_VERSION is $gov — lsp.sh would warn-and-skip, leaving gopls stale or absent; bump both together"
+    bad "gopls $goplsv requires go >= $floor but GO_VERSION is $gov — mise-runtimes would fail on gopls, leaving it stale or absent; bump both together"
+  fi
+}
+
+check_tsls_typescript_coupling() {
+  hdr "typescript-language-server <-> typescript major"
+  local tsv tslsv major
+  tsv=$(mkval TYPESCRIPT_VERSION)
+  tslsv=$(mkval TYPESCRIPT_LS_VERSION)
+  if [ -z "$tsv" ] || [ -z "$tslsv" ]; then
+    bad "could not read TYPESCRIPT_VERSION / TYPESCRIPT_LS_VERSION from versions.mk"
+    return
+  fi
+  # typescript-language-server (every release through 6.0.0) drives
+  # typescript/lib/tsserver.js; TypeScript 7.x (the native Go compiler) ships
+  # only bin/tsc, so ts-ls fails `initialize` with "Could not find a valid
+  # TypeScript installation" (verified 2026-09-13 against 7.0.2). Until a
+  # ts-ls release targets TS 7, the pin must stay on the 5.x line — the weekly
+  # bumper would otherwise walk it back to 7.x (hence the EXCLUDE entry).
+  major=${tsv%%.*}
+  if [ "$major" -le 5 ] 2>/dev/null; then
+    ok "typescript $tsv (major $major) is tsserver-capable for typescript-language-server $tslsv"
+  else
+    bad "typescript $tsv has no lib/tsserver.js — typescript-language-server $tslsv cannot initialize; keep the 5.x line until ts-ls supports TS 7"
   fi
 }
 
@@ -804,6 +889,7 @@ check_line_endings_and_mode
 check_bom
 check_sentinels
 check_tools_block
+check_mise_config
 check_lsp_plugin
 check_chezmoiignore_targets
 check_completion_parity
@@ -811,8 +897,10 @@ check_warp_guards
 check_zellij_config
 check_update_spec_coverage
 check_go_gopls_coupling
+check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling
 check_zellij_plugin_installer
+check_mise_lib
 check_python_env_parity
 check_curl_helper_parity
 check_shellcheck

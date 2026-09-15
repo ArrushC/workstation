@@ -1456,19 +1456,23 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Polyglot dev tool version manager (asdf successor)"
+                                    data-tip="Polyglot runtime manager — owns node/Go/uv + the LSP servers (make mise-runtimes; global pins generated from versions.mk)"
                                     >mise<span class="sr-only">
-                                        — polyglot dev tool version manager
-                                        (asdf successor)</span
+                                        — polyglot runtime manager; installs
+                                        node, Go, uv and the language servers
+                                        from pins generated out of
+                                        versions.mk (make mise-runtimes)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Fast Python installer + venv (replaces pip + venv)"
+                                    data-tip="Fast Python installer + venv (mise-managed, both scopes; replaces pip + venv)"
                                     >uv (+ uvx)<span class="sr-only">
-                                        — fast Python installer + venv (replaces
-                                        pip + venv)</span
+                                        — fast Python installer + venv;
+                                        installed by mise on both dev_machine
+                                        and prod_machine (replaces pip +
+                                        venv)</span
                                     ></span
                                 >
                                 <span
@@ -1486,13 +1490,24 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Go toolchain from go.dev (dev_machine only — make go-runtime MODE=dev)"
+                                    data-tip="Go toolchain via mise (dev_machine only — make mise-runtimes MODE=dev)"
                                     >go <small>(dev)</small
                                     ><span class="sr-only">
-                                        — official Go toolchain; extracted from
-                                        go.dev tarball into /usr/local/bin
-                                        (dev_machine only via go-runtime
-                                        bespoke target)</span
+                                        — official Go toolchain, installed
+                                        user-level by mise (dev_machine only
+                                        via mise-runtimes)</span
+                                    ></span
+                                >
+                                <span
+                                    class="chip"
+                                    tabindex="0"
+                                    data-tip="Node.js via mise (dev_machine only — npx for ccstatusline + the npm language servers)"
+                                    >node <small>(dev)</small
+                                    ><span class="sr-only">
+                                        — Node.js, installed user-level by mise
+                                        (dev_machine only); provides npx for
+                                        ccstatusline and carries the npm
+                                        language servers as its postinstall</span
                                     ></span
                                 >
                             </div>
@@ -1542,21 +1557,22 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Go language server (go install, dev_machine only — needs go-runtime)"
+                                    data-tip="Go language server (mise go: backend, dev_machine only)"
                                     >gopls <small>(dev)</small
                                     ><span class="sr-only">
-                                        — Go language server; installed via
-                                        go install with GOBIN pointing at
-                                        /usr/local/bin (dev_machine only)</span
+                                        — Go language server; built by mise&rsquo;s
+                                        go: backend against the pinned Go
+                                        (dev_machine only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Lua language server tree install (dev_machine only)"
+                                    data-tip="Lua language server (mise registry install, dev_machine only)"
                                     >lua-language-server <small>(dev)</small
                                     ><span class="sr-only">
-                                        — Lua language server; full tree install
+                                        — Lua language server; installed by mise
+                                        from its registry as a full tree
                                         (multi-file, not a single binary)
                                         dev_machine only</span
                                     ></span
@@ -1564,29 +1580,31 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Type-strict Python LSP (uv tool install, dev_machine only)"
+                                    data-tip="Type-strict Python LSP (mise pipx: backend via uv tool install, dev_machine only)"
                                     >basedpyright <small>(dev)</small
                                     ><span class="sr-only">
                                         — type-strict Python language server;
-                                        installed via uv tool install to the
-                                        user site (dev_machine only)</span
+                                        installed by mise&rsquo;s pipx: backend
+                                        (uv tool install) (dev_machine
+                                        only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="TypeScript/JS language server (npm, dev_machine only)"
+                                    data-tip="TypeScript/JS language server (npm postinstall of mise's node, dev_machine only)"
                                     >typescript-language-server <small>(dev)</small
                                     ><span class="sr-only">
                                         — TypeScript + JavaScript language
-                                        server; npm install (dev_machine
-                                        only, needs node-runtime)</span
+                                        server; npm install (dev_machine only;
+                                        npm postinstall of mise&rsquo;s
+                                        node)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Bash language server (npm, dev_machine only)"
+                                    data-tip="Bash language server (npm postinstall of mise's node, dev_machine only)"
                                     >bash-language-server <small>(dev)</small
                                     ><span class="sr-only">
                                         — Bash language server; npm install
@@ -1596,7 +1614,7 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="YAML language server (npm, dev_machine only)"
+                                    data-tip="YAML language server (npm postinstall of mise's node, dev_machine only)"
                                     >yaml-language-server <small>(dev)</small
                                     ><span class="sr-only">
                                         — YAML language server; npm install
@@ -1606,8 +1624,8 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="JSON language server (npm via vscode-langservers-extracted, dev_machine only)"
-                                    >vscode-json-languageserver <small>(dev)</small
+                                    data-tip="JSON language server (npm postinstall of mise's node via vscode-langservers-extracted, dev_machine only)"
+                                    >vscode-json-language-server <small>(dev)</small
                                     ><span class="sr-only">
                                         — JSON language server from
                                         vscode-langservers-extracted; npm
@@ -1618,9 +1636,13 @@ try {
                             <p class="card-note">
                                 Install with
                                 <code>make lsp-servers MODE=dev</code> (runs as
-                                part of <code>make dev</code>). Each server is
-                                best-effort &mdash; one failure never aborts the
-                                rest. <code>rust-analyzer</code>,
+                                part of <code>make dev</code>). The
+                                mise-managed servers come from
+                                <code>make mise-runtimes</code>; mise installs
+                                each tool independently, so one failure leaves
+                                the others usable and the next
+                                <code>make</code> retries.
+                                <code>rust-analyzer</code>,
                                 <code>marksman</code>, and <code>taplo</code>
                                 install on both <code>dev_machine</code> and
                                 <code>prod_machine</code> (eget binaries). On
@@ -2536,8 +2558,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p class="note-row">
                         Re-runnable any time:
                         <code>make -C makefile claude-statusline MODE=dev</code>.
-                        Auto-installs Linux-native Node.js (pinned LTS) as a
-                        dep via <code>make -C makefile node-runtime MODE=dev</code>,
+                        Auto-installs the mise-managed Linux-native Node.js
+                        as a dep via
+                        <code>make -C makefile mise-runtimes MODE=dev</code>,
                         so a fresh dev_machine doesn&rsquo;t need <code>npx</code>
                         on PATH beforehand. The ccstatusline version is pinned
                         in <code>makefile/versions.mk</code> via
@@ -4145,28 +4168,38 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         for the option semantics.
                     </p>
 
-                    <h3>
-                        <span class="badge dev">dev</span> Node.js runtime
-                    </h3>
+                    <h3>Runtimes via mise</h3>
                     <p>
-                        Install or refresh the pinned Linux-native Node.js
-                        (currently <code>NODE_VERSION</code> in
-                        <code>versions.mk</code>; consumed by the
-                        ccstatusline <code>statusLine</code> command and
-                        anything else that needs <code>npx</code>):
+                        Install or refresh the mise-managed runtimes (Node.js,
+                        Go, uv) and language servers. Pins live in
+                        <code>makefile/versions.mk</code> and are rendered into
+                        <code>~/.config/mise/conf.d/</code>; consumed by the
+                        ccstatusline <code>statusLine</code> command, the
+                        Claude&nbsp;Code <code>LSP</code> plugin, and anything
+                        else that needs <code>npx</code>, <code>go</code> or
+                        <code>uv</code>:
                     </p>
-                    <pre><code>make -C makefile node-runtime MODE=dev</code></pre>
+                    <pre><code>make -C makefile mise-runtimes MODE=dev   # MODE=prod installs uv only</code></pre>
                     <p class="note-row">
-                        Tarball extracted to
-                        <code>$(DEST)/_node-vX.Y.Z/</code>;
-                        <code>node</code>/<code>npm</code>/<code>npx</code>/<code>corepack</code>
-                        symlinked into <code>$(DEST)/</code>. Auto-runs as a
-                        dep of <code>claude-statusline</code> on
-                        <code>dev_machine</code>, so you rarely need to call
-                        it directly. WSL note: if your <code>PATH</code>
-                        leaks a Windows-side <code>npx</code> from
-                        <code>/mnt/c/...</code>, the setup script detects it
-                        and points you at this target.
+                        Everything lands user-level under
+                        <code>~/.local/share/mise</code>; the only privileged
+                        step is the one-time sweep of the pre-mise
+                        <code>/usr/local/bin</code> artifacts on
+                        <code>dev_machine</code> (sudo prompt on the first run).
+                        Interactive shells see the tools through
+                        <code>mise activate</code>; non-interactive ones
+                        (<code>ssh host cmd</code>, Make, IDE spawns) through
+                        <code>~/.local/share/mise/shims</code>, exported from
+                        <code>~/.zshenv</code> and from <code>~/.bashrc</code>
+                        above its interactive guard. Auto-runs as a dep of
+                        <code>claude-statusline</code> and
+                        <code>python-env</code>, so you rarely need to call it
+                        directly. Force a full redo as two commands:
+                        <code>make clean-mise-runtimes MODE=dev</code> then
+                        <code>make mise-runtimes MODE=dev</code>. WSL note: if
+                        your <code>PATH</code> leaks a Windows-side
+                        <code>npx</code> from <code>/mnt/c/...</code>, the setup
+                        script detects it and points you at this target.
                     </p>
 
                     <h3>Python scripting env</h3>
@@ -5772,24 +5805,22 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                         <div class="ts-body">
                             <p>
                                 <code>make lsp-servers MODE=dev</code> (also
-                                runs as part of <code>make dev</code>) installs
-                                each server best-effort &mdash; one failure
-                                warns and continues. Servers and their
-                                mechanisms:
+                                runs as part of <code>make dev</code>) covers
+                                the whole stack. Servers and their mechanisms:
                             </p>
                             <ul>
                                 <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; eget binaries, dev + prod; re-run <code>make provision MODE=dev</code>.</li>
-                                <li><strong>gopls</strong> &mdash; <code>go install</code> via <code>go-runtime</code>; needs <code>make go-runtime MODE=dev</code> first.</li>
-                                <li><strong>lua-language-server</strong> &mdash; tree install (not a single binary); verify <code>lua-language-server --version</code>.</li>
-                                <li><strong>basedpyright</strong> &mdash; <code>uv tool install</code> to user site; check <code>uv tool list</code>.</li>
-                                <li><strong>typescript-language-server / bash-language-server / yaml-language-server / vscode-json-languageserver</strong> &mdash; npm, needs <code>node-runtime</code>; check <code>npm list -g --prefix /usr/local</code>.</li>
+                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (<code>make mise-runtimes MODE=dev</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line (<code>TYPESCRIPT_VERSION</code>) on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
                                 <li><strong>clangd</strong> &mdash; verified-only (comes from <code>clang-tools-extra</code> via dnf, see the C/C++ entry below); <code>make lsp-servers</code> only warns if absent.</li>
                             </ul>
                             <p>
-                                Re-run a single mechanism:
-                                <code>make lsp-servers MODE=dev</code>.
-                                To force a reinstall of the Go toolchain:
-                                <code>make clean-go-runtime go-runtime MODE=dev</code>.
+                                Re-run the stack:
+                                <code>make lsp-servers MODE=dev</code>. Force a
+                                reinstall of everything mise-managed, as two
+                                commands (a combined goal list races under
+                                <code>-j</code>):
+                                <code>make clean-mise-runtimes MODE=dev</code>
+                                then <code>make mise-runtimes MODE=dev</code>.
                             </p>
                         </div>
                     </details>

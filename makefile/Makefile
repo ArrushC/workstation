@@ -223,40 +223,48 @@ clean-claude-cli:
 	@rm -f $(STAMP)/claude-*.done $(HOME)/.local/bin/claude
 
 # -----------------------------------------------------------------------------
-# node-runtime — Node.js (+ npm + npx + corepack) from the nodejs.org
-# tarball. Dev-only (the ccstatusline statusLine command runs `npx`, and
-# any future npm-based tool needs it). Pinned to NODE_VERSION in
-# versions.mk. The lib/node.sh helper extracts the tarball to
-# $(DEST)/_node-vX.Y.Z/ and symlinks the four bin entries into $(DEST).
-# Older _node-* trees are stripped on every (re-)install.
+# mise-runtimes — node, Go, uv and the LSP servers via mise. BOTH scopes and
+# USER-LEVEL: mise installs under ~/.local/share/mise; the one privileged step
+# is the legacy sweep of $(DEST). What gets installed is declared in
+# chezmoi/dot_config/mise/conf.d/workstation.toml (both scopes: uv) +
+# workstation-dev.toml (node with the npm servers as its postinstall, go,
+# gopls, lua-language-server, basedpyright) — GENERATED from versions.mk by
+# scripts/gen-mise-config.sh (never hand-edited; check-invariants asserts no
+# drift). lib/mise.sh seeds the right file(s) into ~/.config/mise/conf.d/ (the
+# fanout runs before the dotfiles phase; chezmoi later deploys identical
+# bytes), runs `mise install`, force-reinstalls node only when the DECLARED node
+# version is already installed (so a changed npm postinstall re-runs; a
+# NODE_VERSION bump installs once), prunes superseded versions, then sweeps the
+# pre-mise artifacts ($(SUDO); dev: the /usr/local node/go/uv/LSP set, prod:
+# only the eget uv/uvx) and the old user-site basedpyright.
+# Stamp bakes a cksum of the consumed config file(s): any pin change re-fires
+# it. Order-only dep on mise's eget stamp FILE (stamp-on-stamp invariant).
+# Interactive shells see the tools via `mise activate`; non-interactive ones
+# (this Makefile's own recipes, ssh, IDE spawns) via the shims dir below.
 # -----------------------------------------------------------------------------
-.PHONY: node-runtime clean-node-runtime
-node-runtime: $(STAMP)/node-$(NODE_VERSION).done
-$(STAMP)/node-$(NODE_VERSION).done:
-	@printf '==> node %s\n' "$(NODE_VERSION)"
-	@$(SUDO) $(LIB)/node.sh $(NODE_VERSION)
+MISE_CONF_SRC   := $(REPO_ROOT)/chezmoi/dot_config/mise/conf.d
+MISE_CONF_FILES := $(MISE_CONF_SRC)/workstation.toml
+ifeq ($(MODE),dev)
+MISE_CONF_FILES += $(MISE_CONF_SRC)/workstation-dev.toml
+endif
+MISE_RUNTIMES_STAMP := $(shell cat $(MISE_CONF_FILES) | cksum | cut -d' ' -f1)
+# Recipes that need a mise-managed tool before any shell has activated mise
+# (python-env's uv, claude-statusline's npx) prepend this. MISE_DATA_DIR is
+# honoured so sandbox runs never touch the real install.
+MISE_SHIMS := $(or $(MISE_DATA_DIR),$(HOME)/.local/share/mise)/shims
+.PHONY: mise-runtimes clean-mise-runtimes
+mise-runtimes: $(STAMP)/mise-runtimes-$(MISE_RUNTIMES_STAMP).done
+$(STAMP)/mise-runtimes-$(MISE_RUNTIMES_STAMP).done: | $(STAMP)/mise-$(MISE_VERSION).done
+	@printf '==> mise-runtimes (%s)\n' "$(MODE)"
+	@$(LIB)/mise.sh seed $(MODE) $(MISE_CONF_SRC)
+	# $(DEST) first so `mise` resolves over non-interactive ssh on prod (~/.local/bin is off PATH there).
+	@PATH="$(DEST):$$PATH" $(LIB)/mise.sh install
+	@$(SUDO) $(LIB)/mise.sh sweep-legacy $(MODE) $(DEST)
+	@PATH="$(DEST):$$PATH" $(LIB)/mise.sh sweep-user
 	@mkdir -p $(@D) && touch $@
-clean-node-runtime:
-	@rm -f $(STAMP)/node-*.done
-	@$(SUDO) rm -f $(DEST)/node $(DEST)/npm $(DEST)/npx $(DEST)/corepack
-	@$(SUDO) rm -rf $(DEST)/_node-*
-
-# -----------------------------------------------------------------------------
-# go-runtime — Go toolchain from the official go.dev tarball. Dev-only (gopls
-# is built from it; Go is generally useful on a dev box). Pinned to GO_VERSION
-# in versions.mk. lib/go.sh extracts to $(DEST)/_go-X.Y.Z/ and symlinks go +
-# gofmt into $(DEST). Older _go-* trees are stripped on every (re-)install.
-# -----------------------------------------------------------------------------
-.PHONY: go-runtime clean-go-runtime
-go-runtime: $(STAMP)/go-$(GO_VERSION).done
-$(STAMP)/go-$(GO_VERSION).done:
-	@printf '==> go %s\n' "$(GO_VERSION)"
-	@$(SUDO) $(LIB)/go.sh $(GO_VERSION)
-	@mkdir -p $(@D) && touch $@
-clean-go-runtime:
-	@rm -f $(STAMP)/go-*.done
-	@$(SUDO) rm -f $(DEST)/go $(DEST)/gofmt
-	@$(SUDO) rm -rf $(DEST)/_go-*
+clean-mise-runtimes:
+	@rm -f $(STAMP)/mise-runtimes-*.done
+	@PATH="$(DEST):$$PATH" $(LIB)/mise.sh uninstall
 
 # -----------------------------------------------------------------------------
 # nerd-fonts — JetBrainsMono Nerd Font Mono variants from ryanoasis/nerd-fonts.
@@ -267,7 +275,7 @@ clean-go-runtime:
 #     so `make nerd-fonts` returns fast on subsequent WSL runs.
 #   - NO $(SUDO) — deposits to $HOME/.local/share/fonts/JetBrainsMonoNerdFontMono/
 #     which is user-owned; fc-cache also runs against a user-scope dir. Other
-#     bespoke targets (node-runtime, claude-cli) use $(SUDO) because they
+#     bespoke targets (pwndbg, devtoys-cli) use $(SUDO) because they
 #     deposit to $(DEST) (/usr/local/bin on dev) which is system-owned.
 #   - Stamp encodes $(JETBRAINSMONO_NERD_VERSION); bumping the pin in
 #     versions.mk invalidates the stamp on the next run.
@@ -288,9 +296,10 @@ clean-nerd-fonts:
 # -----------------------------------------------------------------------------
 # claude-statusline — interactive ccstatusline setup prompt.
 #   - Dev-only. The recipe body conditionally compiles based on MODE.
-#   - Depends on node-runtime (also dev-only) so the npx the script
-#     invokes is the chezmoi-managed Linux-native one, not a Windows
-#     passthrough that crashes on WSL working dirs.
+#   - Depends on mise-runtimes (node is mise-managed) and prepends the mise
+#     shims dir, so the npx the script invokes is the Linux-native pinned one
+#     even from bootstrap.sh's tail (no shell has activated mise yet) — never
+#     a Windows passthrough that crashes on WSL working dirs.
 #   - Re-runnable any time post-bootstrap; bootstrap.sh's tail also
 #     invokes this target on --dev runs after ensure_chezmoi_initialized.
 #   - Version passed via env so versions.mk stays the single source of
@@ -298,11 +307,11 @@ clean-nerd-fonts:
 # -----------------------------------------------------------------------------
 .PHONY: claude-statusline
 ifeq ($(MODE),dev)
-claude-statusline: node-runtime
+claude-statusline: mise-runtimes
 endif
 claude-statusline:
 ifeq ($(MODE),dev)
-	@CCSTATUSLINE_VERSION=$(CCSTATUSLINE_VERSION) ../scripts/setup-ccstatusline.sh
+	@PATH="$(MISE_SHIMS):$$PATH" CCSTATUSLINE_VERSION=$(CCSTATUSLINE_VERSION) ../scripts/setup-ccstatusline.sh
 else
 	@echo "claude-statusline is a dev_machine target — skipping (MODE=$(MODE))"
 endif
@@ -313,7 +322,7 @@ endif
 # command (its own bundled Python). It deliberately does NOT touch ~/.gdbinit,
 # so plain `gdb` keeps loading GEF (the chezmoi-tracked ~/.gdbinit): `gdb` →
 # GEF, `pwndbg` → pwndbg, no collision. $(SUDO) because it deposits under
-# $(DEST) (/usr/local on dev), like node-runtime. Stamp bakes PWNDBG_VERSION so
+# $(DEST) (/usr/local on dev), like devtoys-cli. Stamp bakes PWNDBG_VERSION so
 # a bump in versions.mk reinstalls. No WSL skip — a debugger is useful in a WSL
 # dev guest (unlike the host-management services below).
 # -----------------------------------------------------------------------------
@@ -371,18 +380,18 @@ clean-vcpkg:
 # rebuilds on the next provision; upgrading the latest-tracking libs is
 # `make python-env-rebuild` (see that target below — a combined
 # `clean-python-env python-env` goal list races under -j$(nproc)). Order-only
-# dep on uv's stamp FILE (never the phony — EGET_TOOL stamp-on-stamp
-# invariant). No WSL skip (useful in a WSL dev guest, like pwndbg). Windows
+# dep on the mise-runtimes stamp FILE — uv is mise-managed (never the phony;
+# stamp-on-stamp invariant). No WSL skip (useful in a WSL dev guest, like pwndbg). Windows
 # half: Invoke-PythonEnv in bootstrap.ps1 ($PythonEnvVersion/$PythonLibs —
 # check-invariants pairs).
 # -----------------------------------------------------------------------------
 PYTHON_ENV_STAMP := $(shell cksum $(LIB)/python-env.sh | cut -d' ' -f1)
 .PHONY: python-env clean-python-env
 python-env: $(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done
-$(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done: | $(STAMP)/uv-$(UV_VERSION).done
+$(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done: | $(STAMP)/mise-runtimes-$(MISE_RUNTIMES_STAMP).done
 	@printf '==> python-env %s\n' "$(PYTHON_VERSION)"
-	# non-interactive ssh (update-hosts.sh) lacks ~/.local/bin on PATH on prod; prepend DEST so the script's uv calls resolve.
-	@PATH="$(DEST):$$PATH" $(LIB)/python-env.sh $(PYTHON_VERSION)
+	# uv lives behind mise: the shims dir first (no shell has activated mise inside make); DEST next for prod's off-PATH ~/.local/bin over ssh.
+	@PATH="$(MISE_SHIMS):$(DEST):$$PATH" $(LIB)/python-env.sh $(PYTHON_VERSION)
 	@mkdir -p $(@D) && touch $@
 clean-python-env:
 	@rm -f $(STAMP)/python-env-*.done
@@ -427,50 +436,25 @@ clean-devtoys-cli:
 	@$(SUDO) rm -rf $(DEST)/_devtoys-cli-*
 
 # -----------------------------------------------------------------------------
-# lsp-servers — install/verify the whole language-server stack (dev_machine
-# only). One coherent target so `make lsp-servers` covers every server. The
-# single-binary servers (rust-analyzer/marksman/taplo) are both-scope EGET_TOOLs
-# installed by `tools`; this target DEPENDS on them and adds the rest:
-#   - lua-language-server  (TREE install via lib/lsp.sh; not a single binary)
-#   - npm servers          (typescript/bash/yaml/vscode-langservers via node)
-#   - gopls                (go install via go-runtime)
-#   - basedpyright         (uv tool install — user-site, no sudo)
-#   - clangd               (VERIFIED only; comes from clang-tools-extra, dnf)
-# Each install is best-effort inside lib/lsp.sh (a server's outage never aborts
-# the provision, matching the C/C++ `|| true` and cht.sh SOFT_TOOL precedent).
-# Stamp bakes a hash of all the LSP pins so bumping any reinstalls.
+# lsp-servers — dev-only alias over the whole language-server stack: the three
+# both-scopes eget servers + mise-runtimes (gopls / lua-language-server /
+# basedpyright / the npm servers, declared in workstation-dev.toml) + a clangd
+# presence check (clangd comes from clang-tools-extra via dnf — verified only,
+# a warning never aborts the provision). Kept so `make lsp-servers MODE=dev`
+# (README) still means "the whole stack"; there is no stamp of its own.
 # -----------------------------------------------------------------------------
-LSP_PINS := $(GOPLS_VERSION)|$(LUA_LS_VERSION)|$(BASEDPYRIGHT_VERSION)|$(TYPESCRIPT_LS_VERSION)|$(BASH_LS_VERSION)|$(YAML_LS_VERSION)|$(VSCODE_LANGSERVERS_VERSION)
-LSP_STAMP := $(shell printf '%s' '$(LSP_PINS)' | cksum | cut -d' ' -f1)
-.PHONY: lsp-servers clean-lsp-servers
+.PHONY: lsp-servers
 ifeq ($(MODE),dev)
-lsp-servers: rust-analyzer marksman taplo node-runtime go-runtime $(STAMP)/lsp-servers-$(LSP_STAMP).done
-$(STAMP)/lsp-servers-$(LSP_STAMP).done:
-	@printf '==> lsp-servers (language-server stack)\n'
-	@$(LIB)/lsp.sh verify-clangd
-	@$(SUDO) $(LIB)/lsp.sh lua $(DEST) $(LUA_LS_VERSION)
-	@$(SUDO) $(LIB)/lsp.sh npm $(DEST) \
-	  typescript-language-server@$(TYPESCRIPT_LS_VERSION) typescript \
-	  bash-language-server@$(BASH_LS_VERSION) \
-	  yaml-language-server@$(YAML_LS_VERSION) \
-	  vscode-langservers-extracted@$(VSCODE_LANGSERVERS_VERSION)
-	@$(SUDO) $(LIB)/lsp.sh gopls $(DEST) $(GOPLS_VERSION)
-	@$(LIB)/lsp.sh basedpyright $(BASEDPYRIGHT_VERSION)
-	@mkdir -p $(@D) && touch $@
+lsp-servers: rust-analyzer marksman taplo mise-runtimes
+	@if command -v clangd >/dev/null 2>&1; then \
+	  printf '  ✓ clangd present: %s\n' "$$(command -v clangd)"; \
+	else \
+	  printf '  ! clangd not found — install clang-tools-extra (packages-optional; needs EPEL/CRB on EL9)\n' >&2; \
+	fi
 else
 lsp-servers:
 	@echo "lsp-servers is a dev_machine target — skipping (MODE=$(MODE))"
 endif
-clean-lsp-servers:
-	@rm -f $(STAMP)/lsp-servers-*.done
-	@$(SUDO) rm -f $(DEST)/lua-language-server $(DEST)/gopls \
-	  $(DEST)/typescript-language-server $(DEST)/bash-language-server \
-	  $(DEST)/yaml-language-server $(DEST)/vscode-json-language-server \
-	  $(DEST)/vscode-css-language-server $(DEST)/vscode-html-language-server \
-	  $(DEST)/vscode-eslint-language-server $(DEST)/vscode-markdown-language-server \
-	  $(DEST)/tsc $(DEST)/tsserver
-	@$(SUDO) rm -rf $(DEST)/_lua-language-server-*
-	@uv tool uninstall basedpyright 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
 # docker-engine — Docker CE from Docker's official dnf repo, enabled via systemd.
@@ -762,12 +746,13 @@ user-tools: $(USER_TOOLS)
 # New provision-phase targets join PROVISION_FANOUT (or, if they must be
 # ordered, get an explicit edge) — see the parallel-provisioning invariant.
 PROVISION_FANOUT := tools user-tools shell wsl-config
-# both-scopes for the ad-hoc scripting venv every host gets — the dev-gated
-# block below keeps the genuinely dev-only targets.
-PROVISION_FANOUT += python-env
+# both-scopes: the mise-managed runtimes (uv everywhere; node/go/LSP on dev)
+# and the ad-hoc scripting venv every host gets — the dev-gated block below
+# keeps the genuinely dev-only targets.
+PROVISION_FANOUT += mise-runtimes python-env
 ifeq ($(MODE),dev)
-PROVISION_FANOUT += claude-cli node-runtime nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-PROVISION_FANOUT += pwndbg vcpkg go-runtime lsp-servers devtoys-cli
+PROVISION_FANOUT += claude-cli nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
+PROVISION_FANOUT += pwndbg vcpkg lsp-servers devtoys-cli
 endif
 
 provision-fanout: $(PROVISION_FANOUT)
@@ -802,7 +787,7 @@ all: tools
 # flags front these targets with the repo/chezmoi-level checks.
 # -----------------------------------------------------------------------------
 DOCTOR_ROWS += bespoke|claude-cli|$(CLAUDE_VERSION)
-DOCTOR_ROWS += bespoke|node-runtime|$(NODE_VERSION)
+DOCTOR_ROWS += bespoke|mise-runtimes|$(MISE_RUNTIMES_STAMP)
 DOCTOR_ROWS += bespoke|nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)
 DOCTOR_ROWS += bespoke|docker-engine|-
 DOCTOR_ROWS += bespoke|dozzle-service|$(DOZZLE_VERSION)
@@ -811,7 +796,6 @@ DOCTOR_ROWS += bespoke|rsyslog-service|-
 DOCTOR_ROWS += bespoke|wsl-config|-
 DOCTOR_ROWS += bespoke|pwndbg|$(PWNDBG_VERSION)
 DOCTOR_ROWS += bespoke|vcpkg|$(VCPKG_VERSION)
-DOCTOR_ROWS += bespoke|go-runtime|$(GO_VERSION)
 DOCTOR_ROWS += bespoke|devtoys-cli|$(DEVTOYS_CLI_VERSION)
 DOCTOR_ROWS += bespoke|lsp-servers|-
 DOCTOR_ROWS += bespoke|python-env|$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP)
@@ -898,7 +882,8 @@ list:
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
 	@printf '\nC/C++ dev tools (provisioned on MODE=dev only): pwndbg vcpkg\n'
 	@printf '  (nnd debugger is a scope-tool above; gcc/clang/gdb/valgrind/... come from dnf)\n'
-	@printf '\nLanguage servers (provisioned on MODE=dev only): lsp-servers (+ go-runtime)\n'
+	@printf '\nmise-runtimes (both scopes): uv; on MODE=dev also node (+ npm LSP servers), go, gopls, lua-language-server, basedpyright\n'
+	@printf '  declared in chezmoi/dot_config/mise/conf.d/ (generated from versions.mk); lsp-servers = alias + clangd check\n'
 	@printf '  (rust-analyzer/marksman/taplo are scope-tools above; clangd from clang-tools-extra)\n'
 	@printf '\npython-env (both scopes): blessed Python scripting env (uv-managed CPython + venv)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'

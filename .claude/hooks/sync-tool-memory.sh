@@ -37,28 +37,33 @@ case "$norm" in
 *) exit 0 ;;
 esac
 
-# Resolve the generator from the EDITED FILE's checkout (walk up from the
-# file), so an edit inside a git worktree regenerates THAT worktree's memory
-# file. CLAUDE_PROJECT_DIR is only a fallback: it points at the main checkout,
-# and preferring it used to silently regenerate the WRONG copy (a content
-# no-op) while claiming success for the worktree edit.
-gen=""
+# Resolve the generators from the EDITED FILE's checkout (walk up from the
+# file), so an edit inside a git worktree regenerates THAT worktree's files.
+# CLAUDE_PROJECT_DIR is only a fallback: it points at the main checkout, and
+# preferring it used to silently regenerate the WRONG copy (a content no-op)
+# while claiming success for the worktree edit.
+scripts=""
 d="$(dirname "$norm")"
 while [ "$d" != "/" ] && [ -n "$d" ]; do
   if [ -x "$d/scripts/gen-tool-memory.sh" ]; then
-    gen="$d/scripts/gen-tool-memory.sh"
+    scripts="$d/scripts"
     break
   fi
   d="$(dirname "$d")"
 done
-if [ -z "$gen" ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -x "$CLAUDE_PROJECT_DIR/scripts/gen-tool-memory.sh" ]; then
-  gen="$CLAUDE_PROJECT_DIR/scripts/gen-tool-memory.sh"
+if [ -z "$scripts" ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -x "$CLAUDE_PROJECT_DIR/scripts/gen-tool-memory.sh" ]; then
+  scripts="$CLAUDE_PROJECT_DIR/scripts"
 fi
-[ -n "$gen" ] || exit 0
+[ -n "$scripts" ] || exit 0
 
-"$gen" >/dev/null 2>&1 || exit 0
+"$scripts/gen-tool-memory.sh" >/dev/null 2>&1 || exit 0
+# Second generated artifact: the mise conf.d tool declarations (OUTDIR honoured
+# for the hook test). Missing generator (older checkout) → skip, never fail.
+if [ -x "$scripts/gen-mise-config.sh" ]; then
+  "$scripts/gen-mise-config.sh" >/dev/null 2>&1 || exit 0
+fi
 
-msg="Tool inventory regenerated in chezmoi/private_dot_claude/CLAUDE.md (TOOLS block) from your makefile edit — commit it with this change and run \`cza\` to deploy the refreshed memory to ~/.claude/CLAUDE.md."
+msg="Regenerated from your makefile edit: the TOOLS block in chezmoi/private_dot_claude/CLAUDE.md and the mise tool declarations in chezmoi/dot_config/mise/conf.d/ — commit both with this change and run \`cza\` to deploy them (~/.claude/CLAUDE.md, ~/.config/mise/conf.d/)."
 
 if command -v jq >/dev/null 2>&1; then
   jq -nc --arg c "$msg" \
