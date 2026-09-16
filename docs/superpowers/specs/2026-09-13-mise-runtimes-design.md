@@ -232,7 +232,10 @@ Windows: chezmoi init --apply ──▶ %USERPROFILE%\.config\mise\conf.d\ ─�
 Linux dev: `make dev` (or `czu` → `update-hosts.sh`) installs via mise and
 sweeps `/usr/local`; open a new shell (or `exec zsh`) to pick up `.zshenv`.
 Prod: the same, user-level; the eget `uv`/`uvx` in `~/.local/bin` are swept.
-Windows: re-run `.\bootstrap.ps1`; restart the terminal for the User PATH.
+Windows: re-run `.\bootstrap.ps1`; restart the terminal for the User PATH. The
+mise step also sweeps the retired portable uv (`%LOCALAPPDATA%\workstation\uv`,
+its stamp and its User PATH entry — the counterpart of decision 4's prod
+`uv`/`uvx` sweep) so the stale copy cannot shadow mise's uv.
 
 ## Documentation
 

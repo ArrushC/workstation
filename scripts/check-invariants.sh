@@ -121,13 +121,13 @@ check_version_pins() {
     bad "gh drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
-  v=$(mkval UV_VERSION)
-  ref=$(grep -oE 'astral-sh/uv/releases/download/[0-9][0-9.]+' bootstrap.ps1 |
-    head -1 | sed 's#.*/##')
+  v=$(mkval MISE_VERSION)
+  ref=$(grep -oE 'jdx/mise/releases/download/v[0-9][0-9.]+' bootstrap.ps1 |
+    head -1 | sed 's#.*/v##')
   if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-    ok "uv @ $v  (versions.mk == bootstrap.ps1)"
+    ok "mise @ $v  (versions.mk == bootstrap.ps1)"
   else
-    bad "uv drift: versions.mk='$v' bootstrap.ps1='$ref'"
+    bad "mise drift: versions.mk='$v' bootstrap.ps1='$ref'"
   fi
 
   v=$(mkval PYTHON_VERSION)

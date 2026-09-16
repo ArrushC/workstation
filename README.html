@@ -2960,24 +2960,38 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             with <code>makefile/versions.mk</code>).
                         </li>
                         <li>
-                            <strong>uv</strong> &mdash; the Python front
-                            door; pinned, sha256-verified portable tree into
-                            its own <code>%LOCALAPPDATA%\workstation\uv</code>
-                            directory (never <code>workstation\bin</code>
-                            &mdash; a <code>tree</code>-layout install wipes
-                            its destination on every re-pin). The pin
-                            dual-edits <code>UV_VERSION</code> in
-                            <code>makefile/versions.mk</code> (the Linux
-                            half is the eget-installed <code>uv</code>, both
-                            dev_machine and prod_machine). A bespoke step
-                            then builds the blessed Python scripting env at
+                            <strong>mise</strong> &mdash; the runtime manager;
+                            pinned, sha256-verified portable tree into its own
+                            <code>%LOCALAPPDATA%\workstation\mise</code>
+                            directory (<code>bin\</code> joins the PATH: the
+                            zip nests <code>mise.exe</code> next to the
+                            <code>mise-shim.exe</code> template that gives
+                            every tool a native <code>.exe</code> shim). The
+                            pin dual-edits <code>MISE_VERSION</code> in
+                            <code>makefile/versions.mk</code> (the Linux half
+                            is the eget-installed <code>mise</code>, both
+                            dev_machine and prod_machine). Right after chezmoi
+                            applies, a bespoke step installs what the deployed
+                            <code>%USERPROFILE%\.config\mise\conf.d\</code>
+                            declares &mdash; Node.js, Go, uv, gopls and the
+                            language servers, pinned in <code>versions.mk</code>
+                            and rendered into that config &mdash; and puts
+                            <code>%LOCALAPPDATA%\mise\shims</code> on the User
+                            PATH. Both Windows shells activate mise: Nushell
+                            through a generated
+                            <code>%APPDATA%\nushell\vendor\autoload\mise.nu</code>
+                            (regenerated every bootstrap &mdash; never
+                            hand-edit), PowerShell through its profile. The
+                            blessed Python scripting env at
                             <code>%LOCALAPPDATA%\workstation\python-env</code>
-                            &mdash; a pinned CPython plus
-                            Textual/Click/rich/httpx/pydantic/typer/polars/duckdb
-                            &mdash; dropping
+                            (a pinned CPython plus
+                            Textual/Click/rich/httpx/pydantic/typer/polars/duckdb)
+                            is then built with mise's uv, dropping
                             <code>wpy</code>/<code>textual</code>/<code>typer</code>
-                            shims into
-                            <code>%LOCALAPPDATA%\workstation\bin</code>.
+                            shims into <code>workstation\bin</code>. Upgrade the
+                            libs: delete the <code>python-env.*.stamp</code>
+                            under <code>%LOCALAPPDATA%\workstation\stamps</code>
+                            and re-run <code>bootstrap.ps1</code>.
                         </li>
                         <li>
                             <strong>dnGrep</strong> &mdash; search/replace GUI
@@ -3313,9 +3327,9 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
                         chezmoi/Windows
-                        Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/uv/DevToys
+                        Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys
                         CLI/dnGrep/LogExpert
-                        installs and the Python scripting env build,
+                        installs, the mise runtimes and the Python scripting env build,
                         <em>and</em> the installer-class apps
                         (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond
                         Compare) and the native
@@ -5343,7 +5357,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                         <div class="ts-body">
                             <p>
                                 The portable tools
-                                (Starship/Helix/Nushell/jq/OpenCode/omp/uv/DevToys
+                                (Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys
                                 CLI/dnGrep/LogExpert) are pinned to a specific version
                                 <em>and</em> sha256 in
                                 <code>$PortableTools</code> inside
@@ -5812,6 +5826,7 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; eget binaries, dev + prod; re-run <code>make provision MODE=dev</code>.</li>
                                 <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (<code>make mise-runtimes MODE=dev</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line (<code>TYPESCRIPT_VERSION</code>) on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
                                 <li><strong>clangd</strong> &mdash; verified-only (comes from <code>clang-tools-extra</code> via dnf, see the C/C++ entry below); <code>make lsp-servers</code> only warns if absent.</li>
+                                <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s mise step; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
                             </ul>
                             <p>
                                 Re-run the stack:
