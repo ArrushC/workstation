@@ -7,11 +7,12 @@
 # shell (the Windows Terminal "Nushell" profile); PowerShell stays installed
 # for .NET/COM tasks and the WSL2 notify hook.
 #
-# This file owns the HAND-WRITTEN config (aliases, env, helpers). The Starship
-# prompt is wired separately by a GENERATED file at
-# %APPDATA%\nushell\vendor\autoload\starship.nu (written by bootstrap.ps1's
-# Invoke-NushellStarship — everything under vendor/autoload is auto-sourced on
-# startup, so there is no `source` line for it here).
+# This file owns the HAND-WRITTEN config (aliases, env, helpers). Two things are
+# wired separately by GENERATED files under %APPDATA%\nushell\vendor\autoload\
+# (everything there is auto-sourced on startup, so no `source` lines here):
+# starship.nu (the prompt — bootstrap.ps1's Invoke-NushellStarship) and mise.nu
+# (`mise activate nu` — Invoke-NushellMise; puts the mise-managed node/Go/uv/
+# LSP servers on PATH ahead of the shims dir).
 #
 # PARITY NOTE: the cz*/g* aliases below mirror the PowerShell profile
 # (Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tmpl). Keep the two in

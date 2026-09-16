@@ -74,9 +74,13 @@ K9S_VERSION        := 0.51.0
 RCLONE_VERSION     := 1.75.1
 CROC_VERSION       := 11.5.0
 HYPERFINE_VERSION  := 1.20.0
+# mise — DUAL-EDIT with bootstrap.ps1's $PortableTools (Windows portable mise:
+# Layout tree + BinSubdir bin; check-invariants.sh verifies). Both scopes on
+# Linux (EGET_TOOL); it installs everything in the generated conf.d.
 MISE_VERSION       := 2026.9.1
 # uv — consumed by scripts/gen-mise-config.sh (installed via mise-runtimes on
-# both scopes, NOT eget). Dual-edits bootstrap.ps1's $PortableTools until PR 2.
+# both scopes, NOT eget). No Windows half: Windows installs uv through mise
+# too (bootstrap.ps1's Invoke-MiseRuntimes).
 UV_VERSION         := 0.12.7
 DSQ_VERSION        := 0.23.0
 

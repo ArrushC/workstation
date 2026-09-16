@@ -22,8 +22,8 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #      lockstep; JQ + SHFMT + GITLEAKS are guarded by check-invariants.sh (the
 #      latter two dual-edit .github/workflows/lint.yml's pinned install step), so
 #      an auto-bump in versions.mk alone would fail the workflow's own invariant step.
-#      UV joins the list because its pin now dual-edits bootstrap.ps1's
-#      $PortableTools (Windows half of the Python env). PYTHON_VERSION joins
+#      MISE_VERSION — dual-edits bootstrap.ps1's $PortableTools (Windows
+#      portable mise; sha256 refresh needed). PYTHON_VERSION joins
 #      too — it dual-edits bootstrap.ps1's $PythonEnvVersion and a bump needs
 #      a wheel-coverage check (duckdb/pydantic-core lag new CPython releases).
 #      GH/OPENCODE/OMP dual-edit bootstrap.ps1's $PortableTools as well (the
@@ -50,7 +50,7 @@ SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 #     states its zellij floor, recorded as ZJSTATUS_ZELLIJ_FLOOR next to the pin
 #     and asserted by check-invariants. A blind bump would raise the floor
 #     silently; bump pin + floor by hand from the release notes.
-EXCLUDE="GO_VERSION GOPLS_VERSION TYPESCRIPT_VERSION ZJSTATUS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION UV_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
+EXCLUDE="GO_VERSION GOPLS_VERSION TYPESCRIPT_VERSION ZJSTATUS_VERSION HELIX_VERSION JETBRAINSMONO_NERD_VERSION CCSTATUSLINE_VERSION JQ_VERSION SHFMT_VERSION GITLEAKS_VERSION NCDU_VERSION MISE_VERSION PYTHON_VERSION GH_VERSION OPENCODE_VERSION OMP_VERSION DEVTOYS_CLI_VERSION"
 
 # Tool names whose versions.mk variable does NOT follow the default
 # uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs

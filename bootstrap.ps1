@@ -48,6 +48,7 @@
 #                     chezmoi's own default source dir).
 #   4. chezmoi apply— applies chezmoi/ to %USERPROFILE% (PowerShell profile,
 #                     Warp + Windows Terminal settings, Zed/VSCode settings, …).
+#   4b. mise runtimes — installs node/Go/uv/gopls/LSP servers from the deployed conf.d
 #   5. profile shim — if Documents is redirected (OneDrive), drop a loader at the
 #                     real $PROFILE that sources the chezmoi canonical profile.
 #   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
@@ -63,6 +64,7 @@
 #                     vendor/autoload dir (self-heals every run).
 #   5f. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
 #                     settings in %APPDATA%\dnGREP, not the wiped-on-bump Dest.
+#   5g. nushell mise activation — generates vendor\autoload\mise.nu (mise activate nu)
 #   6. burnt toast  — PSGallery module (CurrentUser) for Claude Code WSL2 toasts.
 #   7. nerd fonts   — JetBrainsMono Nerd Font Mono (per-user, HKCU).
 #   8. ssh key      — generate %USERPROFILE%\.ssh\id_ed25519 if missing.
@@ -263,7 +265,7 @@ $GhHeaderKey = "http.https://github.com/.extraheader"
 #   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
 #   workstation\dngrep       — the dnGrep portable GUI tree          → on User PATH
 #   workstation\logexpert    — the LogExpert portable GUI tree       → on User PATH
-#   workstation\uv           — the uv portable tree (CPython/venvs)  → on User PATH
+#   workstation\mise         — the mise portable tree (bin\mise.exe + mise-shim.exe) → bin\ on User PATH
 #   workstation\stamps       — "<exe>.<version>.stamp" idempotency markers
 $WsRoot       = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin        = Join-Path $WsRoot "bin"
@@ -272,7 +274,7 @@ $WsNu         = Join-Path $WsRoot "nu"
 $WsDevToysCli = Join-Path $WsRoot "devtoys-cli"
 $WsDnGrep     = Join-Path $WsRoot "dngrep"
 $WsLogExpert  = Join-Path $WsRoot "logexpert"
-$WsUv         = Join-Path $WsRoot "uv"
+$WsMise       = Join-Path $WsRoot "mise"
 $WsStamps     = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
@@ -292,6 +294,12 @@ $WsStamps     = Join-Path $WsRoot "stamps"
 # (Invoke-StartMenuShortcuts) drops a per-user "<Name>.lnk" pointing at
 # <Dest>\<Target>.exe. Target is a basename WITHOUT ".exe", and may differ
 # from Exe. CLI-only tools omit the key — no shortcut is made.
+#
+# OPT-IN key `BinSubdir = "<subdir>"` — for 'tree' archives that nest their
+# binaries below the (flattened) top level: <Dest>\<BinSubdir> holds <Exe>.exe
+# and is the directory that joins the User PATH. Absent = Dest itself (every
+# other tool). Only mise uses it today (mise\bin\mise.exe + mise-shim.exe —
+# the shim template must sit next to mise.exe for native .exe shims).
 $PortableTools = @(
     @{
         Name       = "Starship"
@@ -359,20 +367,27 @@ $PortableTools = @(
         UpdateHint = "dual-edit: `$PortableTools here AND JQ_VERSION in makefile/versions.mk (jq powers the Claude Code hooks' JSON parsing on Windows)"
     },
     @{
-        # uv — Python front door for Invoke-PythonEnv (pinned CPython + the
-        # blessed scripting env). Zip is FLAT (uv.exe + uvw.exe + uvx.exe) —
-        # 'tree' into its OWN dir: tree-extract WIPES Dest, so $WsBin is off
-        # limits (nu/helix precedent).
-        Name       = "uv"
-        Exe        = "uv"
-        Version    = "0.12.7"
-        Url        = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-pc-windows-msvc.zip"
-        Sha256     = "bf1518af459a3915511a11fdc6e2f43ef9a2afa138b9d498eeb9642fe9d85218"
+        # mise — the runtime manager (node / Go / uv / gopls / the LSP
+        # servers): the Windows half of the Linux both-scopes EGET_TOOL. The
+        # zip nests mise\bin\mise.exe + mise-shim.exe (the template mise
+        # copies for native .exe shims — without it shims degrade to .cmd
+        # wrappers), so 'tree' into its OWN dir with BinSubdir pointing the
+        # PATH at bin\. WHAT mise installs is declared by the chezmoi-deployed
+        # %USERPROFILE%\.config\mise\conf.d\*.toml (GENERATED from
+        # makefile/versions.mk — no runtime pin table lives here) and driven
+        # by Invoke-MiseRuntimes after chezmoi apply. uv is one of those
+        # runtimes now (it was a portable tool of its own until 2026-09).
+        Name       = "mise"
+        Exe        = "mise"
+        Version    = "2026.9.1"
+        Url        = "https://github.com/jdx/mise/releases/download/v2026.9.1/mise-v2026.9.1-windows-x64.zip"
+        Sha256     = "9556296db217774e7dae8fc241542d6bbc2351122ba93c8df2a65d3b921d7a28"
         Layout     = "tree"
-        Dest       = $WsUv
-        Repo       = "astral-sh/uv"
-        TagPrefix  = ""
-        UpdateHint = "dual-edit: `$PortableTools here AND UV_VERSION in makefile/versions.mk"
+        BinSubdir  = "bin"
+        Dest       = $WsMise
+        Repo       = "jdx/mise"
+        TagPrefix  = "v"
+        UpdateHint = "dual-edit: `$PortableTools here AND MISE_VERSION in makefile/versions.mk"
     },
     @{
         # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
@@ -796,6 +811,25 @@ function Add-ToUserPath {
     }
 }
 
+# Remove-FromUserPath — the inverse of Add-ToUserPath: drop one directory from
+# the User PATH (registry scope) and from this session's $env:PATH, matching
+# case- and trailing-slash-insensitively. Idempotent and silent when absent.
+function Remove-FromUserPath {
+    param([string]$Dir)
+
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($userPath) {
+        $kept = @($userPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
+            Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
+        if ($kept.Count -ne $userPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries).Count) {
+            [Environment]::SetEnvironmentVariable("PATH", ($kept -join ';'), "User")
+            Write-Ok "Removed $Dir from User PATH"
+        }
+    }
+    $env:PATH = (@(($env:PATH).Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
+        Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') }) -join ';')
+}
+
 function New-Uuid5 {
     # RFC 4122 v5 GUID. Windows Terminal's fragment convention: name bytes are UTF-16LE
     # (namespace {f65ddb7e-706b-4499-8a50-40313caf510a} -> app -> profile name).
@@ -856,6 +890,11 @@ function Install-PortableTool {
 
     $stamp = Join-Path $WsStamps "$($Tool.Exe).$($Tool.Version).stamp"
 
+    # BinSubdir (opt-in): where <Exe>.exe lives under Dest and what joins the
+    # PATH — see the $PortableTools comment. Honoured in exactly two places
+    # (the stamp fast-path check below and the 'tree' branch's Add-ToUserPath).
+    $binDir = if ($Tool.ContainsKey('BinSubdir')) { Join-Path $Tool.Dest $Tool.BinSubdir } else { $Tool.Dest }
+
     # Idempotency: stamp present AND the pinned exe exists on disk → already
     # done. A version bump changes the stamp name, so the old stamp won't
     # match → reinstall. Deliberately NOT Get-Command: PATH resolution depends
@@ -864,8 +903,8 @@ function Install-PortableTool {
     # the only tool with its own PATH dir — 2026-07-14). The Add-ToUserPath
     # below keeps the User PATH entry self-healing on the skip path (idempotent
     # and silent when already present).
-    if ((Test-Path $stamp) -and (Test-Path (Join-Path $Tool.Dest "$($Tool.Exe).exe"))) {
-        Add-ToUserPath $Tool.Dest
+    if ((Test-Path $stamp) -and (Test-Path (Join-Path $binDir "$($Tool.Exe).exe"))) {
+        Add-ToUserPath $binDir
         Write-Ok "$($Tool.Name) $($Tool.Version) already installed"
         return
     }
@@ -933,7 +972,7 @@ The pinned hash in `$PortableTools is stale, or the download was corrupted/tampe
             if (Test-Path $Tool.Dest) { Remove-Item -Recurse -Force $Tool.Dest }
             New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null
             Copy-Item -Path (Join-Path $src '*') -Destination $Tool.Dest -Recurse -Force
-            Add-ToUserPath $Tool.Dest
+            Add-ToUserPath $binDir
         }
 
         if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
@@ -1354,7 +1393,7 @@ function Install-WindowsTerminal {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/uv/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; Python env not built"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise runtimes not installed, Python env not built"
         return
     }
 
@@ -1463,6 +1502,116 @@ function Invoke-Chezmoi {
         Write-Fail "chezmoi init --apply failed. Inspect with: chezmoi diff --source $RepoPath"
     }
     Write-Ok "chezmoi applied — dotfiles in place"
+}
+
+# =============================================================================
+# 4b. MISE RUNTIMES — node / Go / uv / gopls / the LSP servers via mise (the
+#    Windows half of the Linux `mise-runtimes` Make target). WHAT to install is
+#    declared by the two conf.d files chezmoi has just deployed to
+#    %USERPROFILE%\.config\mise\conf.d\ (GENERATED from makefile/versions.mk
+#    by scripts/gen-mise-config.sh — the single source of every runtime pin;
+#    this script carries NO runtime pin table). mise's config dir is
+#    %USERPROFILE%\.config\mise on every platform; its data dir (installs +
+#    shims) is %LOCALAPPDATA%\mise. Stamp = sha256 of both conf.d files, so any
+#    pin change re-runs it. node is force-reinstalled only when the DECLARED
+#    version was already present and node is still declared — its npm
+#    postinstall carries the language servers, and a changed postinstall only
+#    re-runs on a reinstall (the lib/mise.sh gate). Every run re-adds the
+#    shims dir to the User PATH (self-heals like the Start Menu shortcuts).
+#    Per-user, no admin; warn-and-continue; -SkipToolInstall skips it.
+# =============================================================================
+$MiseConfDir = Join-Path $env:USERPROFILE ".config\mise\conf.d"
+$MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
+
+# Get-MiseRuntimesStamp — the exact stamp path Invoke-MiseRuntimes writes on
+# success: a hash of the conf.d files it consumed (sorted by name). Doctor
+# calls this SAME helper so its verdict can never drift onto a stale stamp
+# (the Get-PythonEnvStamp precedent). $null when no conf.d file is deployed.
+function Get-MiseRuntimesStamp {
+    # FIXED order, not Sort-Object: the two names differ only by a hyphen, and
+    # culture-aware sorting orders them differently under .NET Framework (5.1,
+    # NLS) and .NET Core (pwsh 7, ICU) — the stamp must not depend on which
+    # PowerShell ran the bootstrap (bit the first Windows run, 2026-09-16).
+    $files = @(@("workstation.toml", "workstation-dev.toml") |
+        ForEach-Object { Join-Path $MiseConfDir $_ } |
+        Where-Object { Test-Path -LiteralPath $_ })
+    if ($files.Count -eq 0) { return $null }
+    $text   = ($files | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_ }) -join "`n"
+    $bytes  = [System.Text.Encoding]::UTF8.GetBytes($text)
+    $stream = New-Object System.IO.MemoryStream (,$bytes)
+    $hash   = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.Substring(0, 8).ToLower()
+    return Join-Path $WsStamps "mise-runtimes.$hash.stamp"
+}
+
+function Invoke-MiseRuntimes {
+    if ($SkipToolInstall) {
+        Write-Log "mise runtimes skipped (-SkipToolInstall)"
+        return
+    }
+    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+        Write-Warn "mise runtimes skipped — mise not on PATH (portable-tool step failed? open a NEW shell and re-run .\bootstrap.ps1)"
+        return
+    }
+
+    # One-time sweep of the retired portable uv (a $PortableTools entry until
+    # 2026-09): its dir sat on the User PATH ahead of mise's shims, so the stale
+    # copy would shadow mise's uv in every non-activated shell. Idempotent —
+    # the Linux counterpart is lib/mise.sh sweep-legacy.
+    $legacyUv = Join-Path $WsRoot "uv"
+    if (Test-Path $legacyUv) {
+        Remove-Item -Recurse -Force $legacyUv -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $WsStamps -Filter "uv.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Ok "Swept the retired portable uv ($legacyUv — uv is a mise runtime now)"
+    }
+    Remove-FromUserPath $legacyUv
+
+    $stamp = Get-MiseRuntimesStamp
+    if ($null -eq $stamp) {
+        Write-Warn "mise runtimes skipped — no $MiseConfDir\workstation*.toml deployed (chezmoi step skipped or failed?)"
+        return
+    }
+
+    # Shims on the User PATH every run (self-heals) and in-session, so later
+    # steps (Invoke-PythonEnv's `mise which uv`, Claude Code's npx) resolve.
+    if (-not (Test-Path $MiseShims)) { New-Item -ItemType Directory -Force -Path $MiseShims | Out-Null }
+    Add-ToUserPath $MiseShims
+
+    if (Test-Path $stamp) {
+        Write-Ok "mise runtimes already installed (conf.d unchanged — $(Split-Path -Leaf $stamp))"
+        return
+    }
+
+    Write-Log "Installing mise runtimes from $MiseConfDir (node / Go / uv / gopls / LSP servers — a few minutes on first run)..."
+    # Native commands chatter on stderr; keep that from tripping an EAP=Stop
+    # session (the chezmoi --version precedent in Invoke-CheckForUpdates).
+    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try {
+        # `mise where node` succeeds only when the DECLARED node version is
+        # already installed — a NODE_VERSION bump therefore installs once.
+        & mise where node *> $null
+        $hadNode = ($LASTEXITCODE -eq 0)
+        $nodeDeclared = [bool](Select-String -Path (Join-Path $MiseConfDir "workstation*.toml") -Pattern '^node\s*=' -Quiet)
+
+        & mise install --yes
+        if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
+        if ($hadNode -and $nodeDeclared) {
+            Write-Log "  node was already installed — forcing a reinstall so its npm postinstall re-runs"
+            & mise install --yes --force node
+            if ($LASTEXITCODE -ne 0) { throw "mise install --force node exited $LASTEXITCODE" }
+        }
+        & mise prune --yes
+        if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
+
+        if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
+        Get-ChildItem -Path $WsStamps -Filter "mise-runtimes.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
+        New-Item -ItemType File -Force -Path $stamp | Out-Null
+        Write-Ok "mise runtimes installed ($MiseShims is on the User PATH)"
+    } catch {
+        Write-Warn "mise runtimes install failed: $($_.Exception.Message)"
+        Write-Warn "  Re-run .\bootstrap.ps1 to retry (no stamp was written); diagnose with: mise doctor ; mise ls --missing"
+    } finally {
+        $ErrorActionPreference = $oldEap
+    }
 }
 
 # =============================================================================
@@ -1857,6 +2006,38 @@ function Invoke-DnGrepConfig {
 }
 
 # =============================================================================
+# 5g. NUSHELL MISE ACTIVATION — Nushell cannot `eval`, so `mise activate nu` is
+#    saved as a GENERATED file under vendor\autoload (auto-sourced on startup,
+#    exactly like starship.nu) and regenerated every run (self-heals; tracks
+#    the installed mise). Never hand-edited, never in config.nu. Verified on
+#    nu 0.113.1: an autoloaded activate file is picked up (its export-env
+#    runs) — the hook then puts mise's real bin dirs on PATH ahead of the shims
+#    dir Invoke-MiseRuntimes added.
+# =============================================================================
+function Invoke-NushellMise {
+    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+        Write-Warn "Skipping Nushell mise activation — mise not on PATH (install step skipped?)."
+        return
+    }
+    if (-not (Get-Command nu -ErrorAction SilentlyContinue)) {
+        Write-Warn "Skipping Nushell mise activation — nu not on PATH (install step skipped?)."
+        return
+    }
+
+    $autoload = Join-Path $env:APPDATA "nushell\vendor\autoload"
+    $target   = Join-Path $autoload "mise.nu"
+    try {
+        if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
+        # UTF-8 WITHOUT a BOM — nu chokes on a leading BOM in sourced scripts.
+        $init = (& mise activate nu) -join "`n"
+        [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "Nushell mise activation generated ($target)"
+    } catch {
+        Write-Warn "Could not generate the Nushell mise activation: $($_.Exception.Message)"
+    }
+}
+
+# =============================================================================
 # 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
 #    chezmoi/private_dot_claude/executable_notify.sh (deployed to
@@ -1938,13 +2119,14 @@ function Invoke-InstallClaudeCode {
 
 # =============================================================================
 # 6c. PYTHON SCRIPTING ENV — the blessed uv-built venv (Windows half of the
-#    Linux `python-env` Make target). uv installs the pinned CPython
-#    (python-build-standalone, per-user) and rebuilds the env from scratch,
-#    then wpy/textual/typer .cmd shims land in $WsBin. Libs track LATEST at
-#    install time; stamp bakes the pin + the lib list, so a bump or list edit
-#    rebuilds on the next bootstrap and a lib upgrade is "delete the stamp,
-#    re-run" (Linux: make python-env-rebuild). Per-user, no admin;
-#    warn-and-continue (standard tool-step posture).
+#    Linux `python-env` Make target). uv (mise-managed — resolved via
+#    `mise which uv`, so Invoke-MiseRuntimes must have run) installs the
+#    pinned CPython (python-build-standalone, per-user) and rebuilds the env
+#    from scratch, then wpy/textual/typer .cmd shims land in $WsBin. Libs
+#    track LATEST at install time; stamp bakes the pin + the lib list, so a
+#    bump or list edit rebuilds on the next bootstrap and a lib upgrade is
+#    "delete the stamp, re-run" (Linux: make python-env-rebuild). Per-user,
+#    no admin; warn-and-continue (standard tool-step posture).
 # =============================================================================
 # Get-PythonEnvStamp — the exact stamp path Invoke-PythonEnv writes on a
 # successful build (pin + a hash of the lib list, the Linux cksum analog).
@@ -1965,9 +2147,16 @@ function Invoke-PythonEnv {
         Write-Log "Python env skipped (-SkipToolInstall)"
         return
     }
-    $uvExe = Join-Path $WsUv "uv.exe"
-    if (-not (Test-Path $uvExe)) {
-        Write-Warn "Python env skipped — uv not installed at $uvExe (portable-tool step failed?)"
+    # uv is a mise runtime now: ask mise for the binary the deployed conf.d
+    # declares (no fixed path — mise's data dir owns the install).
+    $uvExe = $null
+    if (Get-Command mise -ErrorAction SilentlyContinue) {
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $uvExe = (& mise which uv 2>$null | Select-Object -First 1)
+        $ErrorActionPreference = $oldEap
+    }
+    if (-not $uvExe -or -not (Test-Path $uvExe)) {
+        Write-Warn "Python env skipped — uv not resolvable via 'mise which uv' (mise runtimes step failed?)"
         return
     }
 
@@ -2381,6 +2570,10 @@ function Invoke-Doctor {
     if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
     else { Write-Warn "Nushell starship prompt missing — re-run .\bootstrap.ps1 (regenerates it)" }
 
+    $nuMise = Join-Path $env:APPDATA "nushell\vendor\autoload\mise.nu"
+    if (Test-Path $nuMise) { Write-Ok "Nushell mise activation generated ($nuMise)" }
+    else { Write-Warn "Nushell mise activation missing — re-run .\bootstrap.ps1 (regenerates it)" }
+
     $wpyShim = Join-Path $WsBin "wpy.cmd"
     $pyStamp = Get-PythonEnvStamp
     if ((Test-Path $wpyShim) -and (Test-Path $pyStamp)) {
@@ -2389,6 +2582,28 @@ function Invoke-Doctor {
         Write-Warn "Python env shims present but pin or lib list moved — next bootstrap rebuilds"
     } else {
         Write-Bad "Python env not built — re-run .\bootstrap.ps1"
+    }
+
+    $miseStamp = Get-MiseRuntimesStamp
+    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+        Write-Bad "mise runtimes: mise not on PATH — re-run .\bootstrap.ps1"
+    } elseif ($null -eq $miseStamp) {
+        Write-Bad "mise runtimes: no conf.d deployed under $MiseConfDir — re-run .\bootstrap.ps1 (chezmoi step)"
+    } else {
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $missing = ((& mise ls --missing --global 2>$null) | Out-String).Trim()
+        $ErrorActionPreference = $oldEap
+        if ((Test-Path $miseStamp) -and -not $missing) {
+            Write-Ok "mise runtimes installed (nothing missing; $(Split-Path -Leaf $miseStamp))"
+        } elseif (-not $missing) {
+            Write-Warn "mise runtimes present but conf.d moved (no $(Split-Path -Leaf $miseStamp)) — next bootstrap reinstalls"
+        } else {
+            Write-Bad "mise runtimes missing: $(($missing -split "`r?`n") -join ', ') — re-run .\bootstrap.ps1"
+        }
+        $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        $shimsOnPath = @(($userPath -split ';') | Where-Object { $_.TrimEnd('\') -ieq $MiseShims.TrimEnd('\') }).Count -gt 0
+        if ($shimsOnPath) { Write-Ok "mise shims dir on the User PATH ($MiseShims)" }
+        else { Write-Warn "mise shims dir NOT on the User PATH — re-run .\bootstrap.ps1 (self-heals)" }
     }
 
     $dnGrepCfg = Join-Path $WsDnGrep "dnGrep.config.xml"
@@ -2582,12 +2797,14 @@ Invoke-Preflight
 Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
 Invoke-Chezmoi
+Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers from the chezmoi-deployed conf.d (self-heals the shims PATH)
 Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
 Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + hosts.conf SSH/Zellij) — self-heals
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
+Invoke-NushellMise        # generate the Nushell mise activation (vendor/autoload — self-heals)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
@@ -2598,8 +2815,8 @@ Invoke-EnsureSshKey
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
-Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset},"
-Write-Host "${Bold}$WsNu${Reset}) and the chezmoi-applied configs pick up — starship prompt,"
+Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset}, ${Bold}$WsNu${Reset},"
+Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset}) and the chezmoi-applied configs pick up — starship prompt,"
 Write-Host "chezmoi/git aliases, etc."
 Write-Host ""
 Write-Host "${Bold}Two terminals are managed.${Reset} Warp is the day-to-day one: it opens into"

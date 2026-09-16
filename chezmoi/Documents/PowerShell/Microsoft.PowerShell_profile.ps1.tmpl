@@ -26,6 +26,20 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
     Invoke-Expression (& { (zoxide init powershell | Out-String) })
 }
 
+# --- mise (runtimes: node / Go / uv / LSP servers + per-project mise.toml) ----
+# Global pins live in %USERPROFILE%\.config\mise\conf.d (chezmoi-deployed,
+# generated from makefile/versions.mk; installed by bootstrap.ps1's
+# Invoke-MiseRuntimes). The hook puts the real bin dirs on PATH ahead of the
+# shims dir bootstrap added to the User PATH. Dot-sourced by the 5.1 profile
+# too — `mise activate pwsh` output is plain PowerShell.
+if (Get-Command mise -ErrorAction SilentlyContinue) {
+    # Windows PowerShell 5.1 (dot-sources this file) lacks the chpwd hook mise
+    # needs for per-directory switching; activation itself works there. Silence
+    # the warning mise prints about it on every 5.1 shell start.
+    if ($PSVersionTable.PSVersion.Major -lt 7) { $env:MISE_PWSH_CHPWD_WARNING = '0' }
+    (& mise activate pwsh) | Out-String | Invoke-Expression
+}
+
 # --- chezmoi aliases (mirror the Linux bashrc) ------------------------------
 function cz  { chezmoi @args }
 function cza { chezmoi apply @args }
