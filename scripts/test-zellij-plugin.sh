@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-zellij-plugin.sh — makefile/lib/zellij-plugin.sh must land the plugin
+# test-zellij-plugin.sh — scripts/lib/zellij-plugin.sh must land the plugin
 # where zellij's RELATIVE `file:<name>.wasm` lookup finds it: the data dir
 # (~/.local/share/zellij/plugins), never ~/.config/zellij/plugins. The first
 # cut installed to the latter and every session showed "ERROR IN PLUGIN"
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-lib="$root/makefile/lib/zellij-plugin.sh"
+lib="$root/scripts/lib/zellij-plugin.sh"
 
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT

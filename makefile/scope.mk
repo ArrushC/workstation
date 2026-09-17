@@ -4,36 +4,26 @@
 # in roles/linux-base/tasks/main.yml. One source of truth, computed in Make.
 #
 # Used by every other .mk file under this directory (packages.mk, shell.mk,
-# tools.mk, etc.) — they reference $(DEST), $(SUDO), $(HAS_SUDO),
-# $(INSTALL_PACKAGES), $(HELIX_RUNTIME_DEST) without ever asking what mode
-# we're in.
+# etc.) — they reference $(DEST), $(SUDO), $(HAS_SUDO), $(INSTALL_PACKAGES)
+# without ever asking what mode we're in. DEST is now only where legacy
+# (pre-mise) binaries are swept from (tasks/migrate-legacy) and where
+# chezmoi's `-b` used to point — the tool layer itself is mise, not this
+# Makefile.
 #
 # Errors at parse time if MODE is missing — there is deliberately no
 # default, because the two scopes are too load-bearing to silently
 # fall through to one.
 
 ifeq ($(MODE),dev)
-  # dev_machine — hosts you own, sudo available, system-wide install.
-  #
-  # `--preserve-env=DEST,HELIX_RUNTIME_DEST` is load-bearing: sudo's default
-  # is env_reset (every env var stripped except a whitelist), so without
-  # this flag the install helpers under lib/ see DEST as empty and abort
-  # with `archive.sh: DEST not set`. Listing the vars explicitly bypasses
-  # the sudoers env_check filter for exactly these (vs `-E` which preserves
-  # everything and is more easily blocked by site policy).
-  DEST               := /usr/local/bin
-  HELIX_RUNTIME_DEST := /usr/local/lib/helix
-  HAS_SUDO           := true
-  INSTALL_PACKAGES   := true
-  SUDO               := sudo --preserve-env=DEST,HELIX_RUNTIME_DEST
+  DEST             := /usr/local/bin
+  HAS_SUDO         := true
+  INSTALL_PACKAGES := true
+  SUDO             := sudo --preserve-env=DEST
 else ifeq ($(MODE),prod)
-  # prod_machine — hosts you don't fully own, no sudo, per-user install.
-  # SUDO is empty so install helpers inherit env directly from make.
-  DEST               := $(HOME)/.local/bin
-  HELIX_RUNTIME_DEST := $(HOME)/.config/helix
-  HAS_SUDO           := false
-  INSTALL_PACKAGES   := false
-  SUDO               :=
+  DEST             := $(HOME)/.local/bin
+  HAS_SUDO         := false
+  INSTALL_PACKAGES := false
+  SUDO             :=
 else
   $(error MODE not set. Use 'make dev' / 'make prod', or set MODE=dev|prod explicitly. For sandbox builds: 'make all MODE=prod DEST=/tmp/test STAMP=/tmp/stamps')
 endif
@@ -52,3 +42,13 @@ endif
 # duplicating the detection. Mirrors bootstrap.sh's is_wsl() helper.
 IS_WSL := $(shell { [ -n "$$WSL_DISTRO_NAME" ] || grep -qi microsoft /proc/version 2>/dev/null; } && echo true || echo false)
 export IS_WSL
+
+# MISE_ENV — which config.<env>.toml files mise loads (scripts/lib/mise-env.sh is
+# the single source; bootstrap.sh exports the same value). An explicit MISE_ENV
+# in the environment wins (sandbox runs). ifndef + := (not `?=`, which is
+# recursively-expanded like `=`) so the $(shell …) forks at most once per
+# make invocation, not on every later expansion of $(MISE_ENV).
+ifndef MISE_ENV
+MISE_ENV := $(shell $(abspath $(CURDIR)/..)/scripts/lib/mise-env.sh $(MODE))
+endif
+export MISE_ENV

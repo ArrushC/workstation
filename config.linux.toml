@@ -1,0 +1,105 @@
+# config.linux.toml — the Linux toolbelt, BOTH scopes (loads when MISE_ENV has `linux`).
+# User-level under ~/.local/share/mise; interactive shells see the real bin
+# dirs via `mise activate`, everything else via ~/.local/share/mise/shims.
+[tools]
+# --- aqua registry (short names) ---
+fzf = "0.74.3"
+zoxide = "0.10.0"
+starship = "1.26.0"
+zellij = "0.45.1"
+glow = "3.0.0"
+helix = "25.07.1"          # archive carries runtime/ beside hx — no HELIX_RUNTIME needed
+chezmoi = "latest"         # retired in PR3 (dotfiles move to mise)
+fd = "10.5.0"
+bat = "0.26.1"
+btop = "1.4.7"
+jq = "1.8.2"
+yq = "4.53.6"
+witr = "0.3.3"
+lazydocker = "0.25.2"
+dive = "0.13.1"
+lnav = "0.14.1"
+gopass = "1.17.0"
+age = "1.3.2"
+gitui = "0.28.1"
+lazygit = "0.65.0"
+jj = "0.45.1"
+ast-grep = "0.45.3"
+xh = "0.26.2"
+delta = "0.19.2"
+micro = "2.0.15"
+eza = "0.23.5"
+sd = "1.1.0"
+ctop = "0.7.7"
+k9s = "0.51.0"
+rclone = "1.75.1"
+croc = "11.5.0"
+hyperfine = "1.20.0"
+gh = "2.98.0"
+sops = "3.13.3"
+htmlq = "0.4.0"
+watchexec = "2.7.2"
+bottom = "0.14.9"
+systemctl-tui = "0.8.0"
+lazyjournal = "0.8.6"
+cheat = "5.1.0"
+fx = "39.2.0"
+ripgrep = "15.2.0"
+miller = "6.21.0"
+difftastic = "0.70.0"
+doggo = "1.4.0"
+miniserve = "0.35.0"
+numbat = "1.24.0"
+grex = "1.4.6"
+shfmt = "3.14.0"
+gitleaks = "8.30.1"
+dust = "1.2.5"
+hexyl = "0.17.0"
+gum = "2.0.0"
+rust-analyzer = "2026-09-07"
+marksman = "2026-02-08"
+taplo = "0.10.0"
+# --- github: (registry entry absent or picks the wrong asset for EL9) ---
+"github:xo/usql" = { version = "0.21.4", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38
+"github:fastfetch-cli/fastfetch" = { version = "2.68.1", asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz" }   # plain build's loader fails on EL9
+"github:dalance/procs" = { version = "0.14.12", asset_pattern = "procs-v{{version}}-x86_64-linux.zip" }
+"github:imsnif/bandwhich" = { version = "0.23.1", asset_pattern = "bandwhich-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }
+"github:tealdeer-rs/tealdeer" = { version = "1.9.0", asset_pattern = "tealdeer-linux-x86_64-musl", bin = "tldr" }
+"github:jarun/nnn" = { version = "5.3", asset_pattern = "nnn-musl-static-{{version}}.x86_64.tar.gz", rename_exe = { "nnn-musl-static" = "nnn" } }
+"github:YS-L/csvlens" = { version = "0.15.1", asset_pattern = "csvlens-x86_64-unknown-linux-musl.tar.xz" }
+"github:fujiapple852/trippy" = { version = "0.13.0", asset_pattern = "trippy-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # binary is `trip`
+"github:tummychow/git-absorb" = { version = "0.9.0", asset_pattern = "git-absorb-{{version}}-x86_64-unknown-linux-musl.tar.gz" }
+"github:ouch-org/ouch" = { version = "0.8.2", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }
+"github:boyter/scc" = { version = "4.0.0", asset_pattern = "scc_Linux_x86_64.tar.gz" }
+"github:multiprocessio/dsq" = { version = "0.23.0" }
+"github:unhappychoice/gitlogue" = { version = "0.11.0" }
+"github:daptify14/chezit" = { version = "0.4.0", matching = "linux_amd64" }     # retired in PR3
+"github:PaulJuliusMartinez/jless" = { version = "0.9.0", asset_pattern = "jless-v{{version}}-x86_64-unknown-linux-gnu.zip" }
+"github:Canop/broot" = { version = "1.60.0", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
+"github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd" }
+"github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); FAIL in the verify-binary gate
+"github:sxyazi/yazi" = { version = "26.9.1", asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); the missing symbol only surfaces at exec time (`ldd`/actually running the binary), not from a static ELF/arch check alone — pin the musl asset; ships both yazi + ya
+"github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); pin the musl asset; binary is `tv`
+"github:atuinsh/atuin" = { version = "18.21.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.38 > EL9's 2.34); pin the musl asset
+"github:dathere/qsv" = { version = "22.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua registry defaults to the gnu build (GLIBCXX_3.4.30 > EL9's floor); pin the musl asset; archive ships 6 binaries, bin= picks the full-feature one
+"github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # copied into zellij's data dir by `make tools`
+# --- http: (no GitHub release, bare assets, or scripts) ---
+"http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
+"http:pueue" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueue-x86_64-unknown-linux-musl", bin = "pueue" }
+"http:pueued" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueued-x86_64-unknown-linux-musl", bin = "pueued" }
+"http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }
+"http:sysz" = { version = "1.4.3", url = "https://raw.githubusercontent.com/joehillen/sysz/{{version}}/sysz", bin = "sysz" }
+# The OpenSSH tag (V_10_5_P1) is hard-coded in the URL below — it does not
+# derive from `version`, so bump it by hand together with `version` (e.g.
+# "10.6p1" -> V_10_6_P1) or the download stays pinned to the old script.
+"http:ssh-copy-id" = { version = "10.5p1", url = "https://raw.githubusercontent.com/openssh/openssh-portable/V_10_5_P1/contrib/ssh-copy-id", bin = "ssh-copy-id" }
+# cht.sh — client for the cheat.sh online service; a rolling raw script (no
+# release, no version in the URL), so "latest" is a bookkeeping label only.
+# version = "0": the http: backend rejects "latest" outright, and this URL
+# has no {{version}} template to substitute a real one into anyway — any
+# placeholder pin works, since the script itself is what's rolling.
+"http:cht.sh" = { version = "0", url = "https://cht.sh/:cht.sh", bin = "cht.sh" }
+# --- pypi: (latest at install time, pinned by mise.lock; was pip --user) ---
+"pypi:glances" = "latest"
+"pypi:asciinema" = "latest"
+"pypi:harlequin" = "latest"

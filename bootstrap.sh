@@ -46,8 +46,13 @@
 #     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
 # Flow (both modes):
-#   1. preflight             — check curl/git/make/tar/unzip/iproute
-#   2. clone repo            — into ~/.local/share/chezmoi (or git pull if present)
+#   1. preflight             — check curl/git/make/tar/iproute
+#   1.5. relocate_repo       — one-time move of a pre-2026-09 checkout from
+#                              ~/.local/share/chezmoi to ~/.config/mise (idempotent)
+#   2. clone repo            — into ~/.config/mise (or git pull if present)
+#   2.5. install_mise        — the pinned mise binary into ~/.local/bin
+#                              (sha256-verified); mise then installs every other
+#                              tool from config*.toml, and MISE_ENV is exported
 #   3. self_register         — add this host to hosts.conf
 #                              (auto-skipped inside WSL — see is_wsl below)
 #   4. run_make              — `make MODE=<dev|prod> provision` inside makefile/
@@ -73,8 +78,10 @@
 # end-of-bootstrap copy-id tip is also suppressed.
 #
 # Tool versions, URLs, dnf packages, PATH wiring, chezmoi orchestration —
-# everything lives under makefile/ (versions.mk, tools.mk, packages.mk,
-# shell.mk, dotfiles.mk, lib/*.sh). bootstrap.sh has no per-tool knowledge.
+# everything lives under makefile/ (versions.mk, packages.mk, shell.mk,
+# dotfiles.mk, lib/*.sh, and the `tools` target in Makefile itself — mise
+# installs from config*.toml at the repo root). bootstrap.sh has no
+# per-tool knowledge.
 # =============================================================================
 
 set -euo pipefail
@@ -106,8 +113,16 @@ is_wsl() {
 }
 
 DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
-CHEZMOI_SOURCE="$HOME/.local/share/chezmoi"
+# The checkout IS mise's global config dir (config*.toml, mise.lock, tasks/ live at its root).
+REPO_DIR="$HOME/.config/mise"
+LEGACY_REPO_DIR="$HOME/.local/share/chezmoi" # pre-2026-09 location; relocate_repo() moves it
+CHEZMOI_SOURCE="$REPO_DIR"                   # chezmoi's --source (its .chezmoiroot points at chezmoi/ inside)
 BIN="$HOME/.local/bin"
+# The ONE pin bootstrap owns: mise itself (everything else is in config*.toml).
+# DUAL-EDIT with bootstrap.ps1 $PortableTools (mise) and min_version in config.toml —
+# scripts/check-invariants.sh asserts all three agree.
+MISE_VERSION="2026.9.9"
+MISE_SHA256="986f36c5efef4302f6252f1b1e58c32052f3696fcf19b1ed44a1976b3c2b4ffc" # mise-v${MISE_VERSION}-linux-x64-musl.tar.gz
 
 # http.extraheader key scoped to github.com so the token never leaks to
 # other remotes. Stored in the cloned repo's .git/config so subsequent
@@ -228,7 +243,10 @@ do_reinstall() {
   log "Reinstall mode — wipe + re-bootstrap"
   echo ""
   echo "  Will REMOVE:"
-  echo "    - $CHEZMOI_SOURCE   (cloned workstation repo)"
+  echo "    - $REPO_DIR   (cloned workstation repo)"
+  if [[ -d "$LEGACY_REPO_DIR" ]]; then
+    echo "    - $LEGACY_REPO_DIR   (pre-relocation checkout, not yet swept)"
+  fi
   echo "    - $HOME/.config/chezmoi/    (chezmoi config + cached init data)"
   echo ""
   echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
@@ -237,8 +255,8 @@ do_reinstall() {
   echo "    - Deployed dotfiles in \$HOME (chezmoi will re-apply over them)"
   echo ""
   echo "  For a deeper uninstall (remove tools too), do that manually first:"
-  echo "    rm -f ~/.local/bin/{fzf,zoxide,starship,zellij,glow,hx,nb,chezmoi}"
-  echo "    sudo rm -f /usr/local/bin/{fzf,zoxide,starship,zellij,glow,hx,nb,chezmoi}"
+  echo "    mise implode                 # removes every mise-installed tool + mise's data dir"
+  echo "    rm -rf ~/.local/share/mise   # if implode isn't available (older mise, or already gone)"
   echo ""
 
   # Self-deletion guard: if this script is being run from inside the path
@@ -248,8 +266,8 @@ do_reinstall() {
   if [[ -n "$script_path" && -f "$script_path" ]]; then
     local script_real
     script_real=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
-    if [[ "$script_real" == "$CHEZMOI_SOURCE"* ]]; then
-      fail "Refusing to reinstall — running script is inside $CHEZMOI_SOURCE.
+    if [[ "$script_real" == "$REPO_DIR"* || "$script_real" == "$LEGACY_REPO_DIR"* ]]; then
+      fail "Refusing to reinstall — running script is inside $REPO_DIR or $LEGACY_REPO_DIR.
 Either pipe the remote script (runs from memory):
   curl -fsSL -H \"Authorization: token \$GITHUB_TOKEN\" \\
     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --${MACHINE_TYPE} --reinstall
@@ -267,12 +285,20 @@ Or copy this script out of the repo first:
     fi
   fi
 
-  if [[ -d "$CHEZMOI_SOURCE" ]]; then
-    log "Removing $CHEZMOI_SOURCE..."
-    rm -rf "$CHEZMOI_SOURCE"
+  if [[ -d "$REPO_DIR" ]]; then
+    log "Removing $REPO_DIR..."
+    rm -rf "$REPO_DIR"
     ok "Repo removed"
   else
-    log "$CHEZMOI_SOURCE not present — nothing to remove"
+    log "$REPO_DIR not present — nothing to remove"
+  fi
+
+  if [[ -d "$LEGACY_REPO_DIR" ]]; then
+    log "Removing $LEGACY_REPO_DIR..."
+    rm -rf "$LEGACY_REPO_DIR"
+    ok "Legacy repo removed"
+  else
+    log "$LEGACY_REPO_DIR not present — nothing to remove"
   fi
 
   if [[ -d "$HOME/.config/chezmoi" ]]; then
@@ -299,17 +325,36 @@ preflight() {
   command -v git &>/dev/null || missing+=("git")
   command -v make &>/dev/null || missing+=("make (drives makefile/Makefile)")
   command -v tar &>/dev/null || missing+=("tar (for archive extraction)")
-  command -v unzip &>/dev/null || missing+=("unzip (for .zip releases like lnav/yazi/rclone)")
   command -v ip &>/dev/null || missing+=("iproute (for self-registration)")
 
   if ((${#missing[@]} > 0)); then
     fail "Missing required prerequisites: ${missing[*]}
 Install via your distro's package manager, e.g.
-  RHEL/Fedora:   sudo dnf install curl git make tar unzip iproute
-  Debian/Ubuntu: sudo apt install curl git make tar unzip iproute2"
+  RHEL/Fedora:   sudo dnf install curl git make tar iproute
+  Debian/Ubuntu: sudo apt install curl git make tar iproute2"
   fi
 
   ok "Prerequisites OK"
+}
+
+# =============================================================================
+# 1.5 RELOCATE — the checkout moved from ~/.local/share/chezmoi to ~/.config/mise
+# (this repo IS mise's global config dir since 2026-09). One-time, idempotent.
+# A pre-existing ~/.config/mise (the chezmoi-deployed conf.d era) is moved aside.
+# =============================================================================
+relocate_repo() {
+  [[ -d "$REPO_DIR/.git" ]] && return 0
+  [[ -d "$LEGACY_REPO_DIR/.git" ]] || return 0
+  log "Relocating the workstation checkout: $LEGACY_REPO_DIR → $REPO_DIR"
+  if [[ -e "$REPO_DIR" ]]; then
+    local aside
+    aside="$REPO_DIR.pre-relocation.$(date +%Y%m%d%H%M%S)"
+    mv "$REPO_DIR" "$aside" || fail "could not move aside $REPO_DIR"
+    warn "moved the old $REPO_DIR (chezmoi-deployed mise conf.d) to $aside — delete it once the new layout works"
+  fi
+  mkdir -p "$(dirname "$REPO_DIR")"
+  mv "$LEGACY_REPO_DIR" "$REPO_DIR" || fail "could not move $LEGACY_REPO_DIR to $REPO_DIR"
+  ok "checkout now at $REPO_DIR"
 }
 
 # =============================================================================
@@ -326,7 +371,7 @@ self_register() {
     return
   fi
 
-  local manage_script="$CHEZMOI_SOURCE/scripts/manage-hosts.sh"
+  local manage_script="$REPO_DIR/scripts/manage-hosts.sh"
 
   # We invoke via `bash "$manage_script"` below, so the executable bit isn't
   # required — just the file. -x would skip on any clone where git didn't
@@ -366,6 +411,27 @@ self_register() {
 }
 
 # =============================================================================
+# 2.5 MISE — the pinned mise binary into ~/.local/bin (sha256-verified). mise
+# installs every other tool from config*.toml; the Make layer only orchestrates.
+# =============================================================================
+install_mise() {
+  if [[ -x "$BIN/mise" ]] && [[ "$("$BIN/mise" --version 2>/dev/null | awk '{print $1}')" == "$MISE_VERSION" ]]; then
+    ok "mise $MISE_VERSION present ($BIN/mise)"
+    return 0
+  fi
+  log "Installing mise $MISE_VERSION into $BIN..."
+  local tmp url
+  tmp=$(mktemp -d)
+  url="https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/mise-v${MISE_VERSION}-linux-x64-musl.tar.gz"
+  curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/mise.tgz" "$url" || fail "mise download failed: $url"
+  printf '%s  %s\n' "$MISE_SHA256" "$tmp/mise.tgz" | sha256sum -c --quiet - || fail "mise tarball sha256 mismatch — refusing to install"
+  tar -xzf "$tmp/mise.tgz" -C "$tmp"
+  install -m 0755 "$tmp/mise/bin/mise" "$BIN/mise"
+  rm -rf "$tmp"
+  ok "mise $MISE_VERSION installed ($BIN/mise)"
+}
+
+# =============================================================================
 # 3. RUN MAKE — invoke `make MODE=<dev|prod> provision` inside makefile/.
 #
 # The Makefile resolves DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES from MODE (see
@@ -376,7 +442,7 @@ self_register() {
 # pip/claude never accidentally get sudo'd.
 # =============================================================================
 run_make() {
-  cd "$CHEZMOI_SOURCE/makefile"
+  cd "$REPO_DIR/makefile"
   log "Running 'make MODE=${MACHINE_TYPE} provision'..."
   if [[ "$MACHINE_TYPE" == "dev" ]]; then
     log "Dev mode — sudo may prompt once early for dnf + /usr/local/bin writes"
@@ -436,6 +502,20 @@ ensure_chezmoi_initialized() {
     warn "chezmoi init failed. Inspect with: chezmoi diff --source $CHEZMOI_SOURCE"
     return 0
   fi
+}
+
+# =============================================================================
+# 4.6. REFRESH CHEZMOI CONFIG — re-render chezmoi's config when it predates
+# the sourceDir key (the relocation): `init` without --apply re-runs
+# .chezmoi.toml.tmpl; cached prompt answers mean no prompts.
+# =============================================================================
+refresh_chezmoi_config() {
+  local config="$HOME/.config/chezmoi/chezmoi.toml" chezmoi_bin
+  chezmoi_bin=$(command -v chezmoi || true)
+  [[ -n "$chezmoi_bin" && -f "$config" ]] || return 0
+  grep -q '^sourceDir' "$config" && return 0
+  log "Refreshing chezmoi config (sourceDir → $REPO_DIR)..."
+  WORKSTATION_GROUP="$GROUP_NAME" "$chezmoi_bin" init --no-tty --source "$CHEZMOI_SOURCE" && ok "chezmoi config refreshed" || warn "chezmoi init --no-tty failed; run: chezmoi init --source $CHEZMOI_SOURCE"
 }
 
 # =============================================================================
@@ -525,12 +605,20 @@ set_default_shell() {
 #    Warn-don't-fail: `make provision` already succeeded by now, so we never abort here.
 # =============================================================================
 push_host_changes() {
-  cd "$CHEZMOI_SOURCE"
+  cd "$REPO_DIR"
 
   # Anything to commit (working tree OR already-staged)?
   if git diff --quiet hosts.conf 2>/dev/null &&
     git diff --cached --quiet hosts.conf 2>/dev/null; then
     log "No host-list changes to commit"
+    return 0
+  fi
+
+  # Non-interactive runs (fleet updates via update-hosts.sh) must never write
+  # to the shared repo on the caller's behalf — commit+push only when stdin
+  # is a TTY (an interactive ./bootstrap.sh run).
+  if [[ ! -t 0 ]]; then
+    warn "hosts.conf changed but this is a non-interactive run — commit it by hand: cd $REPO_DIR && git add hosts.conf && git commit -m 'hosts: …' && git push"
     return 0
   fi
 
@@ -554,7 +642,7 @@ push_host_changes() {
   fi
 
   if ! git "${cfg_args[@]}" commit -m "chore(hosts): register $(hostname -s)" 2>/dev/null; then
-    warn "Commit failed — inspect with:  cd $CHEZMOI_SOURCE && git status"
+    warn "Commit failed — inspect with:  cd $REPO_DIR && git status"
     return 0
   fi
 
@@ -563,7 +651,7 @@ push_host_changes() {
     ok "Host registration pushed"
   else
     warn "Push failed (auth, conflict, or no upstream). Recover with:"
-    warn "  cd $CHEZMOI_SOURCE && git push"
+    warn "  cd $REPO_DIR && git push"
   fi
 }
 
@@ -576,8 +664,14 @@ push_host_changes() {
 # `make check-updates` in makefile/ — the thin-seed invariant holds.
 # =============================================================================
 require_repo() {
-  if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
-    fail "No workstation repo at $CHEZMOI_SOURCE — bootstrap this host first:
+  if [[ ! -d "$REPO_DIR/.git" ]]; then
+    if [[ -d "$LEGACY_REPO_DIR/.git" ]]; then
+      REPO_DIR="$LEGACY_REPO_DIR"
+      CHEZMOI_SOURCE="$REPO_DIR"
+      warn "checkout not yet relocated to ~/.config/mise — run ./bootstrap.sh --${MACHINE_TYPE} once"
+      return 0
+    fi
+    fail "No workstation repo at $REPO_DIR — bootstrap this host first:
   ./bootstrap.sh --${MACHINE_TYPE}"
   fi
 }
@@ -585,8 +679,8 @@ require_repo() {
 # Shared by both modes: fetch (best-effort), then report branch, ahead/behind
 # the upstream, and working-tree cleanliness. Never aborts — report-only.
 report_repo_state() {
-  cd "$CHEZMOI_SOURCE"
-  log "Workstation repo ($CHEZMOI_SOURCE)"
+  cd "$REPO_DIR"
+  log "Workstation repo ($REPO_DIR)"
   if git fetch --quiet 2>/dev/null; then
     ok "fetched origin"
   else
@@ -602,19 +696,19 @@ report_repo_state() {
     behind=$(git rev-list --count "HEAD..@{upstream}" 2>/dev/null || echo 0)
     ahead=$(git rev-list --count "@{upstream}..HEAD" 2>/dev/null || echo 0)
     if ((behind > 0)); then
-      warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $CHEZMOI_SOURCE pull --ff-only"
+      warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $REPO_DIR pull --ff-only"
     else
       ok "branch $branch is up to date with $upstream"
     fi
     if ((ahead > 0)); then
-      warn "$ahead local commit(s) not pushed — push with: git -C $CHEZMOI_SOURCE push"
+      warn "$ahead local commit(s) not pushed — push with: git -C $REPO_DIR push"
     fi
   else
     warn "branch $branch has no upstream — behind/ahead unknown"
   fi
 
   if ((dirty > 0)); then
-    warn "$dirty uncommitted change(s) — review with: git -C $CHEZMOI_SOURCE status"
+    warn "$dirty uncommitted change(s) — review with: git -C $REPO_DIR status"
   else
     ok "working tree clean"
   fi
@@ -622,13 +716,15 @@ report_repo_state() {
 
 do_doctor() {
   require_repo
+  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
+  export MISE_ENV
   log "Doctor — read-only health report (MODE=${MACHINE_TYPE}); nothing is installed or changed"
   echo ""
 
   # Same prereq list as preflight, but report-all instead of hard-fail.
   log "Prerequisites"
   local cmd
-  for cmd in curl git make tar unzip ip; do
+  for cmd in curl git make tar ip; do
     if command -v "$cmd" &>/dev/null; then
       ok "$cmd"
     else
@@ -658,7 +754,7 @@ do_doctor() {
       warn "not initialized — re-run ./bootstrap.sh --${MACHINE_TYPE} (runs chezmoi init --apply)"
     fi
   else
-    warn "chezmoi not on PATH — install: make -C $CHEZMOI_SOURCE/makefile chezmoi MODE=${MACHINE_TYPE}"
+    warn "chezmoi not on PATH — install: make -C $REPO_DIR/makefile chezmoi MODE=${MACHINE_TYPE}"
   fi
   echo ""
 
@@ -675,12 +771,18 @@ do_doctor() {
   fi
   echo ""
 
+  log "mise"
+  if command -v mise >/dev/null 2>&1; then ok "mise $(mise --version 2>/dev/null | awk '{print $1}') on PATH ($(command -v mise)) — pinned $MISE_VERSION"; else warn "mise not on PATH — re-run ./bootstrap.sh --${MACHINE_TYPE}"; fi
+  echo ""
+
   log "Tools, services, stamps — make doctor MODE=${MACHINE_TYPE}"
-  make -C "$CHEZMOI_SOURCE/makefile" --no-print-directory MODE="$MACHINE_TYPE" doctor
+  make -C "$REPO_DIR/makefile" --no-print-directory MODE="$MACHINE_TYPE" doctor
 }
 
 do_check_updates() {
   require_repo
+  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
+  export MISE_ENV
   log "Check for updates (MODE=${MACHINE_TYPE}) — workstation repo first, then tool pins vs upstream"
   echo ""
 
@@ -689,7 +791,7 @@ do_check_updates() {
   echo "     pull first so the pins you're comparing are current)"
   echo ""
 
-  make -C "$CHEZMOI_SOURCE/makefile" --no-print-directory MODE="$MACHINE_TYPE" check-updates
+  make -C "$REPO_DIR/makefile" --no-print-directory MODE="$MACHINE_TYPE" check-updates
 }
 
 # =============================================================================
@@ -709,7 +811,8 @@ if [[ "$REINSTALL" == true ]]; then
 fi
 preflight
 mkdir -p "$BIN"
-export PATH="$BIN:$PATH"
+export PATH="$BIN:$HOME/.local/share/mise/shims:$PATH"
+relocate_repo
 
 # --- Repo --------------------------------------------------------------------
 # If GITHUB_TOKEN is set, use it via http.extraheader (scoped to github.com).
@@ -727,39 +830,45 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   GH_HEADER_VAL="Authorization: Basic $GH_HEADER_B64"
 fi
 
-if [[ ! -d "$CHEZMOI_SOURCE/.git" ]]; then
-  log "Cloning workstation repo into $CHEZMOI_SOURCE..."
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+  log "Cloning workstation repo into $REPO_DIR..."
   if [[ -n "$GH_HEADER_VAL" ]]; then
-    git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" ||
+    git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$REPO_DIR" ||
       fail "Clone failed. For a private repo, set GITHUB_TOKEN to a PAT with repo read access."
-    git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+    git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   else
-    git clone "$DOTFILES_REPO" "$CHEZMOI_SOURCE" ||
+    git clone "$DOTFILES_REPO" "$REPO_DIR" ||
       fail "Clone failed. If the repo is private, set GITHUB_TOKEN and re-run."
   fi
   ok "Repo cloned"
 else
-  log "Repo already present at $CHEZMOI_SOURCE — pulling latest..."
+  log "Repo already present at $REPO_DIR — pulling latest..."
   # Refresh the stored token if a new one was passed in this invocation.
   if [[ -n "$GH_HEADER_VAL" ]]; then
-    git -C "$CHEZMOI_SOURCE" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+    git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   fi
   # A failed pull means we'd run make against a stale-or-broken tree —
   # better to bail out and let the user inspect.
-  if ! git -C "$CHEZMOI_SOURCE" pull --ff-only; then
-    fail "git pull --ff-only failed in $CHEZMOI_SOURCE.
+  if ! git -C "$REPO_DIR" pull --ff-only; then
+    fail "git pull --ff-only failed in $REPO_DIR.
 This usually means stale credentials in .git/config, or local commits/conflicts.
 Inspect with:
-  cd $CHEZMOI_SOURCE && git status && git log --oneline -5
+  cd $REPO_DIR && git status && git log --oneline -5
 
 To start over from scratch (wipes the cloned repo, not your tools/dotfiles):
   ./bootstrap.sh --${MACHINE_TYPE} --reinstall"
   fi
 fi
 
+install_mise
+MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
+export MISE_ENV
+log "mise environment: MISE_ENV=$MISE_ENV"
+
 self_register
 run_make
 ensure_chezmoi_initialized
+refresh_chezmoi_config
 check_age_identity
 set_default_shell
 push_host_changes
@@ -774,6 +883,11 @@ fi
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
 
+echo -e "${YELLOW}Replace this shell now:${RESET} run ${YELLOW}exec zsh${RESET} (or open a new tab)."
+echo -e "  The shell you ran this from still has its mise/starship prompt hooks bound to the"
+echo -e "  pre-migration /usr/local binaries, which the legacy sweep just removed — its prompt"
+echo -e "  will print 'no such file or directory' on every keystroke until it is replaced."
+
 # Only print the "you're on zsh" tip when the user actually is. set_default_shell
 # may have bailed out (prod with no sudo, missing zsh binary, usermod refused) and
 # already printed its own follow-up command, so we just stay quiet here. Read the
@@ -781,8 +895,7 @@ echo -e "${BOLD}Bootstrap complete.${RESET}"
 _login_shell=$(getent passwd "$USER" | cut -d: -f7)
 _zsh_path=$(command -v zsh || true)
 if [[ -n "$_zsh_path" && "$_login_shell" == "$_zsh_path" ]]; then
-  echo -e "Open a new tab (or log out + back in) to land in zsh."
-  echo -e "Or switch this terminal right now: ${YELLOW}exec zsh${RESET}"
+  echo -e "Log out + back in (or open a new tab) to land in zsh as your login shell."
 fi
 
 if is_wsl; then

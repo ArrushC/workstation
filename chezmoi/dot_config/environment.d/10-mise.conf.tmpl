@@ -1,0 +1,5 @@
+# ~/.config/environment.d/10-mise.conf — managed by chezmoi.
+# systemd's user manager imports every ~/.config/environment.d/*.conf at
+# login, so this gives MISE_ENV to every future user unit and D-Bus-activated
+# service, not just pueued.service (which also sets it directly — see there).
+MISE_ENV={{ if and (hasKey . "group") (eq .group "dev_machine") }}linux,dev,host,{{ if contains "microsoft" (lower .chezmoi.kernel.osrelease) }}wsl{{ else }}native{{ end }}{{ else }}linux{{ end }}

@@ -43,12 +43,13 @@
 #                     then Windows Terminal + Warp, the installer-class apps
 #                     (Obsidian, Zed), and the best-effort elevated class
 #                     (SSHFS-Win — may pop UAC).
-#   3. clone repo   — into -RepoPath (default %USERPROFILE%\.local\share\chezmoi,
-#                     matching bootstrap.sh's $HOME/.local/share/chezmoi and
-#                     chezmoi's own default source dir).
+#   3. clone repo   — into -RepoPath (default %USERPROFILE%\.config\mise —
+#                     mise's own global config dir now; matches bootstrap.sh's
+#                     relocated $HOME/.config/mise checkout on Linux).
 #   4. chezmoi apply— applies chezmoi/ to %USERPROFILE% (PowerShell profile,
 #                     Warp + Windows Terminal settings, Zed/VSCode settings, …).
-#   4b. mise runtimes — installs node/Go/uv/gopls/LSP servers from the deployed conf.d
+#   4b. mise tools  — installs node/Go/uv/gopls/LSP servers/ccstatusline from
+#                     config.toml + config.dev.toml at the repo root
 #   5. profile shim — if Documents is redirected (OneDrive), drop a loader at the
 #                     real $PROFILE that sources the chezmoi canonical profile.
 #   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
@@ -103,13 +104,13 @@
 # Or clone manually + run:
 #
 #   git clone https://github.com/ArrushC/workstation.git `
-#     "$env:USERPROFILE\.local\share\chezmoi"
-#   cd "$env:USERPROFILE\.local\share\chezmoi"
+#     "$env:USERPROFILE\.config\mise"
+#   cd "$env:USERPROFILE\.config\mise"
 #   .\bootstrap.ps1
 #
 # Flags:
 #   -RepoPath <path>    override clone target
-#                       (default $env:USERPROFILE\.local\share\chezmoi)
+#                       (default $env:USERPROFILE\.config\mise)
 #   -SkipKeyGen         skip the SSH-key generation prompt
 #   -SkipToolInstall    skip the chezmoi/GitHub CLI/Starship/Helix/Nushell/jq/
 #                       OpenCode/omp/DevToys CLI/dnGrep/LogExpert
@@ -145,7 +146,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoPath = (Join-Path $env:USERPROFILE ".local\share\chezmoi"),
+    [string]$RepoPath = (Join-Path $env:USERPROFILE ".config\mise"),
     [switch]$SkipKeyGen,
     [switch]$SkipToolInstall,
     [switch]$SkipChezmoi,
@@ -372,22 +373,22 @@ $PortableTools = @(
         # zip nests mise\bin\mise.exe + mise-shim.exe (the template mise
         # copies for native .exe shims — without it shims degrade to .cmd
         # wrappers), so 'tree' into its OWN dir with BinSubdir pointing the
-        # PATH at bin\. WHAT mise installs is declared by the chezmoi-deployed
-        # %USERPROFILE%\.config\mise\conf.d\*.toml (GENERATED from
-        # makefile/versions.mk — no runtime pin table lives here) and driven
-        # by Invoke-MiseRuntimes after chezmoi apply. uv is one of those
-        # runtimes now (it was a portable tool of its own until 2026-09).
+        # PATH at bin\. WHAT mise installs is declared by config.toml +
+        # config.dev.toml at the root of the checkout — %USERPROFILE%\.config\mise
+        # IS the checkout (Invoke-CloneRepo relocates a pre-2026-09 clone
+        # there), read directly by Invoke-MiseRuntimes after chezmoi apply. uv
+        # is one of those tools now (it was a portable tool of its own until 2026-09).
         Name       = "mise"
         Exe        = "mise"
-        Version    = "2026.9.1"
-        Url        = "https://github.com/jdx/mise/releases/download/v2026.9.1/mise-v2026.9.1-windows-x64.zip"
-        Sha256     = "9556296db217774e7dae8fc241542d6bbc2351122ba93c8df2a65d3b921d7a28"
+        Version    = "2026.9.9"
+        Url        = "https://github.com/jdx/mise/releases/download/v2026.9.9/mise-v2026.9.9-windows-x64.zip"
+        Sha256     = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
         Layout     = "tree"
         BinSubdir  = "bin"
         Dest       = $WsMise
         Repo       = "jdx/mise"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND MISE_VERSION in makefile/versions.mk"
+        UpdateHint = "dual-edit: `$PortableTools here AND MISE_VERSION in bootstrap.sh AND min_version in config.toml"
     },
     @{
         # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
@@ -1393,7 +1394,7 @@ function Install-WindowsTerminal {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise runtimes not installed, Python env not built"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise-installed tools not installed, Python env not built"
         return
     }
 
@@ -1431,6 +1432,57 @@ function Invoke-ToolInstall {
 # 3. CLONE REPO (with $env:GITHUB_TOKEN support for private repo)
 # =============================================================================
 function Invoke-CloneRepo {
+    # One-time relocation: the checkout moved from .local\share\chezmoi to
+    # .config\mise (the repo IS mise's global config dir). A pre-existing
+    # .config\mise (the chezmoi-deployed conf.d era) is moved aside.
+    $legacyRepo = Join-Path $env:USERPROFILE ".local\share\chezmoi"
+    if (-not (Test-Path "$RepoPath\.git") -and (Test-Path "$legacyRepo\.git")) {
+        if (Test-Path $RepoPath) {
+            $aside = "$RepoPath.pre-relocation.$(Get-Date -Format yyyyMMddHHmmss)"
+            try {
+                Move-Item -LiteralPath $RepoPath -Destination $aside -ErrorAction Stop
+            } catch {
+                Write-Fail @"
+Couldn't move the old $RepoPath (mise conf.d) aside to ${aside}:
+  $($_.Exception.Message)
+  Something still holds it open — usually a shell whose current directory is
+  inside it, or an editor with the folder open. Close or cd them out of it,
+  then re-run this script.
+"@
+            }
+            Write-Warn "moved the old $RepoPath (mise conf.d) to $aside — delete it once the new layout works"
+        }
+        $parent = Split-Path $RepoPath -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+
+        # Windows won't move a directory any process is sitting in. Release our
+        # own two holds first — the provider location AND the .NET process cwd
+        # (Set-Location never updates the latter in PowerShell 5.1).
+        $home_ = $env:USERPROFILE
+        if ((Get-Location).Path.StartsWith($legacyRepo, [StringComparison]::OrdinalIgnoreCase)) {
+            Set-Location -LiteralPath $home_
+        }
+        if ([Environment]::CurrentDirectory.StartsWith($legacyRepo, [StringComparison]::OrdinalIgnoreCase)) {
+            [Environment]::CurrentDirectory = $home_
+        }
+        try {
+            Move-Item -LiteralPath $legacyRepo -Destination $RepoPath -ErrorAction Stop
+        } catch {
+            Write-Fail @"
+Couldn't relocate the checkout: $legacyRepo -> $RepoPath
+  $($_.Exception.Message)
+  Something still holds the old checkout open — usually a shell whose current directory
+  is inside it (another terminal tab, or the Nushell/PowerShell that launched this script),
+  or an editor with the folder open. Close or cd them out of it (cd ~), then re-run:
+    & "$legacyRepo\bootstrap.ps1"
+"@
+        }
+        Write-Ok "Relocated the checkout: $legacyRepo -> $RepoPath"
+        # The script (and, when run in-process, the user's shell) now sits in a
+        # path that no longer exists — move it into the relocated checkout.
+        Set-Location -LiteralPath $RepoPath
+    }
+
     # HTTP Basic with base64-encoded "x-access-token:<PAT>" — same scheme
     # actions/checkout uses. "Authorization: bearer" works for the REST/raw API
     # (how curl.exe fetches bootstrap.ps1) but is NOT accepted by git's smart-HTTP
@@ -1505,38 +1557,40 @@ function Invoke-Chezmoi {
 }
 
 # =============================================================================
-# 4b. MISE RUNTIMES — node / Go / uv / gopls / the LSP servers via mise (the
-#    Windows half of the Linux `mise-runtimes` Make target). WHAT to install is
-#    declared by the two conf.d files chezmoi has just deployed to
-#    %USERPROFILE%\.config\mise\conf.d\ (GENERATED from makefile/versions.mk
-#    by scripts/gen-mise-config.sh — the single source of every runtime pin;
-#    this script carries NO runtime pin table). mise's config dir is
-#    %USERPROFILE%\.config\mise on every platform; its data dir (installs +
-#    shims) is %LOCALAPPDATA%\mise. Stamp = sha256 of both conf.d files, so any
-#    pin change re-runs it. node is force-reinstalled only when the DECLARED
+# 4b. MISE TOOLS — node / Go / uv / gopls / the LSP servers / ccstatusline via
+#    mise (the Windows half of the Linux mise-driven install). WHAT to install
+#    is declared by config.toml + config.dev.toml at the ROOT of the checkout
+#    — %USERPROFILE%\.config\mise IS the checkout (Invoke-CloneRepo relocates
+#    a pre-2026-09 clone there), so mise reads them directly; nothing is
+#    generated or copied, and config.linux.toml never loads here (MISE_ENV
+#    carries no `linux` token on Windows). mise's data dir (installs + shims)
+#    is %LOCALAPPDATA%\mise. Stamp = sha256 of both config files, so any pin
+#    change re-runs it. node is force-reinstalled only when the DECLARED
 #    version was already present and node is still declared — its npm
 #    postinstall carries the language servers, and a changed postinstall only
 #    re-runs on a reinstall (the lib/mise.sh gate). Every run re-adds the
 #    shims dir to the User PATH (self-heals like the Start Menu shortcuts).
 #    Per-user, no admin; warn-and-continue; -SkipToolInstall skips it.
 # =============================================================================
-$MiseConfDir = Join-Path $env:USERPROFILE ".config\mise\conf.d"
-$MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
+$MiseConfigFiles = @("config.toml", "config.dev.toml")   # config.windows.toml joins in PR3
+$MiseShims       = Join-Path $env:LOCALAPPDATA "mise\shims"
+$MiseEnv         = "windows,dev"
 
 # Get-MiseRuntimesStamp — the exact stamp path Invoke-MiseRuntimes writes on
-# success: a hash of the conf.d files it consumed (sorted by name). Doctor
-# calls this SAME helper so its verdict can never drift onto a stale stamp
-# (the Get-PythonEnvStamp precedent). $null when no conf.d file is deployed.
+# success: a hash of $MiseConfigFiles (config.toml + config.dev.toml) under
+# $RepoPath. Doctor calls this SAME helper so its verdict can never drift onto
+# a stale stamp (the Get-PythonEnvStamp precedent). $null when config.toml is
+# missing (repo not cloned yet, or the relocation above hasn't run).
 function Get-MiseRuntimesStamp {
-    # FIXED order, not Sort-Object: the two names differ only by a hyphen, and
-    # culture-aware sorting orders them differently under .NET Framework (5.1,
-    # NLS) and .NET Core (pwsh 7, ICU) — the stamp must not depend on which
-    # PowerShell ran the bootstrap (bit the first Windows run, 2026-09-16).
-    $files = @(@("workstation.toml", "workstation-dev.toml") |
-        ForEach-Object { Join-Path $MiseConfDir $_ } |
-        Where-Object { Test-Path -LiteralPath $_ })
-    if ($files.Count -eq 0) { return $null }
-    $text   = ($files | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_ }) -join "`n"
+    # FIXED order, not Sort-Object: the two names differ only by a middle
+    # token, and culture-aware sorting orders them differently under .NET
+    # Framework (5.1, NLS) and .NET Core (pwsh 7, ICU) — the stamp must not
+    # depend on which PowerShell ran the bootstrap (bit the first Windows run,
+    # 2026-09-16).
+    $files = @($MiseConfigFiles | ForEach-Object { Join-Path $RepoPath $_ })
+    if (-not (Test-Path -LiteralPath $files[0])) { return $null }
+    $existing = @($files | Where-Object { Test-Path -LiteralPath $_ })
+    $text   = ($existing | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_ }) -join "`n"
     $bytes  = [System.Text.Encoding]::UTF8.GetBytes($text)
     $stream = New-Object System.IO.MemoryStream (,$bytes)
     $hash   = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.Substring(0, 8).ToLower()
@@ -1553,6 +1607,12 @@ function Invoke-MiseRuntimes {
         return
     }
 
+    # Persist MISE_ENV as a User env var right after we know mise is present
+    # and before any `mise` invocation below — every process that resolves
+    # tools (shells, Claude Code hooks, this session) must see the same set.
+    [Environment]::SetEnvironmentVariable("MISE_ENV", $MiseEnv, "User")
+    $env:MISE_ENV = $MiseEnv
+
     # One-time sweep of the retired portable uv (a $PortableTools entry until
     # 2026-09): its dir sat on the User PATH ahead of mise's shims, so the stale
     # copy would shadow mise's uv in every non-activated shell. Idempotent —
@@ -1567,7 +1627,7 @@ function Invoke-MiseRuntimes {
 
     $stamp = Get-MiseRuntimesStamp
     if ($null -eq $stamp) {
-        Write-Warn "mise runtimes skipped — no $MiseConfDir\workstation*.toml deployed (chezmoi step skipped or failed?)"
+        Write-Warn "mise tools skipped — $RepoPath\config.toml missing (clone step failed?)"
         return
     }
 
@@ -1577,11 +1637,11 @@ function Invoke-MiseRuntimes {
     Add-ToUserPath $MiseShims
 
     if (Test-Path $stamp) {
-        Write-Ok "mise runtimes already installed (conf.d unchanged — $(Split-Path -Leaf $stamp))"
+        Write-Ok "mise runtimes already installed (config unchanged — $(Split-Path -Leaf $stamp))"
         return
     }
 
-    Write-Log "Installing mise runtimes from $MiseConfDir (node / Go / uv / gopls / LSP servers — a few minutes on first run)..."
+    Write-Log "Installing mise tools from $RepoPath\config*.toml (node / Go / uv / gopls / LSP servers / ccstatusline — a few minutes on first run)..."
     # Native commands chatter on stderr; keep that from tripping an EAP=Stop
     # session (the chezmoi --version precedent in Invoke-CheckForUpdates).
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -1590,7 +1650,7 @@ function Invoke-MiseRuntimes {
         # already installed — a NODE_VERSION bump therefore installs once.
         & mise where node *> $null
         $hadNode = ($LASTEXITCODE -eq 0)
-        $nodeDeclared = [bool](Select-String -Path (Join-Path $MiseConfDir "workstation*.toml") -Pattern '^node\s*=' -Quiet)
+        $nodeDeclared = [bool](Select-String -Path (Join-Path $RepoPath "config.dev.toml") -Pattern '^node\s*=' -Quiet)
 
         & mise install --yes
         if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
@@ -2147,8 +2207,8 @@ function Invoke-PythonEnv {
         Write-Log "Python env skipped (-SkipToolInstall)"
         return
     }
-    # uv is a mise runtime now: ask mise for the binary the deployed conf.d
-    # declares (no fixed path — mise's data dir owns the install).
+    # uv is a mise runtime now: ask mise for the binary config.toml declares
+    # (no fixed path — mise's data dir owns the install).
     $uvExe = $null
     if (Get-Command mise -ErrorAction SilentlyContinue) {
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -2588,7 +2648,7 @@ function Invoke-Doctor {
     if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
         Write-Bad "mise runtimes: mise not on PATH — re-run .\bootstrap.ps1"
     } elseif ($null -eq $miseStamp) {
-        Write-Bad "mise runtimes: no conf.d deployed under $MiseConfDir — re-run .\bootstrap.ps1 (chezmoi step)"
+        Write-Bad "mise runtimes: no config.toml under $RepoPath — re-run .\bootstrap.ps1 (clone step)"
     } else {
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
         $missing = ((& mise ls --missing --global 2>$null) | Out-String).Trim()
@@ -2596,7 +2656,7 @@ function Invoke-Doctor {
         if ((Test-Path $miseStamp) -and -not $missing) {
             Write-Ok "mise runtimes installed (nothing missing; $(Split-Path -Leaf $miseStamp))"
         } elseif (-not $missing) {
-            Write-Warn "mise runtimes present but conf.d moved (no $(Split-Path -Leaf $miseStamp)) — next bootstrap reinstalls"
+            Write-Warn "mise runtimes present but config*.toml moved (no $(Split-Path -Leaf $miseStamp)) — next bootstrap reinstalls"
         } else {
             Write-Bad "mise runtimes missing: $(($missing -split "`r?`n") -join ', ') — re-run .\bootstrap.ps1"
         }
@@ -2604,6 +2664,15 @@ function Invoke-Doctor {
         $shimsOnPath = @(($userPath -split ';') | Where-Object { $_.TrimEnd('\') -ieq $MiseShims.TrimEnd('\') }).Count -gt 0
         if ($shimsOnPath) { Write-Ok "mise shims dir on the User PATH ($MiseShims)" }
         else { Write-Warn "mise shims dir NOT on the User PATH — re-run .\bootstrap.ps1 (self-heals)" }
+    }
+
+    # MISE_ENV is set by Invoke-MiseRuntimes right after it finds mise on PATH;
+    # check it independently so Doctor still reports a missing/stale value even
+    # when the tool-install branches above never ran this session.
+    if ([Environment]::GetEnvironmentVariable("MISE_ENV", "User") -eq $MiseEnv) {
+        Write-Ok "MISE_ENV=$MiseEnv persisted (User)"
+    } else {
+        Write-Warn "MISE_ENV not persisted — re-run .\bootstrap.ps1"
     }
 
     $dnGrepCfg = Join-Path $WsDnGrep "dnGrep.config.xml"
@@ -2797,7 +2866,7 @@ Invoke-Preflight
 Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
 Invoke-Chezmoi
-Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers from the chezmoi-deployed conf.d (self-heals the shims PATH)
+Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers/ccstatusline from config*.toml at the repo root (self-heals the shims PATH)
 Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
 Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
@@ -2816,7 +2885,7 @@ Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
 Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset}, ${Bold}$WsNu${Reset},"
-Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset}) and the chezmoi-applied configs pick up — starship prompt,"
+Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset} — mise-installed tools) and the chezmoi-applied configs pick up — starship prompt,"
 Write-Host "chezmoi/git aliases, etc."
 Write-Host ""
 Write-Host "${Bold}Two terminals are managed.${Reset} Warp is the day-to-day one: it opens into"

@@ -105,7 +105,7 @@
                                 <span class="dot g" aria-hidden="true"></span>
                                 <span class="title"
                                     ><span class="who">provision.sh — preview</span>:
-                                    ~/.local/share/chezmoi</span
+                                    ~/.config/mise</span
                                 >
                                 <span class="badge-dev"><span class="status-dot" aria-hidden="true"></span> EXAMPLE OUTPUT</span>
                             </div>
@@ -115,11 +115,11 @@
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="ok">&#10003;</span> system packages &amp; PATH <span class="mut">&middot;&middot;&middot;&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="ok">&#10003;</span> 90+ CLI tools (static bins) <span class="mut">&middot;&middot;&middot;</span> done</div>
+                                <div class="ln"><span class="ok">&#10003;</span> 140+ CLI tools (mise install) <span class="mut">&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="ok">&#10003;</span> chezmoi handoff &rarr; dotfiles <span class="mut">&middot;&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="mut"># adding a tool is a two-line edit in</span> <span class="acc">makefile/</span></div>
+                                <div class="ln"><span class="mut"># adding a tool is a one-line edit in</span> <span class="acc">config.linux.toml</span></div>
 
                             </div>
                         </div>
@@ -135,11 +135,15 @@
                             Dev-environment provisioning for Linux hosts, plus
                             Warp and Windows Terminal on Windows.
                             A single <code>Makefile</code> under
-                            <code>makefile/</code> drives everything &mdash;
-                            system packages, PATH, tool installs, and the chezmoi
-                            handoff for dotfiles. <code>bootstrap.sh</code> is a
+                            <code>makefile/</code> drives system packages, PATH,
+                            and the chezmoi handoff for dotfiles; <code>mise</code>
+                            (declared in <code>config.toml</code> /
+                            <code>config.linux.toml</code> /
+                            <code>config.dev.toml</code> at the repo root &mdash;
+                            this checkout IS mise&rsquo;s global config dir)
+                            owns every tool. <code>bootstrap.sh</code> is a
                             thin seed that runs <code>make MODE=dev|prod
-                            provision</code>. Adding a tool is a two-line edit.
+                            provision</code>. Adding a tool is a one-line edit.
                         </p>
                     <div class="section-heading" id="launchpad"><div><span class="eyebrow">01 / LIFT OFF</span><h2>Your next machine starts here.</h2></div><span class="section-caption">Three steps to a familiar workspace.</span></div>
                     <div class="setup-launchpad">
@@ -230,9 +234,18 @@ try {
                                 Make
                             </h3>
                             <p>
-                                Packages, tool installs, PATH, chezmoi handoff &mdash;
-                                all under <code>makefile/</code>.
+                                Packages, PATH, chezmoi handoff &mdash;
+                                all under <code>makefile/</code>. Tool installs
+                                are mise&rsquo;s job now.
                             </p>
+                        </article>
+                        <article class="stack-card">
+                            <div class="layer-label">Tool manager</div>
+                            <h3>
+                                <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v14H4zM8 7V3h8v4M4 12h16m-10 0v3h4v-3"/></svg></span>
+                                mise
+                            </h3>
+                            <p>Owns every tool now &mdash; <code>config*.toml</code> + <code>mise.lock</code> at the repo root.</p>
                         </article>
                         <article class="stack-card">
                             <div class="layer-label">Dotfiles</div>
@@ -310,15 +323,19 @@ try {
 
                     <div class="directory-heading"><div><span class="eyebrow">THE GOOD STUFF, ALL HERE</span><h3 id="toolbelt">Meet your toolbelt<span class="directory-total" data-tool-total>146</span></h3></div><span class="directory-subtitle">Small tools. Extraordinary possibilities.</span></div>
                     <p class="lede">
-                        CLI tools installed on every host via
-                        <code>makefile/Makefile</code> (invoked by
-                        <code>bootstrap.sh</code> as
-                        <code>make MODE=dev|prod provision</code>).
+                        CLI tools installed on every host by
+                        <code>mise</code> from <code>config.toml</code> /
+                        <code>config.linux.toml</code> /
+                        <code>config.dev.toml</code> at the repo root
+                        (<code>bootstrap.sh</code> runs
+                        <code>make MODE=dev|prod provision</code>, whose
+                        <code>tools</code> phase is <code>mise install</code>).
                         Default install is a static binary on both
                         <code>dev_machine</code> and <code>prod_machine</code>.
                         Scope tags: <code>(dnf)</code> =
                         <span class="badge dev">dev_machine</span> only via dnf,
-                        <code>(pip)</code> = via <code>pip --user</code> (both
+                        <code>(pip)</code> = via mise&rsquo;s
+                        <code>pypi:</code> backend (both
                         hosts), <code>(ins)</code> = via upstream installer,
                         <code>(dev)</code> =
                         <span class="badge dev">dev_machine</span> only via a
@@ -1456,21 +1473,22 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Polyglot runtime manager — owns node/Go/uv + the LSP servers (make mise-runtimes; global pins generated from versions.mk)"
+                                    data-tip="Polyglot tool manager — owns every tool in the toolbelt now (config.toml/config.linux.toml/config.dev.toml + mise.lock at the repo root)"
                                     >mise<span class="sr-only">
-                                        — polyglot runtime manager; installs
-                                        node, Go, uv and the language servers
-                                        from pins generated out of
-                                        versions.mk (make mise-runtimes)</span
+                                        — polyglot tool manager; owns every
+                                        tool in this toolbelt, declared in
+                                        config.toml/config.linux.toml/config.dev.toml
+                                        at the repo root and installed by
+                                        `make tools`</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Fast Python installer + venv (mise-managed, both scopes; replaces pip + venv)"
+                                    data-tip="Fast Python installer + venv (mise tool, both scopes; replaces pip + venv)"
                                     >uv (+ uvx)<span class="sr-only">
                                         — fast Python installer + venv;
-                                        installed by mise on both dev_machine
+                                        a mise tool on both dev_machine
                                         and prod_machine (replaces pip +
                                         venv)</span
                                     ></span
@@ -1490,12 +1508,12 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Go toolchain via mise (dev_machine only — make mise-runtimes MODE=dev)"
+                                    data-tip="Go toolchain via mise (dev_machine only — make tools MODE=dev)"
                                     >go <small>(dev)</small
                                     ><span class="sr-only">
                                         — official Go toolchain, installed
-                                        user-level by mise (dev_machine only
-                                        via mise-runtimes)</span
+                                        user-level by mise (dev_machine only,
+                                        config.dev.toml)</span
                                     ></span
                                 >
                                 <span
@@ -1530,28 +1548,28 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Rust language server (eget, dev + prod)"
+                                    data-tip="Rust language server (mise aqua-registry tool, dev + prod)"
                                     >rust-analyzer<span class="sr-only">
-                                        — Rust language server; eget binary,
-                                        dev + prod</span
+                                        — Rust language server; mise
+                                        aqua-registry tool, dev + prod</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Markdown language server (eget, dev + prod)"
+                                    data-tip="Markdown language server (mise aqua-registry tool, dev + prod)"
                                     >marksman<span class="sr-only">
-                                        — Markdown language server; eget binary,
-                                        dev + prod</span
+                                        — Markdown language server; mise
+                                        aqua-registry tool, dev + prod</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="TOML formatter + language server (eget, dev + prod)"
+                                    data-tip="TOML formatter + language server (mise aqua-registry tool, dev + prod)"
                                     >taplo<span class="sr-only">
-                                        — TOML formatter + language server; eget
-                                        binary, dev + prod</span
+                                        — TOML formatter + language server;
+                                        mise aqua-registry tool, dev + prod</span
                                     ></span
                                 >
                                 <span
@@ -1580,12 +1598,12 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Type-strict Python LSP (mise pipx: backend via uv tool install, dev_machine only)"
+                                    data-tip="Type-strict Python LSP (mise pypi: backend via uv, dev_machine only)"
                                     >basedpyright <small>(dev)</small
                                     ><span class="sr-only">
                                         — type-strict Python language server;
-                                        installed by mise&rsquo;s pipx: backend
-                                        (uv tool install) (dev_machine
+                                        installed by mise&rsquo;s pypi: backend
+                                        (dev_machine
                                         only)</span
                                     ></span
                                 >
@@ -1635,17 +1653,22 @@ try {
                             </div>
                             <p class="card-note">
                                 Install with
-                                <code>make lsp-servers MODE=dev</code> (runs as
-                                part of <code>make dev</code>). The
-                                mise-managed servers come from
-                                <code>make mise-runtimes</code>; mise installs
+                                <code>make tools MODE=dev</code> (mise installs
+                                every server declared in
+                                <code>config.linux.toml</code>/<code
+                                    >config.dev.toml</code
+                                >, runs as part of <code>make dev</code>).
+                                <code>make lsp-servers MODE=dev</code> installs
+                                nothing any more &mdash; it only verifies
+                                <code>clangd</code> is present. mise installs
                                 each tool independently, so one failure leaves
                                 the others usable and the next
-                                <code>make</code> retries.
+                                <code>mise install</code> retries.
                                 <code>rust-analyzer</code>,
                                 <code>marksman</code>, and <code>taplo</code>
                                 install on both <code>dev_machine</code> and
-                                <code>prod_machine</code> (eget binaries). On
+                                <code>prod_machine</code> (mise aqua-registry
+                                tools). On
                                 <code>dev_machine</code>, all servers are
                                 automatically registered with Claude&nbsp;Code's
                                 <code>LSP</code> tool via the bundled
@@ -2049,6 +2072,39 @@ try {
                                             host list</span
                                         >
                                     </li>
+                                    <li>
+                                        config.toml / config.linux.toml /
+                                        config.dev.toml
+                                        <span class="note"
+                                            >&mdash; mise tool declarations
+                                            (this checkout IS
+                                            ~/.config/mise)</span
+                                        >
+                                    </li>
+                                    <li>
+                                        mise.lock / mise.linux.lock /
+                                        mise.dev.lock
+                                        <span class="note"
+                                            >&mdash; per-file lockfiles;
+                                            never hand-edit</span
+                                        >
+                                    </li>
+                                    <li>
+                                        locks/
+                                        <span class="note"
+                                            >&mdash; per-tool lock sidecars
+                                            for dependency-locked pypi:/npm:
+                                            tools; never hand-edit</span
+                                        >
+                                    </li>
+                                    <li>
+                                        tasks/
+                                        <span class="note"
+                                            >&mdash; verify-tools (post-install
+                                            capability gate), migrate-legacy
+                                            (one-time sweep)</span
+                                        >
+                                    </li>
                                 </ul>
                                 <details open>
                                     <summary>scripts/</summary>
@@ -2072,8 +2128,43 @@ try {
                                             <span class="note"
                                                 >&mdash; multi-host updater
                                                 (ssh-loop, runs
-                                                <code>git pull &amp;&amp;
-                                                make provision</code>)</span
+                                                <code>git pull --ff-only
+                                                &amp;&amp;
+                                                ./bootstrap.sh
+                                                --&lt;mode&gt;
+                                                --yes</code>)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            lib/mise-env.sh
+                                            <span class="note"
+                                                >&mdash; MISE_ENV token set
+                                                for dev|prod (+ WSL vs
+                                                native)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            lib/mise-install.sh
+                                            <span class="note"
+                                                >&mdash; mise install +
+                                                node-postinstall marker + mise
+                                                prune</span
+                                            >
+                                        </li>
+                                        <li>
+                                            lib/verify-binary.sh
+                                            <span class="note"
+                                                >&mdash; ELF/loader/glibc
+                                                capability check, called by
+                                                tasks/verify-tools</span
+                                            >
+                                        </li>
+                                        <li>
+                                            lib/zellij-plugin.sh
+                                            <span class="note"
+                                                >&mdash; copies zjstatus.wasm
+                                                into zellij&rsquo;s data
+                                                dir</span
                                             >
                                         </li>
                                     </ul>
@@ -2083,8 +2174,10 @@ try {
                                         makefile/
                                         <span class="note"
                                             >&mdash; Linux provisioning
-                                            (packages + tools + PATH +
-                                            chezmoi)</span
+                                            (packages + PATH + chezmoi
+                                            handoff; tool installs are
+                                            mise&rsquo;s job now, via the
+                                            <code>tools</code> phase)</span
                                         >
                                     </summary>
                                     <ul>
@@ -2093,7 +2186,12 @@ try {
                                             <span class="note"
                                                 >&mdash; top-level: include
                                                 + provision/dev/prod targets
-                                                + TOOL/USER_TOOL macros</span
+                                                + the mise-backed
+                                                <code>tools</code> target
+                                                + bespoke targets
+                                                (python-env, vcpkg,
+                                                nerd-fonts, docker-engine,
+                                                &hellip;)</span
                                             >
                                         </li>
                                         <li>
@@ -2101,21 +2199,21 @@ try {
                                             <span class="note"
                                                 >&mdash; MODE=dev|prod →
                                                 DEST / SUDO / HAS_SUDO /
-                                                INSTALL_PACKAGES</span
+                                                INSTALL_PACKAGES /
+                                                MISE_ENV</span
                                             >
                                         </li>
                                         <li>
                                             versions.mk
                                             <span class="note"
-                                                >&mdash; tool versions
-                                                (SoT)</span
-                                            >
-                                        </li>
-                                        <li>
-                                            tools.mk
-                                            <span class="note"
-                                                >&mdash; per-tool install
-                                                rules (one line each)</span
+                                                >&mdash; the five pins Make
+                                                still owns, post-mise
+                                                (claude-cli, Dozzle, Nerd
+                                                Font, vcpkg, python-env)
+                                                plus the zjstatus floor
+                                                constant; every tool pin
+                                                now lives in
+                                                config*.toml</span
                                             >
                                         </li>
                                         <li>
@@ -2146,10 +2244,10 @@ try {
                                         <li>
                                             lib/
                                             <span class="note"
-                                                >&mdash; eget.sh /
-                                                archive.sh / direct.sh /
-                                                pipe.sh / pip.sh /
-                                                helix.sh</span
+                                                >&mdash; check-updates.sh /
+                                                doctor.sh / font.sh /
+                                                pipe.sh / python-env.sh /
+                                                vcpkg.sh</span
                                             >
                                         </li>
                                     </ul>
@@ -2346,14 +2444,18 @@ try {
                     <p class="lede">
                         <code>bootstrap.sh</code> needs only <code>curl</code>,
                         <code>git</code>, <code>make</code>, <code>tar</code>,
-                        <code>unzip</code>, and <code>iproute</code>
-                        (<code>ip</code>). A single preflight check reports
+                        and <code>iproute</code>
+                        (<code>ip</code>) &mdash; <code>unzip</code> is no
+                        longer required (mise extracts its own archives). A
+                        single preflight check reports
                         <strong>all</strong> missing prereqs at once. The
-                        script then runs
+                        script then installs the pinned <code>mise</code>
+                        binary and runs
                         <code>make MODE=&lt;dev|prod&gt; provision</code>
-                        inside <code>makefile/</code> &mdash; no
-                        <code>ansible-core</code> install, no Python &ge; 3.9
-                        gate.
+                        inside <code>makefile/</code>, whose
+                        <code>tools</code> phase is <code>mise install</code>
+                        &mdash; no <code>ansible-core</code> install, no
+                        Python &ge; 3.9 gate.
                     </p>
 
                     <h4>Env vars to set before running</h4>
@@ -2469,7 +2571,13 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="step">
                             <span class="num">2</span
                             ><span class="lbl">Clone repo</span
-                            ><span class="note">~/.local/share/chezmoi</span>
+                            ><span class="note">~/.config/mise &mdash; this checkout IS mise's global config dir</span>
+                        </div>
+                        <div class="arrow">&rarr;</div>
+                        <div class="step">
+                            <span class="num">2.5</span
+                            ><span class="lbl">Install mise</span
+                            ><span class="note">pinned, sha256-verified, into ~/.local/bin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -2558,14 +2666,16 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p class="note-row">
                         Re-runnable any time:
                         <code>make -C makefile claude-statusline MODE=dev</code>.
-                        Auto-installs the mise-managed Linux-native Node.js
-                        as a dep via
-                        <code>make -C makefile mise-runtimes MODE=dev</code>,
-                        so a fresh dev_machine doesn&rsquo;t need <code>npx</code>
-                        on PATH beforehand. The ccstatusline version is pinned
-                        in <code>makefile/versions.mk</code> via
-                        <code>CCSTATUSLINE_VERSION</code>; Node version via
-                        <code>NODE_VERSION</code>.
+                        Needs the mise-managed Linux-native Node.js on PATH
+                        (installed by <code>make -C makefile tools MODE=dev</code>,
+                        which the recipe prepends via the mise shims dir), so
+                        a fresh dev_machine doesn&rsquo;t need
+                        <code>npx</code> on PATH beforehand. Both the
+                        ccstatusline and Node versions are pinned in
+                        <code>config.dev.toml</code> (<code
+                            >npm:ccstatusline</code
+                        >
+                        and <code>tools.node</code>).
                     </p>
 
                     <h4>
@@ -2631,9 +2741,9 @@ try {
                         </div>
                         <p>
                             <strong>Wipes:</strong> the cloned repo (<code
-                                >~/.local/share/chezmoi</code
+                                >~/.config/mise</code
                             >
-                            / <code>%USERPROFILE%\.local\share\chezmoi</code>) and
+                            / <code>%USERPROFILE%\.config\mise</code>) and
                             chezmoi&rsquo;s config dir
                             (<code>~/.config/chezmoi/</code>).
                         </p>
@@ -2689,11 +2799,24 @@ make -C makefile check-updates MODE=dev</code></pre>
                             prerequisites, the repo&rsquo;s git state (branch,
                             commits ahead/behind upstream after a fetch,
                             uncommitted changes), chezmoi init state + dotfile
-                            drift, the login shell, then every managed tool
-                            (binary + version stamp, one
+                            drift, the login shell, then the mise-managed
+                            toolbelt (one summary row naming anything
+                            <code>mise ls --missing</code> finds, repaired
+                            with <code>make tools MODE=&lt;dev|prod&gt;</code>,
+                            plus rows for the zjstatus plugin copy and the
+                            legacy-tool sweep), then each bespoke Make target
+                            &mdash; <code>claude-cli</code>,
+                            <code>nerd-fonts</code>,
+                            <code>docker-engine</code>,
+                            <code>dozzle-service</code>,
+                            <code>cockpit-service</code>,
+                            <code>rsyslog-service</code>,
+                            <code>wsl-config</code>, <code>vcpkg</code>,
+                            <code>lsp-servers</code>,
+                            <code>python-env</code> (one
                             <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
                             line each, with the exact <code>make</code> repair
-                            command), the dev-only services
+                            command) &mdash; the dev-only services
                             (docker/dozzle/cockpit/rsyslog &mdash; active or
                             inactive), <code>wsl-config</code>, and the dnf
                             package lists. On Windows it covers the portable
@@ -2707,18 +2830,30 @@ make -C makefile check-updates MODE=dev</code></pre>
                             <strong><code>--check-for-updates</code></strong>
                             checks the <strong>workstation repo first</strong>
                             (fetch + commits-behind &mdash; pull before
-                            trusting the pin comparison), then compares every
-                            pinned tool version against the newest upstream
-                            release tag via <code>git ls-remote</code> (no
-                            GitHub API, no rate limits).
-                            <code>latest</code>-tracking tools (broot, nb,
-                            chezmoi, the pip tools, &hellip;) are reported as
-                            rolling. The scan is <strong>report-only</strong>:
-                            updating a pin is still the manual edit in
-                            <code>makefile/versions.mk</code> (Linux) or
-                            <code>$PortableTools</code> in
-                            <code>bootstrap.ps1</code> (Windows), followed by
-                            a re-provision.
+                            trusting the pin comparison), then runs
+                            <code>mise outdated --bump</code> for every tool
+                            declared in <code>config.toml</code> /
+                            <code>config.linux.toml</code> /
+                            <code>config.dev.toml</code>, plus
+                            <code>git ls-remote</code> (no GitHub API, no
+                            rate limits) for the handful of pins Make still
+                            owns directly in <code>makefile/versions.mk</code>
+                            (<code>claude-cli</code>, <code>dozzle</code>,
+                            <code>nerd-fonts</code>, <code>vcpkg</code>,
+                            <code>python-env</code>).
+                            <code>latest</code>-tracking tools (chezmoi, the
+                            <code>pypi:</code> tools, &hellip;) are reported
+                            as rolling. The scan is
+                            <strong>report-only</strong>: bumping a mise pin
+                            is <code>mise config set</code> (or
+                            <code>mise use</code>) followed by
+                            <code>mise lock --global</code>; bumping a
+                            Make-owned pin is still the manual edit in
+                            <code>makefile/versions.mk</code>, followed by a
+                            re-provision. On Windows the portable-tool pins
+                            in <code>bootstrap.ps1</code>&rsquo;s
+                            <code>$PortableTools</code> are checked the same
+                            read-only way.
                         </p>
                     </details>
 
@@ -2764,10 +2899,13 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         <p>
                             A weekly GitHub Actions job
                             (<code>version-bumps.yml</code>) runs
-                            <code>scripts/bump-versions.sh</code> and opens a
-                            PR bumping any drifted single-location
-                            <code>versions.mk</code> pins (the dual/triple-edit
-                            pins are listed for manual bumping). The workflow runs
+                            <code>scripts/bump-versions.sh</code>, which bumps
+                            mise tool pins via <code>mise outdated</code> +
+                            <code>mise config set</code> +
+                            <code>mise lock --global</code> and any drifted
+                            single-location <code>versions.mk</code> pins
+                            (the dual/triple-edit pins are listed for manual
+                            bumping), then opens a PR. The workflow runs
                             the invariant checker on the bumped tree before opening
                             the PR.
                         </p>
@@ -2924,9 +3062,10 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             into <code>%LOCALAPPDATA%\workstation\bin</code>.
                             Authenticate once with
                             <code>gh auth login</code>. The pin dual-edits
-                            <code>GH_VERSION</code> in
-                            <code>makefile/versions.mk</code> (the Linux half
-                            is the eget-installed <code>gh</code>).
+                            the Windows <code>$PortableTools</code> entry
+                            against the Linux half &mdash; <code>gh</code> in
+                            <code>config.linux.toml</code> (a mise
+                            aqua-registry tool).
                         </li>
                         <li>
                             <strong>Starship</strong> &mdash; pinned,
@@ -2944,9 +3083,13 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             (<code>omp</code>) &mdash; AI coding agents; pinned,
                             sha256-verified portable binaries into
                             <code>%LOCALAPPDATA%\workstation\bin</code>. The
-                            Windows halves of the Linux dev-only installs
-                            (versions dual-edit with
-                            <code>makefile/versions.mk</code>).
+                            Windows halves of the Linux dev-only mise tools
+                            (<code>opencode</code> and
+                            <code>github:can1357/oh-my-pi</code>, both
+                            <code>os = ["linux"]</code> in
+                            <code>config.dev.toml</code> so mise never
+                            installs them here &mdash; the pin is a manual
+                            dual-edit with this file).
                         </li>
                         <li>
                             <strong>DevToys CLI</strong>
@@ -2956,26 +3099,37 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>%LOCALAPPDATA%\workstation\devtoys-cli</code>
                             (the single-file exe needs its sibling
                             <code>Plugins\</code> tree). The Windows half of
-                            the Linux dev-only install (version dual-edit
-                            with <code>makefile/versions.mk</code>).
+                            the Linux dev-only mise tool
+                            (<code>github:DevToys-app/DevToys</code>,
+                            <code>os = ["linux"]</code> in
+                            <code>config.dev.toml</code>; version is a
+                            manual dual-edit with this file).
                         </li>
                         <li>
-                            <strong>mise</strong> &mdash; the runtime manager;
+                            <strong>mise</strong> &mdash; the tool manager;
                             pinned, sha256-verified portable tree into its own
                             <code>%LOCALAPPDATA%\workstation\mise</code>
                             directory (<code>bin\</code> joins the PATH: the
                             zip nests <code>mise.exe</code> next to the
                             <code>mise-shim.exe</code> template that gives
                             every tool a native <code>.exe</code> shim). The
-                            pin dual-edits <code>MISE_VERSION</code> in
-                            <code>makefile/versions.mk</code> (the Linux half
-                            is the eget-installed <code>mise</code>, both
-                            dev_machine and prod_machine). Right after chezmoi
-                            applies, a bespoke step installs what the deployed
-                            <code>%USERPROFILE%\.config\mise\conf.d\</code>
-                            declares &mdash; Node.js, Go, uv, gopls and the
-                            language servers, pinned in <code>versions.mk</code>
-                            and rendered into that config &mdash; and puts
+                            pin is a three-way dual-edit: the
+                            <code>$PortableTools</code> entry here, the
+                            <code>MISE_VERSION</code> mise itself is
+                            installed with in <code>bootstrap.sh</code>, and
+                            <code>min_version</code> in
+                            <code>config.toml</code>. Right after chezmoi
+                            applies, a bespoke step (<code>Invoke-MiseRuntimes</code>)
+                            runs <code>mise install</code> straight against
+                            <code>config.toml</code> +
+                            <code>config.dev.toml</code> at the root of this
+                            checkout &mdash; nothing is generated or copied,
+                            and <code>config.linux.toml</code> never loads
+                            here (the Windows <code>MISE_ENV</code> carries
+                            no <code>linux</code> token). That installs
+                            Node.js, Go, uv, gopls, the language servers and
+                            ccstatusline (the tools not marked
+                            <code>os = ["linux"]</code>), and puts
                             <code>%LOCALAPPDATA%\mise\shims</code> on the User
                             PATH. Both Windows shells activate mise: Nushell
                             through a generated
@@ -3141,8 +3295,10 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         are pinned in
                         <code>bootstrap.ps1</code> (<code>$PortableTools</code>),
                         the same self-contained pattern as
-                        <code>install-nerd-fonts.ps1</code>; the Helix pin tracks
-                        <code>HELIX_VERSION</code> in <code>makefile/versions.mk</code>.
+                        <code>install-nerd-fonts.ps1</code>; the Helix pin is a
+                        dual-edit with <code>helix</code> in
+                        <code>config.linux.toml</code> (the Linux half, a
+                        mise aqua-registry tool).
                         Your helix config deploys to
                         <code>%APPDATA%\helix\config.toml</code> on Windows
                         (Helix&rsquo;s Windows config dir).
@@ -3263,8 +3419,8 @@ try {
 
                     <h4>Or after cloning manually</h4>
                     <pre><code>git clone https://github.com/ArrushC/workstation.git `
-  "$env:USERPROFILE\.local\share\chezmoi"
-cd "$env:USERPROFILE\.local\share\chezmoi"
+  "$env:USERPROFILE\.config\mise"
+cd "$env:USERPROFILE\.config\mise"
 .\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
  .\bootstrap.ps1 -SkipToolInstall                 # Windows Terminal + the portable/installer tools already present
@@ -3276,11 +3432,17 @@ cd "$env:USERPROFILE\.local\share\chezmoi"
 .\bootstrap.ps1 -CheckForUpdates                 # read-only update scan (repo first), then exit</code></pre>
                     <p class="note-row">
                         <strong>Default clone path</strong> is
-                        <code>%USERPROFILE%\.local\share\chezmoi</code>, which
+                        <code>%USERPROFILE%\.config\mise</code>, which
                         matches <code>bootstrap.sh</code>&rsquo;s
-                        <code>$HOME/.local/share/chezmoi</code> and chezmoi&rsquo;s
-                        own default source directory. Override it with
+                        <code>$HOME/.config/mise</code> on Linux &mdash; this
+                        checkout IS mise&rsquo;s global config dir on both
+                        OSes, so a persisted <code>MISE_ENV</code> User
+                        environment variable is all mise needs to find its
+                        tool declarations. Override the path with
                         <code>-RepoPath</code> if you keep the repo elsewhere.
+                        A pre-2026-09 clone at the old
+                        <code>%USERPROFILE%\.local\share\chezmoi</code> is
+                        moved aside automatically on first run.
                     </p>
 
                     <h4>What <code>bootstrap.ps1</code> does</h4>
@@ -3933,7 +4095,12 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <code>scripts/update-hosts.sh</code> reads
                         <code>hosts.conf</code> directly when doing bulk
                         remote updates &mdash; the group column drives the
-                        per-host <code>MODE</code>.
+                        per-host <code>MODE</code>. It&rsquo;s a
+                        <strong>prod-host</strong> tool: prod never needs
+                        sudo, so the fleet run is fully non-interactive. Dev
+                        hosts are bootstrapped by hand, interactively, one at
+                        a time &mdash; see &ldquo;Make &mdash; remote&rdquo;
+                        in <a href="#daily">Daily workflows</a>.
                     </p>
                     <div class="callout">
                         <strong
@@ -4137,7 +4304,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         </tbody>
                     </table></div>
                     <p>To push changes back to the repo:</p>
-                    <pre><code>cd ~/.local/share/chezmoi   # or wherever the source state lives
+                    <pre><code>cd ~/.config/mise   # or wherever the source state lives
 git add -A && git commit -m "update zshrc" && git push</code></pre>
 
                     <h4>Per-machine overrides (untracked, sourced last)</h4>
@@ -4184,33 +4351,38 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
 
                     <h3>Runtimes via mise</h3>
                     <p>
-                        Install or refresh the mise-managed runtimes (Node.js,
-                        Go, uv) and language servers. Pins live in
-                        <code>makefile/versions.mk</code> and are rendered into
-                        <code>~/.config/mise/conf.d/</code>; consumed by the
-                        ccstatusline <code>statusLine</code> command, the
+                        <code>mise</code> owns every tool in the toolbelt now
+                        &mdash; Node.js, Go, uv, python, the language servers,
+                        and everything else. Pins live in
+                        <code>config.toml</code> /
+                        <code>config.linux.toml</code> /
+                        <code>config.dev.toml</code> at the repo root (this
+                        checkout IS mise&rsquo;s global config dir); consumed
+                        by the ccstatusline <code>statusLine</code> command, the
                         Claude&nbsp;Code <code>LSP</code> plugin, and anything
                         else that needs <code>npx</code>, <code>go</code> or
-                        <code>uv</code>:
+                        <code>uv</code>. Install or refresh the whole set with:
                     </p>
-                    <pre><code>make -C makefile mise-runtimes MODE=dev   # MODE=prod installs uv only</code></pre>
+                    <pre><code>make -C makefile tools MODE=dev   # MODE=prod installs the smaller prod-scope set</code></pre>
                     <p class="note-row">
                         Everything lands user-level under
                         <code>~/.local/share/mise</code>; the only privileged
                         step is the one-time sweep of the pre-mise
                         <code>/usr/local/bin</code> artifacts on
-                        <code>dev_machine</code> (sudo prompt on the first run).
-                        Interactive shells see the tools through
+                        <code>dev_machine</code> (sudo prompt on the first run,
+                        <code>tasks/migrate-legacy</code>). Interactive shells
+                        see the tools through
                         <code>mise activate</code>; non-interactive ones
                         (<code>ssh host cmd</code>, Make, IDE spawns) through
                         <code>~/.local/share/mise/shims</code>, exported from
                         <code>~/.zshenv</code> and from <code>~/.bashrc</code>
-                        above its interactive guard. Auto-runs as a dep of
-                        <code>claude-statusline</code> and
-                        <code>python-env</code>, so you rarely need to call it
-                        directly. Force a full redo as two commands:
-                        <code>make clean-mise-runtimes MODE=dev</code> then
-                        <code>make mise-runtimes MODE=dev</code>. WSL note: if
+                        above its interactive guard. To install or refresh
+                        just one tool:
+                        <code>mise install &lt;tool&gt;</code>; to remove one:
+                        <code>mise uninstall &lt;tool&gt;</code>. Auto-runs
+                        as a dep of <code>claude-statusline</code> and
+                        <code>python-env</code>, so you rarely need to call
+                        <code>make tools</code> directly. WSL note: if
                         your <code>PATH</code> leaks a Windows-side
                         <code>npx</code> from <code>/mnt/c/...</code>, the setup
                         script detects it and points you at this target.
@@ -4250,13 +4422,30 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </h3>
                     <p class="note-row">
                         <code>scripts/update-hosts.sh</code> ssh's into every
-                        managed host in <code>hosts.conf</code> and runs
-                        <code>git pull &amp;&amp; make provision</code>.
-                        <code>MODE</code> is derived per host from the group
-                        column (dev_machine &rarr; MODE=dev, prod_machine
-                        &rarr; MODE=prod) &mdash; one command bulk-updates a
-                        mixed set with the right scope per host. Replaces the
-                        pre-migration <code>ansible-playbook playbooks/linux.yml --limit ...</code>.
+                        managed host in <code>hosts.conf</code>, <code>cd</code>s
+                        into the checkout (<code>~/.config/mise</code>, or
+                        the pre-relocation <code>~/.local/share/chezmoi</code>
+                        on a host that hasn&rsquo;t bootstrapped since the
+                        move), and runs
+                        <code>git pull --ff-only &amp;&amp; ./bootstrap.sh
+                        --&lt;dev|prod&gt; --yes</code> &mdash; the full
+                        bootstrap flow, not just <code>make provision</code>,
+                        so a host also picks up a relocated checkout or a
+                        newly-pinned <code>mise</code>. It is a
+                        <strong>prod-host</strong> tool &mdash; prod hosts
+                        never sudo, so the whole run is non-interactive and
+                        safe to fire at the fleet in parallel.
+                        <strong>Dev</strong> hosts are bootstrapped
+                        <em>interactively, by hand, one at a time</em> instead
+                        (their <code>make provision</code> can hit a sudo
+                        password prompt, which a non-interactive SSH run can
+                        never satisfy):
+                        <code>ssh -t &lt;host&gt; 'cd ~/.config/mise
+                        2&gt;/dev/null || cd ~/.local/share/chezmoi; git pull
+                        --ff-only &amp;&amp; ./bootstrap.sh --dev'</code>.
+                        Replaces the pre-migration
+                        <code>ansible-playbook playbooks/linux.yml --limit
+                        ...</code>.
                     </p>
                     <div class="tabs">
                         <input
@@ -4269,20 +4458,21 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         <input type="radio" id="ar-host" name="tabset-ar" />
                         <input type="radio" id="ar-check" name="tabset-ar" />
                         <div class="tab-labels">
-                            <label for="ar-all">All hosts</label>
+                            <label for="ar-all">All prod hosts</label>
                             <label for="ar-group">By group</label>
                             <label for="ar-host">Single host</label>
                             <label for="ar-check">Dry run</label>
                         </div>
                         <div class="tab-panels">
                             <div class="tab-panel ar-panel-all">
-                                <pre><code># Every host in hosts.conf, parallel (default -P 4).
-# Dev hosts will sudo-prompt during their remote `make provision`.
-./scripts/update-hosts.sh</code></pre>
+                                <pre><code># Every PROD host in hosts.conf, parallel (default -P 4), no sudo.
+# Bootstrap dev hosts by hand instead — see the note above.
+./scripts/update-hosts.sh --group prod_machine</code></pre>
                             </div>
                             <div class="tab-panel ar-panel-group">
-                                <pre><code>./scripts/update-hosts.sh --group dev_machine
-./scripts/update-hosts.sh --group prod_machine</code></pre>
+                                <pre><code>./scripts/update-hosts.sh --group prod_machine
+# --group dev_machine works too, but can sudo-prompt non-interactively —
+# bootstrap dev hosts by hand instead (see the note above).</code></pre>
                             </div>
                             <div class="tab-panel ar-panel-host">
                                 <pre><code>./scripts/update-hosts.sh --name atc-cache-dev09</code></pre>
@@ -4326,9 +4516,10 @@ make dev                                        # friendly alias
 # Dry run (Make&rsquo;s built-in: print recipe lines, don&rsquo;t execute)
 make -n MODE=prod provision
 
-# Single tool — useful for iterating when one install is flaky
-make gitui MODE=prod
-make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
+# Single tool — useful for iterating when one install is flaky (mise tools
+# take no MODE — MISE_ENV, exported by the rc, already picks the scope)
+mise install gitui
+mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                     <p class="note-row">
                         <strong>Provisioning is parallel by default</strong>
                         &mdash; make self-assigns <code>-j$(nproc)</code>, and
@@ -4718,93 +4909,118 @@ make clean-gitui MODE=prod &amp;&amp; make gitui MODE=prod</code></pre>
 
                     <h3>Adding a new tool</h3>
                     <p>
-                        Two files, one line each. Tool installs live in
-                        <code>makefile/</code> &mdash;
-                        <code>make provision</code> invokes them as part of
-                        the normal bootstrap flow. There are three macros;
-                        <strong>prefer <code>EGET_TOOL</code></strong> for
-                        single-binary GitHub releases (the common case &mdash;
-                        64 of the current 87 tools use it).
+                        One line, in the right file &mdash; every tool is a
+                        <code>mise</code> pin now.
+                        <code>config.linux.toml</code> is the Linux toolbelt
+                        (both scopes); <code>config.dev.toml</code> is
+                        dev_machine-only tools on <strong>both</strong>
+                        OSes (add <code>os = ["linux"]</code> to a table
+                        entry when it&rsquo;s dev-only <em>and</em>
+                        Linux-only). Prefer mise&rsquo;s
+                        <strong>aqua registry</strong> short name (~65
+                        tools already use it, e.g. <code>fzf =
+                        "0.74.3"</code>) &mdash; reach for a
+                        <code>github:</code>/<code>http:</code> backend only
+                        when the registry picks the wrong asset (a glibc
+                        floor EL9 can&rsquo;t meet, the wrong build) or
+                        there&rsquo;s no GitHub release at all.
                     </p>
+                    <pre><code># config.linux.toml — [tools] (both scopes; aqua registry short name)
+direnv = "2.34.0"</code></pre>
+                    <p class="note-row">
+                        A tool the registry gets wrong needs an explicit
+                        asset instead (see the <code>gping</code> /
+                        <code>yazi</code> / <code>television</code> /
+                        <code>atuin</code> / <code>qsv</code> entries in
+                        <code>config.linux.toml</code> for worked examples
+                        of the EL9-glibc-floor case):
+                    </p>
+                    <pre><code># config.linux.toml — pin an explicit asset when the registry default won't run on EL9
+"github:direnv/direnv" = { version = "2.34.0", asset_pattern = "direnv.linux-amd64" }</code></pre>
                     <ol>
                         <li>
-                            Pin the version in
-                            <code>makefile/versions.mk</code>.
+                            <code>mise install &lt;name&gt;</code> &mdash;
+                            installs just that tool.
                         </li>
                         <li>
-                            Add one
-                            <code>$(eval $(call EGET_TOOL,&lt;name&gt;,$(&lt;NAME&gt;_VERSION),&lt;user/repo&gt;[,&lt;tag&gt;][,&lt;extra args&gt;]))</code>
-                            line in <code>makefile/tools.mk</code>. The 4th
-                            arg overrides the default <code>v$VERSION</code>
-                            tag (use it for tools like delta whose tag is
-                            <code>0.19.2</code>, not <code>v0.19.2</code>).
-                            The 5th arg passes flags to <a
-                                href="https://github.com/zyedidia/eget"
-                                >eget</a> &mdash; commonly
-                            <code>--asset musl</code> when upstream
-                            publishes both gnu and musl variants.
+                            <code>tasks/verify-tools</code> &mdash; the
+                            capability gate every install goes through
+                            (ELF arch, dynamic-loader resolution, glibc
+                            floor); a failure here is the signal to pick an
+                            explicit <code>github:</code> asset instead of
+                            the registry default.
+                        </li>
+                        <li>
+                            Refresh both lockfiles for the platforms the
+                            fleet runs:
+                            <code>MISE_ENV=linux,dev,host,native mise lock
+                            --global --platform linux-x64</code> and
+                            <code>MISE_ENV=windows,dev mise lock --global
+                            --platform windows-x64</code> (skip the second
+                            for a tool marked <code>os = ["linux"]</code>).
+                        </li>
+                        <li>
+                            Commit the edited <code>config*.toml</code>, the
+                            <code>mise.lock</code> /
+                            <code>mise.linux.lock</code> /
+                            <code>mise.dev.lock</code> files, and any new
+                            sidecar under <code>locks/**</code>
+                            (dependency-locked <code>pypi:</code>/<code
+                                >npm:</code
+                            >
+                            tools get one).
                         </li>
                     </ol>
-                    <pre><code># makefile/versions.mk
-DIRENV_VERSION := 2.34.0</code></pre>
-                    <pre><code># makefile/tools.mk
-$(eval $(call EGET_TOOL,direnv,$(DIRENV_VERSION),direnv/direnv))</code></pre>
                     <p class="note-row">
-                        eget figures out the right asset from
-                        <code>direnv/direnv</code> + the tag, downloads it,
-                        finds the binary inside, and installs to
-                        <code>$(DEST)</code>. The wrapper at
-                        <code>lib/eget.sh</code> bakes in noise filters
-                        (<code>.sbom</code>, <code>.sig</code>,
-                        <code>.deb</code>, etc.) so eget's auto-detection
-                        almost always picks unambiguously.
-                    </p>
-                    <p>
-                        <strong>Fallback to <code>TOOL</code></strong> for the
-                        shapes eget can't handle: multi-binary archives with
-                        junk files (age has LICENSE, yazi has shell
-                        completions), non-GitHub URLs (ncdu at
-                        dystroy.org), raw binary URLs (jq, broot, sops),
-                        curl-pipe installers (chezmoi, claude), or helix's
-                        binary-plus-runtime layout. Use the matching helper:
-                        <code>archive.sh</code>, <code>direct.sh</code>,
-                        <code>pipe.sh</code>, or <code>helix.sh</code>.
-                        <strong>Fallback to <code>USER_TOOL</code></strong>
-                        for pip user-site tools. <strong>Do not</strong>
+                        <strong>Do not</strong>
                         add tool-specific logic to <code>bootstrap.sh</code>
                         or invent a parallel install path under
-                        <code>scripts/</code>.
+                        <code>scripts/</code>. The machine-level Claude
+                        memory&rsquo;s tool inventory regenerates from
+                        <code>config*.toml</code> automatically
+                        (<code>scripts/gen-tool-memory.sh</code>, run by the
+                        <code>sync-tool-memory.sh</code> hook on every edit
+                        &mdash; or run it by hand).
                     </p>
                     <p>
-                        Sanity-test before pushing (set
-                        <code>GITHUB_TOKEN</code> to avoid eget's
-                        unauthenticated rate limit):
+                        Sanity-test before pushing:
                     </p>
-                    <pre><code>cd makefile
-make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps
-ls /tmp/install-test/direnv            # binary present?
-make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # second run: no output (stamp protected)</code></pre>
+                    <pre><code>mise install direnv
+mise where direnv            # installed?
+tasks/verify-tools            # capability gate — arch/loader/glibc</code></pre>
 
                     <h3>Bumping a tool version</h3>
                     <p>
-                        Edit one line in
-                        <code>makefile/versions.mk</code> and commit.
-                        The version is baked into the stamp filename at
-                        <code>$STAMP/&lt;tool&gt;-&lt;version&gt;.done</code>,
-                        so the change invalidates the old stamp; the next
-                        <code>make all</code> redownloads the new release
-                        automatically. No <code>make clean</code> needed.
+                        Edit the version in <code>config.toml</code> /
+                        <code>config.linux.toml</code> /
+                        <code>config.dev.toml</code> (or run
+                        <code>mise config set tools.&lt;name&gt;
+                        &lt;version&gt;</code> &mdash; note that it drops a
+                        same-line comment on the bumped string entry and a
+                        leading comment above a table&rsquo;s first key, so
+                        re-add those by hand afterward if they mattered),
+                        then refresh both lockfiles the same way as above
+                        and commit. No stamp file to invalidate &mdash; mise
+                        is idempotent on its own.
+                        <code>mise outdated --bump</code> does this across
+                        the whole toolbelt at once; it&rsquo;s what the
+                        weekly <code>version-bumps.yml</code> job runs.
                     </p>
                     <p>
-                        Multi-binary tools split into two camps. <strong>eget
-                        with <code>--all</code></strong> covers archives
-                        containing only the binaries we want (ast-grep ships
-                        <code>sg</code>+<code>ast-grep</code>, uv ships
-                        <code>uv</code>+<code>uvx</code>). <strong>archive.sh
-                        with a colon-separated binary spec</strong> covers
-                        archives that also have LICENSE / completion files
-                        we don't want to install (age, yazi). See
-                        <code>makefile/tools.mk</code> for both patterns.
+                        Multi-binary archives install every binary they
+                        contain by default (ast-grep ships
+                        <code>sg</code>+<code>ast-grep</code>). When an
+                        archive also carries files you don&rsquo;t want
+                        (LICENSE, shell completions &mdash; age, yazi) or
+                        several binaries and you only want one (qsv ships
+                        six), pin it with <code>bin</code> or
+                        <code>bin_path</code> on the <code>github:</code>
+                        entry &mdash; see <code>qsv</code>&rsquo;s
+                        <code>bin = "qsv"</code> or
+                        <code>pwndbg</code>&rsquo;s
+                        <code>bin_path = "pwndbg/bin"</code> in
+                        <code>config.linux.toml</code> /
+                        <code>config.dev.toml</code> for worked examples.
                     </p>
 
                     <h3>Adding a new host</h3>
@@ -4874,15 +5090,15 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                             <p>
                                 <strong>RHEL/Fedora:</strong>
                                 <code
-                                    >sudo dnf install curl git python3
-                                    python3-pip iproute</code
+                                    >sudo dnf install curl git make tar
+                                    iproute</code
                                 >
                             </p>
                             <p>
                                 <strong>Debian/Ubuntu:</strong>
                                 <code
-                                    >sudo apt install curl git python3
-                                    python3-pip iproute2</code
+                                    >sudo apt install curl git make tar
+                                    iproute2</code
                                 >
                             </p>
                             <p>
@@ -4908,7 +5124,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                             <p>
                                 Recover with
                                 <code
-                                    >cd ~/.local/share/chezmoi &amp;&amp; git
+                                    >cd ~/.config/mise &amp;&amp; git
                                     push</code
                                 >.
                             </p>
@@ -4919,6 +5135,79 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                                 >
                                 first), or you&rsquo;ve forked and never set the
                                 remote.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            The checkout moved
+                            (<code>~/.local/share/chezmoi</code> is gone)
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                This repo <strong>is</strong> mise&rsquo;s
+                                global config dir now
+                                (<code>config.toml</code> +
+                                <code>mise.lock</code> live at its root), so
+                                <code>bootstrap.sh</code> /
+                                <code>bootstrap.ps1</code> relocate it from
+                                the old <code>~/.local/share/chezmoi</code> /
+                                <code>%USERPROFILE%\.local\share\chezmoi</code>
+                                to <code>~/.config/mise</code> /
+                                <code>%USERPROFILE%\.config\mise</code> on
+                                first run.
+                            </p>
+                            <p>
+                                The move is automatic and one-time. A
+                                pre-existing <code>~/.config/mise</code>
+                                from before the relocation (the chezmoi-era
+                                conf.d layout) is moved aside first as
+                                <code>*.pre-relocation.&lt;timestamp&gt;</code>
+                                &mdash; delete it once the new layout is
+                                confirmed working. The script also writes
+                                <code>sourceDir</code> into chezmoi&rsquo;s
+                                own config
+                                (<code>~/.config/chezmoi/chezmoi.toml</code>),
+                                so <code>cza</code>/<code>czd</code>/&hellip;
+                                keep pointing at the new location without any
+                                manual fix-up. <code>scripts/update-hosts.sh</code>
+                                detects either path on a host that
+                                hasn&rsquo;t re-bootstrapped since the move.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            Windows: <em>&ldquo;Cannot move item &hellip; is
+                            in use&rdquo;</em> during the one-time relocation
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                The relocation above (moving
+                                <code>~\.local\share\chezmoi</code> to
+                                <code>~\.config\mise</code>) fails with
+                                <code>Move-Item : Cannot move item because the
+                                item at &hellip; is in use</code>. Windows
+                                refuses to move a directory that any process
+                                holds as its current directory &mdash; almost
+                                always a shell (or editor) sitting inside the
+                                old checkout, including the very shell running
+                                <code>.\bootstrap.ps1</code> in-process.
+                                <code>bootstrap.ps1</code> releases its own
+                                hold on the directory before moving it, but
+                                can&rsquo;t release one held by a different
+                                process (another terminal tab, an editor
+                                window, or the shell that launched it).
+                            </p>
+                            <p>
+                                <code>cd ~</code> in every shell open inside
+                                <code>~\.local\share\chezmoi</code>, close any
+                                editor with that folder open, then re-run:
+                                <code
+                                    >&amp; "$HOME\.local\share\chezmoi\bootstrap.ps1"</code
+                                >.
                             </p>
                         </div>
                     </details>
@@ -4949,7 +5238,7 @@ make direnv MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps   # 
                             <p>
                                 <strong>To clear:</strong>
                                 <code
-                                    >git -C ~/.local/share/chezmoi config
+                                    >git -C ~/.config/mise config
                                     --unset
                                     http.https://github.com/.extraheader</code
                                 >.
@@ -5818,24 +6107,28 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                         </summary>
                         <div class="ts-body">
                             <p>
-                                <code>make lsp-servers MODE=dev</code> (also
-                                runs as part of <code>make dev</code>) covers
-                                the whole stack. Servers and their mechanisms:
+                                <code>make lsp-servers MODE=dev</code> no
+                                longer installs anything &mdash; it only
+                                verifies <code>clangd</code> is present.
+                                <code>make tools MODE=dev</code> (also runs as
+                                part of <code>make dev</code>) is what
+                                installs the whole stack, via mise. Servers
+                                and their mechanisms:
                             </p>
                             <ul>
-                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; eget binaries, dev + prod; re-run <code>make provision MODE=dev</code>.</li>
-                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (<code>make mise-runtimes MODE=dev</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line (<code>TYPESCRIPT_VERSION</code>) on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
+                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; mise aqua-registry tools, dev + prod; re-run <code>mise install rust-analyzer marksman taplo</code> or <code>make tools MODE=dev</code>.</li>
+                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (<code>make tools MODE=dev</code>, from <code>config.dev.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
                                 <li><strong>clangd</strong> &mdash; verified-only (comes from <code>clang-tools-extra</code> via dnf, see the C/C++ entry below); <code>make lsp-servers</code> only warns if absent.</li>
-                                <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s mise step; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
+                                <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s <code>Invoke-MiseRuntimes</code> step, straight from <code>config.toml</code> + <code>config.dev.toml</code>; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
                             </ul>
                             <p>
                                 Re-run the stack:
-                                <code>make lsp-servers MODE=dev</code>. Force a
-                                reinstall of everything mise-managed, as two
-                                commands (a combined goal list races under
-                                <code>-j</code>):
-                                <code>make clean-mise-runtimes MODE=dev</code>
-                                then <code>make mise-runtimes MODE=dev</code>.
+                                <code>make tools MODE=dev</code> (idempotent
+                                &mdash; mise installs each declared tool
+                                independently). Force one tool&rsquo;s
+                                reinstall:
+                                <code>mise uninstall &lt;name&gt; &amp;&amp;
+                                mise install &lt;name&gt;</code>.
                             </p>
                         </div>
                     </details>
@@ -6042,7 +6335,8 @@ make -C makefile MODE=dev packages</code></pre>
                                 <code>/tmp/zellij-&lt;uid&gt;/zellij-log/zellij.log</code>
                                 says which path it tried):
                             </p>
-                            <pre><code>make zjstatus MODE=prod      # or MODE=dev; user-level, no sudo
+                            <pre><code>make tools MODE=prod         # or MODE=dev; user-level, no sudo — mise installs
+                              # zjstatus.wasm and copies it into zellij's data dir
 zellij kill-session main       # config and plugins load when a session is created</code></pre>
                             <p>
                                 <strong>Boxes instead of pills</strong> mean the

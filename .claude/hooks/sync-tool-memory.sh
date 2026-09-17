@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # sync-tool-memory.sh — Claude Code PostToolUse hook (Edit|Write|MultiEdit).
 #
-# Repo-specific. When Claude edits a tool-source makefile, regenerate the
-# auto-inventory block in the machine-level Claude memory (chezmoi source
-# chezmoi/private_dot_claude/CLAUDE.md) so it never drifts from what the repo
-# installs. Pure: fails OPEN (does nothing) on unparseable input or a generator
-# error, always exits 0. Reports back so Claude commits it + runs `cza`.
+# Repo-specific. When Claude edits a mise config*.toml or one of the pins Make
+# still owns directly, regenerate the auto-inventory block in the machine-level
+# Claude memory (chezmoi source chezmoi/private_dot_claude/CLAUDE.md) so it
+# never drifts from what the repo installs. Pure: fails OPEN (does nothing) on
+# unparseable input or a generator error, always exits 0. Reports back so
+# Claude commits it (and refreshes mise.lock on a pin change).
 #
 # Honors MEMFILE in the environment (passed through to the generator) so the
 # hook test can target a throwaway file. See CLAUDE.md + docs/claude/.
@@ -33,7 +34,12 @@ f="$(hookfield '.tool_input.file_path')"
 norm="${f//\\//}"
 
 case "$norm" in
-*/makefile/versions.mk | */makefile/tools.mk | */makefile/packages.mk | */makefile/Makefile) ;;
+# A chezmoi-managed dotfile's OWN config.toml (helix/herdr/tealdeer/…) is not
+# mise's config*.toml — exclude it before the glob below, which would
+# otherwise also match "*/dot_config/helix/config.toml" etc. (both end in
+# "/config.toml").
+*/chezmoi/dot_config/*) exit 0 ;;
+*/config.toml | */config.*.toml | */makefile/versions.mk | */makefile/packages.mk) ;;
 *) exit 0 ;;
 esac
 
@@ -57,13 +63,8 @@ fi
 [ -n "$scripts" ] || exit 0
 
 "$scripts/gen-tool-memory.sh" >/dev/null 2>&1 || exit 0
-# Second generated artifact: the mise conf.d tool declarations (OUTDIR honoured
-# for the hook test). Missing generator (older checkout) → skip, never fail.
-if [ -x "$scripts/gen-mise-config.sh" ]; then
-  "$scripts/gen-mise-config.sh" >/dev/null 2>&1 || exit 0
-fi
 
-msg="Regenerated from your makefile edit: the TOOLS block in chezmoi/private_dot_claude/CLAUDE.md and the mise tool declarations in chezmoi/dot_config/mise/conf.d/ — commit both with this change and run \`cza\` to deploy them (~/.claude/CLAUDE.md, ~/.config/mise/conf.d/)."
+msg="Regenerated the TOOLS block in chezmoi/private_dot_claude/CLAUDE.md from your config*.toml/versions.mk edit — commit it with this change and run \`cza\`. If you changed a pin: \`mise lock --global\` refreshes mise.lock (commit it too)."
 
 if command -v jq >/dev/null 2>&1; then
   jq -nc --arg c "$msg" \

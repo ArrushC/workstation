@@ -25,3 +25,6 @@ Thumbs.db
 
 # Node (CI-only jsdom for scripts/check-readme.mjs; never committed)
 node_modules/
+
+# Per-host mise overrides (name/email vars from PR3 onward) — never committed
+config.local.toml

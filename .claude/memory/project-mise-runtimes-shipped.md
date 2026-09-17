@@ -1,6 +1,6 @@
 ---
 name: project-mise-runtimes-shipped
-description: mise owns node/Go/uv/LSP on Linux (#153, 2026-09-16) and Windows (#154, 2026-09-16); the three interop/PowerShell gotchas that bit the Windows execution gate and are NOT in the repo docs
+description: mise owns node/Go/uv/LSP on Linux (#153, 2026-09-16) and Windows (#154, 2026-09-16); the three interop/PowerShell gotchas that bit the Windows execution gate and are NOT in the repo docs. Superseded by PR1 of the mise-everything migration (config*.toml at the repo root) — see [[project-mise-everything]]; the interop gotchas below still apply verbatim.
 metadata:
   type: project
 ---

@@ -39,10 +39,15 @@ case "$norm" in
   msg="Parity pair: you edited dot_bashrc.tmpl — mirror the change in dot_zshrc.tmpl. Change both in the same commit. See CLAUDE.md."
   ;;
 */makefile/versions.mk)
-  msg="versions.mk changed. Dual/triple-edit pins that have NO template bridge: CCSTATUSLINE_VERSION -> ccstatusline@ in modify_private_settings.json; JETBRAINSMONO_NERD_VERSION -> lib/font.sh SHA arm + install-nerd-fonts.ps1; HELIX_VERSION -> bootstrap.ps1 download URL. If you touched any of those pins, update its paired file(s) in the same commit."
+  msg="versions.mk holds only the Make-era pins (python, nerd font, dozzle, vcpkg): PYTHON_VERSION dual-edits bootstrap.ps1 \$PythonEnvVersion; JETBRAINSMONO_NERD_VERSION -> lib/font.sh SHA arm + install-nerd-fonts.ps1."
   ;;
-*/makefile/scope.mk)
-  msg="scope.mk changed. If you touched HELIX_RUNTIME_DEST, mirror the value in the HELIX_RUNTIME rc literal in BOTH dot_zshrc.tmpl and dot_bashrc.tmpl (no template var bridges them). See CLAUDE.md."
+# A chezmoi-managed dotfile's OWN config.toml (helix/herdr/tealdeer/…) is not
+# mise's config*.toml — exclude it before the glob below, which would
+# otherwise also match "*/dot_config/helix/config.toml" etc. (both end in
+# "/config.toml").
+*/chezmoi/dot_config/*) ;;
+*/config.linux.toml | */config.dev.toml | */config.toml)
+  msg="Tool pins changed. jq/gh/helix (config.linux.toml) and opencode/omp/DevToys (config.dev.toml) dual-edit bootstrap.ps1 \$PortableTools; min_version dual-edits MISE_VERSION in bootstrap.sh + bootstrap.ps1. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
   ;;
 */chezmoi/.chezmoiignore.tmpl)
   msg="Reminder: .chezmoiignore patterns are matched against TARGET paths (.bashrc, .config/zsh, .claude, .config/ccstatusline) — NOT source-state names (dot_*/private_dot_*/*.tmpl), which silently ignore nothing. Verify with 'chezmoi ignored'."
@@ -55,9 +60,6 @@ if [ -z "$msg" ]; then
     ;;
   manage-hosts.ps1)
     msg="Parity pair: manage-hosts.ps1 and manage-hosts.sh must stay feature-identical. Change both in the same commit. (Also keep the UTF-8 BOM on the .ps1.)"
-    ;;
-  modify_private_settings.json)
-    msg="If you changed the ccstatusline@ pin here, mirror it in CCSTATUSLINE_VERSION in makefile/versions.mk (dual-edit, no bridge)."
     ;;
   python-env.sh)
     msg="Parity pair: python-env.sh (PY_LIBS list) mirrors Invoke-PythonEnv in bootstrap.ps1 (\$PythonLibs). Change both in the same commit. See CLAUDE.md."

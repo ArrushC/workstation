@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+#MISE description="One-time sweep of the pre-mise tool installs (/usr/local/bin or ~/.local/bin, helix runtime, eget, tool stamps)"
+#MISE hide=true
+# Idempotent; marker ~/.local/state/workstation/legacy-tools-swept skips the
+# whole sweep on later runs. sudo is used ONLY for /usr/local paths and ONLY
+# when this host is a dev machine (MISE_ENV contains `host`, or the Make era's
+# HAS_SUDO=true). Everything removed here is reinstalled by mise from
+# config*.toml — nothing is unrecoverable.
+# When there is no sudo on this host, /usr/local is skipped ENTIRELY (not just
+# individual paths within it): the repo's prod scope only ever installed to
+# ~/.local/bin, so a sudo-less host has nothing of its own under /usr/local to
+# sweep, and any root-owned files it happens to find there are not ours to
+# remove — walking them would only ever report a permanent, unfixable failure
+# and keep the marker withheld forever.
+# Fleet runs (update-hosts.sh) are non-interactive, so a dev host whose sudo
+# needs a password must never block on a prompt: a one-shot `sudo -n true`
+# probe decides up front, and rm_p uses `sudo -n` too so a later, unrelated
+# sudo timeout can't reintroduce a hang.
+set -uo pipefail
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+marker="$state/legacy-tools-swept"
+if [ -f "$marker" ]; then
+  echo "  legacy sweep already done ($marker)"
+  exit 0
+fi
+use_sudo=false
+case ",${MISE_ENV:-}," in *,host,*) use_sudo=true ;; esac
+[ "${HAS_SUDO:-}" = true ] && use_sudo=true
+failed=0
+sudo_password_needed=false
+if $use_sudo && ! sudo -n true 2>/dev/null; then
+  use_sudo=false
+  sudo_password_needed=true
+  printf '  ! sudo needs a password on this host — /usr/local left untouched; run ./bootstrap.sh --dev interactively once to finish the sweep\n'
+  failed=$((failed + 1))
+fi
+rm_p() { # rm_p <path>… — rm -rf, via sudo only where the parent is not ours;
+  # counts a failed-or-skipped removal in $failed so the caller can withhold
+  # the idempotency marker instead of falsely claiming the sweep is done.
+  local p
+  for p in "$@"; do
+    [ -e "$p" ] || [ -L "$p" ] || continue
+    if [ -w "$(dirname "$p")" ]; then
+      if rm -rf "$p"; then
+        printf '  - removed %s\n' "$p"
+      else
+        printf '  ! failed to remove %s\n' "$p"
+        failed=$((failed + 1))
+      fi
+    elif $use_sudo; then
+      if sudo -n rm -rf "$p"; then
+        printf '  - removed %s\n' "$p"
+      else
+        printf '  ! failed to remove %s\n' "$p"
+        failed=$((failed + 1))
+      fi
+    else
+      printf '  ! cannot remove %s (no sudo on this host) — remove by hand\n' "$p"
+      failed=$((failed + 1))
+    fi
+  done
+}
+# Every binary the Make macros used to place in DEST (registered names → binaries).
+names=(fzf zoxide starship zellij glow hx fd bat btop bandwhich lazydocker dive lnav gopass fastfetch
+  gitui lazygit jj ast-grep sg tv fx gitlogue xh gping atuin delta micro eza sd k9s rclone croc hyperfine
+  mise dsq gh htmlq ouch watchexec btm systemctl-tui rg mlr csvlens difft trip doggo scc git-absorb
+  miniserve numbat qsv grex jless gitleaks procs dust hexyl gum rust-analyzer marksman taplo herdr
+  opencode omp broot chezit cheat eget ncdu usql yazi ya nnn age age-keygen nb jq yq tldr witr ctop sops
+  lazyjournal sysz ssh-copy-id shfmt pueue pueued nnd chezmoi cht.sh devtoys.cli pwndbg
+  node npm npx corepack go gofmt uv uvx gopls lua-language-server typescript-language-server
+  bash-language-server yaml-language-server vscode-json-language-server vscode-css-language-server
+  vscode-html-language-server vscode-eslint-language-server vscode-markdown-language-server tsc tsserver)
+dirs=("$HOME/.local/bin")
+if $use_sudo; then
+  dirs=(/usr/local/bin "${dirs[@]}")
+elif ! $sudo_password_needed; then
+  echo "  · no sudo on this host — /usr/local left untouched (prod hosts never received Make installs there)"
+fi
+for d in "${dirs[@]}"; do
+  [ -d "$d" ] || continue
+  # ~/.local/bin/mise is the NEW pinned mise (bootstrap.sh) — never remove it there.
+  for n in "${names[@]}"; do
+    [ "$d" = "$HOME/.local/bin" ] && [ "$n" = mise ] && continue
+    rm_p "$d/$n"
+  done
+  rm_p "$d"/_pwndbg-* "$d"/_devtoys-cli-* "$d"/_node-* "$d"/_go-* "$d"/_lua-language-server-*
+done
+if $use_sudo; then
+  rm_p /usr/local/lib/helix /usr/local/lib/node_modules
+fi
+# pip --user era of glances/asciinema/harlequin (now pypi: tools behind shims)
+python3 -m pip uninstall -y -q glances asciinema harlequin >/dev/null 2>&1 || true
+# stamps of the retired Make targets (keep the ones PR2 still owns)
+stamps="$HOME/.local/share/workstation-install"
+if [ -d "$stamps" ]; then
+  find "$stamps" -maxdepth 1 -name '*.done' \
+    ! -name 'claude-*' ! -name 'nerd-fonts-*' ! -name 'vcpkg-*' ! -name 'python-env-*' \
+    ! -name 'docker-engine*' ! -name 'dozzle-service-*' ! -name 'cockpit-service*' \
+    ! -name 'rsyslog-service-*' ! -name 'wsl-config-*' -print -delete | sed 's/^/  - removed stamp /'
+fi
+if [ "$failed" -eq 0 ]; then
+  mkdir -p "$state" && : >"$marker"
+  echo "  ✓ legacy tool installs swept ($marker)"
+else
+  printf '  ! legacy sweep incomplete (%d path(s) left) — it retries on the next run\n' "$failed"
+fi
+exit 0

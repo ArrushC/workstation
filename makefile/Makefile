@@ -1,24 +1,29 @@
-# makefile/Makefile — single-tool provisioning for workstation hosts.
+# makefile/Makefile — provisioning for workstation hosts.
 #
-# Replaces the old ansible/ tree entirely. One language (Make + bash),
-# one dependency graph, one set of stamps for idempotency.
+# Replaces the old ansible/ tree entirely. One language (Make + bash), one
+# dependency graph. The tool layer is mise's job now — every tool is declared
+# in config.toml / config.linux.toml / config.dev.toml at the repo root (+
+# mise.lock / mise.dev.lock / mise.linux.lock / locks/**). This Makefile
+# still owns packages, shell wiring, dotfiles, the services, and the handful
+# of bespoke non-mise targets (claude-cli, nerd-fonts, python-env, vcpkg, the
+# *-service targets, wsl-config, lsp-servers).
 #
 # Entry points:
 #   make dev                      provision a dev_machine (sudo, /usr/local/bin)
 #   make prod                     provision a prod_machine (no sudo, ~/.local/bin)
 #   make provision MODE=dev|prod  same, explicit
-#   make <tool>      MODE=...     install just one tool, e.g. make gitui MODE=prod
-#   make clean-<tool> MODE=...    wipe stamp (+ binary for scope tools)
-#   make list        MODE=...     list every managed tool, grouped
-#   make help                     this help text
+#   make tools           MODE=... mise install + verify + legacy sweep
+#   make <bespoke-target> MODE=... install just one bespoke target, e.g. make vcpkg MODE=dev
+#   make clean-<bespoke-target> MODE=... wipe its stamp
+#   make list             MODE=... mise ls + bespoke targets, grouped
+#   make help                      this help text
 #
 # Composition (in include order — order matters for variable visibility):
-#   scope.mk      DEST / SUDO / HAS_SUDO / INSTALL_PACKAGES from MODE
-#   versions.mk   tool versions (single source of truth)
+#   scope.mk      DEST / SUDO / HAS_SUDO / INSTALL_PACKAGES / MISE_ENV from MODE
+#   versions.mk   the few pins Make still owns, post-mise
 #   packages.mk   dnf packages + EPEL (replaces packages.yml)
 #   shell.mk      PATH wiring (replaces shell.yml)
 #   dotfiles.mk   chezmoi update (replaces dotfiles.yml)
-#   tools.mk      per-tool install rules (uses TOOL / USER_TOOL macros below)
 #
 # Bootstrap.sh calls `make MODE=dev provision` (or MODE=prod). The
 # update-hosts.sh script does the same for remote hosts over ssh.
@@ -48,10 +53,13 @@ include scope.mk
 include versions.mk
 
 # --- Parallel by default ------------------------------------------------------
-# The per-tool install layer is an independent-stamp DAG and network-bound, so
-# it parallelizes ~linearly (measured 6.3x on 12 tools at -j8). Default to
-# -j$(NPROC); `make <goal> -j1` is the serial escape hatch (an explicit -j on
-# the command line IS visible in parse-time MAKEFLAGS, so the guard yields).
+# The provision-fanout phase (services, nerd-fonts, python-env, ...) is an
+# independent-stamp DAG and network-bound, so it parallelizes well (the old
+# per-tool install layer this measured 6.3x on 12 tools at -j8 before it moved
+# to mise — mise does its own parallel fetch inside the single `tools` phase).
+# Default to -j$(NPROC); `make <goal> -j1` is the serial escape hatch (an
+# explicit -j on the command line IS visible in parse-time MAKEFLAGS, so the
+# guard yields).
 # MAKELEVEL guard: only the top-level make self-assigns -j — makefile-assigned
 # flags do NOT reach a sub-make's parse-time MAKEFLAGS (verified on make 4.3),
 # so without the guard every recursive phase below would re-add -j and clobber
@@ -75,136 +83,24 @@ REPO_ROOT := $(abspath $(CURDIR)/..)
 
 # Export so library scripts (lib/*.sh) and any sub-makes inherit these.
 # MODE + HAS_SUDO are read by lib/doctor.sh (scope-aware report text + the
-# wsl-config gating); IS_WSL is exported from scope.mk.
-export DEST HELIX_RUNTIME_DEST LIB STAMP SUDO MODE HAS_SUDO
-
-# verify_cmd <basename> — shell snippet (for &&-chaining onto an install
-# command) that runs the install-time capability check against $(DEST)/<basename>,
-# or a no-op `:` when <basename> is the skip sentinel `-`. A failing check exits
-# non-zero so _RULE_BODY's trailing `touch` never fires — no stamp for a binary
-# that cannot run on this host. See docs/claude/invariants.md.
-verify_cmd = $(if $(filter -,$1),:,$(SUDO) $(LIB)/verify-binary.sh '$(DEST)/$1')
+# wsl-config gating); IS_WSL + MISE_ENV are exported from scope.mk.
+export DEST LIB STAMP SUDO MODE HAS_SUDO
 
 # -----------------------------------------------------------------------------
-# Macros — used by tools.mk to register one tool per call.
-#
-#   $(eval $(call TOOL,<name>,<version>,<install_cmd>[,<verify-binary>]))
-# <verify-binary> (optional, opt-in): basename under $(DEST) to capability-check
-# after install. Pass it for ELF-binary installs (archive.sh/direct.sh); omit
-# for script installs (nb, sysz, ssh-copy-id) and non-binary helpers.
-#
-#   $(eval $(call USER_TOOL,<name>,<version>,<install_cmd>))  always ~/.local
-#
-# Difference: TOOL prefixes the install command (and the rm in clean-*) with
-# $(SUDO), so dev mode writes /usr/local/bin via sudo while prod mode (SUDO
-# empty) just runs as the dev user. USER_TOOL never sudos — pip/claude
-# always land in the user's site, regardless of mode.
-#
-# Note on $$: inside `define`, the body is expanded twice — once at $(eval)
-# time and once when the rule fires. We escape $ as $$ for variables that
-# need to resolve at rule-fire time (STAMP, DEST). Per-call args $(1)/$(2)/$(3)
-# use single $ to bake in NOW.
-# -----------------------------------------------------------------------------
-define _RULE_BODY
-$(1): $$(STAMP)/$(1)-$(2).done
-$$(STAMP)/$(1)-$(2).done:
-	@printf '==> %s %s\n' "$(1)" "$(2)"
-	@$(3)
-	@mkdir -p $$(@D) && touch $$@
-.PHONY: $(1) clean-$(1)
-endef
-
-define TOOL
-SCOPE_TOOLS += $(1)
-DOCTOR_ROWS += scope|$(1)|$(2)
-$(call _RULE_BODY,$(1),$(2),$(SUDO) $(3)$(if $(4), && $(call verify_cmd,$(4))))
-clean-$(1):
-	@rm -f $$(STAMP)/$(1)-*.done
-	@$(SUDO) rm -f $$(DEST)/$(1)
-endef
-
-# _SOFT_RULE_BODY — like _RULE_BODY, but a FAILING install command warns and is
-# skipped instead of aborting the build, and the stamp is left ABSENT so the
-# next run retries. (A naive `cmd || true` in _RULE_BODY would be wrong: the
-# trailing `touch` would still fire, marking the tool installed-when-it-isn't
-# and never retrying.) For rolling tools fetched live from a third-party
-# service whose transient outage shouldn't fail a whole `make dev` (cht.sh).
-define _SOFT_RULE_BODY
-$(1): $$(STAMP)/$(1)-$(2).done
-$$(STAMP)/$(1)-$(2).done:
-	@printf '==> %s %s\n' "$(1)" "$(2)"
-	@if $(3); then mkdir -p $$(@D) && touch $$@; else printf '  ! %s install failed (service unreachable?) — skipping; will retry next run\n' "$(1)"; fi
-.PHONY: $(1) clean-$(1)
-endef
-
-# SOFT_TOOL — TOOL whose install failure is non-fatal (see _SOFT_RULE_BODY).
-define SOFT_TOOL
-SCOPE_TOOLS += $(1)
-DOCTOR_ROWS += scope|$(1)|$(2)
-$(call _SOFT_RULE_BODY,$(1),$(2),$(SUDO) $(3))
-clean-$(1):
-	@rm -f $$(STAMP)/$(1)-*.done
-	@$(SUDO) rm -f $$(DEST)/$(1)
-endef
-
-define USER_TOOL
-USER_TOOLS += $(1)
-DOCTOR_ROWS += user|$(1)|$(2)
-$(call _RULE_BODY,$(1),$(2),$(3))
-clean-$(1):
-	@rm -f $$(STAMP)/$(1)-*.done
-endef
-
-# -----------------------------------------------------------------------------
-# EGET_TOOL — register a GitHub-release single-binary install via eget.
-#
-#   $(eval $(call EGET_TOOL,<name>,<version>,<user/repo>[,<tag>][,<extra>]))
-#
-#   $(1)  name        tool name (stamp + phony target + binary at $(DEST)).
-#   $(2)  version     pinned in versions.mk; baked into the stamp filename.
-#   $(3)  user/repo   GitHub owner/repo path.
-#   $(4)  tag         OPTIONAL explicit tag. Defaults to v$(version).
-#                     Override for tools whose release tag doesn't follow
-#                     vX.Y.Z (e.g. delta uses "0.19.2", gping uses
-#                     "gping-vX.Y.Z").
-#   $(5)  extra       OPTIONAL extra args forwarded to eget. Common cases:
-#                       --asset musl   prefer musl static over gnu
-#                       --asset <s>    other disambiguator
-#                       --all          install every executable in the
-#                                      archive (for multi-binary releases)
-#   $(6)  verify     OPTIONAL installed-binary basename for the capability
-#                    check. Defaults to $(1); set when the binary name differs
-#                    (bottom -> btm). Set to `-` to skip verification.
-#
-# Like TOOL: joins $(SCOPE_TOOLS), emits a stamp rule, threads $(SUDO).
-# Unlike TOOL: adds an order-only `| eget` prerequisite so the eget binary
-# (installed by archive.sh in tools.mk) exists before this rule fires.
-# -----------------------------------------------------------------------------
-define EGET_TOOL
-SCOPE_TOOLS += $(1)
-DOCTOR_ROWS += scope|$(1)|$(2)
-UPDATE_SPECS += $(1)|$(2)|$(3)|$(if $(4),$(4),v$(2))
-$(call _RULE_BODY,$(1),$(2),$(SUDO) $(LIB)/eget.sh $(3) $(if $(4),$(4),v$(2)) $(5) && $(call verify_cmd,$(if $(6),$(6),$(1))))
-$$(STAMP)/$(1)-$(2).done: | $$(STAMP)/eget-$$(EGET_VERSION).done
-clean-$(1):
-	@rm -f $$(STAMP)/$(1)-*.done
-	@$(SUDO) rm -f $$(DEST)/$(1)
-endef
-
 # DOCTOR_ROWS  — one `kind|name|version` row per managed component, consumed
-#                by `make doctor` (lib/doctor.sh). TOOL/EGET_TOOL register as
-#                `scope`, USER_TOOL as `user`; the bespoke targets are added
-#                by hand next to the doctor target below.
+#                by `make doctor` (lib/doctor.sh). Every row here is a bespoke
+#                Makefile target, added by hand next to the doctor target
+#                below — mise-installed tools get their own report section
+#                (lib/doctor.sh's tools_section talks to mise directly, no
+#                per-tool rows).
 # UPDATE_SPECS — one `name|version|repo|tag` spec per pinned tool, consumed
-#                by `make check-updates` (lib/check-updates.sh). EGET_TOOL
-#                registers automatically (it knows repo + tag); everything
-#                else is hand-registered in the UPDATE-CHECK REGISTRY block
-#                at the bottom of tools.mk.
-SCOPE_TOOLS  :=
-USER_TOOLS   :=
+#                by `make check-updates` (lib/check-updates.sh). Entirely
+#                hand-registered here now (no more EGET_TOOL auto-registration)
+#                — one line per surviving versions.mk pin, added after
+#                DOCTOR_ROWS below.
+# -----------------------------------------------------------------------------
 DOCTOR_ROWS  :=
 UPDATE_SPECS :=
-include tools.mk
 
 # -----------------------------------------------------------------------------
 # Claude — bespoke rule outside the macros.
@@ -223,48 +119,28 @@ clean-claude-cli:
 	@rm -f $(STAMP)/claude-*.done $(HOME)/.local/bin/claude
 
 # -----------------------------------------------------------------------------
-# mise-runtimes — node, Go, uv and the LSP servers via mise. BOTH scopes and
-# USER-LEVEL: mise installs under ~/.local/share/mise; the one privileged step
-# is the legacy sweep of $(DEST). What gets installed is declared in
-# chezmoi/dot_config/mise/conf.d/workstation.toml (both scopes: uv) +
-# workstation-dev.toml (node with the npm servers as its postinstall, go,
-# gopls, lua-language-server, basedpyright) — GENERATED from versions.mk by
-# scripts/gen-mise-config.sh (never hand-edited; check-invariants asserts no
-# drift). lib/mise.sh seeds the right file(s) into ~/.config/mise/conf.d/ (the
-# fanout runs before the dotfiles phase; chezmoi later deploys identical
-# bytes), runs `mise install`, force-reinstalls node only when the DECLARED node
-# version is already installed (so a changed npm postinstall re-runs; a
-# NODE_VERSION bump installs once), prunes superseded versions, then sweeps the
-# pre-mise artifacts ($(SUDO); dev: the /usr/local node/go/uv/LSP set, prod:
-# only the eget uv/uvx) and the old user-site basedpyright.
-# Stamp bakes a cksum of the consumed config file(s): any pin change re-fires
-# it. Order-only dep on mise's eget stamp FILE (stamp-on-stamp invariant).
-# Interactive shells see the tools via `mise activate`; non-interactive ones
-# (this Makefile's own recipes, ssh, IDE spawns) via the shims dir below.
+# tools — every toolbelt tool + runtime, installed by mise from config*.toml at
+# the repo root (this checkout is ~/.config/mise). USER-LEVEL: never $(SUDO).
+# Three steps: scripts/lib/mise-install.sh (install, node-postinstall marker,
+# prune), tasks/verify-tools (the capability gate the old macros &&-chained),
+# tasks/migrate-legacy (one-time sweep of the pre-mise binaries; sudo inside
+# only for /usr/local on dev). No stamp: mise is idempotent itself. Runs as its
+# own provision phase BEFORE the fanout so python-env / claude-statusline /
+# zjstatus see the shims.
 # -----------------------------------------------------------------------------
-MISE_CONF_SRC   := $(REPO_ROOT)/chezmoi/dot_config/mise/conf.d
-MISE_CONF_FILES := $(MISE_CONF_SRC)/workstation.toml
-ifeq ($(MODE),dev)
-MISE_CONF_FILES += $(MISE_CONF_SRC)/workstation-dev.toml
-endif
-MISE_RUNTIMES_STAMP := $(shell cat $(MISE_CONF_FILES) | cksum | cut -d' ' -f1)
-# Recipes that need a mise-managed tool before any shell has activated mise
-# (python-env's uv, claude-statusline's npx) prepend this. MISE_DATA_DIR is
-# honoured so sandbox runs never touch the real install.
 MISE_SHIMS := $(or $(MISE_DATA_DIR),$(HOME)/.local/share/mise)/shims
-.PHONY: mise-runtimes clean-mise-runtimes
-mise-runtimes: $(STAMP)/mise-runtimes-$(MISE_RUNTIMES_STAMP).done
-$(STAMP)/mise-runtimes-$(MISE_RUNTIMES_STAMP).done: | $(STAMP)/mise-$(MISE_VERSION).done
-	@printf '==> mise-runtimes (%s)\n' "$(MODE)"
-	@$(LIB)/mise.sh seed $(MODE) $(MISE_CONF_SRC)
-	# $(DEST) first so `mise` resolves over non-interactive ssh on prod (~/.local/bin is off PATH there).
-	@PATH="$(DEST):$$PATH" $(LIB)/mise.sh install
-	@$(SUDO) $(LIB)/mise.sh sweep-legacy $(MODE) $(DEST)
-	@PATH="$(DEST):$$PATH" $(LIB)/mise.sh sweep-user
-	@mkdir -p $(@D) && touch $@
-clean-mise-runtimes:
-	@rm -f $(STAMP)/mise-runtimes-*.done
-	@PATH="$(DEST):$$PATH" $(LIB)/mise.sh uninstall
+.PHONY: tools
+tools:
+	@printf '==> tools (mise install, MISE_ENV=%s)\n' "$(MISE_ENV)"
+	@PATH="$(HOME)/.local/bin:$$PATH" $(REPO_ROOT)/scripts/lib/mise-install.sh
+	@PATH="$(HOME)/.local/bin:$$PATH" $(REPO_ROOT)/tasks/verify-tools
+	@PATH="$(HOME)/.local/bin:$$PATH" $(REPO_ROOT)/tasks/migrate-legacy
+	@# zjstatus.wasm goes into zellij's DATA plugin dir (not a bin dir): copy from mise's install.
+	@# `mise where` runs inside a PATH-prefixed `bash -c` (not directly on this
+	@# recipe line) — a bare `VAR=… cmd "$$(mise where …)"` would resolve the
+	@# $$(mise where …) command substitution against the AMBIENT shell's PATH
+	@# while constructing cmd's argv, before the VAR= prefix ever takes effect.
+	@PATH="$(MISE_SHIMS):$(HOME)/.local/bin:$$PATH" bash -c 'exec "$(REPO_ROOT)/scripts/lib/zellij-plugin.sh" zjstatus "file://$$(mise where github:dj95/zjstatus)/zjstatus.wasm"'
 
 # -----------------------------------------------------------------------------
 # nerd-fonts — JetBrainsMono Nerd Font Mono variants from ryanoasis/nerd-fonts.
@@ -274,9 +150,9 @@ clean-mise-runtimes:
 #     invoked from bootstrap.ps1) handles registration. Stamp still written
 #     so `make nerd-fonts` returns fast on subsequent WSL runs.
 #   - NO $(SUDO) — deposits to $HOME/.local/share/fonts/JetBrainsMonoNerdFontMono/
-#     which is user-owned; fc-cache also runs against a user-scope dir. Other
-#     bespoke targets (pwndbg, devtoys-cli) use $(SUDO) because they
-#     deposit to $(DEST) (/usr/local/bin on dev) which is system-owned.
+#     which is user-owned; fc-cache also runs against a user-scope dir. The
+#     vcpkg bespoke target below uses $(SUDO) because it deposits under
+#     $(DEST) (/usr/local/bin on dev) which is system-owned.
 #   - Stamp encodes $(JETBRAINSMONO_NERD_VERSION); bumping the pin in
 #     versions.mk invalidates the stamp on the next run.
 # -----------------------------------------------------------------------------
@@ -296,51 +172,20 @@ clean-nerd-fonts:
 # -----------------------------------------------------------------------------
 # claude-statusline — interactive ccstatusline setup prompt.
 #   - Dev-only. The recipe body conditionally compiles based on MODE.
-#   - Depends on mise-runtimes (node is mise-managed) and prepends the mise
-#     shims dir, so the npx the script invokes is the Linux-native pinned one
-#     even from bootstrap.sh's tail (no shell has activated mise yet) — never
-#     a Windows passthrough that crashes on WSL working dirs.
+#   - Prepends the mise shims dir, so the npx the script invokes is the
+#     Linux-native pinned node even from bootstrap.sh's tail (no shell has
+#     activated mise yet) — never a Windows passthrough that crashes on WSL
+#     working dirs. node is a prior provision phase (`tools`), not a Make dep.
 #   - Re-runnable any time post-bootstrap; bootstrap.sh's tail also
 #     invokes this target on --dev runs after ensure_chezmoi_initialized.
-#   - Version passed via env so versions.mk stays the single source of
-#     truth.
 # -----------------------------------------------------------------------------
 .PHONY: claude-statusline
-ifeq ($(MODE),dev)
-claude-statusline: mise-runtimes
-endif
 claude-statusline:
 ifeq ($(MODE),dev)
-	@PATH="$(MISE_SHIMS):$$PATH" CCSTATUSLINE_VERSION=$(CCSTATUSLINE_VERSION) ../scripts/setup-ccstatusline.sh
+	@PATH="$(MISE_SHIMS):$$PATH" ../scripts/setup-ccstatusline.sh
 else
 	@echo "claude-statusline is a dev_machine target — skipping (MODE=$(MODE))"
 endif
-
-# -----------------------------------------------------------------------------
-# pwndbg — GDB front-end (dev_machine only). Installs the self-contained
-# portable release tarball via lib/pwndbg.sh, exposing a standalone `pwndbg`
-# command (its own bundled Python). It deliberately does NOT touch ~/.gdbinit,
-# so plain `gdb` keeps loading GEF (the chezmoi-tracked ~/.gdbinit): `gdb` →
-# GEF, `pwndbg` → pwndbg, no collision. $(SUDO) because it deposits under
-# $(DEST) (/usr/local on dev), like devtoys-cli. Stamp bakes PWNDBG_VERSION so
-# a bump in versions.mk reinstalls. No WSL skip — a debugger is useful in a WSL
-# dev guest (unlike the host-management services below).
-# -----------------------------------------------------------------------------
-.PHONY: pwndbg clean-pwndbg
-ifeq ($(MODE),dev)
-pwndbg: $(STAMP)/pwndbg-$(PWNDBG_VERSION).done
-$(STAMP)/pwndbg-$(PWNDBG_VERSION).done:
-	@printf '==> pwndbg %s\n' "$(PWNDBG_VERSION)"
-	@$(SUDO) $(LIB)/pwndbg.sh $(PWNDBG_VERSION)
-	@mkdir -p $(@D) && touch $@
-else
-pwndbg:
-	@echo "pwndbg is a dev_machine target — skipping (MODE=$(MODE))"
-endif
-clean-pwndbg:
-	@rm -f $(STAMP)/pwndbg-*.done
-	@$(SUDO) rm -f $(DEST)/pwndbg
-	@$(SUDO) rm -rf $(DEST)/_pwndbg-*
 
 # -----------------------------------------------------------------------------
 # vcpkg — Microsoft C/C++ package manager (dev_machine only). git-clones +
@@ -379,18 +224,19 @@ clean-vcpkg:
 # (lsp-servers hash precedent), so bumping the pin OR editing the lib list
 # rebuilds on the next provision; upgrading the latest-tracking libs is
 # `make python-env-rebuild` (see that target below — a combined
-# `clean-python-env python-env` goal list races under -j$(nproc)). Order-only
-# dep on the mise-runtimes stamp FILE — uv is mise-managed (never the phony;
-# stamp-on-stamp invariant). No WSL skip (useful in a WSL dev guest, like pwndbg). Windows
-# half: Invoke-PythonEnv in bootstrap.ps1 ($PythonEnvVersion/$PythonLibs —
-# check-invariants pairs).
+# `clean-python-env python-env` goal list races under -j$(nproc)). uv is
+# mise-managed; `tools` is a PRIOR provision phase (not a Make prerequisite —
+# provision's sequential recipe lines already order it before this one), so
+# no order-only dep is needed here. No WSL skip (useful in a WSL dev guest,
+# like vcpkg). Windows half: Invoke-PythonEnv in bootstrap.ps1
+# ($PythonEnvVersion/$PythonLibs — check-invariants pairs).
 # -----------------------------------------------------------------------------
 PYTHON_ENV_STAMP := $(shell cksum $(LIB)/python-env.sh | cut -d' ' -f1)
 .PHONY: python-env clean-python-env
 python-env: $(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done
-$(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done: | $(STAMP)/mise-runtimes-$(MISE_RUNTIMES_STAMP).done
+$(STAMP)/python-env-$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP).done:
 	@printf '==> python-env %s\n' "$(PYTHON_VERSION)"
-	# uv lives behind mise: the shims dir first (no shell has activated mise inside make); DEST next for prod's off-PATH ~/.local/bin over ssh.
+	@# uv lives behind mise: the shims dir first (no shell has activated mise inside make); DEST next for prod's off-PATH ~/.local/bin over ssh.
 	@PATH="$(MISE_SHIMS):$(DEST):$$PATH" $(LIB)/python-env.sh $(PYTHON_VERSION)
 	@mkdir -p $(@D) && touch $@
 clean-python-env:
@@ -408,44 +254,23 @@ python-env-rebuild:
 	+@$(MAKE) --no-print-directory python-env
 
 # -----------------------------------------------------------------------------
-# devtoys-cli — DevToys CLI (dev_machine only): scriptable command-line
-# versions of the DevToys developer tools (json<->yaml, base64, hash, jwt).
-# NOT an EGET_TOOL: the single-file DevToys.CLI executable requires its
-# sibling Plugins/ tree, so lib/devtoys-cli.sh extracts the whole portable
-# zip to $(DEST)/_devtoys-cli-<ver>/ and symlinks $(DEST)/devtoys.cli
-# (command-name parity with the Windows $PortableTools install). The pin
-# DUAL-EDITS with bootstrap.ps1 (check-invariants.sh enforces). $(SUDO)
-# because it deposits under $(DEST). Stamp bakes DEVTOYS_CLI_VERSION so a
-# bump in versions.mk reinstalls. No WSL skip (a converter belt is useful in
-# a WSL dev guest).
-# -----------------------------------------------------------------------------
-.PHONY: devtoys-cli clean-devtoys-cli
-ifeq ($(MODE),dev)
-devtoys-cli: $(STAMP)/devtoys-cli-$(DEVTOYS_CLI_VERSION).done
-$(STAMP)/devtoys-cli-$(DEVTOYS_CLI_VERSION).done:
-	@printf '==> devtoys-cli %s\n' "$(DEVTOYS_CLI_VERSION)"
-	@$(SUDO) $(LIB)/devtoys-cli.sh $(DEVTOYS_CLI_VERSION)
-	@mkdir -p $(@D) && touch $@
-else
-devtoys-cli:
-	@echo "devtoys-cli is a dev_machine target — skipping (MODE=$(MODE))"
-endif
-clean-devtoys-cli:
-	@rm -f $(STAMP)/devtoys-cli-*.done
-	@$(SUDO) rm -f $(DEST)/devtoys.cli
-	@$(SUDO) rm -rf $(DEST)/_devtoys-cli-*
-
-# -----------------------------------------------------------------------------
-# lsp-servers — dev-only alias over the whole language-server stack: the three
-# both-scopes eget servers + mise-runtimes (gopls / lua-language-server /
-# basedpyright / the npm servers, declared in workstation-dev.toml) + a clangd
-# presence check (clangd comes from clang-tools-extra via dnf — verified only,
-# a warning never aborts the provision). Kept so `make lsp-servers MODE=dev`
-# (README) still means "the whole stack"; there is no stamp of its own.
+# lsp-servers — dev-only alias over the whole language-server stack: rust-
+# analyzer / marksman / taplo / gopls / lua-language-server / basedpyright /
+# the npm servers are all mise tools now (config.dev.toml), installed by
+# `provision`'s `tools` phase BEFORE the fanout this target lives in — so by
+# the time this runs they're already present. NOT a prerequisite on `tools`
+# (that would re-run the whole mise install + verify-tools + migrate-legacy
+# sweep a second time under `make provision MODE=dev`, since `tools` is
+# .PHONY and every fanout member is a fresh recursive $(MAKE)). This target
+# only prints a hint plus a clangd presence check (clangd comes from clang-
+# tools-extra via dnf — verified only, a warning never aborts the provision).
+# Kept so `make lsp-servers MODE=dev` (README) still means "the whole stack";
+# there is no stamp of its own.
 # -----------------------------------------------------------------------------
 .PHONY: lsp-servers
 ifeq ($(MODE),dev)
-lsp-servers: rust-analyzer marksman taplo mise-runtimes
+lsp-servers:
+	@printf '  language servers are mise tools — `make tools MODE=dev` installs them (this target only verifies clangd)\n'
 	@if command -v clangd >/dev/null 2>&1; then \
 	  printf '  ✓ clangd present: %s\n' "$$(command -v clangd)"; \
 	else \
@@ -472,7 +297,7 @@ endif
 #   - The enable + group steps are guarded (unit/group may not exist when the
 #     fast-path found a podman shim instead of real Docker CE).
 #   - dozzle-service's stamp order-only-depends on THIS stamp file (not the
-#     phony — see the EGET_TOOL invariant) so `make -j` can't fire dozzle
+#     phony — stamp-on-stamp order-only dep) so `make -j` can't fire dozzle
 #     before the engine exists.
 #   - clean-docker-engine deliberately does NOT `dnf remove` docker-ce or
 #     touch images/containers — too destructive for a clean target. It only
@@ -536,7 +361,7 @@ clean-docker-engine:
 #     stamp so the next `make dev` re-renders dozzle.env, re-pulls the
 #     image, and restarts the unit.
 #   - Stamp order-only-depends on docker-engine's stamp FILE (not the
-#     phony — EGET_TOOL invariant) so the engine exists first even under
+#     phony — stamp-on-stamp order-only dep) so the engine exists first even under
 #     `make -j`. The `command -v docker` sanity check stays as a safety
 #     net for direct invocation or a failed/skipped engine install.
 # -----------------------------------------------------------------------------
@@ -711,33 +536,38 @@ include dotfiles.mk
 # -----------------------------------------------------------------------------
 # Top-level targets.
 #
-# `provision` is the full bootstrap — packages + shell + tools + user-tools
-# + dotfiles, plus claude-cli on dev mode only. `dev` and `prod` are
-# friendlies that set MODE and re-invoke.
+# `provision` is the full bootstrap — packages + tools (mise) + the fanout
+# (shell, wsl-config, python-env, plus the dev-only bespoke targets) +
+# dotfiles. `dev` and `prod` are friendlies that set MODE and re-invoke.
 #
 # Order of phony deps matches the old playbook order:
 #   packages.yml  → packages
-#   tools.yml     → tools (scope) + user-tools + claude-cli (dev only)
+#   tools.yml     → tools (mise install + verify + legacy sweep)
 #   shell.yml     → shell
 #   dotfiles.yml  → dotfiles
 # -----------------------------------------------------------------------------
-.PHONY: provision provision-fanout dev prod all tools user-tools list clean help doctor check-updates inventory
+.PHONY: provision provision-fanout dev prod all list clean help doctor check-updates inventory
 
-tools: $(SCOPE_TOOLS)
-user-tools: $(USER_TOOLS)
-
-# provision — three sequential phases (recipe lines are hard barriers under
+# provision — FOUR sequential phases (recipe lines are hard barriers under
 # -j; prerequisites of one target are NOT ordered among themselves, so a
 # prereq list can't express phases):
 #   1. packages  — serial (dnf holds a global lock; the core→epel→optional
 #                  chain lives in packages.mk). On dev this also fields the
 #                  ONE sudo password prompt; everything after rides the
 #                  cached timestamp instead of racing 8 prompts onto the tty.
-#   2. fanout    — every independent phase target, in parallel (jobserver
+#   2. tools     — serial: mise install (scripts/lib/mise-install.sh) must
+#                  land before the fanout, so python-env / claude-statusline /
+#                  zjstatus / lsp-servers (the language servers it verifies
+#                  are mise tools) see the shims and the zellij plugin dir
+#                  populated — none of them are a Make prerequisite on
+#                  `tools` (it's .PHONY; a prerequisite would re-run the
+#                  whole install+verify+sweep a second time inside the
+#                  fanout), they just rely on this phase already having run.
+#   3. fanout    — every independent phase target, in parallel (jobserver
 #                  inherited via `+`). --output-sync=target is passed HERE,
 #                  explicitly: -O never appears in a child's parse-time
 #                  MAKEFLAGS, so it can't be set-and-detected globally.
-#   3. dotfiles  — serial tail, deliberately UNSYNCED: `chezmoi update` can
+#   4. dotfiles  — serial tail, deliberately UNSYNCED: `chezmoi update` can
 #                  prompt interactively, and output-sync buffering would
 #                  make that prompt invisible (recursive `+` lines are
 #                  exempt from the parent's sync — verified on make 4.3).
@@ -745,20 +575,22 @@ user-tools: $(USER_TOOLS)
 #                  fully-provisioned host (tic, pueued, ...).
 # New provision-phase targets join PROVISION_FANOUT (or, if they must be
 # ordered, get an explicit edge) — see the parallel-provisioning invariant.
-PROVISION_FANOUT := tools user-tools shell wsl-config
-# both-scopes: the mise-managed runtimes (uv everywhere; node/go/LSP on dev)
-# and the ad-hoc scripting venv every host gets — the dev-gated block below
-# keeps the genuinely dev-only targets.
-PROVISION_FANOUT += mise-runtimes python-env
+PROVISION_FANOUT := shell wsl-config
+# both-scopes: the ad-hoc scripting venv every host gets — the dev-gated
+# block below keeps the genuinely dev-only targets. mise (uv everywhere;
+# node/go/LSP servers on dev) is NOT in this fanout — it's `provision`'s own
+# serial phase 2 (the `tools` target), ahead of everything here.
+PROVISION_FANOUT += python-env
 ifeq ($(MODE),dev)
 PROVISION_FANOUT += claude-cli nerd-fonts docker-engine dozzle-service cockpit-service rsyslog-service
-PROVISION_FANOUT += pwndbg vcpkg lsp-servers devtoys-cli
+PROVISION_FANOUT += vcpkg lsp-servers
 endif
 
 provision-fanout: $(PROVISION_FANOUT)
 
 provision:
 	+@$(MAKE) --no-print-directory packages
+	+@$(MAKE) --no-print-directory tools
 	+@$(MAKE) --no-print-directory --output-sync=target provision-fanout
 	+@$(MAKE) --no-print-directory dotfiles
 
@@ -777,28 +609,38 @@ all: tools
 # doctor / check-updates — read-only reports; neither installs anything.
 #
 #   make doctor MODE=dev|prod         what's installed / missing / stale /
-#                                     active, per tool + service + stamp
-#   make check-updates MODE=dev|prod  every versions.mk pin vs the newest
-#                                     upstream release tag (git ls-remote)
+#                                     active, per mise tool + bespoke target +
+#                                     service + stamp
+#   make check-updates MODE=dev|prod  `mise outdated --bump` for every
+#                                     config*.toml tool, plus each surviving
+#                                     versions.mk pin vs its newest upstream
+#                                     release tag (git ls-remote)
 #
-# The macro-registered DOCTOR_ROWS / UPDATE_SPECS (see the macro block above)
-# carry the per-tool knowledge; the rows below add the bespoke targets that
-# live outside the macros. bootstrap.sh's --doctor / --check-for-updates
-# flags front these targets with the repo/chezmoi-level checks.
+# DOCTOR_ROWS now carries only the bespoke targets — mise-installed tools get
+# their own report section (lib/doctor.sh's tools_section talks to mise
+# directly). bootstrap.sh's --doctor / --check-for-updates flags front these
+# targets with the repo/chezmoi-level checks.
 # -----------------------------------------------------------------------------
 DOCTOR_ROWS += bespoke|claude-cli|$(CLAUDE_VERSION)
-DOCTOR_ROWS += bespoke|mise-runtimes|$(MISE_RUNTIMES_STAMP)
 DOCTOR_ROWS += bespoke|nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)
 DOCTOR_ROWS += bespoke|docker-engine|-
 DOCTOR_ROWS += bespoke|dozzle-service|$(DOZZLE_VERSION)
 DOCTOR_ROWS += bespoke|cockpit-service|-
 DOCTOR_ROWS += bespoke|rsyslog-service|-
 DOCTOR_ROWS += bespoke|wsl-config|-
-DOCTOR_ROWS += bespoke|pwndbg|$(PWNDBG_VERSION)
 DOCTOR_ROWS += bespoke|vcpkg|$(VCPKG_VERSION)
-DOCTOR_ROWS += bespoke|devtoys-cli|$(DEVTOYS_CLI_VERSION)
 DOCTOR_ROWS += bespoke|lsp-servers|-
 DOCTOR_ROWS += bespoke|python-env|$(PYTHON_VERSION)-$(PYTHON_ENV_STAMP)
+
+# UPDATE_SPECS — hand-registered, one line per surviving versions.mk pin (was
+# tools.mk lines 549–600 before the tool layer moved to mise; `mise outdated`
+# covers every config*.toml-declared tool now, see the check-updates recipe
+# below).
+UPDATE_SPECS += claude-cli|$(CLAUDE_VERSION)|-|-
+UPDATE_SPECS += dozzle|$(DOZZLE_VERSION)|amir20/dozzle|v$(DOZZLE_VERSION)
+UPDATE_SPECS += nerd-fonts|$(JETBRAINSMONO_NERD_VERSION)|ryanoasis/nerd-fonts|v$(JETBRAINSMONO_NERD_VERSION)
+UPDATE_SPECS += vcpkg|$(VCPKG_VERSION)|microsoft/vcpkg|$(VCPKG_VERSION)
+UPDATE_SPECS += python-env|$(PYTHON_VERSION)|python/cpython|v$(PYTHON_VERSION)
 
 # NOTE: rows/specs contain `|` — they MUST be single-quoted into the recipe
 # (via $(foreach …,'…')) or the shell parses every row as a pipeline and
@@ -810,6 +652,8 @@ doctor:
 	  $(LIB)/doctor.sh
 
 check-updates:
+	@printf '==> mise tools (config*.toml): mise outdated --bump\n'
+	@PATH="$(HOME)/.local/bin:$$PATH" mise outdated --bump || true
 	@printf '%s\n' $(foreach s,$(UPDATE_SPECS),'$(s)') | $(LIB)/check-updates.sh
 
 # inventory — machine-readable DOCTOR_ROWS dump (kind|name|version, one row
@@ -853,13 +697,13 @@ ps-lint:
 # check. Soft-skips if shfmt is absent. Invoke `make fmt MODE=prod`.
 fmt:
 	@if command -v shfmt >/dev/null 2>&1; then \
-	   cd $(REPO_ROOT) && shfmt -w -i 2 bootstrap.sh makefile/lib/*.sh scripts/*.sh \
+	   cd $(REPO_ROOT) && shfmt -w -i 2 bootstrap.sh makefile/lib/*.sh scripts/*.sh scripts/lib/*.sh tasks/* \
 	     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh \
 	     chezmoi/private_dot_claude/executable_notify.sh \
 	     chezmoi/dot_local/bin/executable_winterop \
 	   && printf 'shfmt -i 2: formatted the first-party shell scripts\n'; \
 	 else \
-	   printf 'shfmt not installed — `make shfmt MODE=<...>` first\n'; \
+	   printf 'shfmt not installed — `mise install shfmt` (or `make tools MODE=<...>`) first\n'; \
 	 fi
 
 # secrets — scan the working tree for committed secrets with gitleaks (same scan
@@ -868,25 +712,19 @@ secrets:
 	@if command -v gitleaks >/dev/null 2>&1; then \
 	   cd $(REPO_ROOT) && gitleaks dir --no-banner --redact -c .gitleaks.toml .; \
 	 else \
-	   printf 'gitleaks not installed — `make gitleaks MODE=<...>` first\n'; \
+	   printf 'gitleaks not installed — `mise install gitleaks` (or `make tools MODE=<...>`) first\n'; \
 	 fi
 
 list:
-	@printf 'scope-tools (%d):\n' $(words $(SCOPE_TOOLS))
-	@printf '  %s\n' $(sort $(SCOPE_TOOLS))
-	@printf '\nuser-tools (%d):\n' $(words $(USER_TOOLS))
-	@printf '  %s\n' $(sort $(USER_TOOLS))
+	@PATH="$(HOME)/.local/bin:$$PATH" mise ls
 	@printf '\nservices (provisioned on MODE=dev only; no-op on WSL):\n'
 	@printf '  docker-engine\n  dozzle-service\n  cockpit-service\n  rsyslog-service\n'
+	@printf '\nvcpkg (provisioned on MODE=dev only; git clone + bootstrap into /usr/local/share/vcpkg)\n'
 	@printf '\nclaude-cli (provisioned on MODE=dev only)\n'
 	@printf '\nnerd-fonts (provisioned on MODE=dev only; no-op on WSL)\n'
-	@printf '\nC/C++ dev tools (provisioned on MODE=dev only): pwndbg vcpkg\n'
-	@printf '  (nnd debugger is a scope-tool above; gcc/clang/gdb/valgrind/... come from dnf)\n'
-	@printf '\nmise-runtimes (both scopes): uv; on MODE=dev also node (+ npm LSP servers), go, gopls, lua-language-server, basedpyright\n'
-	@printf '  declared in chezmoi/dot_config/mise/conf.d/ (generated from versions.mk); lsp-servers = alias + clangd check\n'
-	@printf '  (rust-analyzer/marksman/taplo are scope-tools above; clangd from clang-tools-extra)\n'
 	@printf '\npython-env (both scopes): blessed Python scripting env (uv-managed CPython + venv)\n'
 	@printf '\nwsl-config (WSL hosts with sudo only; deploys /etc/wsl.conf)\n'
+	@printf '\npwndbg / devtoys.cli / nnd are mise tools now (config.dev.toml / config.linux.toml)\n'
 
 clean:
 	@rm -rf "$(STAMP)"
@@ -897,26 +735,25 @@ help:
 	@echo "  make prod                     full provision, prod_machine scope (~/.local/bin)"
 	@echo "  make provision MODE=dev|prod  same, explicit"
 	@echo ""
-	@echo "Tool installs (scope-aware via MODE):"
-	@echo "  make all          install every scope-aware tool (use -j8 for parallelism)"
-	@echo "  make user-tools   install pip user-site tools (glances, asciinema, harlequin)"
+	@echo "Tool installs:"
+	@echo "  make tools MODE=...   (mise install + verify + legacy sweep)"
+	@echo "  mise install <tool>   install just one mise tool (see config*.toml)"
+	@echo "  mise outdated --bump  compare mise tools against upstream (also: make check-updates)"
 	@echo "  make claude-cli   install the Claude Code CLI"
 	@echo "  make docker-engine    install Docker CE + enable the service (dev only, non-WSL)"
 	@echo "  make dozzle-service   install dozzle systemd unit + start service (dev only)"
 	@echo "  make cockpit-service  install cockpit.conf + enable socket + open firewall (dev only)"
 	@echo "  make rsyslog-service  install local-routing drop-in + enable rsyslog (dev only, non-WSL)"
-	@echo "  make pwndbg           install the pwndbg GDB front-end, portable build (dev only)"
 	@echo "  make vcpkg            install the vcpkg C/C++ package manager (dev only)"
 	@echo "  make python-env       build the blessed Python scripting env (both scopes)"
 	@echo "  make wsl-config       install tracked /etc/wsl.conf (WSL hosts only)"
-	@echo "  make <tool>       install just one tool, e.g. make gitui"
-	@echo "  make clean-<tool> wipe stamp (+ binary for scope tools)"
-	@echo "  make list         list every managed tool, grouped"
-	@echo "  make clean        wipe all stamps (forces full reinstall next run)"
+	@echo "  make clean-<bespoke-target> wipe its stamp"
+	@echo "  make list         mise ls + bespoke targets, grouped"
+	@echo "  make clean        wipe all stamps (forces full reinstall of the bespoke targets next run)"
 	@echo ""
 	@echo "Health / updates (read-only — nothing is installed or changed):"
-	@echo "  make doctor MODE=dev|prod         report installed/missing/stale tools, services, stamps"
-	@echo "  make check-updates MODE=dev|prod  compare versions.mk pins against upstream release tags"
+	@echo "  make doctor MODE=dev|prod         report installed/missing/stale mise tools, bespoke targets, services, stamps"
+	@echo "  make check-updates MODE=dev|prod  mise outdated --bump, plus versions.mk pins vs upstream release tags"
 	@echo ""
 	@echo "Sub-targets (rarely invoked directly):"
 	@echo "  make packages     dnf core + EPEL + optional (MODE=dev only)"
@@ -927,10 +764,10 @@ help:
 	@echo "  MODE=dev|prod     scope selector — set explicitly or via 'make dev' / 'make prod'"
 	@echo ""
 	@echo "Files:"
-	@echo "  scope.mk     MODE → DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES"
-	@echo "  versions.mk  tool versions"
+	@echo "  scope.mk     MODE → DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES/MISE_ENV"
+	@echo "  versions.mk  the few pins Make still owns, post-mise"
 	@echo "  packages.mk  dnf packages"
 	@echo "  shell.mk     PATH wiring"
 	@echo "  dotfiles.mk  chezmoi orchestration"
-	@echo "  tools.mk     per-tool rules"
-	@echo "  lib/*.sh     install helpers"
+	@echo "  lib/*.sh     bespoke-target helpers + doctor/check-updates report scripts"
+	@echo "  config.toml / config.linux.toml / config.dev.toml   mise tool declarations (repo root)"

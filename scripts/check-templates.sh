@@ -106,9 +106,12 @@ hdr "rendered-template syntax checks (dev_machine + prod_machine)"
 for group in dev_machine prod_machine; do
   if command -v zsh >/dev/null 2>&1; then
     check "$group" dot_zshrc.tmpl ".zshrc" zsh_check
+    check "$group" dot_zshenv.tmpl ".zshenv" zsh_check
   else
     note ".zshrc [$group]: zsh not installed — render-only"
     check "$group" dot_zshrc.tmpl ".zshrc(render)"
+    note ".zshenv [$group]: zsh not installed — render-only"
+    check "$group" dot_zshenv.tmpl ".zshenv(render)"
   fi
   check "$group" dot_bashrc.tmpl ".bashrc" bash_check
   check "$group" dot_gitconfig.tmpl ".gitconfig" git_check
@@ -120,6 +123,9 @@ for group in dev_machine prod_machine; do
   done
   # systemd user unit: ExecStart branches on .group — render both ways.
   check "$group" dot_config/systemd/user/pueued.service.tmpl "pueued.service"
+  # environment.d conf: MISE_ENV branches on .group — render both ways. Its
+  # output is a plain KEY=value line — render-only, no syntax checker.
+  check "$group" dot_config/environment.d/10-mise.conf.tmpl "10-mise.conf"
 done
 
 # Group-independent Linux-target files: render once as dev_machine.

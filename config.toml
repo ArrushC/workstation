@@ -1,0 +1,26 @@
+# ~/.config/mise/config.toml — this repository IS mise's global config dir.
+#
+# Which files load is picked by MISE_ENV (scripts/lib/mise-env.sh):
+#   config.toml          always            (cross-platform: uv)
+#   config.linux.toml    linux             (the Linux toolbelt, both scopes)
+#   config.dev.toml      dev               (dev tools on both OSes)
+#   config.local.toml    always, git-ignored — per-host overrides
+# Pins live here and in mise.lock (URLs + sha256 per platform). Bump with
+# `mise outdated --bump`, then `scripts/bump-versions.sh` or `mise use`.
+min_version = "2026.9.9"
+
+[tools]
+# uv — the Python installer behind python-env (both scopes, both OSes).
+# Pinned above 0.12.10: `mise lock` refuses to write Python dependency
+# locks (pypi:/pipx: tools — basedpyright, glances, asciinema, harlequin)
+# below that floor ("Python dependency locks require uv >= 0.12.10").
+# 0.12.15 is latest at time of writing. uv has no versions.mk entry any
+# more — it is a pure mise pin now, bumped here (and by `mise outdated`).
+uv = "0.12.15"
+# python — mise's interpreter for the dependency-locked pypi: tools (uv sync
+# --frozen --python <this>; without it mise falls back to the system 3.9 and
+# glances/harlequin refuse to install). Same pin as PYTHON_VERSION in
+# makefile/versions.mk and $PythonEnvVersion in bootstrap.ps1 (three-way
+# dual-edit, check-invariants). NOTE: this shadows `python3` in mise-activated
+# shells (the system interpreter stays at /usr/bin/python3).
+python = "3.14.7"

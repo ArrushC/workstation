@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.9
+          install: false
+          cache: true
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Propose version bumps
         run: bash scripts/bump-versions.sh
         env:
@@ -20,6 +27,7 @@ jobs:
           # `git add -A`, so a repo-relative path would get committed into
           # the PR (and land in the repo on merge). runner.temp is ephemeral.
           BUMP_SUMMARY_FILE: ${{ runner.temp }}/bump-summary.md
+          MISE_CONFIG_DIR: ${{ github.workspace }}
       # Validate the bumped tree here: a PR opened by GITHUB_TOKEN does NOT
       # trigger lint.yml (GitHub's recursion guard), so the invariant checker
       # must run in THIS workflow before the PR is created.

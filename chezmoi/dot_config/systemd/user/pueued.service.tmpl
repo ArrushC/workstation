@@ -7,12 +7,16 @@ Description=Pueue task-queue daemon (pueued)
 Documentation=https://github.com/Nukesor/pueue
 
 [Service]
-{{- /* DEST is scope-dependent: dev installs to /usr/local/bin, prod to
-       ~/.local/bin. systemd resolves ExecStart from a fixed compiled-in
-       path list (never the user's PATH), so the absolute path must be
-       templated by group. Hosts predating the `group` data field were all
-       dev-era → default to the dev path. */}}
-ExecStart={{ if and (hasKey . "group") (eq .group "prod_machine") }}{{ .chezmoi.homeDir }}/.local/bin{{ else }}/usr/local/bin{{ end }}/pueued -v
+{{- /* pueued is a mise-installed tool (config.linux.toml); systemd resolves
+       ExecStart from a fixed path list, never $PATH, so point at mise's shims
+       dir (%h = the user's home). Same path on dev and prod. */}}
+{{- /* systemd user units start with no shell env; the shim needs MISE_ENV to
+       load config.linux.toml, or it fails with "No version is set for shim:
+       pueued". ~/.config/environment.d/10-mise.conf covers future units too,
+       but this unit-level Environment= is the one that's guaranteed live
+       without a re-login. */}}
+Environment=MISE_ENV={{ if and (hasKey . "group") (eq .group "dev_machine") }}linux,dev,host,{{ if contains "microsoft" (lower .chezmoi.kernel.osrelease) }}wsl{{ else }}native{{ end }}{{ else }}linux{{ end }}
+ExecStart=%h/.local/share/mise/shims/pueued -v
 Restart=on-failure
 
 [Install]

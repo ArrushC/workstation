@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#MISE description="Capability-check every mise-installed Linux binary (ELF arch, loader, glibc floor)"
+# The install-time gate the Make macros used to &&-chain onto every install.
+# Walks every active bin dir mise exposes, runs scripts/lib/verify-binary.sh on
+# each ELF (scripts pass through), and fails loudly on the first host that
+# cannot run an asset — the fix is an explicit github: asset_pattern for that
+# tool in config*.toml. Read-only. Linux only (no-op elsewhere).
+# Symlinked bins (mise's `.mise-bins/` indirection) are deliberately followed —
+# [ -f ], head -c4 and verify-binary.sh all resolve through the symlink.
+set -uo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+verify="$root/scripts/lib/verify-binary.sh"
+[ "$(uname -s)" = Linux ] || {
+  echo "verify-tools: Linux only — skipped"
+  exit 0
+}
+command -v mise >/dev/null || {
+  echo "verify-tools: mise not on PATH" >&2
+  exit 1
+}
+paths="$(mise bin-paths 2>&1)" || {
+  printf 'verify-tools: mise bin-paths failed:\n%s\n' "$paths" >&2
+  exit 1
+}
+n=0 bad=0
+while IFS= read -r dir; do
+  [ -d "$dir" ] || continue
+  for f in "$dir"/*; do
+    [ -f "$f" ] && [ -x "$f" ] || continue
+    head -c4 "$f" 2>/dev/null | grep -q $'\x7fELF' || continue
+    n=$((n + 1))
+    if ! out="$("$verify" "$f" 2>&1)"; then
+      bad=$((bad + 1))
+      printf ' ✗ %s\n%s\n' "$f" "$(printf '%s\n' "$out" | sed 's/^/     /')"
+    fi
+  done
+done <<<"$paths"
+if [ "$bad" -gt 0 ]; then
+  printf 'verify-tools: %d of %d binaries cannot run on this host — pick an explicit asset (github: asset_pattern) for each in config*.toml\n' "$bad" "$n" >&2
+  exit 1
+fi
+if [ "$n" -eq 0 ]; then
+  echo "verify-tools: no ELF binaries found on mise bin-paths — nothing installed?" >&2
+  exit 1
+fi
+printf ' ✓ verify-tools: %d ELF binaries pass (arch, loader, glibc floor)\n' "$n"

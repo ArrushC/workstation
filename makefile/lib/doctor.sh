@@ -4,17 +4,21 @@
 # Invoked by `make doctor MODE=dev|prod` (makefile/Makefile), which pipes one
 # row per managed component on stdin and passes the dnf package lists via env:
 #
-#   scope|<name>|<version>     TOOL/EGET_TOOL registrations  → binary in $DEST
-#   user|<name>|<version>      USER_TOOL registrations       → ~/.local/bin (pip)
 #   bespoke|<name>|<version>   bespoke Makefile targets (claude-cli,
-#                              mise-runtimes, nerd-fonts, docker-engine,
-#                              dozzle-service, cockpit-service, rsyslog-service,
-#                              wsl-config)
+#                              nerd-fonts, docker-engine, dozzle-service,
+#                              cockpit-service, rsyslog-service, wsl-config,
+#                              vcpkg, lsp-servers, python-env)
 #
-# Env (exported by the Makefile/scope.mk): DEST, STAMP, MODE, IS_WSL, HAS_SUDO.
-# Recipe-passed: LINUX_PACKAGES, LINUX_OPTIONAL_PACKAGES.
+# Every mise-installed tool (config.toml / config.linux.toml / config.dev.toml
+# at the repo root) is reported by tools_section() below, which talks to mise
+# directly instead of walking per-tool rows — there is no more `scope|`/`user|`
+# row kind (those were TOOL/EGET_TOOL/USER_TOOL registrations; the tool layer
+# moved to mise).
 #
-# Per-tool verdicts (stamp = $STAMP/<stamp-key>-<version>.done):
+# Env (exported by the Makefile/scope.mk): DEST, STAMP, MODE, IS_WSL, HAS_SUDO,
+# MISE_ENV. Recipe-passed: LINUX_PACKAGES, LINUX_OPTIONAL_PACKAGES.
+#
+# Per-bespoke-target verdicts (stamp = $STAMP/<stamp-key>-<version>.done):
 #   ✓  binary present + pinned stamp present
 #   !  binary present, pinned stamp missing — the pin moved (or the stamp was
 #      wiped); the next `make provision` reinstalls it
@@ -62,17 +66,6 @@ row_skip() {
   n_skip=$((n_skip + 1))
 }
 
-# Registered-name → installed-binary-name exceptions. The stamp always uses
-# the registered name; these three release archives ship a different binary.
-bin_for() {
-  case "$1" in
-  helix) echo hx ;;
-  television) echo tv ;;
-  bottom) echo btm ;;
-  *) echo "$1" ;;
-  esac
-}
-
 # check_component <label> <stamp-key> <binary> <bindir> <version>
 # label = make target name (used in the repair hints); stamp-key differs from
 # it only for the bespoke targets (claude-cli stamps as claude-*, etc.).
@@ -96,10 +89,10 @@ svc_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
 
 check_bespoke() {
   local name=$1 version=$2
-  # Everything in this section is dev_machine-only except the three both-scopes
-  # rows: wsl-config, mise-runtimes (uv on prod) and python-env.
+  # Everything in this section is dev_machine-only except the two both-scopes
+  # rows: wsl-config and python-env.
   case "$name" in
-  wsl-config | mise-runtimes | python-env) ;;
+  wsl-config | python-env) ;;
   *)
     if [[ "$MODE" != dev ]]; then
       row_skip "$name" "dev_machine only (MODE=$MODE)"
@@ -110,27 +103,6 @@ check_bespoke() {
   case "$name" in
   claude-cli)
     check_component claude-cli claude claude "$HOME/.local/bin" "$version"
-    ;;
-  mise-runtimes)
-    # $version is the cksum of the consumed conf.d file(s) (the stamp suffix),
-    # so a pin change shows as "pins moved". Presence = one shim per tool the
-    # config declares for this scope; mise's own binary is a scope-tool row.
-    local shims="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims" want b missing=()
-    if [[ "$MODE" == dev ]]; then
-      want="node npm npx go gofmt uv uvx gopls lua-language-server basedpyright-langserver typescript-language-server bash-language-server yaml-language-server vscode-json-language-server"
-    else
-      want="uv uvx"
-    fi
-    for b in $want; do
-      [[ -x "$shims/$b" ]] || missing+=("$b")
-    done
-    if [[ -f "$STAMP/mise-runtimes-$version.done" ]] && ((${#missing[@]} == 0)); then
-      row_ok "$name" "all shims present ($shims)"
-    elif ((${#missing[@]} == 0)); then
-      row_warn "$name" "shims present, but no $version stamp — pins moved? next 'make provision' reinstalls"
-    else
-      row_bad "$name" "missing shims: ${missing[*]} — install: make mise-runtimes MODE=$MODE"
-    fi
     ;;
   nerd-fonts)
     if [[ "${IS_WSL:-false}" == true ]]; then
@@ -222,9 +194,6 @@ check_bespoke() {
       fi
     fi
     ;;
-  pwndbg)
-    check_component pwndbg pwndbg pwndbg "$DEST" "$version"
-    ;;
   vcpkg)
     check_component vcpkg vcpkg vcpkg "$DEST" "$version"
     ;;
@@ -237,6 +206,31 @@ check_bespoke() {
     row_warn "$name" "doctor.sh has no check for this bespoke target — add one"
     ;;
   esac
+}
+
+tools_section() {
+  hdr "tools (mise, config*.toml — MISE_ENV=${MISE_ENV:-unset})"
+  if ! command -v mise >/dev/null 2>&1; then
+    row_bad "mise" "not on PATH — re-run ./bootstrap.sh --$MODE (installs the pinned mise into ~/.local/bin)"
+    return
+  fi
+  local missing
+  missing=$(mise ls --missing 2>/dev/null | awk 'NF {print $1}' | paste -sd' ' -)
+  if [[ -z "$missing" ]]; then
+    row_ok "mise tools" "every declared tool installed ($(mise ls 2>/dev/null | grep -c .) entries)"
+  else
+    row_bad "mise tools" "missing: $missing — install: make tools MODE=$MODE"
+  fi
+  if [[ -f "$HOME/.local/share/zellij/plugins/zjstatus.wasm" ]]; then
+    row_ok "zjstatus" "plugin in zellij's data dir"
+  else
+    row_warn "zjstatus" "zjstatus.wasm not in ~/.local/share/zellij/plugins — make tools MODE=$MODE copies it"
+  fi
+  if [[ -f "${XDG_STATE_HOME:-$HOME/.local/state}/workstation/legacy-tools-swept" ]]; then
+    row_ok "legacy sweep" "pre-mise binaries removed"
+  else
+    row_warn "legacy sweep" "not yet run — make tools MODE=$MODE (needs sudo once on dev)"
+  fi
 }
 
 packages_section() {
@@ -303,6 +297,11 @@ check_wiring() {
       row_skip "pueued" "no systemd user manager (start manually: pueued -d)"
     elif systemctl --user is-active --quiet pueued.service; then
       row_ok "pueued" "user service active"
+    elif systemctl --user is-failed --quiet pueued.service; then
+      # Most common cause: the unit ran before MISE_ENV was in its env (fixed
+      # by the unit-level Environment=MISE_ENV=... — see CLAUDE.md) — point
+      # at the log instead of the generic "not running" hint.
+      row_warn "pueued" "unit failed — run: journalctl --user -u pueued -n 3"
     else
       row_warn "pueued" "daemon not running — run: systemctl --user enable --now pueued (jobs that must survive logout also need: loginctl enable-linger)"
     fi
@@ -312,32 +311,21 @@ check_wiring() {
 }
 
 main() {
-  local scope_rows=() user_rows=() bespoke_rows=() row name version
+  local bespoke_rows=() row name version
 
   while IFS= read -r row; do
     case "$row" in
-    scope\|*) scope_rows+=("$row") ;;
-    user\|*) user_rows+=("$row") ;;
     bespoke\|*) bespoke_rows+=("$row") ;;
     '') ;;
     *) printf 'doctor.sh: ignoring malformed row: %s\n' "$row" >&2 ;;
     esac
   done
 
-  hdr "workstation doctor — MODE=$MODE · DEST=$DEST · WSL=${IS_WSL:-false} · read-only"
+  hdr "workstation doctor — MODE=$MODE · MISE_ENV=${MISE_ENV:-unset} · WSL=${IS_WSL:-false} · read-only"
   printf '   stamps: %s\n' "$STAMP"
   echo ""
 
-  hdr "scope tools (${#scope_rows[@]}) → $DEST"
-  while IFS='|' read -r _ name version; do
-    check_component "$name" "$name" "$(bin_for "$name")" "$DEST" "$version"
-  done < <(printf '%s\n' "${scope_rows[@]}" | sort -t'|' -k2,2)
-  echo ""
-
-  hdr "user tools (${#user_rows[@]}) → $HOME/.local/bin (pip user-site)"
-  while IFS='|' read -r _ name version; do
-    check_component "$name" "$name" "$name" "$HOME/.local/bin" "$version"
-  done < <(printf '%s\n' "${user_rows[@]}" | sort -t'|' -k2,2)
+  tools_section
   echo ""
 
   hdr "dev-only components & services"
