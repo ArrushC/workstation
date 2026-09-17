@@ -6,14 +6,23 @@
 # from the pre-Make era. Reads hosts.conf, optionally filters by group
 # or name, and runs over SSH for each matching host:
 #
-#     cd ~/.local/share/chezmoi
+#     d=~/.config/mise; [ -d "$d/.git" ] || d=~/.local/share/chezmoi
+#     cd "$d"
 #     git pull --ff-only
-#     cd makefile && make MODE=<dev|prod> provision
+#     ./bootstrap.sh --<dev|prod> --yes
 #
 # The MODE is derived from each host's group column in hosts.conf:
 # dev_machine → MODE=dev (sudo, /usr/local/bin), prod_machine → MODE=prod
-# (no sudo, ~/.local/bin). So a single command bulk-updates a mixed-group
-# set with the correct scope per host.
+# (no sudo, ~/.local/bin).
+#
+# This is a PROD-HOST tool: prod never sudos, so the remote run is fully
+# non-interactive and safe to fire at the whole fleet in parallel
+# (--group prod_machine, or the default run). Dev hosts are bootstrapped
+# interactively BY HAND instead, one at a time — their `make provision` can
+# hit a sudo password prompt that a non-interactive SSH run can never
+# satisfy:
+#     ssh -t <host> 'cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; \
+#       git pull --ff-only && ./bootstrap.sh --dev'
 #
 # Usage:
 #   ./scripts/update-hosts.sh                       every host in hosts.conf
@@ -130,13 +139,13 @@ update_one() {
 
   local remote_cmd
   remote_cmd="set -e
-cd \$HOME/.local/share/chezmoi
+d=\$HOME/.config/mise; [ -d \"\$d/.git\" ] || d=\$HOME/.local/share/chezmoi
+cd \"\$d\"
 git pull --ff-only
-cd makefile
-make MODE=$mode provision"
+./bootstrap.sh --$mode --yes"
 
   if $CHECK; then
-    printf " ${BLUE}-${RESET} %-24s would: ssh %s@%s '<git pull && make MODE=%s provision>'\n" \
+    printf " ${BLUE}-${RESET} %-24s would: ssh %s@%s '<git pull && ./bootstrap.sh --%s --yes>'\n" \
       "$name" "$user" "$ip" "$mode"
     return 0
   fi

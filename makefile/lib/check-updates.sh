@@ -16,9 +16,11 @@
 #            gping-v1.20.1, 25.07.1, …). MUST end with <version> — the
 #            leading remainder becomes the ls-remote tag-glob prefix.
 #
-# EGET_TOOL registrations feed this automatically (the macro in
-# makefile/Makefile); TOOL/USER_TOOL/bespoke pins are hand-registered in the
-# UPDATE-CHECK REGISTRY block at the bottom of tools.mk.
+# The toolbelt itself (mise-managed, config*.toml) is covered by `mise
+# outdated`, not this script. The handful of pins Make still owns directly
+# (claude-cli, dozzle, nerd-fonts, vcpkg, python-env) are hand-registered as
+# UPDATE_SPECS lines in makefile/Makefile's own registry block, near the
+# check-updates recipe.
 #
 # Self-exec fan-out: with no args this is the driver (reads specs on stdin,
 # fans out via xargs -P, sorts, summarizes); with one arg it is a worker that

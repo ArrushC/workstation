@@ -42,7 +42,7 @@ norm="${f//\\//}" # normalise Windows backslashes for matching only
 
 is_lf_exec=0
 case "$norm" in
-*/makefile/lib/*.sh | */scripts/*.sh | */.claude/hooks/*.sh | */.githooks/* | */chezmoi/dot_local/bin/executable_batpipe)
+*/makefile/lib/*.sh | */scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */.githooks/* | */chezmoi/dot_local/bin/executable_batpipe)
   is_lf_exec=1
   ;;
 esac

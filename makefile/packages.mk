@@ -12,7 +12,8 @@
 # at the top of this file and swap LINUX_PACKAGES / dnf for an apt-side
 # list / apt-get. Not done yet because no managed host in hosts.conf needs it.
 
-# Required packages — bootstrap pulls these in before tools.mk fires.
+# Required packages — bootstrap pulls these in before the tools phase (mise
+# install, via the `tools` Makefile target) fires.
 # Anything that fails here aborts the build (no `|| true` on the install line).
 #
 # `libatomic` is the runtime shared lib the Node.js >=25 binary links against
@@ -47,7 +48,7 @@ LINUX_PACKAGES := \
 # (verified 2026-05-30). The `|| true` path silently skips it on EL9 hosts; the
 # line is kept so it installs automatically on EL7/8 or a future Debian host.
 # On EL9 the file-watching need is covered by `inotify-tools` (EPEL) +
-# `watchexec` (EGET_TOOL, both scopes). To get real fswatch on EL9 you'd have
+# `watchexec` (mise tool, both scopes). To get real fswatch on EL9 you'd have
 # to build it from source (autotools) — deliberately not done here.
 #
 # C/C++ TOOLCHAIN GROUP (gcc-c++ … heaptrack): the GNU + LLVM toolchains plus
@@ -66,11 +67,12 @@ LINUX_PACKAGES := \
 # ~/.local/bin if a build expects `ninja`). `bear` generates a
 # compile_commands.json (`bear -- make`) so clangd works on Make-based projects
 # that aren't CMake/meson; `ccache` is a compiler cache (use via `ccache gcc` or
-# PATH shims). nnd/pwndbg/vcpkg are NOT here — see tools.mk (nnd) and the
-# bespoke pwndbg/vcpkg targets in the Makefile.
+# PATH shims). nnd/pwndbg are NOT here — they're mise tools (config.linux.toml
+# / config.dev.toml); vcpkg is the one bespoke Makefile target left (git-clone
+# + bootstrap, not a single-binary release mise can install).
 #
 # `bind-utils` is the classic ISC DNS toolset (dig/nslookup/host/delv/nsupdate,
-# EL9 AppStream). Kept alongside the modern `doggo` (EGET_TOOL, both scopes)
+# EL9 AppStream). Kept alongside the modern `doggo` (mise tool, both scopes)
 # because scripts, docs, and muscle memory everywhere assume plain
 # `dig`/`nslookup` exist. No WSL gate — DNS tooling works fine there.
 LINUX_OPTIONAL_PACKAGES := \

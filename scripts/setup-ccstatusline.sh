@@ -25,30 +25,27 @@ HOST="$(hostname -s)"
 # shellcheck disable=SC2034  # symmetry with SENTINEL_END; awk patterns below match the literal string
 SENTINEL_START='# CCSTATUSLINE:START'
 SENTINEL_END='# CCSTATUSLINE:END'
-CCSTATUSLINE_VERSION="${CCSTATUSLINE_VERSION:-2.2.19}"
 
 # --- preflight --------------------------------------------------------------
 
 preflight() {
-  if ! command -v npx >/dev/null 2>&1; then
-    printf '%bnpx not found.%b ccstatusline runs via npx; install Node.js first:\n' "$YELLOW" "$RESET"
-    printf '  Recommended: %bmake -C makefile mise-runtimes MODE=dev%b (this repo; node is mise-managed, pinned in versions.mk)\n' "$YELLOW" "$RESET"
-    printf '  Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
+  if ! command -v ccstatusline >/dev/null 2>&1; then
+    printf '%bccstatusline not found%b — %bmake tools MODE=dev%b installs it (npm:ccstatusline in config.dev.toml)\n' "$YELLOW" "$RESET" "$YELLOW" "$RESET"
     exit 0
   fi
-  # WSL trap: if `npx` resolves to a Windows-side install (PATH passthrough
-  # through /mnt/c/... or *.exe), the Windows node can't operate from a WSL
-  # working directory (UNC path failure — CMD.EXE refuses \\wsl.localhost\…
-  # and falls back to the Windows directory, breaking the TUI before it can
-  # render). Detect and bail with a useful install hint.
-  local npx_path
-  npx_path="$(command -v npx)"
-  case "$npx_path" in
-  /mnt/* | */node.exe | *.exe)
-    printf '%bnpx resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$npx_path" "$RESET"
-    printf 'Windows node cannot run from a WSL working directory (UNC path failure).\n'
-    printf 'Install Linux-native Node.js inside this WSL distro:\n'
-    printf '  %bmake -C makefile mise-runtimes MODE=dev%b\n' "$YELLOW" "$RESET"
+  # WSL trap: if `ccstatusline` resolves to a Windows-side install (PATH
+  # passthrough through /mnt/c/...), the Windows-side binary can't operate
+  # from a WSL working directory (UNC path failure — CMD.EXE refuses
+  # \\wsl.localhost\… and falls back to the Windows directory, breaking the
+  # TUI before it can render). Detect and bail with a useful install hint.
+  local ccstatusline_path
+  ccstatusline_path="$(command -v ccstatusline)"
+  case "$ccstatusline_path" in
+  /mnt/*)
+    printf '%bccstatusline resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$ccstatusline_path" "$RESET"
+    printf 'A Windows-side ccstatusline cannot run from a WSL working directory (UNC path failure).\n'
+    printf 'Install the mise-managed Linux-native ccstatusline inside this WSL distro:\n'
+    printf '  %bmake -C makefile tools MODE=dev%b\n' "$YELLOW" "$RESET"
     printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
     exit 0
     ;;
@@ -126,8 +123,8 @@ option_use_tracked() {
   printf '%bDone.%b\n' "$GREEN" "$RESET"
 }
 option_this_machine() {
-  printf '%bLaunching ccstatusline TUI (v%s)...%b\n' "$BOLD" "$CCSTATUSLINE_VERSION" "$RESET"
-  if ! npx -y "ccstatusline@$CCSTATUSLINE_VERSION" </dev/tty; then
+  printf '%bLaunching ccstatusline TUI...%b\n' "$BOLD" "$RESET"
+  if ! ccstatusline </dev/tty; then
     printf '%bTUI exited non-zero or was cancelled — no changes.%b\n' "$YELLOW" "$RESET"
     return 0
   fi
@@ -145,8 +142,8 @@ option_this_machine() {
   esac
 }
 option_set_global() {
-  printf '%bLaunching ccstatusline TUI (v%s)...%b\n' "$BOLD" "$CCSTATUSLINE_VERSION" "$RESET"
-  if ! npx -y "ccstatusline@$CCSTATUSLINE_VERSION" </dev/tty; then
+  printf '%bLaunching ccstatusline TUI...%b\n' "$BOLD" "$RESET"
+  if ! ccstatusline </dev/tty; then
     printf '%bTUI exited non-zero or was cancelled — no changes.%b\n' "$YELLOW" "$RESET"
     return 0
   fi
@@ -160,8 +157,8 @@ option_set_global() {
   # overwrites the local file with a statusLine-only block, which would
   # strip every other key (skipAutoPermissionPrompt, tui, theme, etc.) on
   # every save. That merge-template is hand-managed via direct edits to
-  # chezmoi/private_dot_claude/modify_private_settings.json; statusline
-  # version bumps are a dual-edit with versions.mk per CLAUDE.md.
+  # chezmoi/private_dot_claude/modify_private_settings.json; the pin is
+  # `npm:ccstatusline` in config.dev.toml.
   chezmoi re-add "$WIDGET_DEST"
   cd "$REPO_ROOT"
   git add \
@@ -181,8 +178,8 @@ option_skip() { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
 # --- menu -------------------------------------------------------------------
 
 show_menu() {
-  printf '\n%bccstatusline setup%b (host: %b%s%b, version: %b%s%b)\n' \
-    "$BOLD" "$RESET" "$YELLOW" "$HOST" "$RESET" "$YELLOW" "$CCSTATUSLINE_VERSION" "$RESET"
+  printf '\n%bccstatusline setup%b (host: %b%s%b)\n' \
+    "$BOLD" "$RESET" "$YELLOW" "$HOST" "$RESET"
   printf '  1) Use the chezmoi-tracked status line (same as every host)\n'
   printf '  2) Define a new status line for this machine (with persist sub-prompt)\n'
   printf '  3) Set a new global status line (configure + commit + push)\n'

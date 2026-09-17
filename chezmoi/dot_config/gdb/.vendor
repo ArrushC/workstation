@@ -27,7 +27,8 @@ note:           Leading-dot filename (.vendor) → chezmoi-ignored; provenance o
                 dev_machine only + Linux-only: both ~/.gdbinit and ~/.config/gdb are gated out
                 on prod_machine and Windows in .chezmoiignore.tmpl (TARGET paths: .gdbinit,
                 .config/gdb). The OTHER GDB front-end, pwndbg, is installed separately as a
-                standalone `pwndbg` command (makefile/lib/pwndbg.sh) and does NOT hook
+                standalone `pwndbg` command — it is a mise tool now
+                (`github:pwndbg/pwndbg` in config.dev.toml) and does NOT hook
                 ~/.gdbinit, so the two never collide. No versions.mk entry — pinned only here.
                 Bump (ONLY once the fleet's gdb-Python ≥ the target GEF's floor — see PYTHON
                 FLOOR above): re-download gef.py at the new tag, refresh release + asset +

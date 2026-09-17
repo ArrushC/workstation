@@ -12,20 +12,26 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-      # shfmt + gitleaks pins are a DUAL-EDIT with makefile/versions.mk
-      # (SHFMT_VERSION / GITLEAKS_VERSION); check-invariants.sh verifies they
-      # match. They're installed here so the format/secret checks actually
-      # enforce in CI (check-invariants soft-skips a missing tool).
-      - name: Install shfmt + gitleaks (pinned)
-        run: |
-          SHFMT=3.14.0
-          GITLEAKS=8.30.1
-          sudo curl -fsSL "https://github.com/mvdan/sh/releases/download/v${SHFMT}/shfmt_v${SHFMT}_linux_amd64" -o /usr/local/bin/shfmt
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS}/gitleaks_${GITLEAKS}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
-          sudo chmod +x /usr/local/bin/shfmt /usr/local/bin/gitleaks
-          shfmt --version && gitleaks version
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.9
+          install: false
+          cache: true
+      # mise 2026.9.9 rewrites lock files' sidecar refs to .mise/locks/ unless the config root is
+      # literally $HOME/.config/mise (here it's MISE_CONFIG_DIR=$GITHUB_WORKSPACE), which would dirty
+      # mise.linux.lock before check-invariants.sh asserts the locks/ layout. MISE_LOCKFILE=false skips
+      # that rewrite; versions still come from config.linux.toml's pins, only checksum verification is off.
+      - name: Install shfmt + gitleaks from the repo's own config (pins only, lockfile off)
+        run: mise install shfmt gitleaks && shfmt --version && gitleaks version
+        env:
+          MISE_CONFIG_DIR: ${{ github.workspace }}
+          MISE_ENV: linux
+          MISE_LOCKFILE: "false"
       - name: Run invariant checks
         run: bash scripts/check-invariants.sh
+        env:
+          MISE_CONFIG_DIR: ${{ github.workspace }}
+          MISE_ENV: linux
   powershell:
     runs-on: ubuntu-latest
     steps:

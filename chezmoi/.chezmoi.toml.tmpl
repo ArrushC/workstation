@@ -1,6 +1,11 @@
 # chezmoi.toml.tmpl — runs on `chezmoi init` to generate ~/.config/chezmoi/chezmoi.toml
 # Prompts are only asked once; answers stored in chezmoi's config.
 
+# The checkout lives at ~/.config/mise (it is mise's global config dir); chezmoi's
+# source state is the chezmoi/ subdir inside it (.chezmoiroot). Persisted here so
+# bare `chezmoi apply`/`cza` (no --source) keep working after the relocation.
+sourceDir = {{ joinPath .chezmoi.homeDir ".config/mise" | quote }}
+
 {{- $ageRecipient := env "WORKSTATION_AGE_RECIPIENT" }}
 [data]
     name     = "{{ promptStringOnce . "name" "Full name" }}"
@@ -19,7 +24,7 @@
 
 # When the interactive apply prompt offers `diff/overwrite/skip/quit` and you
 # press `d`, chezmoi pipes its unified diff into this pager. `delta` (installed
-# by makefile/tools.mk on Linux) renders it as a syntax-highlighted side-by-side
+# by mise on Linux, config.linux.toml) renders it as a syntax-highlighted side-by-side
 # view instead of plain red/green ±. delta is NOT present on Windows, and chezmoi
 # (unlike git) can't find Git's bundled `less` on the PowerShell PATH — so the
 # pager is left empty on Windows and chezmoi writes the diff straight to stdout.

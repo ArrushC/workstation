@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # zellij-plugin.sh — install a zellij WASM plugin where zellij looks for it.
 #
-# Invoked by makefile/tools.mk's USER_TOOL entries (NOT directly).
+# Invoked directly by makefile/Makefile's `tools` target, after mise installs
+# zjstatus (mise puts the plugin's directory on PATH-adjacent state, not a bin
+# dir, so this script copies zjstatus.wasm into zellij's own plugin dir).
 #
 # Usage:
 #   zellij-plugin.sh <name> <url>

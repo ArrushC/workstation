@@ -38,15 +38,6 @@ fi
 export EDITOR="hx"
 export VISUAL="hx"
 {{ if and (hasKey . "group") (eq .group "dev_machine") }}
-# Helix runtime path — dev_machine only. `make` installs the runtime to
-# $HELIX_RUNTIME_DEST/runtime (= /usr/local/lib/helix/runtime on dev; see
-# makefile/scope.mk). Helix's only default search paths are
-# ~/.config/helix/runtime and <bin>/runtime — neither is that dir — so without
-# this export Helix finds NO runtime and silently falls back to its built-in
-# (purple) default theme, ignoring `theme =` in config.toml. prod installs the
-# runtime to ~/.config/helix/runtime (already a default search path), hence the
-# dev gate. KEEP IN SYNC with HELIX_RUNTIME_DEST in makefile/scope.mk.
-export HELIX_RUNTIME="/usr/local/lib/helix/runtime"
 # vcpkg (Microsoft C/C++ package manager) — dev_machine only. `make vcpkg`
 # clones + bootstraps it into this dir (= $VCPKG_ROOT) and symlinks the `vcpkg`
 # binary onto PATH. KEEP IN SYNC with VCPKG_ROOT_DIR in makefile/Makefile.
@@ -182,10 +173,10 @@ if command -v broot &>/dev/null; then
 fi
 
 # --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
-# The global pins live in ~/.config/mise/conf.d/ (generated from versions.mk,
-# installed by `make mise-runtimes`). `mise activate` installs a precmd/chpwd
-# hook that puts the real bin dirs on PATH (in front of the shims from
-# ~/.zshenv) and layers any project mise.toml on top as you cd.
+# The global pins are declared in ~/.config/mise/config*.toml (this
+# checkout). `mise activate` installs a precmd/chpwd hook that puts the real
+# bin dirs on PATH (in front of the shims from ~/.zshenv) and layers any
+# project mise.toml on top as you cd.
 if command -v mise &>/dev/null; then
   eval "$(mise activate zsh)"
 fi

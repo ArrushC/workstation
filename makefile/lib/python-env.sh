@@ -29,7 +29,7 @@ bin_dir="$HOME/.local/bin"
 PY_LIBS=(textual textual-dev click rich httpx pydantic typer polars duckdb)
 
 if ! command -v uv >/dev/null 2>&1; then
-  printf 'python-env.sh: uv not on PATH — run `make mise-runtimes` first (uv is mise-managed)\n' >&2
+  printf 'python-env.sh: uv not on PATH — run `make tools` first (uv is mise-managed)\n' >&2
   exit 1
 fi
 

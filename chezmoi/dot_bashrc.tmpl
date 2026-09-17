@@ -5,11 +5,11 @@
 
 # --- NON-interactive PATH (ABOVE the guard): ~/.local/bin + mise shims -------
 # The bash sshd spawns for `ssh host cmd` reads ~/.bashrc but is NOT
-# interactive, so both prepends must precede the return below (the
+# interactive, so these exports must precede the return below (the
 # interactive-only ~/.local/bin export further down stays for readability).
 # Shims go in front of ~/.local/bin; interactive shells layer `mise activate
-# bash` (further down) on top. PARITY: dot_zshenv is the zsh twin (zsh reads
-# .zshenv for every invocation instead).
+# bash` (further down) on top. PARITY: dot_zshenv.tmpl is the zsh twin (zsh
+# reads .zshenv for every invocation instead).
 case ":$PATH:" in
 *":$HOME/.local/bin:"*) ;;
 *) export PATH="$HOME/.local/bin:$PATH" ;;
@@ -18,6 +18,11 @@ case ":$PATH:" in
 *":$HOME/.local/share/mise/shims:"*) ;;
 *) export PATH="$HOME/.local/share/mise/shims:$PATH" ;;
 esac
+
+# --- MISE_ENV: which config.<env>.toml files mise loads on this host ---------
+# Computed once by bootstrap.sh (scripts/lib/mise-env.sh) and persisted here so
+# every bash — interactive, `ssh host cmd`, cron — sees the same tool set.
+export MISE_ENV="{{ if and (hasKey . "group") (eq .group "dev_machine") }}linux,dev,host,{{ if contains "microsoft" (lower .chezmoi.kernel.osrelease) }}wsl{{ else }}native{{ end }}{{ else }}linux{{ end }}"
 
 # Not running interactively? Stop here.
 [[ $- != *i* ]] && return
@@ -54,15 +59,6 @@ fi
 export EDITOR="hx"
 export VISUAL="hx"
 {{ if and (hasKey . "group") (eq .group "dev_machine") }}
-# Helix runtime path — dev_machine only. `make` installs the runtime to
-# $HELIX_RUNTIME_DEST/runtime (= /usr/local/lib/helix/runtime on dev; see
-# makefile/scope.mk). Helix's only default search paths are
-# ~/.config/helix/runtime and <bin>/runtime — neither is that dir — so without
-# this export Helix finds NO runtime and silently falls back to its built-in
-# (purple) default theme, ignoring `theme =` in config.toml. prod installs the
-# runtime to ~/.config/helix/runtime (already a default search path), hence the
-# dev gate. KEEP IN SYNC with HELIX_RUNTIME_DEST in makefile/scope.mk.
-export HELIX_RUNTIME="/usr/local/lib/helix/runtime"
 # vcpkg (Microsoft C/C++ package manager) — dev_machine only. `make vcpkg`
 # clones + bootstraps it into this dir (= $VCPKG_ROOT) and symlinks the `vcpkg`
 # binary onto PATH. KEEP IN SYNC with VCPKG_ROOT_DIR in makefile/Makefile.
@@ -241,9 +237,9 @@ if command -v broot &>/dev/null; then
 fi
 
 # --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
-# Global pins in ~/.config/mise/conf.d/ (generated from versions.mk, installed
-# by `make mise-runtimes`). `mise activate` hooks PROMPT_COMMAND to put the
-# real bin dirs on PATH (in front of the shims exported above the guard).
+# Global pins are declared in ~/.config/mise/config*.toml (this checkout).
+# `mise activate` hooks PROMPT_COMMAND to put the real bin dirs on PATH (in
+# front of the shims exported above the guard).
 if command -v mise &>/dev/null; then
   eval "$(mise activate bash)"
 fi

@@ -15,6 +15,14 @@ pass=0
 fail=0
 
 j() { jq -nc "$@"; } # build compact JSON test input
+
+# jq may be a mise shim; shims need $HOME, and the session-end cases stub it. Put the real binary first.
+jq_path="$(command -v jq)"
+case "$jq_path" in
+*/shims/*) jq_path="$(mise which jq 2>/dev/null || printf '%s' "$jq_path")" ;;
+esac
+JQ_DIR="$(dirname "$jq_path")"
+
 run() { OUT="$(printf '%s' "$2" | bash "$1" 2>/dev/null)"; }
 ok() {
   local n="$1"
@@ -68,9 +76,13 @@ ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/scripts/manage-hosts.sh" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "manage-hosts.sh -> .ps1" has 'manage-hosts.ps1'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "versions.mk -> pins" has 'CCSTATUSLINE_VERSION'
+ok "versions.mk -> pins" has 'PYTHON_VERSION'
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.dev.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "config.dev.toml -> pins" has 'PortableTools'
 run "$RH/parity-reminder.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated -> silent" empty
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/chezmoi/dot_config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "chezmoi dotfile config.toml (helix) -> silent, not mise config" empty
 
 echo "== secret-guard (G1) =="
 run "$GH/executable_secret-guard.sh" "$(j --arg f "/home/u/.ssh/id_rsa" '{tool_name:"Read",tool_input:{file_path:$f}}')"
@@ -123,26 +135,23 @@ printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$ST/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$ROOT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "versions.mk -> cza nudge" has 'cza'
 ok "block regenerated (stale gone)" bash -c '! grep -q stale "'"$ST"'/CLAUDE.md"'
-mkdir -p "$ST/conf.d"
-printf 'stale\n' >"$ST/conf.d/workstation.toml"
-OUT="$(printf '%s' "$(j --arg f "$ROOT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" OUTDIR="$ST/conf.d" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
-ok "versions.mk -> mise conf.d nudge" has 'conf.d'
-ok "mise conf.d regenerated (stale gone)" bash -c 'grep -q "^uv = " "'"$ST"'/conf.d/workstation.toml" && grep -q "^node = " "'"$ST"'/conf.d/workstation-dev.toml"'
 run "$RH/sync-tool-memory.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated path -> silent" empty
 run "$RH/sync-tool-memory.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
+run "$RH/sync-tool-memory.sh" "$(j --arg f "$ROOT/chezmoi/dot_config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "chezmoi dotfile config.toml (helix) -> silent, not mise config" empty
 # worktree: an edit in a SECOND checkout must regenerate THAT checkout's
 # memory file even when CLAUDE_PROJECT_DIR points at this (main) one.
 WT="$(mktemp -d)"
 mkdir -p "$WT/scripts" "$WT/makefile" "$WT/chezmoi/private_dot_claude"
-cp "$ROOT/scripts/gen-tool-memory.sh" "$ROOT/scripts/gen-mise-config.sh" "$WT/scripts/"
-cp "$ROOT/makefile/versions.mk" "$ROOT/makefile/tools.mk" "$ROOT/makefile/packages.mk" "$WT/makefile/"
+cp "$ROOT/scripts/gen-tool-memory.sh" "$WT/scripts/"
+cp "$ROOT/config.toml" "$ROOT/config.linux.toml" "$ROOT/config.dev.toml" "$WT/"
+cp "$ROOT/makefile/versions.mk" "$ROOT/makefile/packages.mk" "$WT/makefile/"
 printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/chezmoi/private_dot_claude/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$WT/makefile/versions.mk" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | CLAUDE_PROJECT_DIR="$ROOT" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "worktree edit -> cza nudge" has 'cza'
 ok "worktree's own memory regenerated" bash -c '! grep -q stale "'"$WT"'/chezmoi/private_dot_claude/CLAUDE.md"'
-ok "worktree's own mise conf.d generated" test -f "$WT/chezmoi/dot_config/mise/conf.d/workstation-dev.toml"
 rm -rf "$WT"
 rm -rf "$ST"
 
@@ -177,7 +186,7 @@ STUB
 chmod +x "$SE/slowstub.sh"
 se_run() {
   : >"$SE/notified.log"
-  printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR HOME="$SE/home" \
+  printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$JQ_DIR:$PATH" \
     WORKSTATION_NOTIFY="$SE/stub.sh" bash "$1" >/dev/null 2>&1
 }
 # The notifier is fired detached/backgrounded, so poll briefly for the async write.
@@ -202,7 +211,7 @@ ok "dirty repo -> toast mentions uncommitted" notified 'uncommitted'
 : >"$SE/notified.log"
 _t0=$(date +%s)
 printf '%s' "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')" |
-  env -u CLAUDE_PROJECT_DIR HOME="$SE/home" WORKSTATION_NOTIFY="$SE/slowstub.sh" \
+  env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$JQ_DIR:$PATH" WORKSTATION_NOTIFY="$SE/slowstub.sh" \
     bash "$RH/session-end-notify.sh" >/dev/null 2>&1
 _t1=$(date +%s)
 ok "does not block on a slow notifier (<2s)" test "$((_t1 - _t0))" -lt 2
