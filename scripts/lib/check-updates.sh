@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# check-updates.sh — compare pinned tool versions (versions.mk) against the
+# check-updates.sh — compare pinned tool versions (config.toml [vars]) against the
 # newest upstream release tags, via `git ls-remote --tags` (plain git, no
 # GitHub API, no rate limits, GITHUB_TOKEN not needed for public repos).
 #
-# Invoked by `make check-updates MODE=dev|prod` (makefile/Makefile), which
-# pipes one spec per line on stdin:
+# Invoked by tasks/check-updates, which pipes one spec per line on stdin:
 #
 #   <name>|<version>|<repo>|<tag>
 #
 #   name     registered tool name (display only)
-#   version  the pin from versions.mk ("latest" → reported as rolling)
+#   version  the pin from config.toml [vars] ("latest" → reported as rolling)
 #   repo     GitHub owner/repo, a full git URL (anything with ://), or "-"
 #            when there is no tag source to compare against
 #   tag      the exact upstream tag the pin installs (v1.2.3, jq-1.8.1,
@@ -17,19 +16,19 @@
 #            leading remainder becomes the ls-remote tag-glob prefix.
 #
 # The toolbelt itself (mise-managed, config*.toml) is covered by `mise
-# outdated`, not this script. The handful of pins Make still owns directly
-# (claude-cli, dozzle, nerd-fonts, vcpkg, python-env) are hand-registered as
-# UPDATE_SPECS lines in makefile/Makefile's own registry block, near the
-# check-updates recipe.
+# outdated`, not this script. The handful of pins config.toml [vars] still
+# owns directly (claude-cli, dozzle, nerd-fonts, vcpkg, python-env) are
+# hand-registered as spec lines built by tasks/check-updates.
 #
 # Self-exec fan-out: with no args this is the driver (reads specs on stdin,
 # fans out via xargs -P, sorts, summarizes); with one arg it is a worker that
 # checks a single spec and prints one `status|name|detail` line, where
 # status ∈ ok | update | ahead | rolling | unknown.
 #
-# READ-ONLY + network-bound. Report only — updating a pin is still the manual
-# versions.mk edit (mind the CCSTATUSLINE / JETBRAINSMONO / HELIX dual- and
-# triple-edit invariants in CLAUDE.md), followed by `make provision`.
+# READ-ONLY + network-bound. Report only — updating a pin is still a manual
+# config.toml [vars] edit (mind the CCSTATUSLINE / JETBRAINSMONO / HELIX dual-
+# and triple-edit invariants in CLAUDE.md), followed by `mise bootstrap`
+# (bootstrap.sh).
 
 set -euo pipefail
 
@@ -42,7 +41,7 @@ if (($# == 1)); then
   IFS='|' read -r name version repo tag <<<"$1"
 
   if [[ "$version" == "latest" ]]; then
-    echo "rolling|$name|tracks latest — force a refresh: make clean-$name $name MODE=<dev|prod>"
+    echo "rolling|$name|tracks latest — self-updates; reinstall: rm ~/.local/bin/claude and re-run ./bootstrap.sh --dev"
     exit 0
   fi
   if [[ "$repo" == "-" || -z "$repo" ]]; then
@@ -168,6 +167,6 @@ echo ""
 printf '   %s update(s) available · %s up to date · %s rolling · %s unchecked\n' \
   "$n_update" "$n_ok" "$n_roll" "$n_unk"
 if ((n_update > 0)); then
-  printf '   to update: edit the pin in makefile/versions.mk, then make provision MODE=%s\n' "${MODE:-dev|prod}"
+  printf '   to update: edit the pin in config.toml [vars], then ./bootstrap.sh --<dev|prod>\n'
   printf '   (mind the dual/triple-edit pins — CCSTATUSLINE, JETBRAINSMONO, HELIX; see CLAUDE.md)\n'
 fi

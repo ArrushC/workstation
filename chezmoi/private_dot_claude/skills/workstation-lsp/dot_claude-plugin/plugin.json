@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "workstation-lsp",
   "version": "0.1.0",
-  "description": "Registers the workstation toolbelt's installed language servers with Claude Code's LSP tool (bash, yaml, json, css, html, toml, markdown, python, c/c++, go, rust, typescript). Internal — not a user-invocable skill. Server binaries are provisioned by `make lsp-servers`.",
+  "description": "Registers the workstation toolbelt's installed language servers with Claude Code's LSP tool (bash, yaml, json, css, html, toml, markdown, python, c/c++, go, rust, typescript). Internal — not a user-invocable skill. Server binaries are provisioned by mise (config.dev.toml).",
   "author": {
     "name": "Arrush Chaturvedi"
   },

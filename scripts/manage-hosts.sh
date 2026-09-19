@@ -34,10 +34,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HOSTS_CONF="$REPO_ROOT/hosts.conf"
 
-# Valid host groups. dev_machine → MODE=dev provisioning (sudo, system-wide);
-# prod_machine → MODE=prod (no sudo, ~/.local/bin). makefile/scope.mk maps
-# these groups to scope. An unknown group breaks update-hosts.sh's MODE
-# derivation, so we reject anything else at save time.
+# Valid host groups. dev_machine → --dev provisioning (sudo, system-wide);
+# prod_machine → --prod (no sudo, ~/.local/bin). bootstrap.sh maps
+# these groups to the flag it passes mise bootstrap. An unknown group breaks
+# update-hosts.sh's flag derivation, so we reject anything else at save time.
 VALID_GROUPS=("dev_machine" "prod_machine")
 
 # --- Colours -----------------------------------------------------------------

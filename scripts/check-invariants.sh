@@ -3,8 +3,8 @@
 # documented in CLAUDE.md + docs/claude/file-care.md.
 #
 # Single source of truth for the checks; invoked three ways:
-#   - make lint                  (makefile/Makefile -> $REPO_ROOT/scripts/check-invariants.sh)
-#   - .githooks/pre-commit       (installed via `make install-hooks`)
+#   - mise run lint               (tasks/lint -> $REPO_ROOT/scripts/check-invariants.sh)
+#   - .githooks/pre-commit       (installed via `mise run install-hooks`)
 #   - .github/workflows/lint.yml (CI backstop)
 #
 # Runs from anywhere — it cd's to the repo root. Exits 0 if all checks pass,
@@ -32,13 +32,6 @@ bad() {
   fails=$((fails + 1))
 }
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
-
-# Extract a `NAME := value` value from makefile/versions.mk.
-mkval() {
-  grep -E "^$1[[:space:]]*:=" makefile/versions.mk |
-    head -1 |
-    sed -E 's/^[^:=]*:=[[:space:]]*//; s/[[:space:]]*(#.*)?$//'
-}
 
 # Python with tomllib: EL9's python3 is 3.9 (no tomllib) — prefer the python-env
 # wpy (3.14); CI's python3 is 3.11+. Empty when neither exists (callers soft-skip).
@@ -149,42 +142,42 @@ check_version_pins() {
       bad "mise drift: bootstrap.sh='$v' bootstrap.ps1='$ref' config.toml-min_version='$v2'"
     fi
 
-    v=$(mkval PYTHON_VERSION)
+    v=$(tomlval config.toml vars.python_version)
     v2=$(tomlval config.toml tools.python)
     ref=$(grep -oE '^\$PythonEnvVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 |
       grep -oE '[0-9][0-9.]+' | head -1)
     if [ -n "$v" ] && [ "$v" = "$v2" ] && [ "$v" = "$ref" ]; then
-      ok "python-env @ $v  (versions.mk == config.toml tools.python == bootstrap.ps1)"
+      ok "python-env @ $v  (config.toml [vars] == config.toml tools.python == bootstrap.ps1)"
     else
-      bad "python-env drift: versions.mk='$v' config.toml-tools.python='$v2' bootstrap.ps1='$ref'"
+      bad "python-env drift: config.toml-vars.python_version='$v' config.toml-tools.python='$v2' bootstrap.ps1='$ref'"
+    fi
+
+    v=$(tomlval config.toml vars.nerd_font_version)
+    ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
+      grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    # font.sh pins the SHA per version in a `case "$VERSION"` block; the runtime
+    # looks it up BY VALUE, so verify an arm for $v EXISTS (position-independent)
+    # — appending a new arm on a bump (as font.sh instructs) must still pass.
+    font_re="^[[:space:]]*${v//./\\.}\\)[[:space:]]*EXPECT_SHA"
+    if grep -qE "$font_re" scripts/lib/font.sh; then font_has=yes; else font_has=no; fi
+    if [ -n "$v" ] && [ "$v" = "$ps_v" ] && [ "$font_has" = yes ]; then
+      ok "jetbrains-mono nerd @ $v  (config.toml [vars] == install-nerd-fonts.ps1; scripts/lib/font.sh SHA arm present)"
+    else
+      bad "jetbrains-mono nerd drift: config.toml-vars.nerd_font_version='$v' install-nerd-fonts.ps1='$ps_v' font.sh-SHA-arm=$font_has"
     fi
   fi
 
-  v=$(mkval JETBRAINSMONO_NERD_VERSION)
-  ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
-    grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  # font.sh pins the SHA per version in a `case "$VERSION"` block; the runtime
-  # looks it up BY VALUE, so verify an arm for $v EXISTS (position-independent)
-  # — appending a new arm on a bump (as font.sh instructs) must still pass.
-  font_re="^[[:space:]]*${v//./\\.}\\)[[:space:]]*EXPECT_SHA"
-  if grep -qE "$font_re" makefile/lib/font.sh; then font_has=yes; else font_has=no; fi
-  if [ -n "$v" ] && [ "$v" = "$ps_v" ] && [ "$font_has" = yes ]; then
-    ok "jetbrains-mono nerd @ $v  (versions.mk == install-nerd-fonts.ps1; font.sh SHA arm present)"
-  else
-    bad "jetbrains-mono nerd drift: versions.mk='$v' install-nerd-fonts.ps1='$ps_v' font.sh-SHA-arm=$font_has"
-  fi
-
-  # VCPKG_ROOT — the dev-gated rc literal must match VCPKG_ROOT_DIR in the
-  # Makefile (the vcpkg target clones the tree there; the rc exports it).
-  local mk_vcpkg rc_z rc_b
-  mk_vcpkg=$(grep -E '^[[:space:]]*VCPKG_ROOT_DIR[[:space:]]*:=[[:space:]]*/' \
-    makefile/Makefile | head -1 | sed -E 's#.*:=[[:space:]]*##; s/[[:space:]]*$//')
+  # VCPKG_ROOT — both rc files must export the SAME literal, and tasks/vcpkg's
+  # vroot= literal is the one that actually decides where vcpkg lands. The rc
+  # literal is asserted equal to that same $HOME/.local/share/vcpkg.
+  local rc_z rc_b vroot_task want='$HOME/.local/share/vcpkg'
   rc_z=$(grep -oE 'VCPKG_ROOT="[^"]*"' chezmoi/dot_zshrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
   rc_b=$(grep -oE 'VCPKG_ROOT="[^"]*"' chezmoi/dot_bashrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  if [ -n "$mk_vcpkg" ] && [ "$rc_z" = "$mk_vcpkg" ] && [ "$rc_b" = "$mk_vcpkg" ]; then
-    ok "vcpkg-root @ $mk_vcpkg  (Makefile == zshrc == bashrc)"
+  vroot_task=$(grep -oE 'vroot="[^"]*"' tasks/vcpkg | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  if [ -n "$rc_z" ] && [ "$rc_z" = "$rc_b" ] && [ "$rc_z" = "$want" ] && [ "$vroot_task" = "$want" ]; then
+    ok "vcpkg-root @ zshrc == bashrc == $want; tasks/vcpkg vroot == $want"
   else
-    bad "vcpkg-root drift: Makefile='$mk_vcpkg' zshrc='$rc_z' bashrc='$rc_b'"
+    bad "vcpkg-root drift: zshrc='$rc_z' bashrc='$rc_b' tasks/vcpkg-vroot='$vroot_task' (want $want)"
   fi
 }
 
@@ -200,39 +193,71 @@ check_version_pins() {
 # (they live in their own coupling-check functions) so are named explicitly.
 # One-directional: extra EXCLUDE entries are fine.
 check_bumper_exclude() {
-  hdr "bump-versions.sh EXCLUDE covers dual-edit pins"
+  hdr "bump-versions.sh EXCLUDE/EXCLUDE_VARS cover dual-edit pins"
   local exclude pins var missing="" n=0
   local -a coupled=(github:dj95/zjstatus go go:golang.org/x/tools/gopls http:ncdu node)
   exclude=$(grep -m1 -E '^EXCLUDE=' scripts/bump-versions.sh |
     sed -E 's/^EXCLUDE="//; s/"[[:space:]]*$//')
   if [ -z "$exclude" ]; then
     bad "scripts/bump-versions.sh: EXCLUDE= line not found"
+  else
+    pins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
+      grep -oE "tomlval config[a-z.]*toml '?tools\.[^ ']+'?" |
+      sed -E "s/.*tools\.//; s/^\"//; s/\"'?\$//; s/\)\$//" | sort -u)
+    pins="$pins
+$(printf '%s\n' "${coupled[@]}")"
+    while read -r var; do
+      [ -n "$var" ] || continue
+      n=$((n + 1))
+      case " $exclude " in
+      *" $var "*) ;;
+      *) missing="$missing $var" ;;
+      esac
+    done <<<"$pins"
+    if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
+      ok "all $n dual-edit tool pins in bumper EXCLUDE (bump-versions.sh)"
+    else
+      bad "dual-edit tool pin(s) missing from bump-versions.sh EXCLUDE:${missing:- <none derived>} — the weekly bumper would rewrite config*.toml alone and fail the pin check"
+    fi
+  fi
+
+  # Same coverage for config.toml [vars] pins: any vars.<name> read by
+  # check_version_pins is a dual/triple-edit host pin and must sit in the
+  # bumper's EXCLUDE_VARS (Layer 2) — otherwise a blind bump rewrites
+  # config.toml [vars] alone and immediately fails check_version_pins.
+  # dozzle_version/vcpkg_version are single-edit pins (never referenced via
+  # `tomlval config.toml vars.*` in check_version_pins) so are correctly NOT
+  # derived here, and zjstatus_zellij_floor is a coupling floor, not a pin
+  # (read only by check_zjstatus_zellij_coupling) so is correctly absent too.
+  local exclude_vars vpins vmissing="" vn=0
+  exclude_vars=$(grep -m1 -E '^EXCLUDE_VARS=' scripts/bump-versions.sh |
+    sed -E 's/^EXCLUDE_VARS="//; s/"[[:space:]]*$//')
+  if [ -z "$exclude_vars" ]; then
+    bad "scripts/bump-versions.sh: EXCLUDE_VARS= line not found"
     return
   fi
-  pins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
-    grep -oE "tomlval config[a-z.]*toml '?tools\.[^ ']+'?" |
-    sed -E "s/.*tools\.//; s/^\"//; s/\"'?\$//; s/\)\$//" | sort -u)
-  pins="$pins
-$(printf '%s\n' "${coupled[@]}")"
+  vpins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
+    grep -oE 'tomlval config\.toml vars\.[a-z_]+' |
+    sed -E 's/.*vars\.//' | sort -u)
   while read -r var; do
     [ -n "$var" ] || continue
-    n=$((n + 1))
-    case " $exclude " in
+    vn=$((vn + 1))
+    case " $exclude_vars " in
     *" $var "*) ;;
-    *) missing="$missing $var" ;;
+    *) vmissing="$vmissing $var" ;;
     esac
-  done <<<"$pins"
-  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-    ok "all $n dual-edit pins in bumper EXCLUDE (bump-versions.sh)"
+  done <<<"$vpins"
+  if [ "$vn" -gt 0 ] && [ -z "$vmissing" ]; then
+    ok "all $vn dual-edit [vars] pin(s) in bumper EXCLUDE_VARS (bump-versions.sh)"
   else
-    bad "dual-edit pin(s) missing from bump-versions.sh EXCLUDE:${missing:- <none derived>} — the weekly bumper would rewrite config*.toml alone and fail the pin check"
+    bad "dual-edit [vars] pin(s) missing from bump-versions.sh EXCLUDE_VARS:${vmissing:- <none derived>} — the weekly bumper would rewrite config.toml [vars] alone and fail the pin check"
   fi
 }
 
 check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
-  local -a files=(makefile/lib/*.sh scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh chezmoi/dot_local/bin/executable_*)
+  local -a files=(scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh chezmoi/dot_local/bin/executable_*)
   [ -e .githooks/pre-commit ] && files+=(.githooks/pre-commit)
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then
@@ -379,7 +404,7 @@ for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("confi
         # pin<->lock version equality: a config pin bumped without `mise lock`
         # still passes coverage above (the lock entry exists, just stale) —
         # catch that here so every host doesn't silently rewrite the tracked
-        # lock on its next `make tools`. "latest" pins have no fixed version
+        # lock on its next `mise install`. "latest" pins have no fixed version
         # to compare. A lock entry can have multiple blocks (e.g. os=["linux"]
         # tools still carry an inert windows-x64 table); any matching block
         # is accepted.
@@ -397,6 +422,46 @@ PY
     ok "every [tools] entry has a lock entry (linux-x64; windows-x64 where it installs on Windows)"
   else
     bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,dev,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,dev mise lock --global --platform windows-x64"
+  fi
+  # PR2 host-state files: config.host.toml / config.native.toml / config.wsl.toml
+  # must parse and declare no [tools] (lock coverage above stays three files),
+  # and config.toml must carry the five [vars] pins the host-state tasks read.
+  if [ -z "$PY" ]; then
+    note "no python with tomllib — host-state file / [vars] checks skipped locally (CI enforces)"
+  else
+    for f in config.host.toml config.native.toml config.wsl.toml; do
+      if [ ! -f "$f" ]; then
+        bad "missing: $f"
+        continue
+      fi
+      if "$PY" - "$f" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], "rb") as fh:
+    d = tomllib.load(fh)
+sys.exit(1 if "tools" in d else 0)
+PY
+      then
+        ok "$f parses and declares no [tools]"
+      else
+        bad "$f declares [tools] — host-state files must not (lock coverage is three files)"
+      fi
+    done
+    local vk vars_bad=0
+    for vk in python_version nerd_font_version dozzle_version vcpkg_version zjstatus_zellij_floor; do
+      if "$PY" - "$vk" <<'PY'
+import sys, tomllib
+with open("config.toml", "rb") as fh:
+    d = tomllib.load(fh)
+sys.exit(0 if sys.argv[1] in d.get("vars", {}) else 1)
+PY
+      then
+        :
+      else
+        bad "config.toml [vars] missing: $vk"
+        vars_bad=1
+      fi
+    done
+    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has all five host pins"
   fi
   if command -v mise >/dev/null 2>&1; then
     local tmp
@@ -439,45 +504,179 @@ PY
   fi
 }
 
-check_sweep_vs_make() {
-  hdr "makefile/** never references \$(DEST)/<name> for a name tasks/migrate-legacy sweeps"
-  local legacy="tasks/migrate-legacy"
-  if [ ! -f "$legacy" ]; then
-    bad "missing: $legacy"
+# Every config.toml [vars] *_version pin must be reachable two ways, or a
+# bump nobody sees: tasks/check-updates (the upstream-drift report) and
+# scripts/gen-tool-memory.sh (the machine-memory inventory). zjstatus_zellij_
+# floor is deliberately excluded (it's a coupling floor, not a pin — see
+# check_zjstatus_zellij_coupling).
+check_vars_pin_coverage() {
+  hdr "config.toml [vars] *_version pins reachable by check-updates + gen-tool-memory"
+  if [ -z "$PY" ]; then
+    note "no python with tomllib — vars-pin coverage skipped locally (CI enforces)"
     return
   fi
-  # Parse the names=(...) bash array straight out of the script text: the
-  # single source of truth for "binaries the legacy sweep deletes from
-  # $(DEST)". A $(DEST)/<name> reference anywhere in makefile/** for one of
-  # these is the Critical #1 shape (dotfiles.mk's stale CHEZMOI_BIN pointed
-  # at a $(DEST)/chezmoi the sweep had already deleted) — that tool is now a
-  # bare mise-shim command reached via PATH, not a $(DEST) path.
-  local names
-  names=$(sed -n '/^names=(/,/)$/p' "$legacy" | sed -e 's/^names=(//' -e 's/)[[:space:]]*$//' | tr -s '[:space:]' '\n' | grep -v '^$' | sort -u)
-  if [ -z "$names" ]; then
-    bad "could not parse the names=(...) array out of $legacy"
-    return
-  fi
-  # Real invocations only — skip comment lines (prose that merely MENTIONS a
-  # $(DEST)/<name> path, e.g. dotfiles.mk explaining why it no longer uses one).
-  local offenders bad_hits="" line name n
-  offenders=$(grep -rnE '\$\(DEST\)/[A-Za-z0-9_.-]+' makefile/ 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#')
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    while IFS= read -r name; do
-      [ -n "$name" ] || continue
-      n="${name#\$(DEST)/}"
-      if printf '%s\n' "$names" | grep -qxF "$n"; then
-        bad_hits="${bad_hits}${line}
-"
-      fi
-    done <<<"$(grep -oE '\$\(DEST\)/[A-Za-z0-9_.-]+' <<<"$line")"
-  done <<<"$offenders"
-  if [ -z "$bad_hits" ]; then
-    ok "no \$(DEST)/<name> reference in makefile/** names a legacy-sweep entry"
+  local keys key env_name missing="" n=0
+  keys=$(
+    "$PY" - <<'PY'
+import tomllib
+with open("config.toml", "rb") as fh:
+    d = tomllib.load(fh)
+for k in d.get("vars", {}):
+    if k.endswith("_version"):
+        print(k)
+PY
+  )
+  while read -r key; do
+    [ -n "$key" ] || continue
+    n=$((n + 1))
+    env_name=$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')
+    grep -q "$env_name" tasks/check-updates || missing="$missing $key(tasks/check-updates)"
+    grep -q "$key" scripts/gen-tool-memory.sh || missing="$missing $key(gen-tool-memory.sh)"
+  done <<<"$keys"
+  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
+    ok "all $n [vars] *_version pin(s) covered by tasks/check-updates + gen-tool-memory.sh"
   else
-    bad "makefile/** references \$(DEST)/<name> for a name tasks/migrate-legacy deletes — that tool is a mise shim now, reached via PATH, not \$(DEST):"
-    printf '%s' "$bad_hits" | sed 's/^/       /'
+    bad "config.toml [vars] *_version pin(s) not fully covered:${missing:- <none derived>} — check-updates emits no line for these, or gen-tool-memory.sh doesn't read them"
+  fi
+}
+
+# Bootstrap-config invariants over the four [bootstrap.*] TOML files (PR2
+# Task 3): parse, hook shape + task existence + name uniqueness, file source
+# existence + phase, package key shape + uniqueness + dropped names, the two
+# no-sudo rulings (docs/superpowers/plans/2026-09-17-mise-host.md Rulings
+# 1-2), and prod/Windows safety (config.toml/config.dev.toml never gain a
+# [bootstrap] table). (h) is a live `mise bootstrap plan` — soft-skipped
+# unless both mise and dnf are on PATH (CI has no dnf).
+check_bootstrap_config() {
+  hdr "bootstrap-config invariants (config.host/native/wsl/linux.toml)"
+  if [ -z "$PY" ]; then
+    note "no python with tomllib — bootstrap-config checks skipped locally (CI enforces)"
+  else
+    local out result detail
+    out=$(
+      "$PY" - <<'PY'
+import os, re, tomllib
+
+files = ["config.host.toml", "config.native.toml", "config.wsl.toml", "config.linux.toml"]
+loaded = {}
+for f in files:
+    try:
+        with open(f, "rb") as fh:
+            loaded[f] = tomllib.load(fh)
+        print(f"PASS|parse|{f} parses")
+    except Exception as e:
+        print(f"FAIL|parse|{f} failed to parse: {e}")
+
+# (b)/(c): hooks — value shape ("mise run <task>"), task file exists, hook
+# NAME appears in exactly one config file.
+hook_re = re.compile(r"^mise run [a-z-]+$")
+seen = {}
+bad_hooks = []
+n_hooks = 0
+for f, d in loaded.items():
+    for name, val in d.get("bootstrap", {}).get("hooks", {}).items():
+        n_hooks += 1
+        if not hook_re.match(val):
+            bad_hooks.append(f"{f}:{name}={val!r} (want 'mise run <task>')")
+            continue
+        task = val.split("mise run ", 1)[1]
+        if not os.path.isfile(os.path.join("tasks", task)):
+            bad_hooks.append(f"{f}:{name} -> task file tasks/{task} missing")
+        seen.setdefault(name, []).append(f)
+if bad_hooks:
+    print("FAIL|hooks|" + "; ".join(bad_hooks))
+else:
+    print(f"PASS|hooks|{n_hooks} hook(s) are 'mise run <task>' and the task file exists")
+dupes = [f"{name} in {fs}" for name, fs in seen.items() if len(fs) > 1]
+if dupes:
+    print("FAIL|hook-unique|duplicated hook name(s) across config files: " + "; ".join(dupes))
+else:
+    print(f"PASS|hook-unique|{len(seen)} hook name(s) each appear in exactly one config file")
+
+# (d): files — source exists relative to the repo root, phase valid when present.
+bad_files = []
+n_files = 0
+for f, d in loaded.items():
+    for path, spec in d.get("bootstrap", {}).get("files", {}).items():
+        n_files += 1
+        src = spec.get("source")
+        if not src or not os.path.isfile(src):
+            bad_files.append(f"{f}:{path} source missing: {src}")
+        phase = spec.get("phase")
+        if phase is not None and phase not in ("pre-packages", "post-packages"):
+            bad_files.append(f"{f}:{path} phase={phase!r} (want pre-packages/post-packages)")
+if bad_files:
+    print("FAIL|files|" + "; ".join(bad_files))
+else:
+    print(f"PASS|files|{n_files} bootstrap.files entry/ies: source exists, phase valid")
+
+# (e): packages — dnf: prefix, unique across host+native, dropped names absent.
+dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck"}
+seen_pkg = {}
+bad_pkg = []
+for f in ("config.host.toml", "config.native.toml"):
+    for key in loaded.get(f, {}).get("bootstrap", {}).get("packages", {}):
+        if not key.startswith("dnf:"):
+            bad_pkg.append(f"{f}:{key} (missing dnf: prefix)")
+        if key in dropped:
+            bad_pkg.append(f"{f}:{key} (dropped name — not packaged/virtual/renamed on EL9)")
+        seen_pkg.setdefault(key, []).append(f)
+pkg_dupes = [f"{k} in {fs}" for k, fs in seen_pkg.items() if len(fs) > 1]
+if bad_pkg or pkg_dupes:
+    print("FAIL|packages|" + "; ".join(bad_pkg + pkg_dupes))
+else:
+    print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) across host+native, unique, no dropped names")
+
+# (f): no [bootstrap.linux.firewall] and no [bootstrap.user] anywhere (rulings 1-2).
+ruling_hits = []
+for f, d in loaded.items():
+    bs = d.get("bootstrap", {})
+    if "user" in bs:
+        ruling_hits.append(f"{f} has [bootstrap.user] (ruling 2: chsh needs util-linux-user + prompts for a password)")
+    linux = bs.get("linux", {})
+    if isinstance(linux, dict) and "firewall" in linux:
+        ruling_hits.append(f"{f} has [bootstrap.linux.firewall] (ruling 1: aborts unprivileged mise bootstrap plan/status)")
+if ruling_hits:
+    print("FAIL|rulings|" + "; ".join(ruling_hits))
+else:
+    print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (rulings 1-2)")
+
+# (g): config.toml / config.dev.toml carry no [bootstrap] table (prod hosts / Windows never load one).
+prod_hits = []
+for f in ("config.toml", "config.dev.toml"):
+    try:
+        with open(f, "rb") as fh:
+            d = tomllib.load(fh)
+    except Exception as e:
+        prod_hits.append(f"{f} failed to parse: {e}")
+        continue
+    if "bootstrap" in d:
+        prod_hits.append(f"{f} has a [bootstrap] table (prod hosts / Windows must never load one)")
+if prod_hits:
+    print("FAIL|prod-safety|" + "; ".join(prod_hits))
+else:
+    print("PASS|prod-safety|config.toml and config.dev.toml carry no [bootstrap] table")
+PY
+    )
+    while IFS='|' read -r result _ detail; do
+      [ -n "$result" ] || continue
+      if [ "$result" = PASS ]; then
+        ok "$detail"
+      else
+        bad "$detail"
+      fi
+    done <<<"$out"
+  fi
+
+  # (h) live plan — dev host with dnf only; CI has no dnf.
+  if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
+    if MISE_ENV=linux,dev,host,native mise bootstrap plan --json >/dev/null 2>&1; then
+      ok "mise bootstrap plan --json (MISE_ENV=linux,dev,host,native) exits 0"
+    else
+      bad "mise bootstrap plan --json (MISE_ENV=linux,dev,host,native) failed"
+    fi
+  else
+    note "mise and/or dnf not on PATH — skipped the live 'mise bootstrap plan' check (CI has no dnf)"
   fi
 }
 
@@ -621,7 +820,7 @@ check_completion_parity() {
 
 # --- python-env lib-list parity ----------------------------------------------
 # The blessed-env library list is defined twice (Make never runs on Windows):
-# PY_LIBS in makefile/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
+# PY_LIBS in scripts/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
 # are one-line arrays by contract (comments at each site) so single-line greps
 # can extract them. Order-insensitive compare (sort) — content is the contract.
 check_zjstatus_zellij_coupling() {
@@ -633,9 +832,9 @@ check_zjstatus_zellij_coupling() {
   fi
   zj=$(tomlval config.linux.toml tools.zellij)
   zjs=$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"')
-  floor=$(mkval ZJSTATUS_ZELLIJ_FLOOR)
+  floor=$(tomlval config.toml vars.zjstatus_zellij_floor)
   if [ -z "$zj" ] || [ -z "$zjs" ] || [ -z "$floor" ]; then
-    bad "could not read tools.zellij / tools.\"github:dj95/zjstatus\" from config.linux.toml, or ZJSTATUS_ZELLIJ_FLOOR from versions.mk"
+    bad "could not read tools.zellij / tools.\"github:dj95/zjstatus\" from config.linux.toml, or vars.zjstatus_zellij_floor from config.toml"
     return
   fi
   # zjstatus is compiled against zellij-tile, and each release states the
@@ -681,7 +880,7 @@ check_mise_install_lib() {
 check_python_env_parity() {
   hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
   local sh_libs ps_libs
-  sh_libs=$(grep -oE '^PY_LIBS=\([^)]*\)' makefile/lib/python-env.sh |
+  sh_libs=$(grep -oE '^PY_LIBS=\([^)]*\)' scripts/lib/python-env.sh |
     sed 's/^PY_LIBS=(//; s/)$//' | tr ' ' '\n' | grep -v '^$' | sort)
   ps_libs=$(grep -oE '^\$PythonLibs *= *@\([^)]*\)' bootstrap.ps1 |
     sed 's/.*@(//; s/)$//' | tr -d '",' | tr ' ' '\n' | grep -v '^$' | sort)
@@ -718,7 +917,7 @@ check_shellcheck() {
   fi
   # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
   # vendored (eth-p/bat-extras) and deliberately excluded.
-  local -a targets=(bootstrap.sh makefile/lib/*.sh scripts/*.sh scripts/lib/*.sh tasks/*
+  local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
     chezmoi/private_dot_claude/executable_notify.sh
     chezmoi/dot_local/bin/executable_winterop
@@ -733,11 +932,11 @@ check_shellcheck() {
 check_shfmt() {
   hdr "shfmt (shell formatting, -i 2)"
   if ! command -v shfmt >/dev/null 2>&1; then
-    note "shfmt not installed — skipped locally (CI enforces; 'make fmt MODE=prod' to format here)"
+    note "shfmt not installed — skipped locally (CI enforces; 'mise run fmt' to format here)"
     return 0
   fi
   # Same first-party set as shellcheck (vendored _cht.sh / batpipe excluded).
-  local -a targets=(bootstrap.sh makefile/lib/*.sh scripts/*.sh scripts/lib/*.sh tasks/*
+  local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
     .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
     chezmoi/private_dot_claude/executable_notify.sh
     chezmoi/dot_local/bin/executable_winterop
@@ -746,7 +945,7 @@ check_shfmt() {
   if out=$(shfmt -d -i 2 "${targets[@]}" 2>&1); then
     ok "clean over ${#targets[@]} shell files (shfmt -i 2)"
   else
-    bad "shfmt formatting diffs (fix: make fmt MODE=prod):"
+    bad "shfmt formatting diffs (fix: mise run fmt):"
     printf '%s\n' "$out" | sed 's/^/       /' | head -40
   fi
 }
@@ -754,7 +953,7 @@ check_shfmt() {
 check_gitleaks() {
   hdr "gitleaks (committed-secret scan)"
   if ! command -v gitleaks >/dev/null 2>&1; then
-    note "gitleaks not installed — skipped locally (CI enforces; 'make secrets MODE=prod' to scan here)"
+    note "gitleaks not installed — skipped locally (CI enforces; 'mise run secrets' to scan here)"
     return 0
   fi
   local out
@@ -914,50 +1113,6 @@ check_zellij_config() {
   fi
 }
 
-check_update_spec_coverage() {
-  hdr "every versions.mk pin is reachable by check-updates"
-  local specs pins alias_lines covered missing="" n_pins=0 n_specs=0 var
-
-  # MODE=dev: UPDATE_SPECS registrations in Makefile are unconditional now (no
-  # MODE gate — the tool layer moved to mise, whose config*.toml pins are
-  # covered by `mise outdated` instead), so any MODE gives the same specs
-  # here; dev is just the conventional default for read-only probes.
-  specs=$(make -s --no-print-directory -C makefile -p MODE=dev 2>/dev/null |
-    grep -E '^UPDATE_SPECS :?=' | head -1 | tr ' ' '\n' | grep '|' | cut -d'|' -f1 | sort -u)
-  pins=$(grep -oE '^[A-Z][A-Z0-9_]*_VERSION' makefile/versions.mk | sort -u)
-  if [ -z "$specs" ] || [ -z "$pins" ]; then
-    bad "could not read UPDATE_SPECS or versions.mk pins"
-    return
-  fi
-
-  # Spec names normally derive to their pin var (uppercase, - => _, +_VERSION).
-  # Where they don't, bump-versions.sh's ALIAS map is the single source of truth
-  # for the mapping — parse it rather than duplicating the list here.
-  alias_lines=$(sed -n 's/^[[:space:]]*\["\([^"]*\)"\]=\([A-Z0-9_]*\).*/\1 \2/p' scripts/bump-versions.sh)
-
-  covered=$(
-    while read -r spec; do
-      [ -n "$spec" ] || continue
-      var=$(printf '%s\n' "$alias_lines" | awk -v s="$spec" '$1 == s {print $2; exit}')
-      [ -n "$var" ] || var=$(printf '%s' "$spec" | tr '[:lower:].-' '[:upper:]__')_VERSION
-      printf '%s\n' "$var"
-    done <<<"$specs" | sort -u
-  )
-
-  while read -r pin; do
-    [ -n "$pin" ] || continue
-    n_pins=$((n_pins + 1))
-    grep -qxF "$pin" <<<"$covered" || missing="$missing $pin"
-  done <<<"$pins"
-  n_specs=$(printf '%s\n' "$specs" | grep -c .)
-
-  if [ -z "$missing" ]; then
-    ok "all $n_pins pins covered by $n_specs update specs"
-  else
-    bad "versions.mk pin(s) with no UPDATE_SPECS entry:${missing} — check-updates emits NO line for these (not even '?') and the weekly bumper inherits the blind spot; add an UPDATE_SPECS line in makefile/Makefile"
-  fi
-}
-
 check_go_gopls_coupling() {
   hdr "gopls <-> Go toolchain floor"
   local gov goplsv floor
@@ -989,7 +1144,7 @@ check_go_gopls_coupling() {
   if [ "$(printf '%s\n%s\n' "$floor" "$gov" | sort -V | tail -1)" = "$gov" ]; then
     ok "gopls $goplsv needs go >= $floor; pinned go is $gov"
   else
-    bad "gopls $goplsv requires go >= $floor but tools.go (config.dev.toml) is $gov — \`make tools\` would fail on gopls, leaving it stale or absent; bump both together"
+    bad "gopls $goplsv requires go >= $floor but tools.go (config.dev.toml) is $gov — \`mise install\` would fail on gopls, leaving it stale or absent; bump both together"
   fi
 }
 
@@ -1026,13 +1181,13 @@ check_ps_variable_drive_refs
 check_sentinels
 check_tools_block
 check_mise_config_files
-check_sweep_vs_make
+check_vars_pin_coverage
+check_bootstrap_config
 check_lsp_plugin
 check_chezmoiignore_targets
 check_completion_parity
 check_warp_guards
 check_zellij_config
-check_update_spec_coverage
 check_go_gopls_coupling
 check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling

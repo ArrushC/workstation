@@ -38,10 +38,11 @@ fi
 export EDITOR="hx"
 export VISUAL="hx"
 {{ if and (hasKey . "group") (eq .group "dev_machine") }}
-# vcpkg (Microsoft C/C++ package manager) — dev_machine only. `make vcpkg`
-# clones + bootstraps it into this dir (= $VCPKG_ROOT) and symlinks the `vcpkg`
-# binary onto PATH. KEEP IN SYNC with VCPKG_ROOT_DIR in makefile/Makefile.
-export VCPKG_ROOT="/usr/local/share/vcpkg"
+# vcpkg (Microsoft C/C++ package manager) — dev_machine only. `mise run vcpkg`
+# (tasks/vcpkg) clones + bootstraps it into this dir (= $VCPKG_ROOT) and
+# symlinks the `vcpkg` binary onto PATH. KEEP IN SYNC with tasks/vcpkg's
+# vroot=.
+export VCPKG_ROOT="$HOME/.local/share/vcpkg"
 {{ end }}
 export PAGER="less"
 # Colorized man pages via bat when available; plain less otherwise.
@@ -219,7 +220,7 @@ if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
     printf '\e]133;C\a'
     # Indeterminate taskbar progress for curated long-runners.
     case "${1%% *}" in
-      make | cza | czu | dnf | cargo | npm | uv) printf '\e]9;4;3;0\a' ;;
+      make | mise | cza | czu | dnf | cargo | npm | uv) printf '\e]9;4;3;0\a' ;;
       git)
         case "$1" in
           git\ push* | git\ pull* | git\ fetch* | git\ clone*) printf '\e]9;4;3;0\a' ;;
@@ -490,13 +491,17 @@ alias czs='chezmoi status'
 alias czt='chezit'
 
 # --- Aliases — web admin services (dev_machine only) -------------------------
-# Quick health-check / log-tail / restart shortcuts for the Dozzle + Cockpit
-# services provisioned by `make dozzle-service` / `make cockpit-service`. On
-# prod_machine hosts these target non-existent units; systemctl prints a
-# "not found" error harmlessly. Keeping the aliases everywhere for parity.
-alias dozzle-status='systemctl status dozzle.service'
-alias dozzle-logs='journalctl -u dozzle.service -f'
-alias dozzle-restart='sudo systemctl restart dozzle.service'
+# Quick health-check / log-tail / restart shortcuts for Dozzle + Cockpit.
+# Dozzle is a docker-compose project under /etc/dozzle (config.native.toml
+# [bootstrap.compose.dozzle]) — no sudo: native-post-packages puts the user in
+# the docker group and the compose file is root-owned 0644. Cockpit stays a
+# systemd service (config.native.toml [bootstrap.services]). On prod_machine
+# hosts these target things that don't exist there (no docker, no
+# cockpit.socket); the commands just fail harmlessly. Keeping the aliases
+# everywhere for parity.
+alias dozzle-status='docker compose -f /etc/dozzle/compose.yaml ps'
+alias dozzle-logs='docker compose -f /etc/dozzle/compose.yaml logs -f'
+alias dozzle-restart='docker compose -f /etc/dozzle/compose.yaml restart'
 alias cockpit-status='systemctl status cockpit.socket'
 
 # --- Functions ---------------------------------------------------------------

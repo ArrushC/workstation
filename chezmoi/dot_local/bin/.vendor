@@ -25,6 +25,6 @@ files:          executable_batpipe  (prebuilt standalone bin/batpipe from the re
 note:           Leading-dot filename → chezmoi-ignored; provenance only, never deployed.
                 Deploys 0755 to ~/.local/bin/batpipe (executable_ prefix); wired as the less LESSOPEN
                 preprocessor via `eval "$(batpipe)"` in dot_zshrc.tmpl + dot_bashrc.tmpl.
-                No versions.mk entry — pinned only here (not coupled to BAT_VERSION).
+                No config.toml [vars] entry — pinned only here (not coupled to BAT_VERSION).
                 Bump: re-download the release zip, replace executable_batpipe with bin/batpipe,
                 RE-APPLY the local-patch above, then refresh release + asset-sha256 + both file-sha256 here.

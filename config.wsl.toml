@@ -1,0 +1,8 @@
+# ~/.config/mise/config.wsl.toml — WSL dev host state (MISE_ENV token `wsl`).
+# /etc/wsl.conf is read by the Windows side on distro start: after a change run
+# `wsl --shutdown` from a Windows terminal (restarts every distro).
+[bootstrap.files."/etc/wsl.conf"]
+source = "configs/wsl/wsl.conf"
+owner = "root"
+group = "root"
+mode = "0644"

@@ -7,14 +7,21 @@
 # sudo) withholds the idempotency marker, reports "legacy sweep incomplete",
 # still exits 0, and never touches /usr/local (no-sudo hosts skip it entirely
 # — prod never installed there). (6) a fully-writable ~/.local/bin sweep with
-# no sudo completes, writes the marker, and reports "already done" on the next
-# run — host-independent, since /usr/local (which this real dev box's own
-# leftover root-owned installs would otherwise poison) is out of the walk.
+# no sudo completes, writes both PR1 + PR2 markers, and reports "already done"
+# on the next run — host-independent, since /usr/local (which this real dev
+# box's own leftover root-owned installs would otherwise poison) is out of the
+# walk; the PR2 half also fully removes the pre-mise stamps dir.
 # tasks/verify-tools: (5) a failing `mise bin-paths` exits 1 with the failure
 # message instead of silently reporting zero binaries.
+# mise-install.sh: (9) an unreadable `tools.node` declaration must force the
+# node reinstall and write NO marker, never the empty-input cksum (a constant
+# marker name froze the whole re-run mechanism).
 # tasks/migrate-legacy: (7) sudo present but requiring a password (a
 # non-interactive fleet run) prints exactly one "sudo needs a password"
-# line, withholds the marker, exits 0, and never attempts an /usr/local path.
+# line, withholds both markers, exits 0, and never attempts an /usr/local or
+# /etc/profile.d path. (8) a PR1 marker left over from before this PR2 second
+# block existed must not block the PR2 sweep — only a block's OWN marker may
+# skip it.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -27,7 +34,7 @@ case "$1 ${2:-}" in
 "where node") [ -f "$FAKE_NODE" ] && exit 0 || exit 1 ;;
 "install --force") echo "install --force $3" >>"$log"; exit 0 ;;
 "install ") echo "install" >>"$log"; : >"$FAKE_NODE"; exit 0 ;;
-"config get") printf '%s\n' "$FAKE_DECL"; exit 0 ;;
+"config get") [ -n "${FAKE_DECL_FAIL:-}" ] && { echo "mise ERROR Key not found: tools.node" >&2; exit 1; }; printf '%s\n' "$FAKE_DECL"; exit 0 ;;
 "prune "|"reshim ") exit 0 ;;
 esac
 echo "fake mise: unexpected args: $*" >&2; exit 99
@@ -104,8 +111,9 @@ HOME="$S" XDG_STATE_HOME="$S/.local/state" MISE_ENV=linux bash "$root/tasks/migr
 [ -f "$S/.local/bin/mise" ] || fail "migrate-legacy (writable sweep): mise was removed"
 [ -f "$S/.local/bin/wpy" ] || fail "migrate-legacy (writable sweep): wpy was removed"
 [ -f "$S/.local/share/workstation-install/fzf-0.74.3.done" ] && fail "migrate-legacy (writable sweep): fzf stamp not removed"
-[ -f "$S/.local/share/workstation-install/python-env-3.14.7-1.done" ] || fail "migrate-legacy (writable sweep): python-env stamp removed"
-[ -f "$S/.local/state/workstation/legacy-tools-swept" ] || fail "migrate-legacy (writable sweep): marker not written"
+[ -e "$S/.local/share/workstation-install" ] && fail "migrate-legacy (writable sweep): old stamps dir not removed by the PR2 sweep (superseded — tasks/{python-env,fonts,vcpkg} stamp \$state now)"
+[ -f "$S/.local/state/workstation/legacy-tools-swept" ] || fail "migrate-legacy (writable sweep): PR1 marker not written"
+[ -f "$S/.local/state/workstation/legacy-host-swept" ] || fail "migrate-legacy (writable sweep): PR2 marker not written"
 out6b="$(HOME="$S" XDG_STATE_HOME="$S/.local/state" MISE_ENV=linux bash "$root/tasks/migrate-legacy" 2>&1)"
 printf '%s\n' "$out6b" | grep -q 'already done' || fail "migrate-legacy (writable sweep): second run did not print 'already done'"
 
@@ -133,4 +141,40 @@ printf '%s\n' "$out7" | grep -q 'no sudo on this host' && fail "migrate-legacy (
 printf '%s\n' "$out7" | grep -E '^  (- removed|! failed to remove|! cannot remove) ' | grep -q '/usr/local' &&
   fail "migrate-legacy (sudo needs password): touched /usr/local despite the password prompt"
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; migrate-legacy withholds its marker on a failed removal, skips /usr/local entirely with no sudo, sweeps + marks-done cleanly when everything is writable, and never blocks on a sudo password prompt; verify-tools fails loudly on a broken mise bin-paths"
+# 8. migrate-legacy: a PR1 marker left over from before the PR2 second block
+# existed must not block the PR2 sweep — only a block's OWN marker skips it.
+# No /usr/local, /etc or systemd interaction: MISE_ENV=linux (no host token,
+# no sudo) and no pueued unit file in this sandbox, so this stays fully
+# offline like every other case above.
+M="$T/premarked-home"
+mkdir -p "$M/.local/state/workstation" "$M/.local/share/workstation-install"
+: >"$M/.local/state/workstation/legacy-tools-swept"
+: >"$M/.local/share/workstation-install/python-env-3.14.7-1.done"
+out8="$(HOME="$M" XDG_STATE_HOME="$M/.local/state" MISE_ENV=linux bash "$root/tasks/migrate-legacy" 2>&1)"
+printf '%s\n' "$out8" | grep -q 'legacy sweep already done' || fail "migrate-legacy (PR1 pre-marked): PR1 half did not report already-done"
+[ -f "$M/.local/state/workstation/legacy-host-swept" ] || fail "migrate-legacy (PR1 pre-marked): PR2 sweep did not run despite the PR1 marker"
+[ -e "$M/.local/share/workstation-install" ] && fail "migrate-legacy (PR1 pre-marked): old stamps dir not removed by the PR2 sweep"
+
+# 9. mise-install.sh: an UNREADABLE node declaration (the real failure mode —
+# `mise config get tools.node` without `-f` reads only the highest-precedence
+# config file, which since PR2 declares no tools, so it errors) must NOT settle
+# on the empty-input cksum. Before the fix that constant marker froze the
+# mechanism: node would never force-reinstall again on a postinstall change.
+: >"$FAKE_LOG"
+rm -f "$XDG_STATE_HOME/workstation"/node-postinstall.*
+: >"$FAKE_NODE" # node already installed
+FAKE_DECL_FAIL=1 bash "$root/scripts/lib/mise-install.sh" >/dev/null 2>&1
+[ "$(grep -c 'install --force node' "$FAKE_LOG")" = 1 ] ||
+  fail "unreadable declaration must force the node reinstall (never assume unchanged)"
+empty_sum="$(printf '' | cksum | cut -d' ' -f1)"
+[ -e "$XDG_STATE_HOME/workstation/node-postinstall.$empty_sum" ] &&
+  fail "unreadable declaration wrote the empty-cksum marker ($empty_sum) — the mechanism would freeze"
+ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null 2>&1 &&
+  fail "unreadable declaration must write no marker at all, so the next run retries"
+# and it recovers: a readable declaration on the next run writes a real marker
+: >"$FAKE_LOG"
+bash "$root/scripts/lib/mise-install.sh" >/dev/null
+ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null ||
+  fail "a readable declaration after a failure must write the marker again"
+
+echo "PASS: mise-install.sh installs/forces-node-once-on-change; migrate-legacy withholds its markers on a failed removal, skips /usr/local+/etc/profile.d entirely with no sudo, sweeps + marks-done cleanly (both PR1 and PR2) when everything is writable, never blocks on a sudo password prompt, and runs its PR2 half even when only the PR1 marker pre-exists; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker"

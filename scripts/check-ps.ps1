@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # check-ps.ps1 -- run PSScriptAnalyzer over the repo's PowerShell scripts.
-# Single source for `make ps-lint` and the CI `powershell` job. Exits non-zero
+# Single source for `mise run ps-lint` and the CI `powershell` job. Exits non-zero
 # if any finding at Warning or Error remains after PSScriptAnalyzerSettings.psd1.
 $ErrorActionPreference = 'Stop'
 

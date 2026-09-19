@@ -34,7 +34,7 @@ $env.config.show_banner = false
 # current directory (native Windows paths — no translation needed), and the
 # hooks emit ConEmu OSC 9;4 taskbar progress (indeterminate while a curated
 # long-runner executes; cleared at the next prompt — the same curated list as
-# the zsh side: make/cza/czu/dnf/cargo/npm/uv + git push/pull/fetch/clone).
+# the zsh side: make/mise/cza/czu/dnf/cargo/npm/uv + git push/pull/fetch/clone).
 # Gated on WT_SESSION so nothing is emitted under any other host terminal.
 # Escapes: nu has no \a — use \u{1b} (ESC) and \u{07} (BEL).
 # PRE-1.0 CHURN: hooks + shell_integration are churn surfaces — re-check on
@@ -47,7 +47,7 @@ if "WT_SESSION" in $env {
     $env.config.hooks.pre_execution = (
         $env.config.hooks.pre_execution? | default [] | append {||
             let cmd = (commandline | str trim)
-            let simple = ($cmd | parse -r '^(?:make|cza|czu|dnf|cargo|npm|uv)(?:\s|$)' | is-not-empty)
+            let simple = ($cmd | parse -r '^(?:make|mise|cza|czu|dnf|cargo|npm|uv)(?:\s|$)' | is-not-empty)
             let git_net = ($cmd | parse -r '^git\s+(?:push|pull|fetch|clone)(?:\s|$)' | is-not-empty)
             if ($simple or $git_net) {
                 print -n "\u{1b}]9;4;3;0\u{07}"

@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 # =============================================================================
-# bootstrap.sh — workstation setup (Make seed)
+# bootstrap.sh — workstation setup (mise seed)
 #
 # Exactly one of --dev or --prod is required — it picks both the hosts.conf
-# group this host registers as AND the scope `make provision` runs in:
+# group this host registers as AND the MISE_ENV token set `mise bootstrap`
+# loads (scripts/lib/mise-env.sh maps MACHINE_TYPE → MISE_ENV):
 #
-#   DEV  (host you own, sudo, system-wide install to /usr/local/bin):
+#   DEV  (host you own, sudo for system packages + /etc files; tools are user-level):
 #     ./bootstrap.sh --dev
 #
 #   PROD (host you don't fully own, no sudo, install to ~/.local/bin):
 #     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
 #     or: ./bootstrap.sh --prod
 #
-# The scope-aware facts (DEST, SUDO, HAS_SUDO, INSTALL_PACKAGES) are
-# resolved from MODE=dev|prod by makefile/scope.mk. Same resolution
-# happens whether you bootstrap locally or update remotely via
-# scripts/update-hosts.sh.
+# MISE_ENV picks which config*.toml [bootstrap.*] tables load (dnf packages,
+# /etc files, services, compose, repos, hooks) — dev hosts load host state
+# that needs sudo, prod hosts load none. Same resolution happens whether you
+# bootstrap locally or update remotely via scripts/update-hosts.sh.
 #
 # REINSTALL — wipe the cloned repo + chezmoi config, then re-bootstrap fresh.
 # Does NOT remove installed tools or deployed dotfiles (those are idempotent
@@ -30,9 +31,10 @@
 #     ./bootstrap.sh --dev --doctor              # health: tools, services, repo, chezmoi
 #     ./bootstrap.sh --dev --check-for-updates   # repo first, then pins vs upstream tags
 #
-# Per the thin-seed rule, all per-tool knowledge stays in makefile/ — these
-# modes front `make doctor` / `make check-updates` with the repo-level checks
-# (prereqs, git branch/ahead/behind/dirty, chezmoi init + drift, login shell).
+# This script owns only the repo-level checks (prereqs, git branch/
+# ahead/behind/dirty, chezmoi init + drift, login shell) — these modes front
+# `mise run health` / `mise run check-updates`, which carry ALL per-tool and
+# per-host-state knowledge (tasks/, config*.toml).
 #
 # PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME, and
 # GIT_USER_EMAIL before running. The token is used for both the bootstrap.sh
@@ -46,22 +48,30 @@
 #     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
 # Flow (both modes):
-#   1. preflight             — check curl/git/make/tar/iproute
+#   1. preflight             — check curl/git/tar/iproute
+#   1a. do_reinstall (opt.)  — wipe the cloned repo + chezmoi config
+#                              (--reinstall); then falls through to a fresh run
 #   1.5. relocate_repo       — one-time move of a pre-2026-09 checkout from
 #                              ~/.local/share/chezmoi to ~/.config/mise (idempotent)
 #   2. clone repo            — into ~/.config/mise (or git pull if present)
 #   2.5. install_mise        — the pinned mise binary into ~/.local/bin
-#                              (sha256-verified); mise then installs every other
-#                              tool from config*.toml, and MISE_ENV is exported
+#                              (sha256-verified)
+#   2.6. MISE_ENV             — resolved from MACHINE_TYPE via
+#                              scripts/lib/mise-env.sh and exported
 #   3. self_register         — add this host to hosts.conf
 #                              (auto-skipped inside WSL — see is_wsl below)
-#   4. run_make              — `make MODE=<dev|prod> provision` inside makefile/
-#                              (packages + tools + shell + dotfiles in one pass)
+#   3.5. user-manager env    — `systemctl --user set-environment MISE_ENV=…`
+#                              so the live systemd user manager sees it too
+#                              (the pueued shim needs MISE_ENV to resolve mise)
+#   4. mise install (tools)  — scripts/lib/mise-install.sh installs every
+#                              tool the active MISE_ENV declares
+#   4.5. mise bootstrap      — packages, /etc files, services, compose,
+#                              repos, tools gate, then the `bootstrap` task
 #   4b. ensure_chezmoi_initialized — `chezmoi init --apply` interactively if
-#                              ~/.config/chezmoi/chezmoi.toml is missing. The
-#                              `chezmoi update` invoked by makefile/dotfiles.mk
-#                              can't prompt (no TTY in make recipes), so this
-#                              closes the first-run gap with stdin from /dev/tty.
+#                              ~/.config/chezmoi/chezmoi.toml is missing.
+#                              mise bootstrap has no TTY for interactive
+#                              prompts, so this closes the first-run gap with
+#                              stdin from /dev/tty.
 #   4c. set_default_shell    — `sudo usermod -s "$(command -v zsh)" "$USER"`
 #                              on --dev only. The chezmoi-tracked rc lives at
 #                              ~/.zshrc; we switch the login shell so new
@@ -77,11 +87,10 @@
 # short-circuits self_register so hosts.conf is never touched. The
 # end-of-bootstrap copy-id tip is also suppressed.
 #
-# Tool versions, URLs, dnf packages, PATH wiring, chezmoi orchestration —
-# everything lives under makefile/ (versions.mk, packages.mk, shell.mk,
-# dotfiles.mk, lib/*.sh, and the `tools` target in Makefile itself — mise
-# installs from config*.toml at the repo root). bootstrap.sh has no
-# per-tool knowledge.
+# Tool versions, dnf packages, /etc files, services, PATH wiring, chezmoi
+# orchestration — everything lives in config*.toml [bootstrap.*] tables and
+# global mise tasks under tasks/ (discovered from this checkout, mise's
+# global config dir). bootstrap.sh has no per-tool knowledge.
 # =============================================================================
 
 set -euo pipefail
@@ -162,7 +171,7 @@ while [[ $# -gt 0 ]]; do
     fail "--full was removed.
 
 Use one of the new mutually-exclusive flags:
-  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + system packages
+  ./bootstrap.sh --dev      # Host you own        — sudo for system packages + /etc files; tools are user-level
   ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
 
 Run ./bootstrap.sh --help for the full flag list."
@@ -180,10 +189,9 @@ Run ./bootstrap.sh --help for the full flag list."
 Usage: ./bootstrap.sh (--dev | --prod) [flags]
 
 Required (exactly one):
-  --dev         Host you own. Sudo available. Installs system-wide to
-                /usr/local/bin and pulls system packages via the OS package
-                manager (dnf on RHEL/Fedora today). Registers as group
-                dev_machine.
+  --dev         Host you own. Sudo available for system packages + /etc
+                files (dnf on RHEL/Fedora today); tools install user-level.
+                Registers as group dev_machine.
   --prod        Host you don't fully own. No sudo. Installs user-wide to
                 ~/.local/bin. Registers as group prod_machine.
 
@@ -195,11 +203,11 @@ Optional flags:
   --doctor      Read-only health report, then exit (provisions nothing):
                 prereqs, repo git state (branch, ahead/behind, dirty),
                 chezmoi init + drift, login shell, then every managed
-                tool/service/stamp via 'make doctor'.
+                tool/host-state/service via 'mise run health'.
   --check-for-updates
                 Read-only update scan, then exit: the workstation repo
                 first (fetch + commits-behind), then every pinned tool
-                against its upstream release tags via 'make check-updates'
+                against its upstream release tags via 'mise run check-updates'
                 (git ls-remote — no GitHub API, no rate limits).
                 --checkforupdates is accepted as an alias.
   -h, --help    Show this message.
@@ -214,7 +222,7 @@ if [[ -z "$MACHINE_TYPE" ]]; then
   fail "Missing required flag: --dev or --prod.
 
 Pick one based on the host you're bootstrapping:
-  ./bootstrap.sh --dev      # Host you own        — sudo, /usr/local/bin + system packages
+  ./bootstrap.sh --dev      # Host you own        — sudo for system packages + /etc files; tools are user-level
   ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
 
 Curl-pipe form (private repo with token):
@@ -250,7 +258,7 @@ do_reinstall() {
   echo "    - $HOME/.config/chezmoi/    (chezmoi config + cached init data)"
   echo ""
   echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
-  echo "    - Installed tools in ~/.local/bin or /usr/local/bin"
+  echo "    - Installed tools in ~/.local/bin (tools are user-level since PR1)"
   echo "    - dnf packages, SSH keys"
   echo "    - Deployed dotfiles in \$HOME (chezmoi will re-apply over them)"
   echo ""
@@ -323,15 +331,14 @@ preflight() {
   local missing=()
   command -v curl &>/dev/null || missing+=("curl")
   command -v git &>/dev/null || missing+=("git")
-  command -v make &>/dev/null || missing+=("make (drives makefile/Makefile)")
   command -v tar &>/dev/null || missing+=("tar (for archive extraction)")
   command -v ip &>/dev/null || missing+=("iproute (for self-registration)")
 
   if ((${#missing[@]} > 0)); then
     fail "Missing required prerequisites: ${missing[*]}
 Install via your distro's package manager, e.g.
-  RHEL/Fedora:   sudo dnf install curl git make tar iproute
-  Debian/Ubuntu: sudo apt install curl git make tar iproute2"
+  RHEL/Fedora:   sudo dnf install curl git tar iproute
+  Debian/Ubuntu: sudo apt install curl git tar iproute2"
   fi
 
   ok "Prerequisites OK"
@@ -399,7 +406,7 @@ self_register() {
   fi
 
   log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
-  # Any make/chezmoi step that reads hosts.conf downstream sees the current
+  # Any mise/chezmoi step that reads hosts.conf downstream sees the current
   # inventory from the single --add pass; the Windows-side Windows Terminal
   # SSH profiles (fragment) regenerate from it on the next bootstrap.ps1 run.
   bash "$manage_script" --add \
@@ -432,42 +439,48 @@ install_mise() {
 }
 
 # =============================================================================
-# 3. RUN MAKE — invoke `make MODE=<dev|prod> provision` inside makefile/.
-#
-# The Makefile resolves DEST/SUDO/HAS_SUDO/INSTALL_PACKAGES from MODE (see
-# makefile/scope.mk) and then runs the equivalent of every old Ansible task
-# in one parallel pass: dnf packages, PATH wiring, tool installs, chezmoi
-# update. Sudo is prefixed onto individual recipe lines that need it; make
-# itself runs as the dev user end-to-end, so stamps stay under $HOME and
-# pip/claude never accidentally get sudo'd.
+# 3.5/4/4.5. RUN BOOTSTRAP — carry MISE_ENV onto the live systemd user
+# manager, retire the chezmoi-era pueued unit, install tools, then run
+# `mise bootstrap` (packages, /etc files, services, compose, repos, tools
+# gate, then the `bootstrap` task itself). Sudo (dev only) is scoped to the
+# dnf batch and /etc files inside mise's own elevation — this script never
+# runs sudo directly.
 # =============================================================================
-run_make() {
-  cd "$REPO_DIR/makefile"
-  log "Running 'make MODE=${MACHINE_TYPE} provision'..."
+run_bootstrap() {
+  # The user manager must carry MISE_ENV for the pueued shim (dev.mise.pueued.service);
+  # environment.d covers the next login, this covers the live manager.
+  if systemctl --user show-environment >/dev/null 2>&1; then
+    systemctl --user set-environment "MISE_ENV=$MISE_ENV" || warn "could not set MISE_ENV on the systemd user manager"
+  fi
+  # chezmoi-era pueued unit: retire BEFORE mise's services phase starts dev.mise.pueued (same daemon/socket).
+  if [[ -f "$HOME/.config/systemd/user/pueued.service" ]]; then
+    systemctl --user disable --now pueued.service 2>/dev/null || true
+    rm -f "$HOME/.config/systemd/user/pueued.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    ok "retired the chezmoi-era pueued.service (mise owns dev.mise.pueued.service now)"
+  fi
+  log "mise install (tools) — MISE_ENV=$MISE_ENV"
+  "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
+  log "mise bootstrap — packages, /etc files, services, compose, repos, tools gate, then the bootstrap task"
   if [[ "$MACHINE_TYPE" == "dev" ]]; then
-    log "Dev mode — sudo may prompt once early for dnf + /usr/local/bin writes"
+    log "Dev mode — sudo will prompt for the dnf batch and /etc files (fleet runs on dev hosts are interactive by design)"
   fi
-
-  if ! make MODE="$MACHINE_TYPE" provision; then
-    fail "make provision failed — see the output above for the failing target."
-  fi
-
-  ok "make provision complete"
+  mise bootstrap --yes || fail "mise bootstrap failed — see the failing phase above; re-run after fixing (idempotent)"
+  ok "mise bootstrap complete"
 }
 
 # =============================================================================
 # 4.5. ENSURE CHEZMOI IS INITIALIZED — run `chezmoi init --apply` once.
 #
-# `make provision` installs the chezmoi binary but can't run `chezmoi init`
-# itself: `.chezmoi.toml.tmpl` calls promptStringOnce for name/email, and
-# make recipes have no TTY for the prompts. So makefile/dotfiles.mk runs
-# only `chezmoi update` (pull + apply), gated on the config file's existence.
+# `mise bootstrap` installs the chezmoi binary (a mise tool pin) but can't run
+# `chezmoi init` itself: `.chezmoi.toml.tmpl` calls promptStringOnce for
+# name/email, and mise's hooks have no TTY for the prompts.
 #
 # That leaves a first-run gap: chezmoi config doesn't exist yet, so the
-# update task is skipped, and the dotfiles never land. This function closes
-# the gap by running `chezmoi init --apply` interactively after `make
-# provision` returns, with stdin explicitly redirected from /dev/tty so
-# prompts also work under `curl … | bash` (where script stdin is the curl pipe).
+# dotfiles never land on their own. This function closes the gap by running
+# `chezmoi init --apply` interactively after mise bootstrap returns, with
+# stdin explicitly redirected from /dev/tty so prompts also work under
+# `curl … | bash` (where script stdin is the curl pipe).
 #
 # Idempotent: if the config file already exists, returns immediately.
 # =============================================================================
@@ -475,7 +488,7 @@ ensure_chezmoi_initialized() {
   local chezmoi_bin
   chezmoi_bin=$(command -v chezmoi || true)
   if [[ -z "$chezmoi_bin" ]]; then
-    warn "chezmoi binary not on PATH after 'make provision' — dotfiles not applied."
+    warn "chezmoi binary not on PATH after mise bootstrap — dotfiles not applied."
     warn "Run manually: chezmoi init --apply --source $CHEZMOI_SOURCE"
     return 0
   fi
@@ -486,11 +499,16 @@ ensure_chezmoi_initialized() {
     return 0
   fi
 
-  if [[ ! -r /dev/tty ]]; then
+  # `[[ ! -r /dev/tty ]]` is an access(2) test: it returns true (readable)
+  # even under `ssh host 'cmd'` with no controlling terminal, so it never
+  # actually detects "no TTY" — open the device instead, which fails for
+  # real when there is none.
+  if ! exec 3</dev/tty 2>/dev/null; then
     warn "No TTY — skipping chezmoi init. Run interactively after this script:"
     warn "  $chezmoi_bin init --apply --source $CHEZMOI_SOURCE"
     return 0
   fi
+  exec 3<&-
 
   log "First-time chezmoi setup — prompting for name/email..."
   # WORKSTATION_GROUP feeds the `group` field in chezmoi.toml.tmpl's [data]
@@ -602,7 +620,7 @@ set_default_shell() {
 
 # =============================================================================
 # 5. PUSH HOST CHANGES — commit hosts.conf, push upstream.
-#    Warn-don't-fail: `make provision` already succeeded by now, so we never abort here.
+#    Warn-don't-fail: mise bootstrap already succeeded by now, so we never abort here.
 # =============================================================================
 push_host_changes() {
   cd "$REPO_DIR"
@@ -660,8 +678,8 @@ push_host_changes() {
 # --check-for-updates). Both exit before the provisioning flow starts:
 # nothing is cloned, installed, registered, or pushed. This script owns only
 # the repo-level checks (prereqs, git state, chezmoi init + drift, login
-# shell) and delegates ALL per-tool knowledge to `make doctor` /
-# `make check-updates` in makefile/ — the thin-seed invariant holds.
+# shell) and delegates ALL per-tool and host-state knowledge to
+# `mise run health` / `mise run check-updates`.
 # =============================================================================
 require_repo() {
   if [[ ! -d "$REPO_DIR/.git" ]]; then
@@ -724,7 +742,7 @@ do_doctor() {
   # Same prereq list as preflight, but report-all instead of hard-fail.
   log "Prerequisites"
   local cmd
-  for cmd in curl git make tar ip; do
+  for cmd in curl git tar ip; do
     if command -v "$cmd" &>/dev/null; then
       ok "$cmd"
     else
@@ -754,7 +772,7 @@ do_doctor() {
       warn "not initialized — re-run ./bootstrap.sh --${MACHINE_TYPE} (runs chezmoi init --apply)"
     fi
   else
-    warn "chezmoi not on PATH — install: make -C $REPO_DIR/makefile chezmoi MODE=${MACHINE_TYPE}"
+    warn "chezmoi not on PATH — install: mise install chezmoi"
   fi
   echo ""
 
@@ -775,8 +793,9 @@ do_doctor() {
   if command -v mise >/dev/null 2>&1; then ok "mise $(mise --version 2>/dev/null | awk '{print $1}') on PATH ($(command -v mise)) — pinned $MISE_VERSION"; else warn "mise not on PATH — re-run ./bootstrap.sh --${MACHINE_TYPE}"; fi
   echo ""
 
-  log "Tools, services, stamps — make doctor MODE=${MACHINE_TYPE}"
-  make -C "$REPO_DIR/makefile" --no-print-directory MODE="$MACHINE_TYPE" doctor
+  log "Tools, host state, services — mise run health"
+  mise run health
+  exit $?
 }
 
 do_check_updates() {
@@ -787,11 +806,11 @@ do_check_updates() {
   echo ""
 
   report_repo_state
-  echo "    (tool pins live in makefile/versions.mk of THIS clone — if the repo is behind,"
-  echo "     pull first so the pins you're comparing are current)"
+  echo "    (tool pins live in config*.toml + config.toml [vars] of THIS clone — if the repo"
+  echo "     is behind, pull first so the pins you're comparing are current)"
   echo ""
 
-  make -C "$REPO_DIR/makefile" --no-print-directory MODE="$MACHINE_TYPE" check-updates
+  mise run check-updates
 }
 
 # =============================================================================
@@ -847,7 +866,7 @@ else
   if [[ -n "$GH_HEADER_VAL" ]]; then
     git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   fi
-  # A failed pull means we'd run make against a stale-or-broken tree —
+  # A failed pull means we'd run mise bootstrap against a stale-or-broken tree —
   # better to bail out and let the user inspect.
   if ! git -C "$REPO_DIR" pull --ff-only; then
     fail "git pull --ff-only failed in $REPO_DIR.
@@ -866,7 +885,7 @@ export MISE_ENV
 log "mise environment: MISE_ENV=$MISE_ENV"
 
 self_register
-run_make
+run_bootstrap
 ensure_chezmoi_initialized
 refresh_chezmoi_config
 check_age_identity
@@ -875,9 +894,9 @@ push_host_changes
 
 # --- ccstatusline setup (dev only) -----------------------------------------
 # Interactive prompt for the Claude Code statusline. Re-runnable any time
-# via `make -C makefile claude-statusline MODE=dev` from the repo root.
-if [ "$MACHINE_TYPE" = "dev" ]; then
-  make -C "$(dirname "$0")/makefile" claude-statusline MODE=dev || true
+# via `mise run statusline` from anywhere.
+if [[ "$MACHINE_TYPE" == dev && -t 0 ]]; then
+  mise run statusline || true
 fi
 
 echo ""
@@ -908,5 +927,6 @@ else
 fi
 if [ "$MACHINE_TYPE" = "dev" ]; then
   echo -e "Re-configure the Claude Code statusline any time:"
-  echo -e "  ${YELLOW}make -C makefile claude-statusline MODE=dev${RESET}"
+  echo -e "  ${YELLOW}mise run statusline${RESET}"
 fi
+echo -e "Health check any time: ${YELLOW}mise run health${RESET}"

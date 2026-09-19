@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+#MISE description="Read-only health report: bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, dev extras, legacy leftovers"
+#MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
+# Replaces makefile/lib/doctor.sh + the Make `doctor` target. Ports its
+# hdr/row_ok/row_warn/row_bad/row_skip report shape. READ-ONLY: no installs,
+# no sudo, but (unlike doctor.sh) exits 1 if any row_bad fired — this is the
+# gate CI / a human runs post-bootstrap, not just a report.
+# Deliberately no `-e`: one failing row (row_bad) must not abort the report —
+# every remaining check still has to run so the summary counts are complete.
+set -uo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+env_has() {
+  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+
+# A python with `json` for parsing `mise bootstrap status --json` (below).
+# wpy is python-env's launcher (both scopes); mise's own python and the system
+# interpreter are the fallbacks. Empty when none exists — the one caller treats
+# that as "cannot classify" and fails the row rather than passing it.
+PY=""
+for _py in "$HOME/.local/bin/wpy" python3 python; do
+  if command -v "$_py" >/dev/null 2>&1 && "$_py" -c 'import json' >/dev/null 2>&1; then
+    PY="$_py"
+    break
+  fi
+done
+
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+RED=$'\033[0;31m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
+
+n_ok=0
+n_warn=0
+n_bad=0
+n_skip=0
+
+hdr() { printf '%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"; }
+row_ok() {
+  printf ' %s✓%s %-16s %s\n' "$GREEN" "$RESET" "$1" "$2"
+  n_ok=$((n_ok + 1))
+}
+row_warn() {
+  printf ' %s!%s %-16s %s\n' "$YELLOW" "$RESET" "$1" "$2"
+  n_warn=$((n_warn + 1))
+}
+row_bad() {
+  printf ' %s✗%s %-16s %s\n' "$RED" "$RESET" "$1" "$2"
+  n_bad=$((n_bad + 1))
+}
+row_skip() {
+  printf ' · %-16s %s\n' "$1" "$2"
+  n_skip=$((n_skip + 1))
+}
+
+mode="prod"
+env_has dev && mode="dev"
+
+hdr "workstation health — MISE_ENV=${MISE_ENV:-unset} · read-only"
+echo ""
+
+# 1. mise bootstrap status — packages/files/services/compose/repos per origin
+# file, one host-state gate over everything [bootstrap.*] owns.
+hdr "bootstrap state (mise bootstrap status --missing)"
+bootstrap_out=$(mise bootstrap status --missing 2>&1)
+bootstrap_rc=$?
+printf '%s\n' "$bootstrap_out" | sed 's/^/   /'
+if [ "$bootstrap_rc" -eq 0 ]; then
+  row_ok "bootstrap state" "current"
+else
+  # Drift. One case is NOT a problem: a host with no systemd user manager (a
+  # prod box reached without a logind session) reports the pueued user service
+  # as `unavailable: systemd user manager not available`, yet `mise bootstrap`
+  # itself skips that service cleanly and exits 0 — so the advice below could
+  # never clear the row. Classify from `--json`'s exact state/action fields
+  # (never the human table: a suffix match on words like "installed" would
+  # mask a row reading "not installed"). No JSON-capable python => fall back
+  # to failing the row, which is the safe direction.
+  bootstrap_why=$(mise bootstrap status --json 2>/dev/null | "$PY" -c '
+import json, sys
+
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("unparseable")
+    sys.exit(0)
+
+SETTLED_ACTIONS = {"noop", "unchanged"}
+excused, real = [], []
+
+for mgr, info in (d.get("packages") or {}).items():
+    if not info.get("available", True):
+        real.append("package manager %s unavailable" % mgr)
+    for p in info.get("packages") or []:
+        if p.get("state") != "installed":
+            real.append("%s:%s %s" % (mgr, p.get("package"), p.get("state")))
+
+for t in d.get("tools") or []:
+    if not t.get("installed"):
+        real.append("tool %s %s" % (t.get("tool"), t.get("state")))
+
+for key in ("files", "services", "compose", "repos", "accounts", "firewall",
+            "mise_shell_activate", "user_services"):
+    for r in d.get(key) or []:
+        if (r.get("action") or "noop") in SETTLED_ACTIONS:
+            continue
+        name = r.get("name") or (r.get("id") or {}).get("name") or key
+        cur = str(r.get("current") or "")
+        if key == "user_services" and "systemd user manager not available" in cur:
+            excused.append(name)
+        else:
+            real.append("%s %s -> %s" % (name, cur or "?", r.get("action")))
+
+print("real:" + "; ".join(real[:6]) if real else
+      ("excused:" + ", ".join(excused) if excused else "none"))
+' 2>/dev/null)
+  case "$bootstrap_why" in
+  excused:*)
+    row_warn "bootstrap state" "pueued skipped — no systemd user manager on this host (loginctl enable-linger to run it)"
+    ;;
+  none)
+    # --missing said drift, the JSON says everything is settled: trust the
+    # exit code and report it, rather than silently passing.
+    row_bad "bootstrap state" "drift reported by --missing but not visible in --json — inspect: mise bootstrap status"
+    ;;
+  *)
+    row_bad "bootstrap state" "drift — run ./bootstrap.sh --$mode"
+    ;;
+  esac
+fi
+
+# 2. mise-installed tools
+hdr "mise tools"
+missing_tools=$(mise ls --missing 2>/dev/null | awk 'NF {print $1}' | paste -sd' ' -)
+if [ -z "$missing_tools" ]; then
+  row_ok "mise tools" "every declared tool installed"
+else
+  n_missing=$(wc -w <<<"$missing_tools")
+  row_bad "mise tools" "$n_missing missing ($missing_tools) — mise install"
+fi
+echo ""
+
+# 3. MISE_ENV persisted — rc files for future logins/non-interactive shells,
+# plus the LIVE systemd user manager env (only a re-login or a manual
+# set-environment fixes that one, so it's a warn rather than a hard failure).
+hdr "MISE_ENV persisted"
+zshenv_ok=false
+grep -q 'export MISE_ENV=' "$HOME/.zshenv" 2>/dev/null && zshenv_ok=true
+envd_ok=false
+[ -f "$HOME/.config/environment.d/10-mise.conf" ] && envd_ok=true
+if $zshenv_ok && $envd_ok; then
+  row_ok "MISE_ENV rc" "both: ~/.zshenv + ~/.config/environment.d/10-mise.conf"
+else
+  row_bad "MISE_ENV rc" "rc files: ~/.zshenv export=$zshenv_ok environment.d=$envd_ok — chezmoi apply / bootstrap.sh writes both"
+fi
+if systemctl --user show-environment 2>/dev/null | grep -q '^MISE_ENV='; then
+  row_ok "MISE_ENV live" "set in the systemd user manager"
+else
+  row_warn "MISE_ENV live" "not set — re-login or: systemctl --user set-environment MISE_ENV=${MISE_ENV:-...}"
+fi
+echo ""
+
+# 4. pueued — the mise-managed user unit (Task 1), plus a warn for the
+# chezmoi-era unit name if it's still lying around.
+hdr "pueued"
+if systemctl --user is-active --quiet dev.mise.pueued.service 2>/dev/null; then
+  row_ok "pueued" "dev.mise.pueued.service active"
+elif systemctl --user is-failed --quiet dev.mise.pueued.service 2>/dev/null; then
+  row_bad "pueued" "unit failed — run: journalctl --user -u dev.mise.pueued -n 3"
+else
+  row_warn "pueued" "dev.mise.pueued.service not active — mise bootstrap --only services"
+fi
+if [ -f "$HOME/.config/systemd/user/pueued.service" ]; then
+  row_warn "pueued (old unit)" "chezmoi-era unit still present — ./bootstrap.sh retires it"
+fi
+echo ""
+
+# 5. python-env — wpy's own reported version must match the current pin.
+hdr "python-env"
+if [ -x "$HOME/.local/bin/wpy" ]; then
+  wpy_v=$("$HOME/.local/bin/wpy" -c 'import sys;print(sys.version.split()[0])' 2>/dev/null || true)
+  if [ "$wpy_v" = "$PYTHON_VERSION" ]; then
+    row_ok "python-env" "wpy -> CPython $wpy_v"
+  else
+    row_bad "python-env" "wpy reports '${wpy_v:-?}', want $PYTHON_VERSION — mise run python-env"
+  fi
+else
+  row_bad "python-env" "missing: ~/.local/bin/wpy — mise run python-env"
+fi
+echo ""
+
+# 6. zjstatus — both scopes: tasks/bootstrap installs the plugin
+# unconditionally (config.linux.toml, the zellij + zjstatus tools, loads on
+# both dev and prod), so this row must not be gated on dev.
+hdr "zjstatus"
+# Same [PLUGIN DIR] lookup as scripts/lib/zellij-plugin.sh.
+plugin_dir="${ZELLIJ_PLUGIN_DIR:-}"
+if [ -z "$plugin_dir" ] && command -v zellij >/dev/null 2>&1; then
+  plugin_dir=$(timeout 10 zellij setup --check 2>/dev/null | sed -n 's/^\[PLUGIN DIR\]: "\(.*\)"$/\1/p' | head -1 || true)
+fi
+: "${plugin_dir:=$HOME/.local/share/zellij/plugins}"
+if [ -f "$plugin_dir/zjstatus.wasm" ]; then
+  row_ok "zjstatus" "plugin in $plugin_dir"
+else
+  row_bad "zjstatus" "zjstatus.wasm missing from $plugin_dir — mise run bootstrap"
+fi
+echo ""
+
+# 7. dev-only extras
+if env_has dev; then
+  hdr "dev extras"
+  if command -v claude >/dev/null 2>&1; then
+    row_ok "claude" "$(command -v claude)"
+  else
+    row_bad "claude" "not on PATH — mise run bootstrap"
+  fi
+  if [ -x "$HOME/.local/bin/vcpkg" ] && [ -x "$HOME/.local/share/vcpkg/vcpkg" ]; then
+    row_ok "vcpkg" "present: ~/.local/bin/vcpkg -> ~/.local/share/vcpkg/vcpkg"
+  else
+    row_bad "vcpkg" "missing — mise run vcpkg"
+  fi
+  if env_has native; then
+    fdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
+    if [ -d "$fdir" ] && [ -n "$(find "$fdir" -maxdepth 1 -name '*.ttf' -print -quit 2>/dev/null)" ]; then
+      row_ok "fonts" "$fdir has TTFs"
+    else
+      row_bad "fonts" "no TTFs in $fdir — mise run fonts"
+    fi
+  else
+    row_skip "fonts" "WSL — the Windows terminal resolves fonts"
+  fi
+  echo ""
+fi
+
+# 8. shell, dotfiles, legacy leftovers
+hdr "shell, dotfiles, legacy leftovers"
+login_shell=$(getent passwd "$USER" | cut -d: -f7)
+if [ "$(basename "$login_shell")" = zsh ]; then
+  row_ok "login shell" "$login_shell"
+else
+  row_warn "login shell" "$login_shell — expected zsh"
+fi
+if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+  drift=$(chezmoi status --source "$root" 2>/dev/null | wc -l)
+  if [ "$drift" -eq 0 ]; then
+    row_ok "chezmoi" "initialised, no drift"
+  else
+    row_warn "chezmoi" "$drift line(s) of drift — chezmoi apply --source $root"
+  fi
+else
+  row_warn "chezmoi" "not initialised — bootstrap.sh runs chezmoi init --apply"
+fi
+if [ -f "$state/legacy-tools-swept" ] && [ -f "$state/legacy-host-swept" ]; then
+  row_ok "legacy sweep" "both markers present"
+else
+  row_warn "legacy sweep" "not fully swept yet — mise run bootstrap"
+fi
+if env_has dev; then
+  stale=()
+  for b in mise starship fzf; do
+    [ -e "/usr/local/bin/$b" ] && stale+=("$b")
+  done
+  if [ "${#stale[@]}" -eq 0 ]; then
+    row_ok "legacy /usr/local" "no stale binaries"
+  else
+    row_warn "legacy /usr/local" "still present: ${stale[*]} — mise run bootstrap"
+  fi
+fi
+if env_has native; then
+  if [ -f /etc/systemd/system/dozzle.service ]; then
+    row_warn "legacy dozzle" "/etc/systemd/system/dozzle.service still present — mise run bootstrap"
+  else
+    row_ok "legacy dozzle" "retired"
+  fi
+fi
+echo ""
+
+hdr "summary"
+printf '   %d ok · %d warnings · %d problems · %d n/a\n' "$n_ok" "$n_warn" "$n_bad" "$n_skip"
+if [ "$n_bad" -eq 0 ]; then
+  echo "health: OK"
+  exit 0
+else
+  echo "health: $n_bad problem(s)"
+  exit 1
+fi

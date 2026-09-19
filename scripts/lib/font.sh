@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # font.sh — install JetBrainsMono Nerd Font Mono variants for user-scope use.
 #
-# Invoked by makefile/Makefile's nerd-fonts target (NOT directly). Downloads
+# Invoked by tasks/fonts (NOT directly). Downloads
 # the JetBrainsMono.tar.xz release archive from ryanoasis/nerd-fonts, verifies
 # its SHA256 against a per-version pin, extracts the six Mono variants into
 # $PARENT/JetBrainsMonoNerdFontMono/, refreshes fontconfig, writes a stamp.

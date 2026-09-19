@@ -1,5 +1,5 @@
 # .gitleaks.toml — config for the committed-secret scan.
-# Consumed by scripts/check-invariants.sh (check_gitleaks), `make secrets`, and
+# Consumed by scripts/check-invariants.sh (check_gitleaks), `mise run secrets`, and
 # CI (.github/workflows/lint.yml). Extends gitleaks' bundled default ruleset,
 # then allowlists this repo's known-safe, secret-shaped-but-not-secret content
 # so the gate doesn't false-positive on a docs-heavy, age-encrypted repo.

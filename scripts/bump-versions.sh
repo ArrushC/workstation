@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # bump-versions.sh — propose version-pin bumps across the two layers that
-# remain after the tool move to mise:
+# remain after the tool AND host-pin move to mise:
 #
 #   (1) mise tool pins in config.toml / config.linux.toml / config.dev.toml,
 #       via `mise outdated --bump --json` + `mise config set` + `mise lock`.
-#   (2) the handful of pins Make still owns directly in
-#       makefile/versions.mk, via the unchanged `make check-updates`
-#       porcelain path.
+#   (2) the handful of host pins config.toml [vars] owns directly (dozzle,
+#       vcpkg — python/nerd-fonts are dual/triple-edit, reported not
+#       auto-edited), via scripts/lib/check-updates.sh worker mode (the same
+#       specs tasks/check-updates registers) + `mise config set`.
 #
 # Dual/triple-edit and coupled pins in EITHER layer are reported, never
 # auto-edited (see the comment above each EXCLUDE list below) — they need a
@@ -15,13 +16,14 @@
 #
 # Used by .github/workflows/version-bumps.yml (weekly) and runnable locally.
 # --dry-run prints what would change without writing config*.toml,
-# makefile/versions.mk, mise.lock/mise.*.lock, or the generated files — it
-# only produces the summary.
+# mise.lock/mise.*.lock, or the generated files — it only produces the
+# summary.
 # Writes a Markdown summary to $BUMP_SUMMARY_FILE (default /tmp/bump-summary.md)
 # for the PR body. Exits 0 normally (report tool; the caller decides if a
 # bump changed anything) but exits 1 when `mise outdated` itself fails
-# (network, broken mise, malformed config — the mise half is skipped in that
-# case, though the versions.mk half still runs and is reported) or a
+# (network, broken mise, malformed config — the mise tool-pin layer is
+# skipped in that case, though the config.toml [vars] layer still runs and
+# is reported) or a
 # post-bump `mise lock` regeneration fails, so the weekly workflow fails
 # visibly instead of silently reporting "nothing to bump". Individual
 # `mise config set` failures are reported under "Failed to edit (manual)"
@@ -31,15 +33,14 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit
 
-VERSIONS="makefile/versions.mk"
 SUMMARY="${BUMP_SUMMARY_FILE:-/tmp/bump-summary.md}"
 DRY=false
 [ "${1:-}" = "--dry-run" ] && DRY=true
 
 bumped=""        # mise tool pins bumped this run (config*.toml)
 manual=""        # pins in either EXCLUDE list — reported, never auto-edited
-skipped=""       # versions.mk pins check-updates found but couldn't map safely
-mk_bumped=""     # makefile/versions.mk pins bumped this run
+skipped=""       # a pin check-updates found but couldn't map safely
+vars_bumped=""   # config.toml [vars] pins bumped this run
 failed=""        # mise config set / mise lock calls that failed this run
 outdated_fail="" # captured stderr when `mise outdated` itself fails (non-empty => mise half skipped)
 exit_code=0
@@ -65,10 +66,10 @@ exit_code=0
 #    mid-provision — and hard-fails under GOTOOLCHAIN=local or a restricted
 #    GOPROXY. Bump both together, deliberately.
 #  - github:dj95/zjstatus is ABI-coupled to zellij: every zjstatus release
-#    states its zellij floor, recorded as ZJSTATUS_ZELLIJ_FLOOR in
-#    makefile/versions.mk and asserted against tools.zellij by
-#    check-invariants.sh. A blind bump would raise the floor silently; bump
-#    the pin AND the floor together, by hand, from the release notes.
+#    states its zellij floor, recorded as vars.zjstatus_zellij_floor in
+#    config.toml and asserted against tools.zellij by check-invariants.sh. A
+#    blind bump would raise the floor silently; bump the pin AND the floor
+#    together, by hand, from the release notes.
 #  - http:ncdu — its linux-x86_64 binary is published at dev.yorhel.nl for
 #    only SOME releases (2.9.1 has one; 2.9.2 returns 404), so a bump must
 #    be verified by hand against the download URL before landing or it
@@ -83,7 +84,7 @@ exit_code=0
 #    only re-runs then). typescript must also stay on the 5.x major: ts-ls 6.x needs
 #    typescript/lib/tsserver.js, gone in TS 7 (check_tsls_typescript_coupling
 #    asserts this). Review and bump the whole postinstall string by hand.
-#  - python is a three-way pin (makefile/versions.mk PYTHON_VERSION ==
+#  - python is a three-way pin (config.toml vars.python_version ==
 #    config.toml tools.python == bootstrap.ps1 $PythonEnvVersion, all
 #    asserted by check-invariants.sh) that ALSO needs a wheel-coverage check
 #    before bumping — uv-managed pypi: dependency locks (basedpyright,
@@ -209,65 +210,67 @@ if [ -z "$outdated_fail" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Layer 2: makefile/versions.mk pins — unchanged path (make check-updates).
-# Only 5 pins are checked here (the surviving UPDATE_SPECS entries: claude-cli,
-# dozzle, nerd-fonts, vcpkg, python-env); ZJSTATUS_ZELLIJ_FLOOR is a coupling
-# floor, not an UPDATE_SPECS pin, so it never reaches this path.
+# Layer 2: config.toml [vars] host pins — dozzle_version + vcpkg_version bump
+# automatically; python_version + nerd_font_version (EXCLUDE_VARS) are
+# dual/triple-edit pins, reported only, never auto-edited. Drift is checked
+# via scripts/lib/check-updates.sh worker mode against the SAME specs
+# tasks/check-updates registers; claude-cli is a rolling `latest` pin outside
+# [vars] (no bump path), so isn't checked here. ZJSTATUS_ZELLIJ_FLOOR is a
+# coupling floor, not a pin, so it never reaches this path either.
 # -----------------------------------------------------------------------------
 #
-# JETBRAINSMONO_NERD_VERSION dual/triple-edits install-nerd-fonts.ps1 + the
-# SHA case arm in makefile/lib/font.sh (a bump needs a SHA recompute).
-# PYTHON_VERSION is the same three-way pin described in the mise EXCLUDE
-# comment above (versions.mk is one of its three edit points) and needs the
-# same wheel-coverage check before bumping.
-EXCLUDE_MK="JETBRAINSMONO_NERD_VERSION PYTHON_VERSION"
+# nerd_font_version dual/triple-edits scripts/install-nerd-fonts.ps1 + the SHA
+# case arm in scripts/lib/font.sh (a bump needs a SHA recompute). python_version
+# is the same three-way pin described in the mise EXCLUDE comment above
+# (config.toml [vars] is one of its three edit points) and needs the same
+# wheel-coverage check before bumping.
+EXCLUDE_VARS="nerd_font_version python_version"
 
-# Tool names whose versions.mk variable does NOT follow the default
-# uppercase(name)+_VERSION convention (the UPDATE_SPECS registry name differs
-# from the pin variable). Trimmed to the entries UPDATE_SPECS still declares
-# (dozzle and vcpkg map cleanly via the default convention already).
-# Keys MUST stay quoted: shfmt reformats unquoted hyphenated subscripts as
-# arithmetic ([nerd-fonts] -> [nerd - fonts]), silently breaking the lookup.
-declare -A ALIAS=(
-  ["nerd-fonts"]=JETBRAINSMONO_NERD_VERSION
-  # Spec is named python-env (the make target) but the pin is PYTHON_VERSION.
-  ["python-env"]=PYTHON_VERSION
-  # "claude-cli" -> CLAUDE_CLI_VERSION would be wrong; it's a rolling `latest`
-  # pin so no bump is ever produced, but mapping it keeps spec coverage
-  # complete.
-  ["claude-cli"]=CLAUDE_VERSION
+# config.toml [vars] key -> its current string value (a plain `key = "value"`
+# line — the same shape check-invariants.sh's tomlval reads via tomllib; grep
+# is enough here since every [vars] entry is a single-line string).
+varval() {
+  grep -E "^$1 = " config.toml | head -1 | sed -E 's/^[^"]*"([^"]*)".*/\1/'
+}
+
+# check-updates spec name -> its config.toml [vars] key.
+declare -A VARS_KEY=(
+  ["python-env"]=python_version
+  ["nerd-fonts"]=nerd_font_version
+  ["dozzle"]=dozzle_version
+  ["vcpkg"]=vcpkg_version
 )
 
-updates=$(CHECK_UPDATES_PORCELAIN=1 \
-  make -s --no-print-directory -C makefile check-updates MODE=dev 2>/dev/null |
+vars_specs="python-env|$(varval python_version)|python/cpython|v$(varval python_version)
+nerd-fonts|$(varval nerd_font_version)|ryanoasis/nerd-fonts|v$(varval nerd_font_version)
+dozzle|$(varval dozzle_version)|amir20/dozzle|v$(varval dozzle_version)
+vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|$(varval vcpkg_version)"
+
+updates=$(printf '%s\n' "$vars_specs" |
+  CHECK_UPDATES_PORCELAIN=1 scripts/lib/check-updates.sh |
   grep '^update|' || true)
 
 while IFS='|' read -r _ name detail; do
   [ -n "${name:-}" ] || continue
   old="${detail%% *}" # "old → new" -> "old"
   new="${detail##* }" # "old → new" -> "new"
-  var="${ALIAS[$name]:-$(printf '%s' "$name" | tr '[:lower:]-' '[:upper:]_')_VERSION}"
-  old_re="${old//./\\.}"
-  new_re="${new//./\\.}"
+  key="${VARS_KEY[$name]:-}"
+  [ -n "$key" ] || continue
 
-  case " $EXCLUDE_MK " in
-  *" $var "*)
-    manual="${manual}- \`$var\` ($name): $old → $new — needs SHA/multi-file edit (manual)\n"
+  case " $EXCLUDE_VARS " in
+  *" $key "*)
+    manual="${manual}- \`$key\` ($name): $old → $new — needs SHA/multi-file edit (manual)\n"
     continue
     ;;
   esac
 
-  # Shared-pin dedup: an earlier row may have already bumped this var — done,
-  # not a skip.
-  if grep -qE "^${var}[[:space:]]*:=[[:space:]]*${new_re}[[:space:]]*\$" "$VERSIONS"; then
-    continue
-  fi
-
-  if grep -qE "^${var}[[:space:]]*:=[[:space:]]*${old_re}[[:space:]]*\$" "$VERSIONS"; then
-    $DRY || sed -i -E "s|^(${var}[[:space:]]*:=[[:space:]]*)${old_re}[[:space:]]*\$|\1${new}|" "$VERSIONS"
-    mk_bumped="${mk_bumped}- \`$var\` ($name): $old → $new\n"
+  if $DRY; then
+    vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"
+  elif mise config set -f config.toml "vars.$key" "$new"; then
+    vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"
   else
-    skipped="${skipped}- \`$var\` ($name): reported $old → $new but no matching pin line (manual)\n"
+    printf '  ! mise config set failed for %s (vars.%s)\n' "$name" "$key" >&2
+    failed="${failed}- \`$key\` ($name): mise config set failed (manual)\n"
   fi
 done <<<"$updates"
 
@@ -278,7 +281,7 @@ done <<<"$updates"
 # generated file drift, and check-invariants.sh ("TOOLS block in sync")
 # fails on merge. There is no longer a second generated-config script to
 # call here: config*.toml IS the tool layer's single source of truth now.
-if [ -n "$bumped$mk_bumped" ] && ! $DRY; then
+if [ -n "$bumped$vars_bumped" ] && ! $DRY; then
   scripts/gen-tool-memory.sh >/dev/null
 fi
 
@@ -292,7 +295,7 @@ fi
     printf '%s\n' "$outdated_fail"
     echo '```'
     echo
-    echo "_The mise tool-pin layer was skipped this run — see stderr above/in the workflow log. The makefile/versions.mk layer below, if any, still ran._"
+    echo "_The mise tool-pin layer was skipped this run — see stderr above/in the workflow log. The config.toml [vars] layer below, if any, still ran._"
     echo
   fi
   $DRY && echo "_dry run — nothing was written._" && echo
@@ -302,10 +305,10 @@ fi
     printf '%b' "$bumped"
     echo
   fi
-  if [ -n "$mk_bumped" ]; then
-    echo "### Bumped in \`makefile/versions.mk\`"
+  if [ -n "$vars_bumped" ]; then
+    echo "### Bumped in \`config.toml\` [vars]"
     echo
-    printf '%b' "$mk_bumped"
+    printf '%b' "$vars_bumped"
     echo
   fi
   if [ -n "$manual" ]; then
@@ -326,9 +329,9 @@ fi
     printf '%b' "$skipped"
     echo
   fi
-  [ -n "$outdated_fail$bumped$mk_bumped$manual$failed$skipped" ] || echo "All pins up to date — nothing to bump."
+  [ -n "$outdated_fail$bumped$vars_bumped$manual$failed$skipped" ] || echo "All pins up to date — nothing to bump."
   echo
-  echo "_Generated by \`scripts/bump-versions.sh\`. Each bumped pin installs on the next \`make provision\` (\`mise install\`); mise.lock updated. Review before merge._"
+  echo "_Generated by \`scripts/bump-versions.sh\`. Each bumped pin installs on the next \`./bootstrap.sh\` (\`mise install\`); mise.lock updated. Review before merge._"
 } | tee "$SUMMARY"
 
 exit "$exit_code"

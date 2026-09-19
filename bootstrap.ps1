@@ -1,7 +1,7 @@
 ﻿# =============================================================================
 # bootstrap.ps1 — workstation setup (Windows client side)
 #
-# The Windows host is a CLIENT — Ansible/Make run on Linux hosts only. On
+# The Windows host is a CLIENT — mise bootstrap runs on Linux hosts only. On
 # Windows this script provisions its slice with NO admin rights: it installs a
 # small set of first-party binaries into a per-user location, seeds the two
 # managed terminals (Warp + Windows Terminal) through their official WinGet
@@ -279,8 +279,9 @@ $WsMise       = Join-Path $WsRoot "mise"
 $WsStamps     = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
-# as scripts\install-nerd-fonts.ps1) — NOT makefile/versions.mk, because Make
-# never runs on Windows. Bump = update Version + refresh Sha256 (compute over the
+# as scripts\install-nerd-fonts.ps1) — NOT config.linux.toml/config.dev.toml,
+# because mise's Linux-side [bootstrap.*] tables never run on Windows.
+# Bump = update Version + refresh Sha256 (compute over the
 # downloaded .zip). Layout 'single' copies <Exe>.exe into Dest; 'tree' extracts
 # the whole archive into Dest.
 #
@@ -324,7 +325,7 @@ $PortableTools = @(
         Dest       = $WsBin
         Repo       = "cli/cli"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND GH_VERSION in makefile/versions.mk"
+        UpdateHint = "dual-edit: `$PortableTools here AND tools.gh in config.linux.toml"
     },
     @{
         Name       = "Helix"
@@ -336,7 +337,7 @@ $PortableTools = @(
         Dest       = $WsHelix
         Repo       = "helix-editor/helix"
         TagPrefix  = ""
-        UpdateHint = "dual-edit: `$PortableTools here AND HELIX_VERSION in makefile/versions.mk"
+        UpdateHint = "dual-edit: `$PortableTools here AND tools.helix in config.linux.toml"
     },
     @{
         # Nushell — the default LOCAL Windows shell (the Windows Terminal
@@ -365,7 +366,7 @@ $PortableTools = @(
         Dest       = $WsBin
         Repo       = "jqlang/jq"
         TagPrefix  = "jq-"
-        UpdateHint = "dual-edit: `$PortableTools here AND JQ_VERSION in makefile/versions.mk (jq powers the Claude Code hooks' JSON parsing on Windows)"
+        UpdateHint = "dual-edit: `$PortableTools here AND tools.jq in config.linux.toml (jq powers the Claude Code hooks' JSON parsing on Windows)"
     },
     @{
         # mise — the runtime manager (node / Go / uv / gopls / the LSP
@@ -392,8 +393,8 @@ $PortableTools = @(
     },
     @{
         # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
-        # Linux dev-only EGET_TOOLs (see the AI-agents section in
-        # makefile/versions.mk). Bun-compiled x64 binaries: both REQUIRE AVX2
+        # Linux dev-only mise tools (see config.dev.toml's opencode / omp
+        # entries). Bun-compiled x64 binaries: both REQUIRE AVX2
         # (any CPU since ~2013).
         Name       = "OpenCode"
         Exe        = "opencode"
@@ -404,7 +405,7 @@ $PortableTools = @(
         Dest       = $WsBin
         Repo       = "anomalyco/opencode"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND OPENCODE_VERSION in makefile/versions.mk"
+        UpdateHint = "dual-edit: `$PortableTools here AND opencode in config.dev.toml"
     },
     @{
         Name       = "Oh My Pi"
@@ -416,11 +417,11 @@ $PortableTools = @(
         Dest       = $WsBin
         Repo       = "can1357/oh-my-pi"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND OMP_VERSION in makefile/versions.mk"
+        UpdateHint = "dual-edit: `$PortableTools here AND github:can1357/oh-my-pi in config.dev.toml"
     },
     @{
         # DevToys CLI — scriptable command-line half of DevToys; the Windows
-        # half of the Linux dev-only devtoys-cli target (see versions.mk).
+        # half of the Linux dev-only devtoys-cli mise tool (config.dev.toml).
         # The *_portable zip is self-contained .NET (the plain zip needs a
         # system .NET 8 runtime — never use it). NOT Layout 'single': the
         # single-file DevToys.CLI.exe REQUIRES its sibling Plugins\ tree.
@@ -435,7 +436,7 @@ $PortableTools = @(
         Dest       = $WsDevToysCli
         Repo       = "DevToys-app/DevToys"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND DEVTOYS_CLI_VERSION in makefile/versions.mk (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
+        UpdateHint = "dual-edit: `$PortableTools here AND the DevToys-app/DevToys tool in config.dev.toml (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
     },
     @{
         # dnGrep — search/replace GUI (grep for Windows). Portable, NOT
@@ -447,7 +448,7 @@ $PortableTools = @(
         # here), and the 'tree' wipe on a pin bump would destroy them — so
         # step 5e (Invoke-DnGrepConfig) seeds a dnGrep.config.xml redirecting
         # its data dir to %APPDATA%\dnGREP. Windows-only GUI tool: no
-        # makefile/versions.mk pin, no dual-edit (Nushell precedent).
+        # config.toml [vars] pin, no dual-edit (Nushell precedent).
         Name       = "dnGrep"
         Exe        = "dnGREP"
         Version    = "5.0.30.0"
@@ -470,7 +471,7 @@ $PortableTools = @(
         # installs no runtimes; first launch prompts with a download link if
         # it's missing. Settings live in %APPDATA%\LogExpert (safe across pin
         # bumps); only its sessionFiles\ sit next to the exe — minor loss on
-        # a bump. Windows-only GUI tool: no versions.mk pin, no dual-edit.
+        # a bump. Windows-only GUI tool: no config.toml [vars] pin, no dual-edit.
         Name       = "LogExpert"
         Exe        = "LogExpert"
         Version    = "1.41.0"
@@ -486,8 +487,8 @@ $PortableTools = @(
 )
 
 # --- Blessed Python scripting env (Invoke-PythonEnv) -------------------------
-# DUAL-EDIT: $PythonEnvVersion pairs with PYTHON_VERSION in makefile/versions.mk;
-# $PythonLibs pairs with PY_LIBS in makefile/lib/python-env.sh. KEEP EACH ON ONE
+# DUAL-EDIT: $PythonEnvVersion pairs with vars.python_version in config.toml;
+# $PythonLibs pairs with PY_LIBS in scripts/lib/python-env.sh. KEEP EACH ON ONE
 # LINE — scripts/check-invariants.sh parses both with single-line greps.
 $PythonEnvVersion = "3.14.7"
 $PythonLibs = @("textual", "textual-dev", "click", "rich", "httpx", "pydantic", "typer", "polars", "duckdb")
@@ -596,7 +597,7 @@ $InstallerTools = @(
 # distribution is a WinGet package, not a GitHub release asset (there are no
 # release assets to hash), so this is a bespoke best-effort seed rather than an
 # $InstallerTools entry: WinGet's manifest enforces the installer hash and Warp
-# self-updates afterward, hence NO versions.mk pin — the same evergreen model as
+# self-updates afterward, hence NO config.toml [vars] pin — the same evergreen model as
 # the Windows Terminal seed. Both terminals stay fully managed: Warp is the
 # day-to-day terminal (its session shell is AlmaLinux-9 WSL zsh), Windows
 # Terminal is the compatibility path and keeps Windows' default-terminal-
@@ -622,7 +623,7 @@ $WarpTool = @{
 # digest/pin-verified direct-MSI fallback when winget is ABSENT. EVERY failure
 # mode (declined UAC, offline, hash mismatch) warns and continues — this class
 # never aborts the bootstrap. -SkipElevated skips it; -ForceInstaller reinstalls
-# (and adds --force on the winget path). NOT pinned in versions.mk — latest-
+# (and adds --force on the winget path). NOT pinned in config.toml [vars] — latest-
 # release model, same as $InstallerTools (winget installs latest anyway).
 $ElevatedTools = @(
     @{
@@ -1368,7 +1369,7 @@ function Install-Warp {
 
 function Install-WindowsTerminal {
     # Evergreen MSIX seed: per-user by design (no admin), Store-serviced thereafter.
-    # No versions.mk pin — same latest-release model as the installer-class apps.
+    # No config.toml [vars] pin — same latest-release model as the installer-class apps.
     $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
                (Get-Command wt.exe -ErrorAction SilentlyContinue)
     if ($present -and -not $ForceInstaller) {
@@ -2143,8 +2144,8 @@ function Invoke-InstallBurntToast {
 #     release manifest, then `claude.exe install latest` sets up the launcher
 #     (%USERPROFILE%\.local\bin), PATH, and shell integration itself.
 #     NOT $PortableTools: native installs SELF-UPDATE in the background, so a
-#     pin would fight the auto-updater (mirrors CLAUDE_VERSION := latest on
-#     the Linux side — the claude-cli target in makefile/). NOT
+#     pin would fight the auto-updater (mirrors the rolling, no-pin install on
+#     the Linux side — step 1 of tasks/bootstrap). NOT
 #     $InstallerTools: no Uninstall-registry entry, not a GitHub release.
 #     Detect-by-command, skip when present; soft-fails (warn-and-continue).
 #     Runs in a CHILD powershell.exe — the installer script calls `exit` on
@@ -2179,13 +2180,13 @@ function Invoke-InstallClaudeCode {
 
 # =============================================================================
 # 6c. PYTHON SCRIPTING ENV — the blessed uv-built venv (Windows half of the
-#    Linux `python-env` Make target). uv (mise-managed — resolved via
+#    Linux `python-env` mise task, tasks/python-env). uv (mise-managed — resolved via
 #    `mise which uv`, so Invoke-MiseRuntimes must have run) installs the
 #    pinned CPython (python-build-standalone, per-user) and rebuilds the env
 #    from scratch, then wpy/textual/typer .cmd shims land in $WsBin. Libs
 #    track LATEST at install time; stamp bakes the pin + the lib list, so a
 #    bump or list edit rebuilds on the next bootstrap and a lib upgrade is
-#    "delete the stamp, re-run" (Linux: make python-env-rebuild). Per-user,
+#    "delete the stamp, re-run" (Linux: REBUILD=1 mise run python-env). Per-user,
 #    no admin; warn-and-continue (standard tool-step posture).
 # =============================================================================
 # Get-PythonEnvStamp — the exact stamp path Invoke-PythonEnv writes on a
@@ -2335,7 +2336,7 @@ function Invoke-EnsureSshKey {
 # -CheckForUpdates). Both exit before the provisioning flow starts: nothing
 # is installed, cloned, applied, or written. The Windows counterpart of
 # bootstrap.sh --doctor / --check-for-updates (whose tool knowledge lives in
-# makefile/; here the manifests in THIS script are the source of truth).
+# config*.toml + tasks/; here the manifests in THIS script are the source of truth).
 # =============================================================================
 
 # Shared by both modes: fetch (best-effort), then report branch, ahead/behind
@@ -2830,12 +2831,12 @@ function Invoke-CheckForUpdates {
     if ($fontStamps.Count -gt 0) {
         $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
         $latest  = Get-LatestGitTag -Repo 'ryanoasis/nerd-fonts'
-        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'triple-edit: versions.mk + lib/font.sh + install-nerd-fonts.ps1 (see CLAUDE.md)'
+        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'triple-edit: config.toml [vars] nerd_font_version + scripts/lib/font.sh + install-nerd-fonts.ps1 (see CLAUDE.md)'
     } else {
         Write-Warn "Nerd Fonts not stamped — re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
     }
     $latestPy = Get-LatestGitTag -Repo 'python/cpython' -TagPrefix 'v'
-    Write-UpdateStatus -Name 'Python env (CPython)' -Pinned $PythonEnvVersion -Latest $latestPy -Hint 'dual-edit: $PythonEnvVersion here AND PYTHON_VERSION in makefile/versions.mk; check cp-wheel coverage first (see versions.mk comment)'
+    Write-UpdateStatus -Name 'Python env (CPython)' -Pinned $PythonEnvVersion -Latest $latestPy -Hint 'dual-edit: $PythonEnvVersion here AND vars.python_version in config.toml; check cp-wheel coverage first (see config.toml [vars] comment)'
     $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
           Sort-Object Version -Descending | Select-Object -First 1
     if ($bt) { Write-Ok "BurntToast $($bt.Version) installed — update via: Update-Module BurntToast" }

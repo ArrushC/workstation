@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # setup-ccstatusline.sh — interactive setup of the Claude Code statusline
 # via ccstatusline. Four options: use tracked / this machine / set global /
-# skip. Invoked by `make -C makefile claude-statusline MODE=dev` and at
-# the tail of `bootstrap.sh --dev`.
+# skip. Invoked by `mise run statusline` and at the tail of `bootstrap.sh --dev`.
 
 set -euo pipefail
 
@@ -30,7 +29,7 @@ SENTINEL_END='# CCSTATUSLINE:END'
 
 preflight() {
   if ! command -v ccstatusline >/dev/null 2>&1; then
-    printf '%bccstatusline not found%b — %bmake tools MODE=dev%b installs it (npm:ccstatusline in config.dev.toml)\n' "$YELLOW" "$RESET" "$YELLOW" "$RESET"
+    printf '%bccstatusline not found%b — %bmise install npm:ccstatusline%b installs it (npm:ccstatusline in config.dev.toml)\n' "$YELLOW" "$RESET" "$YELLOW" "$RESET"
     exit 0
   fi
   # WSL trap: if `ccstatusline` resolves to a Windows-side install (PATH
@@ -45,8 +44,8 @@ preflight() {
     printf '%bccstatusline resolves to a Windows-side install (%s).%b\n' "$YELLOW" "$ccstatusline_path" "$RESET"
     printf 'A Windows-side ccstatusline cannot run from a WSL working directory (UNC path failure).\n'
     printf 'Install the mise-managed Linux-native ccstatusline inside this WSL distro:\n'
-    printf '  %bmake -C makefile tools MODE=dev%b\n' "$YELLOW" "$RESET"
-    printf 'Then re-run: %bmake -C makefile claude-statusline MODE=dev%b\n' "$YELLOW" "$RESET"
+    printf '  %bmise install npm:ccstatusline%b\n' "$YELLOW" "$RESET"
+    printf 'Then re-run: %bmise run statusline%b\n' "$YELLOW" "$RESET"
     exit 0
     ;;
   esac

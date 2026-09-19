@@ -3,7 +3,7 @@
 #
 # Repo-specific. The repo's load-bearing file invariants (LF endings, 0755 git
 # mode, UTF-8 BOM on three .ps1 files) are enforced at COMMIT time by
-# scripts/check-invariants.sh (pre-commit hook + CI + `make lint`). This hook
+# scripts/check-invariants.sh (pre-commit hook + CI + `mise run lint`). This hook
 # pulls that feedback forward to EDIT time and AUTO-REPAIRS the cheap cases, so
 # a regression Claude just introduced cannot survive the turn:
 #   - strip CRLF from "run-directly" shell scripts
@@ -42,7 +42,7 @@ norm="${f//\\//}" # normalise Windows backslashes for matching only
 
 is_lf_exec=0
 case "$norm" in
-*/makefile/lib/*.sh | */scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */.githooks/* | */chezmoi/dot_local/bin/executable_batpipe)
+*/scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */.githooks/* | */chezmoi/dot_local/bin/executable_batpipe)
   is_lf_exec=1
   ;;
 esac

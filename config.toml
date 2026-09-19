@@ -4,10 +4,22 @@
 #   config.toml          always            (cross-platform: uv)
 #   config.linux.toml    linux             (the Linux toolbelt, both scopes)
 #   config.dev.toml      dev               (dev tools on both OSes)
+#   config.host.toml     host              (Linux dev: dnf + /etc)
+#   config.native.toml   native            (non-WSL dev: docker/cockpit/rsyslog/dozzle/NFS)
+#   config.wsl.toml      wsl               (/etc/wsl.conf)
 #   config.local.toml    always, git-ignored — per-host overrides
 # Pins live here and in mise.lock (URLs + sha256 per platform). Bump with
 # `mise outdated --bump`, then `scripts/bump-versions.sh` or `mise use`.
 min_version = "2026.9.9"
+
+[vars]
+# Host pins that makefile/versions.mk used to own (PR2). Tasks read them via
+# `#MISE env={X="{{ vars.x }}"}`; scripts/check-invariants.sh asserts the dual-edits.
+python_version = "3.14.7"        # == tools.python below == $PythonEnvVersion in bootstrap.ps1 (three-way pin)
+nerd_font_version = "3.5.1"      # == SHA arm in scripts/lib/font.sh == $Version in scripts/install-nerd-fonts.ps1 (triple)
+dozzle_version = "10.10.0"       # image tag amir20/dozzle:v<ver>, rendered into /etc/dozzle/compose.yaml (configs/dozzle/compose.yaml.tera)
+vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by tasks/vcpkg
+zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
 [tools]
 # uv — the Python installer behind python-env (both scopes, both OSes).
@@ -19,8 +31,8 @@ min_version = "2026.9.9"
 uv = "0.12.15"
 # python — mise's interpreter for the dependency-locked pypi: tools (uv sync
 # --frozen --python <this>; without it mise falls back to the system 3.9 and
-# glances/harlequin refuse to install). Same pin as PYTHON_VERSION in
-# makefile/versions.mk and $PythonEnvVersion in bootstrap.ps1 (three-way
-# dual-edit, check-invariants). NOTE: this shadows `python3` in mise-activated
+# glances/harlequin refuse to install). Same pin as vars.python_version above
+# and $PythonEnvVersion in bootstrap.ps1 (three-way dual-edit, check-invariants).
+# NOTE: this shadows `python3` in mise-activated
 # shells (the system interpreter stays at /usr/bin/python3).
 python = "3.14.7"

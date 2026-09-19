@@ -121,8 +121,6 @@ for group in dev_machine prod_machine; do
   for s in "$SRC"/.chezmoiscripts/*.sh.tmpl; do
     check "$group" ".chezmoiscripts/$(basename "$s")" "$(basename "$s" .tmpl)" bash_check
   done
-  # systemd user unit: ExecStart branches on .group — render both ways.
-  check "$group" dot_config/systemd/user/pueued.service.tmpl "pueued.service"
   # environment.d conf: MISE_ENV branches on .group — render both ways. Its
   # output is a plain KEY=value line — render-only, no syntax checker.
   check "$group" dot_config/environment.d/10-mise.conf.tmpl "10-mise.conf"

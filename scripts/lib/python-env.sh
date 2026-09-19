@@ -4,18 +4,18 @@
 # Usage:
 #   python-env.sh <python-version>
 #
-#   python-version   Pinned CPython, e.g. 3.14.6 (PYTHON_VERSION in
-#                    versions.mk; dual-edits $PythonEnvVersion in
-#                    bootstrap.ps1 — check-invariants.sh verifies).
+#   python-version   Pinned CPython, e.g. 3.14.6 (config.toml [vars]
+#                    python_version; three-way with tools.python and
+#                    $PythonEnvVersion in bootstrap.ps1 — check-invariants.sh
+#                    verifies).
 #
-# uv (mise-managed — the Makefile prepends mise's shims dir) downloads the pinned CPython
+# uv (mise-managed — tasks/python-env runs under mise, so uv is on PATH) downloads the pinned CPython
 # (python-build-standalone, user-level under ~/.local/share/uv) and builds
 # the venv at ~/.local/share/workstation-python. USER-LEVEL like pip.sh —
 # never run under sudo. The env is recreated from scratch every run
 # (deterministic; ad-hoc `uv pip install -p <env> <pkg>` additions are
 # deliberately disposable). Libs track LATEST at install time (glances
-# precedent) — upgrading is `make python-env-rebuild` (serialized; a
-# combined `clean-python-env python-env` goal list races under -j).
+# precedent) — upgrading is `REBUILD=1 mise run python-env`.
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ bin_dir="$HOME/.local/bin"
 PY_LIBS=(textual textual-dev click rich httpx pydantic typer polars duckdb)
 
 if ! command -v uv >/dev/null 2>&1; then
-  printf 'python-env.sh: uv not on PATH — run `make tools` first (uv is mise-managed)\n' >&2
+  printf 'python-env.sh: uv not on PATH — run ./bootstrap.sh (uv is mise-managed)\n' >&2
   exit 1
 fi
 
