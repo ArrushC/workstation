@@ -33,8 +33,8 @@
 # manual registration via Settings → Personalization → Fonts).
 #
 # Version + SHA256 are pinned in the script body — must mirror
-# JETBRAINSMONO_NERD_VERSION in makefile/versions.mk + the per-version SHA in
-# makefile/lib/font.sh (zip vs tar.xz hashes differ — see CLAUDE.md dual-edit
+# vars.nerd_font_version in config.toml + the per-version SHA in
+# scripts/lib/font.sh (zip vs tar.xz hashes differ — see CLAUDE.md dual-edit
 # invariant).
 # =============================================================================
 

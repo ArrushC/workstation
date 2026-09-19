@@ -29,7 +29,7 @@ note:           Leading-dot filename (.vendor) → chezmoi-ignored; provenance o
                 .config/gdb). The OTHER GDB front-end, pwndbg, is installed separately as a
                 standalone `pwndbg` command — it is a mise tool now
                 (`github:pwndbg/pwndbg` in config.dev.toml) and does NOT hook
-                ~/.gdbinit, so the two never collide. No versions.mk entry — pinned only here.
+                ~/.gdbinit, so the two never collide. No config.toml [vars] entry — pinned only here.
                 Bump (ONLY once the fleet's gdb-Python ≥ the target GEF's floor — see PYTHON
                 FLOOR above): re-download gef.py at the new tag, refresh release + asset +
                 file-sha256 + vendored, then re-verify the load on an EL9 host. ~/.gdbinit

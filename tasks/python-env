@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Blessed Python scripting env: uv-built CPython + venv, launchers wpy/textual/typer (REBUILD=1 forces a rebuild)"
+#MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
+set -euo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+env_has() {
+  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+mkdir -p "$state"
+stamp="$state/python-env.stamp"
+want="$PYTHON_VERSION $(cksum <"$root/scripts/lib/python-env.sh" | cut -d' ' -f1)"
+if [ "${REBUILD:-0}" != 1 ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] && [ -x "$HOME/.local/bin/wpy" ]; then
+  echo "  python-env $PYTHON_VERSION up to date (REBUILD=1 mise run python-env to rebuild)"
+  exit 0
+fi
+"$root/scripts/lib/python-env.sh" "$PYTHON_VERSION"
+printf '%s\n' "$want" >"$stamp"

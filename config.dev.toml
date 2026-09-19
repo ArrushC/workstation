@@ -5,7 +5,10 @@
 # The npm language servers ride node's postinstall so typescript-language-server
 # finds typescript as a global sibling (separate npm: trees would break that).
 # A changed postinstall only re-runs when node reinstalls: scripts/lib/mise-install.sh forces it.
-node = { version = "26.8.1", postinstall = "npm install -g typescript-language-server@6.0.0 typescript@5.9.3 bash-language-server@5.6.0 yaml-language-server@1.24.0 vscode-langservers-extracted@4.10.0" }
+# --allow-scripts=core-js silences npm 11's install-scripts warning (core-js'
+# postinstall is a funding banner; npm otherwise prints a 4-line warn on every
+# node reinstall).
+node = { version = "26.8.1", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.0 typescript@5.9.3 bash-language-server@5.6.0 yaml-language-server@1.24.0 vscode-langservers-extracted@4.10.0" }
 go = "1.27.0"
 "go:golang.org/x/tools/gopls" = "0.23.0"
 lua-language-server = "3.19.1"

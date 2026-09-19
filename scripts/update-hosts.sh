@@ -11,18 +11,25 @@
 #     git pull --ff-only
 #     ./bootstrap.sh --<dev|prod> --yes
 #
-# The MODE is derived from each host's group column in hosts.conf:
-# dev_machine → MODE=dev (sudo, /usr/local/bin), prod_machine → MODE=prod
-# (no sudo, ~/.local/bin).
+# The flag (and the MISE_ENV it resolves to) is derived from each host's
+# group column in hosts.conf: dev_machine → --dev (sudo for dnf + /etc),
+# prod_machine → --prod (no sudo).
 #
 # This is a PROD-HOST tool: prod never sudos, so the remote run is fully
 # non-interactive and safe to fire at the whole fleet in parallel
 # (--group prod_machine, or the default run). Dev hosts are bootstrapped
-# interactively BY HAND instead, one at a time — their `make provision` can
-# hit a sudo password prompt that a non-interactive SSH run can never
+# interactively BY HAND instead, one at a time — their `mise bootstrap`
+# prompts for sudo, which a non-interactive SSH run can never
 # satisfy:
 #     ssh -t <host> 'cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; \
 #       git pull --ff-only && ./bootstrap.sh --dev'
+#
+# A bare run (no --group/--name) SKIPS dev_machine hosts automatically —
+# printing one "skipped <name> (dev_machine — ...)" line per host — instead
+# of trying (and failing) to bootstrap them non-interactively. Pass an
+# explicit --group dev_machine or --name <dev host> to target them anyway
+# (still non-interactive: only use that against a dev host reachable without
+# a sudo prompt, or run the ssh -t one-liner above instead).
 #
 # Usage:
 #   ./scripts/update-hosts.sh                       every host in hosts.conf
@@ -117,6 +124,24 @@ if ((${#HOSTS[@]} == 0)); then
   else
     fail "hosts.conf has no managed hosts (every line was a comment or blank)."
   fi
+fi
+
+# A bare run (no --group/--name) must not try to bootstrap dev_machine hosts
+# non-interactively — their `mise bootstrap` prompts for sudo, which this
+# script's non-interactive `ssh -o BatchMode=yes` can never satisfy (see the
+# header above). Skip them, one printed line each; an explicit --group
+# dev_machine or --name <dev host> still targets them.
+if [[ -z "$GROUP_FILTER" && -z "$NAME_FILTER" ]]; then
+  kept=()
+  for h in "${HOSTS[@]}"; do
+    IFS='|' read -r name _ _ group <<<"$h"
+    if [[ "$group" == "dev_machine" ]]; then
+      warn "skipped $name (dev_machine — bootstrap dev hosts interactively: ssh -t …)"
+      continue
+    fi
+    kept+=("$h")
+  done
+  HOSTS=("${kept[@]}")
 fi
 
 # --- Per-host worker ---------------------------------------------------------

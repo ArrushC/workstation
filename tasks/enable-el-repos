@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="pre-packages hook: EPEL + CRB on RHEL-family dev hosts (config.host.toml)"
+#MISE hide=true
+set -euo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+env_has() {
+  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+exec "$root/scripts/lib/enable-el-repos.sh"

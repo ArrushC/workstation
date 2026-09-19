@@ -1,5 +1,6 @@
 # herdr config — deploys to ~/.config/herdr/config.toml (Linux dev_machine
-# only; herdr itself is the dev-only agent multiplexer installed by make).
+# only; herdr itself is the dev-only agent multiplexer installed via mise,
+# config.dev.toml).
 # Only this file is chezmoi-tracked: the rest of ~/.config/herdr/ is runtime
 # state (sockets, logs, session.json, plugins/) and must stay untracked.
 # After editing: `herdr server reload-config`.

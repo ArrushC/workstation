@@ -1,0 +1,83 @@
+# ~/.config/mise/config.host.toml — Linux DEV host state (MISE_ENV token `host`).
+# Loaded only on dev hosts (linux,dev,host,{wsl|native}); prod hosts never see it,
+# so nothing here may be needed without sudo. Sudo is requested by mise itself,
+# by default (no repo setting — mise's dnf backend re-execs itself with sudo
+# unconditionally), for the dnf batch and by the hook task.
+
+[bootstrap.hooks]
+# EPEL + CRB must exist before the dnf batch below resolves (ripgrep/htop/cppcheck/
+# heaptrack/bear/ccache are EPEL, meson/ninja-build are CRB). mise has no repo-
+# enabling key, so this stays a shell step — always `mise run <task>` (tasks are
+# discovered from any cwd and run with tools on PATH; hook strings themselves are
+# opaque to mise). Hook names are unique across config files (merge is unverified).
+"pre-packages" = "mise run enable-el-repos"
+
+[bootstrap.packages]
+# ONE `sudo dnf install -y <every missing name>` per run — a single unresolvable
+# name fails the whole batch, so every name here is EL9-verified (dnf repoquery,
+# AlmaLinux 9.8, 2026-09-17). Gone from the Make-era list: fswatch + entr (not
+# packaged for EL9), cockpit-networkmanager (virtual provide of cockpit-system,
+# `rpm -q` never sees it). `make` stays: it is a C-toolchain dependency, not our
+# orchestrator any more. Cockpit + NFS live in config.native.toml (WSL skips them).
+# --- core (the old LINUX_PACKAGES) ---
+"dnf:curl" = "latest"
+"dnf:gcc" = "latest"
+"dnf:git" = "latest"
+"dnf:libatomic" = "latest"          # node >=25 links libatomic.so.1 (BaseOS); without it node/ccstatusline die at startup
+"dnf:make" = "latest"
+"dnf:ncurses" = "latest"
+"dnf:openssl-devel" = "latest"
+"dnf:pkgconf-pkg-config" = "latest"
+"dnf:python3" = "latest"
+"dnf:python3-pip" = "latest"
+"dnf:tar" = "latest"
+"dnf:unzip" = "latest"
+"dnf:wget" = "latest"
+"dnf:zsh" = "latest"
+# --- optional (the old LINUX_OPTIONAL_PACKAGES, minus the drops above) ---
+"dnf:ShellCheck" = "latest"          # EPEL capitalises it
+"dnf:bash-completion" = "latest"
+"dnf:bear" = "latest"
+"dnf:bind-utils" = "latest"
+"dnf:ccache" = "latest"
+"dnf:clang" = "latest"
+"dnf:clang-tools-extra" = "latest"
+"dnf:cmake" = "latest"
+"dnf:cppcheck" = "latest"
+"dnf:cronie" = "latest"
+"dnf:gcc-c++" = "latest"
+"dnf:gdb" = "latest"
+"dnf:gdb-gdbserver" = "latest"
+"dnf:goaccess" = "latest"
+"dnf:heaptrack" = "latest"
+"dnf:htop" = "latest"
+"dnf:info" = "latest"
+"dnf:inotify-tools" = "latest"
+"dnf:libasan" = "latest"
+"dnf:libtsan" = "latest"
+"dnf:libubsan" = "latest"
+"dnf:lldb" = "latest"
+"dnf:llvm" = "latest"
+"dnf:lsof" = "latest"
+"dnf:ltrace" = "latest"
+"dnf:man-db" = "latest"
+"dnf:man-pages" = "latest"
+"dnf:meson" = "latest"
+"dnf:mtr" = "latest"
+"dnf:multitail" = "latest"
+"dnf:ninja-build" = "latest"
+"dnf:nmap" = "latest"
+"dnf:parallel" = "latest"
+"dnf:perf" = "latest"
+"dnf:pv" = "latest"
+"dnf:ripgrep" = "latest"
+"dnf:rlwrap" = "latest"
+"dnf:rsync" = "latest"
+"dnf:rsyslog" = "latest"
+"dnf:strace" = "latest"
+"dnf:tcpdump" = "latest"
+"dnf:time" = "latest"
+"dnf:tree" = "latest"
+"dnf:valgrind" = "latest"
+"dnf:vim-common" = "latest"
+"dnf:vim-enhanced" = "latest"

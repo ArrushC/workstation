@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="run the mechanical invariant checks (version pins, line-endings/mode, BOM, sentinels, shellcheck, …)"
+set -euo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+env_has() {
+  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+exec "$root/scripts/check-invariants.sh"

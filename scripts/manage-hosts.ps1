@@ -52,10 +52,10 @@ $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path -Parent $ScriptDir
 $HostsConf  = Join-Path $RepoRoot "hosts.conf"
 
-# Valid host groups. dev_machine → MODE=dev provisioning (sudo, system-wide);
-# prod_machine → MODE=prod (no sudo, ~/.local/bin). makefile/scope.mk maps
-# these groups to scope. An unknown group breaks update-hosts.sh's MODE
-# derivation, so we reject anything else at save time.
+# Valid host groups. dev_machine → --dev provisioning (sudo, system-wide);
+# prod_machine → --prod (no sudo, ~/.local/bin). bootstrap.sh maps
+# these groups to the flag it passes mise bootstrap. An unknown group breaks
+# update-hosts.sh's flag derivation, so we reject anything else at save time.
 $ValidGroups = @('dev_machine', 'prod_machine')
 
 # --- ANSI escape codes (matches manage-hosts.sh; rendered by Windows

@@ -22,6 +22,12 @@ cheat -s <keyword>        # search across sheets
 cht.sh <lang> <query>     # online answer (e.g. cht.sh python 'reverse a list')
 cht.sh --shell            # interactive cheat.sh REPL (rlwrap on dev)
 
-# --- provisioning ---
-make MODE=dev provision   # full provisioning (dev: system-wide, sudo)
-make MODE=prod provision  # per-user provisioning (prod: ~/.local)
+# --- provisioning (mise) ---
+./bootstrap.sh --dev       # full bootstrap (dev: system-wide, sudo)
+./bootstrap.sh --prod      # full bootstrap (prod: ~/.local, no sudo)
+mise bootstrap status      # what mise bootstrap would still change
+mise run health             # tools, host state, services report
+mise run update             # mise outdated + dnf check-update (dev)
+mise run python-env         # rebuild the blessed uv-managed Python venv
+mise run fonts               # install the pinned Nerd Font
+mise run statusline         # (re)configure the Claude Code statusline

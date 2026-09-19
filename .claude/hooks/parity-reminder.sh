@@ -38,15 +38,15 @@ case "$norm" in
 */chezmoi/dot_bashrc.tmpl)
   msg="Parity pair: you edited dot_bashrc.tmpl — mirror the change in dot_zshrc.tmpl. Change both in the same commit. See CLAUDE.md."
   ;;
-*/makefile/versions.mk)
-  msg="versions.mk holds only the Make-era pins (python, nerd font, dozzle, vcpkg): PYTHON_VERSION dual-edits bootstrap.ps1 \$PythonEnvVersion; JETBRAINSMONO_NERD_VERSION -> lib/font.sh SHA arm + install-nerd-fonts.ps1."
-  ;;
 # A chezmoi-managed dotfile's OWN config.toml (helix/herdr/tealdeer/…) is not
 # mise's config*.toml — exclude it before the glob below, which would
 # otherwise also match "*/dot_config/helix/config.toml" etc. (both end in
 # "/config.toml").
 */chezmoi/dot_config/*) ;;
-*/config.linux.toml | */config.dev.toml | */config.toml)
+*/config.toml)
+  msg="config.toml [vars]: python_version is a three-way pin with tools.python and bootstrap.ps1 \$PythonEnvVersion; nerd_font_version triple-edits scripts/lib/font.sh (SHA arm) and scripts/install-nerd-fonts.ps1."
+  ;;
+*/config.linux.toml | */config.dev.toml)
   msg="Tool pins changed. jq/gh/helix (config.linux.toml) and opencode/omp/DevToys (config.dev.toml) dual-edit bootstrap.ps1 \$PortableTools; min_version dual-edits MISE_VERSION in bootstrap.sh + bootstrap.ps1. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
   ;;
 */chezmoi/.chezmoiignore.tmpl)
@@ -65,7 +65,7 @@ if [ -z "$msg" ]; then
     msg="Parity pair: python-env.sh (PY_LIBS list) mirrors Invoke-PythonEnv in bootstrap.ps1 (\$PythonLibs). Change both in the same commit. See CLAUDE.md."
     ;;
   bootstrap.ps1)
-    msg="If you touched Invoke-PythonEnv (the \$PythonLibs list), mirror it in makefile/lib/python-env.sh (PY_LIBS). Change both in the same commit. See CLAUDE.md."
+    msg="If you touched Invoke-PythonEnv (the \$PythonLibs list), mirror it in scripts/lib/python-env.sh (PY_LIBS). Change both in the same commit. See CLAUDE.md."
     ;;
   esac
 fi

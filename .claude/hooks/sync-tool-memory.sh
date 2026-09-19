@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # sync-tool-memory.sh — Claude Code PostToolUse hook (Edit|Write|MultiEdit).
 #
-# Repo-specific. When Claude edits a mise config*.toml or one of the pins Make
-# still owns directly, regenerate the auto-inventory block in the machine-level
-# Claude memory (chezmoi source chezmoi/private_dot_claude/CLAUDE.md) so it
-# never drifts from what the repo installs. Pure: fails OPEN (does nothing) on
-# unparseable input or a generator error, always exits 0. Reports back so
-# Claude commits it (and refreshes mise.lock on a pin change).
+# Repo-specific. When Claude edits a mise config*.toml (tool pins, host pins
+# in [vars], or bootstrap.packages), regenerate the auto-inventory block in
+# the machine-level Claude memory (chezmoi source chezmoi/private_dot_claude/
+# CLAUDE.md) so it never drifts from what the repo installs. Pure: fails OPEN
+# (does nothing) on unparseable input or a generator error, always exits 0.
+# Reports back so Claude commits it (and refreshes mise.lock on a pin change).
 #
 # Honors MEMFILE in the environment (passed through to the generator) so the
 # hook test can target a throwaway file. See CLAUDE.md + docs/claude/.
@@ -39,7 +39,7 @@ case "$norm" in
 # otherwise also match "*/dot_config/helix/config.toml" etc. (both end in
 # "/config.toml").
 */chezmoi/dot_config/*) exit 0 ;;
-*/config.toml | */config.*.toml | */makefile/versions.mk | */makefile/packages.mk) ;;
+*/config.toml | */config.*.toml) ;;
 *) exit 0 ;;
 esac
 
@@ -64,7 +64,7 @@ fi
 
 "$scripts/gen-tool-memory.sh" >/dev/null 2>&1 || exit 0
 
-msg="Regenerated the TOOLS block in chezmoi/private_dot_claude/CLAUDE.md from your config*.toml/versions.mk edit — commit it with this change and run \`cza\`. If you changed a pin: \`mise lock --global\` refreshes mise.lock (commit it too)."
+msg="Regenerated the TOOLS block in chezmoi/private_dot_claude/CLAUDE.md from your config*.toml edit — commit it with this change and run \`cza\`. If you changed a pin: \`mise lock --global\` refreshes mise.lock (commit it too)."
 
 if command -v jq >/dev/null 2>&1; then
   jq -nc --arg c "$msg" \

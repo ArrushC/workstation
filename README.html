@@ -72,7 +72,7 @@
             </nav>
 
             <main id="main" tabindex="-1">
-                <div class="page-breadcrumb"><span>Handbook</span><span aria-hidden="true">/</span><span id="current-section">Overview</span><span class="page-kind"><span class="status-dot" aria-hidden="true"></span> MAKE + CHEZMOI</span></div>
+                <div class="page-breadcrumb"><span>Handbook</span><span aria-hidden="true">/</span><span id="current-section">Overview</span><span class="page-kind"><span class="status-dot" aria-hidden="true"></span> MISE + CHEZMOI</span></div>
                 <header id="intro">
                     <div class="hero-scene">
                         <div class="hero-copy">
@@ -89,13 +89,13 @@
 
                         <div class="workspace-visual">
                             <div class="visual-caption"><span>ONE SOURCE. EVERY HOST.</span><span aria-hidden="true">↗</span></div>
-                            <div class="architecture" role="img" aria-label="One workstation repository connects Make provisioning, chezmoi dotfiles, Linux hosts, and Windows terminals.">
+                            <div class="architecture" role="img" aria-label="One workstation repository connects mise provisioning, chezmoi dotfiles, Linux hosts, and Windows terminals.">
                                 <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
                                 <svg class="architecture-lines" viewBox="0 0 440 300" fill="none" aria-hidden="true"><path d="M220 150H95V62M220 150H355V68M220 150H100V243M220 150H350V237" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 6"/><circle cx="220" cy="150" r="5" fill="currentColor"/></svg>
                                 <div class="architecture-core" aria-hidden="true"><span>w<span>.</span></span><small>workstation</small></div>
                                 <div class="architecture-node node-linux" aria-hidden="true"><span class="node-symbol">&gt;_</span><span><b>Linux</b><small>dev + prod hosts</small></span></div>
                                 <div class="architecture-node node-windows" aria-hidden="true"><span class="node-symbol">⊞</span><span><b>Windows</b><small>your terminal, configured</small></span></div>
-                                <div class="architecture-node node-make" aria-hidden="true"><span class="node-symbol">⌘</span><span><b>Make</b><small>provision everything</small></span></div>
+                                <div class="architecture-node node-make" aria-hidden="true"><span class="node-symbol">⌘</span><span><b>mise</b><small>provision everything</small></span></div>
                                 <div class="architecture-node node-dotfiles" aria-hidden="true"><span class="node-symbol">~/</span><span><b>chezmoi</b><small>dotfiles that travel</small></span></div>
                             </div>
                         <div class="term">
@@ -104,18 +104,18 @@
                                 <span class="dot y" aria-hidden="true"></span>
                                 <span class="dot g" aria-hidden="true"></span>
                                 <span class="title"
-                                    ><span class="who">provision.sh — preview</span>:
+                                    ><span class="who">bootstrap.sh — preview</span>:
                                     ~/.config/mise</span
                                 >
                                 <span class="badge-dev"><span class="status-dot" aria-hidden="true"></span> EXAMPLE OUTPUT</span>
                             </div>
                             <div class="body">
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="pr">&#10095;</span> <span class="cmd">make MODE=dev provision</span></div>
+                                <div class="ln"><span class="pr">&#10095;</span> <span class="cmd">./bootstrap.sh --dev</span></div>
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="ok">&#10003;</span> system packages &amp; PATH <span class="mut">&middot;&middot;&middot;&middot;&middot;&middot;</span> done</div>
+                                <div class="ln"><span class="ok">&#10003;</span> mise install &mdash; 146 CLI tools <span class="mut">&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="ok">&#10003;</span> 140+ CLI tools (mise install) <span class="mut">&middot;&middot;&middot;</span> done</div>
+                                <div class="ln"><span class="ok">&#10003;</span> mise bootstrap &mdash; packages, /etc files, services <span class="mut">&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="ok">&#10003;</span> chezmoi handoff &rarr; dotfiles <span class="mut">&middot;&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
@@ -134,16 +134,19 @@
                         <p class="overview-note">
                             Dev-environment provisioning for Linux hosts, plus
                             Warp and Windows Terminal on Windows.
-                            A single <code>Makefile</code> under
-                            <code>makefile/</code> drives system packages, PATH,
-                            and the chezmoi handoff for dotfiles; <code>mise</code>
-                            (declared in <code>config.toml</code> /
+                            One command, <code>./bootstrap.sh --dev</code> or
+                            <code>--prod</code>, drives system packages, <code>/etc</code>
+                            files, and services via <code>mise bootstrap</code>, then
+                            the chezmoi handoff for dotfiles; <code>mise</code>
+                            (this checkout IS mise&rsquo;s global config dir &mdash;
+                            tool pins in <code>config.toml</code> /
                             <code>config.linux.toml</code> /
-                            <code>config.dev.toml</code> at the repo root &mdash;
-                            this checkout IS mise&rsquo;s global config dir)
-                            owns every tool. <code>bootstrap.sh</code> is a
-                            thin seed that runs <code>make MODE=dev|prod
-                            provision</code>. Adding a tool is a one-line edit.
+                            <code>config.dev.toml</code>, host state in
+                            <code>config.host.toml</code> /
+                            <code>config.native.toml</code> /
+                            <code>config.wsl.toml</code>)
+                            owns every tool and every piece of host state.
+                            Adding a tool or a package is a one-line edit.
                         </p>
                     <div class="section-heading" id="launchpad"><div><span class="eyebrow">01 / LIFT OFF</span><h2>Your next machine starts here.</h2></div><span class="section-caption">Three steps to a familiar workspace.</span></div>
                     <div class="setup-launchpad">
@@ -231,21 +234,21 @@ try {
                             <div class="layer-label">Provisioning</div>
                             <h3>
                                 <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM8 9l3 3-3 3m5 0h4"/></svg></span>
-                                Make
+                                bootstrap.sh
                             </h3>
                             <p>
-                                Packages, PATH, chezmoi handoff &mdash;
-                                all under <code>makefile/</code>. Tool installs
-                                are mise&rsquo;s job now.
+                                Installs pinned mise, computes
+                                <code>MISE_ENV</code>, then hands off to
+                                <code>mise bootstrap</code>.
                             </p>
                         </article>
                         <article class="stack-card">
-                            <div class="layer-label">Tool manager</div>
+                            <div class="layer-label">Tool manager + host state</div>
                             <h3>
                                 <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v14H4zM8 7V3h8v4M4 12h16m-10 0v3h4v-3"/></svg></span>
                                 mise
                             </h3>
-                            <p>Owns every tool now &mdash; <code>config*.toml</code> + <code>mise.lock</code> at the repo root.</p>
+                            <p>Owns every tool AND every piece of host state now &mdash; <code>config*.toml</code> <code>[bootstrap.*]</code> tables + <code>mise*.lock</code> at the repo root.</p>
                         </article>
                         <article class="stack-card">
                             <div class="layer-label">Dotfiles</div>
@@ -328,8 +331,9 @@ try {
                         <code>config.linux.toml</code> /
                         <code>config.dev.toml</code> at the repo root
                         (<code>bootstrap.sh</code> runs
-                        <code>make MODE=dev|prod provision</code>, whose
-                        <code>tools</code> phase is <code>mise install</code>).
+                        <code>scripts/lib/mise-install.sh</code>, then
+                        <code>mise bootstrap --yes</code>, whose tools
+                        phase is <code>mise install</code>).
                         Default install is a static binary on both
                         <code>dev_machine</code> and <code>prod_machine</code>.
                         Scope tags: <code>(dnf)</code> =
@@ -650,12 +654,13 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Managed rsyslog drop-in (dev_machine, non-WSL) — routes local0..local7 into /var/log/workstation.log; emit via `logger -p local0.info`. Enable with: make rsyslog-service"
+                                    data-tip="Managed rsyslog drop-in (dev_machine, non-WSL) — routes local0..local7 into /var/log/workstation.log; emit via `logger -p local0.info`. Enabled by config.native.toml's [bootstrap.services.rsyslog]"
                                     >rsyslog<span class="sr-only">
                                         — managed rsyslog drop-in (dev_machine,
                                         non-WSL) routing local0..local7 into
                                         /var/log/workstation.log; emit via logger
-                                        -p local0.info (make rsyslog-service)</span
+                                        -p local0.info (config.native.toml
+                                        [bootstrap.services.rsyslog])</span
                                     ></span
                                 >
                                 <span
@@ -1479,7 +1484,7 @@ try {
                                         tool in this toolbelt, declared in
                                         config.toml/config.linux.toml/config.dev.toml
                                         at the repo root and installed by
-                                        `make tools`</span
+                                        `mise bootstrap`</span
                                     ></span
                                 >
                                 <span
@@ -1508,7 +1513,7 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Go toolchain via mise (dev_machine only — make tools MODE=dev)"
+                                    data-tip="Go toolchain via mise (dev_machine only)"
                                     >go <small>(dev)</small
                                     ><span class="sr-only">
                                         — official Go toolchain, installed
@@ -1537,12 +1542,12 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="C/C++ language server (clang-tools-extra via dnf; installed by provisioning, verified by lsp-servers)"
-                                    >clangd <small>(verify)</small
+                                    data-tip="C/C++ language server (clang-tools-extra via dnf; not a mise tool)"
+                                    >clangd <small>(dnf)</small
                                     ><span class="sr-only">
                                         — C/C++ language server (clang-tools-extra
-                                        via dnf, dev_machine only; lsp-servers
-                                        verifies its presence)</span
+                                        via dnf, dev_machine only; not a mise
+                                        tool — comes from config.host.toml)</span
                                     ></span
                                 >
                                 <span
@@ -1653,15 +1658,18 @@ try {
                             </div>
                             <p class="card-note">
                                 Install with
-                                <code>make tools MODE=dev</code> (mise installs
-                                every server declared in
+                                <code>./bootstrap.sh --dev</code> (mise
+                                installs every server declared in
                                 <code>config.linux.toml</code>/<code
                                     >config.dev.toml</code
-                                >, runs as part of <code>make dev</code>).
-                                <code>make lsp-servers MODE=dev</code> installs
-                                nothing any more &mdash; it only verifies
-                                <code>clangd</code> is present. mise installs
-                                each tool independently, so one failure leaves
+                                >, as part of the tools phase &mdash;
+                                <code>mise run health</code> reports what did
+                                not install). <code>clangd</code> is not a
+                                mise tool &mdash; it comes from dnf
+                                (<code>clang-tools-extra</code> in
+                                <code>config.host.toml</code>; see the C/C++
+                                entry below). mise installs each tool
+                                independently, so one failure leaves
                                 the others usable and the next
                                 <code>mise install</code> retries.
                                 <code>rust-analyzer</code>,
@@ -1980,17 +1988,17 @@ try {
                     <h2>Machine types</h2>
                     <p class="lede">
                         Every host belongs to exactly one group in
-                        <code>hosts.conf</code>. The group decides the
-                        provisioning <code>MODE</code> &mdash; no separate
-                        scope flag.
+                        <code>hosts.conf</code>. The group decides which
+                        <code>bootstrap.sh</code> flag
+                        (<code>--dev</code>/<code>--prod</code>) a host
+                        runs &mdash; no separate scope flag.
                     </p>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
                                 <th>Group</th>
                                 <th>Sudo</th>
-                                <th>Binary dest</th>
-                                <th>Helix runtime</th>
+                                <th>System packages / <code>/etc</code></th>
                                 <th>Used for</th>
                             </tr>
                         </thead>
@@ -2000,14 +2008,15 @@ try {
                                     <span class="badge dev">dev_machine</span>
                                 </td>
                                 <td>Yes</td>
-                                <td><code>/usr/local/bin</code></td>
                                 <td>
-                                    <code>/usr/local/lib/helix/runtime</code>
+                                    dnf (RHEL/Fedora) + managed
+                                    <code>/etc</code> files
                                 </td>
                                 <td>
-                                    Hosts you own &mdash; full system-wide
-                                    install via OS package manager (dnf on
-                                    RHEL/Fedora) + <code>/usr/local/bin</code>.
+                                    Hosts you own &mdash; the one scope where
+                                    <code>mise bootstrap</code> also installs
+                                    system packages and writes system-owned
+                                    <code>/etc</code> files.
                                 </td>
                             </tr>
                             <tr>
@@ -2015,24 +2024,39 @@ try {
                                     <span class="badge prod">prod_machine</span>
                                 </td>
                                 <td>No</td>
-                                <td><code>~/.local/bin</code></td>
-                                <td><code>~/.config/helix/runtime</code></td>
+                                <td>none</td>
                                 <td>
                                     Hosts you don&rsquo;t fully own &mdash;
-                                    user-wide install only, no system packages.
+                                    user-wide only, no system packages, no
+                                    <code>/etc</code> files.
                                 </td>
                             </tr>
                         </tbody>
                     </table></div>
                     <p class="note-row">
-                        Scope values live in <code>makefile/scope.mk</code>,
-                        keyed off <code>MODE=dev|prod</code>.
-                        <code>bootstrap.sh</code> derives <code>MODE</code>
-                        from its <code>--dev</code> / <code>--prod</code> flag
-                        (exactly one is required);
-                        <code>scripts/update-hosts.sh</code> derives it from
-                        each host's group column in <code>hosts.conf</code>
-                        for bulk remote updates.
+                        <strong>Every mise tool installs identically on both
+                        scopes</strong> &mdash; user-level under
+                        <code>~/.local/share/mise/installs</code>, reached
+                        through <code>~/.local/share/mise/shims</code> or
+                        <code>mise activate</code>. That includes Helix: its
+                        runtime ships inside its own mise install dir, and
+                        there is no <code>HELIX_RUNTIME</code> env var and no
+                        <code>/usr/local</code> anywhere in the toolchain any
+                        more (the sudo column above is about system packages
+                        and <code>/etc</code> files only, never tools).
+                    </p>
+                    <p class="note-row">
+                        Scope maps to the <code>MISE_ENV</code> token set
+                        computed by <code>scripts/lib/mise-env.sh</code>
+                        (<code>linux</code> for prod;
+                        <code>linux,dev,host,wsl</code> or
+                        <code>linux,dev,host,native</code> for dev, depending
+                        on whether the host is WSL). <code>bootstrap.sh</code>
+                        takes <code>--dev</code> / <code>--prod</code>
+                        directly (exactly one is required);
+                        <code>scripts/update-hosts.sh</code> derives the flag
+                        from each host's group column in
+                        <code>hosts.conf</code> for bulk remote updates.
                     </p>
                 </section>
 
@@ -2046,8 +2070,11 @@ try {
                                     <li>
                                         bootstrap.sh
                                         <span class="note"
-                                            >&mdash; Linux host entry point
-                                            (thin Make seed)</span
+                                            >&mdash; Linux host entry point:
+                                            installs pinned mise, computes
+                                            MISE_ENV, runs mise-install.sh
+                                            then `mise bootstrap --yes`,
+                                            then chezmoi init</span
                                         >
                                     </li>
                                     <li>
@@ -2076,9 +2103,21 @@ try {
                                         config.toml / config.linux.toml /
                                         config.dev.toml
                                         <span class="note"
-                                            >&mdash; mise tool declarations
-                                            (this checkout IS
+                                            >&mdash; mise tool declarations +
+                                            [vars] host pins (this checkout IS
                                             ~/.config/mise)</span
+                                        >
+                                    </li>
+                                    <li>
+                                        config.host.toml / config.native.toml
+                                        / config.wsl.toml
+                                        <span class="note"
+                                            >&mdash; host state as
+                                            [bootstrap.*] tables (dnf
+                                            packages, /etc files, services);
+                                            loaded only on dev hosts, picked
+                                            by the host/native/wsl MISE_ENV
+                                            tokens</span
                                         >
                                     </li>
                                     <li>
@@ -2097,15 +2136,137 @@ try {
                                             tools; never hand-edit</span
                                         >
                                     </li>
-                                    <li>
+                                </ul>
+                                <details open>
+                                    <summary>
+                                        configs/
+                                        <span class="note"
+                                            >&mdash; /etc file sources,
+                                            deployed by [bootstrap.files] in
+                                            config.native.toml /
+                                            config.wsl.toml (source paths are
+                                            relative to the repo root; NOT
+                                            chezmoi-managed)</span
+                                        >
+                                    </summary>
+                                    <ul>
+                                        <li>
+                                            docker/docker-ce.repo
+                                            <span class="note"
+                                                >&mdash; vendored Docker CE
+                                                yum repo file</span
+                                            >
+                                        </li>
+                                        <li>
+                                            cockpit/cockpit.conf
+                                            <span class="note"
+                                                >&mdash; Cockpit web-admin
+                                                config</span
+                                            >
+                                        </li>
+                                        <li>
+                                            rsyslog/30-workstation.conf
+                                            <span class="note"
+                                                >&mdash; rsyslog drop-in
+                                                (local0..local7 &rarr;
+                                                /var/log/workstation.log)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            dozzle/compose.yaml.tera
+                                            <span class="note"
+                                                >&mdash; Dozzle compose
+                                                project, Tera-rendered with
+                                                vars.dozzle_version</span
+                                            >
+                                        </li>
+                                        <li>
+                                            wsl/wsl.conf
+                                            <span class="note"
+                                                >&mdash; /etc/wsl.conf
+                                                (appendWindowsPath=false)</span
+                                            >
+                                        </li>
+                                    </ul>
+                                </details>
+                                <details open>
+                                    <summary>
                                         tasks/
                                         <span class="note"
-                                            >&mdash; verify-tools (post-install
-                                            capability gate), migrate-legacy
-                                            (one-time sweep)</span
+                                            >&mdash; global mise file tasks
+                                            (discovered from this checkout at
+                                            $HOME/.config/mise/tasks);
+                                            `mise tasks ls` for the live
+                                            list</span
                                         >
-                                    </li>
-                                </ul>
+                                    </summary>
+                                    <ul>
+                                        <li>
+                                            bootstrap
+                                            <span class="note"
+                                                >&mdash; end-of-bootstrap
+                                                steps: Claude Code, zjstatus
+                                                plugin, chezmoi apply (until
+                                                PR3), legacy sweep</span
+                                            >
+                                        </li>
+                                        <li>
+                                            health / check-updates / update /
+                                            update-hosts
+                                            <span class="note"
+                                                >&mdash; read-only report,
+                                                outdated-pin scan, pull +
+                                                reinstall this host, fan out
+                                                to the fleet</span
+                                            >
+                                        </li>
+                                        <li>
+                                            python-env / fonts / vcpkg
+                                            <span class="note"
+                                                >&mdash; the blessed Python
+                                                env, Nerd Font, and vcpkg
+                                                (each dev-only; REBUILD=1
+                                                forces python-env to
+                                                rebuild)</span
+                                            >
+                                        </li>
+                                        <li>
+                                            lint / fmt / ps-lint / secrets /
+                                            install-hooks
+                                            <span class="note"
+                                                >&mdash;
+                                                check-invariants.sh, shfmt
+                                                -w, PSScriptAnalyzer,
+                                                gitleaks, git
+                                                core.hooksPath</span
+                                            >
+                                        </li>
+                                        <li>
+                                            inventory / bump-versions /
+                                            statusline
+                                            <span class="note"
+                                                >&mdash; mise ls + bootstrap
+                                                status dump, pin bumper,
+                                                ccstatusline prompt</span
+                                            >
+                                        </li>
+                                        <li>
+                                            enable-el-repos /
+                                            native-post-packages /
+                                            verify-tools / migrate-legacy
+                                            <span class="note"
+                                                >&mdash; hidden install-time
+                                                helpers: the
+                                                pre-/post-packages hooks
+                                                config.host.toml /
+                                                config.native.toml declare,
+                                                the post-install capability
+                                                gate, and the one-time
+                                                legacy sweep</span
+                                            >
+                                        </li>
+                                    </ul>
+                                </details>
                                 <details open>
                                     <summary>scripts/</summary>
                                     <ul>
@@ -2167,87 +2328,28 @@ try {
                                                 dir</span
                                             >
                                         </li>
-                                    </ul>
-                                </details>
-                                <details open>
-                                    <summary>
-                                        makefile/
-                                        <span class="note"
-                                            >&mdash; Linux provisioning
-                                            (packages + PATH + chezmoi
-                                            handoff; tool installs are
-                                            mise&rsquo;s job now, via the
-                                            <code>tools</code> phase)</span
-                                        >
-                                    </summary>
-                                    <ul>
                                         <li>
-                                            Makefile
+                                            lib/enable-el-repos.sh
                                             <span class="note"
-                                                >&mdash; top-level: include
-                                                + provision/dev/prod targets
-                                                + the mise-backed
-                                                <code>tools</code> target
-                                                + bespoke targets
-                                                (python-env, vcpkg,
-                                                nerd-fonts, docker-engine,
-                                                &hellip;)</span
+                                                >&mdash; EPEL + CRB on RHEL
+                                                family dev hosts
+                                                (config.host.toml
+                                                pre-packages hook)</span
                                             >
                                         </li>
                                         <li>
-                                            scope.mk
+                                            lib/font.sh / lib/python-env.sh /
+                                            lib/vcpkg.sh /
+                                            lib/check-updates.sh
                                             <span class="note"
-                                                >&mdash; MODE=dev|prod →
-                                                DEST / SUDO / HAS_SUDO /
-                                                INSTALL_PACKAGES /
-                                                MISE_ENV</span
-                                            >
-                                        </li>
-                                        <li>
-                                            versions.mk
-                                            <span class="note"
-                                                >&mdash; the five pins Make
-                                                still owns, post-mise
-                                                (claude-cli, Dozzle, Nerd
-                                                Font, vcpkg, python-env)
-                                                plus the zjstatus floor
-                                                constant; every tool pin
-                                                now lives in
-                                                config*.toml</span
-                                            >
-                                        </li>
-                                        <li>
-                                            packages.mk
-                                            <span class="note"
-                                                >&mdash; dnf core + EPEL +
-                                                optional loop</span
-                                            >
-                                        </li>
-                                        <li>
-                                            shell.mk
-                                            <span class="note"
-                                                >&mdash; PATH via
-                                                /etc/profile.d (sudo) or
-                                                ~/.bashrc (no sudo); the
-                                                chezmoi-tracked
-                                                ~/.zshrc / ~/.bashrc
-                                                already export PATH on
-                                                their own</span
-                                            >
-                                        </li>
-                                        <li>
-                                            dotfiles.mk
-                                            <span class="note"
-                                                >&mdash; chezmoi update gate</span
-                                            >
-                                        </li>
-                                        <li>
-                                            lib/
-                                            <span class="note"
-                                                >&mdash; check-updates.sh /
-                                                doctor.sh / font.sh /
-                                                pipe.sh / python-env.sh /
-                                                vcpkg.sh</span
+                                                >&mdash; moved from the
+                                                deleted
+                                                <code>makefile/lib/</code>;
+                                                called by
+                                                <code>tasks/fonts</code> /
+                                                <code>python-env</code> /
+                                                <code>vcpkg</code> /
+                                                <code>check-updates</code></span
                                             >
                                         </li>
                                     </ul>
@@ -2443,18 +2545,17 @@ try {
                     <h3 id="setup-linux">2. On each Linux host</h3>
                     <p class="lede">
                         <code>bootstrap.sh</code> needs only <code>curl</code>,
-                        <code>git</code>, <code>make</code>, <code>tar</code>,
-                        and <code>iproute</code>
-                        (<code>ip</code>) &mdash; <code>unzip</code> is no
-                        longer required (mise extracts its own archives). A
-                        single preflight check reports
-                        <strong>all</strong> missing prereqs at once. The
-                        script then installs the pinned <code>mise</code>
-                        binary and runs
-                        <code>make MODE=&lt;dev|prod&gt; provision</code>
-                        inside <code>makefile/</code>, whose
-                        <code>tools</code> phase is <code>mise install</code>
-                        &mdash; no <code>ansible-core</code> install, no
+                        <code>git</code>, <code>tar</code>, and
+                        <code>iproute</code> (<code>ip</code>) &mdash;
+                        <code>unzip</code> is no longer required (mise
+                        extracts its own archives). A single preflight check
+                        reports <strong>all</strong> missing prereqs at once.
+                        The script then installs the pinned <code>mise</code>
+                        binary, computes <code>MISE_ENV</code>, runs
+                        <code>scripts/lib/mise-install.sh</code> (tools), then
+                        <code>mise bootstrap --yes</code> (packages, /etc
+                        files, services, compose, repos) &mdash; ONE command
+                        per host, no <code>ansible-core</code> install, no
                         Python &ge; 3.9 gate.
                     </p>
 
@@ -2532,11 +2633,11 @@ try {
                         <div class="tab-panels">
                             <div class="tab-panel panel-prod">
                                 <p class="tab-meta">
-                                    Binaries &rarr;
-                                    <code>~/.local/bin</code> &middot; no
-                                    <code>dnf</code> step.
+                                    Tools &rarr; mise-managed, user-level
+                                    (<code>~/.local/share/mise</code>)
+                                    &middot; no <code>dnf</code> step.
                                 </p>
-                                <pre><code># === Bootstrap: prod machine (no sudo, ~/.local/bin) ===
+                                <pre><code># === Bootstrap: prod machine (no sudo, user-level tools only) ===
 export GITHUB_TOKEN='&lt;your-PAT&gt;' \
        GIT_USER_NAME='Arrush Chaturvedi' \
        GIT_USER_EMAIL='contact@arrushc.com' && \
@@ -2546,12 +2647,13 @@ exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
                             </div>
                             <div class="tab-panel panel-dev">
                                 <p class="tab-meta">
-                                    Binaries &rarr;
-                                    <code>/usr/local/bin</code> &middot;
+                                    Tools &rarr; mise-managed, user-level
+                                    (same as prod) &middot; additionally
                                     installs system packages via
-                                    <code>dnf</code>.
+                                    <code>dnf</code> + managed
+                                    <code>/etc</code> files.
                                 </p>
-                                <pre><code># === Bootstrap: dev machine (sudo, /usr/local/bin + system packages) ===
+                                <pre><code># === Bootstrap: dev machine (sudo, + dnf system packages / etc files) ===
 export GITHUB_TOKEN='&lt;your-PAT&gt;' \
        GIT_USER_NAME='Arrush Chaturvedi' \
        GIT_USER_EMAIL='contact@arrushc.com' && \
@@ -2587,9 +2689,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">4</span
-                            ><span class="lbl">make provision</span
+                            ><span class="lbl">mise install + mise bootstrap</span
                             ><span class="note"
-                                >MODE=dev|prod, parallel</span
+                                >tools, then packages/files/services</span
                             >
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -2664,12 +2766,11 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <li><strong>Skip</strong> &mdash; no setup this run.</li>
                     </ol>
                     <p class="note-row">
-                        Re-runnable any time:
-                        <code>make -C makefile claude-statusline MODE=dev</code>.
+                        Re-runnable any time: <code>mise run statusline</code>.
                         Needs the mise-managed Linux-native Node.js on PATH
-                        (installed by <code>make -C makefile tools MODE=dev</code>,
-                        which the recipe prepends via the mise shims dir), so
-                        a fresh dev_machine doesn&rsquo;t need
+                        (installed as part of <code>mise bootstrap</code>'s
+                        tools phase; the task itself runs through the mise
+                        shims), so a fresh dev_machine doesn&rsquo;t need
                         <code>npx</code> on PATH beforehand. Both the
                         ccstatusline and Node versions are pinned in
                         <code>config.dev.toml</code> (<code
@@ -2683,8 +2784,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         Font Mono
                     </h4>
                     <p>
-                        <code>make provision MODE=dev</code> runs the
-                        <code>nerd-fonts</code> target, which installs
+                        <code>mise bootstrap</code> runs the
+                        <code>fonts</code> task (a post-tools mise task,
+                        dev + non-WSL only), which installs
                         <strong>JetBrainsMono Nerd Font Mono</strong> to
                         <code>~/.local/share/fonts/JetBrainsMonoNerdFontMono/</code>
                         and refreshes the fontconfig cache. The font is required
@@ -2699,10 +2801,12 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <code>bootstrap.ps1</code> on the Windows side to install
                         the font there instead (step 7: <code>Invoke-InstallNerdFonts</code>
                         via <code>scripts/install-nerd-fonts.ps1</code>).
-                        Re-runnable any time:
-                        <code>make -C makefile nerd-fonts MODE=dev</code>.
-                        Font version pinned in <code>makefile/versions.mk</code>
-                        via <code>JETBRAINSMONO_NERD_VERSION</code>.
+                        Re-runnable any time: <code>mise run fonts</code>.
+                        Font version pinned in <code>config.toml</code>
+                        <code>[vars]</code> as
+                        <code>nerd_font_version</code> (a triple-edit with
+                        <code>scripts/lib/font.sh</code> and
+                        <code>scripts/install-nerd-fonts.ps1</code>).
                     </p>
 
                     <details>
@@ -2776,8 +2880,8 @@ try {
 ./bootstrap.sh --dev --check-for-updates   # update scan (read-only)
 
 # Same engines, invoked directly:
-make -C makefile doctor MODE=dev           # or MODE=prod
-make -C makefile check-updates MODE=dev</code></pre>
+mise run health
+mise run check-updates</code></pre>
                             </div>
                             <div class="os-card windows">
                                 <span class="os-label">Windows</span>
@@ -2794,53 +2898,47 @@ make -C makefile check-updates MODE=dev</code></pre>
                             install scope being inspected).
                         </p>
                         <p>
-                            <strong><code>--doctor</code></strong> reports
+                            <strong><code>--doctor</code></strong> runs
+                            <code>mise run health</code>, which reports
                             what is installed, missing, stale, or broken:
-                            prerequisites, the repo&rsquo;s git state (branch,
-                            commits ahead/behind upstream after a fetch,
-                            uncommitted changes), chezmoi init state + dotfile
-                            drift, the login shell, then the mise-managed
-                            toolbelt (one summary row naming anything
-                            <code>mise ls --missing</code> finds, repaired
-                            with <code>make tools MODE=&lt;dev|prod&gt;</code>,
-                            plus rows for the zjstatus plugin copy and the
-                            legacy-tool sweep), then each bespoke Make target
-                            &mdash; <code>claude-cli</code>,
-                            <code>nerd-fonts</code>,
-                            <code>docker-engine</code>,
-                            <code>dozzle-service</code>,
-                            <code>cockpit-service</code>,
-                            <code>rsyslog-service</code>,
-                            <code>wsl-config</code>, <code>vcpkg</code>,
-                            <code>lsp-servers</code>,
-                            <code>python-env</code> (one
+                            <code>mise bootstrap status --missing</code>
+                            (every declared dnf package / /etc file / service
+                            / repo / tool), whether the mise-managed toolbelt
+                            is complete, <code>MISE_ENV</code> persistence
+                            (rc files + the systemd user manager), pueued,
+                            python-env, the dev extras (Claude Code, vcpkg,
+                            fonts, the zjstatus plugin copy), the login shell,
+                            chezmoi drift, and the legacy-tool sweep (one
                             <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
-                            line each, with the exact <code>make</code> repair
-                            command) &mdash; the dev-only services
-                            (docker/dozzle/cockpit/rsyslog &mdash; active or
-                            inactive), <code>wsl-config</code>, and the dnf
-                            package lists. On Windows it covers the portable
-                            and installer-class tools, Warp, Windows Terminal,
-                            Nerd Fonts, BurntToast, the Start Menu shortcuts,
-                            the workstation SSH-profile fragment, the managed
-                            Warp Tab Configs, the dnGrep config seed, the
-                            profile shim, and the SSH key.
+                            row each, with the exact repair command &mdash;
+                            typically <code>mise bootstrap --yes</code> or
+                            <code>mise run &lt;task&gt;</code>). On Windows it
+                            covers the portable and installer-class tools,
+                            Warp, Windows Terminal, Nerd Fonts, BurntToast,
+                            the Start Menu shortcuts, the workstation
+                            SSH-profile fragment, the managed Warp Tab
+                            Configs, the dnGrep config seed, the profile
+                            shim, and the SSH key.
                         </p>
                         <p>
                             <strong><code>--check-for-updates</code></strong>
+                            runs <code>mise run check-updates</code>, which
                             checks the <strong>workstation repo first</strong>
                             (fetch + commits-behind &mdash; pull before
                             trusting the pin comparison), then runs
                             <code>mise outdated --bump</code> for every tool
                             declared in <code>config.toml</code> /
                             <code>config.linux.toml</code> /
-                            <code>config.dev.toml</code>, plus
+                            <code>config.dev.toml</code>, a dnf
+                            <code>check-update</code> on dev hosts, plus
                             <code>git ls-remote</code> (no GitHub API, no
-                            rate limits) for the handful of pins Make still
-                            owns directly in <code>makefile/versions.mk</code>
-                            (<code>claude-cli</code>, <code>dozzle</code>,
-                            <code>nerd-fonts</code>, <code>vcpkg</code>,
-                            <code>python-env</code>).
+                            rate limits) for the handful of pins in
+                            <code>config.toml</code> <code>[vars]</code>
+                            (<code>nerd_font_version</code>,
+                            <code>dozzle_version</code>,
+                            <code>vcpkg_version</code>; the Make-era
+                            <code>claude-cli</code> pin is gone &mdash;
+                            Claude Code self-updates, no pin to check).
                             <code>latest</code>-tracking tools (chezmoi, the
                             <code>pypi:</code> tools, &hellip;) are reported
                             as rolling. The scan is
@@ -2848,10 +2946,11 @@ make -C makefile check-updates MODE=dev</code></pre>
                             is <code>mise config set</code> (or
                             <code>mise use</code>) followed by
                             <code>mise lock --global</code>; bumping a
-                            Make-owned pin is still the manual edit in
-                            <code>makefile/versions.mk</code>, followed by a
-                            re-provision. On Windows the portable-tool pins
-                            in <code>bootstrap.ps1</code>&rsquo;s
+                            <code>[vars]</code> pin is still the manual edit
+                            in <code>config.toml</code>, followed by
+                            <code>mise bootstrap --yes</code>. On Windows the
+                            portable-tool pins in
+                            <code>bootstrap.ps1</code>&rsquo;s
                             <code>$PortableTools</code> are checked the same
                             read-only way.
                         </p>
@@ -2860,16 +2959,16 @@ make -C makefile check-updates MODE=dev</code></pre>
                     <details>
                         <summary>
                             Enforcement / CI
-                            (<code>make lint</code> /
-                            <code>make install-hooks</code>)
+                            (<code>mise run lint</code> /
+                            <code>mise run install-hooks</code>)
                         </summary>
                         <div class="os-card linux">
                             <span class="os-label">Linux</span>
-                            <pre><code>make -C makefile lint MODE=dev     # or MODE=prod — runs check-invariants.sh
-make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-commit hook)</code></pre>
+                            <pre><code>mise run lint            # runs check-invariants.sh
+mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</code></pre>
                         </div>
                         <p>
-                            <code>make lint</code> runs
+                            <code>mise run lint</code> runs
                             <code>scripts/check-invariants.sh</code>, which
                             verifies the mechanically-checkable subset of the
                             load-bearing invariants: version-pin
@@ -2883,11 +2982,11 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             <code>manage-hosts.ps1</code>,
                             <code>install-nerd-fonts.ps1</code>) are linted by
                             <strong>PSScriptAnalyzer</strong> at warning+ in
-                            the same CI workflow; <code>make ps-lint</code>
+                            the same CI workflow; <code>mise run ps-lint</code>
                             runs it locally on a host with <code>pwsh</code>.
                         </p>
                         <p>
-                            <code>make install-hooks</code> sets
+                            <code>mise run install-hooks</code> sets
                             <code>git config core.hooksPath .githooks</code>
                             so the same checks run automatically as a
                             pre-commit hook. Bypass a single commit with
@@ -2899,15 +2998,18 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         <p>
                             A weekly GitHub Actions job
                             (<code>version-bumps.yml</code>) runs
-                            <code>scripts/bump-versions.sh</code>, which bumps
-                            mise tool pins via <code>mise outdated</code> +
+                            <code>scripts/bump-versions.sh</code>
+                            (<code>mise run bump-versions</code>), which
+                            bumps mise tool pins via <code>mise outdated</code> +
                             <code>mise config set</code> +
                             <code>mise lock --global</code> and any drifted
-                            single-location <code>versions.mk</code> pins
-                            (the dual/triple-edit pins are listed for manual
-                            bumping), then opens a PR. The workflow runs
-                            the invariant checker on the bumped tree before opening
-                            the PR.
+                            single-location <code>config.toml</code>
+                            <code>[vars]</code> pin (the dual/triple-edit
+                            pins &mdash; <code>python_version</code>,
+                            <code>nerd_font_version</code> &mdash; are listed
+                            for manual bumping), then opens a PR. The
+                            workflow runs the invariant checker on the bumped
+                            tree before opening the PR.
                         </p>
                     </details>
 
@@ -2996,7 +3098,7 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             installer&rsquo;s per-user mode, so <strong>no
                             UAC</strong>). The seed is <strong>evergreen, not
                             pinned</strong> &mdash; Warp self-updates, so
-                            there is no <code>versions.mk</code> entry.
+                            there is no pin to track.
                             Best-effort: without WinGet the script warns and
                             points at
                             <a href="https://www.warp.dev/download"
@@ -3031,9 +3133,8 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             package at user scope. The seed is
                             <strong>evergreen, not pinned</strong>: it is a
                             per-user MSIX that the Microsoft Store services
-                            afterward, so there is no
-                            <code>versions.mk</code> entry and no
-                            <code>$PortableTools</code> pin (the same
+                            afterward, so there is no pin to track and no
+                            <code>$PortableTools</code> entry (the same
                             latest-release model as the installer-class apps).
                             Best-effort: when WinGet is unavailable the script
                             warns and points at
@@ -3279,8 +3380,8 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                             the background (nothing to pin). Skipped when
                             <code>claude</code> already resolves; soft-fails
                             with a manual-retry hint. The WSL2 copy (installed
-                            by <code>make dev</code> inside the distro) is
-                            independent and unaffected.
+                            by <code>./bootstrap.sh --dev</code> inside the
+                            distro) is independent and unaffected.
                         </li>
                     </ul>
                     <p>
@@ -3388,8 +3489,8 @@ make -C makefile install-hooks     # installs .githooks/pre-commit (git pre-comm
                         <code>bootstrap.ps1</code> requires elevation). Visible to
                         Windows Terminal, Zed, VS Code, and any other
                         Windows app. Font version matches
-                        <code>JETBRAINSMONO_NERD_VERSION</code> in
-                        <code>makefile/versions.mk</code>.
+                        <code>nerd_font_version</code> in
+                        <code>config.toml</code> <code>[vars]</code>.
                     </p>
 
                     <p>Windows HTTP downloads and API requests use <code>curl.exe</code>
@@ -3612,9 +3713,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     <p class="note-row">
                         Use <code>--dev</code> for WSL distros where you have
                         sudo (the common case &mdash; you own the WSL host).
-                        Tools land in <code>/usr/local/bin</code>, starship +
-                        aliases + fzf + zoxide + zellij all become available
-                        on next shell.
+                        Tools install mise-managed and user-level (same as
+                        every other scope); starship + aliases + fzf +
+                        zoxide + zellij all become available on next shell.
                     </p>
                     <p class="note-row">
                         <strong>Why WSL tabs land in <code>~</code>:</strong>
@@ -3643,20 +3744,26 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         Two files configure WSL, and the repo owns both.
                         <code>/etc/wsl.conf</code> (per-distro: systemd,
                         automount, interop, default user) is deployed on WSL
-                        hosts by <code>make wsl-config</code> &mdash; part of
-                        <code>make dev</code> / <code>provision</code>, gated to
-                        WSL hosts with sudo, from the tracked
+                        hosts by <code>mise bootstrap</code>
+                        (<code>config.wsl.toml</code>'s
+                        <code>[bootstrap.files]</code> entry, loaded only
+                        when <code>MISE_ENV</code> carries the
+                        <code>wsl</code> token), from the tracked
                         <code>configs/wsl/wsl.conf</code>. The global
                         <code>%USERPROFILE%\.wslconfig</code> (WSL2 VM memory /
                         CPU / networking, all distros) is deployed by chezmoi on
                         the Windows host from <code>chezmoi/dot_wslconfig</code>.
                         <strong>Both need <code>wsl --shutdown</code></strong>
-                        from a Windows terminal to take effect;
-                        <code>wsl-config</code> prints the reminder, and a
-                        chezmoi <code>run_onchange</code> script prints it on
-                        Windows when <code>.wslconfig</code> changes. The
-                        tracked <code>.wslconfig</code> already opts into
-                        dynamic memory
+                        from a Windows terminal to take effect. On the
+                        Windows side a chezmoi <code>run_onchange</code>
+                        script prints the reminder when
+                        <code>.wslconfig</code> changes; on Linux, remember
+                        it yourself after a <code>/etc/wsl.conf</code>
+                        change (the Make-era printed reminder is gone with
+                        <code>makefile/</code> &mdash; <code>mise bootstrap</code>
+                        reports the file as updated, but prints no
+                        follow-up hint). The tracked <code>.wslconfig</code>
+                        already opts into dynamic memory
                         (<code>autoMemoryReclaim=gradual</code> returns cached
                         RAM to Windows) and pre-opts into sparse VHDs
                         (<code>sparseVhd=true</code> &mdash; currently disabled
@@ -3882,7 +3989,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         (<kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd>)
                         fuzzy-searches eight tracked snippets
                         (<code>cza</code>/<code>czu</code>/<code>czd</code>/<code>czs</code>,
-                        full provision, lint, fleet update,
+                        full dev bootstrap, lint, fleet update,
                         <code>zellij attach</code>) plus recent commands &mdash;
                         snippets insert editable text and never auto-execute.
                     </p>
@@ -4095,12 +4202,14 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <code>scripts/update-hosts.sh</code> reads
                         <code>hosts.conf</code> directly when doing bulk
                         remote updates &mdash; the group column drives the
-                        per-host <code>MODE</code>. It&rsquo;s a
+                        per-host <code>--dev</code>/<code>--prod</code> flag
+                        passed to <code>bootstrap.sh</code>. It&rsquo;s a
                         <strong>prod-host</strong> tool: prod never needs
                         sudo, so the fleet run is fully non-interactive. Dev
                         hosts are bootstrapped by hand, interactively, one at
-                        a time &mdash; see &ldquo;Make &mdash; remote&rdquo;
-                        in <a href="#daily">Daily workflows</a>.
+                        a time &mdash; see &ldquo;Remote fleet
+                        updates&rdquo; in <a href="#daily">Daily
+                        workflows</a>.
                     </p>
                     <div class="callout">
                         <strong
@@ -4339,7 +4448,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         setup any time (use tracked / this machine / set new
                         global / skip):
                     </p>
-                    <pre><code>make -C makefile claude-statusline MODE=dev</code></pre>
+                    <pre><code>mise run statusline</code></pre>
                     <p class="note-row">
                         Same prompt that fires at the tail of
                         <code>bootstrap.sh --dev</code>. See
@@ -4363,26 +4472,27 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         else that needs <code>npx</code>, <code>go</code> or
                         <code>uv</code>. Install or refresh the whole set with:
                     </p>
-                    <pre><code>make -C makefile tools MODE=dev   # MODE=prod installs the smaller prod-scope set</code></pre>
+                    <pre><code>mise bootstrap --yes   # runs on every host; MISE_ENV picks the scope</code></pre>
                     <p class="note-row">
                         Everything lands user-level under
                         <code>~/.local/share/mise</code>; the only privileged
-                        step is the one-time sweep of the pre-mise
-                        <code>/usr/local/bin</code> artifacts on
-                        <code>dev_machine</code> (sudo prompt on the first run,
-                        <code>tasks/migrate-legacy</code>). Interactive shells
-                        see the tools through
+                        step is the dnf batch itself (a single
+                        <code>sudo dnf install -y</code> per run &mdash; mise
+                        elevates itself) plus the one-time sweep of the
+                        pre-mise <code>/usr/local/bin</code> artifacts on
+                        <code>dev_machine</code> (<code>tasks/migrate-legacy</code>).
+                        Interactive shells see the tools through
                         <code>mise activate</code>; non-interactive ones
-                        (<code>ssh host cmd</code>, Make, IDE spawns) through
+                        (<code>ssh host cmd</code>, IDE spawns) through
                         <code>~/.local/share/mise/shims</code>, exported from
                         <code>~/.zshenv</code> and from <code>~/.bashrc</code>
                         above its interactive guard. To install or refresh
                         just one tool:
                         <code>mise install &lt;tool&gt;</code>; to remove one:
                         <code>mise uninstall &lt;tool&gt;</code>. Auto-runs
-                        as a dep of <code>claude-statusline</code> and
-                        <code>python-env</code>, so you rarely need to call
-                        <code>make tools</code> directly. WSL note: if
+                        as a dep of <code>tasks/bootstrap</code>, so you
+                        rarely need to call <code>mise bootstrap</code>
+                        directly outside of re-provisioning. WSL note: if
                         your <code>PATH</code> leaks a Windows-side
                         <code>npx</code> from <code>/mnt/c/...</code>, the setup
                         script detects it and points you at this target.
@@ -4400,12 +4510,14 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         on both <code>dev_machine</code> and
                         <code>prod_machine</code>.
                     </p>
-                    <pre><code>make python-env-rebuild MODE=dev   # or MODE=prod; upgrades to latest libs</code></pre>
+                    <pre><code>REBUILD=1 mise run python-env   # runs on both scopes; upgrades to latest libs</code></pre>
                     <p class="note-row">
                         Libraries track latest at install time; only the
                         Python runtime itself is pinned
-                        (<code>PYTHON_VERSION</code> in
-                        <code>versions.mk</code>). Windows upgrade: delete
+                        (<code>python_version</code> in <code>config.toml</code>
+                        <code>[vars]</code>, a three-way pin with
+                        <code>tools.python</code> and
+                        <code>$PythonEnvVersion</code>). Windows upgrade: delete
                         the <code>python-env.*.stamp</code> under
                         <code>%LOCALAPPDATA%\workstation\stamps</code> and
                         re-run <code>bootstrap.ps1</code>. One-off
@@ -4417,11 +4529,12 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </p>
 
                     <h3>
-                        Make &mdash; remote (control machine &rarr; all
+                        Remote fleet updates (control machine &rarr; all
                         hosts via SSH)
                     </h3>
                     <p class="note-row">
-                        <code>scripts/update-hosts.sh</code> ssh's into every
+                        <code>scripts/update-hosts.sh</code>
+                        (<code>mise run update-hosts</code>) ssh's into every
                         managed host in <code>hosts.conf</code>, <code>cd</code>s
                         into the checkout (<code>~/.config/mise</code>, or
                         the pre-relocation <code>~/.local/share/chezmoi</code>
@@ -4429,7 +4542,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         move), and runs
                         <code>git pull --ff-only &amp;&amp; ./bootstrap.sh
                         --&lt;dev|prod&gt; --yes</code> &mdash; the full
-                        bootstrap flow, not just <code>make provision</code>,
+                        bootstrap flow, not just <code>mise bootstrap</code>,
                         so a host also picks up a relocated checkout or a
                         newly-pinned <code>mise</code>. It is a
                         <strong>prod-host</strong> tool &mdash; prod hosts
@@ -4437,7 +4550,8 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         safe to fire at the fleet in parallel.
                         <strong>Dev</strong> hosts are bootstrapped
                         <em>interactively, by hand, one at a time</em> instead
-                        (their <code>make provision</code> can hit a sudo
+                        (their dnf package batch and <code>mise bootstrap
+                        plan</code>/<code>status</code> calls can hit a sudo
                         password prompt, which a non-interactive SSH run can
                         never satisfy):
                         <code>ssh -t &lt;host&gt; 'cd ~/.config/mise
@@ -4486,49 +4600,56 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </div>
 
                     <h3>
-                        Make &mdash; local (self-provisioning &mdash; what
-                        bootstrap.sh runs)
+                        Local re-provisioning (what bootstrap.sh runs)
                     </h3>
                     <p class="note-row">
-                        <code>bootstrap.sh</code> derives
-                        <code>MODE</code> from its
-                        <code>--dev</code>/<code>--prod</code> flag and runs
-                        <code>make MODE=&lt;mode&gt; provision</code> inside
-                        <code>makefile/</code>. You can invoke
-                        <code>make</code> manually for repeated runs without
-                        going through bootstrap each time. Thanks to the
-                        root <code>GNUmakefile</code> shim, the same
-                        <code>make</code> commands also work directly from
-                        the repo root (e.g.
-                        <code>make lint MODE=prod</code>) &mdash; no
-                        <code>cd makefile</code> needed.
+                        <code>bootstrap.sh</code> installs pinned mise,
+                        computes <code>MISE_ENV</code> from its
+                        <code>--dev</code>/<code>--prod</code> flag, runs
+                        <code>scripts/lib/mise-install.sh</code> (tools),
+                        then <code>mise bootstrap --yes</code> (packages,
+                        /etc files, services, compose, repos &mdash; every
+                        <code>[bootstrap.*]</code> table the loaded
+                        <code>config*.toml</code> files declare). You can
+                        invoke <code>mise bootstrap</code> manually for
+                        repeated runs without going through the whole
+                        <code>bootstrap.sh</code> flow each time &mdash; it
+                        works from any cwd inside the checkout, since this
+                        repo IS mise&rsquo;s global config dir.
                     </p>
-                    <pre><code>cd makefile
+                    <pre><code># Full re-provision (packages, /etc files, services, compose, repos, tools)
+mise bootstrap --yes
 
-# Prod (no sudo, ~/.local/bin)
-make MODE=prod provision
-make prod                                       # friendly alias
+# Dry run — print the plan, change nothing
+mise bootstrap plan
+MISE_ENV=linux,dev,host,native mise bootstrap plan   # inspect a scope you're not currently in
 
-# Dev (sudo, /usr/local/bin)
-make MODE=dev provision
-make dev                                        # friendly alias
+# Read-only status of everything mise bootstrap manages
+mise bootstrap status
+mise bootstrap status --missing        # only what's missing/drifted
 
-# Dry run (Make&rsquo;s built-in: print recipe lines, don&rsquo;t execute)
-make -n MODE=prod provision
+# Narrow to one phase — useful for iterating when one step is flaky
+mise bootstrap --only packages --yes
+mise bootstrap --only services,compose --yes
 
-# Single tool — useful for iterating when one install is flaky (mise tools
-# take no MODE — MISE_ENV, exported by the rc, already picks the scope)
+# Single tool — mise tools take no MODE; MISE_ENV, exported by the rc, already
+# picks the scope
 mise install gitui
 mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                     <p class="note-row">
-                        <strong>Provisioning is parallel by default</strong>
-                        &mdash; make self-assigns <code>-j$(nproc)</code>, and
-                        <code>provision</code> runs as three ordered phases
-                        (dnf packages &rarr; tool fan-out &rarr; chezmoi
-                        dotfiles) so the sudo password prompt and any chezmoi
-                        overwrite prompt stay readable. Pass
-                        <code>-j1</code> (e.g. <code>make dev -j1</code>) for
-                        a fully serial run when debugging a flaky install.
+                        <strong><code>mise bootstrap plan</code> and
+                        <code>status</code> never need sudo</strong> &mdash;
+                        they're read-only, so they're safe to run
+                        interactively any time, including from a non-sudo
+                        session. Only the packages phase and the /etc files
+                        it writes actually elevate (mise re-execs itself with
+                        sudo for those steps, one password prompt for the
+                        whole dnf batch). The dnf batch is
+                        <strong>all-or-nothing</strong> &mdash; one
+                        unresolvable package name fails the entire install,
+                        which is why every name in
+                        <code>config.host.toml</code>/<code>config.native.toml</code>
+                        is EL9-verified.
                     </p>
 
                     <h3 id="daily-zellij">Zellij</h3>
@@ -4761,17 +4882,19 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                     <ul>
                         <li>
                             <strong>Docker engine</strong> — installed
-                            automatically by <code>make provision</code>
-                            (the <code>docker-engine</code> target):
-                            Docker CE from Docker&rsquo;s official dnf
-                            repo, service enabled, and your user added
-                            to the <code>docker</code> group (log out/in
-                            once for sudo-less <code>docker</code> /
-                            <code>lazydocker</code>). If Docker is
-                            already present from a manual install, the
-                            target leaves it alone. Versions come from
-                            dnf — there is no pin in
-                            <code>versions.mk</code>.
+                            automatically by <code>mise bootstrap</code>
+                            (<code>config.native.toml</code>): Docker CE from
+                            Docker&rsquo;s official dnf repo
+                            (<code>[bootstrap.files]</code> drops the repo
+                            file pre-packages), service enabled
+                            (<code>[bootstrap.services.docker]</code>), and
+                            your user added to the <code>docker</code> group
+                            by the <code>native-post-packages</code>
+                            post-packages hook (log out/in once for
+                            sudo-less <code>docker</code> /
+                            <code>lazydocker</code>). If Docker is already
+                            present from a manual install, the step leaves it
+                            alone. Versions come from dnf — no pin to track.
                         </li>
                         <li>
                             <strong>Cockpit</strong> — open
@@ -4782,26 +4905,33 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                             storage, network, packages, podman.
                         </li>
                         <li>
-                            <strong>Dozzle</strong> — runs as a Docker
-                            container managed by systemd; bound to
-                            localhost. SSH-tunnel to view:
+                            <strong>Dozzle</strong> — a <code>docker
+                            compose</code> project at
+                            <code>/etc/dozzle</code>
+                            (<code>[bootstrap.compose.dozzle]</code> in
+                            <code>config.native.toml</code>, rendered from
+                            the tracked
+                            <code>configs/dozzle/compose.yaml.tera</code>);
+                            bound to localhost. SSH-tunnel to view:
                             <code>ssh -L 8080:localhost:8080 &lt;host&gt;</code>,
                             then
                             <code>http://localhost:8080</code> on your
                             workstation. Real-time Docker container logs.
                             Bump the pinned image tag by editing
-                            <code>DOZZLE_VERSION</code> in
-                            <code>makefile/versions.mk</code>; the next
-                            <code>make dev</code> re-pulls and restarts
-                            the unit.
+                            <code>dozzle_version</code> in
+                            <code>config.toml</code> <code>[vars]</code>;
+                            the next <code>mise bootstrap</code> re-renders
+                            the compose file and recreates the container.
                         </li>
                         <li>
                             <strong>Shell shortcuts</strong> — on any
                             dev_machine, the chezmoi-tracked shells alias
-                            <code>dozzle-status</code>,
-                            <code>dozzle-logs</code> (follows
-                            <code>journalctl</code>),
-                            <code>dozzle-restart</code>, and
+                            <code>dozzle-status</code>
+                            (<code>docker compose -f /etc/dozzle/compose.yaml
+                            ps</code>), <code>dozzle-logs</code>
+                            (<code>... logs -f</code>),
+                            <code>dozzle-restart</code>
+                            (<code>... restart</code>), and
                             <code>cockpit-status</code> for fast health
                             checks. Defined in
                             <code>dot_zshrc.tmpl</code> /
@@ -4810,26 +4940,26 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                             aren't installed.
                         </li>
                         <li>
-                            <strong>WSL note</strong> — the engine install
-                            and both services are skipped automatically on
-                            WSL dev_machines (like nerd-fonts). The
-                            web-admin stack targets a standalone Linux dev
-                            box, and on WSL the engine belongs to Docker
-                            Desktop on the Windows host, so
-                            <code>make provision</code> prints a
-                            &ldquo;skipping on WSL&rdquo; line for
-                            <code>docker-engine</code> /
-                            <code>dozzle-service</code> /
-                            <code>cockpit-service</code> instead of failing.
+                            <strong>WSL note</strong> — all of
+                            <code>config.native.toml</code> is skipped
+                            automatically on WSL dev_machines (it only loads
+                            when <code>MISE_ENV</code> carries the
+                            <code>native</code> token, never <code>wsl</code>).
+                            The web-admin stack targets a standalone Linux
+                            dev box, and on WSL the engine belongs to Docker
+                            Desktop on the Windows host.
                         </li>
                         <li>
                             <strong>pueue</strong> — unlike the services
                             above, this one runs on every Linux host (both
                             groups, WSL included): the daemon
                             (<code>pueued</code>) runs as a per-user systemd
-                            unit, auto-enabled by <code>chezmoi apply</code>.
+                            unit declared in <code>config.linux.toml</code>
+                            (<code>[bootstrap.services.pueued]</code>,
+                            written as <code>dev.mise.pueued.service</code>
+                            and auto-enabled by <code>mise bootstrap</code>).
                             Inspect with
-                            <code>systemctl --user status pueued</code>.
+                            <code>systemctl --user status dev.mise.pueued</code>.
                             Note that the daemon and all queued jobs are torn
                             down when your last login session ends; if jobs
                             must survive logout, enable user lingering with
@@ -5023,6 +5153,74 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                         <code>config.dev.toml</code> for worked examples.
                     </p>
 
+                    <h3>Adding a dnf package</h3>
+                    <p>
+                        One line, in the right file. Dev-only C-toolchain /
+                        core packages go in <code>config.host.toml</code>;
+                        anything needing docker/cockpit/rsyslog/NFS (non-WSL
+                        dev only) goes in <code>config.native.toml</code>.
+                        Both are <code>[bootstrap.packages]</code> tables of
+                        <code>"dnf:&lt;name&gt;" = "latest"</code> entries,
+                        installed as ONE
+                        <code>sudo dnf install -y &lt;every missing
+                        name&gt;</code> batch &mdash; a single unresolvable
+                        name fails the <strong>whole</strong> batch, so
+                        verify the exact package name against this host&rsquo;s
+                        repos before committing:
+                    </p>
+                    <pre><code># config.host.toml — [bootstrap.packages]
+"dnf:tig" = "latest"</code></pre>
+                    <pre><code>dnf repoquery tig          # confirm the exact name resolves on EL9
+mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap plan</code></pre>
+                    <p class="note-row">
+                        Names already dropped by the 2026-09-17 EL9 spike
+                        (don&rsquo;t re-add them): <code>fswatch</code> and
+                        <code>entr</code> (not packaged for EL9),
+                        <code>cockpit-networkmanager</code> (a virtual
+                        provide of <code>cockpit-system</code>, never
+                        satisfiable by <code>rpm -q</code>).
+                        <code>ShellCheck</code> is capitalised &mdash; EPEL
+                        ships it that way.
+                    </p>
+
+                    <h3>Adding a service or an <code>/etc</code> file</h3>
+                    <p>
+                        Both live in <code>config.native.toml</code> (or
+                        <code>config.wsl.toml</code> for
+                        <code>/etc/wsl.conf</code>-style, WSL-only state):
+                        an <code>[bootstrap.files."/etc/&lt;path&gt;"]</code>
+                        table for the file (<code>source</code> is relative
+                        to the repo root, under <code>configs/</code>; only
+                        <code>pre-packages</code>/<code>post-packages</code>
+                        phases exist; no <code>sudo</code> key &mdash; mise
+                        elevates itself), and an
+                        <code>[bootstrap.services.&lt;name&gt;]</code> table
+                        for the systemd unit it belongs to:
+                    </p>
+                    <pre><code># config.native.toml
+[bootstrap.files."/etc/example/example.conf"]
+source = "configs/example/example.conf"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["example"]          # restart this service when the file changes
+
+[bootstrap.services.example]
+state = "running"
+enabled = true
+on_change = "restart"</code></pre>
+                    <p class="note-row">
+                        Verify with <code>mise bootstrap plan</code> (dry
+                        run) then <code>mise bootstrap status --missing</code>
+                        after a real run. <strong>No
+                        <code>[bootstrap.linux.firewall]</code> table</strong>
+                        &mdash; any firewall rule makes unprivileged
+                        <code>mise bootstrap plan</code>/<code>status</code>
+                        abort on a sudo prompt; open ports the existing
+                        <code>firewall-cmd</code> way, inside a
+                        <code>post-packages</code> hook task instead.
+                    </p>
+
                     <h3>Adding a new host</h3>
                     <div class="flow">
                         <div class="step">
@@ -5090,14 +5288,14 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                             <p>
                                 <strong>RHEL/Fedora:</strong>
                                 <code
-                                    >sudo dnf install curl git make tar
+                                    >sudo dnf install curl git tar
                                     iproute</code
                                 >
                             </p>
                             <p>
                                 <strong>Debian/Ubuntu:</strong>
                                 <code
-                                    >sudo apt install curl git make tar
+                                    >sudo apt install curl git tar
                                     iproute2</code
                                 >
                             </p>
@@ -5404,7 +5602,7 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                                 the <code>theme "&lt;name&gt;"</code> line
                                 against the block names in
                                 <code>themes/*.kdl</code> &mdash; run
-                                <code>make lint MODE=prod</code> if you suspect
+                                <code>mise run lint</code> if you suspect
                                 the config itself.
                             </p>
                             <p>
@@ -5774,30 +5972,110 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
                     <details data-ts>
                         <summary>
-                            <code>make</code> errored with
-                            <em
-                                >&ldquo;MODE=dev requires HAS_SUDO=true&rdquo;</em
-                            >
-                            or
-                            <em
-                                >&ldquo;MODE not set&rdquo;</em
-                            >
+                            <code>mise bootstrap</code> failed with a dnf
+                            error naming one package
                         </summary>
                         <div class="ts-body">
                             <p>
-                                <code>scope.mk</code> guards both: you can't
-                                set <code>MODE=dev</code> without sudo
-                                (system-wide install is meaningless without
-                                it), and there's no default for
-                                <code>MODE</code> &mdash; the choice is too
-                                load-bearing to silently fall through.
+                                The dnf batch is
+                                <strong>all-or-nothing</strong> &mdash; mise
+                                runs ONE <code>sudo dnf install -y &lt;every
+                                missing name&gt;</code> per <code>[bootstrap.packages]</code>
+                                table, so a single unresolvable name fails
+                                the <em>whole</em> batch, even though every
+                                other name would have installed fine.
                             </p>
                             <p>
-                                Use one of <code>make dev</code> /
-                                <code>make prod</code> (which set
-                                <code>MODE</code> for you) or pass it
-                                explicitly: <code>make MODE=prod
-                                provision</code>.
+                                Confirm the exact name for this host&rsquo;s
+                                repos with <code>dnf repoquery
+                                &lt;name&gt;</code>. Every name already in
+                                <code>config.host.toml</code> /
+                                <code>config.native.toml</code> was
+                                EL9-verified as of 2026-09-17; a newer dnf
+                                metadata refresh, a disabled repo, or a
+                                typo in a freshly-added line are the usual
+                                causes. Fix the entry (or the repo state)
+                                and re-run
+                                <code>mise bootstrap --only packages --yes</code>.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            A bootstrap phase fails and blocks the rest
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                <code>mise bootstrap</code> runs its phases
+                                <strong>in a fixed order</strong> (packages,
+                                files/services/compose, repos, dotfiles, tools,
+                                then the <code>bootstrap</code> task) and
+                                <strong>stops at the first failure</strong>
+                                &mdash; a wedged phase blocks every phase after
+                                it, not just its own step.
+                            </p>
+                            <p>
+                                Re-running
+                                <code>./bootstrap.sh --dev|--prod</code> is
+                                <strong>idempotent</strong> and resumes: every
+                                already-settled resource is skipped, so you
+                                aren&rsquo;t redoing work, only retrying what
+                                failed. If a single phase is wedged on
+                                something outside your control (Docker Hub
+                                unreachable, a proxied host, a flaky mirror),
+                                skip just that phase to make progress
+                                elsewhere:
+                            </p>
+                            <pre><code>mise bootstrap --skip compose --yes        # e.g. Docker Hub unreachable
+mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</code></pre>
+                            <p>
+                                then re-run the full
+                                <code>./bootstrap.sh --dev|--prod</code> once
+                                the underlying cause is fixed &mdash; a
+                                skipped phase leaves real drift behind (see
+                                <code>mise run health</code>). Use
+                                <code>mise bootstrap plan</code> first to see
+                                what a phase would actually do before running
+                                it for real.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>mise bootstrap plan</code> / <code>status</code>
+                            asks for a sudo password and hangs (no TTY)
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                This repo ships NO
+                                <code>[bootstrap.linux.firewall]</code>
+                                table on purpose (Ruling 1 in the migration
+                                plan): mise re-execs itself with sudo for
+                                <em>any</em> firewall rule, even during a
+                                read-only <code>plan</code>/<code>status</code>
+                                call, and a non-interactive session (CI, a
+                                cron job, an SSH one-liner) has no TTY to
+                                answer the password prompt &mdash; it just
+                                hangs or fails with <em>&ldquo;sudo: a
+                                password is required&rdquo;</em>.
+                            </p>
+                            <p>
+                                If you see this, a
+                                <code>[bootstrap.linux.firewall]</code> table
+                                was added to a config file that loads
+                                unconditionally (unsupported here &mdash;
+                                <code>mise run health</code> would break on
+                                every host). Cockpit&rsquo;s firewall port
+                                stays the existing <code>firewall-cmd</code>
+                                snippet inside the
+                                <code>native-post-packages</code> hook task
+                                instead, which only runs during an actual
+                                <code>mise bootstrap --yes</code>, never
+                                during <code>plan</code>/<code>status</code>.
+                                Remove the table to restore unprivileged
+                                <code>plan</code>/<code>status</code>.
                             </p>
                         </div>
                     </details>
@@ -5826,24 +6104,81 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Dozzle runs as a Docker container. On
-                                non-WSL dev_machines the engine is installed
-                                automatically by the
-                                <code>docker-engine</code> target (part of
-                                <code>make provision</code>), so this mostly
-                                bites when that step was skipped or failed:
-                                <code>make dozzle-service</code> fails loud
-                                with a "docker not installed" message when
-                                <code>command -v docker</code> returns nothing.
-                                Run <code>make MODE=dev docker-engine</code>,
-                                then re-run <code>make dozzle-service</code>.
-                                (A pre-existing manual Docker or Podman-shim
-                                install is left untouched and also satisfies
-                                the check.) If Docker is installed but the
-                                <code>docker pull amir20/dozzle:&lt;tag&gt;</code>
-                                step fails, check
-                                <code>journalctl -u dozzle -n 30</code> — likely
-                                a registry-rate-limit or DNS issue.
+                                Dozzle is a <code>docker compose</code>
+                                project at <code>/etc/dozzle</code>
+                                (<code>[bootstrap.compose.dozzle]</code> in
+                                <code>config.native.toml</code>). On non-WSL
+                                dev_machines the engine is installed
+                                automatically in the same file&rsquo;s
+                                <code>[bootstrap.packages]</code> table
+                                (packages install before the compose phase
+                                runs), so this mostly bites when that step
+                                was skipped, failed, or the host is missing
+                                <code>docker-compose-plugin</code> (needed
+                                for <code>docker compose</code> itself).
+                                Re-run <code>mise bootstrap --only
+                                packages,compose --yes</code>; check with
+                                <code>docker compose -f
+                                /etc/dozzle/compose.yaml ps</code>
+                                (<code>dozzle-status</code>). (A pre-existing
+                                manual Docker or Podman-shim install is left
+                                untouched and also satisfies the check.) If
+                                Docker is installed but the image pull
+                                fails, check <code>docker compose -f
+                                /etc/dozzle/compose.yaml logs</code>
+                                (<code>dozzle-logs</code>) — likely a
+                                registry-rate-limit or DNS issue. A
+                                container named <code>dozzle</code> already
+                                running from the old Make-era systemd unit
+                                blocks the compose project&rsquo;s port and
+                                name &mdash; the <code>native-post-packages</code>
+                                hook retires that unit before the compose
+                                phase runs; <code>systemctl status
+                                dozzle</code> should report the unit as gone,
+                                not just inactive.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>pueue status</code> fails, or
+                            <code>pueued</code> isn&rsquo;t running
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Check the unit first:
+                                <code>systemctl --user is-active
+                                dev.mise.pueued.service</code>. If it
+                                isn&rsquo;t <code>active</code>, read the log:
+                                <code>journalctl --user -u dev.mise.pueued
+                                -n 20</code>.
+                            </p>
+                            <p>
+                                The usual cause is the systemd
+                                <strong>user manager</strong> not carrying
+                                <code>MISE_ENV</code> &mdash; the unit's
+                                <code>ExecStart</code> shim then errors with
+                                something like <em>&ldquo;No version is set
+                                for shim: pueued&rdquo;</em> because it can&rsquo;t
+                                tell which <code>config*.toml</code> files
+                                declared the tool. The unit deliberately
+                                carries no <code>Environment=MISE_ENV=...</code>
+                                line of its own (the value differs per host),
+                                so it relies entirely on the user manager's
+                                environment: <code>~/.config/environment.d/10-mise.conf</code>
+                                (picked up at the user manager's next
+                                start/re-exec &mdash; i.e. your next login) and
+                                <code>systemctl --user set-environment
+                                MISE_ENV=&lt;your token set&gt;</code> (fixes
+                                the <em>live</em> manager immediately, no
+                                re-login needed). <code>./bootstrap.sh</code>
+                                does both on every run, so this normally only
+                                bites after a manual pueued edit or a
+                                manager restart that raced the environment
+                                file. Fix, then
+                                <code>systemctl --user restart
+                                dev.mise.pueued.service</code>.
                             </p>
                         </div>
                     </details>
@@ -5891,7 +6226,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     <strong>Linux:</strong>
                                     <code>fc-list | grep -i 'jetbrainsmono nerd font mono'</code>
                                     &mdash; expect 6 entries. Empty? Run
-                                    <code>cd makefile &amp;&amp; make nerd-fonts MODE=dev</code>.
+                                    <code>mise run fonts</code>.
                                     Re-run starting shells to refresh.
                                 </li>
                                 <li>
@@ -5944,8 +6279,9 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     tofu:</strong>
                                     restart it so it re-enumerates the
                                     installed fonts. Confirm
-                                    <code>JETBRAINSMONO_NERD_VERSION</code> in
-                                    <code>makefile/versions.mk</code> matches the
+                                    <code>nerd_font_version</code> in
+                                    <code>config.toml</code>
+                                    <code>[vars]</code> matches the
                                     <code>$Version</code> literal in
                                     <code>scripts/install-nerd-fonts.ps1</code>
                                     &mdash; drift between the two means Linux and
@@ -5953,8 +6289,10 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     versions.
                                 </li>
                                 <li>
-                                    <strong>WSL host running <code>make nerd-fonts</code>
-                                    says &ldquo;skipping on WSL&rdquo;:</strong>
+                                    <strong>WSL host running <code>mise run
+                                    fonts</code> says &ldquo;skipped on WSL
+                                    &mdash; the Windows terminal resolves
+                                    fonts&rdquo;:</strong>
                                     intentional. WSL apps render via the Windows
                                     host&rsquo;s terminal (Windows Terminal),
                                     which uses Windows-registered fonts. Run
@@ -6000,7 +6338,10 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                     <code>[interop]</code> in
                                     <code>/etc/wsl.conf</code> &mdash; now
                                     deployed for you by
-                                    <code>make wsl-config</code> (tracked at
+                                    <code>mise bootstrap</code>
+                                    (<code>config.wsl.toml</code>'s
+                                    <code>[bootstrap.files]</code> entry,
+                                    tracked at
                                     <code>configs/wsl/wsl.conf</code>) &mdash;
                                     then <code>wsl --shutdown</code> from a
                                     <em>Windows</em> terminal (ends all WSL
@@ -6102,31 +6443,33 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
 
                     <details data-ts>
                         <summary>
-                            LSP servers &mdash; a language server is missing or
-                            <code>make lsp-servers</code> failed for one server
+                            LSP servers &mdash; a language server is missing
+                            after <code>mise bootstrap</code>
                         </summary>
                         <div class="ts-body">
                             <p>
-                                <code>make lsp-servers MODE=dev</code> no
-                                longer installs anything &mdash; it only
-                                verifies <code>clangd</code> is present.
-                                <code>make tools MODE=dev</code> (also runs as
-                                part of <code>make dev</code>) is what
-                                installs the whole stack, via mise. Servers
-                                and their mechanisms:
+                                There is no separate verify step any more
+                                (the Make-era <code>lsp-servers</code> target
+                                is gone with <code>makefile/</code>).
+                                <code>mise bootstrap</code>'s tools phase
+                                (also reachable directly as
+                                <code>./bootstrap.sh --dev</code> or
+                                <code>scripts/lib/mise-install.sh</code>) is
+                                what installs the whole stack, via mise.
+                                Servers and their mechanisms:
                             </p>
                             <ul>
-                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; mise aqua-registry tools, dev + prod; re-run <code>mise install rust-analyzer marksman taplo</code> or <code>make tools MODE=dev</code>.</li>
-                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (<code>make tools MODE=dev</code>, from <code>config.dev.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
-                                <li><strong>clangd</strong> &mdash; verified-only (comes from <code>clang-tools-extra</code> via dnf, see the C/C++ entry below); <code>make lsp-servers</code> only warns if absent.</li>
+                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; mise aqua-registry tools, dev + prod; re-run <code>mise install rust-analyzer marksman taplo</code> or <code>mise bootstrap --yes</code>.</li>
+                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (installed as part of <code>mise bootstrap</code>, from <code>config.dev.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
+                                <li><strong>clangd</strong> &mdash; not a mise tool; comes from dnf (<code>clang-tools-extra</code> in <code>config.host.toml</code>, see the C/C++ entry below). <code>mise run health</code> does not check it &mdash; verify with <code>command -v clangd</code>.</li>
                                 <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s <code>Invoke-MiseRuntimes</code> step, straight from <code>config.toml</code> + <code>config.dev.toml</code>; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
                             </ul>
                             <p>
                                 Re-run the stack:
-                                <code>make tools MODE=dev</code> (idempotent
-                                &mdash; mise installs each declared tool
-                                independently). Force one tool&rsquo;s
-                                reinstall:
+                                <code>mise bootstrap --only tools --yes</code>
+                                (idempotent &mdash; mise installs each
+                                declared tool independently). Force one
+                                tool&rsquo;s reinstall:
                                 <code>mise uninstall &lt;name&gt; &amp;&amp;
                                 mise install &lt;name&gt;</code>.
                             </p>
@@ -6150,21 +6493,24 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 install via dnf on
                                 <span class="badge dev">dev_machine</span> only,
                                 <strong>best-effort</strong>. Several come from
-                                EPEL/CRB, not BaseOS &mdash; <code>make
-                                provision</code> auto-enables both (EPEL +
-                                CodeReady Builder) on RHEL-family hosts, because
-                                EPEL on EL9 needs CRB or
+                                EPEL/CRB, not BaseOS &mdash; the
+                                <code>config.host.toml</code>
+                                <code>pre-packages</code> hook
+                                (<code>mise run enable-el-repos</code>) auto-enables
+                                both (EPEL + CodeReady Builder) on RHEL-family
+                                hosts before the dnf batch runs, because EPEL
+                                on EL9 needs CRB or
                                 <code>meson</code>/<code>ninja-build</code> (which
                                 live in CRB) and
                                 <code>heaptrack</code>/<code>bear</code> (which
                                 pull CRB deps) fail to resolve. If a package
-                                still shows <code>skipped</code> (e.g. CRB
-                                couldn&rsquo;t be auto-enabled), enable it
-                                manually and re-run:
+                                still fails to resolve (e.g. CRB couldn&rsquo;t
+                                be auto-enabled), enable it manually and
+                                re-run:
                             </p>
                             <pre><code>sudo dnf install epel-release
 sudo dnf config-manager --set-enabled crb   # EL9 Alma/Rocky/Stream (powertools on EL8)
-make -C makefile MODE=dev packages</code></pre>
+mise bootstrap --only packages --yes</code></pre>
                             <p>
                                 <strong><code>ninja: command not found</code></strong>
                                 &mdash; on RHEL the binary is
@@ -6188,17 +6534,20 @@ make -C makefile MODE=dev packages</code></pre>
                             <p>
                                 <strong>vcpkg:</strong> it lives at
                                 <code>$VCPKG_ROOT</code>
-                                (<code>/usr/local/share/vcpkg</code>, exported by
-                                the shell rc on dev hosts). The tree is
-                                root-owned, so classic-mode
+                                (<code>~/.local/share/vcpkg</code>, a
+                                user-owned shallow clone at the pinned tag,
+                                installed by <code>mise run vcpkg</code> and
+                                exported by the shell rc on dev hosts). Being
+                                user-owned, classic-mode
                                 <code>vcpkg install &lt;pkg&gt;</code> (which
-                                writes into the tree) needs sudo &mdash; prefer
-                                <strong>manifest mode</strong>
-                                (a <code>vcpkg.json</code> per project, installs
+                                writes into the tree) needs no sudo any more
+                                &mdash; <strong>manifest mode</strong> (a
+                                <code>vcpkg.json</code> per project, installs
                                 into the project&rsquo;s
-                                <code>vcpkg_installed/</code>), or
-                                <code>sudo chown -R "$USER" "$VCPKG_ROOT"</code>
-                                to use classic mode unprivileged. Prefer the
+                                <code>vcpkg_installed/</code>) is still
+                                preferred for reproducibility, but nothing
+                                blocks classic mode now. Missing entirely?
+                                <code>mise run vcpkg</code>. Prefer the
                                 compiler sanitizers
                                 (<code>-fsanitize=address,undefined</code>,
                                 ~2&ndash;4&times; overhead) over Valgrind
@@ -6222,8 +6571,8 @@ make -C makefile MODE=dev packages</code></pre>
                             <p>
                                 <strong>Linux:</strong>
                                 <code
-                                    >make python-env-rebuild MODE=dev   # or
-                                    MODE=prod</code
+                                    >REBUILD=1 mise run python-env   # runs
+                                    on both scopes</code
                                 >
                             </p>
                             <p>
@@ -6252,15 +6601,18 @@ make -C makefile MODE=dev packages</code></pre>
                             <p>
                                 The NFS client group (<code>nfs-utils</code>,
                                 <code>nfs4-acl-tools</code>,
-                                <code>autofs</code>) installs via dnf on
-                                <span class="badge dev">dev_machine</span> only
-                                &mdash; and is
+                                <code>autofs</code>) is a
+                                <code>[bootstrap.packages]</code> entry in
+                                <code>config.native.toml</code> &mdash; dev
+                                hosts only, and
                                 <strong>skipped entirely on WSL hosts</strong>
-                                by design (same policy as the Docker engine and
-                                Cockpit: provision prints
-                                <code>skipping NFS client group on WSL</code>).
-                                On a native dev host, re-run
-                                <code>make -C makefile MODE=dev packages</code>.
+                                by design (same policy as the Docker engine
+                                and Cockpit: the whole file only loads when
+                                <code>MISE_ENV</code> carries the
+                                <code>native</code> token, never
+                                <code>wsl</code>). On a native dev host,
+                                re-run
+                                <code>mise bootstrap --only packages --yes</code>.
                             </p>
                             <p>
                                 <code>autofs</code> is installed but
@@ -6335,9 +6687,9 @@ make -C makefile MODE=dev packages</code></pre>
                                 <code>/tmp/zellij-&lt;uid&gt;/zellij-log/zellij.log</code>
                                 says which path it tried):
                             </p>
-                            <pre><code>make tools MODE=prod         # or MODE=dev; user-level, no sudo — mise installs
-                              # zjstatus.wasm and copies it into zellij's data dir
-zellij kill-session main       # config and plugins load when a session is created</code></pre>
+                            <pre><code>mise run bootstrap              # user-level, no sudo — re-copies zjstatus.wasm
+                                 # into zellij's data dir (runs on both scopes)
+zellij kill-session main        # config and plugins load when a session is created</code></pre>
                             <p>
                                 <strong>Boxes instead of pills</strong> mean the
                                 terminal you are attaching from is not using a

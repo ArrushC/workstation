@@ -166,16 +166,16 @@
             "command": 
             {
                 "action": "sendInput",
-                "input": "make -C ~/.local/share/chezmoi dev"
+                "input": "cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; ./bootstrap.sh --dev"
             },
             "id": "User.snippet.makedev",
-            "name": "Snippet: full dev provision (WSL)"
+            "name": "Snippet: full dev bootstrap (WSL)"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "sendInput",
-                "input": "make -C ~/.local/share/chezmoi lint MODE=prod"
+                "input": "mise run lint"
             },
             "id": "User.snippet.lint",
             "name": "Snippet: lint + invariants (WSL)"

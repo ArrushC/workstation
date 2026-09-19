@@ -82,7 +82,7 @@ taplo = "0.10.0"
 "github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); pin the musl asset; binary is `tv`
 "github:atuinsh/atuin" = { version = "18.21.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.38 > EL9's 2.34); pin the musl asset
 "github:dathere/qsv" = { version = "22.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua registry defaults to the gnu build (GLIBCXX_3.4.30 > EL9's floor); pin the musl asset; archive ships 6 binaries, bin= picks the full-feature one
-"github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # copied into zellij's data dir by `make tools`
+"github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # copied into zellij's data dir by scripts/lib/zellij-plugin.sh (tasks/bootstrap)
 # --- http: (no GitHub release, bare assets, or scripts) ---
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
 "http:pueue" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueue-x86_64-unknown-linux-musl", bin = "pueue" }
@@ -103,3 +103,24 @@ taplo = "0.10.0"
 "pypi:glances" = "latest"
 "pypi:asciinema" = "latest"
 "pypi:harlequin" = "latest"
+
+# ---------------------------------------------------------------------------
+# Host state that needs no sudo (both scopes). Sudo-requiring state lives in
+# config.host.toml / config.native.toml / config.wsl.toml (dev-only tokens).
+# ---------------------------------------------------------------------------
+[bootstrap.hooks]
+# Capability gate over every mise-installed Linux binary (scripts/lib/verify-binary.sh).
+"post-tools" = "mise run verify-tools"
+
+# pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
+# it. systemd expands %h in ExecStart; the shim needs MISE_ENV, which the user
+# manager gets from ~/.config/environment.d/10-mise.conf (next login) and from
+# bootstrap.sh's `systemctl --user set-environment MISE_ENV=…` (this login) —
+# never baked here, because the value differs per host (wsl vs native vs prod).
+[bootstrap.services.pueued]
+scope = "user"
+command = "%h/.local/share/mise/shims/pueued -v"
+restart = "on-failure"
+requires_tools = true
+enabled = true
+state = "running"

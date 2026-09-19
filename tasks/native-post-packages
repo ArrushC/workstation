@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#MISE description="post-packages hook (config.native.toml): docker group, cockpit firewalld service, retire the Make-era dozzle unit"
+#MISE hide=true
+set -euo pipefail
+# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+env_has() {
+  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+# 1. docker group membership (takes effect at next login)
+if getent group docker >/dev/null 2>&1; then
+  if id -nG "$USER" | grep -qw docker; then
+    echo "  $USER already in the docker group"
+  else
+    sudo usermod -aG docker "$USER" && echo "  added $USER to the docker group — re-login (or: newgrp docker)" ||
+      echo "  ! failed to add $USER to the docker group — run: sudo usermod -aG docker $USER" >&2
+  fi
+else echo "  no docker group on this host — skipped"; fi
+# 2. cockpit through firewalld (no [bootstrap.linux.firewall]: it aborts unprivileged plan/status)
+if systemctl is-active --quiet firewalld 2>/dev/null; then
+  sudo firewall-cmd --permanent --add-service=cockpit >/dev/null && sudo firewall-cmd --reload >/dev/null && echo "  firewalld: cockpit service open" ||
+    echo "  ! failed to open cockpit through firewalld — run: sudo firewall-cmd --permanent --add-service=cockpit && sudo firewall-cmd --reload" >&2
+else echo "  firewalld inactive — firewall step skipped"; fi
+# 3. Make-era dozzle: a systemd unit running `docker run --name dozzle` — must be gone
+#    before the compose phase (same container name + port). Idempotent.
+if [ -f /etc/systemd/system/dozzle.service ]; then
+  sudo systemctl disable --now dozzle.service 2>/dev/null || true
+  sudo docker rm -f dozzle 2>/dev/null || true
+  sudo rm -f /etc/systemd/system/dozzle.service /etc/dozzle/dozzle.env
+  sudo systemctl daemon-reload
+  echo "  retired the Make-era dozzle.service (compose project takes over)"
+fi

@@ -6,25 +6,24 @@
 #   vcpkg.sh <version-tag> <root-dir>
 #
 #   version-tag  Release tag to check out (e.g. 2026.06.01).
-#   root-dir     Where the vcpkg tree lives = $VCPKG_ROOT. The shell rc exports
-#                this SAME literal (dev-gated) — keep dot_zshrc.tmpl /
-#                dot_bashrc.tmpl in sync with VCPKG_ROOT_DIR in makefile/Makefile
+#   root-dir     Where the vcpkg tree lives = $VCPKG_ROOT — ~/.local/share/vcpkg
+#                (user-level). The shell rc exports this SAME literal (dev-gated)
+#                — keep dot_zshrc.tmpl / dot_bashrc.tmpl in sync with tasks/vcpkg
 #                (see CLAUDE.md's VCPKG_ROOT dual-edit invariant).
 #
 # Env:
-#   DEST         Destination directory for the `vcpkg` symlink (required;
-#                provided by scope.mk).
+#   DEST         Destination directory for the `vcpkg` symlink (optional;
+#                defaults to ~/.local/bin).
 #
 # Unlike a normal single-binary tool, vcpkg IS its own VCPKG_ROOT tree: the
 # ports registry and the bootstrapped `vcpkg` binary both live inside the clone.
 # So we clone to <root-dir>, bootstrap, then symlink only the binary into $DEST
 # (which is on PATH). Re-runs fast-forward the existing clone to the pinned tag
-# rather than re-cloning. bootstrap needs network + a C++ compiler (gcc-c++ from
-# packages.mk). Sudo is the Makefile's job (SUDO wrapper from scope.mk).
+# rather than re-cloning. bootstrap needs network + a C++ compiler (gcc-c++).
 
 set -euo pipefail
 
-: "${DEST:?vcpkg.sh: DEST not set}"
+DEST="${DEST:-$HOME/.local/bin}"
 
 if (($# != 2)); then
   printf 'vcpkg.sh: usage: %s <version-tag> <root-dir>\n' "$0" >&2
@@ -38,7 +37,7 @@ mkdir -p "$DEST"
 
 # -c advice.detachedHead=false silences git's detached-HEAD advisory — both the
 # tag checkout and the --branch <tag> clone land on a detached HEAD, and the
-# hint is noise in a clean `make dev` log.
+# hint is noise in a clean `mise run vcpkg` log.
 if [ -d "$root/.git" ]; then
   printf '  ↻ updating vcpkg clone at %s -> %s\n' "$root" "$version"
   git -C "$root" fetch --depth 1 origin "refs/tags/$version" --quiet

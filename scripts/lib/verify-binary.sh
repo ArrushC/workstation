@@ -2,8 +2,8 @@
 # verify-binary.sh — fail-fast capability check: can this freshly-installed
 # binary actually run on THIS host? Non-executing (static inspection only), so
 # it is safe for TUI tools. Called by tasks/verify-tools, walking every mise
-# bin dir as a post-install gate (the `tools` phase in Makefile runs it right
-# after `mise install`, before the fanout phase).
+# bin dir as a post-install gate (tasks/verify-tools is the `post-tools` hook,
+# running right after `mise install`).
 #
 # Usage:
 #   verify-binary.sh <path-to-installed-binary>

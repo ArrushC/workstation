@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#MISE description="End-of-bootstrap steps: Claude Code, zjstatus plugin, chezmoi apply (until PR3), legacy sweep — runs after python-env, fonts, vcpkg"
+#MISE depends=["python-env", "fonts", "vcpkg"]
+set -euo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+env_has() {
+  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+# 1. Claude Code — official installer, skip-if-present, self-updates (dev only; rolling, no pin)
+if env_has dev; then
+  if command -v claude >/dev/null 2>&1; then
+    echo "  claude present ($(command -v claude))"
+  else
+    echo "==> claude (official installer)"
+    curl -fsSL https://claude.ai/install.sh | bash
+  fi
+fi
+# 2. cheat community cheatsheets (was config.linux.toml's [bootstrap.repos]
+# entry — moved here because a failed clone must not abort provisioning:
+# repos ran ahead of tools/services/the bootstrap task, so an unreachable
+# GitHub took down the whole run for a cosmetic cheat-sheet checkout).
+if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
+  [ ! -d "$HOME/.config/cheat/cheatsheets/community" ]; then
+  echo "==> cheat community cheatsheets"
+  git clone --depth 1 https://github.com/cheat/cheatsheets \
+    "$HOME/.config/cheat/cheatsheets/community" ||
+    { echo "  ! cheat community clone failed — run manually: git clone --depth 1 https://github.com/cheat/cheatsheets $HOME/.config/cheat/cheatsheets/community" >&2; }
+fi
+# 3. zjstatus.wasm → zellij's DATA plugin dir (mise installs the tool; zellij loads plugins from its data dir, never a bin dir)
+"$root/scripts/lib/zellij-plugin.sh" zjstatus "file://$(mise where github:dj95/zjstatus)/zjstatus.wasm"
+# 4. one-time sweeps of pre-mise artifacts (marker-guarded, idempotent) —
+# BEFORE chezmoi apply: a quit at chezmoi's merge prompt below must not be
+# able to skip the sweep.
+"$root/tasks/migrate-legacy"
+# 5. dotfiles — chezmoi until PR3. First-run init needs a TTY: bootstrap.sh does it after this task.
+# Soft-fail: under a non-interactive SSH run (update-hosts.sh, no TTY) a
+# drifted target makes `chezmoi apply` error instead of prompting, and an
+# interactive `q` at the merge prompt does the same — either must not abort
+# this task (mind set -euo pipefail). Drift is already a health row.
+if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+  echo "==> chezmoi apply"
+  echo "    if prompted (\"<file> has changed since chezmoi last wrote it?\"): d=diff m=merge o=overwrite a=all s=skip q=quit"
+  chezmoi apply --source "$root" || { echo "  ! chezmoi apply did not complete — review with: chezmoi diff --source $root ; re-apply with: cza" >&2; }
+else
+  echo "  chezmoi not initialised yet — bootstrap.sh runs chezmoi init --apply next"
+fi

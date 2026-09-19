@@ -89,10 +89,10 @@ scrollback_lines_to_serialize 10000
 
 // Web server / session sharing: OFF, explicitly.
 //
-// Not redundant with the upstream defaults (false / "off"). makefile/tools.mk
-// installs zellij with `--asset musl --asset '^no-web'`, and that `^` is eget's
-// ANTI-match — it EXCLUDES the no-web tarball, i.e. the build on every fleet host
-// has the web-server capability compiled in. That makes "a shell served over
+// Not redundant with the upstream defaults (false / "off"). The aqua-registry
+// `zellij` asset mise installs (config.linux.toml) is already the web-capable
+// build — no asset override needed, no no-web variant to select — i.e. the
+// build on every fleet host has the web-server capability compiled in. That makes "a shell served over
 // HTTP" one config key away on machines we don't sit at, so the value is pinned
 // here rather than inherited.
 //
@@ -138,9 +138,10 @@ theme "catppuccin-mocha-mauve"
 // 0.45.1: `zellij action dump-layout` shows the override in the tab-bar slot of
 // every tab, including the swap layouts (and the log confirms the load).
 //
-// The plugin file is installed by makefile/tools.mk (USER_TOOL zjstatus →
-// ~/.local/share/zellij/plugins/zjstatus.wasm, zellij's DATA dir; pin + zellij
-// floor in versions.mk). The location MUST stay the RELATIVE
+// The plugin file is installed by scripts/lib/zellij-plugin.sh (tasks/bootstrap,
+// after mise installs zjstatus) → ~/.local/share/zellij/plugins/zjstatus.wasm,
+// zellij's DATA dir; pin + zellij floor in config.linux.toml / config.toml
+// [vars] zjstatus_zellij_floor. The location MUST stay the RELATIVE
 // `file:zjstatus.wasm`: zellij resolves it against /usr/share/zellij/plugins,
 // then that data dir — never ~/.config/zellij/plugins — and keeps the relative
 // string as the plugin's identity, including the key in

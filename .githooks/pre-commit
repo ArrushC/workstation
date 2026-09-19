@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-commit — block commits that violate the repo's mechanical invariants.
-# Installed by `make install-hooks` (git config core.hooksPath .githooks).
+# Installed by `mise run install-hooks` (git config core.hooksPath .githooks).
 # Emergency bypass for a single commit: git commit --no-verify
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
