@@ -3,11 +3,11 @@
 # remain after the tool AND host-pin move to mise:
 #
 #   (1) mise tool pins in config.toml / config.linux.toml / config.dev.toml,
-#       via `mise outdated --bump --json` + `mise config set` + `mise lock`.
+#       via `mise outdated --bump --json` + set_pin + `mise lock`.
 #   (2) the handful of host pins config.toml [vars] owns directly (vcpkg —
 #       python/nerd-fonts are dual/triple-edit, reported not
 #       auto-edited), via scripts/lib/check-updates.sh worker mode (the same
-#       specs tasks/check-updates registers) + `mise config set`.
+#       specs tasks/check-updates registers) + set_pin.
 #
 # Dual/triple-edit and coupled pins in EITHER layer are reported, never
 # auto-edited (see the comment above each EXCLUDE list below) — they need a
@@ -28,7 +28,7 @@
 # visibly instead of silently reporting "nothing to bump". A lock failure
 # that names one bumped tool is NOT fatal: that pin is reverted and reported
 # under "Refused by mise lock", and the lock retried (see lock_platform).
-# Individual `mise config set` failures are reported under "Failed to edit
+# Individual pin-rewrite failures are reported under "Failed to edit
 # (manual)" without forcing a nonzero exit on their own.
 set -uo pipefail
 
@@ -43,7 +43,7 @@ bumped=""        # mise tool pins bumped this run (config*.toml)
 manual=""        # pins in either EXCLUDE list — reported, never auto-edited
 skipped=""       # a pin check-updates found but couldn't map safely
 vars_bumped=""   # config.toml [vars] pins bumped this run
-failed=""        # mise config set / mise lock calls that failed this run
+failed=""        # pin rewrites / mise lock calls that failed this run
 outdated_fail="" # captured stderr when `mise outdated` itself fails (non-empty => mise half skipped)
 exit_code=0
 
@@ -51,7 +51,7 @@ exit_code=0
 # Layer 1: mise tool pins (config.toml / config.linux.toml / config.dev.toml)
 # -----------------------------------------------------------------------------
 #
-# Pins `mise config set` must NOT auto-edit (reported as manual instead):
+# Pins the bumper must NOT auto-edit (reported as manual instead):
 #  - jq, gh, helix, opencode, github:can1357/oh-my-pi (omp), github:DevToys-app/DevToys
 #    (devtoys-cli) all DUAL-EDIT bootstrap.ps1's $PortableTools/$InstallerTools
 #    (the Windows half of each tool) — a version there needs its sha256/asset
@@ -143,9 +143,40 @@ normalize_lock_sidecars() {
   }
 }
 
+# Rewrite one pin's version string in place and leave the rest of the file
+# byte-for-byte alone. Don't use `mise config set` here: in mise 2026.9.9 it
+# re-serializes the key it edits and drops the comments around it — the
+# comment lines above a plain `name = "ver"` entry and its trailing `# ...`.
+# The 2026-09-23 run lost uv's 6-line note about its version floor, the aqua
+# registry section header, and two inline notes that way. set_pin matches
+# `name = "cur"` or `name = { ... version = "cur" ... }` at the start of a
+# line (name optionally quoted, matched literally). Anything other than
+# exactly one match fails without writing, so the caller reports the pin as
+# manual instead of guessing.
+set_pin() {
+  local file="$1" name="$2" cur="$3" new="$4" n
+  n="$(PIN_NAME="$name" PIN_CUR="$cur" PIN_NEW="$new" perl -e '
+    my ($f) = @ARGV;
+    open(my $in, "<", $f) or die "$f: $!";
+    my @lines = <$in>;
+    close $in;
+    my $n = 0;
+    for (@lines) {
+      $n++ if s/^("?\Q$ENV{PIN_NAME}\E"?\s*=\s*(?:\{[^#]*?\bversion\s*=\s*)?)"\Q$ENV{PIN_CUR}\E"/$1"$ENV{PIN_NEW}"/;
+    }
+    if ($n == 1) {
+      open(my $out, ">", $f) or die "$f: $!";
+      print $out @lines;
+      close $out;
+    }
+    print $n;
+  ' "$file")" || return 1
+  [ "$n" = 1 ]
+}
+
 # Per-tool record of every pin this run bumped, so lock_platform can put one
 # back. Keys are mise tool names (may contain `:`/`/`), always quoted.
-declare -A bump_file bump_key bump_cur bump_new
+declare -A bump_file bump_cur bump_new
 refused="" # bumps reverted because `mise lock` refused the new version
 
 # `mise lock` one platform. `mise lock` is all-or-nothing: if it refuses ONE
@@ -183,7 +214,7 @@ lock_platform() {
     # so point the reader there.
     reason="$(sed -n 's/.*failed to resolve [^ ]* for [^;]*; \(.*\)/\1/p' "$err" | head -n1)"
     reason="${reason:-could not resolve it} on $platform; \`mise -v lock\` shows why"
-    if ! mise config set -f "${bump_file["$tool"]}" "${bump_key["$tool"]}" "${bump_cur["$tool"]}"; then
+    if ! set_pin "${bump_file["$tool"]}" "$tool" "${bump_new["$tool"]}" "${bump_cur["$tool"]}"; then
       rm -f "$err"
       return 1
     fi
@@ -218,30 +249,16 @@ if [ -z "$outdated_fail" ]; then
     # $ROOT/config.toml — basename it instead of stripping a $ROOT prefix.
     # All three config files sit flat at the repo root, so this is exact.
     file="${path##*/}"
-    # Table-valued entries (github:/http: with options, or a bare { version =
-    # ... } table) take tools.<name>.version; everything else is a plain
-    # string entry and takes tools.<name> directly. The key path passed to
-    # `mise config set` must stay UNQUOTED even when <name> contains `:` or
-    # `/` — verified against mise 2026.9.9: a quoted segment (tools."<name>")
-    # is taken literally, quote characters and all, as an unrecognized key —
-    # it appends a broken duplicate entry instead of editing the real one in
-    # place, while the unquoted form correctly locates and edits it.
-    if grep -qE "^\"?${name//\//\\/}\"? = \{" "$file"; then
-      key="tools.$name.version"
-    else
-      key="tools.$name"
-    fi
     if $DRY; then
       bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
-    elif mise config set -f "$file" "$key" "$new"; then
+    elif set_pin "$file" "$name" "$cur" "$new"; then
       bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
       bump_file["$name"]="$file"
-      bump_key["$name"]="$key"
       bump_cur["$name"]="$cur"
       bump_new["$name"]="$new"
     else
-      printf '  ! mise config set failed for %s (%s)\n' "$name" "$file" >&2
-      failed="${failed}- \`$name\` ($file): mise config set failed (manual)\n"
+      printf '  ! could not rewrite %s = "%s" in %s\n' "$name" "$cur" "$file" >&2
+      failed="${failed}- \`$name\` ($file): could not rewrite its pin in place (manual)\n"
     fi
   done < <(printf '%s' "$outdated" | jq -r 'to_entries[] | select(.value.bump != null and .value.bump != .value.requested) | [.key, .value.requested, .value.bump, .value.source.path] | @tsv')
 
@@ -323,11 +340,11 @@ while IFS='|' read -r _ name detail; do
 
   if $DRY; then
     vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"
-  elif mise config set -f config.toml "vars.$key" "$new"; then
+  elif set_pin config.toml "$key" "$old" "$new"; then
     vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"
   else
-    printf '  ! mise config set failed for %s (vars.%s)\n' "$name" "$key" >&2
-    failed="${failed}- \`$key\` ($name): mise config set failed (manual)\n"
+    printf '  ! could not rewrite %s = "%s" in config.toml\n' "$key" "$old" >&2
+    failed="${failed}- \`$key\` ($name): could not rewrite its pin in place (manual)\n"
   fi
 done <<<"$updates"
 
