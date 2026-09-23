@@ -9,10 +9,11 @@
 #       auto-edited), via scripts/lib/check-updates.sh worker mode (the same
 #       specs tasks/check-updates registers) + set_pin.
 #
-# Dual/triple-edit and coupled pins in EITHER layer are reported, never
-# auto-edited (see the comment above each EXCLUDE list below) — they need a
-# paired file edited in lockstep, a coupling floor bumped by hand from
-# release notes, or a manual sanity check the bumper can't perform safely.
+# Dual-edit and coupled tool pins (the Windows halves in bootstrap.ps1,
+# go+gopls, node's postinstall LSP servers) are bumped by dedicated code that
+# keeps every paired edit in step. Only the pins in the EXCLUDE lists below
+# are reported and never edited: those need a coupling floor read from release
+# notes, a download check, or a wheel-coverage check the bumper can't do.
 #
 # Used by .github/workflows/version-bumps.yml (weekly) and runnable locally.
 # --dry-run prints what would change without writing config*.toml,
@@ -51,22 +52,32 @@ exit_code=0
 # Layer 1: mise tool pins (config.toml / config.linux.toml / config.dev.toml)
 # -----------------------------------------------------------------------------
 #
-# Pins the bumper must NOT auto-edit (reported as manual instead):
-#  - jq, gh, helix, opencode, github:can1357/oh-my-pi (omp), github:DevToys-app/DevToys
-#    (devtoys-cli) all DUAL-EDIT bootstrap.ps1's $PortableTools/$InstallerTools
-#    (the Windows half of each tool) — a version there needs its sha256/asset
-#    verified and the pin bumped in lockstep, and check-invariants.sh's
-#    check_version_pins asserts config*.toml == bootstrap.ps1 for every one
-#    of them, so an auto-bump in config*.toml alone would fail that check
-#    immediately (the same class of bug as version-bumps run #9, one layer
-#    down: gh was added as a dual-edit pin without the matching exclusion).
+# Pins that need more than a one-line edit are bumped by dedicated code
+# below, not skipped (user decision 2026-09-23: "always bump those packages").
+#  - DUAL-EDIT (PS1_NAME below): jq, gh, helix, opencode, omp, DevToys each
+#    have a Windows half in bootstrap.ps1's $PortableTools (Version + Url +
+#    Sha256), and check_version_pins asserts both halves match. bump_ps1
+#    swaps the version inside the Windows Url, downloads that asset and
+#    hashes it, then rewrites all three fields together with the config
+#    pin. If the download fails, neither half changes, and the pin is
+#    reported under "Failed to edit".
 #  - go + go:golang.org/x/tools/gopls are a COUPLED PAIR: gopls declares a
-#    hard toolchain floor in its own go.mod (0.20.0 needs go 1.24.2, 0.21.0
-#    needs 1.25, 0.23.0 needs 1.26.0) and mise's go: backend builds it via
-#    `go install` using the PINNED go, so bumping gopls past the current
-#    go's ceiling makes GOTOOLCHAIN=auto silently fetch a second toolchain
-#    mid-provision — and hard-fails under GOTOOLCHAIN=local or a restricted
-#    GOPROXY. Bump both together, deliberately.
+#    hard toolchain floor in its own go.mod (0.23.0 needs go 1.26.0), and
+#    mise's go: backend builds it with the PINNED go. go bumps freely. gopls
+#    bumps only when its floor is at or below the go pin this run leaves.
+#    Otherwise it is reported as manual.
+#  - node's `postinstall` string pins the LSP servers (typescript-language-
+#    server, typescript, bash-/yaml-language-server,
+#    vscode-langservers-extracted). `mise outdated` sees only node itself, so
+#    the postinstall step after the main loop moves each package to the newest release within
+#    its CURRENT major, straight from the npm registry. A new major is
+#    reported as manual: an LSP server's major can change which TypeScript
+#    or node it needs. typescript is also held on 5.x, because ts-ls needs
+#    typescript/lib/tsserver.js, which TS 7 removed
+#    (check_tsls_typescript_coupling). A changed postinstall string makes
+#    scripts/lib/mise-install.sh reinstall node on each host, so the
+#    servers are actually refreshed.
+# Still EXCLUDED (reported, never auto-edited):
 #  - github:dj95/zjstatus is ABI-coupled to zellij: every zjstatus release
 #    states its zellij floor, recorded as vars.zjstatus_zellij_floor in
 #    config.toml and asserted against tools.zellij by check-invariants.sh. A
@@ -76,16 +87,6 @@ exit_code=0
 #    only SOME releases (2.9.1 has one; 2.9.2 returns 404), so a bump must
 #    be verified by hand against the download URL before landing or it
 #    404s the install.
-#  - node carries the LSP server pins for typescript-language-server,
-#    typescript, bash-language-server, yaml-language-server and
-#    vscode-langservers-extracted in its free-form `postinstall` string —
-#    `mise outdated` only tracks node's OWN version, not the packages
-#    embedded in that string, and a node bump is the trigger point for
-#    reinstalling them (scripts/lib/mise-install.sh force-reinstalls node
-#    only when its declared version is already present — the postinstall
-#    only re-runs then). typescript must also stay on the 5.x major: ts-ls 6.x needs
-#    typescript/lib/tsserver.js, gone in TS 7 (check_tsls_typescript_coupling
-#    asserts this). Review and bump the whole postinstall string by hand.
 #  - python is a three-way pin (config.toml vars.python_version ==
 #    config.toml tools.python == bootstrap.ps1 $PythonEnvVersion, all
 #    asserted by check-invariants.sh) that ALSO needs a wheel-coverage check
@@ -94,7 +95,21 @@ exit_code=0
 #    (duckdb/pydantic-core wheels in particular), and it's coupled to
 #    UV_VERSION the same way (uv resolves interpreters from its own bundled
 #    metadata, so a new CPython patch can need a newer uv first).
-EXCLUDE="jq gh helix opencode github:can1357/oh-my-pi github:DevToys-app/DevToys github:dj95/zjstatus go go:golang.org/x/tools/gopls http:ncdu node python"
+EXCLUDE="github:dj95/zjstatus http:ncdu python"
+# Coupled pins bumped by dedicated code instead of EXCLUDE. check_bumper_exclude
+# requires every dual-edit/coupled pin to be in EXCLUDE, PS1_NAME, or this list.
+# shellcheck disable=SC2034  # read by check-invariants.sh, not here
+COUPLED_AUTO="go go:golang.org/x/tools/gopls node"
+
+# mise tool name -> its bootstrap.ps1 $PortableTools Name (the dual-edit pins).
+declare -A PS1_NAME=(
+  ["jq"]="jq"
+  ["gh"]="GitHub CLI"
+  ["helix"]="Helix"
+  ["opencode"]="OpenCode"
+  ["github:can1357/oh-my-pi"]="Oh My Pi"
+  ["github:DevToys-app/DevToys"]="DevToys CLI"
+)
 
 # Run a mise subcommand against this checkout as mise's GLOBAL config dir,
 # from OUTSIDE the checkout, via a throwaway XDG_CONFIG_HOME symlink dir.
@@ -174,6 +189,82 @@ set_pin() {
   [ "$n" = 1 ]
 }
 
+# version_gt A B — true when A is strictly newer than B (sort -V). mise
+# outdated --bump can offer an OLDER version: it offered DevToys 1.0.13.0
+# for the pinned 2.0.9.0, because upstream flags every release prerelease.
+version_gt() {
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+# ps1_field NAME FIELD — one field (Version/Url/Sha256) of the bootstrap.ps1
+# $PortableTools entry whose Name is NAME.
+ps1_field() {
+  PS1_ENTRY="$1" PS1_FIELD="$2" perl -0777 -ne '
+    print $1 if /Name\s*=\s*"\Q$ENV{PS1_ENTRY}\E"[^}]*?\b\Q$ENV{PS1_FIELD}\E\s*=\s*"([^"]*)"/s
+  ' bootstrap.ps1
+}
+
+# ps1_set NAME VERSION URL SHA256 — rewrite those three fields of one
+# $PortableTools entry, byte-for-byte elsewhere (the UTF-8 BOM PowerShell 5.1
+# needs survives, since perl only substitutes inside the match). Fails without
+# writing unless exactly one entry matched.
+ps1_set() {
+  local n
+  n="$(PS1_ENTRY="$1" PS1_V="$2" PS1_U="$3" PS1_S="$4" perl -0777 -e '
+    my $f = "bootstrap.ps1";
+    open(my $in, "<:raw", $f) or die "$f: $!";
+    local $/; my $s = <$in>; close $in;
+    my $n = ($s =~ s#(Name\s*=\s*"\Q$ENV{PS1_ENTRY}\E"[^}]*?\bVersion\s*=\s*")[^"]*("[^}]*?\bUrl\s*=\s*")[^"]*("[^}]*?\bSha256\s*=\s*")[0-9a-fA-F]*(")#$1$ENV{PS1_V}$2$ENV{PS1_U}$3$ENV{PS1_S}$4#gs);
+    if ($n == 1) { open(my $out, ">:raw", $f) or die "$f: $!"; print $out $s; close $out }
+    print $n + 0;
+  ')" || return 1
+  [ "$n" = 1 ]
+}
+
+# bump_ps1 NAME CUR NEW — move a dual-edit tool's Windows half from CUR to NEW:
+# swap the version inside its Url, download that asset, hash it, and write
+# Version + Url + Sha256. Old values are saved in ps1_old_* for a revert.
+declare -A ps1_old_url ps1_old_sha
+bump_ps1() {
+  local entry="$1" cur="$2" new="$3" url newurl tmp sha
+  url="$(ps1_field "$entry" Url)"
+  [ -n "$url" ] || return 1
+  case "$url" in *"$cur"*) ;; *) return 1 ;; esac
+  newurl="${url//"$cur"/"$new"}"
+  tmp="$(mktemp)"
+  if ! curl -fsSL --retry 2 --max-time 600 -o "$tmp" "$newurl"; then
+    printf '  ! %s: could not download %s\n' "$entry" "$newurl" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  sha="$(sha256sum "$tmp" | cut -d' ' -f1)"
+  rm -f "$tmp"
+  ps1_old_url["$entry"]="$url"
+  ps1_old_sha["$entry"]="$(ps1_field "$entry" Sha256)"
+  ps1_set "$entry" "$new" "$newurl" "$sha"
+}
+
+# gopls_floor VERSION — the go toolchain floor gopls VERSION declares in its
+# own go.mod (empty when offline or the tag is missing).
+gopls_floor() {
+  curl -fsSL --max-time 15 \
+    "https://raw.githubusercontent.com/golang/tools/gopls/v$1/gopls/go.mod" 2>/dev/null |
+    awk '/^go /{print $2; exit}'
+}
+
+# npm_latest_in_major PKG MAJOR — newest stable PKG release with that major,
+# from the npm registry's abbreviated metadata (no npm needed on the runner).
+npm_latest_in_major() {
+  curl -fsSL --max-time 60 -H 'Accept: application/vnd.npm.install-v1+json' \
+    "https://registry.npmjs.org/$1" 2>/dev/null |
+    jq -r '.versions | keys[]' | grep -E "^$2\.[0-9]+\.[0-9]+$" | sort -V | tail -n1
+}
+
+# npm_latest PKG — the registry's `latest` dist-tag for PKG.
+npm_latest() {
+  curl -fsSL --max-time 30 "https://registry.npmjs.org/$1/latest" 2>/dev/null | jq -r '.version // empty'
+}
+
 # Per-tool record of every pin this run bumped, so lock_platform can put one
 # back. Keys are mise tool names (may contain `:`/`/`), always quoted.
 declare -A bump_file bump_cur bump_new
@@ -218,6 +309,14 @@ lock_platform() {
       rm -f "$err"
       return 1
     fi
+    # A dual-edit tool's Windows half moved with it; put that back too, or
+    # check_version_pins fails on the half-reverted pair.
+    if [ -n "${PS1_NAME["$tool"]+x}" ] &&
+      ! ps1_set "${PS1_NAME["$tool"]}" "${bump_cur["$tool"]}" \
+        "${ps1_old_url["${PS1_NAME["$tool"]}"]}" "${ps1_old_sha["${PS1_NAME["$tool"]}"]}"; then
+      rm -f "$err"
+      return 1
+    fi
     printf '  ! mise lock refused %s@%s on %s — reverted to %s, retrying\n' \
       "$tool" "${bump_new["$tool"]}" "$platform" "${bump_cur["$tool"]}" >&2
     bumped="${bumped/"- \`$tool\` (${bump_file["$tool"]}): ${bump_cur["$tool"]} → ${bump_new["$tool"]}\n"/}"
@@ -244,23 +343,99 @@ if [ -z "$outdated_fail" ]; then
       continue
       ;;
     esac
+    if ! version_gt "$new" "$cur"; then
+      skipped="${skipped}- \`$name\`: mise offered $new, which is not newer than the pinned $cur — left alone\n"
+      continue
+    fi
     # `source.path` comes back through the symlinked config root (mise
     # doesn't canonicalize it), e.g. /tmp/xxx/mise/config.toml rather than
     # $ROOT/config.toml — basename it instead of stripping a $ROOT prefix.
     # All three config files sit flat at the repo root, so this is exact.
     file="${path##*/}"
+    # gopls waits until go's final pin is known (below the loop).
+    if [ "$name" = "go:golang.org/x/tools/gopls" ]; then
+      gopls_cur="$cur" gopls_new="$new" gopls_file="$file"
+      continue
+    fi
     if $DRY; then
       bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
-    elif set_pin "$file" "$name" "$cur" "$new"; then
-      bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
+      continue
+    fi
+    # Dual-edit: the Windows half must land first (download + hash); if it
+    # can't, leave both halves alone.
+    if [ -n "${PS1_NAME["$name"]+x}" ] && ! bump_ps1 "${PS1_NAME["$name"]}" "$cur" "$new"; then
+      failed="${failed}- \`$name\`: $cur → $new — could not fetch/hash its Windows asset for bootstrap.ps1; both halves left at $cur (manual)\n"
+      continue
+    fi
+    if set_pin "$file" "$name" "$cur" "$new"; then
+      if [ -n "${PS1_NAME["$name"]+x}" ]; then
+        bumped="${bumped}- \`$name\` ($file + bootstrap.ps1): $cur → $new\n"
+      else
+        bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
+      fi
       bump_file["$name"]="$file"
       bump_cur["$name"]="$cur"
       bump_new["$name"]="$new"
     else
       printf '  ! could not rewrite %s = "%s" in %s\n' "$name" "$cur" "$file" >&2
       failed="${failed}- \`$name\` ($file): could not rewrite its pin in place (manual)\n"
+      if [ -n "${PS1_NAME["$name"]+x}" ]; then
+        ps1_set "${PS1_NAME["$name"]}" "$cur" "${ps1_old_url["${PS1_NAME["$name"]}"]}" \
+          "${ps1_old_sha["${PS1_NAME["$name"]}"]}" ||
+          failed="${failed}- \`$name\`: bootstrap.ps1 was bumped but could not be reverted — fix by hand\n"
+      fi
     fi
   done < <(printf '%s' "$outdated" | jq -r 'to_entries[] | select(.value.bump != null and .value.bump != .value.requested) | [.key, .value.requested, .value.bump, .value.source.path] | @tsv')
+
+  # gopls: bump only when the floor its go.mod declares is at or below the
+  # go pin this run leaves (go may have just moved).
+  if [ -n "${gopls_new:-}" ]; then
+    go_pin="${bump_new[go]:-$(grep -m1 -E '^go = "' config.dev.toml | sed -E 's/^go = "([^"]*)".*/\1/')}"
+    floor="$(gopls_floor "$gopls_new")"
+    if [ -z "$floor" ]; then
+      manual="${manual}- \`go:golang.org/x/tools/gopls\`: $gopls_cur → $gopls_new — could not read its go.mod floor (offline?) (manual)\n"
+    elif ! version_gt "$floor" "$go_pin"; then
+      if $DRY; then
+        bumped="${bumped}- \`go:golang.org/x/tools/gopls\` ($gopls_file): $gopls_cur → $gopls_new (needs go >= $floor)\n"
+      elif set_pin "$gopls_file" "go:golang.org/x/tools/gopls" "$gopls_cur" "$gopls_new"; then
+        bumped="${bumped}- \`go:golang.org/x/tools/gopls\` ($gopls_file): $gopls_cur → $gopls_new (needs go >= $floor)\n"
+        bump_file["go:golang.org/x/tools/gopls"]="$gopls_file"
+        bump_cur["go:golang.org/x/tools/gopls"]="$gopls_cur"
+        bump_new["go:golang.org/x/tools/gopls"]="$gopls_new"
+      else
+        failed="${failed}- \`go:golang.org/x/tools/gopls\` ($gopls_file): could not rewrite its pin in place (manual)\n"
+      fi
+    else
+      manual="${manual}- \`go:golang.org/x/tools/gopls\`: $gopls_cur → $gopls_new — needs go >= $floor, pinned go is $go_pin (waits for a go bump)\n"
+    fi
+  fi
+
+  # node's postinstall LSP servers: newest release within each package's
+  # CURRENT major (typescript: the 5.x line, see the header). A new major is
+  # reported, not taken.
+  node_line="$(grep -m1 -E '^node = \{' config.dev.toml)"
+  for spec in $(grep -oE '[a-z@/.-]+@[0-9]+\.[0-9]+\.[0-9]+' <<<"$node_line"); do
+    pkg="${spec%@*}" pcur="${spec##*@}" major="${pcur%%.*}"
+    pnew="$(npm_latest_in_major "$pkg" "$major")"
+    platest="$(npm_latest "$pkg")"
+    if [ -n "$platest" ] && [ "${platest%%.*}" != "$major" ] && version_gt "$platest" "$pcur"; then
+      if [ "$pkg" = typescript ]; then
+        manual="${manual}- \`typescript\` (node postinstall): held on ${major}.x — $platest has no lib/tsserver.js, which typescript-language-server needs\n"
+      else
+        manual="${manual}- \`$pkg\` (node postinstall): $pcur → $platest is a new major — take it by hand once its compatibility is checked\n"
+      fi
+    fi
+    [ -n "$pnew" ] && version_gt "$pnew" "$pcur" || continue
+    if $DRY; then
+      bumped="${bumped}- \`$pkg\` (config.dev.toml node postinstall): $pcur → $pnew\n"
+    elif PIN_OLD="$spec" PIN_NEW="$pkg@$pnew" perl -i -pe \
+      's/(?<=[ "])\Q$ENV{PIN_OLD}\E(?=[ "])/$ENV{PIN_NEW}/ if /^node = \{/' config.dev.toml &&
+      grep -qF "$pkg@$pnew" config.dev.toml; then
+      bumped="${bumped}- \`$pkg\` (config.dev.toml node postinstall): $pcur → $pnew\n"
+    else
+      failed="${failed}- \`$pkg\` (node postinstall): could not rewrite $spec (manual)\n"
+    fi
+  done
 
   if [ -n "$bumped" ] && ! $DRY; then
     # mise lock writes a pypi: tool's dependency lock (its `uv = { path =

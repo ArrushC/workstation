@@ -329,11 +329,18 @@ check_mise_env_three_way() {
 # (they live in their own coupling-check functions) so are named explicitly.
 # One-directional: extra EXCLUDE entries are fine.
 check_bumper_exclude() {
-  hdr "bump-versions.sh EXCLUDE/EXCLUDE_VARS cover dual-edit pins"
-  local exclude pins var missing="" n=0
+  hdr "bump-versions.sh handles every dual-edit/coupled pin"
+  local exclude handled pins var missing="" n=0
   local -a coupled=(github:dj95/zjstatus go go:golang.org/x/tools/gopls http:ncdu node)
   exclude=$(grep -m1 -E '^EXCLUDE=' scripts/bump-versions.sh |
     sed -E 's/^EXCLUDE="//; s/"[[:space:]]*$//')
+  # A dual-edit/coupled pin is safe when the bumper either skips it (EXCLUDE)
+  # or bumps it with dedicated code that keeps its pair in step: the Windows
+  # half via the PS1_NAME map, go+gopls / node via COUPLED_AUTO. Anything else
+  # would get a blind one-sided edit and fail check_version_pins.
+  handled="$exclude $(grep -m1 -E '^COUPLED_AUTO=' scripts/bump-versions.sh |
+    sed -E 's/^COUPLED_AUTO="//; s/"[[:space:]]*$//') $(awk '/^declare -A PS1_NAME=\(/,/^\)/' scripts/bump-versions.sh |
+      sed -nE 's/^[[:space:]]*\["([^"]+)"\]=.*/\1/p' | tr '\n' ' ')"
   if [ -z "$exclude" ]; then
     bad "scripts/bump-versions.sh: EXCLUDE= line not found"
   else
@@ -345,15 +352,15 @@ $(printf '%s\n' "${coupled[@]}")"
     while read -r var; do
       [ -n "$var" ] || continue
       n=$((n + 1))
-      case " $exclude " in
+      case " $handled " in
       *" $var "*) ;;
       *) missing="$missing $var" ;;
       esac
     done <<<"$pins"
     if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-      ok "all $n dual-edit tool pins in bumper EXCLUDE (bump-versions.sh)"
+      ok "all $n dual-edit/coupled tool pins excluded or paired-bumped (bump-versions.sh EXCLUDE / PS1_NAME / COUPLED_AUTO)"
     else
-      bad "dual-edit tool pin(s) missing from bump-versions.sh EXCLUDE:${missing:- <none derived>} — the weekly bumper would rewrite config*.toml alone and fail the pin check"
+      bad "dual-edit/coupled tool pin(s) the bumper doesn't handle:${missing:- <none derived>} — add each to bump-versions.sh's PS1_NAME map (Windows half), COUPLED_AUTO, or EXCLUDE, or the weekly bumper rewrites one side alone and fails the pin check"
     fi
   fi
 

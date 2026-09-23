@@ -3034,16 +3034,27 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             (<code>version-bumps.yml</code>) runs
                             <code>scripts/bump-versions.sh</code>
                             (<code>mise run bump-versions</code>), which
-                            bumps mise tool pins via <code>mise outdated</code> +
-                            <code>mise config set</code> +
-                            <code>mise lock --global</code> and any drifted
+                            bumps mise tool pins via <code>mise outdated</code>
+                            + an in-place pin rewrite (comments survive) +
+                            <code>mise lock --global</code>, plus any drifted
                             single-location <code>config.toml</code>
-                            <code>[vars]</code> pin (the dual/triple-edit
-                            pins &mdash; <code>python_version</code>,
-                            <code>nerd_font_version</code> &mdash; are listed
-                            for manual bumping), then opens a PR. The
-                            workflow runs the invariant checker on the bumped
-                            tree before opening the PR.
+                            <code>[vars]</code> pin, then opens a PR. Coupled
+                            pins are bumped too, in step. Tools with a Windows
+                            half (gh, jq, helix, opencode, omp, DevToys) get
+                            their <code>bootstrap.ps1</code> Version, Url and a
+                            freshly computed Sha256 in the same edit. gopls
+                            moves only when its go floor allows. node's
+                            language servers move within their major (TypeScript
+                            stays on 5.x). A new version that <code>mise
+                            lock</code> refuses (e.g. its release signing looks
+                            weaker) is put back and listed for manual review
+                            instead of failing the run. Only zjstatus, ncdu,
+                            python and the <code>[vars]</code> dual-edit pins
+                            (<code>python_version</code>,
+                            <code>nerd_font_version</code>) are listed for
+                            manual bumping. The workflow runs the invariant
+                            checker on the bumped tree before opening the
+                            PR.
                         </p>
                     </details>
 
