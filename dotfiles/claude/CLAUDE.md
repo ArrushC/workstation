@@ -86,7 +86,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `rclone` 1.75.1
 - `croc` 11.5.3
 - `hyperfine` 1.20.0
-- `gh` 2.98.0
+- `gh` 2.101.0
 - `sops` 3.13.3
 - `htmlq` 0.4.0
 - `watchexec` 2.7.3
@@ -144,20 +144,20 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `harlequin` latest
 
 ### Dev tools (config.dev.toml)
-- `node` 26.8.1
+- `node` 26.10.0
 - `typescript-language-server` 6.0.0
 - `typescript` 5.9.3
-- `bash-language-server` 5.6.0
+- `bash-language-server` 5.8.1
 - `yaml-language-server` 1.24.0
 - `vscode-langservers-extracted` 4.10.0
-- `go` 1.27.0
+- `go` 1.27.1
 - `gopls` 0.23.0
 - `lua-language-server` 3.19.1
 - `basedpyright` 1.40.1
 - `ccstatusline` 2.2.30
 - `herdr` 0.9.1
-- `opencode` 1.18.25
-- `oh-my-pi` 18.0.11
+- `opencode` 1.18.32
+- `oh-my-pi` 18.2.8
 - `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
 
