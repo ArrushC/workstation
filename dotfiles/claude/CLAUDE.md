@@ -51,11 +51,11 @@ The full, always-current inventory of what's installed (with versions) is below.
 <!-- regenerated on config*.toml edits by .claude/hooks/sync-tool-memory.sh; run `wsa` to deploy -->
 
 ### Cross-platform tools (config.toml)
-- `uv` 0.12.15
+- `uv` 0.12.17
 - `python` 3.14.7
 
 ### Linux toolbelt, both scopes (config.linux.toml)
-- `fzf` 0.74.3
+- `fzf` 0.74.4
 - `zoxide` 0.10.0
 - `starship` 1.26.0
 - `zellij` 0.45.1
@@ -70,10 +70,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
 - `lnav` 0.14.1
-- `gopass` 1.17.0
+- `gopass` 1.17.2
 - `age` 1.3.2
 - `gitui` 0.28.1
-- `lazygit` 0.65.0
+- `lazygit` 0.65.1
 - `jj` 0.45.1
 - `ast-grep` 0.45.3
 - `xh` 0.26.2
@@ -84,12 +84,12 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.75.1
-- `croc` 11.5.0
+- `croc` 11.5.3
 - `hyperfine` 1.20.0
 - `gh` 2.98.0
 - `sops` 3.13.3
 - `htmlq` 0.4.0
-- `watchexec` 2.7.2
+- `watchexec` 2.7.3
 - `bottom` 0.14.9
 - `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
@@ -101,15 +101,15 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `miniserve` 0.35.0
 - `numbat` 1.24.0
 - `grex` 1.4.6
-- `shfmt` 3.14.0
+- `shfmt` 3.14.1
 - `gitleaks` 8.30.1
-- `dust` 1.2.5
+- `dust` 1.2.6
 - `hexyl` 0.17.0
-- `gum` 2.0.0
-- `rust-analyzer` 2026-09-07
+- `gum` 2.0.1
+- `rust-analyzer` 2026-09-21
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
-- `usql` 0.21.4
+- `usql` 0.21.5
 - `fastfetch` 2.68.1
 - `procs` 0.14.12
 - `bandwhich` 0.23.1
@@ -119,18 +119,18 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `trippy` 0.13.0
 - `git-absorb` 0.9.0
 - `ouch` 0.8.2
-- `scc` 4.0.0
+- `scc` 4.1.0
 - `dsq` 0.23.0
 - `gitlogue` 0.11.0
 - `jless` 0.9.0
-- `broot` 1.60.0
+- `broot` 1.60.1
 - `nnd` 0.80
 - `gping` 1.21.0
 - `yazi` 26.9.1
 - `television` 0.15.9
-- `atuin` 18.21.0
-- `difftastic` 0.70.0
-- `qsv` 22.0.1
+- `atuin` 18.23.0
+- `difftastic` 0.71.0
+- `qsv` 23.0.1
 - `zjstatus` 0.25.0
 - `ncdu` 2.9.1
 - `pueue` 4.0.4
@@ -153,12 +153,12 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `go` 1.27.0
 - `gopls` 0.23.0
 - `lua-language-server` 3.19.1
-- `basedpyright` 1.39.10
-- `ccstatusline` 2.2.27
-- `herdr` 0.8.2
+- `basedpyright` 1.40.1
+- `ccstatusline` 2.2.30
+- `herdr` 0.9.1
 - `opencode` 1.18.25
 - `oh-my-pi` 18.0.11
-- `pwndbg` 2026.07.29
+- `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
 
 ### Host pins (config.toml [vars])

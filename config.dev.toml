@@ -12,12 +12,12 @@ node = { version = "26.8.1", postinstall = "npm install -g --allow-scripts=core-
 go = "1.27.0"
 "go:golang.org/x/tools/gopls" = "0.23.0"
 lua-language-server = "3.19.1"
-"pypi:basedpyright" = "1.39.10"      # was pipx: in the old conf.d; pypi: accepted cleanly by mise 2026.9.9, consistent with the three pypi: tools in config.linux.toml
-"npm:ccstatusline" = "2.2.27"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
-herdr = { version = "0.8.2", os = ["linux"] }
+"pypi:basedpyright" = "1.40.1"      # was pipx: in the old conf.d; pypi: accepted cleanly by mise 2026.9.9, consistent with the three pypi: tools in config.linux.toml
+"npm:ccstatusline" = "2.2.30"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
+herdr = { version = "0.9.1", os = ["linux"] }
 opencode = { version = "1.18.25", os = ["linux"] }              # Windows half stays in bootstrap.ps1 $PortableTools
 "github:can1357/oh-my-pi" = { version = "18.0.11", os = ["linux"], bin = "omp" }   # bare per-platform binary asset (omp-linux-x64); bin= names the installed command
-"github:pwndbg/pwndbg" = { version = "2026.07.29", os = ["linux"], version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # bin_path settled in Step 7: archive extracts a top-level pwndbg/ wrapper dir
+"github:pwndbg/pwndbg" = { version = "2026.09.15", os = ["linux"], version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # bin_path settled in Step 7: archive extracts a top-level pwndbg/ wrapper dir
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", os = ["linux"], asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }
 
 # ---------------------------------------------------------------------------

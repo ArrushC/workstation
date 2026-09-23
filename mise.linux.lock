@@ -65,14 +65,14 @@ url = "https://github.com/cheat/cheat/releases/download/5.1.0/cheat-linux-amd64.
 url_api = "https://api.github.com/repos/cheat/cheat/releases/assets/356479028"
 
 [[tools.croc]]
-version = "11.5.0"
+version = "11.5.3"
 backend = "aqua:schollz/croc"
-specifiers = ["11.5.0"]
+specifiers = ["11.5.3"]
 
 [tools.croc."platforms.linux-x64"]
-checksum = "sha256:ea040965dec526bd86b756b594a7f3958bbd795a3f7f89d195e8ed836c7bcd6e"
-url = "https://github.com/schollz/croc/releases/download/v11.5.0/croc_v11.5.0_Linux-64bit.tar.gz"
-url_api = "https://api.github.com/repos/schollz/croc/releases/assets/547460992"
+checksum = "sha256:73b44449937a3f656571c4f016cb2fd0e722544568d7a17dcc3b82475ad250ad"
+url = "https://github.com/schollz/croc/releases/download/v11.5.3/croc_v11.5.3_Linux-64bit.tar.gz"
+url_api = "https://api.github.com/repos/schollz/croc/releases/assets/561827361"
 
 [[tools.ctop]]
 version = "0.7.7"
@@ -115,14 +115,14 @@ url = "https://github.com/mr-karan/doggo/releases/download/v1.4.0/doggo-linux-x8
 url_api = "https://api.github.com/repos/mr-karan/doggo/releases/assets/539320012"
 
 [[tools.dust]]
-version = "1.2.5"
+version = "1.2.6"
 backend = "aqua:bootandy/dust"
-specifiers = ["1.2.5"]
+specifiers = ["1.2.6"]
 
 [tools.dust."platforms.linux-x64"]
-checksum = "sha256:64b16f5c10cc4c25d2eaa144e9d2d44b3ed8f72ee63b3bc0a92c85e21e9e0932"
-url = "https://github.com/bootandy/dust/releases/download/v1.2.5/dust-v1.2.5-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/521290571"
+checksum = "sha256:14f788707aad217667f6812cf1a9639bf5c861a2ee815d486cffc36051f5e759"
+url = "https://github.com/bootandy/dust/releases/download/v1.2.6/dust-v1.2.6-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/568852367"
 
 [[tools.eza]]
 version = "0.23.5"
@@ -155,14 +155,14 @@ url = "https://github.com/antonmedv/fx/releases/download/39.2.0/fx_linux_amd64"
 url_api = "https://api.github.com/repos/antonmedv/fx/releases/assets/315468989"
 
 [[tools.fzf]]
-version = "0.74.3"
+version = "0.74.4"
 backend = "aqua:junegunn/fzf"
-specifiers = ["0.74.3"]
+specifiers = ["0.74.4"]
 
 [tools.fzf."platforms.linux-x64"]
-checksum = "sha256:3501a595e4b5c40a6b047340a0e8f805c46fd4e61ef95ef8a136ba8c61cf6f22"
-url = "https://github.com/junegunn/fzf/releases/download/v0.74.3/fzf-0.74.3-linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/junegunn/fzf/releases/assets/517537066"
+checksum = "sha256:05e6813a337cc722c3ed07e54a764b75cc5d671e2e60459db0ba696ee5fa7504"
+url = "https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/junegunn/fzf/releases/assets/558287768"
 
 [[tools.gh]]
 version = "2.98.0"
@@ -176,17 +176,17 @@ url_api = "https://api.github.com/repos/cli/cli/releases/assets/522857901"
 provenance = "github-attestations"
 
 [[tools."github:Canop/broot"]]
-version = "1.60.0"
+version = "1.60.1"
 backend = "github:Canop/broot"
-specifiers = ["1.60.0"]
+specifiers = ["1.60.1"]
 
 [tools."github:Canop/broot".options]
 asset_pattern = "broot_{version}.zip"
 
 [tools."github:Canop/broot"."platforms.linux-x64"]
-checksum = "sha256:097ed2e86616d8cd5df10ed6d1ff2c69efa6667a96e8e8b2c19242cda950b955"
-url = "https://github.com/Canop/broot/releases/download/v1.60.0/broot_1.60.0.zip"
-url_api = "https://api.github.com/repos/Canop/broot/releases/assets/546051489"
+checksum = "sha256:de4a054424ac01ef73fb30c3b3fac0cda437e7426388085d7467b5e0aaa1cb55"
+url = "https://github.com/Canop/broot/releases/download/v1.60.1/broot_1.60.1.zip"
+url_api = "https://api.github.com/repos/Canop/broot/releases/assets/551127327"
 
 [[tools."github:PaulJuliusMartinez/jless"]]
 version = "0.9.0"
@@ -202,14 +202,14 @@ url = "https://github.com/PaulJuliusMartinez/jless/releases/download/v0.9.0/jles
 url_api = "https://api.github.com/repos/PaulJuliusMartinez/jless/releases/assets/117306822"
 
 [[tools."github:Wilfred/difftastic"]]
-version = "0.70.0"
+version = "0.71.0"
 backend = "github:Wilfred/difftastic"
-specifiers = ["0.70.0"]
+specifiers = ["0.71.0"]
 
 [tools."github:Wilfred/difftastic"."platforms.linux-x64"]
-checksum = "sha256:2997d2bbe620534edbd79b0049f00ce84eef3fedb15c7822456d58e38d8b05c9"
-url = "https://github.com/Wilfred/difftastic/releases/download/0.70.0/difft-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/Wilfred/difftastic/releases/assets/505661744"
+checksum = "sha256:61aea5394a53c56f144637cf39b3a0c0dafa27769731745e5851ff276e6478da"
+url = "https://github.com/Wilfred/difftastic/releases/download/0.71.0/difft-0.71.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/Wilfred/difftastic/releases/assets/573539079"
 
 [[tools."github:YS-L/csvlens"]]
 version = "0.15.1"
@@ -251,31 +251,31 @@ url = "https://github.com/alexpasmantier/television/releases/download/0.15.9/tv-
 url_api = "https://api.github.com/repos/alexpasmantier/television/releases/assets/447569675"
 
 [[tools."github:atuinsh/atuin"]]
-version = "18.21.0"
+version = "18.23.0"
 backend = "github:atuinsh/atuin"
-specifiers = ["18.21.0"]
+specifiers = ["18.23.0"]
 
 [tools."github:atuinsh/atuin".options]
 asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:atuinsh/atuin"."platforms.linux-x64"]
-checksum = "sha256:792e1867d113ba9bebec94996b3160164aba738e3d23987b3cddb9dee976ac08"
-url = "https://github.com/atuinsh/atuin/releases/download/v18.21.0/atuin-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/538647980"
+checksum = "sha256:d1b40dd6e7cd3d823867ffe22b39a025bc420f7875926ae9ca974155378da14d"
+url = "https://github.com/atuinsh/atuin/releases/download/v18.23.0/atuin-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/580134247"
 provenance = "github-attestations"
 
 [[tools."github:boyter/scc"]]
-version = "4.0.0"
+version = "4.1.0"
 backend = "github:boyter/scc"
-specifiers = ["4.0.0"]
+specifiers = ["4.1.0"]
 
 [tools."github:boyter/scc".options]
 asset_pattern = "scc_Linux_x86_64.tar.gz"
 
 [tools."github:boyter/scc"."platforms.linux-x64"]
-checksum = "sha256:b8535fb0714dd33c5434c24de181e4d1a632e6a1f869e1985bbd10ad8b838545"
-url = "https://github.com/boyter/scc/releases/download/v4.0.0/scc_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/boyter/scc/releases/assets/526904413"
+checksum = "sha256:c7328436d3027f4357d3d7853f7dc3ac2bbcb4ca08f1adad91a27c593884079b"
+url = "https://github.com/boyter/scc/releases/download/v4.1.0/scc_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/boyter/scc/releases/assets/549478876"
 
 [[tools."github:dalance/procs"]]
 version = "0.14.12"
@@ -291,17 +291,17 @@ url = "https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.1
 url_api = "https://api.github.com/repos/dalance/procs/releases/assets/457525859"
 
 [[tools."github:dathere/qsv"]]
-version = "22.0.1"
+version = "23.0.1"
 backend = "github:dathere/qsv"
-specifiers = ["22.0.1"]
+specifiers = ["23.0.1"]
 
 [tools."github:dathere/qsv".options]
 asset_pattern = "qsv-{version}-x86_64-unknown-linux-musl.zip"
 
 [tools."github:dathere/qsv"."platforms.linux-x64"]
-checksum = "sha256:e74398627f24a3ccce09c7917cb4f75c95b96de41a79f4b600c646870cf59d9a"
-url = "https://github.com/dathere/qsv/releases/download/22.0.1/qsv-22.0.1-x86_64-unknown-linux-musl.zip"
-url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/507534467"
+checksum = "sha256:e4175df7ecb74b91b5b481ffb96f5adbd7e9ea129c1954bfb280b21cba325433"
+url = "https://github.com/dathere/qsv/releases/download/23.0.1/qsv-23.0.1-x86_64-unknown-linux-musl.zip"
+url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/560347953"
 
 [[tools."github:dj95/zjstatus"]]
 version = "0.25.0"
@@ -456,17 +456,17 @@ url = "https://github.com/unhappychoice/gitlogue/releases/download/v0.11.0/gitlo
 url_api = "https://api.github.com/repos/unhappychoice/gitlogue/releases/assets/536320141"
 
 [[tools."github:xo/usql"]]
-version = "0.21.4"
+version = "0.21.5"
 backend = "github:xo/usql"
-specifiers = ["0.21.4"]
+specifiers = ["0.21.5"]
 
 [tools."github:xo/usql".options]
 asset_pattern = "usql_static-{version}-linux-amd64.tar.bz2"
 
 [tools."github:xo/usql"."platforms.linux-x64"]
-checksum = "sha256:93537a7239737b3d0cd2f42b7a13766a455a40176be7c0896a3586cd698cf751"
-url = "https://github.com/xo/usql/releases/download/v0.21.4/usql_static-0.21.4-linux-amd64.tar.bz2"
-url_api = "https://api.github.com/repos/xo/usql/releases/assets/381966141"
+checksum = "sha256:30a4463107d7d089acbd07e2c7b46865722e6fee2fcd114e95bc8d449a4ae465"
+url = "https://github.com/xo/usql/releases/download/v0.21.5/usql_static-0.21.5-linux-amd64.tar.bz2"
+url_api = "https://api.github.com/repos/xo/usql/releases/assets/560756002"
 
 [[tools.gitleaks]]
 version = "8.30.1"
@@ -500,14 +500,14 @@ url_api = "https://api.github.com/repos/charmbracelet/glow/releases/assets/51046
 provenance = "cosign"
 
 [[tools.gopass]]
-version = "1.17.0"
+version = "1.17.2"
 backend = "aqua:gopasspw/gopass"
-specifiers = ["1.17.0"]
+specifiers = ["1.17.2"]
 
 [tools.gopass."platforms.linux-x64"]
-checksum = "sha256:287ab06e5018ca6cff2bc72300eeaa55f10bb824289c6727c82c1f1f9eb10de3"
-url = "https://github.com/gopasspw/gopass/releases/download/v1.17.0/gopass-1.17.0-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/gopasspw/gopass/releases/assets/536677456"
+checksum = "sha256:95df834e451dec445565b8132efd4d9d18cb889b56d0fc65382d4ac3efdefb08"
+url = "https://github.com/gopasspw/gopass/releases/download/v1.17.2/gopass-1.17.2-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/gopasspw/gopass/releases/assets/555209290"
 provenance = "cosign"
 
 [[tools.grex]]
@@ -521,14 +521,14 @@ url = "https://github.com/pemistahl/grex/releases/download/v1.4.6/grex-v1.4.6-x8
 url_api = "https://api.github.com/repos/pemistahl/grex/releases/assets/316379863"
 
 [[tools.gum]]
-version = "2.0.0"
+version = "2.0.1"
 backend = "aqua:charmbracelet/gum"
-specifiers = ["2.0.0"]
+specifiers = ["2.0.1"]
 
 [tools.gum."platforms.linux-x64"]
-checksum = "sha256:c99b0005bb5b514770eea404b24c7987e08eba35bb0b2d7bc6545bb676c36861"
-url = "https://github.com/charmbracelet/gum/releases/download/v2.0.0/gum_2.0.0_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/charmbracelet/gum/releases/assets/521957928"
+checksum = "sha256:4dfe4547f960813864c803b3617aa64427fa32ca566707fde949e08975297c48"
+url = "https://github.com/charmbracelet/gum/releases/download/v2.0.1/gum_2.0.1_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/gum/releases/assets/556563001"
 provenance = "cosign"
 
 [[tools.helix]]
@@ -676,14 +676,14 @@ url = "https://github.com/jesseduffield/lazydocker/releases/download/v0.25.2/laz
 url_api = "https://api.github.com/repos/jesseduffield/lazydocker/releases/assets/399711577"
 
 [[tools.lazygit]]
-version = "0.65.0"
+version = "0.65.1"
 backend = "aqua:jesseduffield/lazygit"
-specifiers = ["0.65.0"]
+specifiers = ["0.65.1"]
 
 [tools.lazygit."platforms.linux-x64"]
-checksum = "sha256:44d8e7dd1484b4a66e191bd4ab25a71e8b4b3a65ab122f838e65677ef58c5506"
-url = "https://github.com/jesseduffield/lazygit/releases/download/v0.65.0/lazygit_0.65.0_linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/jesseduffield/lazygit/releases/assets/545957203"
+checksum = "sha256:02beacbcda0fa342e50ae3480ba8147307353af3fb28e1d5f790e02329c201a6"
+url = "https://github.com/jesseduffield/lazygit/releases/download/v0.65.1/lazygit_0.65.1_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/jesseduffield/lazygit/releases/assets/560658266"
 
 [[tools.lazyjournal]]
 version = "0.8.6"
@@ -794,14 +794,14 @@ url = "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15
 url_api = "https://api.github.com/repos/BurntSushi/ripgrep/releases/assets/478120097"
 
 [[tools.rust-analyzer]]
-version = "2026-09-07"
+version = "2026-09-21"
 backend = "aqua:rust-lang/rust-analyzer"
-specifiers = ["2026-09-07"]
+specifiers = ["2026-09-21"]
 
 [tools.rust-analyzer."platforms.linux-x64"]
-checksum = "sha256:a3500183aa08bf740c0da6e030ad262d4cfa1c19e7ce195ab5f772bdf9ddfb12"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-07/rust-analyzer-x86_64-unknown-linux-gnu.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/548243469"
+checksum = "sha256:b2d24ce2bda2ea05b1ad7c2917d205f8111775f703ccd908e6061803ae8257d0"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-21/rust-analyzer-x86_64-unknown-linux-gnu.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/578247795"
 
 [[tools.sd]]
 version = "1.1.0"
@@ -814,14 +814,14 @@ url = "https://github.com/chmln/sd/releases/download/v1.1.0/sd-v1.1.0-x86_64-unk
 url_api = "https://api.github.com/repos/chmln/sd/releases/assets/362325296"
 
 [[tools.shfmt]]
-version = "3.14.0"
+version = "3.14.1"
 backend = "aqua:mvdan/sh"
-specifiers = ["3.14.0"]
+specifiers = ["3.14.1"]
 
 [tools.shfmt."platforms.linux-x64"]
-checksum = "sha256:fe42021c7272ef2d67ea36cbc3031683c625d0badec733ef3a57b567246a0b66"
-url = "https://github.com/mvdan/sh/releases/download/v3.14.0/shfmt_v3.14.0_linux_amd64"
-url_api = "https://api.github.com/repos/mvdan/sh/releases/assets/534119985"
+checksum = "sha256:76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf"
+url = "https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64"
+url_api = "https://api.github.com/repos/mvdan/sh/releases/assets/547320883"
 
 [[tools.sops]]
 version = "3.13.3"
@@ -867,14 +867,14 @@ url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86
 url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257322600"
 
 [[tools.watchexec]]
-version = "2.7.2"
+version = "2.7.3"
 backend = "aqua:watchexec/watchexec"
-specifiers = ["2.7.2"]
+specifiers = ["2.7.3"]
 
 [tools.watchexec."platforms.linux-x64"]
-checksum = "sha256:b5b3cf6fd45ce2503bae90ba4017f85d62314b427b91c06818ff39a4c46930c4"
-url = "https://github.com/watchexec/watchexec/releases/download/v2.7.2/watchexec-2.7.2-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/watchexec/watchexec/releases/assets/546730436"
+checksum = "sha256:8ace3a1d2e752d189f28b6766311d58f155ab977fae66aba60b111ec8aec2f64"
+url = "https://github.com/watchexec/watchexec/releases/download/v2.7.3/watchexec-2.7.3-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/watchexec/watchexec/releases/assets/565495660"
 
 [[tools.witr]]
 version = "0.3.3"

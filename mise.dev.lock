@@ -36,24 +36,24 @@ url = "https://github.com/can1357/oh-my-pi/releases/download/v18.0.11/omp-window
 url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/535576886"
 
 [[tools."github:pwndbg/pwndbg"]]
-version = "2026.07.29"
+version = "2026.09.15"
 backend = "github:pwndbg/pwndbg"
-specifiers = ["2026.07.29"]
+specifiers = ["2026.09.15"]
 
 [tools."github:pwndbg/pwndbg".options]
 asset_pattern = "pwndbg_{version}_x86_64-portable.tar.xz"
 version_prefix = ""
 
 [tools."github:pwndbg/pwndbg"."platforms.linux-x64"]
-checksum = "sha256:63c38b76bf8baeb44b4bc018c73ea0b05b872c2aba205ed5680892f2d65adb03"
-url = "https://github.com/pwndbg/pwndbg/releases/download/2026.07.29/pwndbg_2026.07.29_x86_64-portable.tar.xz"
-url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/494061387"
+checksum = "sha256:7ba64666ee595885ba4b0e073f85e423829103e9fdbe921ba4eef1acd9150803"
+url = "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026.09.15_x86_64-portable.tar.xz"
+url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/566633367"
 provenance = "github-attestations"
 
 [tools."github:pwndbg/pwndbg"."platforms.windows-x64"]
-checksum = "sha256:63c38b76bf8baeb44b4bc018c73ea0b05b872c2aba205ed5680892f2d65adb03"
-url = "https://github.com/pwndbg/pwndbg/releases/download/2026.07.29/pwndbg_2026.07.29_x86_64-portable.tar.xz"
-url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/494061387"
+checksum = "sha256:7ba64666ee595885ba4b0e073f85e423829103e9fdbe921ba4eef1acd9150803"
+url = "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026.09.15_x86_64-portable.tar.xz"
+url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/566633367"
 provenance = "github-attestations"
 
 [[tools.go]]
@@ -75,19 +75,19 @@ backend = "go:golang.org/x/tools/gopls"
 specifiers = ["0.23.0"]
 
 [[tools.herdr]]
-version = "0.8.2"
+version = "0.9.1"
 backend = "aqua:herdrdev/herdr"
-specifiers = ["0.8.2"]
+specifiers = ["0.9.1"]
 
 [tools.herdr."platforms.linux-x64"]
-checksum = "sha256:976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.8.2/herdr-linux-x86_64"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/521169107"
+checksum = "sha256:2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7"
+url = "https://github.com/herdrdev/herdr/releases/download/v0.9.1/herdr-linux-x86_64"
+url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/568559679"
 
 [tools.herdr."platforms.windows-x64"]
-checksum = "sha256:0ab3d0fe1434d55757997542b978c771d642987bb15a7130f4160f0db38821d5"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.8.2/herdr-windows-x86_64.zip"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/521169109"
+checksum = "sha256:04ce380cac5af27bfcf75d0951ac49b7afe4c984aee8852985806d4f71f93a6e"
+url = "https://github.com/herdrdev/herdr/releases/download/v0.9.1/herdr-windows-x86_64.zip"
+url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/568559681"
 
 [[tools.lua-language-server]]
 version = "3.19.1"
@@ -118,10 +118,10 @@ checksum = "sha256:57693d8e93d1b04e7b7de46aca53ecd63e97564e73de36a68428d7ff08d83
 url = "https://nodejs.org/dist/v26.8.1/node-v26.8.1-win-x64.zip"
 
 [[tools."npm:ccstatusline"]]
-version = "2.2.27"
-aube = { path = "locks/mise.dev/npm-ccstatusline/2.2.27", digest = "sha256:3bda44f9ff19a77826c5e6a9974d4768fa3a084c3a41cd6c0f067da9b9343ae1" }
+version = "2.2.30"
+aube = { path = "locks/mise.dev/npm-ccstatusline/2.2.30", digest = "sha256:df2c07c76c465a27faaae3a947d2eeb3ac2ecf3638f2ee82b878c3676638b79c" }
 backend = "npm:ccstatusline"
-specifiers = ["2.2.27"]
+specifiers = ["2.2.30"]
 
 [[tools.opencode]]
 version = "1.18.25"
@@ -139,7 +139,6 @@ url = "https://github.com/anomalyco/opencode/releases/download/v1.18.25/opencode
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/533315557"
 
 [[tools."pypi:basedpyright"]]
-version = "1.39.10"
+version = "1.40.1"
 backend = "pypi:basedpyright"
-specifiers = ["1.39.10"]
-uv = { path = "locks/mise.dev/pypi-basedpyright/1.39.10", digest = "sha256:1795146b3e4dec60bc6f604cdd40df2802e3bbba4e0ee6a706b59c4de6abae4b" }
+specifiers = ["1.40.1"]
