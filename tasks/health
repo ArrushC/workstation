@@ -123,9 +123,22 @@ print("real:" + "; ".join(real[:6]) if real else
     row_warn "bootstrap state" "pueued skipped — no systemd user manager on this host (loginctl enable-linger to run it)"
     ;;
   none)
-    # --missing said drift, the JSON says everything is settled: trust the
-    # exit code and report it, rather than silently passing.
-    row_bad "bootstrap state" "drift reported by --missing but not visible in --json — inspect: mise bootstrap status"
+    # --missing said drift, the JSON says every [bootstrap.*] resource is
+    # settled. One known, non-bad cause: `mise bootstrap status --json`'s
+    # top-level exit code also reflects [dotfiles] drift (its "dotfiles" key
+    # is just {"edits": []} — no per-target state to classify, unlike
+    # files/services/etc above), so a single un-applied dotfile makes
+    # `--missing` exit non-zero with nothing "real" for this classifier to
+    # find. Don't guess from the JSON (it structurally can't tell us) —
+    # re-probe with the SAME command the dedicated "dotfiles" row below uses
+    # and let that row own dotfiles drift instead of double-reporting it here
+    # at hard-failure severity. If dotfiles are ALSO clean, the drift is
+    # genuinely unattributable and stays a hard failure.
+    if mise dot status --missing >/dev/null 2>&1; then
+      row_bad "bootstrap state" "drift reported by --missing but not visible in --json — inspect: mise bootstrap status"
+    else
+      row_warn "bootstrap state" "drift is dotfiles-only (see the dotfiles row below) — inspect: mise dot status"
+    fi
     ;;
   *)
     row_bad "bootstrap state" "drift — run ./bootstrap.sh --$mode"
@@ -147,15 +160,31 @@ echo ""
 # 3. MISE_ENV persisted — rc files for future logins/non-interactive shells,
 # plus the LIVE systemd user manager env (only a re-login or a manual
 # set-environment fixes that one, so it's a warn rather than a hard failure).
+# I1 (final-fix-brief.md): a bare presence grep for `export MISE_ENV=` passes
+# on ANY value, so a host that baked the wrong token set (e.g. plain "linux"
+# on a dev host) reported a false green. Compare the actual BAKED value in
+# each file against scripts/lib/mise-env.sh "$mode" — the canonical token
+# set for THIS host — mirroring the render comparison
+# check_mise_env_three_way makes in scripts/check-invariants.sh.
 hdr "MISE_ENV persisted"
-zshenv_ok=false
-grep -q 'export MISE_ENV=' "$HOME/.zshenv" 2>/dev/null && zshenv_ok=true
-envd_ok=false
-[ -f "$HOME/.config/environment.d/10-mise.conf" ] && envd_ok=true
-if $zshenv_ok && $envd_ok; then
-  row_ok "MISE_ENV rc" "both: ~/.zshenv + ~/.config/environment.d/10-mise.conf"
+canonical_env=$("$root/scripts/lib/mise-env.sh" "$mode" 2>/dev/null || true)
+_baked_mise_env() {
+  # Matches both the rc-file form (export MISE_ENV="linux,dev,host,wsl") and
+  # environment.d's unquoted systemd form (MISE_ENV=linux,dev,host,wsl).
+  grep -oE '(export )?MISE_ENV="?[a-z,]+"?' "$1" 2>/dev/null | head -1 |
+    sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//'
+}
+if [ -z "$canonical_env" ]; then
+  row_bad "MISE_ENV rc" "scripts/lib/mise-env.sh $mode produced no output — cannot verify baked rc files"
 else
-  row_bad "MISE_ENV rc" "rc files: ~/.zshenv export=$zshenv_ok environment.d=$envd_ok — chezmoi apply / bootstrap.sh writes both"
+  zshenv_baked=$(_baked_mise_env "$HOME/.zshenv")
+  bashrc_baked=$(_baked_mise_env "$HOME/.bashrc")
+  envd_baked=$(_baked_mise_env "$HOME/.config/environment.d/10-mise.conf")
+  if [ "$zshenv_baked" = "$canonical_env" ] && [ "$bashrc_baked" = "$canonical_env" ] && [ "$envd_baked" = "$canonical_env" ]; then
+    row_ok "MISE_ENV rc" "all three bake \"$canonical_env\": ~/.zshenv, ~/.bashrc, environment.d/10-mise.conf"
+  else
+    row_bad "MISE_ENV rc" "want \"$canonical_env\" ($mode) — got zshenv=\"${zshenv_baked:-<missing>}\" bashrc=\"${bashrc_baked:-<missing>}\" environment.d=\"${envd_baked:-<missing>}\" — mise dot apply / bootstrap.sh writes all three"
+  fi
 fi
 if systemctl --user show-environment 2>/dev/null | grep -q '^MISE_ENV='; then
   row_ok "MISE_ENV live" "set in the systemd user manager"
@@ -165,7 +194,7 @@ fi
 echo ""
 
 # 4. pueued — the mise-managed user unit (Task 1), plus a warn for the
-# chezmoi-era unit name if it's still lying around.
+# legacy (pre-mise) unit name if it's still lying around.
 hdr "pueued"
 if systemctl --user is-active --quiet dev.mise.pueued.service 2>/dev/null; then
   row_ok "pueued" "dev.mise.pueued.service active"
@@ -175,7 +204,7 @@ else
   row_warn "pueued" "dev.mise.pueued.service not active — mise bootstrap --only services"
 fi
 if [ -f "$HOME/.config/systemd/user/pueued.service" ]; then
-  row_warn "pueued (old unit)" "chezmoi-era unit still present — ./bootstrap.sh retires it"
+  row_warn "pueued (old unit)" "legacy pueued.service still present — ./bootstrap.sh retires it"
 fi
 echo ""
 
@@ -244,18 +273,21 @@ if [ "$(basename "$login_shell")" = zsh ]; then
 else
   row_warn "login shell" "$login_shell — expected zsh"
 fi
-if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
-  drift=$(chezmoi status --source "$root" 2>/dev/null | wc -l)
-  if [ "$drift" -eq 0 ]; then
-    row_ok "chezmoi" "initialised, no drift"
-  else
-    row_warn "chezmoi" "$drift line(s) of drift — chezmoi apply --source $root"
-  fi
+if mise dot status --missing >/dev/null 2>&1; then
+  row_ok "dotfiles" "no drift (mise dot status)"
 else
-  row_warn "chezmoi" "not initialised — bootstrap.sh runs chezmoi init --apply"
+  row_warn "dotfiles" "drift — inspect: mise dot status · apply: mise dot apply"
 fi
-if [ -f "$state/legacy-tools-swept" ] && [ -f "$state/legacy-host-swept" ]; then
-  row_ok "legacy sweep" "both markers present"
+# ruling 8: symlinked dotfiles live inside the git checkout, so editing one
+# dirties the repo — and update-hosts.sh's `git pull --ff-only` then fails.
+repo_dirty=$(git -C "$root" status --porcelain 2>/dev/null | wc -l)
+if [ "$repo_dirty" -eq 0 ]; then
+  row_ok "repo checkout" "clean ($root)"
+else
+  row_warn "repo checkout" "$repo_dirty uncommitted change(s) in $root — commit or stash before update-hosts.sh runs (its git pull --ff-only fails on local changes)"
+fi
+if [ -f "$state/legacy-tools-swept" ] && [ -f "$state/legacy-host-swept" ] && [ -f "$state/legacy-chezmoi-swept" ]; then
+  row_ok "legacy sweep" "all three markers present"
 else
   row_warn "legacy sweep" "not fully swept yet — mise run bootstrap"
 fi
@@ -268,13 +300,6 @@ if env_has dev; then
     row_ok "legacy /usr/local" "no stale binaries"
   else
     row_warn "legacy /usr/local" "still present: ${stale[*]} — mise run bootstrap"
-  fi
-fi
-if env_has native; then
-  if [ -f /etc/systemd/system/dozzle.service ]; then
-    row_warn "legacy dozzle" "/etc/systemd/system/dozzle.service still present — mise run bootstrap"
-  else
-    row_ok "legacy dozzle" "retired"
   fi
 fi
 echo ""

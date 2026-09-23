@@ -18,7 +18,7 @@
 # AlmaLinux 9.8, 2026-09-17). Gone from the Make-era list: fswatch + entr (not
 # packaged for EL9), cockpit-networkmanager (virtual provide of cockpit-system,
 # `rpm -q` never sees it). `make` stays: it is a C-toolchain dependency, not our
-# orchestrator any more. Cockpit + NFS live in config.native.toml (WSL skips them).
+# orchestrator any more. NFS lives in config.native.toml (WSL skips it).
 # --- core (the old LINUX_PACKAGES) ---
 "dnf:curl" = "latest"
 "dnf:gcc" = "latest"
@@ -81,3 +81,37 @@
 "dnf:valgrind" = "latest"
 "dnf:vim-common" = "latest"
 "dnf:vim-enhanced" = "latest"
+
+# ---------------------------------------------------------------------------
+# Dotfiles: Linux DEV only (`host` token — loads on Linux dev hosts only,
+# never on `windows,dev`, which carries no `host` token). Moved from
+# config.dev.toml (dev-only, both OSes) by PR3 Task 3 controller review:
+# gdbinit/gdb are read by nothing on Windows, and herdr's config was a dead
+# file there too (herdr itself is Linux-only, config.dev.toml's own
+# `herdr = { …, os = ["linux"] }`). `host` lands identically on every Linux
+# dev host — both `linux,dev,host,wsl` and `linux,dev,host,native` carry it.
+# zed's settings.json joined this file for the same reason (I7,
+# 2026-09-22 copy-migration review): it used to live in config.linux.toml,
+# which carries no `dev` gate at all, so it deployed on Linux PROD hosts too
+# — neither mise nor chezmoi ever did that (chezmoi's own dev-gate excluded
+# ~/.config/zed on prod). `host` is Linux-dev-only, same as gdb/herdr above.
+#
+# Every entry below is `copy` (or `template`) — no `symlink`/`symlink-each`
+# anywhere any more (2026-09-22 copy-migration, user decision). `~/.config/gdb`
+# keeps exclude = [".vendor", ".gitkeep"] on a directory `copy` entry: copy on
+# a directory leaves unmanaged siblings alone, same guarantee symlink-each
+# used to give (re-verified for the copy migration — see config.linux.toml's
+# header comment for the full C2-hazard reasoning).
+# ---------------------------------------------------------------------------
+[dotfiles]
+"~/.gdbinit" = { source = "dotfiles/gdbinit.tera", mode = "template" }
+"~/.config/gdb" = { source = "dotfiles/config/gdb", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # gef.py, vendored
+"~/.config/herdr/config.toml" = { source = "dotfiles/config/herdr/config.toml", mode = "copy" }
+# Moved from config.linux.toml (I7, 2026-09-22 copy-migration review — see
+# this file's header comment above): Zed's settings UI / command palette
+# rewrites this file in place, same as its Windows sibling
+# (config.windows.toml's ~/AppData/Roaming/Zed/settings.json). A live edit
+# made through the app no longer reaches the repo implicitly under copy mode
+# — record it back with `wsr` (`mise dot add --changed`) before the next
+# apply overwrites it.
+"~/.config/zed/settings.json" = { source = "dotfiles/config/zed/settings.json", mode = "copy" }

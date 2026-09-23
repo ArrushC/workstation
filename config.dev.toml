@@ -19,3 +19,70 @@ opencode = { version = "1.18.25", os = ["linux"] }              # Windows half s
 "github:can1357/oh-my-pi" = { version = "18.0.11", os = ["linux"], bin = "omp" }   # bare per-platform binary asset (omp-linux-x64); bin= names the installed command
 "github:pwndbg/pwndbg" = { version = "2026.07.29", os = ["linux"], version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # bin_path settled in Step 7: archive extracts a top-level pwndbg/ wrapper dir
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", os = ["linux"], asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }
+
+# ---------------------------------------------------------------------------
+# Dotfiles gated on `dev` regardless of OS — chezmoi's ignore block only
+# listed Linux-form paths for this same dev gate (ruling 10's asymmetry); a
+# hypothetical Windows prod host would have deployed ~/.claude ungated. Here
+# the dev token on this file's own name fixes that by construction.
+#
+# gdbinit/gdb and herdr's config used to live here too, gated on `dev` alone
+# — functionally inert on a Windows dev host (nothing reads ~/.gdbinit there,
+# and herdr itself is Linux-only, `herdr = { …, os = ["linux"] }` above).
+# PR3 Task 3 controller review moved them to config.host.toml, gated on
+# `host` (Linux dev hosts only — `windows,dev` carries no `host` token),
+# which drops the dead Windows deploy while still landing on every Linux dev
+# host (`host` is present in both `linux,dev,host,wsl` and
+# `linux,dev,host,native`).
+# ---------------------------------------------------------------------------
+[dotfiles]
+# Every entry here is `copy` — no `symlink`/`symlink-each` anywhere any more
+# (2026-09-22 copy-migration, user decision: chezmoi's copy semantics survive
+# applications on either OS that don't respect symlinks). Before the
+# migration, a Windows-loaded, dev-gated file like this one had to be `copy`
+# by the old ruling-7 rule anyway (symlink needs Developer Mode on Windows
+# and falls back to copy regardless); now every entry everywhere is `copy`
+# for the same underlying reason, so that distinction no longer matters.
+#
+# Per-host opt-out: scripts/setup-ccstatusline.sh writes a
+# CCSTATUSLINE-OPTOUT:START/END block into config.local.toml's own
+# [dotfiles] table — { enabled = false } alone is silently ignored, so the
+# written entry repeats `mode` too (ruling 2,
+# docs/superpowers/plans/2026-09-19-mise-dotfiles.md).
+# A live edit through ccstatusline's own setup menu no longer reaches the
+# repo implicitly under copy mode — record it back with `wsr`
+# (`mise dot add --changed`) before the next apply overwrites it.
+"~/.config/ccstatusline/settings.json" = { source = "dotfiles/config/ccstatusline/settings.json", mode = "copy" }
+# ~/.config/zed/settings.json lives in config.host.toml (I7,
+# final-fix-brief.md / 2026-09-22 I7 fix): this file is gated on `dev`
+# regardless of OS, so it was ALSO rendering on a Windows dev host — at a
+# Linux-only path Zed for Windows never reads (~/AppData/Roaming/Zed/
+# settings.json is config.windows.toml's real entry) — same class of
+# dead-file-on-Windows miss already fixed for helix/gdb/herdr. config.host.toml's
+# `host` token (Linux dev only) also fixes I7's Linux-prod-deploy regression:
+# config.linux.toml carries no dev gate at all, so it must not live there either.
+
+# ~/.claude tree. Directory mode 700 is restored by the post-dotfiles hook
+# (config.linux.toml) since copy mode can't express a directory's own mode
+# either. settings.json and settings.local.json are deliberately NOT
+# declared here: Task 3 replaces settings.json with a
+# scripts/lib/claude-settings-merge.sh jq merge (mise has no modify_-template
+# equivalent), and settings.local.json is rewritten wholesale by Claude Code
+# itself on every run, same as the Zed/Warp/WT/Code files in config.linux.toml
+# and config.windows.toml.
+# A live edit under $HOME no longer reaches the repo implicitly — `wsr`
+# (`mise dot add --changed`) round-trips it (the TOOLS block is still
+# regenerated in place at the SOURCE by gen-tool-memory.sh either way — only
+# the deployed copy needs a re-apply to pick it up). CLAUDE.md is the file
+# Claude Code agents are routinely nudged to edit directly: see `wsa`'s
+# drift check (CLAUDE.md/docs/claude/invariants.md) before assuming an edit
+# here is safe to blow away.
+"~/.claude/CLAUDE.md" = { source = "dotfiles/claude/CLAUDE.md", mode = "copy" }
+"~/.claude/hooks" = { source = "dotfiles/claude/hooks", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # dangerous-command-guard.sh, secret-guard.sh — both git mode 755; copy on a directory leaves unmanaged hooks (e.g. herdr-agent-state.sh) alone
+"~/.claude/notify.sh" = { source = "dotfiles/claude/notify.sh", mode = "copy" }   # git mode 755; copy preserves the git-tracked executable bit from the source
+# agents/commands are the two directories the user creates files in
+# directly — see docs/claude/invariants.md's round-trip note for exactly
+# which `mise dot add` forms capture a live addition here.
+"~/.claude/agents" = { source = "dotfiles/claude/agents", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.claude/commands" = { source = "dotfiles/claude/commands", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.claude/skills" = { source = "dotfiles/claude/skills", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # workstation-lsp/ (.claude-plugin/plugin.json, .lsp.json, SKILL.md); copy so unmanaged skill dirs (e.g. computer-use, orca-cli, orchestration) survive

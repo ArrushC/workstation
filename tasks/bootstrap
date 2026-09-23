@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-#MISE description="End-of-bootstrap steps: Claude Code, zjstatus plugin, chezmoi apply (until PR3), legacy sweep — runs after python-env, fonts, vcpkg"
+#MISE description="End-of-bootstrap steps: Claude Code + plugins, zjstatus plugin, legacy sweep, nb/herdr/tldr lifecycle steps, Claude settings merge — runs after python-env, fonts, vcpkg"
 #MISE depends=["python-env", "fonts", "vcpkg"]
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 env_has() {
   case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
@@ -31,19 +30,137 @@ if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
 fi
 # 3. zjstatus.wasm → zellij's DATA plugin dir (mise installs the tool; zellij loads plugins from its data dir, never a bin dir)
 "$root/scripts/lib/zellij-plugin.sh" zjstatus "file://$(mise where github:dj95/zjstatus)/zjstatus.wasm"
-# 4. one-time sweeps of pre-mise artifacts (marker-guarded, idempotent) —
-# BEFORE chezmoi apply: a quit at chezmoi's merge prompt below must not be
-# able to skip the sweep.
+# 4. one-time sweeps of pre-mise artifacts (marker-guarded, idempotent).
 "$root/tasks/migrate-legacy"
-# 5. dotfiles — chezmoi until PR3. First-run init needs a TTY: bootstrap.sh does it after this task.
-# Soft-fail: under a non-interactive SSH run (update-hosts.sh, no TTY) a
-# drifted target makes `chezmoi apply` error instead of prompting, and an
-# interactive `q` at the merge prompt does the same — either must not abort
-# this task (mind set -euo pipefail). Drift is already a health row.
-if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
-  echo "==> chezmoi apply"
-  echo "    if prompted (\"<file> has changed since chezmoi last wrote it?\"): d=diff m=merge o=overwrite a=all s=skip q=quit"
-  chezmoi apply --source "$root" || { echo "  ! chezmoi apply did not complete — review with: chezmoi diff --source $root ; re-apply with: cza" >&2; }
-else
-  echo "  chezmoi not initialised yet — bootstrap.sh runs chezmoi init --apply next"
+# 5. nb notebook init at ~/notes, once (was run_once_after_init.sh.tmpl).
+# Marker-guarded rather than a content-hashed run_once: a missing nb or a
+# failed/incomplete init must not abort the bootstrap, and must retry on the
+# next run instead of giving up forever. nb's first-run wizard needs a real
+# answer — read from /dev/tty (under `curl … | bash`, plain stdin is the
+# piped script itself, not a terminal; when there's no controlling tty the
+# redirect itself fails fast instead of hanging — the same pattern
+# ensure_config_local() in bootstrap.sh uses for its own first-run prompt).
+# Success is judged by the post-condition (~/notes exists), never by nb's
+# own exit code — nb's wizard exits 0 on stdin EOF having created nothing
+# (found while verifying this step in a scratch $HOME).
+nb_marker="$state/nb-notebook"
+if [ ! -f "$nb_marker" ]; then
+  if command -v nb >/dev/null 2>&1; then
+    if [ -d "$HOME/notes" ]; then
+      mkdir -p "$state" && : >"$nb_marker" || true
+    else
+      echo "==> nb notebook (~/notes)"
+      nb notebooks init home "$HOME/notes" </dev/tty || nb init </dev/tty || true
+      if [ -d "$HOME/notes" ]; then
+        mkdir -p "$state" && : >"$nb_marker" || true
+      else
+        echo "  ! nb notebook not created at ~/notes — run by hand: nb notebooks init ~/notes --name home" >&2
+      fi
+    fi
+  else
+    echo "  nb not found on PATH — skipping notebook init (retries next run)" >&2
+  fi
+fi
+# 6. Claude plugin marketplace + the 8 user-scope plugins, once (dev only;
+# was run_once_install-claude-plugins.sh.tmpl). Idempotent even without the
+# marker (marketplace add / plugin install both no-op when already present)
+# — the marker just skips the claude invocations entirely once they've all
+# succeeded.
+claude_plugins_marker="$state/claude-plugins"
+if env_has dev && [ ! -f "$claude_plugins_marker" ]; then
+  if command -v claude >/dev/null 2>&1; then
+    echo "==> claude plugin marketplace + plugins"
+    claude_marketplace="claude-plugins-official"
+    claude_plugins_ok=true
+    if ! claude plugin marketplace list 2>/dev/null | grep -qF "$claude_marketplace"; then
+      claude plugin marketplace add "anthropics/claude-plugins-official" --scope user ||
+        {
+          claude_plugins_ok=false
+          echo "  ! claude plugin marketplace add failed" >&2
+        }
+    fi
+    claude_plugins=(superpowers claude-md-management claude-code-setup microsoft-docs hookify context7 github frontend-design)
+    for plugin in "${claude_plugins[@]}"; do
+      claude plugin install "${plugin}@${claude_marketplace}" --scope user ||
+        {
+          claude_plugins_ok=false
+          echo "  ! claude plugin install failed: $plugin" >&2
+        }
+    done
+    if $claude_plugins_ok; then
+      mkdir -p "$state" && : >"$claude_plugins_marker" || true
+    else
+      echo "  ! claude plugin setup incomplete — retries on the next run" >&2
+    fi
+  else
+    echo "  claude not found on PATH — skipping plugin install (retries next run)" >&2
+  fi
+fi
+# 7. ~/.claude/settings.json three-layer merge (dev only;
+# scripts/lib/claude-settings-merge.sh — ruling 5, mise has no
+# modify_-template equivalent). Runs every bootstrap, not marker-guarded:
+# ongoing enforcement, not a one-time script. The script itself is
+# soft-failing; the `||` here is belt-and-braces.
+if env_has dev; then
+  "$root/scripts/lib/claude-settings-merge.sh" ||
+    echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
+fi
+# 7b. ~/.claude/settings.local.json — seed-if-absent (I5, final-fix-brief.md;
+# dev only). Ruling 5 keeps this file out of [dotfiles] the same as
+# settings.json (Claude Code rewrites the live file), but unlike
+# settings.json there is no enforced layer reapplied on every run here — a
+# plain seed, set ONLY when the live file doesn't exist yet, so a fresh host
+# gets the tracked default ({"spinnerTipsEnabled": false}) without a
+# `[dotfiles]` entry ever clobbering a live edit Claude Code (or the user)
+# makes afterward.
+if env_has dev; then
+  claude_local_src="$root/dotfiles/claude/settings.local.json"
+  claude_local_dest="$HOME/.claude/settings.local.json"
+  if [ -f "$claude_local_src" ] && [ ! -e "$claude_local_dest" ]; then
+    if mkdir -p "$(dirname "$claude_local_dest")" &&
+      cp "$claude_local_src" "$claude_local_dest" &&
+      chmod 600 "$claude_local_dest"; then
+      echo "  seeded $claude_local_dest"
+    else
+      echo "  ! failed to seed $claude_local_dest — inspect by hand" >&2
+    fi
+  fi
+fi
+# 8. herdr plugin at its pinned ref, once (dev only; was
+# run_once_install-herdr-plugins.sh.tmpl). PIN lives in the marker filename
+# itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
+# re-fires the install the same way a content-hashed run_once used to.
+herdr_plugin_ref="v1.7.0"
+herdr_plugins_marker="$state/herdr-plugins-$herdr_plugin_ref"
+if env_has dev && [ ! -f "$herdr_plugins_marker" ]; then
+  if command -v herdr >/dev/null 2>&1; then
+    echo "==> herdr plugin (smarzban/herdr-file-viewer@$herdr_plugin_ref)"
+    if herdr plugin install smarzban/herdr-file-viewer --ref "$herdr_plugin_ref" --yes; then
+      mkdir -p "$state" && : >"$herdr_plugins_marker" || true
+    else
+      echo "  ! herdr plugin install failed — retries next run" >&2
+    fi
+  else
+    echo "  herdr not found on PATH — skipping herdr plugin install (retries next run)" >&2
+  fi
+fi
+# 9. tldr page cache seed, once (was run_once_seed-tldr-cache.sh.tmpl).
+# Ongoing freshness after the first seed is auto_update in
+# ~/.config/tealdeer/config.toml, not this step.
+tldr_marker="$state/tldr-cache"
+if [ ! -f "$tldr_marker" ]; then
+  if command -v tldr >/dev/null 2>&1; then
+    if [ -d "$HOME/.cache/tealdeer/tldr-pages" ]; then
+      mkdir -p "$state" && : >"$tldr_marker" || true
+    else
+      echo "==> tldr cache seed"
+      if tldr --update >/dev/null 2>&1; then
+        mkdir -p "$state" && : >"$tldr_marker" || true
+      else
+        echo "  ! tldr --update failed (offline?) — auto_update will retry on first use" >&2
+      fi
+    fi
+  else
+    echo "  tldr not found on PATH — skipping cache seed (retries next run)" >&2
+  fi
 fi

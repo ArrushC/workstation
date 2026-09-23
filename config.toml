@@ -5,8 +5,9 @@
 #   config.linux.toml    linux             (the Linux toolbelt, both scopes)
 #   config.dev.toml      dev               (dev tools on both OSes)
 #   config.host.toml     host              (Linux dev: dnf + /etc)
-#   config.native.toml   native            (non-WSL dev: docker/cockpit/rsyslog/dozzle/NFS)
+#   config.native.toml   native            (non-WSL dev: NFS client)
 #   config.wsl.toml      wsl               (/etc/wsl.conf)
+#   config.windows.toml  windows           (Windows-only dotfiles surface)
 #   config.local.toml    always, git-ignored — per-host overrides
 # Pins live here and in mise.lock (URLs + sha256 per platform). Bump with
 # `mise outdated --bump`, then `scripts/bump-versions.sh` or `mise use`.
@@ -17,7 +18,6 @@ min_version = "2026.9.9"
 # `#MISE env={X="{{ vars.x }}"}`; scripts/check-invariants.sh asserts the dual-edits.
 python_version = "3.14.7"        # == tools.python below == $PythonEnvVersion in bootstrap.ps1 (three-way pin)
 nerd_font_version = "3.5.1"      # == SHA arm in scripts/lib/font.sh == $Version in scripts/install-nerd-fonts.ps1 (triple)
-dozzle_version = "10.10.0"       # image tag amir20/dozzle:v<ver>, rendered into /etc/dozzle/compose.yaml (configs/dozzle/compose.yaml.tera)
 vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by tasks/vcpkg
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
@@ -36,3 +36,37 @@ uv = "0.12.15"
 # NOTE: this shadows `python3` in mise-activated
 # shells (the system interpreter stays at /usr/bin/python3).
 python = "3.14.7"
+
+# ---------------------------------------------------------------------------
+# Dotfiles that land the same regardless of MISE_ENV — config.toml carries no
+# gating token, so it always loads, on every host including Windows. Only
+# entries genuinely meaningful on BOTH OSes belong here: a single Tera
+# template that branches on os() internally (gitconfig, ssh config), or a
+# plain file chezmoi already deploys unchanged on both (starship, which per
+# inventory §1.4 footnote 5 is NOT in chezmoi's Windows-ignore block). Helix
+# config used to be the other example here, but it's actually Linux-only in
+# effect (Windows reads %APPDATA%\helix\config.toml, not ~/.config/helix/
+# config.toml) — PR3 Task 3 controller review moved it to config.linux.toml
+# so a Windows dev host no longer lands that dead file too; the Windows
+# config still read_file()-inlines the same source (config.windows.toml).
+# Everything else (Linux-only, dev-only, Windows-only) lives in the
+# token-gated config.*.toml file that loads it — see the file map above.
+# ---------------------------------------------------------------------------
+[dotfiles]
+# OS-branches internally: gh cred helper (non-Windows, config.linux.toml's gh)
+# vs Git Credential Manager (Windows-only, bootstrap.ps1's tool install).
+"~/.gitconfig" = { source = "dotfiles/gitconfig.tera", mode = "template" }
+# OS-branches internally: the ControlMaster block is non-Windows only. Source
+# is git-mode 0644 (git tracks only the executable bit) — template mode
+# propagates that onto the target, so ~/.ssh/config lands 0644 until the
+# post-dotfiles hook (config.linux.toml) chmods it 600. See CLAUDE.md/
+# docs/claude/file-care.md for the ~/.ssh mode-sensitivity note.
+"~/.ssh/config" = { source = "dotfiles/ssh/config.tera", mode = "template" }
+# Not in chezmoi's Windows-ignore block — Starship's own config already
+# deploys to the same relative path on both OSes today. mode = "copy", not
+# "symlink" (I4, final-fix-brief.md; broadened by the 2026-09-22
+# copy-migration to every entry, not just this one — see ruling 7 in
+# config.windows.toml's header comment). Trade-off accepted: editing this
+# file needs `wsr` (`mise dot add --changed`) to round-trip, the same as
+# every other entry now.
+"~/.config/starship.toml" = { source = "dotfiles/config/starship.toml", mode = "copy" }

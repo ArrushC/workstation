@@ -1,0 +1,6 @@
+# Tealdeer (tldr client) configuration — managed by mise dotfiles.
+# auto_update keeps the page cache fresh; the initial cache is seeded by
+# tasks/bootstrap's tldr cache seed step on first bootstrap.
+[updates]
+auto_update = true
+auto_update_interval_hours = 720

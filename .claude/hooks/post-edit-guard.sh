@@ -42,7 +42,11 @@ norm="${f//\\//}" # normalise Windows backslashes for matching only
 
 is_lf_exec=0
 case "$norm" in
-*/scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */.githooks/* | */chezmoi/dot_local/bin/executable_batpipe)
+# dotfiles/local/bin/[!.]* excludes the .vendor provenance sidecar (0644,
+# never LF/+x) while covering every real script there (batpipe, winterop) —
+# mirrors check-invariants.sh's check_line_endings_and_mode target list
+# exactly, so this hook never "fixes" something that check isn't enforcing.
+*/scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */.githooks/* | */dotfiles/local/bin/[!.]*)
   is_lf_exec=1
   ;;
 esac

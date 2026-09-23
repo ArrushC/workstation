@@ -1,0 +1,16 @@
+plugin:         fzf-tab
+upstream:       https://github.com/Aloxaf/fzf-tab
+tag:            v1.3.0
+tarball:        https://github.com/Aloxaf/fzf-tab/archive/refs/tags/v1.3.0.tar.gz
+tarball-sha256: d75ac08c2c8af5a6a0478787b0f11fabbe24951973b7841ae963431e2070ee9a
+license:        MIT
+vendored:       2026-06-03
+files:          fzf-tab.zsh + lib/  (modules/ deliberately omitted — optional compiled C)
+                lib/zsh-ls-colors/ = bundled dep (zsh-ls-colors, MIT), sourced by
+                fzf-tab.zsh for completion colorizing; its demo + README.md were dropped
+                (docs only, no runtime references).
+note:           Leading-dot .vendor → excluded via the symlink-each entry's exclude list; provenance only, never deployed.
+                Sourcing fzf-tab.zsh auto-calls enable-fzf-tab. Picker theming needs the rc's
+                `use-fzf-default-opts yes` zstyle (fzf-tab ignores FZF_DEFAULT_OPTS by default).
+                Bump: re-run the ls-remote tag check, re-download, refresh tag + tarball sha256
+                here; re-drop lib/zsh-ls-colors/{demo,README.md} (docs only).

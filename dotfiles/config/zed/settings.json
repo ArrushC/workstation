@@ -1,0 +1,38 @@
+// Zed settings — Linux (~/.config/zed/settings.json)
+//
+// For information on how to configure Zed, see the Zed
+// documentation: https://zed.dev/docs/configuring-zed
+//
+// Managed by mise dotfiles (copy mode — Zed rewrites this file in place):
+// after editing it live, run `mise dot add --changed` (wsr) to pull your
+// changes back into the tracked source, or edit the source directly with
+// `mise dot edit ~/.config/zed/settings.json` (wse) and re-apply with `wsa`.
+{
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "arguments": [
+          "--background-index-priority=low",
+          "--background-index",
+          "--header-insertion=never",
+          "--completion-style=detailed",
+          "--pch-storage=disk",
+          "--malloc-trim"
+        ]
+      }
+    },
+    "jdtls": {
+      "settings": {
+        "java_home": "/usr/lib/jvm/java-21-openjdk-21.0.10.0.7-1.el8.x86_64/"
+      }
+    }
+  },
+  "terminal": {
+    "detect_venv": {
+      "on": {
+        "directories": [".venv", "venv", "env", ".env"],
+        "activate_script": "default"
+      }
+    }
+  }
+}

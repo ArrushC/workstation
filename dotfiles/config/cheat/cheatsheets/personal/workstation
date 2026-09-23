@@ -1,0 +1,33 @@
+# workstation — quick reference for this dev environment.
+# Synced via mise dotfiles. Edit with:  cheat -e workstation
+
+# --- workstation (mise dotfiles) ---
+wsa          # apply tracked dotfiles
+wse <file>   # edit a tracked file's source
+wsd          # diff pending changes
+wss          # status
+wsr          # record changed copy-mode files back to source
+wsu          # update: pull repo + mise install + mise bootstrap
+
+# --- zellij (multiplexer) ---
+zj           # zellij
+zjl          # list-sessions
+zja          # attach
+
+# --- cheatsheets ---
+cheat -l                  # list all sheets (personal + community)
+cheat <topic>             # view a sheet (e.g. cheat tar)
+cheat -e <topic>          # create/edit a personal sheet in $EDITOR
+cheat -s <keyword>        # search across sheets
+cht.sh <lang> <query>     # online answer (e.g. cht.sh python 'reverse a list')
+cht.sh --shell            # interactive cheat.sh REPL (rlwrap on dev)
+
+# --- provisioning (mise) ---
+./bootstrap.sh --dev       # full bootstrap (dev: system-wide, sudo)
+./bootstrap.sh --prod      # full bootstrap (prod: ~/.local, no sudo)
+mise bootstrap status      # what mise bootstrap would still change
+mise run health             # tools, host state, services report
+mise run update             # mise outdated + dnf check-update (dev)
+mise run python-env         # rebuild the blessed uv-managed Python venv
+mise run fonts               # install the pinned Nerd Font
+mise run statusline         # (re)configure the Claude Code statusline

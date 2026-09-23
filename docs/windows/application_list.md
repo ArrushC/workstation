@@ -35,4 +35,4 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 - Oh My Pi
 - jq
 - SSHFS-Win + WinFsp (elevated class, best-effort — the one UAC prompt)
-- chezmoi, Helix, and the JetBrainsMono Nerd Font
+- Helix and the JetBrainsMono Nerd Font

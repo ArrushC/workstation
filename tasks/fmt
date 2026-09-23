@@ -10,9 +10,9 @@ env_has() {
 }
 if command -v shfmt >/dev/null 2>&1; then
   cd "$root" && shfmt -w -i 2 bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
-    .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh \
-    chezmoi/private_dot_claude/executable_notify.sh \
-    chezmoi/dot_local/bin/executable_winterop
+    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
+    dotfiles/claude/notify.sh \
+    dotfiles/local/bin/winterop
   printf 'shfmt -i 2: formatted the first-party shell scripts\n'
 else
   printf 'shfmt not installed — mise install shfmt\n'

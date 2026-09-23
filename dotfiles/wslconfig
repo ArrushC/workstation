@@ -1,0 +1,23 @@
+# .wslconfig -- global WSL2 settings for this Windows host. Managed by mise
+# dotfiles (deploys to %USERPROFILE%\.wslconfig, Windows only); edit here, not in place.
+# Changes take effect only after `wsl --shutdown` from a Windows terminal.
+# Reference: https://learn.microsoft.com/windows/wsl/wsl-config
+#
+# NOTE: autoMemoryReclaim + sparseVhd are [experimental]-section keys, NOT
+# [wsl2] -- current MS docs list them only under [experimental]. Keep them
+# here. (The networking keys below graduated to [wsl2] in newer WSL but stay
+# honored here; this block is seeded verbatim from the working host config.)
+[experimental]
+networkingMode=mirrored
+dnsTunneling=true
+autoProxy=true
+# Returns cached VM memory to Windows as the Linux page cache grows.
+# gradual = slow trim; current WSL's default is the more aggressive dropCache.
+autoMemoryReclaim=gradual
+# Applies to newly created VHDs only, and currently inert: sparse support is
+# upstream-disabled on WSL >= 2.5 over data-corruption reports
+# (microsoft/WSL#13075); forcing needs --allow-unsafe. Deliberately kept so it
+# takes effect if Microsoft re-enables it. To reclaim disk from an EXISTING
+# VHD, see README.html > Troubleshooting > "WSL disk keeps growing".
+sparseVhd=true
+hostAddressLoopback=true

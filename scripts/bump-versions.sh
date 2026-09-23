@@ -4,8 +4,8 @@
 #
 #   (1) mise tool pins in config.toml / config.linux.toml / config.dev.toml,
 #       via `mise outdated --bump --json` + `mise config set` + `mise lock`.
-#   (2) the handful of host pins config.toml [vars] owns directly (dozzle,
-#       vcpkg — python/nerd-fonts are dual/triple-edit, reported not
+#   (2) the handful of host pins config.toml [vars] owns directly (vcpkg —
+#       python/nerd-fonts are dual/triple-edit, reported not
 #       auto-edited), via scripts/lib/check-updates.sh worker mode (the same
 #       specs tasks/check-updates registers) + `mise config set`.
 #
@@ -210,7 +210,7 @@ if [ -z "$outdated_fail" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Layer 2: config.toml [vars] host pins — dozzle_version + vcpkg_version bump
+# Layer 2: config.toml [vars] host pins — vcpkg_version bumps
 # automatically; python_version + nerd_font_version (EXCLUDE_VARS) are
 # dual/triple-edit pins, reported only, never auto-edited. Drift is checked
 # via scripts/lib/check-updates.sh worker mode against the SAME specs
@@ -237,13 +237,11 @@ varval() {
 declare -A VARS_KEY=(
   ["python-env"]=python_version
   ["nerd-fonts"]=nerd_font_version
-  ["dozzle"]=dozzle_version
   ["vcpkg"]=vcpkg_version
 )
 
 vars_specs="python-env|$(varval python_version)|python/cpython|v$(varval python_version)
 nerd-fonts|$(varval nerd_font_version)|ryanoasis/nerd-fonts|v$(varval nerd_font_version)
-dozzle|$(varval dozzle_version)|amir20/dozzle|v$(varval dozzle_version)
 vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|$(varval vcpkg_version)"
 
 updates=$(printf '%s\n' "$vars_specs" |
@@ -274,8 +272,8 @@ while IFS='|' read -r _ name detail; do
   fi
 done <<<"$updates"
 
-# Keep the generated machine-memory TOOLS block (chezmoi/private_dot_claude/
-# CLAUDE.md) in sync with the pins we just bumped, in either layer. This
+# Keep the generated machine-memory TOOLS block (dotfiles/claude/CLAUDE.md)
+# in sync with the pins we just bumped, in either layer. This
 # script runs in CI (and locally) where the Claude Code sync-tool-memory.sh
 # hook never fires, so regenerate here — otherwise the bumped pins and the
 # generated file drift, and check-invariants.sh ("TOOLS block in sync")

@@ -1,0 +1,258 @@
+// ~/.config/zellij/config.kdl — managed by mise dotfiles
+
+// Start with zellij's BUILT-IN "default" layout: one full-width pane plus the
+// tab-bar/status-bar chrome. Deliberately not our own layouts/dev.kdl — this is
+// the layout every session gets, including each `ssh -t <host> zellij attach
+// --create main` from a Warp Tab Config or a Windows Terminal fragment, and
+// landing in a three-way editor/terminal/run split to read one log on a prod
+// host is the wrong default. `dev` is one flag away: `zellij -l dev`, or the
+// `zs main dev` helper in the rc files.
+//
+// Using the BUILT-IN default rather than shipping a layouts/default.kdl is also
+// deliberate: a custom layout replaces zellij's built-in *swap layouts*, which
+// auto_layout cycles with Alt+[ / Alt+] as you add panes. Hand-rolling those
+// would silently lose them.
+default_layout "default"
+
+// Don't show tip of the day
+show_startup_tips false
+
+// Don't open a release-notes pane on the first run of a new version — without
+// this, every fleet-wide ZELLIJ_VERSION bump greets you with one on every host.
+show_release_notes false
+
+// Powerline arrow separators in the tab/status bars. Safe across the fleet
+// because the glyphs are rendered by the *client* terminal's font, not by
+// anything on the host zellij runs on: both managed Windows terminals are
+// configured for JetBrainsMono NFM. Set this back to true if you ever attach
+// from a terminal without a Nerd Font and see tofu in the bars.
+simplified_ui false
+
+// Full frames around every pane, not just a title line.
+//
+// zellij 0.45 changed the default: pane_frame_style is new there and defaults to
+// "titles" (a title line above each pane) where 0.44 always drew a full frame.
+// Without this line the 0.45 upgrade silently flattens the UI — a painted 0.45.1
+// session drops rounded frames entirely and the mauve accent collapses, because
+// frame_selected (the focused-pane border) has no border left to draw.
+//
+// Safe to carry on BOTH versions: zellij 0.44.3 ignores the unknown key at
+// runtime rather than rejecting the file (verified — frames still drawn, theme
+// still applied, no fallback to the built-in green theme), so this can deploy
+// ahead of, or behind, the binary bump on any given host.
+pane_frame_style "full"
+
+ui {
+    pane_frames {
+        rounded_corners true
+        // The top frame otherwise reads "Zellij (main) - <tab>". Every session in
+        // this fleet is called main (the Warp / Windows Terminal launchers all
+        // run `zellij attach --create main`), so the name is noise; the tab bar
+        // below shows it in a pill anyway.
+        hide_session_name true
+    }
+}
+
+// Mouse support
+mouse_mode true
+
+// Pass OSC 8 hyperlinks through to the client terminal (default false). The
+// `l*` eza aliases in both rc files emit them (--hyperlink), and both managed
+// Windows terminals render them, but without this line zellij strips them and
+// every link in a remote pane is dead. https:// links open on the machine you
+// sit at; file:// links point at the REMOTE path and will not resolve there.
+osc8_hyperlinks true
+
+// Scrollback depth, per pane. Default is 10000; 100000 keeps deep scrollback
+// without unbounded growth — trimmed from 1000000 on 2026-07-09
+// after unbounded buffers accumulated hundreds of MB over multi-day sessions
+// and made scroll/search sluggish. Zellij runs on the remote SSH hosts, so
+// this buffer lives in *their* RAM — allocated lazily as lines scroll off,
+// capped at this ceiling. Read at session creation: an already-running 'main'
+// session won't pick up a change until it's recreated (zellij kill-session main).
+scroll_buffer_size 100000
+
+// Session resurrection. `session_serialization` already defaults to true, so
+// zellij was ALREADY writing each session's tabs/panes/cwds/commands under
+// ~/.cache/zellij/<version>/. These two lines add the pane *contents* to that
+// snapshot, so a session survives a reboot with its scrollback intact — the
+// point being that zellij lives on the remote fleet hosts, which reboot without
+// you.
+//
+// TRADEOFF, stated deliberately: this writes up to scrollback_lines_to_serialize
+// lines of real terminal output per pane to disk on that host. Terminal output
+// can contain secrets. The cache dir is user-owned and mode 700, which is the
+// only thing protecting it. If that's not a trade you want on a given host, drop
+// these two lines — everything else here is unaffected.
+serialize_pane_viewport true
+scrollback_lines_to_serialize 10000
+
+// Web server / session sharing: OFF, explicitly.
+//
+// Not redundant with the upstream defaults (false / "off"). The aqua-registry
+// `zellij` asset mise installs (config.linux.toml) is already the web-capable
+// build — no asset override needed, no no-web variant to select — i.e. the
+// build on every fleet host has the web-server capability compiled in. That makes "a shell served over
+// HTTP" one config key away on machines we don't sit at, so the value is pinned
+// here rather than inherited.
+//
+// "disabled" is strictly stronger than the "off" default: "off" merely means the
+// server won't share sessions unless they opt in, while "disabled" refuses the
+// opt-in too.
+web_server false
+web_sharing "disabled"
+
+// Copy to system clipboard — via OSC 52, which is zellij's DEFAULT when
+// copy_command is unset. Do NOT set copy_command here: it overrides OSC 52 with
+// a program that runs on whatever machine zellij itself is on, and zellij lives
+// on the REMOTE SSH hosts in this fleet. OSC 52 is the only mechanism that can
+// reach the clipboard of the machine you are sitting at.
+//
+// This line used to read `copy_command "xclip -selection clipboard"`, which was
+// dead in two ways at once: xclip is installed by nothing in this repo, and a
+// headless prod host has no X display to talk to anyway. Every yank in a remote
+// session silently went nowhere. Both managed Windows terminals accept OSC 52
+// writes (Warp via osc52_clipboard_access = "write_only"; Windows Terminal
+// natively), so unsetting it is what makes copy work at all.
+//
+// Deliberately NOT set: dangerously_enable_paste_buffer_read — it would let any
+// program in any pane, including one on a remote host, read the local clipboard.
+copy_on_select false
+
+// Theme. DUAL-EDIT: this name must match the theme block in
+// themes/catppuccin-mocha-mauve.kdl. A dangling name is silent — zellij falls
+// back to its built-in default with no error — so scripts/check-invariants.sh
+// asserts the two agree.
+//
+// The built-in "catppuccin-mocha" is NOT used: it accents its chrome with green
+// (#a6e3a1), which clashes with the mauve (#cba6f7) that Warp (accent + cursor)
+// and fzf use here. Windows Terminal is NOT part of that set — its Catppuccin
+// Mocha scheme has no mauve at all (ANSI purple maps to pink #f5c2e7); it needs
+// no change.
+theme "catppuccin-mocha-mauve"
+
+// The tab bar is zjstatus (dj95/zjstatus), swapped in by OVERRIDING the bare
+// `tab-bar` alias that zellij's BUILT-IN default layout references — so this
+// keeps the built-in default layout AND its swap layouts (see the default_layout
+// comment above), which a custom layout file would have replaced. Verified on
+// 0.45.1: `zellij action dump-layout` shows the override in the tab-bar slot of
+// every tab, including the swap layouts (and the log confirms the load).
+//
+// The plugin file is installed by scripts/lib/zellij-plugin.sh (tasks/bootstrap,
+// after mise installs zjstatus) → ~/.local/share/zellij/plugins/zjstatus.wasm,
+// zellij's DATA dir; pin + zellij floor in config.linux.toml / config.toml
+// [vars] zjstatus_zellij_floor. The location MUST stay the RELATIVE
+// `file:zjstatus.wasm`: zellij resolves it against /usr/share/zellij/plugins,
+// then that data dir — never ~/.config/zellij/plugins — and keeps the relative
+// string as the plugin's identity, including the key in
+// ~/.cache/zellij/permissions.kdl. An absolute or ~ path expands per host, so
+// each host would prompt again. scripts/check-invariants.sh asserts the
+// relative form. A missing file shows as "ERROR IN PLUGIN" in the bar; the
+// truth is in /tmp/zellij-<uid>/zellij-log/zellij.log ("Loaded plugin" vs
+// "No such file") — `zellij action dump-layout` echoes the location either way.
+//
+// First load on a host asks once for permissions (ReadApplicationState): the
+// bar shows the request; click it (or CTRL+P then ↑ to focus it) and press y.
+// That grant is what the permission-cache key above protects.
+//
+// The built-in status-bar stays in the bottom slot on purpose: it renders the
+// keybinding hints from THIS config (CTRL+S = Session, ALT+S = Scroll), whereas
+// zjstatus-hints shows zellij's stock defaults and would be wrong here.
+//
+// Look: Catppuccin Mocha over the theme's mantle (#181825), mauve (#cba6f7)
+// for the active tab and Normal mode — the same accent Warp, fzf and the pane
+// frames use. Rounded pills are the Nerd Font half-circles U+E0B6 / U+E0B4,
+// rendered by the CLIENT terminal's font like the powerline arrows above
+// (simplified_ui). Tab numbers come first so they read as the ALT+<n> key.
+plugins {
+    tab-bar location="file:zjstatus.wasm" {
+        format_left   "{mode}#[bg=#181825] {tabs}"
+        format_center ""
+        format_right  "{swap_layout}#[fg=#b4befe,bg=#181825]#[bg=#b4befe,fg=#11111b,bold] {session} #[fg=#b4befe,bg=#181825]"
+        format_space  "#[bg=#181825]"
+        format_precedence "lrc"
+        format_hide_on_overlength "true"
+
+        border_enabled "false"
+        hide_frame_for_single_pane "false"
+
+        // Mode pill — the colour says who is listening. Mauve: zellij (Normal).
+        // Red: LOCKED, every key goes to the program in the pane (CTRL+G).
+        mode_normal        "#[fg=#cba6f7,bg=#181825]#[bg=#cba6f7,fg=#11111b,bold] NORMAL #[fg=#cba6f7,bg=#181825]"
+        mode_locked        "#[fg=#f38ba8,bg=#181825]#[bg=#f38ba8,fg=#11111b,bold] LOCKED #[fg=#f38ba8,bg=#181825]"
+        mode_pane          "#[fg=#89b4fa,bg=#181825]#[bg=#89b4fa,fg=#11111b,bold] PANE #[fg=#89b4fa,bg=#181825]"
+        mode_tab           "#[fg=#f9e2af,bg=#181825]#[bg=#f9e2af,fg=#11111b,bold] TAB #[fg=#f9e2af,bg=#181825]"
+        mode_resize        "#[fg=#fab387,bg=#181825]#[bg=#fab387,fg=#11111b,bold] RESIZE #[fg=#fab387,bg=#181825]"
+        mode_move          "#[fg=#94e2d5,bg=#181825]#[bg=#94e2d5,fg=#11111b,bold] MOVE #[fg=#94e2d5,bg=#181825]"
+        mode_scroll        "#[fg=#89dceb,bg=#181825]#[bg=#89dceb,fg=#11111b,bold] SCROLL #[fg=#89dceb,bg=#181825]"
+        mode_enter_search  "#[fg=#89dceb,bg=#181825]#[bg=#89dceb,fg=#11111b,bold] SEARCH #[fg=#89dceb,bg=#181825]"
+        mode_search        "#[fg=#89dceb,bg=#181825]#[bg=#89dceb,fg=#11111b,bold] SEARCH #[fg=#89dceb,bg=#181825]"
+        mode_session       "#[fg=#f5c2e7,bg=#181825]#[bg=#f5c2e7,fg=#11111b,bold] SESSION #[fg=#f5c2e7,bg=#181825]"
+        mode_rename_tab    "#[fg=#f9e2af,bg=#181825]#[bg=#f9e2af,fg=#11111b,bold] RENAME #[fg=#f9e2af,bg=#181825]"
+        mode_rename_pane   "#[fg=#89b4fa,bg=#181825]#[bg=#89b4fa,fg=#11111b,bold] RENAME #[fg=#89b4fa,bg=#181825]"
+        mode_prompt        "#[fg=#f2cdcd,bg=#181825]#[bg=#f2cdcd,fg=#11111b,bold] PROMPT #[fg=#f2cdcd,bg=#181825]"
+        mode_tmux          "#[fg=#b4befe,bg=#181825]#[bg=#b4befe,fg=#11111b,bold] TMUX #[fg=#b4befe,bg=#181825]"
+        mode_default_to_mode "normal"
+
+        // Tabs: "1 mise" dimmed, the active one as a mauve pill.
+        tab_normal   "#[fg=#6c7086,bg=#181825] {index} {name}{fullscreen_indicator}{sync_indicator}{floating_indicator} "
+        tab_active   "#[fg=#cba6f7,bg=#181825]#[bg=#cba6f7,fg=#11111b,bold] {index} {name}{fullscreen_indicator}{sync_indicator}{floating_indicator} #[fg=#cba6f7,bg=#181825]"
+        tab_separator            ""
+        tab_fullscreen_indicator " □"
+        tab_sync_indicator       " ⇄"
+        tab_floating_indicator   " ⬚"
+
+        // Name of the swap layout in force (ALT+[ / ALT+]), dimmed, right side.
+        swap_layout_format        "#[fg=#6c7086,bg=#181825]{name} "
+        swap_layout_hide_if_empty "true"
+    }
+}
+
+keybinds {
+    normal {
+        // Ctrl+s enters Session mode (session manager / detach). Overrides zellij's
+        // default Ctrl+s = Scroll mode; Session mode's default key is Ctrl+o.
+        bind "Ctrl s" { SwitchToMode "Session"; }
+    }
+
+    // Restores a direct route into Scroll mode, where "/" searches the
+    // scrollback. The `normal` override above shadows zellij's own
+    // `shared_except "scroll" "locked" { bind "Ctrl s" -> Scroll }`, so from
+    // Normal mode there was no way into Scroll at all (it survived only from
+    // other modes, e.g. Ctrl+p then Ctrl+s) and scrollback search was
+    // effectively unreachable.
+    //
+    // Alt+s is unbound in zellij's defaults AND absent from Warp's tracked
+    // keybindings.yaml, so nothing fights over it.
+    shared_except "scroll" "locked" {
+        bind "Alt s" { SwitchToMode "Scroll"; }
+    }
+
+    // Direct tab jumps — zellij binds no Alt+<digit> by default, and neither
+    // managed Windows terminal claims them (Warp's keybindings.yaml uses
+    // alt-shift-*/alt-arrows; Windows Terminal uses alt+shift+b/s).
+    //
+    // Alt+e also lives here: it opens `strider`, zellij's BUILT-IN file browser.
+    // Strider ships with every zellij and is bound to NOTHING by default, so it
+    // is free capability that was simply unreachable. Floating so it overlays
+    // the panes instead of resizing them, and move_to_focused_tab so one
+    // instance follows you between tabs rather than spawning per tab.
+    shared_except "locked" {
+        bind "Alt 1" { GoToTab 1; }
+        bind "Alt 2" { GoToTab 2; }
+        bind "Alt 3" { GoToTab 3; }
+        bind "Alt 4" { GoToTab 4; }
+        bind "Alt 5" { GoToTab 5; }
+        bind "Alt 6" { GoToTab 6; }
+        bind "Alt 7" { GoToTab 7; }
+        bind "Alt 8" { GoToTab 8; }
+        bind "Alt 9" { GoToTab 9; }
+        bind "Alt e" {
+            LaunchOrFocusPlugin "strider" {
+                floating true
+                move_to_focused_tab true
+            };
+            SwitchToMode "Normal"
+        }
+    }
+}

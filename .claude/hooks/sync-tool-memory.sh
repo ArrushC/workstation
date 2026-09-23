@@ -3,8 +3,8 @@
 #
 # Repo-specific. When Claude edits a mise config*.toml (tool pins, host pins
 # in [vars], or bootstrap.packages), regenerate the auto-inventory block in
-# the machine-level Claude memory (chezmoi source chezmoi/private_dot_claude/
-# CLAUDE.md) so it never drifts from what the repo installs. Pure: fails OPEN
+# the machine-level Claude memory (dotfiles source dotfiles/claude/CLAUDE.md)
+# so it never drifts from what the repo installs. Pure: fails OPEN
 # (does nothing) on unparseable input or a generator error, always exits 0.
 # Reports back so Claude commits it (and refreshes mise.lock on a pin change).
 #
@@ -34,11 +34,12 @@ f="$(hookfield '.tool_input.file_path')"
 norm="${f//\\//}"
 
 case "$norm" in
-# A chezmoi-managed dotfile's OWN config.toml (helix/herdr/tealdeer/…) is not
-# mise's config*.toml — exclude it before the glob below, which would
-# otherwise also match "*/dot_config/helix/config.toml" etc. (both end in
-# "/config.toml").
-*/chezmoi/dot_config/*) exit 0 ;;
+# A deployed dotfile's OWN config.toml (helix/herdr/tealdeer/…) is not
+# mise's config*.toml — exclude anything under a dotfiles/ tree before the
+# glob below, which would otherwise also match ".../dotfiles/config/helix/
+# config.toml" etc. (both end in "/config.toml"). mise's own config*.toml
+# files live only at the repo root, never under dotfiles/.
+*/dotfiles/*) exit 0 ;;
 */config.toml | */config.*.toml) ;;
 *) exit 0 ;;
 esac
@@ -64,7 +65,7 @@ fi
 
 "$scripts/gen-tool-memory.sh" >/dev/null 2>&1 || exit 0
 
-msg="Regenerated the TOOLS block in chezmoi/private_dot_claude/CLAUDE.md from your config*.toml edit — commit it with this change and run \`cza\`. If you changed a pin: \`mise lock --global\` refreshes mise.lock (commit it too)."
+msg="Regenerated the TOOLS block in dotfiles/claude/CLAUDE.md from your config*.toml edit — commit it with this change (it's symlinked to ~/.claude/CLAUDE.md, so the update is already live). If you changed a pin: \`mise lock --global\` refreshes the lockfiles (commit those too)."
 
 if command -v jq >/dev/null 2>&1; then
   jq -nc --arg c "$msg" \

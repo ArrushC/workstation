@@ -2,8 +2,10 @@
 # session-context.sh — Claude Code SessionStart hook (repo-scoped).
 #
 # Injects ONE compact additionalContext block of RUNTIME facts the static
-# session context can't carry, for working in the workstation chezmoi repo:
-#   - chezmoi deploy state (does $HOME match the source you're editing?)
+# session context can't carry, for working in the workstation mise-dotfiles
+# repo:
+#   - dotfiles deploy state (does $HOME match the source you're editing? —
+#     `mise dot status`)
 #   - host identity & scope (hostname, dev/prod group, distro / EL family)
 #   - WSL & interop capability (interop enabled?, powershell.exe reachable?)
 #   - guardrail readiness (jq/shfmt/gitleaks/shellcheck + pre-commit hook)
@@ -43,17 +45,32 @@ fi
 top="$(timeout 2s git -C "$root" rev-parse --show-toplevel 2>/dev/null)"
 [ -n "$top" ] && root="$top"
 
-# --- bucket: chezmoi deploy state --------------------------------------------
+# --- bucket: dotfiles deploy state -------------------------------------------
 # shellcheck disable=SC2016  # $HOME is intentional literal text in the context block
-seg_chezmoi() {
-  command -v chezmoi >/dev/null 2>&1 || return 0
-  local out n
-  out="$(timeout 4s chezmoi status 2>/dev/null)" || return 0
-  if [ -z "$out" ]; then
-    printf 'chezmoi: $HOME in sync'
+seg_dotfiles() {
+  command -v mise >/dev/null 2>&1 || return 0
+  local json n total
+  json="$(timeout 4s mise dot status --json 2>/dev/null)" || return 0
+  [ -n "$json" ] || return 0
+  if command -v jq >/dev/null 2>&1; then
+    n="$(printf '%s' "$json" | jq '[.files[]? | select(.state != "applied")] | length' 2>/dev/null)"
+    total="$(printf '%s' "$json" | jq '.files? | length' 2>/dev/null)"
+  elif command -v python3 >/dev/null 2>&1; then
+    n="$(printf '%s' "$json" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print(sum(1 for f in d.get("files",[]) if f.get("state")!="applied"))' 2>/dev/null)"
+    total="$(printf '%s' "$json" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print(len(d.get("files",[])))' 2>/dev/null)"
   else
-    n="$(printf '%s\n' "$out" | grep -c .)"
-    printf 'chezmoi: %s entries differ from $HOME, edits here are PENDING until `cza`' "$n"
+    return 0
+  fi
+  case "$n" in '' | *[!0-9]*) return 0 ;; esac
+  case "$total" in '' | *[!0-9]*) return 0 ;; esac
+  if [ "$n" -eq 0 ]; then
+    printf 'dotfiles: $HOME in sync (%s tracked)' "$total"
+  else
+    printf 'dotfiles: %s/%s entries differ from $HOME, edits here are PENDING until `wsa`' "$n" "$total"
   fi
 }
 
@@ -61,8 +78,16 @@ seg_chezmoi() {
 seg_host() {
   local host group osr id ver plat el osseg
   host="$(uname -n 2>/dev/null)"
-  group="$(sed -nE 's/^[[:space:]]*group[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' \
-    "$HOME/.config/chezmoi/chezmoi.toml" 2>/dev/null | head -1)"
+  # dev/prod is the `dev` token in the live MISE_ENV (rc-exported; see
+  # tasks/bootstrap's own env_has idiom) — not a per-host config file, which
+  # may not exist (config.local.toml carries only vars.name/email).
+  group=""
+  if [ -n "${MISE_ENV:-}" ]; then
+    case ",${MISE_ENV}," in
+    *,dev,*) group="dev_machine" ;;
+    *) group="prod_machine" ;;
+    esac
+  fi
   osr=/etc/os-release
   id="$(sed -nE 's/^ID=("?)([^"]*)\1.*/\2/p' "$osr" 2>/dev/null | head -1)"
   ver="$(sed -nE 's/^VERSION_ID=("?)([^"]*)\1.*/\2/p' "$osr" 2>/dev/null | head -1)"
@@ -121,7 +146,7 @@ seg_guards() {
 # --- assemble (each segment runs in its own subshell, so any var pollution or
 #     failure is contained; empty segments are dropped) ------------------------
 segs=()
-s="$(seg_chezmoi)" && [ -n "$s" ] && segs+=("$s")
+s="$(seg_dotfiles)" && [ -n "$s" ] && segs+=("$s")
 s="$(seg_host)" && [ -n "$s" ] && segs+=("$s")
 s="$(seg_wsl)" && [ -n "$s" ] && segs+=("$s")
 s="$(seg_guards)" && [ -n "$s" ] && segs+=("$s")

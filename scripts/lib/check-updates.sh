@@ -17,7 +17,7 @@
 #
 # The toolbelt itself (mise-managed, config*.toml) is covered by `mise
 # outdated`, not this script. The handful of pins config.toml [vars] still
-# owns directly (claude-cli, dozzle, nerd-fonts, vcpkg, python-env) are
+# owns directly (claude-cli, nerd-fonts, vcpkg, python-env) are
 # hand-registered as spec lines built by tasks/check-updates.
 #
 # Self-exec fan-out: with no args this is the driver (reads specs on stdin,

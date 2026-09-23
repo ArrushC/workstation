@@ -1,0 +1,242 @@
+[appearance]
+spacing = "normal"
+
+[appearance.themes]
+system_theme = false
+theme = { custom = { name = "Catppuccin Mocha", path = "catppuccin-mocha.yaml" } }
+
+[appearance.vertical_tabs]
+enabled = true
+view_mode = "compact"
+display_granularity = "panes"
+primary_info = "working_directory"
+compact_subtitle = "branch"
+show_diff_stats = true
+show_pr_link = true
+show_details_on_hover = true
+show_panel_in_restored_windows = true
+
+[appearance.text]
+# Windows exposes the installed Nerd Font through its abbreviated GDI family.
+font_name = "JetBrainsMono NFM"
+font_size = 13.0
+font_weight = "normal"
+line_height_ratio = 1.0
+ligature_rendering_enabled = true
+match_ai_font = true
+notebook_font_size = 14.0
+
+[appearance.window]
+override_opacity = 100
+override_blur_texture = false
+# Warp's UI persists zoom state here; tracking the 100% default stops every
+# mise dot status from flagging the file as drifted after a ctrl+=/ctrl+- zoom.
+zoom_level = 100
+
+[appearance.tabs]
+show_indicators_button = true
+tab_close_button_position = "right"
+workspace_decoration_visibility = "always_show"
+preserve_active_tab_color = true
+
+[appearance.tabs.header_toolbar_chip_selection]
+
+[appearance.tabs.header_toolbar_chip_selection.custom]
+left = ["tabs_panel", "tools_panel"]
+right = ["code_review", "notifications_mailbox"]
+
+[appearance.panes]
+should_dim_inactive_panes = true
+
+[appearance.cursor]
+cursor_display_type = "bar"
+cursor_blink = "enabled"
+
+[appearance.full_screen_apps]
+# Zero padding around alt-screen apps. This workflow lives in the alt screen —
+# zellij, helix, btop, lazygit, k9s — where a border wastes rows and misaligns
+# zellij's own pane frames. 0.0 is today's Warp default; pinned so a future
+# default change can't quietly add a margin to every TUI.
+alt_screen_padding = { custom = { uniform_padding = 0.0 } }
+
+[general]
+default_session_mode = "terminal"
+restore_session = true
+new_tab_placement = "after_current_tab"
+show_warning_before_quitting = true
+should_confirm_close_session = true
+link_tooltip = true
+# Warp defaults login_item to TRUE (auto-launch at Windows login) — pin the
+# choice so the default can't decide it silently.
+login_item = false
+# Warp self-updates frequently; don't pop the changelog on every update.
+show_changelog_after_update = false
+
+[general.undo_close]
+enabled = true
+
+[session]
+# AlmaLinux-9 WSL/zsh is the primary workflow (see README §setup-wsl) — make it
+# the startup shell for NEW sessions instead of the manual Settings-UI step.
+# The { custom = ... } shape bypasses the executable-path validation that
+# rejects wsl.exe paths (warpdotdev/warp#7576); same launch command as the
+# generated WSL Tab Config. If Warp flags this value after an update, it warns
+# and falls back to the system default (PowerShell) — nothing breaks.
+new_session_shell_override = { custom = "wsl.exe --distribution AlmaLinux-9 --cd ~" }
+
+[agents]
+cloud_conversation_storage_enabled = false
+
+[agents.third_party]
+should_render_cli_agent_toolbar = true
+
+[agents.warp_agent]
+is_any_ai_enabled = false
+
+[agents.warp_agent.other]
+show_agent_notifications = true
+show_conversation_history = true
+# Nothing leaves the box. Both default TRUE-ish upstream and are moot while
+# is_any_ai_enabled = false, but the AI-off decision is stated explicitly rather
+# than left resting on a default Warp is free to change.
+cloud_agent_computer_use_enabled = false
+should_force_disable_cloud_handoff = true
+
+[agents.warp_agent.input]
+nld_in_terminal_enabled = false
+
+[agents.profiles]
+agent_mode_coding_permissions = "always_allow_reading"
+
+[agents.voice]
+# Warp defaults this to TRUE — voice input holds the microphone. That is
+# inconsistent with the rest of this file (AI, telemetry, crash reporting and
+# cloud conversation storage all off), so it is turned off explicitly. This
+# table did not exist at the 2026-07 settings sweep; it arrived with a
+# permissive default, which is exactly why the sweep gets repeated.
+voice_input_enabled = false
+
+[agents.mcp_servers]
+# No file-based MCP discovery. Already the upstream default; pinned because an
+# agent-adjacent feature flipping on by default is the failure mode above.
+file_based_mcp_enabled = false
+
+[code]
+
+[code.editor]
+show_code_review_button = true
+show_code_review_diff_stats = true
+show_project_explorer = true
+show_global_search = true
+show_hidden_files = true
+format_on_save = true
+auto_save = false
+open_file_editor = "warp"
+
+[code.indexing]
+# No codebase context collection or background indexing. Moot while
+# is_any_ai_enabled = false, but same principle as [agents.voice]: state it.
+agent_mode_codebase_context = false
+agent_mode_codebase_context_auto_indexing = false
+
+[warp_drive]
+enabled = true
+
+[privacy]
+telemetry_enabled = false
+crash_reporting_enabled = false
+custom_secret_regex_list = [
+  { name = "IPv4 Address", pattern = '\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}\b' },
+  { name = "IPv6 Address", pattern = '\b((([0-9A-Fa-f]{1,4}:){1,6}:)|(([0-9A-Fa-f]{1,4}:){7}))([0-9A-Fa-f]{1,4})\b' },
+  { name = "Phone Number", pattern = '\b(\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b' },
+  { name = "MAC Address", pattern = '\b((([a-zA-Z0-9]{2}[-:]){5}([a-zA-Z0-9]{2}))|(([a-zA-Z0-9]{2}:){5}([a-zA-Z0-9]{2})))\b' },
+  { name = "Google API Key", pattern = '\bAIza[0-9A-Za-z-_]{35}\b' },
+  { name = "AWS Access ID", pattern = '\b(AKIA|A3T|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{12,}\b' },
+  { name = "Slack App Token", pattern = '\bxapp-[0-9]+-[A-Za-z0-9_]+-[0-9]+-[a-f0-9]+\b' },
+  { name = "GitHub Classic Personal Access Token", pattern = '\bghp_[A-Za-z0-9_]{36}\b' },
+  { name = "GitHub Fine-Grained Personal Access Token", pattern = '\bgithub_pat_[A-Za-z0-9_]{82}\b' },
+  { name = "GitHub OAuth Access Token", pattern = '\bgho_[A-Za-z0-9_]{36}\b' },
+  { name = "GitHub User-to-Server Token", pattern = '\bghu_[A-Za-z0-9_]{36}\b' },
+  { name = "GitHub Server-to-Server Token", pattern = '\bghs_[A-Za-z0-9_]{36}\b' },
+  { name = "Stripe Key", pattern = '\b(?:r|s)k_(test|live)_[0-9a-zA-Z]{24}\b' },
+  { name = "Firebase Auth Domain", pattern = '\b([a-z0-9-]){1,30}(\.firebaseapp\.com)\b' },
+  { name = "JWT", pattern = '\b(ey[a-zA-Z0-9_\-=]{10,}\.){2}[a-zA-Z0-9_\-=]{10,}\b' },
+  { name = "OpenAI API Key", pattern = '\bsk-[a-zA-Z0-9]{48}\b' },
+  { name = "Anthropic API Key", pattern = '\bsk-ant-api\d{0,2}-[a-zA-Z0-9\-]{80,120}\b' },
+  { name = "Generic SK API Key", pattern = '\bsk-[a-zA-Z0-9\-]{10,100}\b' },
+  { name = "Fireworks API Key", pattern = '\bfw_[a-zA-Z0-9]{24}\b' },
+  { name = "Warp API Key", pattern = '\bwk-[0-9]+\.[A-Fa-f0-9.\-]+\b' },
+]
+
+[privacy.secret_redaction]
+enabled = true
+hide_secrets_in_block_list = true
+secret_display_mode_setting = "asterisks"
+
+[account]
+# The tracked mise dotfiles source is authoritative; Warp cloud sync must not overwrite this file.
+is_settings_sync_enabled = false
+
+[experimental]
+async_find_enabled = true
+
+[warpify]
+
+[warpify.ssh]
+# The SSH extension is unavailable from Windows. Top-level Warpification stays
+# off so generated ordinary SSH + Zellij sessions receive no wrapper injection.
+# Warp rewrites the legacy capability flag true on startup, but it is inert while
+# enable_ssh_warpification is false; keep the runtime-canonical value to avoid drift.
+enable_ssh_warpification = false
+enable_legacy_ssh_wrapper = true
+use_ssh_tmux_wrapper = false
+ssh_extension_install_mode = "never_install"
+
+[terminal]
+use_audible_bell = true
+osc52_clipboard_access = "write_only"
+copy_on_select = true
+focus_reporting_enabled = true
+mouse_reporting_enabled = true
+scroll_reporting_enabled = true
+# Scrollback parity with the fleet: zellij keeps scroll_buffer_size 100000
+# (trimmed from 1M on 2026-07-09); Warp's default is 50000 rows.
+maximum_grid_size = 100000
+
+[terminal.smart_select]
+# Double-click selection. Warp's default allowlist is `-.~/"`, which already
+# covers hostnames and paths; `_` and `:` are added so one double-click grabs a
+# whole `user@host`, a `host:port`, or a snake_case identifier instead of
+# stopping at the separator. Daily-driver ergonomics for the SSH workflow.
+enabled = true
+word_char_allowlist = "-.~/\"_:"
+
+[terminal.input]
+# Universal is Warp's rich multi-line editor; AI/NL detection remains disabled.
+input_box_type_setting = "universal"
+honor_ps1 = false
+show_hint_text = true
+classic_completions_mode = false
+completions_open_while_typing = true
+error_underlining_enabled = true
+syntax_highlighting = true
+command_corrections = true
+alias_expansion_enabled = false
+# Left Alt as meta so Zellij/Helix Alt bindings (Alt+n, Alt+arrows) reach
+# remote TUIs in SSH panes; right Alt stays AltGr for international layouts.
+extra_meta_keys = { left_alt = true, right_alt = false }
+
+[notifications]
+toast_duration_secs = 8
+
+[notifications.preferences]
+is_agent_task_completed_enabled = true
+is_long_running_enabled = true
+is_needs_attention_enabled = true
+is_password_prompt_enabled = true
+long_running_threshold = 30
+mode = "enabled"
+play_notification_sound = true
+
+[workflows]
+show_global_workflows_in_universal_search = true

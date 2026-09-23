@@ -32,25 +32,28 @@ base="${norm##*/}"
 
 msg=""
 case "$norm" in
-*/chezmoi/dot_zshrc.tmpl)
-  msg="Parity pair: you edited dot_zshrc.tmpl — mirror any interactive-shell change in dot_bashrc.tmpl (or add a PARITY NOTE explaining the zsh-only divergence). Change both in the same commit. See CLAUDE.md."
+*/dotfiles/zshrc.tera)
+  msg="Parity pair: you edited zshrc.tera — mirror any interactive-shell change in bashrc.tera (or add a PARITY NOTE explaining the zsh-only divergence). Change both in the same commit. See CLAUDE.md."
   ;;
-*/chezmoi/dot_bashrc.tmpl)
-  msg="Parity pair: you edited dot_bashrc.tmpl — mirror the change in dot_zshrc.tmpl. Change both in the same commit. See CLAUDE.md."
+*/dotfiles/bashrc.tera)
+  msg="Parity pair: you edited bashrc.tera — mirror the change in zshrc.tera. Change both in the same commit. See CLAUDE.md."
   ;;
-# A chezmoi-managed dotfile's OWN config.toml (helix/herdr/tealdeer/…) is not
-# mise's config*.toml — exclude it before the glob below, which would
-# otherwise also match "*/dot_config/helix/config.toml" etc. (both end in
-# "/config.toml").
-*/chezmoi/dot_config/*) ;;
+*/dotfiles/windows/AppData/Roaming/nushell/config.nu.tera)
+  msg="Parity pair: you edited the nushell config's ws*/g* alias block — mirror it in Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera. Change both in the same commit. See CLAUDE.md."
+  ;;
+*/dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera)
+  msg="Parity pair: you edited the PowerShell profile's ws*/g* alias block — mirror it in AppData/Roaming/nushell/config.nu.tera. Change both in the same commit. See CLAUDE.md."
+  ;;
+# A dotfiles/** target's OWN config file (helix/herdr/tealdeer/…) is not
+# mise's own config*.toml — exclude the whole dotfiles/ tree before the glob
+# below, which would otherwise also match "*/dotfiles/config/helix/config.toml"
+# etc. (both end in "/config.toml").
+*/dotfiles/*) ;;
 */config.toml)
   msg="config.toml [vars]: python_version is a three-way pin with tools.python and bootstrap.ps1 \$PythonEnvVersion; nerd_font_version triple-edits scripts/lib/font.sh (SHA arm) and scripts/install-nerd-fonts.ps1."
   ;;
 */config.linux.toml | */config.dev.toml)
   msg="Tool pins changed. jq/gh/helix (config.linux.toml) and opencode/omp/DevToys (config.dev.toml) dual-edit bootstrap.ps1 \$PortableTools; min_version dual-edits MISE_VERSION in bootstrap.sh + bootstrap.ps1. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
-  ;;
-*/chezmoi/.chezmoiignore.tmpl)
-  msg="Reminder: .chezmoiignore patterns are matched against TARGET paths (.bashrc, .config/zsh, .claude, .config/ccstatusline) — NOT source-state names (dot_*/private_dot_*/*.tmpl), which silently ignore nothing. Verify with 'chezmoi ignored'."
   ;;
 esac
 if [ -z "$msg" ]; then

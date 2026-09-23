@@ -1,7 +1,0 @@
-# Targets chezmoi REMOVES from $HOME on every apply — migration cleanup for
-# artifacts this repo used to deploy or generate but no longer does. Patterns
-# are TARGET paths (same matching rules as .chezmoiignore). Removing a path
-# that doesn't exist is a no-op, so entries here are safe fleet-wide and
-# self-heal stale hosts without a bespoke cleanup script.
-#
-# (No active entries — past migration cleanups completed and were removed.)
