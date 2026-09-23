@@ -2980,7 +2980,7 @@ function Invoke-Doctor {
         if ($statusRc -eq 0) {
             Write-Ok "deployed dotfiles in sync with the source (mise dot status)"
         } else {
-            Write-Warn "drift, or not yet applied — inspect: mise dot status · apply: mise dot apply"
+            Write-Warn "drift, or not yet applied — inspect: mise dot status · apply: wsa (asks before overwriting a local edit)"
         }
     } else {
         Write-Warn "mise not on PATH — re-run .\bootstrap.ps1 (or open a NEW shell if it just installed)"
@@ -3343,7 +3343,9 @@ Write-Host ""
 $appList = Join-Path $RepoPath "docs\windows\application_list.md"
 if (Test-Path $appList) {
     Write-Host "${Bold}Hand-install shopping list${Reset} (docs\windows\application_list.md):"
-    Get-Content $appList | ForEach-Object { Write-Host "  $_" }
+    # -Encoding UTF8: the list is UTF-8 without a BOM, so PowerShell 5.1's
+    # default (the ANSI codepage) printed every em dash as "â€”".
+    Get-Content -Encoding UTF8 $appList | ForEach-Object { Write-Host "  $_" }
     Write-Host ""
 }
 
@@ -3357,7 +3359,8 @@ Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -All     # or, bulk to eve
 Write-Host "  3. Launch Warp — pick a generated SSH host from the + menu (or Windows"
 Write-Host "     Terminal — same hosts, under the SSH hosts folder in the new-tab dropdown)."
 Write-Host ""
-Write-Host "Editing dotfiles:"
-Write-Host "  mise dot edit <path>   # edit a tracked file in the repo source"
-Write-Host "  mise dot apply         # push edits to `$HOME"
-Write-Host "  mise dot diff          # see what would change"
+Write-Host "Editing dotfiles (new Nushell/PowerShell shell):"
+Write-Host "  wse <path>   # edit a tracked file in the repo source"
+Write-Host "  wsd          # see what would change"
+Write-Host "  wsa          # apply; asks first if a deployed file has a local edit it would overwrite"
+Write-Host "  wsr          # record an app's own edit to a deployed file back into the repo"
