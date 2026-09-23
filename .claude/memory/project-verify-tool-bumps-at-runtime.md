@@ -34,8 +34,10 @@ when adding an anti-match prefer the build already installed (omp kept glibc via
 **Why:** upstream shared-lib deps and release-asset churn don't show up in
 changelogs — only running the binary / running the real install reveals them.
 
-**How to apply:**
-- Sandbox install (sudo-free, live tools untouched): `cd makefile && make all MODE=prod DEST=/tmp/install-test STAMP=/tmp/install-test-stamps` with `GITHUB_TOKEN` set (eget rate limit). `scope.mk` documents this invocation.
-- node-runtime is dev-only (not in `make all MODE=prod`): test it directly — `DEST=/tmp/wf-node bash makefile/lib/node.sh <ver>`, then `ldd .../bin/node | grep 'not found'` and run `node --version`.
-- eget tools: run the actual `make <tool>` target — asset-ambiguity only surfaces through eget's selection.
-- config-driven tools (fzf, zellij): run the bumped binary against the chezmoi config (fzf with `$FZF_DEFAULT_OPTS`; `zellij setup --check` per [[project-wsl-appendwindowspath-false]]'s sibling recipe in `docs/claude/verification.md`).
+**How to apply (post Make→mise, 2026-09):** the file names above (`versions.mk`,
+`packages.mk`, `tools.mk`, eget) are history — pins now live in
+`config.linux.toml`/`config.dev.toml`, dnf packages in `config.host.toml`, and a
+`github:` tool's asset choice is an explicit `asset_pattern`. The lesson is unchanged.
+- Sandbox install (sudo-free, live tools untouched): the `MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox … mise install && … tasks/verify-tools` recipe in `docs/claude/verification.md` (set `GITHUB_TOKEN` for the API rate limit). `tasks/verify-tools` checks ELF arch, loader and glibc floor via `ldd`, so a libatomic-class missing shared lib now fails the gate — but still EXECUTE the bumped binary (`--version`), since ldd can't see everything.
+- Asset ambiguity on a `github:`-backend major bump: run the real sandbox `mise install` for that tool; when pinning an `asset_pattern`, prefer the build already installed (glibc vs musl) so a bump doesn't smuggle in a behaviour change.
+- config-driven tools (fzf, zellij): run the bumped binary against the repo's `dotfiles/` config (fzf with `$FZF_DEFAULT_OPTS`; the zellij headless probe in `docs/claude/verification.md`).

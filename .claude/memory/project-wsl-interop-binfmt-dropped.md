@@ -28,10 +28,9 @@ processes including Claude's subsequent Bash calls. Also note: inside an actual
 `powershell.exe` invocation use native Windows paths (`$env:LOCALAPPDATA\...`),
 NOT `/mnt/c/...` (PowerShell mis-parses the latter as a module path).
 
-**Why:** Hit 2026-06-28 doing a Windows-side `chezmoi apply` to verify the Zed
+**Why:** Hit 2026-06-28 doing a Windows-side apply (then chezmoi) to verify the Zed
 nushell-shell change. Diagnose before theorizing: `ls
 /proc/sys/fs/binfmt_misc/WSLInterop` (missing = this bug) + `cmd.exe /c echo ok`.
 This precedes the apply-via-WSL steps in
-[[project-windows-apply-via-wsl-gotchas]] and the chezmoi.exe-exists check in
-[[feedback-windows-chezmoi-check-before-apply]]; reach Windows via
+[[project-windows-apply-via-wsl-gotchas]]; reach Windows via
 [[project-winterop-wsl-windows-interop]] once interop is back.

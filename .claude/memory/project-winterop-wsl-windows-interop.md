@@ -7,7 +7,7 @@ metadata:
 
 When working from WSL (or any Linux-on-Windows shell) and you need to touch the
 Windows side, use **`winterop`** (`~/.local/bin/winterop`; source at
-`chezmoi/dot_local/bin/executable_winterop`) instead of hand-rolling
+`dotfiles/local/bin/winterop`) instead of hand-rolling
 `powershell.exe` / `wslpath` / `clip.exe` calls.
 
 **Command map:**
@@ -27,5 +27,5 @@ e.g. `open` uses `Start-Process`, not `explorer.exe`, so it survives
 **How to apply:**
 - In a plain Linux VM on Windows (not WSL) the live subcommands intentionally
   refuse and point you at SSH / shared-folder / RDP — heed that, don't force interop.
-- For reaching Windows chezmoi specifically, [[feedback-windows-chezmoi-check-before-apply]] still governs (chezmoi.exe via interop, never the WSL chezmoi; and never run `chezmoi init` non-interactively — it re-prompts `promptStringOnce` and can wipe the config's `[data]`).
-- Deployed only on Linux/WSL (`~/.local` is ignored on Windows); after a fresh clone it lands via `chezmoi apply`.
+- For applying changes on the Windows side, [[project-windows-apply-via-wsl-gotchas]] governs (never render Windows targets with the WSL-side mise; applies are the user's to run).
+- Deployed only on Linux/WSL (`~/.local` is ignored on Windows); after a fresh clone it lands via `wsa` / `./bootstrap.sh` (a `copy`-mode `[dotfiles]` entry for `~/.local/bin`).

@@ -20,7 +20,7 @@ The paired regression check: in a *Windows Terminal* WSL tab, starship + atuin C
 must all still work — the guards are `TERM_PROGRAM`-conditional, so WT must be untouched.
 
 **Why:** the change shipped on green CI before the Windows host could be exercised
-(`bootstrap.ps1`/`chezmoi apply` are the user's to run — see
+(`bootstrap.ps1`/`wsa` are the user's to run — see
 [[feedback-windows-commands-user-runs-them]]), so the verification debt is real and outlives
 the PR.
 
