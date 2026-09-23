@@ -263,6 +263,19 @@ if [ -z "$outdated_fail" ]; then
   done < <(printf '%s' "$outdated" | jq -r 'to_entries[] | select(.value.bump != null and .value.bump != .value.requested) | [.key, .value.requested, .value.bump, .value.source.path] | @tsv')
 
   if [ -n "$bumped" ] && ! $DRY; then
+    # mise lock writes a pypi: tool's dependency lock (its `uv = { path =
+    # "locks/..." }` sidecar) only when uv >= 0.12.10 is installed. Without
+    # uv it warns and skips, and the CI runner has none (mise-action runs
+    # with install: false). That shipped basedpyright@1.40.1 without its
+    # lock in #152; the first `wsu` on a host then generated the lock
+    # inside the tracked checkout, and tasks/update's `git pull --ff-only`
+    # refused the dirty tree. Install the pinned uv first. MISE_LOCKFILE=false
+    # stops this install rewriting the lock files itself.
+    if ! mise_global linux,dev,host,native env MISE_LOCKFILE=false mise install uv; then
+      printf 'bump-versions.sh: mise install uv failed; pypi: dependency locks will be skipped\n' >&2
+      failed="${failed}- \`mise install uv\` failed — pypi: dependency locks not regenerated (manual)\n"
+      exit_code=1
+    fi
     if ! lock_platform linux,dev,host,native linux-x64; then
       printf 'bump-versions.sh: mise lock --platform linux-x64 failed\n' >&2
       failed="${failed}- \`mise lock --platform linux-x64\` failed (manual)\n"

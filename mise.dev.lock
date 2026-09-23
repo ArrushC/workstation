@@ -142,3 +142,4 @@ url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/53331
 version = "1.40.1"
 backend = "pypi:basedpyright"
 specifiers = ["1.40.1"]
+uv = { path = "locks/mise.dev/pypi-basedpyright/1.40.1", digest = "sha256:c3b71f78a9b89d6db261cc3b1da7dbd796d60010832b8003154c18d5dae2b888" }

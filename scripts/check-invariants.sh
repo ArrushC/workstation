@@ -690,6 +690,39 @@ PY
   if [ "$lock_ok" -eq 1 ]; then
     ok "every lock sidecar path ref is under locks/ and the directory exists"
   fi
+  # Every pypi:/npm: lock entry must carry its dependency-lock sidecar ref
+  # (pypi: `uv = { path = ... }`, npm: `aube = { path = ... }`). mise lock
+  # SKIPS a pypi: sidecar with only a warning when no uv >= 0.12.10 is
+  # installed. #152 shipped pypi:basedpyright@1.40.1 that way, and the first
+  # `wsu` on a host then generated the sidecar inside the tracked checkout.
+  # That left the tree dirty, so tasks/update's `git pull --ff-only` failed.
+  if [ -n "$PY" ]; then
+    local missing
+    missing="$(
+      "$PY" - mise.lock mise.linux.lock mise.dev.lock <<'PYEOF'
+import sys, tomllib
+for f in sys.argv[1:]:
+    try:
+        tools = tomllib.load(open(f, "rb")).get("tools", {})
+    except FileNotFoundError:
+        continue
+    for name, entries in tools.items():
+        key = {"pypi": "uv", "npm": "aube"}.get(name.split(":", 1)[0])
+        if not key:
+            continue
+        for e in entries if isinstance(entries, list) else [entries]:
+            if not isinstance(e.get(key), dict) or "path" not in e[key]:
+                print(f"{f}: {name}@{e.get('version')} has no {key} dependency lock")
+PYEOF
+    )"
+    if [ -n "$missing" ]; then
+      while IFS= read -r m; do bad "$m — install uv (pypi:) then re-run: $hint"; done <<<"$missing"
+    else
+      ok "every pypi:/npm: lock entry carries its dependency-lock sidecar"
+    fi
+  else
+    note "no python with tomllib — pypi:/npm: sidecar presence check skipped locally (CI enforces)"
+  fi
 }
 
 # Every config.toml [vars] *_version pin must be reachable two ways, or a

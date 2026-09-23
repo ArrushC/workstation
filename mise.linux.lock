@@ -393,18 +393,17 @@ url = "https://github.com/orf/gping/releases/download/gping-v1.21.0/gping-Linux-
 url_api = "https://api.github.com/repos/orf/gping/releases/assets/538478143"
 
 [[tools."github:ouch-org/ouch"]]
-version = "0.8.2"
+version = "0.8.3"
 backend = "github:ouch-org/ouch"
-specifiers = ["0.8.2"]
+specifiers = ["0.8.3"]
 
 [tools."github:ouch-org/ouch".options]
 asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:ouch-org/ouch"."platforms.linux-x64"]
-checksum = "sha256:c4ced4672badf374696c52661f4cacf154769771dbc7454222907e83ca81b4c0"
-url = "https://github.com/ouch-org/ouch/releases/download/0.8.2/ouch-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/ouch-org/ouch/releases/assets/537367162"
-provenance = "github-attestations"
+checksum = "sha256:eaab9b997a823f584557ac5f85205105ae577a4c4fbd23926b686469cfa19881"
+url = "https://github.com/ouch-org/ouch/releases/download/0.8.3/ouch-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/ouch-org/ouch/releases/assets/561447591"
 
 [[tools."github:sxyazi/yazi"]]
 version = "26.9.1"
