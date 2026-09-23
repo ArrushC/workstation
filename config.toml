@@ -28,7 +28,7 @@ zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invarian
 # below that floor ("Python dependency locks require uv >= 0.12.10").
 # 0.12.15 is latest at time of writing. uv has no versions.mk entry any
 # more — it is a pure mise pin now, bumped here (and by `mise outdated`).
-uv = "0.12.15"
+uv = "0.12.17"
 # python — mise's interpreter for the dependency-locked pypi: tools (uv sync
 # --frozen --python <this>; without it mise falls back to the system 3.9 and
 # glances/harlequin refuse to install). Same pin as vars.python_version above
