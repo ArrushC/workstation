@@ -18,4 +18,4 @@ Files under `.claude/` at the repo root are not gitignored, not excluded, not "s
 - Bundle with adjacent work where the change is causal (e.g. session permission allowlist entries get added because of new commands run during a feature commit — bundle them).
 - If commits get too noisy, group with a single `chore(claude): ...` commit at logical breakpoints (e.g. end of a multi-task work cycle), but never leave the tree dirty across cycles.
 - Exception: if the user explicitly says "don't commit settings yet", respect that for the current task only — the standing rule resumes on the next.
-- Audit on file scope: this rule covers `.claude/settings.json`, `.claude/settings.local.json`, `.claude/memory/**`. Does NOT cover user-home `~/.claude/` files (those are tracked separately via chezmoi).
+- Audit on file scope: this rule covers `.claude/settings.json`, `.claude/settings.local.json`, `.claude/memory/**`. Does NOT cover user-home `~/.claude/` files (those are deployed from `dotfiles/claude/` via mise `[dotfiles]`; `~/.claude/settings.json` via `scripts/lib/claude-settings-merge.sh`).

@@ -28,6 +28,6 @@ which may have run against an older tree or an older set of repo invariants;
 auto-PR), confirm the checks are fresh — compare the check-run `head_sha` to the
 PR head and to current `main`, e.g. `gh pr view <n> --json statusCheckRollup,headRefOid`
 and `gh api repos/{owner}/{repo}/commits/<pr-head>/check-runs --jq '.check_runs[].head_sha'`.
-If they lag, push an empty commit / re-run CI (or just run `make -C makefile lint
-MODE=prod` locally on the merged tree) before merging. Relates to
+If they lag, push an empty commit / re-run CI (or just run `mise run lint`
+locally on the merged tree) before merging. Relates to
 [[project-verify-tool-bumps-at-runtime]] and [[feedback-use-pr-review-workflow]].

@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-`shfmt` (which `check-invariants.sh` enforces and `make fmt` applies) parses
+`shfmt` (which `check-invariants.sh` enforces and `mise run fmt` applies) parses
 unquoted associative-array subscripts as arithmetic and inserts spaces around
 operators: `ALIAS=([nerd-fonts]=X)` becomes `ALIAS=([nerd - fonts]=X)`. That is
 not a style change — the key literally becomes `"nerd - fonts"`, so lookups on

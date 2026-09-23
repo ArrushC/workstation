@@ -14,12 +14,12 @@ Removed 2026-09-06 by user decision: "using the tui for this workstation is caus
 4. The 17 superpowers spec/plan docs under `docs/superpowers/{plans,specs}/` for every TUI phase (2026-08-05 through 2026-08-11).
 5. This memory: `.claude/memory/project-workstation-tui-phase2-carryforwards.md` (the TUI's post-v1 backlog) is gone; this file replaces it as the pointer to what happened.
 
-**What stayed:** `python-env` remains a BOTH-SCOPES bespoke target (`makefile/lib/python-env.sh` + `bootstrap.ps1`'s `Invoke-PythonEnv`) building the blessed uv-managed Python venv with its ad-hoc scripting libs (Textual, Click, rich, httpx, pydantic, typer, polars, duckdb) and the `wpy`/`textual`/`typer` launchers, on both dev_machine and prod_machine. Only the TUI-specific pieces (editable `tui/` install, `workstation` launcher/shim) were cut — the general-purpose scripting env is untouched and still ships Textual as a library for ad-hoc scripts.
+**What stayed:** `python-env` remains a BOTH-SCOPES step (now `scripts/lib/python-env.sh` via `mise run python-env`, + `bootstrap.ps1`'s `Invoke-PythonEnv`) building the blessed uv-managed Python venv with its ad-hoc scripting libs (Textual, Click, rich, httpx, pydantic, typer, polars, duckdb) and the `wpy`/`textual`/`typer` launchers, on both dev_machine and prod_machine. Only the TUI-specific pieces (editable `tui/` install, `workstation` launcher/shim) were cut — the general-purpose scripting env is untouched and still ships Textual as a library for ad-hoc scripts.
 
 **DO NOT re-propose a TUI / Textual control panel for this repo.** If a future request sounds like "let's build a dashboard/control-panel/TUI for workstation," surface this decision first rather than treating it as a fresh idea.
 
 **Host-side effects of the removal (matters for anyone verifying a live host, or debugging "why did my venv rebuild"):**
-- `python-env.sh`'s stamp is `cksum`-keyed on the script's own content, so removing the editable-install lines changes the stamp filename — the next `make provision` (or `make python-env`) rebuilds the venv from scratch, now without the `tui/` package.
+- `python-env.sh`'s stamp is `cksum`-keyed on the script's own content, so removing the editable-install lines changes the stamp filename — the next provision (then `make python-env`; now `mise run python-env`) rebuilds the venv from scratch, now without the `tui/` package.
 - The script self-heals two stale artifacts from earlier provisions: `rm -f ~/.local/bin/workstation` (the old launcher symlink) and `rm -rf ~/.cache/workstation-tui` (the TUI's health/updates/history caches) — both run unconditionally on every `python-env.sh` invocation, dev and prod.
 - `bootstrap.ps1`'s `Invoke-PythonEnv` similarly self-heals `%LOCALAPPDATA%\workstation\bin\workstation.cmd` via `Remove-Item -ErrorAction SilentlyContinue`.
 - Nothing else on a host needs manual cleanup — no service, no cron, no systemd unit was TUI-owned.
