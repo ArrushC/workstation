@@ -37,7 +37,11 @@ case ",${MISE_ENV:-}," in *,host,*) use_sudo=true ;; esac
 [ "${HAS_SUDO:-}" = true ] && use_sudo=true
 failed=0
 sudo_password_needed=false
-if $use_sudo && ! sudo -n true 2>/dev/null; then
+# Probe only while a sudo-using sweep (PR1 or PR2) is still pending. Once
+# both markers exist, a password-sudo dev host would otherwise print the
+# "run ./bootstrap.sh --dev interactively to finish the sweep" warning on
+# every wsu, for a sweep that has already finished.
+if $use_sudo && { ! $marker_done || [ ! -f "$host_marker" ]; } && ! sudo -n true 2>/dev/null; then
   use_sudo=false
   sudo_password_needed=true
   printf '  ! sudo needs a password on this host — /usr/local left untouched; run ./bootstrap.sh --dev interactively once to finish the sweep\n'
