@@ -25,9 +25,11 @@
 # skipped in that case, though the config.toml [vars] layer still runs and
 # is reported) or a
 # post-bump `mise lock` regeneration fails, so the weekly workflow fails
-# visibly instead of silently reporting "nothing to bump". Individual
-# `mise config set` failures are reported under "Failed to edit (manual)"
-# without forcing a nonzero exit on their own.
+# visibly instead of silently reporting "nothing to bump". A lock failure
+# that names one bumped tool is NOT fatal: that pin is reverted and reported
+# under "Refused by mise lock", and the lock retried (see lock_platform).
+# Individual `mise config set` failures are reported under "Failed to edit
+# (manual)" without forcing a nonzero exit on their own.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -141,6 +143,59 @@ normalize_lock_sidecars() {
   }
 }
 
+# Per-tool record of every pin this run bumped, so lock_platform can put one
+# back. Keys are mise tool names (may contain `:`/`/`), always quoted.
+declare -A bump_file bump_key bump_cur bump_new
+refused="" # bumps reverted because `mise lock` refused the new version
+
+# `mise lock` one platform. `mise lock` is all-or-nothing: if it refuses ONE
+# tool's new version it writes nothing and exits 1, which used to fail the
+# whole weekly run and open no PR. It names the refused tool ("failed to
+# resolve <tool>@<ver> for <platform>; refusing to replace locked version(s)
+# ..."), so revert just that pin, record mise's reason, and retry until the
+# lock succeeds. Two real causes so far:
+#  - 2026-09-21, difftastic@0.71.0: upstream renamed its assets and the aqua
+#    registry had not caught up.
+#  - 2026-09-23, ouch@0.8.3: releases moved from GitHub attestations to
+#    cosign bundles. mise treats that as a provenance downgrade and refuses
+#    by design; it has no flag to override this, and there should not be one.
+#    Verify such a release by hand (e.g. `cosign verify-blob`) before
+#    bumping it.
+# Returns 1 only when the failure doesn't name a tool this run bumped (a
+# genuine lock error), leaving the old hard-fail behaviour for those.
+lock_platform() {
+  local mise_env="$1" platform="$2" err tool reason tries=0
+  err="$(mktemp)"
+  while :; do
+    if mise_global "$mise_env" mise lock --global --platform "$platform" 2>"$err"; then
+      rm -f "$err"
+      return 0
+    fi
+    cat "$err" >&2
+    sed -i 's/\x1b\[[0-9;]*m//g' "$err"
+    tool="$(sed -n 's/.*failed to resolve \([^ ]*\)@[^ ]* for .*/\1/p' "$err" | head -n1)"
+    if [ -z "$tool" ] || [ -z "${bump_cur["$tool"]+x}" ] || [ "$tries" -ge 20 ]; then
+      rm -f "$err"
+      return 1
+    fi
+    # Non-verbose mise gives only the refusal line. The cause (for example a
+    # provenance downgrade, or an asset it cannot find) appears only with -v,
+    # so point the reader there.
+    reason="$(sed -n 's/.*failed to resolve [^ ]* for [^;]*; \(.*\)/\1/p' "$err" | head -n1)"
+    reason="${reason:-could not resolve it} on $platform; \`mise -v lock\` shows why"
+    if ! mise config set -f "${bump_file["$tool"]}" "${bump_key["$tool"]}" "${bump_cur["$tool"]}"; then
+      rm -f "$err"
+      return 1
+    fi
+    printf '  ! mise lock refused %s@%s on %s — reverted to %s, retrying\n' \
+      "$tool" "${bump_new["$tool"]}" "$platform" "${bump_cur["$tool"]}" >&2
+    bumped="${bumped/"- \`$tool\` (${bump_file["$tool"]}): ${bump_cur["$tool"]} → ${bump_new["$tool"]}\n"/}"
+    refused="${refused}- \`$tool\`: ${bump_cur["$tool"]} → ${bump_new["$tool"]} — ${reason}\n"
+    unset 'bump_cur["$tool"]'
+    tries=$((tries + 1))
+  done
+}
+
 mise_err_file="$(mktemp)"
 if ! outdated="$(mise_global linux,dev,host,native mise outdated --bump --json 2>"$mise_err_file")"; then
   outdated_fail="$(cat "$mise_err_file")"
@@ -180,6 +235,10 @@ if [ -z "$outdated_fail" ]; then
       bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
     elif mise config set -f "$file" "$key" "$new"; then
       bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
+      bump_file["$name"]="$file"
+      bump_key["$name"]="$key"
+      bump_cur["$name"]="$cur"
+      bump_new["$name"]="$new"
     else
       printf '  ! mise config set failed for %s (%s)\n' "$name" "$file" >&2
       failed="${failed}- \`$name\` ($file): mise config set failed (manual)\n"
@@ -187,12 +246,12 @@ if [ -z "$outdated_fail" ]; then
   done < <(printf '%s' "$outdated" | jq -r 'to_entries[] | select(.value.bump != null and .value.bump != .value.requested) | [.key, .value.requested, .value.bump, .value.source.path] | @tsv')
 
   if [ -n "$bumped" ] && ! $DRY; then
-    if ! mise_global linux,dev,host,native mise lock --global --platform linux-x64; then
+    if ! lock_platform linux,dev,host,native linux-x64; then
       printf 'bump-versions.sh: mise lock --platform linux-x64 failed\n' >&2
       failed="${failed}- \`mise lock --platform linux-x64\` failed (manual)\n"
       exit_code=1
     fi
-    if ! mise_global windows,dev mise lock --global --platform windows-x64; then
+    if ! lock_platform windows,dev windows-x64; then
       printf 'bump-versions.sh: mise lock --platform windows-x64 failed\n' >&2
       failed="${failed}- \`mise lock --platform windows-x64\` failed (manual)\n"
       exit_code=1
@@ -315,6 +374,14 @@ fi
     printf '%b' "$manual"
     echo
   fi
+  if [ -n "$refused" ]; then
+    echo "### Refused by \`mise lock\` (reverted, manual)"
+    echo
+    echo "_mise would not lock these new versions, so they were left at the current pin. Check the reason, verify the release by hand, then bump it deliberately._"
+    echo
+    printf '%b' "$refused"
+    echo
+  fi
   if [ -n "$failed" ]; then
     echo "### Failed to edit (manual)"
     echo
@@ -327,7 +394,7 @@ fi
     printf '%b' "$skipped"
     echo
   fi
-  [ -n "$outdated_fail$bumped$vars_bumped$manual$failed$skipped" ] || echo "All pins up to date — nothing to bump."
+  [ -n "$outdated_fail$bumped$vars_bumped$manual$refused$failed$skipped" ] || echo "All pins up to date — nothing to bump."
   echo
   echo "_Generated by \`scripts/bump-versions.sh\`. Each bumped pin installs on the next \`./bootstrap.sh\` (\`mise install\`); mise.lock updated. Review before merge._"
 } | tee "$SUMMARY"

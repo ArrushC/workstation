@@ -97,7 +97,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `fx` 39.2.0
 - `ripgrep` 15.2.0
 - `miller` 6.21.0
-- `difftastic` 0.70.0
 - `doggo` 1.4.0
 - `miniserve` 0.35.0
 - `numbat` 1.24.0
@@ -130,6 +129,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `yazi` 26.9.1
 - `television` 0.15.9
 - `atuin` 18.21.0
+- `difftastic` 0.70.0
 - `qsv` 22.0.1
 - `zjstatus` 0.25.0
 - `ncdu` 2.9.1

@@ -45,7 +45,6 @@ cheat = "5.1.0"
 fx = "39.2.0"
 ripgrep = "15.2.0"
 miller = "6.21.0"
-difftastic = "0.70.0"
 doggo = "1.4.0"
 miniserve = "0.35.0"
 numbat = "1.24.0"
@@ -79,6 +78,7 @@ taplo = "0.10.0"
 "github:sxyazi/yazi" = { version = "26.9.1", asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); the missing symbol only surfaces at exec time (`ldd`/actually running the binary), not from a static ELF/arch check alone — pin the musl asset; ships both yazi + ya
 "github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); pin the musl asset; binary is `tv`
 "github:atuinsh/atuin" = { version = "18.21.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.38 > EL9's 2.34); pin the musl asset
+"github:Wilfred/difftastic" = { version = "0.70.0" }   # aqua registry can't resolve 0.71.0+ (assets gained a version prefix: difft-<ver>-<triple>); github: autodetects both namings
 "github:dathere/qsv" = { version = "22.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua registry defaults to the gnu build (GLIBCXX_3.4.30 > EL9's floor); pin the musl asset; archive ships 6 binaries, bin= picks the full-feature one
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # copied into zellij's data dir by scripts/lib/zellij-plugin.sh (tasks/bootstrap)
 # --- http: (no GitHub release, bare assets, or scripts) ---

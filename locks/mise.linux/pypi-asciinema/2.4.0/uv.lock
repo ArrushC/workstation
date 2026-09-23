@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.8"
 
 [options]
-exclude-newer = "2026-09-16T10:10:16.366324199Z"
+exclude-newer = "2026-09-22T09:01:37.123822679Z"
 
 [[package]]
 name = "asciinema"
