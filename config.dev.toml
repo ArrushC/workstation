@@ -8,15 +8,15 @@
 # --allow-scripts=core-js silences npm 11's install-scripts warning (core-js'
 # postinstall is a funding banner; npm otherwise prints a 4-line warn on every
 # node reinstall).
-node = { version = "26.8.1", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.0 typescript@5.9.3 bash-language-server@5.6.0 yaml-language-server@1.24.0 vscode-langservers-extracted@4.10.0" }
-go = "1.27.0"
+node = { version = "26.10.0", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.0 typescript@5.9.3 bash-language-server@5.8.1 yaml-language-server@1.24.0 vscode-langservers-extracted@4.10.0" }
+go = "1.27.1"
 "go:golang.org/x/tools/gopls" = "0.23.0"
 lua-language-server = "3.19.1"
 "pypi:basedpyright" = "1.40.1"      # was pipx: in the old conf.d; pypi: accepted cleanly by mise 2026.9.9, consistent with the three pypi: tools in config.linux.toml
 "npm:ccstatusline" = "2.2.30"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
 herdr = { version = "0.9.1", os = ["linux"] }
-opencode = { version = "1.18.25", os = ["linux"] }              # Windows half stays in bootstrap.ps1 $PortableTools
-"github:can1357/oh-my-pi" = { version = "18.0.11", os = ["linux"], bin = "omp" }   # bare per-platform binary asset (omp-linux-x64); bin= names the installed command
+opencode = { version = "1.18.32", os = ["linux"] }              # Windows half stays in bootstrap.ps1 $PortableTools
+"github:can1357/oh-my-pi" = { version = "18.2.8", os = ["linux"], bin = "omp" }   # bare per-platform binary asset (omp-linux-x64); bin= names the installed command
 "github:pwndbg/pwndbg" = { version = "2026.09.15", os = ["linux"], version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # bin_path settled in Step 7: archive extracts a top-level pwndbg/ wrapper dir
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", os = ["linux"], asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }
 
