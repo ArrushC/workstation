@@ -118,7 +118,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `csvlens` 0.15.1
 - `trippy` 0.13.0
 - `git-absorb` 0.9.0
-- `ouch` 0.8.2
+- `ouch` 0.8.3
 - `scc` 4.1.0
 - `dsq` 0.23.0
 - `gitlogue` 0.11.0

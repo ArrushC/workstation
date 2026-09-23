@@ -67,7 +67,7 @@ taplo = "0.10.0"
 "github:YS-L/csvlens" = { version = "0.15.1", asset_pattern = "csvlens-x86_64-unknown-linux-musl.tar.xz" }
 "github:fujiapple852/trippy" = { version = "0.13.0", asset_pattern = "trippy-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # binary is `trip`
 "github:tummychow/git-absorb" = { version = "0.9.0", asset_pattern = "git-absorb-{{version}}-x86_64-unknown-linux-musl.tar.gz" }
-"github:ouch-org/ouch" = { version = "0.8.2", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }
+"github:ouch-org/ouch" = { version = "0.8.3", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }   # 0.8.3+ signs releases with cosign bundles, not GitHub attestations; mise reads that as a provenance downgrade and refuses the bump. Verified by hand 2026-09-23 (cosign verify-blob: signed by ouch-org's own release workflow)
 "github:boyter/scc" = { version = "4.1.0", asset_pattern = "scc_Linux_x86_64.tar.gz" }
 "github:multiprocessio/dsq" = { version = "0.23.0" }
 "github:unhappychoice/gitlogue" = { version = "0.11.0" }
