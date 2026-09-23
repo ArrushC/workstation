@@ -811,7 +811,8 @@ hook_re = re.compile(r"^mise run [a-z-]+$")
 # `; true` was ever reached). Each command needs its own `|| true`.
 EXPECTED_POST_DOTFILES_HOOK = (
     "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; "
-    "chmod 600 ~/.ssh/config 2>/dev/null || true"
+    "chmod 600 ~/.ssh/config 2>/dev/null || true; "
+    "chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 )
 seen = {}
 bad_hooks = []

@@ -195,7 +195,14 @@ taplo = "0.10.0"
 # ever "seen" by errexit (verified: `sh -o errexit -c` with a missing
 # ~/.claude exits 1 with a bare trailing `; true`, exits 0 with `|| true` on
 # each command, in both cases still landing ~/.ssh 700 / ~/.ssh/config 600).
-"post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true"
+# The third chmod sets the SOURCE to 0600 as well. mise compares the target's
+# mode against the source's, so with a 0644 source every later status reported
+# ~/.ssh/config "differs (permissions differ)". Each wsu then rewrote it, each
+# wsa asked about it, and health warned permanently. git tracks only the exec
+# bit, so this doesn't dirty the checkout; the first run after a fresh clone
+# converges and later runs match. (mise 2026.9.9 has no per-entry mode key,
+# and `private = true` is silently ignored; both were tested.)
+"post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true; chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
 # it. systemd expands %h in ExecStart; the shim needs MISE_ENV, which the user
