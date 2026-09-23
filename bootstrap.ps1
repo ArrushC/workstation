@@ -5,11 +5,12 @@
 # Windows this script provisions its slice with NO admin rights: it installs a
 # small set of first-party binaries into a per-user location, seeds the two
 # managed terminals (Warp + Windows Terminal) through their official WinGet
-# packages when available, then hands off to chezmoi to deploy the tracked
-# dotfiles.
+# packages when available, then hands off to mise (`mise bootstrap --only
+# dotfiles,tools`) to deploy the tracked dotfiles and install the runtime
+# tools those same config files declare.
 #
 # Install model (everything under %LOCALAPPDATA%\workstation, added to User PATH):
-#   - chezmoi   — official get.chezmoi.io binary installer  → workstation\bin
+#   - mise      — pinned portable .zip (sha256-verified)     → workstation\mise
 #   - Starship  — pinned portable .zip (sha256-verified)    → workstation\bin
 #   - Helix     — pinned portable .zip (sha256-verified)    → workstation\helix
 #                 (hx.exe + bundled runtime/; no HELIX_RUNTIME env var needed)
@@ -30,7 +31,7 @@
 #   Git is a PREREQUISITE you install yourself — the script HARD-FAILS if git
 #   isn't on PATH (https://git-scm.com/download/win or `winget install Git.Git`).
 #   Zed + VSCode are also installed by hand; the script soft-warns if they're
-#   missing but their chezmoi configs still deploy. zoxide is no longer
+#   missing but their dotfiles still deploy. zoxide is no longer
 #   installed (the PowerShell profile no-ops without it).
 #
 # Flow:
@@ -38,20 +39,29 @@
 #                     (never fail) if ssh-keygen / Zed / VSCode are missing.
 #                     gh itself is NOT a prerequisite — step 2 installs it
 #                     (pinned portable).
-#   2. tool install — chezmoi (official installer) + Starship/Helix (pinned
-#                     portable downloads), all into %LOCALAPPDATA%\workstation;
-#                     then Windows Terminal + Warp, the installer-class apps
+#   2. tool install — mise + GitHub CLI/Starship/Helix (pinned portable
+#                     downloads), all into %LOCALAPPDATA%\workstation; then
+#                     Windows Terminal + Warp, the installer-class apps
 #                     (Obsidian, Zed), and the best-effort elevated class
 #                     (SSHFS-Win — may pop UAC).
 #   3. clone repo   — into -RepoPath (default %USERPROFILE%\.config\mise —
 #                     mise's own global config dir now; matches bootstrap.sh's
 #                     relocated $HOME/.config/mise checkout on Linux).
-#   4. chezmoi apply— applies chezmoi/ to %USERPROFILE% (PowerShell profile,
-#                     Warp + Windows Terminal settings, Zed/VSCode settings, …).
-#   4b. mise tools  — installs node/Go/uv/gopls/LSP servers/ccstatusline from
-#                     config.toml + config.dev.toml at the repo root
+#   4. mise bootstrap — `mise bootstrap --only dotfiles,tools` applies the
+#                     [dotfiles] entries from config.toml/config.dev.toml/
+#                     config.windows.toml to %USERPROFILE% (PowerShell profile,
+#                     Warp + Windows Terminal settings, Zed/VSCode settings,
+#                     .wslconfig, …) AND installs the runtime tools those same
+#                     files declare (node/Go/uv/gopls/LSP servers/
+#                     ccstatusline); prints the "wsl --shutdown" reminder when
+#                     .wslconfig actually changed (ruling 6).
+#   4b. mise tools  — Invoke-MiseRuntimes: the Windows-specific idempotency
+#                     layer on top of step 4's tools phase (legacy portable-uv
+#                     sweep, forces a node reinstall only when its npm
+#                     postinstall needs to re-run, self-heals the shims PATH).
 #   5. profile shim — if Documents is redirected (OneDrive), drop a loader at the
-#                     real $PROFILE that sources the chezmoi canonical profile.
+#                     real $PROFILE that sources the dotfiles-deployed canonical
+#                     profile.
 #   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
 #                     tools (dnGrep/LogExpert — their .zips ship none);
 #                     idempotent + duplicate-proof.
@@ -112,11 +122,12 @@
 #   -RepoPath <path>    override clone target
 #                       (default $env:USERPROFILE\.config\mise)
 #   -SkipKeyGen         skip the SSH-key generation prompt
-#   -SkipToolInstall    skip the chezmoi/GitHub CLI/Starship/Helix/Nushell/jq/
+#   -SkipToolInstall    skip the mise/GitHub CLI/Starship/Helix/Nushell/jq/
 #                       OpenCode/omp/DevToys CLI/dnGrep/LogExpert
 #                       auto-installs, the Warp + Windows Terminal seeds, AND the
 #                       Claude Code step
-#   -SkipChezmoi        clone + install tools but don't apply dotfiles yet
+#   -SkipDotfiles       clone + install tools but don't apply dotfiles yet
+#                       (gates the mise dotfiles+tools bootstrap step)
 #   -SkipBurntToast     skip the BurntToast PSGallery module install
 #   -SkipNerdFonts      skip the Nerd Font install
 #   -ForceInstaller     re-run installer-layout tool installs (e.g. Obsidian) even
@@ -127,14 +138,15 @@
 #   -SkipElevated       skip the best-effort ELEVATED installs ($ElevatedTools:
 #                       SSHFS-Win + WinFsp). Everything else stays admin-free;
 #                       this is the only step that can pop a UAC prompt.
-#   -Reinstall          wipe the cloned repo + chezmoi config first, then run the
-#                       normal flow. Does NOT remove installed tools or deployed
-#                       dotfiles — the bootstrap is idempotent over those.
+#   -Reinstall          wipe the cloned repo (+ any leftover pre-migration
+#                       chezmoi config) first, then run the normal flow. Does
+#                       NOT remove installed tools or deployed dotfiles — the
+#                       bootstrap is idempotent over those.
 #                       Prompts unless -Yes is also passed.
 #   -Yes                skip confirmation prompts (Reinstall).
 #   -Doctor             read-only health report, then exit (installs nothing):
 #                       prereqs, repo git state (branch, ahead/behind, dirty),
-#                       chezmoi init + drift, portable/installer tools, fonts,
+#                       mise dotfiles status, portable/installer tools, fonts,
 #                       BurntToast, Start-menu shortcuts, Windows Terminal
 #                       fragments, Warp Tab Configs, profile shim, SSH key.
 #   -CheckForUpdates    read-only update scan, then exit: the workstation repo
@@ -149,7 +161,7 @@ param(
     [string]$RepoPath = (Join-Path $env:USERPROFILE ".config\mise"),
     [switch]$SkipKeyGen,
     [switch]$SkipToolInstall,
-    [switch]$SkipChezmoi,
+    [switch]$SkipDotfiles,
     [switch]$SkipBurntToast,
     [switch]$SkipNerdFonts,
     [switch]$ForceInstaller,
@@ -237,21 +249,6 @@ function Invoke-CurlRequest {
     }
 }
 
-function Test-AgeIdentity {
-    if (-not $env:WORKSTATION_AGE_RECIPIENT) { return }
-    Write-Log "age encryption: recipient configured ($env:WORKSTATION_AGE_RECIPIENT)"
-    $key = Join-Path $HOME ".config/chezmoi/key.txt"
-    $haveAge = [bool](Get-Command age -ErrorAction SilentlyContinue)
-    if ((Test-Path $key) -and $haveAge) {
-        Write-Ok "age identity present ($key)"
-    } else {
-        if (-not (Test-Path $key)) { Write-Warn "age identity missing: $key" }
-        if (-not $haveAge) { Write-Warn "age not on PATH - install it to use encrypted dotfiles on Windows (not bundled by this repo)" }
-        Write-Warn "  encrypted dotfiles won't decrypt until both are present. Create a key: New-Item -ItemType Directory -Force (Split-Path `"$key`") | Out-Null; age-keygen -o `"$key`""
-        Write-Warn "  or copy key.txt from another host / your password store."
-    }
-}
-
 $DotfilesRepo = "https://github.com/ArrushC/workstation.git"
 $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 
@@ -260,7 +257,7 @@ $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
 # Per-user install root for every binary this script provisions. Admin-free:
-#   workstation\bin          — single-exe tools (chezmoi, starship)  → on User PATH
+#   workstation\bin          — single-exe tools (starship, gh, jq)   → on User PATH
 #   workstation\helix        — the multi-file Helix portable tree    → on User PATH
 #   workstation\nu           — the multi-file Nushell portable tree  → on User PATH
 #   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
@@ -377,8 +374,9 @@ $PortableTools = @(
         # PATH at bin\. WHAT mise installs is declared by config.toml +
         # config.dev.toml at the root of the checkout — %USERPROFILE%\.config\mise
         # IS the checkout (Invoke-CloneRepo relocates a pre-2026-09 clone
-        # there), read directly by Invoke-MiseRuntimes after chezmoi apply. uv
-        # is one of those tools now (it was a portable tool of its own until 2026-09).
+        # there), read directly by Invoke-MiseRuntimes after the dotfiles+tools
+        # bootstrap. uv is one of those tools now (it was a portable tool of
+        # its own until 2026-09).
         Name       = "mise"
         Exe        = "mise"
         Version    = "2026.9.9"
@@ -657,26 +655,33 @@ $ElevatedTools = @(
 )
 
 # =============================================================================
-# 0. REINSTALL (optional) — wipe the cloned repo + chezmoi config, then let the
-#    rest of the script re-bootstrap fresh. Installed tools and deployed
-#    dotfiles are left alone — re-running is idempotent over those.
+# 0. REINSTALL (optional) — wipe the cloned repo (+ any leftover pre-migration
+#    chezmoi config), then let the rest of the script re-bootstrap fresh.
+#    Installed tools and deployed dotfiles are left alone — re-running is
+#    idempotent over those.
 # =============================================================================
 function Invoke-Reinstall {
+    # Leftover from a host that ran the OLD chezmoi-based bootstrap.ps1 —
+    # chezmoi itself is gone (see Task 5), but this directory can still be
+    # sitting there from before the migration; sweep it the same way
+    # bootstrap.sh's do_reinstall() does on Linux.
     $chezmoiCfg = Join-Path $env:USERPROFILE ".config\chezmoi"
 
     Write-Log "Reinstall mode — wipe + re-bootstrap"
     Write-Host ""
     Write-Host "  Will REMOVE:"
     Write-Host "    - $RepoPath  (cloned workstation repo)"
-    Write-Host "    - $chezmoiCfg  (chezmoi config + cached init data)"
+    if (Test-Path $chezmoiCfg) {
+        Write-Host "    - $chezmoiCfg\chezmoistate.boltdb, chezmoi.toml  (leftover pre-migration chezmoi state, if any -- key.txt, if any, is preserved)"
+    }
     Write-Host ""
     Write-Host "  Will NOT remove (leaving for re-bootstrap to no-op over):"
     Write-Host "    - Binary tools under $WsRoot (re-bootstrap detects + skips them)"
-    Write-Host "    - Deployed dotfiles in `$HOME / `$env:APPDATA (chezmoi will re-apply)"
+    Write-Host "    - Deployed dotfiles in `$HOME / `$env:APPDATA (the mise dotfiles+tools bootstrap will re-apply)"
     Write-Host "    - SSH keys"
     Write-Host ""
     Write-Host "  For a deeper uninstall (remove the portable tools too), do that manually first:"
-    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # chezmoi + every portable tool re-downloads next run"
+    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # mise + every portable tool re-downloads next run"
     Write-Host ""
 
     # Self-deletion guard: if this script is being run from inside the path we're
@@ -714,9 +719,17 @@ be deleted, leaving this invocation orphaned. Either:
     }
 
     if (Test-Path $chezmoiCfg) {
-        Write-Log "Removing $chezmoiCfg..."
-        Remove-Item -Recurse -Force $chezmoiCfg
-        Write-Ok "chezmoi config removed"
+        # I9 fix (final-fix-brief.md): tasks/migrate-legacy's own chezmoi
+        # sweep (the bootstrap.sh side) deliberately removes only
+        # chezmoistate.boltdb + chezmoi.toml, never key.txt (the age
+        # identity, if a host ever had one, is out-of-band and not ours to
+        # touch or judge). A whole-directory delete here disagreed and would
+        # take key.txt with it. Match that sweep exactly: same two paths,
+        # nothing else.
+        Write-Log "Removing leftover $chezmoiCfg state (chezmoistate.boltdb, chezmoi.toml)..."
+        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $chezmoiCfg "chezmoistate.boltdb")
+        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $chezmoiCfg "chezmoi.toml")
+        Write-Ok "leftover pre-migration chezmoi state removed (key.txt, if any, preserved)"
     } else {
         Write-Log "$chezmoiCfg not present — nothing to remove"
     }
@@ -727,9 +740,10 @@ be deleted, leaving this invocation orphaned. Either:
 }
 
 # =============================================================================
-# 1. PREFLIGHT — Git is a hard prerequisite; chezmoi presence only matters when
-#    -SkipToolInstall is set and the apply step will run; ssh-keygen soft-warn.
-#    No admin check (nothing in this script needs elevation).
+# 1. PREFLIGHT — Git is a hard prerequisite; mise presence only matters when
+#    -SkipToolInstall is set and the dotfiles+tools bootstrap step will run;
+#    ssh-keygen soft-warn. No admin check (nothing in this script needs
+#    elevation).
 # =============================================================================
 function Invoke-Preflight {
     Write-Log "Checking prerequisites..."
@@ -739,8 +753,9 @@ function Invoke-Preflight {
     }
     Write-Ok "curl.exe found ($($curlCmd.Source))"
 
-    # Git is a hard prerequisite — you install it yourself. Needed for the clone
-    # and for chezmoi's git operations. This script does NOT install Git.
+    # Git is a hard prerequisite — you install it yourself. Needed for the
+    # clone and for git operations mise performs against this same checkout
+    # (dotfiles history — ruling 8). This script does NOT install Git.
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         Write-Fail @"
 Git is required but isn't on PATH.
@@ -755,13 +770,15 @@ This script does NOT install Git for you.
     }
     Write-Ok "git found ($((Get-Command git).Source))"
 
-    # chezmoi is installed by the tool step unless skipped. If -SkipToolInstall
-    # is set and the chezmoi-apply step will run, chezmoi must already be present.
-    if ($SkipToolInstall -and -not $SkipChezmoi -and -not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
+    # mise is installed by the tool step unless skipped. If -SkipToolInstall
+    # is set and the dotfiles+tools bootstrap step will run, mise must already
+    # be present.
+    if ($SkipToolInstall -and -not $SkipDotfiles -and -not (Get-Command mise -ErrorAction SilentlyContinue)) {
         Write-Fail @"
--SkipToolInstall was passed but chezmoi isn't on PATH and the chezmoi-apply step
-will run. Either drop -SkipToolInstall (so the script installs chezmoi), pass
--SkipChezmoi (skip the apply), or install chezmoi yourself first.
+-SkipToolInstall was passed but mise isn't on PATH and the dotfiles+tools
+bootstrap step will run. Either drop -SkipToolInstall (so the script installs
+mise), pass -SkipDotfiles (skip the dotfiles+tools bootstrap), or install mise
+yourself first.
 "@
     }
 
@@ -775,8 +792,9 @@ will run. Either drop -SkipToolInstall (so the script installs chezmoi), pass
 
 # =============================================================================
 # 2. TOOL INSTALL — admin-free binary/portable installs under %LOCALAPPDATA%\
-#    workstation. chezmoi via its official installer; GitHub CLI + Starship +
-#    Helix via pinned, sha256-verified portable archives.
+#    workstation. mise + GitHub CLI + Starship + Helix via pinned,
+#    sha256-verified portable archives (mise is what later applies the
+#    Windows dotfiles + installs the tool runtimes — step 4).
 #    Zed/VSCode are hand-installed (soft-warn). zoxide is intentionally not
 #    installed.
 # =============================================================================
@@ -846,45 +864,6 @@ function New-Uuid5 {
     $b[8] = [byte](($b[8] -band 0x3F) -bor 0x80)   # RFC 4122 variant
     [Array]::Reverse($b, 0, 4); [Array]::Reverse($b, 4, 2); [Array]::Reverse($b, 6, 2)     # back to GUID layout
     return [Guid]::new([byte[]]$b)
-}
-
-function Install-Chezmoi {
-    if (Get-Command chezmoi -ErrorAction SilentlyContinue) {
-        Write-Ok "chezmoi already installed"
-        return
-    }
-
-    if (-not (Test-Path $WsBin)) { New-Item -ItemType Directory -Force -Path $WsBin | Out-Null }
-
-    Write-Log "Installing chezmoi (official get.chezmoi.io binary installer → $WsBin)..."
-    try {
-        $installer = Invoke-CurlRequest -Uri 'https://get.chezmoi.io/ps1'
-        & ([scriptblock]::Create($installer)) -BinDir $WsBin
-    } catch {
-        if ($SkipChezmoi) {
-            Write-Warn "chezmoi install failed ($($_.Exception.Message)) — continuing because -SkipChezmoi was passed."
-            return
-        }
-        Write-Fail @"
-chezmoi install failed: $($_.Exception.Message)
-Install it manually (admin-free) and re-run, e.g.:
-  winget install twpayne.chezmoi
-or drop the chezmoi.exe binary from
-  https://github.com/twpayne/chezmoi/releases
-into $WsBin and re-run.
-"@
-    }
-
-    Add-ToUserPath $WsBin
-
-    if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
-        if ($SkipChezmoi) {
-            Write-Warn "chezmoi installed to $WsBin but isn't resolving on PATH yet (continuing — -SkipChezmoi)."
-            return
-        }
-        Write-Fail "chezmoi installed to $WsBin but isn't resolving on PATH. Open a new shell and re-run."
-    }
-    Write-Ok "chezmoi installed to $WsBin"
 }
 
 function Install-PortableTool {
@@ -1331,7 +1310,7 @@ function Install-ElevatedTool {
 }
 
 # Best-effort, per-user Warp seed. A missing WinGet or failed install must not
-# block the portable toolbelt or chezmoi; Warp's official installer self-updates.
+# block the portable toolbelt or the dotfiles+tools bootstrap; Warp's official installer self-updates.
 # --scope user maps to the Inno /CURRENTUSER switch, so Warp itself never needs
 # admin. One asterisk on that, and it is NOT a new exception to the no-admin rule
 # ($ElevatedTools remains the only sanctioned one): Warp's winget manifest
@@ -1395,7 +1374,7 @@ function Install-WindowsTerminal {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming chezmoi/Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise-installed tools not installed, Python env not built"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise-installed tools not installed, Python env not built"
         return
     }
 
@@ -1403,7 +1382,6 @@ function Invoke-ToolInstall {
         if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
     }
 
-    Install-Chezmoi
     foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
     Install-WindowsTerminal
     Install-Warp
@@ -1420,11 +1398,11 @@ function Invoke-ToolInstall {
     Update-SessionPath
 
     # Soft-warn for the hand-installed editor (VSCode). Zed is auto-installed via
-    # $InstallerTools above; VSCode's chezmoi config deploys regardless, and the
+    # $InstallerTools above; VSCode's dotfiles config deploys regardless, and the
     # script never installs or fails on it.
     foreach ($app in @(@{ Cmd = 'code'; Name = 'VSCode' })) {
         if (-not (Get-Command $app.Cmd -ErrorAction SilentlyContinue)) {
-            Write-Warn "$($app.Name) not on PATH — install it yourself when you want it; its chezmoi config still deploys."
+            Write-Warn "$($app.Name) not on PATH — install it yourself when you want it; its dotfiles still deploy."
         }
     }
 }
@@ -1531,57 +1509,372 @@ Couldn't relocate the checkout: $legacyRepo -> $RepoPath
 }
 
 # =============================================================================
-# 4. CHEZMOI INIT + APPLY — deploys dotfiles tracked in chezmoi/
+# 4. MISE BOOTSTRAP — DOTFILES + TOOLS. `mise bootstrap --only dotfiles,tools`
+#    applies the [dotfiles] entries from config.toml/config.dev.toml/
+#    config.windows.toml to %USERPROFILE% (PowerShell profile, Warp +
+#    Windows Terminal settings, Zed/VSCode settings, the .wslconfig copy, …)
+#    AND installs the runtime tools those same files declare (node/Go/uv/
+#    gopls/LSP servers/ccstatusline) in one invocation — `--only
+#    dotfiles,tools` is verified to skip `[bootstrap.files]` entirely, so no
+#    `/etc`-shaped entry (Linux-only, needs sudo) can ever fire here.
+#    -SkipToolInstall drops the tools phase from the `--only` list (just
+#    `dotfiles`) -- otherwise "reapply dotfiles, don't touch tools" would
+#    silently install/update tools anyway on any host where mise is already
+#    on PATH (Invoke-MiseRuntimes's own -SkipToolInstall gate only covers
+#    ITS separate, later pass).
+#
+#    Ruling 1's migration gate applies here too: every target on a host that
+#    ran the OLD chezmoi-based bootstrap is already a real file (chezmoi's
+#    own deploy), and symlink/copy/template modes all refuse a pre-existing
+#    real file — even --dry-run would exit non-zero without
+#    --force-dotfiles. Pass it ONLY until this host's own migration marker
+#    exists, so a LATER real conflict is still surfaced loudly instead of
+#    silently reclaimed (bootstrap.sh's own $migrated_marker; mirrored here
+#    under %LOCALAPPDATA%\workstation since there is no XDG state dir on
+#    Windows).
+#
+#    Invoke-MiseRuntimes (4b, below) still runs afterward and keeps its own
+#    distinct job — see its header comment; this step does not replace it.
 # =============================================================================
-function Invoke-Chezmoi {
-    if ($SkipChezmoi) {
-        Write-Log "chezmoi step skipped (-SkipChezmoi)"
+$MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
+
+function Initialize-MiseEnv {
+    # Persist MISE_ENV to the User registry AND this session before any mise
+    # invocation that must see it. Invoke-MiseBootstrap and Invoke-MiseRuntimes
+    # can each run independently of the other (-SkipDotfiles / -SkipToolInstall
+    # are orthogonal), so both call this rather than relying on the other
+    # having already run. Idempotent.
+    [Environment]::SetEnvironmentVariable("MISE_ENV", $MiseEnv, "User")
+    $env:MISE_ENV = $MiseEnv
+}
+
+function ConvertFrom-TomlDoubleQuoted {
+    # Minimal, deliberately narrow TOML basic-string unescape: handles only
+    # \\ and \" -- the two escapes bootstrap.sh's own config.local.toml writer
+    # (ensure_config_local) and chezmoi's own toml writer both produce for an
+    # ordinary name/email. There is no tomllib equivalent guaranteed on PATH
+    # this early in a fresh bootstrap (uv/Python haven't been built yet), so a
+    # full parser isn't available here; anything needing a richer TOML escape
+    # just falls through as literal text, and Invoke-EnsureConfigLocal's
+    # interactive prompt still fires when the migrated value looks empty.
+    param([string]$Raw)
+    $sb = New-Object System.Text.StringBuilder
+    $i = 0
+    while ($i -lt $Raw.Length) {
+        if ($Raw[$i] -eq '\' -and ($i + 1) -lt $Raw.Length -and ($Raw[$i + 1] -eq '"' -or $Raw[$i + 1] -eq '\')) {
+            [void]$sb.Append($Raw[$i + 1])
+            $i += 2
+        } else {
+            [void]$sb.Append($Raw[$i])
+            $i += 1
+        }
+    }
+    return $sb.ToString()
+}
+
+function Get-LegacyChezmoiIdentity {
+    # Reads name/email/group out of a pre-migration chezmoi.toml's [data]
+    # table, if present -- the Windows analog of bootstrap.sh's
+    # ensure_config_local() tomllib parse (see ConvertFrom-TomlDoubleQuoted
+    # for why this side hand-parses instead).
+    param([string]$Path)
+    $result = @{ Name = ""; Email = ""; Group = "" }
+    if (-not (Test-Path -LiteralPath $Path)) { return $result }
+    $inData = $false
+    foreach ($line in (Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction SilentlyContinue)) {
+        $t = $line.Trim()
+        if ($t -match '^\[(.+)\]$') {
+            $inData = ($Matches[1].Trim() -eq 'data')
+            continue
+        }
+        if (-not $inData) { continue }
+        if ($t -match '^(name|email|group)\s*=\s*"(.*)"\s*$') {
+            $val = ConvertFrom-TomlDoubleQuoted $Matches[2]
+            switch ($Matches[1]) {
+                'name'  { $result.Name  = $val }
+                'email' { $result.Email = $val }
+                'group' { $result.Group = $val }
+            }
+        }
+    }
+    return $result
+}
+
+function Test-ConfigLocalHasGroup {
+    # Minimal table-aware TOML read for the repair path below -- no full TOML
+    # parser is available this early in a fresh bootstrap (see
+    # ConvertFrom-TomlDoubleQuoted's header), but config.local.toml is only
+    # ever written by Invoke-EnsureConfigLocal, so its shape is fully known:
+    # one comment line, one [vars] table, name/email/group keys.
+    param([string]$Path)
+    $inVars = $false
+    foreach ($line in (Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction SilentlyContinue)) {
+        $t = $line.Trim()
+        if ($t -match '^\[(.+)\]$') {
+            $inVars = ($Matches[1].Trim() -eq 'vars')
+            continue
+        }
+        if ($inVars -and $t -match '^group\s*=') { return $true }
+    }
+    return $false
+}
+
+function Repair-ConfigLocalGroup {
+    # Idempotent repair for a config.local.toml written by an earlier
+    # bootstrap.ps1 that predates vars.group (2026-09-19 fix: MISE_ENV was
+    # baking as "linux" on every host because nothing ever wrote vars.group
+    # -- see the fix report). Windows hosts are always the dev group (there
+    # is no Windows-prod MISE_ENV token set -- see $MiseEnv = "windows,dev"
+    # above), so the repaired value is always "dev_machine".
+    #
+    # I2 fix (final-fix-brief.md): a bare AppendAllText glues onto whatever
+    # the file's last byte happens to be. A config.local.toml written before
+    # this writer appended a trailing newline (or hand-edited without one)
+    # ends its last line with no `\`n`, so a blind append produced e.g.
+    # `email = "x"group = "dev_machine"` -- invalid TOML immediately, and
+    # unparseable by any later run (this repair included, on run 2). Read the
+    # file back and insert the new key right after the `[vars]` header
+    # instead of at EOF, then re-check with Test-ConfigLocalHasGroup to prove
+    # the insert actually landed before trusting it -- never a bare `>>`
+    # equivalent.
+    param([string]$Path)
+    if (Test-ConfigLocalHasGroup -Path $Path) { return }
+    $group = "dev_machine" -replace '\\', '\\' -replace '"', '\"'
+    $newLine = 'group = "' + $group + '"'
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.AddRange([string[]](Get-Content -LiteralPath $Path -Encoding UTF8))
+    $inserted = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].Trim() -eq '[vars]') {
+            $lines.Insert($i + 1, $newLine)
+            $inserted = $true
+            break
+        }
+    }
+    if (-not $inserted) {
+        # No [vars] table at all (shouldn't happen -- Invoke-EnsureConfigLocal
+        # always writes one) -- prepend a fresh one rather than risk an EOF
+        # append landing in whatever table happens to be last.
+        $lines.Insert(0, $newLine)
+        $lines.Insert(0, '[vars]')
+    }
+    $outContent = ($lines -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($Path, $outContent, (New-Object System.Text.UTF8Encoding($false)))
+
+    if (-not (Test-ConfigLocalHasGroup -Path $Path)) {
+        Write-Warn "failed to repair ${Path}: vars.group still missing after rewrite -- inspect by hand"
+        return
+    }
+    Write-Ok "repaired ${Path}: inserted vars.group=dev_machine under [vars] (was missing)"
+}
+
+function Invoke-EnsureConfigLocal {
+    # config.local.toml -- per-host, git-ignored [vars] name/email/group the
+    # Tera dotfiles templates render into the git identity (~/.gitconfig),
+    # the SSH config comment, and -- vars.group -- the baked MISE_ENV token
+    # set in zshenv.tera/bashrc.tera/10-mise.conf.tera (dev_machine ->
+    # linux,dev,host,...; anything else -> linux; see scripts/lib/mise-env.sh,
+    # the canonical source of those token sets). Must exist BEFORE the
+    # dotfiles apply below. Idempotent: once the file is present, only a
+    # missing vars.group is repaired (Repair-ConfigLocalGroup); name/email
+    # are never touched again.
+    #
+    # Migration: a host that ran the old chezmoi-based bootstrap has
+    # name/email/group cached in %USERPROFILE%\.config\chezmoi\chezmoi.toml's
+    # [data] table -- read from there instead of prompting. Fresh hosts (no
+    # chezmoi.toml, or nothing usable in it) fall back to an interactive
+    # prompt; -SkipToolInstall or a non-interactive console (no real input --
+    # a scheduled/remote invocation) skips the prompt and warns instead,
+    # mirroring bootstrap.sh's /dev/tty guard. group falls back to
+    # "dev_machine" (Windows hosts are always the dev group) whenever
+    # chezmoi.toml has none to migrate.
+    $target = Join-Path $RepoPath "config.local.toml"
+    if (Test-Path -LiteralPath $target) {
+        Repair-ConfigLocalGroup -Path $target
+        Write-Ok "config.local.toml already present ($target)"
         return
     }
 
-    if (-not (Get-Command chezmoi -ErrorAction SilentlyContinue)) {
-        Write-Warn "chezmoi not on PATH after install. Open a new shell and re-run, or install manually:"
-        Write-Warn "  winget install twpayne.chezmoi"
+    $legacyToml = Join-Path $env:USERPROFILE ".config\chezmoi\chezmoi.toml"
+    $identity = Get-LegacyChezmoiIdentity -Path $legacyToml
+    $name  = $identity.Name
+    $email = $identity.Email
+    $group = $identity.Group
+    if ($name -or $email -or $group) {
+        Write-Log "Migrating name/email/group from $legacyToml"
+    }
+    if (-not $group) { $group = "dev_machine" }
+
+    if ((-not $name) -or (-not $email)) {
+        $nonInteractive = $SkipToolInstall -or [Console]::IsInputRedirected
+        if ($nonInteractive) {
+            $reason = if ($SkipToolInstall) { "-SkipToolInstall" } else { "no interactive console" }
+            Write-Warn "Skipping the config.local.toml prompt ($reason) and no $legacyToml to migrate from."
+            Write-Warn "Create it by hand before the next bootstrap run ($target):"
+            Write-Warn '  [vars]'
+            Write-Warn '  name = "Your Name"'
+            Write-Warn '  email = "you@example.com"'
+            Write-Warn "  group = `"$group`""
+            return
+        }
+        Write-Log "First-time setup -- name/email for git commits and the SSH config comment..."
+        if (-not $name)  { $name  = Read-Host "  Name" }
+        if (-not $email) { $email = Read-Host "  Email" }
+    }
+
+    $name  = $name  -replace '\\', '\\' -replace '"', '\"'
+    $email = $email -replace '\\', '\\' -replace '"', '\"'
+    $group = $group -replace '\\', '\\' -replace '"', '\"'
+
+    $dir = Split-Path $target -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $content = @"
+# config.local.toml -- per-host, git-ignored.
+[vars]
+name = "$name"
+email = "$email"
+group = "$group"
+"@ + "`n"
+    [System.IO.File]::WriteAllText($target, $content, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Ok "wrote $target"
+}
+
+function Invoke-WslConfigReminder {
+    # Ruling 6: mise has no run_onchange_* equivalent. .wslconfig only takes
+    # effect after `wsl --shutdown` restarts every distro, so remind the user
+    # exactly when the deployed content actually changed -- the same
+    # sha256-named-stamp idiom Get-MiseRuntimesStamp/Get-PythonEnvStamp use
+    # elsewhere in this script (a hash-named stamp file's mere existence IS
+    # the "unchanged" signal; no matching stamp means the hash moved, so the
+    # reminder fires and a fresh stamp is written). Hashes the REPO source
+    # (dotfiles/wslconfig), not the deployed ~/.wslconfig, matching the
+    # deleted chezmoi run_onchange script's own semantics (it hashed its
+    # chezmoi source file the same way). Message text ported verbatim from
+    # the deleted run_onchange_after_remind-wslconfig-restart.ps1.tmpl.
+    $source = Join-Path $RepoPath "dotfiles\wslconfig"
+    if (-not (Test-Path -LiteralPath $source)) { return }
+
+    $hash  = (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash.Substring(0, 8).ToLower()
+    $stamp = Join-Path $WsStamps "wslconfig.$hash.stamp"
+    if (Test-Path -LiteralPath $stamp) { return }
+
+    if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
+    Get-ChildItem -Path $WsStamps -Filter "wslconfig.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType File -Force -Path $stamp | Out-Null
+
+    Write-Host ""
+    Write-Warn ".wslconfig changed -- run 'wsl --shutdown' from a Windows terminal"
+    Write-Warn "for the new WSL2 settings to take effect (restarts all distros)."
+}
+
+function Invoke-MiseBootstrap {
+    if ($SkipDotfiles) {
+        Write-Log "mise dotfiles+tools bootstrap skipped (-SkipDotfiles)"
         return
     }
 
-    Write-Log "Running chezmoi init --apply (source: $RepoPath)..."
+    Initialize-MiseEnv
 
-    # --source points at the cloned repo. .chezmoiroot inside redirects the
-    # actual source state to the chezmoi/ subdirectory, so all `dot_*` files
-    # there map correctly to %USERPROFILE%\... targets.
-    chezmoi init --apply --source $RepoPath
+    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+        Write-Warn "mise not on PATH after install. Open a new shell and re-run, or install manually from https://mise.jdx.dev/installing-mise.html"
+        return
+    }
+
+    # config.local.toml must exist BEFORE the dotfiles apply below -- the
+    # Tera templates guard every vars.* reference, but a real value still
+    # shapes the rendered git identity.
+    Invoke-EnsureConfigLocal
+
+    # -SkipToolInstall must skip the tools phase HERE too, not just in
+    # Invoke-MiseRuntimes below -- otherwise "just reapply my dotfiles,
+    # don't touch my tools" silently installs/updates node/Go/uv/gopls/the
+    # LSP servers/ccstatusline anyway on any host where mise is already on
+    # PATH (Invoke-MiseRuntimes's own -SkipToolInstall gate only skips ITS
+    # later, separate pass -- by then this step has already done the work).
+    # PS 5.1 has no ternary, hence the if/else-as-expression form.
+    $onlyPhases = if ($SkipToolInstall) { 'dotfiles' } else { 'dotfiles,tools' }
+    if ($SkipToolInstall) {
+        Write-Log "-SkipToolInstall passed -- mise bootstrap will run --only dotfiles (tools phase skipped)"
+    }
+
+    $forceFlags = @()
+    if (-not (Test-Path -LiteralPath $MigratedMarker)) {
+        $forceFlags = @('--force-dotfiles')
+        Write-Log "First dotfiles apply on this host -- passing --force-dotfiles (migration marker absent: $MigratedMarker)"
+    }
+
+    Write-Log "Running mise bootstrap --only $onlyPhases (source: $RepoPath)..."
+    $bootstrapArgs = @('bootstrap', '--only', $onlyPhases, '--yes') + $forceFlags
+    & mise @bootstrapArgs
     if ($LASTEXITCODE -ne 0) {
-        Write-Fail "chezmoi init --apply failed. Inspect with: chezmoi diff --source $RepoPath"
+        Write-Fail @"
+mise bootstrap (dotfiles + tools) failed -- see the failing phase above.
+
+A dotfiles conflict aborts the WHOLE dotfiles phase (one bad entry blocks
+every entry -- nothing gets applied). If the failure names a target that
+already exists as a real file:
+  1. resolve that one entry directly:  mise dot apply --force <the path mise named above>
+  2. then re-run:                      .\bootstrap.ps1
+Any other failure (the tools phase) is idempotent to retry -- fix what's
+reported above and re-run.
+"@
     }
-    Write-Ok "chezmoi applied — dotfiles in place"
+    Write-Ok "mise bootstrap (--only $onlyPhases) complete"
+
+    if (-not (Test-Path -LiteralPath $MigratedMarker)) {
+        $markerDir = Split-Path $MigratedMarker -Parent
+        if (-not (Test-Path $markerDir)) { New-Item -ItemType Directory -Force -Path $markerDir | Out-Null }
+        New-Item -ItemType File -Force -Path $MigratedMarker | Out-Null
+        Write-Ok "dotfiles migration marker written ($MigratedMarker) -- future runs no longer force-reclaim dotfiles targets"
+    }
+
+    Invoke-WslConfigReminder
 }
 
 # =============================================================================
 # 4b. MISE TOOLS — node / Go / uv / gopls / the LSP servers / ccstatusline via
-#    mise (the Windows half of the Linux mise-driven install). WHAT to install
-#    is declared by config.toml + config.dev.toml at the ROOT of the checkout
-#    — %USERPROFILE%\.config\mise IS the checkout (Invoke-CloneRepo relocates
-#    a pre-2026-09 clone there), so mise reads them directly; nothing is
-#    generated or copied, and config.linux.toml never loads here (MISE_ENV
-#    carries no `linux` token on Windows). mise's data dir (installs + shims)
-#    is %LOCALAPPDATA%\mise. Stamp = sha256 of both config files, so any pin
-#    change re-runs it. node is force-reinstalled only when the DECLARED
-#    version was already present and node is still declared — its npm
-#    postinstall carries the language servers, and a changed postinstall only
-#    re-runs on a reinstall (the lib/mise.sh gate). Every run re-adds the
-#    shims dir to the User PATH (self-heals like the Start Menu shortcuts).
-#    Per-user, no admin; warn-and-continue; -SkipToolInstall skips it.
+#    mise (the Windows half of the Linux mise-driven install). When step 4
+#    above (Invoke-MiseBootstrap) ran its tools phase (`--only dotfiles,tools`
+#    — it drops to `--only dotfiles` under -SkipToolInstall, so the two steps
+#    stay in agreement: see its header comment), it already installed these
+#    same runtimes — this step is still NOT redundant with that: it is the
+#    Windows-specific idempotency layer around the same underlying
+#    `mise install`, adding what the bootstrap tools phase alone doesn't do
+#    — sweeping the retired portable uv, forcing a node reinstall only when
+#    its npm postinstall (the LSP servers) needs to re-run, and self-healing
+#    the shims PATH — gated by its OWN change-detection stamp, so a repeat
+#    run right after step 4 is a fast no-op. WHAT to install is declared by
+#    config.toml + config.dev.toml + config.windows.toml at the ROOT of the
+#    checkout — %USERPROFILE%\.config\mise IS the checkout (Invoke-CloneRepo
+#    relocates a pre-2026-09 clone there), so mise reads them directly;
+#    nothing is generated or copied, and config.linux.toml never loads here
+#    (MISE_ENV carries no `linux` token on Windows). mise's data dir
+#    (installs + shims) is %LOCALAPPDATA%\mise. Stamp = sha256 of all three
+#    config files, so any pin change re-runs it. node is force-reinstalled
+#    only when the DECLARED version was already present and node is still
+#    declared — its npm postinstall carries the language servers, and a
+#    changed postinstall only re-runs on a reinstall (the lib/mise.sh gate).
+#    Windows can't replace a node install while a process (editor LSP, dev
+#    server, ...) holds a file under it open — the force-reinstall then falls
+#    back to running node's declared postinstall directly against the
+#    already-installed node/npm, so the language servers still refresh
+#    without needing to replace the locked install.
+#    Every run re-adds the shims dir to the User PATH (self-heals like the
+#    Start Menu shortcuts). Per-user, no admin; warn-and-continue;
+#    -SkipToolInstall skips it too (both steps honour the same flag now,
+#    independently of -SkipDotfiles — see Invoke-MiseBootstrap).
 # =============================================================================
-$MiseConfigFiles = @("config.toml", "config.dev.toml")   # config.windows.toml joins in PR3
+$MiseConfigFiles = @("config.toml", "config.dev.toml", "config.windows.toml")
 $MiseShims       = Join-Path $env:LOCALAPPDATA "mise\shims"
 $MiseEnv         = "windows,dev"
 
 # Get-MiseRuntimesStamp — the exact stamp path Invoke-MiseRuntimes writes on
-# success: a hash of $MiseConfigFiles (config.toml + config.dev.toml) under
-# $RepoPath. Doctor calls this SAME helper so its verdict can never drift onto
-# a stale stamp (the Get-PythonEnvStamp precedent). $null when config.toml is
-# missing (repo not cloned yet, or the relocation above hasn't run).
+# success: a hash of $MiseConfigFiles (config.toml + config.dev.toml +
+# config.windows.toml) under $RepoPath. Doctor calls this SAME helper so its
+# verdict can never drift onto a stale stamp (the Get-PythonEnvStamp
+# precedent). $null when config.toml is missing (repo not cloned yet, or the
+# relocation above hasn't run).
 function Get-MiseRuntimesStamp {
     # FIXED order, not Sort-Object: the two names differ only by a middle
     # token, and culture-aware sorting orders them differently under .NET
@@ -1611,8 +1904,9 @@ function Invoke-MiseRuntimes {
     # Persist MISE_ENV as a User env var right after we know mise is present
     # and before any `mise` invocation below — every process that resolves
     # tools (shells, Claude Code hooks, this session) must see the same set.
-    [Environment]::SetEnvironmentVariable("MISE_ENV", $MiseEnv, "User")
-    $env:MISE_ENV = $MiseEnv
+    # Idempotent; Invoke-MiseBootstrap also calls this (they're independently
+    # skippable — see its header comment).
+    Initialize-MiseEnv
 
     # One-time sweep of the retired portable uv (a $PortableTools entry until
     # 2026-09): its dir sat on the User PATH ahead of mise's shims, so the stale
@@ -1644,7 +1938,7 @@ function Invoke-MiseRuntimes {
 
     Write-Log "Installing mise tools from $RepoPath\config*.toml (node / Go / uv / gopls / LSP servers / ccstatusline — a few minutes on first run)..."
     # Native commands chatter on stderr; keep that from tripping an EAP=Stop
-    # session (the chezmoi --version precedent in Invoke-CheckForUpdates).
+    # session (the git ls-remote precedent in Get-LatestGitTag).
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try {
         # `mise where node` succeeds only when the DECLARED node version is
@@ -1657,8 +1951,63 @@ function Invoke-MiseRuntimes {
         if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
         if ($hadNode -and $nodeDeclared) {
             Write-Log "  node was already installed — forcing a reinstall so its npm postinstall re-runs"
-            & mise install --yes --force node
-            if ($LASTEXITCODE -ne 0) { throw "mise install --force node exited $LASTEXITCODE" }
+            # Captured (not streamed): the only way to inspect it for the
+            # Windows file-lock signature below.
+            $forceOutput = & mise install --yes --force node 2>&1
+            $forceExit = $LASTEXITCODE
+            if ($forceExit -ne 0) {
+                $forceText = $forceOutput -join "`n"
+                $isLocked = ($forceText -match 'os error 32') -or ($forceText -match 'being used by another process')
+                Write-Warn "  mise install --force node exited $forceExit — falling back to node's declared npm postinstall (existing node install untouched)"
+
+                # The force-reinstall exists ONLY to re-run node's declared npm
+                # postinstall (the language servers) — mise re-runs postinstall
+                # hooks solely on (re)install. When mise can't replace the install
+                # (most commonly Windows holding a file under it open), running
+                # that SAME postinstall command directly against the
+                # already-installed node/npm gets the identical result without
+                # replacing anything. Read it fresh from config.dev.toml every
+                # time (never hardcode it) with an explicit `-f`, the same way
+                # scripts/lib/mise-install.sh reads it on Linux — a bare
+                # `mise config get` resolves only the highest-precedence loaded
+                # file, which here is config.windows.toml (declares no tools).
+                $postinstallOk = $false
+                $nodeConfigPath = Join-Path $RepoPath "config.dev.toml"
+                $declOutput = & mise config get -f $nodeConfigPath "tools.node.postinstall" 2>&1
+                $declExit = $LASTEXITCODE
+                $postinstallCmd = $null
+                if ($declExit -eq 0) { $postinstallCmd = ($declOutput -join "`n").Trim() }
+
+                if ([string]::IsNullOrWhiteSpace($postinstallCmd)) {
+                    # Unreadable declaration: nothing safe to run (a hardcoded
+                    # guess could silently drift from config.dev.toml) — skip
+                    # straight to the warn below instead of half-fixing it.
+                    Write-Warn "  could not read tools.node.postinstall from $nodeConfigPath — skipping the postinstall fallback"
+                } else {
+                    Write-Log "  running node's declared postinstall directly: $postinstallCmd"
+                    $postinstallParts = $postinstallCmd -split '\s+'
+                    $postinstallArgs = @()
+                    if ($postinstallParts.Length -gt 1) { $postinstallArgs = $postinstallParts[1..($postinstallParts.Length - 1)] }
+                    & $postinstallParts[0] @postinstallArgs
+                    if ($LASTEXITCODE -eq 0) {
+                        $postinstallOk = $true
+                        Write-Ok "  postinstall re-run directly (language servers refreshed)"
+                    } else {
+                        Write-Warn "  fallback postinstall command exited $LASTEXITCODE"
+                    }
+                }
+
+                if (-not $postinstallOk) {
+                    if ($isLocked) {
+                        Write-Warn "  a running program is holding the node install open — commonly an editor's language server, a dev server, or a running agent."
+                        Write-Warn "  the existing node install and its language servers are untouched; close that program and re-run .\bootstrap.ps1 to complete the refresh."
+                    }
+                    throw "mise install --force node exited $forceExit and the postinstall fallback also failed"
+                }
+                # Fallback succeeded: the postinstall genuinely re-ran, so fall
+                # through and let the stamp be written below like any other
+                # successful run.
+            }
         }
         & mise prune --yes
         if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
@@ -1678,12 +2027,12 @@ function Invoke-MiseRuntimes {
 # =============================================================================
 # 5. POWERSHELL PROFILE SHIM (Documents redirection) — when Documents is
 #    redirected (OneDrive / corporate folder redirection), $PROFILE resolves to
-#    the redirected dir, but chezmoi deploys the canonical profile to the LITERAL
-#    %USERPROFILE%\Documents\PowerShell — so PowerShell never loads the managed
-#    profile. Drop a tiny loader at the real $PROFILE dir(s) that dot-sources the
-#    chezmoi canonical. No-op when Documents isn't redirected (chezmoi's normal
-#    deploy already lands in the right place). The literal-path canonical stays
-#    the single source of truth; this only bridges the redirect.
+#    the redirected dir, but the dotfiles apply writes the canonical profile to
+#    the LITERAL %USERPROFILE%\Documents\PowerShell — so PowerShell never loads
+#    the managed profile. Drop a tiny loader at the real $PROFILE dir(s) that
+#    dot-sources the canonical one. No-op when Documents isn't redirected (the
+#    dotfiles apply already lands in the right place). The literal-path
+#    canonical stays the single source of truth; this only bridges the redirect.
 # =============================================================================
 function Invoke-ProfileShim {
     $canonical = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
@@ -1701,8 +2050,8 @@ function Invoke-ProfileShim {
     Write-Log "Documents redirected to $realDocs — installing profile loader(s)..."
     $loader = @'
 # Loader (managed by bootstrap.ps1) — Documents is redirected (OneDrive / folder
-# redirection), so PowerShell loads $PROFILE from here. Source the chezmoi-managed
-# canonical profile at the literal %USERPROFILE%\Documents.
+# redirection), so PowerShell loads $PROFILE from here. Source the
+# dotfiles-managed canonical profile at the literal %USERPROFILE%\Documents.
 $canonical = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
 if (Test-Path $canonical) { . $canonical }
 '@
@@ -1713,7 +2062,7 @@ if (Test-Path $canonical) { . $canonical }
         # Back up a pre-existing non-loader profile once, so we never silently
         # clobber a hand-written one.
         if ((Test-Path $target) -and -not (Select-String -Path $target -Pattern "managed by bootstrap.ps1" -Quiet)) {
-            $bak = "$target.pre-chezmoi.bak"
+            $bak = "$target.pre-dotfiles.bak"
             if (-not (Test-Path $bak)) { Copy-Item $target $bak -Force; Write-Warn "Backed up existing $sub profile to $bak" }
         }
         Set-Content -Path $target -Value $loader -Encoding UTF8
@@ -1967,7 +2316,7 @@ is_focused = true
 #    `Invoke-Expression (& starship init powershell)`, nu's init output can't be
 #    eval'd at parse time, so it must be written to
 #    %APPDATA%\nushell\vendor\autoload\starship.nu — everything under
-#    vendor/autoload is auto-sourced on every nu startup. The chezmoi-managed
+#    vendor/autoload is auto-sourced on every nu startup. The dotfiles-managed
 #    config.nu owns the hand-written config (aliases, env); this owns ONLY the
 #    generated prompt, so the two never fight. Runs EVERY bootstrap independent
 #    of any stamp, so a Starship pin-bump refreshes it and a deleted file
@@ -2101,7 +2450,7 @@ function Invoke-NushellMise {
 # =============================================================================
 # 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
-#    chezmoi/private_dot_claude/executable_notify.sh (deployed to
+#    dotfiles/claude/notify.sh (deployed to
 #    ~/.claude/notify.sh on dev_machine Linux hosts), which calls powershell.exe
 #    from WSL2 to ping the Windows side when Claude Code needs attention. Falls
 #    back to System.Windows.Forms.MessageBox if the module is absent.
@@ -2151,6 +2500,115 @@ function Invoke-InstallBurntToast {
 #     Runs in a CHILD powershell.exe — the installer script calls `exit` on
 #     its error paths, which would kill this bootstrap if dot-run in-process.
 # =============================================================================
+function Invoke-ClaudeSettingsMerge {
+    # ~/.claude/settings.json three-layer merge (I3, final-fix-brief.md).
+    # bootstrap.ps1's `mise bootstrap --only dotfiles,tools` never runs
+    # tasks/bootstrap (a Linux-only mise task file), so nothing on Windows
+    # ever called scripts/lib/claude-settings-merge.sh -- a Windows dev host
+    # got no statusLine, no enabledPlugins, no hooks, none of the enforced
+    # flags, even though chezmoi deployed ~/.claude/settings.json there
+    # ungated before this migration (ruling 10 -- the dev-gate asymmetry is
+    # supposed to be fixed by construction on both OSes). Port the SAME jq
+    # filter (`.[0] * .[1] * .[2]`, ruling 5 -- mise has no modify_-template
+    # equivalent for a merge-on-apply file) using the jq.exe this script
+    # already installs to $WsBin (originally for the Claude Code hooks'
+    # JSON parsing) -- one source of truth for the merge semantics, two
+    # callers, rather than a hand-rolled PowerShell object-merge that could
+    # silently diverge from the Linux behavior. Soft-failing by design, same
+    # posture as the Linux script: every expected failure (no jq, missing
+    # source, invalid existing JSON, a write failure) warns and returns,
+    # never aborts bootstrap.
+    $seed     = Join-Path $RepoPath "dotfiles\claude\settings.seed.json"
+    $enforced = Join-Path $RepoPath "dotfiles\claude\settings.enforced.json"
+    $dest     = Join-Path $env:USERPROFILE ".claude\settings.json"
+
+    if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
+        Write-Warn "jq not found on PATH -- skipping Claude settings merge ($dest left as-is)"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $seed)) {
+        Write-Warn "missing $seed -- skipping Claude settings merge"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $enforced)) {
+        Write-Warn "missing $enforced -- skipping Claude settings merge"
+        return
+    }
+
+    $destDir = Split-Path $dest -Parent
+    if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
+
+    # jq.exe writes UTF-8; force the same on the read side regardless of the
+    # console's default code page (mirrors $PROFILE's own
+    # [Console]::OutputEncoding override) so a non-ASCII value round-trips.
+    $prevOutputEncoding = $OutputEncoding
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    $currentTmp = Join-Path $destDir ".settings.json.current.$PID.tmp"
+    $outTmp     = Join-Path $destDir ".settings.json.$PID.tmp"
+    try {
+        if (Test-Path -LiteralPath $dest) {
+            $currentOut = & jq -c '.' $dest 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $currentOut) {
+                Write-Warn "$dest is not valid JSON -- leaving it untouched"
+                return
+            }
+            [System.IO.File]::WriteAllText($currentTmp, ($currentOut -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        } else {
+            [System.IO.File]::WriteAllText($currentTmp, '{}', (New-Object System.Text.UTF8Encoding($false)))
+        }
+
+        $mergedOut = & jq -s '.[0] * .[1] * .[2]' $seed $currentTmp $enforced 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $mergedOut) {
+            Write-Warn "jq merge failed -- leaving $dest untouched"
+            return
+        }
+
+        [System.IO.File]::WriteAllText($outTmp, ($mergedOut -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        Move-Item -Force -LiteralPath $outTmp -Destination $dest
+        Write-Ok "merged seed + live + enforced -> $dest"
+    } catch {
+        Write-Warn "Claude settings merge failed: $_"
+    } finally {
+        $OutputEncoding = $prevOutputEncoding
+        Remove-Item -Force -ErrorAction SilentlyContinue $currentTmp
+        Remove-Item -Force -ErrorAction SilentlyContinue $outTmp
+    }
+}
+
+function Invoke-ClaudeSettingsLocalSeed {
+    # ~/.claude/settings.local.json -- seed-if-absent (Windows half of the
+    # Linux tasks/bootstrap step 7b, I5/final-fix-brief.md). Mirrors that
+    # script's own reasoning exactly: ruling 5 keeps this file out of
+    # [dotfiles] the same as settings.json (Claude Code rewrites the live
+    # file wholesale on its own), but unlike settings.json there is no
+    # enforced layer reapplied on every run -- a plain seed, written ONLY
+    # when the live file doesn't exist yet, so a fresh host gets the tracked
+    # default ({"spinnerTipsEnabled": false}) without ever clobbering a live
+    # edit Claude Code (or the user) makes afterward. Without this,
+    # bootstrap.ps1 reintroduces for settings.local.json exactly the Windows
+    # asymmetry the Claude-settings-merge fix (Invoke-ClaudeSettingsMerge
+    # above) already closed for settings.json -- a Windows dev host never
+    # got the seed a Linux dev host has always gotten from tasks/bootstrap.
+    $seedSrc = Join-Path $RepoPath "dotfiles\claude\settings.local.json"
+    $dest    = Join-Path $env:USERPROFILE ".claude\settings.local.json"
+
+    if (-not (Test-Path -LiteralPath $seedSrc)) {
+        Write-Warn "missing $seedSrc -- skipping settings.local.json seed"
+        return
+    }
+    if (Test-Path -LiteralPath $dest) {
+        return # already present -- never overwrite a live file here (seed-if-absent only)
+    }
+    try {
+        $destDir = Split-Path $dest -Parent
+        if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
+        Copy-Item -LiteralPath $seedSrc -Destination $dest
+        Write-Ok "seeded $dest"
+    } catch {
+        Write-Warn "failed to seed $dest -- inspect by hand: $_"
+    }
+}
+
 function Invoke-InstallClaudeCode {
     if ($SkipToolInstall) {
         Write-Log "Claude Code install skipped (-SkipToolInstall)"
@@ -2264,7 +2722,7 @@ function Invoke-PythonEnv {
 
 # =============================================================================
 # 7. NERD FONTS — JetBrainsMono Nerd Font Mono installed per-user. Required by
-#    chezmoi-tracked configs that assume Nerd Font glyphs (starship, eza --icons,
+#    dotfiles-tracked configs that assume Nerd Font glyphs (starship, eza --icons,
 #    lazygit, k9s, yazi, broot, helix, ccstatusline, Claude Code TUI). Invokes
 #    scripts/install-nerd-fonts.ps1, which also registers a per-user at-logon
 #    scheduled task (WorkstationNerdFontActivate) that re-activates the font each
@@ -2510,29 +2968,22 @@ function Invoke-Doctor {
 
     if ($gitCmd) { $null = Show-RepoState; Write-Host "" }
 
-    Write-Log "chezmoi / dotfiles"
-    $chezmoiCmd = Get-Command chezmoi -ErrorAction SilentlyContinue
-    if ($chezmoiCmd) {
-        Write-Ok "chezmoi on PATH ($($chezmoiCmd.Source))"
-        $cfg = Join-Path $env:USERPROFILE ".config\chezmoi\chezmoi.toml"
-        if (Test-Path $cfg) {
-            Write-Ok "initialized ($cfg)"
-            $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-            $pending = @(chezmoi status 2>$null)
-            $statusRc = $LASTEXITCODE
-            $ErrorActionPreference = $oldEap
-            if ($statusRc -ne 0) {
-                Write-Warn "chezmoi status failed — inspect with: chezmoi doctor"
-            } elseif ($pending.Count -gt 0) {
-                Write-Warn "$($pending.Count) path(s) differ from the source — review: chezmoi diff · apply: chezmoi apply"
-            } else {
-                Write-Ok "deployed dotfiles in sync with the source"
-            }
+    Write-Log "mise dotfiles"
+    $miseCmd = Get-Command mise -ErrorAction SilentlyContinue
+    if ($miseCmd) {
+        Write-Ok "mise on PATH ($($miseCmd.Source))"
+        Initialize-MiseEnv
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        & mise dot status --missing *> $null
+        $statusRc = $LASTEXITCODE
+        $ErrorActionPreference = $oldEap
+        if ($statusRc -eq 0) {
+            Write-Ok "deployed dotfiles in sync with the source (mise dot status)"
         } else {
-            Write-Warn "not initialized — re-run .\bootstrap.ps1 (runs chezmoi init --apply)"
+            Write-Warn "drift, or not yet applied — inspect: mise dot status · apply: mise dot apply"
         }
     } else {
-        Write-Warn "chezmoi not on PATH — re-run .\bootstrap.ps1 (or open a NEW shell if it just installed)"
+        Write-Warn "mise not on PATH — re-run .\bootstrap.ps1 (or open a NEW shell if it just installed)"
     }
     Write-Host ""
 
@@ -2597,7 +3048,7 @@ function Invoke-Doctor {
         }
     }
     if (Get-Command code -ErrorAction SilentlyContinue) { Write-Ok "VSCode on PATH (hand-installed)" }
-    else { Write-Warn "VSCode not on PATH — hand-install when wanted; its chezmoi config deploys regardless" }
+    else { Write-Warn "VSCode not on PATH — hand-install when wanted; its dotfiles deploy regardless" }
     $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
     $claudeExe = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
     if ($claudeCmd) {
@@ -2737,23 +3188,6 @@ function Invoke-CheckForUpdates {
         $latest    = Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tool.TagPrefix -Filter $filter -StringSort:$useString
         Write-UpdateStatus -Name $tool.Name -Pinned $tool.Version -Latest $latest -Hint $hint -StringSort:$useString
     }
-    # chezmoi is installed unpinned via the official installer — compare the
-    # installed binary against upstream instead of a pin.
-    $chezmoiCmd = Get-Command chezmoi -ErrorAction SilentlyContinue
-    if ($chezmoiCmd) {
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $verOut = chezmoi --version 2>$null
-        $ErrorActionPreference = $oldEap
-        $installed = if ("$verOut" -match 'v(\d+\.\d+\.\d+)') { $Matches[1] } else { $null }
-        if ($installed) {
-            $latest = Get-LatestGitTag -Repo 'twpayne/chezmoi'
-            Write-UpdateStatus -Name 'chezmoi' -Pinned $installed -Latest $latest -Hint 'not pinned — re-run the official installer (or winget upgrade twpayne.chezmoi)'
-        } else {
-            Write-Warn "chezmoi: couldn't parse the installed version from 'chezmoi --version'"
-        }
-    } else {
-        Write-Warn "chezmoi not on PATH — re-run .\bootstrap.ps1"
-    }
     Write-Host ""
 
     Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
@@ -2866,9 +3300,8 @@ if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
 Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
-Invoke-Chezmoi
+Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles apply + a tools pass, then the .wslconfig restart reminder
 Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers/ccstatusline from config*.toml at the repo root (self-heals the shims PATH)
-Test-AgeIdentity          # warn if age key / binary missing when recipient is configured
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
 Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + hosts.conf SSH/Zellij) — self-heals
@@ -2878,6 +3311,8 @@ Invoke-NushellMise        # generate the Nushell mise activation (vendor/autoloa
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
+Invoke-ClaudeSettingsMerge # ~/.claude/settings.json seed+live+enforced jq merge (I3, final-fix-brief.md)
+Invoke-ClaudeSettingsLocalSeed # ~/.claude/settings.local.json seed-if-absent (I5 Windows parity, 2026-09-22)
 Invoke-PythonEnv          # blessed uv-built Python scripting env (wpy/textual/typer shims)
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
 Invoke-EnsureSshKey
@@ -2886,8 +3321,8 @@ Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
 Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset}, ${Bold}$WsNu${Reset},"
-Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset} — mise-installed tools) and the chezmoi-applied configs pick up — starship prompt,"
-Write-Host "chezmoi/git aliases, etc."
+Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset} — mise-installed tools) and the mise-applied dotfiles pick up — starship prompt,"
+Write-Host "git aliases, etc."
 Write-Host ""
 Write-Host "${Bold}Two terminals are managed.${Reset} Warp is the day-to-day one: it opens into"
 Write-Host "AlmaLinux-9 (WSL zsh), and its + menu carries the generated Tab Configs — one"
@@ -2899,7 +3334,7 @@ Write-Host "Restart Windows Terminal if it was running (fragments are read at la
 Write-Host "Warp hot-reloads its settings but needs a restart to notice new Tab Configs."
 Write-Host ""
 Write-Host "Not installed by this script (install yourself if you want it):"
-Write-Host "  VSCode  — its chezmoi config is already deployed."
+Write-Host "  VSCode  — its dotfiles are already deployed."
 Write-Host ""
 
 # Print the curated hand-install shopping list (docs/windows/application_list.md).
@@ -2923,6 +3358,6 @@ Write-Host "  3. Launch Warp — pick a generated SSH host from the + menu (or W
 Write-Host "     Terminal — same hosts, under the SSH hosts folder in the new-tab dropdown)."
 Write-Host ""
 Write-Host "Editing dotfiles:"
-Write-Host "  cze   # chezmoi edit (opens the file in chezmoi's source)"
-Write-Host "  cza   # chezmoi apply (push edits to ~)"
-Write-Host "  czd   # chezmoi diff (see what would change)"
+Write-Host "  mise dot edit <path>   # edit a tracked file in the repo source"
+Write-Host "  mise dot apply         # push edits to `$HOME"
+Write-Host "  mise dot diff          # see what would change"

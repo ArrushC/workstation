@@ -1,0 +1,18 @@
+# ~/.nbrc — managed by mise dotfiles
+# nb configuration
+
+# Default notebook directory
+export NB_DIR="$HOME/notes"
+
+# Use helix as the editor
+export EDITOR="hx"
+
+# Use glow for viewing markdown notes
+export NB_VIEWER="glow"
+
+# Default note format
+export NB_DEFAULT_EXTENSION="md"
+
+# Enable colour output
+export NB_COLOR_PRIMARY=4      # blue
+export NB_COLOR_SECONDARY=2    # green

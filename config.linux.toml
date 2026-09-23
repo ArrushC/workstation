@@ -9,7 +9,6 @@ starship = "1.26.0"
 zellij = "0.45.1"
 glow = "3.0.0"
 helix = "25.07.1"          # archive carries runtime/ beside hx — no HELIX_RUNTIME needed
-chezmoi = "latest"         # retired in PR3 (dotfiles move to mise)
 fd = "10.5.0"
 bat = "0.26.1"
 btop = "1.4.7"
@@ -73,7 +72,6 @@ taplo = "0.10.0"
 "github:boyter/scc" = { version = "4.0.0", asset_pattern = "scc_Linux_x86_64.tar.gz" }
 "github:multiprocessio/dsq" = { version = "0.23.0" }
 "github:unhappychoice/gitlogue" = { version = "0.11.0" }
-"github:daptify14/chezit" = { version = "0.4.0", matching = "linux_amd64" }     # retired in PR3
 "github:PaulJuliusMartinez/jless" = { version = "0.9.0", asset_pattern = "jless-v{{version}}-x86_64-unknown-linux-gnu.zip" }
 "github:Canop/broot" = { version = "1.60.0", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
 "github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd" }
@@ -105,12 +103,99 @@ taplo = "0.10.0"
 "pypi:harlequin" = "latest"
 
 # ---------------------------------------------------------------------------
+# Dotfiles: everything Linux-only, not dev-gated (dev-only targets — the
+# ~/.claude tree, ccstatusline — live in config.dev.toml; Linux-dev-only
+# targets — gdbinit/gdb, herdr's config — in config.host.toml; Windows
+# targets in config.windows.toml; cross-platform targets in config.toml.
+# zed's settings.json is NOT here — I7 (2026-09-22 copy-migration review): it
+# was moved to config.host.toml, the Linux-dev-only `host` token, matching
+# the gdb/herdr precedent (config.linux.toml has no `dev` gate at all, so an
+# entry here deploys on Linux PROD hosts too — neither mise nor chezmoi ever
+# did that for zed; chezmoi's own dev-gate excluded ~/.config/zed there).
+#
+# Every entry below is `copy` (or `template`) — no `symlink`/`symlink-each`
+# anywhere any more (2026-09-22 copy-migration, user decision: chezmoi's copy
+# semantics survive applications on either OS that don't respect symlinks,
+# which a plain file `symlink` and a whole-directory `symlink` both fail at
+# in different ways). Directories that chezmoi managed as directories
+# (zellij, zsh/completions, the claude hooks/agents/commands/skills trees in
+# config.dev.toml) keep exclude = [".vendor", ".gitkeep"] on a directory
+# `copy` entry rather than a whole-directory symlink: mise's `symlink` on a
+# directory REPLACES it wholesale on apply, silently deleting any unmanaged
+# sibling file a user or another tool drops in there (reproduced against
+# this host's own ~/.claude/hooks, ~/.claude/skills and
+# ~/.config/zsh/completions — see final-fix-brief.md C2). `copy` on a
+# directory does NOT share that failure mode — re-verified against the real
+# entries for the copy migration: it copies in only the tracked files and
+# leaves every unmanaged sibling alone, including nested subdirectories
+# (zellij/{layouts,themes}/*, claude/skills/workstation-lsp/*) — but still
+# needs `exclude` so the `.vendor` provenance sidecar and `.gitkeep`
+# placeholders don't themselves land in $HOME.
+# ---------------------------------------------------------------------------
+[dotfiles]
+# Shell rc files. ~/.zshenv is sourced by every zsh invocation (including
+# before ~/.zshrc) and, like ~/.bashrc and 10-mise.conf below, must keep its
+# MISE_ENV expression in sync (dual/triple-edit, checked by check-invariants.sh).
+"~/.bashrc" = { source = "dotfiles/bashrc.tera", mode = "template" }
+"~/.zshrc" = { source = "dotfiles/zshrc.tera", mode = "template" }
+"~/.zshenv" = { source = "dotfiles/zshenv.tera", mode = "template" }
+"~/.dircolors" = { source = "dotfiles/dircolors", mode = "copy" }
+"~/.nbrc" = { source = "dotfiles/nbrc", mode = "copy" }
+
+"~/.config/bash/completions.bash" = { source = "dotfiles/config/bash/completions.bash", mode = "copy" }
+"~/.config/cheat/conf.yml" = { source = "dotfiles/config/cheat/conf.yml.tera", mode = "template" }
+"~/.config/cheat/cheatsheets/personal/workstation" = { source = "dotfiles/config/cheat/cheatsheets/personal/workstation", mode = "copy" }
+# Read by systemd's user-manager before any login shell starts (environment.d
+# is evaluated at user-session start) — cannot depend on anything the shell rc
+# files set up; must independently render the same MISE_ENV value as them.
+"~/.config/environment.d/10-mise.conf" = { source = "dotfiles/config/environment.d/10-mise.conf.tera", mode = "template" }
+"~/.config/tealdeer/config.toml" = { source = "dotfiles/config/tealdeer/config.toml", mode = "copy" }
+# Single source of truth for Helix config on both OSes: this entry, and
+# dotfiles/windows/AppData/Roaming/helix/config.toml.tera (config.windows.toml)
+# read_file()-inlines the same source on Windows. Moved here from config.toml
+# (PR3 Task 3 controller review): Windows reads %APPDATA%\helix\config.toml,
+# not ~/.config/helix/config.toml, so config.toml's cross-platform load
+# deployed a dead file there — `linux` scopes it to Linux (both prod and dev).
+"~/.config/helix/config.toml" = { source = "dotfiles/config/helix/config.toml", mode = "copy" }
+"~/.config/zellij" = { source = "dotfiles/config/zellij", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # layouts/, themes/ nested; copy on a directory leaves unmanaged files alone, same guarantee symlink-each used to give
+"~/.config/zsh/completions" = { source = "dotfiles/config/zsh/completions", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # copy so unmanaged completions (e.g. _workstation) survive
+
+# zsh plugin dirs — all vendored, all carry a .vendor provenance sidecar that
+# must never itself land under ~/.config/zsh/plugins/*.
+"~/.config/zsh/plugins/fzf-tab" = { source = "dotfiles/config/zsh/plugins/fzf-tab", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/zsh/plugins/zsh-autosuggestions" = { source = "dotfiles/config/zsh/plugins/zsh-autosuggestions", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/zsh/plugins/zsh-history-substring-search" = { source = "dotfiles/config/zsh/plugins/zsh-history-substring-search", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/zsh/plugins/zsh-syntax-highlighting" = { source = "dotfiles/config/zsh/plugins/zsh-syntax-highlighting", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/zsh/plugins/zsh-you-should-use" = { source = "dotfiles/config/zsh/plugins/zsh-you-should-use", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+# Single vendored file — provenance is in its own header, no separate .vendor sidecar.
+"~/.config/zsh/plugins/zsh-shift-select.zsh" = { source = "dotfiles/config/zsh/plugins/zsh-shift-select.zsh", mode = "copy" }
+
+# batpipe + winterop, both executable (git mode 755); .vendor sidecar excluded.
+"~/.local/bin" = { source = "dotfiles/local/bin", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+
+# ---------------------------------------------------------------------------
 # Host state that needs no sudo (both scopes). Sudo-requiring state lives in
 # config.host.toml / config.native.toml / config.wsl.toml (dev-only tokens).
 # ---------------------------------------------------------------------------
 [bootstrap.hooks]
 # Capability gate over every mise-installed Linux binary (scripts/lib/verify-binary.sh).
 "post-tools" = "mise run verify-tools"
+# Restores the ~/.ssh and ~/.claude directory modes that copy/template mode
+# can't express (they propagate the SOURCE file's own on-disk bits, and git
+# tracks only the executable bit — a fresh clone yields a 0644
+# dotfiles/ssh/config.tera and default-mode dirs). This is the ONLY guarantee
+# of the SSH security posture: it must run unconditionally and must never be
+# able to fail the bootstrap. mise runs bootstrap hooks as `sh -o errexit -c
+# '<this>'` (confirmed against a real --dry-run render): a bare `; true` tail
+# is NOT enough on its own, because errexit aborts at the FIRST failing
+# command in a `;`-chain — on a prod host (MISE_ENV=linux, no config.dev.toml,
+# so ~/.claude never exists) the first chmod's failure on the missing
+# ~/.claude operand would abort before the second chmod ever runs. Each
+# command therefore gets its own `|| true` so no single command's failure is
+# ever "seen" by errexit (verified: `sh -o errexit -c` with a missing
+# ~/.claude exits 1 with a bare trailing `; true`, exits 0 with `|| true` on
+# each command, in both cases still landing ~/.ssh 700 / ~/.ssh/config 600).
+"post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
 # it. systemd expands %h in ExecStart; the shim needs MISE_ENV, which the user

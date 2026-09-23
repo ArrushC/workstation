@@ -1,0 +1,1 @@
+{{ read_file(path="dotfiles/config/helix/config.toml") }}

@@ -1,6 +1,0 @@
-# Tealdeer (tldr client) configuration — managed by chezmoi.
-# auto_update keeps the page cache fresh; the initial cache is seeded by
-# .chezmoiscripts/run_once_seed-tldr-cache.sh.tmpl on first apply.
-[updates]
-auto_update = true
-auto_update_interval_hours = 720

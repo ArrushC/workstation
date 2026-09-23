@@ -1,0 +1,17 @@
+# cheat configuration — managed by mise dotfiles (renders to ~/.config/cheat/conf.yml).
+# Templated only to expand the home dir in cheatpaths (robust vs `~`).
+# `editor` is intentionally omitted so cheat inherits $EDITOR (= hx, set
+# repo-wide in the rc) — no dual-edit coupling.
+colorize: true
+style: monokai          # chroma style (built into the cheat binary)
+formatter: terminal16m  # truecolor; the fleet's terminals support it
+pager: less -FRX
+cheatpaths:
+  - name: personal      # listed first -> personal sheets take precedence
+    path: {{ env.HOME }}/.config/cheat/cheatsheets/personal
+    tags: [ personal ]
+    readonly: false
+  - name: community     # seeded by run_once_seed-cheat-community.sh.tmpl
+    path: {{ env.HOME }}/.config/cheat/cheatsheets/community
+    tags: [ community ]
+    readonly: true

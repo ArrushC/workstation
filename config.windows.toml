@@ -1,0 +1,61 @@
+# ~/.config/mise/config.windows.toml — Windows-only dotfiles surface
+# (MISE_ENV token `windows`; loads only on the Windows host, alongside
+# config.toml and config.dev.toml — see config.toml's file-map comment).
+#
+# Ruling 7 (docs/superpowers/plans/2026-09-19-mise-dotfiles.md, broadened by
+# the 2026-09-22 copy-migration): EVERY `[dotfiles]` entry, on every
+# platform, uses `copy`, never `symlink`/`symlink-each` — chosen by the user
+# specifically because copy semantics survive applications on either OS that
+# don't respect symlinks. Windows was already forced onto `copy` before that
+# decision (a file symlink needs Developer Mode and silently falls back to a
+# copy without it, symlink-each always copies on Windows regardless, and a
+# directory symlink becomes a junction), so nothing changes here — this file
+# already had zero symlink modes to flip. `copy` makes the behaviour
+# identical everywhere and is what `mise dot add --changed` round-trips. The
+# three sources that are Tera templates (helix include, nushell config.nu,
+# the PS7 profile) use `template` instead: `copy` moves bytes verbatim and
+# would deploy literal unrendered `{{ ... }}` syntax, which is not "never
+# symlink" — it is a different, unrelated requirement (ruling 3/the plan's
+# "template for the 12" mode rule) that ruling 7's copy-vs-symlink rationale
+# does not touch.
+[dotfiles]
+# Windows Terminal rewrites this file itself (reorders keys, regenerates
+# dynamic profiles) every launch — sync-from-host, re-add with
+# `mise dot add --changed` after a Settings-UI edit. No trailing newline is a
+# WT-native quirk; leave it.
+"~/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json" = { source = "dotfiles/windows/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json", mode = "copy" }
+
+# Warp's Settings panel rewrites this and hot-reloads external edits within
+# ~1s — sync-from-host, re-add with `mise dot add --changed` after a UI edit.
+"~/AppData/Local/warp/Warp/config/settings.toml" = { source = "dotfiles/windows/AppData/Local/warp/Warp/config/settings.toml", mode = "copy" }
+# Not app-rewritten (edit-in-repo-only per inventory) — copy here only
+# because ruling 7 forbids symlink on Windows, kept alongside its sibling
+# settings.toml for one consistent Local/warp/Warp/config tree.
+"~/AppData/Local/warp/Warp/config/keybindings.yaml" = { source = "dotfiles/windows/AppData/Local/warp/Warp/config/keybindings.yaml", mode = "copy" }
+# Edit-in-repo-only; Warp's own Local/Roaming split must be preserved as-is
+# (collapsing it makes Warp ignore the file) — copy per ruling 7, not app-rewritten.
+"~/AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml" = { source = "dotfiles/windows/AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml", mode = "copy" }
+
+# VS Code's Preferences UI writes these in place.
+"~/AppData/Roaming/Code/User/settings.json" = { source = "dotfiles/windows/AppData/Roaming/Code/User/settings.json", mode = "copy" }
+"~/AppData/Roaming/Code/User/keybindings.json" = { source = "dotfiles/windows/AppData/Roaming/Code/User/keybindings.json", mode = "copy" }
+
+# Zed's settings UI / command palette writes these in place (same as the
+# Linux ~/.config/zed/settings.json entry in config.dev.toml).
+"~/AppData/Roaming/Zed/settings.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/settings.json", mode = "copy" }
+"~/AppData/Roaming/Zed/keymap.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/keymap.json", mode = "copy" }
+
+# Generated from the single Linux source of truth (config.toml's
+# ~/.config/helix/config.toml) via Tera's read_file() — not independently edited.
+"~/AppData/Roaming/helix/config.toml" = { source = "dotfiles/windows/AppData/Roaming/helix/config.toml.tera", mode = "template" }
+# hostname/username banner + ws* aliases; renders host/user identity via exec().
+"~/AppData/Roaming/nushell/config.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/config.nu.tera", mode = "template" }
+# PS7+ canonical $PROFILE.
+"~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1" = { source = "dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera", mode = "template" }
+# Static 13-line dot-source shim that sources the PS7 profile above if
+# present — trivial, generated/tracked, not independently edited.
+"~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1" = { source = "dotfiles/windows/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1", mode = "copy" }
+
+# Edited only in-repo; the "wsl --shutdown" reminder after a change is a
+# bootstrap.ps1-side sha256-marker step (ruling 6), not a dotfiles concern.
+"~/.wslconfig" = { source = "dotfiles/wslconfig", mode = "copy" }

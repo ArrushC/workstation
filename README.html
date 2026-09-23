@@ -72,7 +72,7 @@
             </nav>
 
             <main id="main" tabindex="-1">
-                <div class="page-breadcrumb"><span>Handbook</span><span aria-hidden="true">/</span><span id="current-section">Overview</span><span class="page-kind"><span class="status-dot" aria-hidden="true"></span> MISE + CHEZMOI</span></div>
+                <div class="page-breadcrumb"><span>Handbook</span><span aria-hidden="true">/</span><span id="current-section">Overview</span><span class="page-kind"><span class="status-dot" aria-hidden="true"></span> MISE + DOTFILES</span></div>
                 <header id="intro">
                     <div class="hero-scene">
                         <div class="hero-copy">
@@ -89,14 +89,14 @@
 
                         <div class="workspace-visual">
                             <div class="visual-caption"><span>ONE SOURCE. EVERY HOST.</span><span aria-hidden="true">↗</span></div>
-                            <div class="architecture" role="img" aria-label="One workstation repository connects mise provisioning, chezmoi dotfiles, Linux hosts, and Windows terminals.">
+                            <div class="architecture" role="img" aria-label="One workstation repository connects mise provisioning, mise dotfiles, Linux hosts, and Windows terminals.">
                                 <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
                                 <svg class="architecture-lines" viewBox="0 0 440 300" fill="none" aria-hidden="true"><path d="M220 150H95V62M220 150H355V68M220 150H100V243M220 150H350V237" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 6"/><circle cx="220" cy="150" r="5" fill="currentColor"/></svg>
                                 <div class="architecture-core" aria-hidden="true"><span>w<span>.</span></span><small>workstation</small></div>
                                 <div class="architecture-node node-linux" aria-hidden="true"><span class="node-symbol">&gt;_</span><span><b>Linux</b><small>dev + prod hosts</small></span></div>
                                 <div class="architecture-node node-windows" aria-hidden="true"><span class="node-symbol">⊞</span><span><b>Windows</b><small>your terminal, configured</small></span></div>
                                 <div class="architecture-node node-make" aria-hidden="true"><span class="node-symbol">⌘</span><span><b>mise</b><small>provision everything</small></span></div>
-                                <div class="architecture-node node-dotfiles" aria-hidden="true"><span class="node-symbol">~/</span><span><b>chezmoi</b><small>dotfiles that travel</small></span></div>
+                                <div class="architecture-node node-dotfiles" aria-hidden="true"><span class="node-symbol">~/</span><span><b>[dotfiles]</b><small>dotfiles that travel</small></span></div>
                             </div>
                         <div class="term">
                             <div class="bar">
@@ -115,9 +115,7 @@
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="ok">&#10003;</span> mise install &mdash; 146 CLI tools <span class="mut">&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="ok">&#10003;</span> mise bootstrap &mdash; packages, /etc files, services <span class="mut">&middot;&middot;</span> done</div>
-                                <!-- prettier-ignore -->
-                                <div class="ln"><span class="ok">&#10003;</span> chezmoi handoff &rarr; dotfiles <span class="mut">&middot;&middot;&middot;&middot;</span> done</div>
+                                <div class="ln"><span class="ok">&#10003;</span> mise bootstrap &mdash; packages, /etc files, services, dotfiles <span class="mut">&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="mut"># adding a tool is a one-line edit in</span> <span class="acc">config.linux.toml</span></div>
 
@@ -129,15 +127,15 @@
                     <div class="feature-bento">
                         <a class="feature-card feature-tools" href="#toolbelt"><div class="feature-top"><span class="eyebrow">THE TOOL DIRECTORY</span><span class="feature-arrow" aria-hidden="true">↗</span></div><div class="feature-number"><span data-tool-total>146</span><span>tools.<br />All in your corner.</span></div><div class="mini-chips" aria-hidden="true"><span>fzf</span><span>zellij</span><span>helix</span><span>+ more</span></div></a>
                         <a class="feature-card feature-scope" href="#machines"><div class="feature-top"><span class="eyebrow">INSTALL ON YOUR TERMS</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Your machine.<br />Your scope.</h2><div class="scope-pills"><span><i aria-hidden="true"></i> DEV <small>system-wide</small></span><span><i aria-hidden="true"></i> PROD <small>user-wide</small></span></div></a>
-                        <a class="feature-card feature-flow" href="#daily"><div class="feature-top"><span class="eyebrow">FIND YOUR FLOW</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Less setup.<br />More making.</h2><div class="flow-keys" aria-hidden="true"><kbd>cze</kbd><span>→</span><kbd>cza</kbd><span>→</span><span class="flow-check">✓</span></div></a>
+                        <a class="feature-card feature-flow" href="#daily"><div class="feature-top"><span class="eyebrow">FIND YOUR FLOW</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Less setup.<br />More making.</h2><div class="flow-keys" aria-hidden="true"><kbd>wse</kbd><span>→</span><kbd>wsa</kbd><span>→</span><span class="flow-check">✓</span></div></a>
                     </div>
                         <p class="overview-note">
                             Dev-environment provisioning for Linux hosts, plus
                             Warp and Windows Terminal on Windows.
                             One command, <code>./bootstrap.sh --dev</code> or
                             <code>--prod</code>, drives system packages, <code>/etc</code>
-                            files, and services via <code>mise bootstrap</code>, then
-                            the chezmoi handoff for dotfiles; <code>mise</code>
+                            files, services, and dotfiles via <code>mise
+                            bootstrap</code>; <code>mise</code>
                             (this checkout IS mise&rsquo;s global config dir &mdash;
                             tool pins in <code>config.toml</code> /
                             <code>config.linux.toml</code> /
@@ -192,7 +190,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             <p class="qs-sub">
                                 <strong>No admin needed.</strong> Install Git and ensure <code>curl.exe</code> is on PATH
                                 first, then this installs Warp, Windows
-                                Terminal, chezmoi,
+                                Terminal,
                                 and Starship under your user profile, applies
                                 dotfiles, and deploys the terminal configs.
                             </p>
@@ -254,7 +252,7 @@ try {
                             <div class="layer-label">Dotfiles</div>
                             <h3>
                                 <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 18 2-6L17 2l5 5-10 10-7 1Zm2-6 5 5M4 22h16"/></svg></span>
-                                chezmoi
+                                mise [dotfiles]
                             </h3>
                             <p>Personal shell config, templated per machine.</p>
                         </article>
@@ -654,18 +652,6 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Managed rsyslog drop-in (dev_machine, non-WSL) — routes local0..local7 into /var/log/workstation.log; emit via `logger -p local0.info`. Enabled by config.native.toml's [bootstrap.services.rsyslog]"
-                                    >rsyslog<span class="sr-only">
-                                        — managed rsyslog drop-in (dev_machine,
-                                        non-WSL) routing local0..local7 into
-                                        /var/log/workstation.log; emit via logger
-                                        -p local0.info (config.native.toml
-                                        [bootstrap.services.rsyslog])</span
-                                    ></span
-                                >
-                                <span
-                                    class="chip"
-                                    tabindex="0"
                                     data-tip="Cgroup tree from systemd (built-in)"
                                     >systemd-cgls <small>(built-in)</small
                                     ><span class="sr-only">
@@ -970,16 +956,6 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Container engine — Docker CE, auto-installed on non-WSL dev machines"
-                                    >docker<span class="sr-only">
-                                        — container engine (Docker CE,
-                                        auto-installed on non-WSL dev
-                                        machines)</span
-                                    ></span
-                                >
-                                <span
-                                    class="chip"
-                                    tabindex="0"
                                     data-tip="Docker TUI"
                                     >lazydocker<span class="sr-only">
                                         — Docker TUI</span
@@ -1007,36 +983,6 @@ try {
                                     data-tip="Inspect Docker image layers"
                                     >dive<span class="sr-only">
                                         — inspect Docker image layers</span
-                                    ></span
-                                >
-                            </div>
-                        </article>
-
-                        <article
-                            class="tool-card cat-containers"
-                            data-cat="containers"
-                        >
-                            <h4>Web admin (dev_machine only)</h4>
-                            <div class="chips">
-                                <span
-                                    class="chip"
-                                    tabindex="0"
-                                    data-tip="Real-time Docker log viewer (container; localhost:8080, SSH-tunnel to access)"
-                                    >dozzle<span class="sr-only">
-                                        — real-time Docker log viewer
-                                        (containerized; localhost:8080,
-                                        SSH-tunnel to access)</span
-                                    ></span
-                                >
-                                <span
-                                    class="chip"
-                                    tabindex="0"
-                                    data-tip="Web admin console — services, journal, storage, network, podman, packages (https://host:9090, PAM auth)"
-                                    >cockpit<span class="sr-only">
-                                        — web admin console: services,
-                                        journal, storage, network, podman,
-                                        packages (https://host:9090, PAM
-                                        auth)</span
                                     ></span
                                 >
                             </div>
@@ -1681,7 +1627,7 @@ try {
                                 automatically registered with Claude&nbsp;Code's
                                 <code>LSP</code> tool via the bundled
                                 <code>workstation-lsp</code> plugin (deployed
-                                by <code>cza</code> &mdash; no extra setup).
+                                by <code>wsa</code> &mdash; no extra setup).
                             </p>
                         </article>
 
@@ -1715,7 +1661,7 @@ try {
                                     data-tip="Offline cheatsheets — your own (synced) + community pack"
                                     >cheat<span class="sr-only">
                                         — offline cheatsheets: personal
-                                        (chezmoi-synced) + community pack</span
+                                        (dotfiles-synced) + community pack</span
                                     ></span
                                 >
                                 <span
@@ -2073,23 +2019,18 @@ try {
                                             >&mdash; Linux host entry point:
                                             installs pinned mise, computes
                                             MISE_ENV, runs mise-install.sh
-                                            then `mise bootstrap --yes`,
-                                            then chezmoi init</span
+                                            then `mise bootstrap --yes`
+                                            (packages/files/services/compose/repos/dotfiles/tools,
+                                            then the bootstrap task)</span
                                         >
                                     </li>
                                     <li>
                                         bootstrap.ps1
                                         <span class="note"
                                             >&mdash; Windows entry point
-                                            (binary installs + chezmoi apply,
-                                            no admin)</span
-                                        >
-                                    </li>
-                                    <li>
-                                        .chezmoiroot
-                                        <span class="note"
-                                            >&mdash; redirects chezmoi source to
-                                            chezmoi/</span
+                                            (binary installs +
+                                            `mise bootstrap --only
+                                            dotfiles,tools`, no admin)</span
                                         >
                                     </li>
                                     <li>
@@ -2143,43 +2084,12 @@ try {
                                         <span class="note"
                                             >&mdash; /etc file sources,
                                             deployed by [bootstrap.files] in
-                                            config.native.toml /
                                             config.wsl.toml (source paths are
                                             relative to the repo root; NOT
-                                            chezmoi-managed)</span
+                                            a [dotfiles] entry)</span
                                         >
                                     </summary>
                                     <ul>
-                                        <li>
-                                            docker/docker-ce.repo
-                                            <span class="note"
-                                                >&mdash; vendored Docker CE
-                                                yum repo file</span
-                                            >
-                                        </li>
-                                        <li>
-                                            cockpit/cockpit.conf
-                                            <span class="note"
-                                                >&mdash; Cockpit web-admin
-                                                config</span
-                                            >
-                                        </li>
-                                        <li>
-                                            rsyslog/30-workstation.conf
-                                            <span class="note"
-                                                >&mdash; rsyslog drop-in
-                                                (local0..local7 &rarr;
-                                                /var/log/workstation.log)</span
-                                            >
-                                        </li>
-                                        <li>
-                                            dozzle/compose.yaml.tera
-                                            <span class="note"
-                                                >&mdash; Dozzle compose
-                                                project, Tera-rendered with
-                                                vars.dozzle_version</span
-                                            >
-                                        </li>
                                         <li>
                                             wsl/wsl.conf
                                             <span class="note"
@@ -2205,9 +2115,11 @@ try {
                                             bootstrap
                                             <span class="note"
                                                 >&mdash; end-of-bootstrap
-                                                steps: Claude Code, zjstatus
-                                                plugin, chezmoi apply (until
-                                                PR3), legacy sweep</span
+                                                steps: Claude Code + plugins,
+                                                zjstatus plugin, legacy sweep,
+                                                nb/herdr/tldr lifecycle steps,
+                                                the Claude settings
+                                                merge</span
                                             >
                                         </li>
                                         <li>
@@ -2356,163 +2268,264 @@ try {
                                 </details>
                                 <details open>
                                     <summary>
-                                        chezmoi/
+                                        dotfiles/
                                         <span class="note"
-                                            >&mdash; cross-platform
-                                            dotfiles</span
+                                            >&mdash; every source file mise
+                                            deploys via <code>[dotfiles]</code>,
+                                            under its real name (no
+                                            <code>dot_</code>/<code
+                                                >private_</code
+                                            >
+                                            prefixing). Each target is one
+                                            entry in the <code>config*.toml</code>
+                                            whose MISE_ENV token gates it;
+                                            two modes total, everywhere:
+                                            <code>template</code> (11
+                                            <code>.tera</code> files, Tera
+                                            syntax) &middot;
+                                            <code>copy</code> (literally
+                                            everything else &mdash;
+                                            app-rewritten files like Warp,
+                                            Windows Terminal, Zed, VS Code,
+                                            every Windows entry, AND every
+                                            vendored plugin/agents/commands
+                                            directory, which keeps
+                                            <code>exclude</code> for its
+                                            <code>.vendor</code>/<code
+                                                >.gitkeep</code
+                                            >
+                                            sidecar). A deployed file is an
+                                            independent copy under
+                                            <code>$HOME</code> now, not a
+                                            symlink into this checkout &mdash;
+                                            editing it no longer dirties the
+                                            repo, but it also no longer
+                                            round-trips back on its own (see
+                                            <a href="#daily">Daily
+                                            workflows</a>)</span
                                         >
                                     </summary>
                                     <ul>
                                         <li>
-                                            .chezmoi.toml.tmpl
+                                            zshrc.tera / bashrc.tera /
+                                            zshenv.tera
                                             <span class="note"
-                                                >&mdash; prompts for name/email
-                                                on init</span
+                                                >&mdash; template; Linux shell
+                                                rc files</span
                                             >
                                         </li>
                                         <li>
-                                            .chezmoiignore.tmpl
+                                            gitconfig.tera
                                             <span class="note"
-                                                >&mdash; OS-aware ignore</span
+                                                >&mdash; template,
+                                                cross-platform:
+                                                ~/.gitconfig (os()-branches
+                                                internally)</span
                                             >
                                         </li>
                                         <li>
-                                            .chezmoiscripts/run_once_after_init.sh.tmpl
+                                            gdbinit.tera
                                             <span class="note"
-                                                >&mdash; Linux-only (renders
-                                                empty on Windows)</span
+                                                >&mdash; template; Linux dev
+                                                only (config.host.toml)</span
                                             >
                                         </li>
                                         <li>
-                                            dot_zshrc.tmpl
+                                            dircolors, nbrc
                                             <span class="note"
-                                                >&mdash; Linux: ~/.zshrc
-                                                (default login shell)</span
+                                                >&mdash; copy</span
                                             >
                                         </li>
                                         <li>
-                                            dot_bashrc.tmpl
+                                            ssh/config.tera
                                             <span class="note"
-                                                >&mdash; Linux: ~/.bashrc
-                                                (fallback for explicit bash
-                                                invocations)</span
+                                                >&mdash; template,
+                                                cross-platform: ~/.ssh/config.
+                                                Source is git-mode 0644;
+                                                <code>post-dotfiles</code>
+                                                chmods the deployed file 600
+                                                and ~/.ssh/~/.claude 700
+                                                (git tracks only the
+                                                executable bit)</span
                                             >
                                         </li>
                                         <li>
-                                            dot_gitconfig.tmpl
+                                            wslconfig
                                             <span class="note"
-                                                >&mdash; cross-platform:
-                                                ~/.gitconfig</span
-                                            >
-                                        </li>
-                                        <li>
-                                            dot_nbrc
-                                            <span class="note"
-                                                >&mdash; Linux: ~/.nbrc</span
-                                            >
-                                        </li>
-                                        <li>
-                                            private_dot_ssh/private_config
-                                            <span class="note"
-                                                >&mdash; cross-platform:
-                                                ~/.ssh/config (0600, parent
-                                                0700). Ships keepalive
-                                                defaults; per-host overrides
-                                                live in un-tracked
-                                                ~/.ssh/config.local</span
+                                                >&mdash; copy; Windows only
+                                                (~/.wslconfig, via
+                                                config.windows.toml)</span
                                             >
                                         </li>
                                     </ul>
                                     <details>
                                         <summary>
-                                            dot_config/
+                                            config/
                                             <span class="note"
                                                 >&mdash; ~/.config/</span
                                             >
                                         </summary>
                                         <ul>
                                             <li>starship.toml</li>
-                                            <li>helix/config.toml</li>
+                                            <li>
+                                                helix/config.toml
+                                                <span class="note"
+                                                    >&mdash; Linux only
+                                                    (config.linux.toml);
+                                                    Windows read_file()-inlines
+                                                    this same source into its
+                                                    own template</span
+                                                >
+                                            </li>
                                             <li>
                                                 zellij/{config.kdl,
-                                                layouts/dev.kdl}
+                                                layouts/, themes/}
                                                 <span class="note"
                                                     >&mdash; Linux only</span
                                                 >
                                             </li>
                                             <li>
-                                                herdr/config.toml
+                                                herdr/config.toml, gdb/
                                                 <span class="note"
-                                                    >&mdash; Linux
-                                                    dev_machine only;
-                                                    file-viewer plugin
-                                                    keybindings</span
+                                                    >&mdash; Linux dev hosts
+                                                    only (config.host.toml)</span
+                                                >
+                                            </li>
+                                            <li>
+                                                ccstatusline/settings.json,
+                                                cheat/conf.yml.tera,
+                                                tealdeer/config.toml,
+                                                environment.d/10-mise.conf.tera
+                                                <span class="note"
+                                                    >&mdash; dev-only / Linux
+                                                    dev</span
+                                                >
+                                            </li>
+                                            <li>
+                                                zsh/completions,
+                                                zsh/plugins/*
+                                                <span class="note"
+                                                    >&mdash; the vendored
+                                                    fzf-tab / autosuggestions /
+                                                    history-substring-search /
+                                                    syntax-highlighting /
+                                                    you-should-use plugin
+                                                    dirs, each
+                                                    copy +
+                                                    exclude = [".vendor",
+                                                    ".gitkeep"]</span
+                                                >
+                                            </li>
+                                            <li>bash/completions.bash</li>
+                                        </ul>
+                                    </details>
+                                    <details>
+                                        <summary>
+                                            claude/
+                                            <span class="note"
+                                                >&mdash; ~/.claude/ (dev
+                                                only). settings.json is
+                                                NOT here &mdash; it&rsquo;s a
+                                                jq merge
+                                                (scripts/lib/claude-settings-merge.sh)
+                                                of settings.seed.json (this
+                                                dir) + the live file +
+                                                settings.enforced.json (this
+                                                dir), run from
+                                                tasks/bootstrap (Linux) /
+                                                bootstrap.ps1&rsquo;s
+                                                Invoke-ClaudeSettingsMerge
+                                                (Windows, same jq
+                                                filter)</span
+                                            >
+                                        </summary>
+                                        <ul>
+                                            <li>CLAUDE.md, notify.sh</li>
+                                            <li>hooks/, skills/</li>
+                                            <li>
+                                                agents/, commands/
+                                                <span class="note"
+                                                    >&mdash;
+                                                    copy (the two dirs
+                                                    users create files
+                                                    in directly &mdash;
+                                                    round-trip a live
+                                                    addition with
+                                                    <code>mise dot add
+                                                    &lt;dir&gt;</code>,
+                                                    naming the directory
+                                                    itself)</span
                                                 >
                                             </li>
                                         </ul>
                                     </details>
                                     <details>
                                         <summary>
-                                            AppData/Roaming/
+                                            local/bin/
                                             <span class="note"
-                                                >&mdash; Windows</span
+                                                >&mdash; ~/.local/bin
+                                                (copy); batpipe,
+                                                winterop</span
                                             >
                                         </summary>
-                                        <ul>
-                                            <li>
-                                                Zed/{settings.json,
-                                                keymap.json}
-                                            </li>
-                                            <li>
-                                                Code/User/{settings.json,
-                                                keybindings.json}
-                                            </li>
-                                        </ul>
                                     </details>
                                     <details>
                                         <summary>
-                                            AppData/Local/
+                                            windows/
                                             <span class="note"
-                                                >&mdash; Windows</span
+                                                >&mdash; every entry is
+                                                copy or template (ruling 7:
+                                                no <code>[dotfiles]</code>
+                                                entry symlinks, anywhere)
+                                                &mdash;
+                                                13 entries total,
+                                                config.windows.toml</span
                                             >
                                         </summary>
                                         <ul>
                                             <li>
-                                                Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
+                                                AppData/Roaming/{Zed,
+                                                Code/User}/*
                                                 <span class="note"
-                                                    >&mdash; Windows Terminal
-                                                    (Catppuccin Mocha)</span
+                                                    >&mdash; copy,
+                                                    app-rewritten</span
                                                 >
                                             </li>
                                             <li>
-                                                warp/Warp/config/settings.toml,
-                                                keybindings.yaml
+                                                AppData/Roaming/helix/config.toml.tera,
+                                                nushell/config.nu.tera
                                                 <span class="note"
-                                                    >&mdash; Warp (theme lives
-                                                    in AppData/Roaming)</span
-                                                >
-                                            </li>
-                                        </ul>
-                                    </details>
-                                    <details>
-                                        <summary>
-                                            Documents/
-                                            <span class="note"
-                                                >&mdash; Windows</span
-                                            >
-                                        </summary>
-                                        <ul>
-                                            <li>
-                                                PowerShell/Microsoft.PowerShell_profile.ps1.tmpl
-                                                <span class="note"
-                                                    >&mdash; PS 7</span
+                                                    >&mdash; template</span
                                                 >
                                             </li>
                                             <li>
-                                                WindowsPowerShell/Microsoft.PowerShell_profile.ps1
+                                                AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml
+                                            </li>
+                                            <li>
+                                                AppData/Local/Packages/Microsoft.WindowsTerminal_.../LocalState/settings.json
                                                 <span class="note"
-                                                    >&mdash; PS 5.1 (dot-sources
-                                                    PS 7)</span
+                                                    >&mdash; copy,
+                                                    app-rewritten</span
+                                                >
+                                            </li>
+                                            <li>
+                                                AppData/Local/warp/Warp/config/{settings.toml,
+                                                keybindings.yaml}
+                                                <span class="note"
+                                                    >&mdash; copy</span
+                                                >
+                                            </li>
+                                            <li>
+                                                Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera
+                                                <span class="note"
+                                                    >&mdash; template; PS7</span
+                                                >
+                                            </li>
+                                            <li>
+                                                Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1
+                                                <span class="note"
+                                                    >&mdash; copy; PS5.1
+                                                    dot-source shim</span
                                                 >
                                             </li>
                                         </ul>
@@ -2554,9 +2567,9 @@ try {
                         binary, computes <code>MISE_ENV</code>, runs
                         <code>scripts/lib/mise-install.sh</code> (tools), then
                         <code>mise bootstrap --yes</code> (packages, /etc
-                        files, services, compose, repos) &mdash; ONE command
-                        per host, no <code>ansible-core</code> install, no
-                        Python &ge; 3.9 gate.
+                        files, services, compose, repos, dotfiles) &mdash; ONE
+                        command per host, no <code>ansible-core</code>
+                        install, no Python &ge; 3.9 gate.
                     </p>
 
                     <h4>Env vars to set before running</h4>
@@ -2577,9 +2590,10 @@ try {
                                     <code>git clone</code
                                     >/<code>pull</code>/<code>push</code>.
                                     Persisted into <code>.git/config</code> so
-                                    <code>chezmoi update</code>, manual
-                                    <code>git pull</code>, and the auto-push
-                                    step keep working without re-passing it.
+                                    <code>scripts/update-hosts.sh</code>,
+                                    manual <code>git pull</code>, and the
+                                    auto-push step keep working without
+                                    re-passing it.
                                     <strong>Never committed.</strong> Generate
                                     at
                                     <a href="https://github.com/settings/tokens"
@@ -2691,18 +2705,14 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                             <span class="num">4</span
                             ><span class="lbl">mise install + mise bootstrap</span
                             ><span class="note"
-                                >tools, then packages/files/services</span
+                                >tools, then
+                                packages/files/services/compose/repos/dotfiles
+                                (--force-dotfiles on the first run)</span
                             >
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl">chezmoi init</span
-                            ><span class="note">if no config yet</span>
-                        </div>
-                        <div class="arrow">&rarr;</div>
-                        <div class="step">
-                            <span class="num">6</span
                             ><span class="lbl">Set zsh as default</span
                             ><span class="note"
                                 >sudo usermod -s on dev; warns
@@ -2711,7 +2721,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
-                            <span class="num">7</span
+                            <span class="num">6</span
                             ><span class="lbl">Commit + push</span
                             ><span class="note">warn-don&rsquo;t-fail</span>
                         </div>
@@ -2735,7 +2745,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </h4>
                     <p>
                         At the tail of <code>bootstrap.sh --dev</code>, after
-                        chezmoi initializes, you&rsquo;ll be prompted to
+                        the dotfiles apply, you&rsquo;ll be prompted to
                         configure the Claude Code statusline via
                         <a href="https://github.com/sirmalloc/ccstatusline"
                             >ccstatusline</a
@@ -2743,7 +2753,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </p>
                     <ol>
                         <li>
-                            <strong>Use the chezmoi-tracked status line</strong>
+                            <strong>Use the tracked status line</strong>
                             &mdash; apply the tracked widget config + Claude
                             Code settings (same look as every other
                             <code>dev_machine</code>).
@@ -2751,17 +2761,22 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <li>
                             <strong>Define a new status line for this machine</strong>
                             &mdash; launch the ccstatusline TUI; on save, choose
-                            whether to persist across future
-                            <code>chezmoi update</code> runs (a yes adds this
-                            host to a per-host opt-out block in
-                            <code>.chezmoiignore.tmpl</code>).
+                            whether to persist across future dotfiles applies
+                            (a yes writes a per-host opt-out block into
+                            <code>config.local.toml</code>&rsquo;s own
+                            <code>[dotfiles]</code> table &mdash; <code
+                                >enabled = false</code
+                            >
+                            alone is silently ignored, so the written entry
+                            repeats <code>mode</code> too).
                         </li>
                         <li>
                             <strong>Set a new global status line</strong>
                             &mdash; launch the TUI; on save, the result is
-                            re-added to the chezmoi source, committed, and
-                            pushed so every other <code>dev_machine</code>
-                            picks it up on next sync.
+                            re-added to the tracked dotfiles source
+                            (<code>dotfiles/config/ccstatusline/settings.json</code>),
+                            committed, and pushed so every other
+                            <code>dev_machine</code> picks it up on next sync.
                         </li>
                         <li><strong>Skip</strong> &mdash; no setup this run.</li>
                     </ol>
@@ -2792,7 +2807,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         and refreshes the fontconfig cache. The font is required
                         for Nerd Font glyphs in starship, <code>eza
                         --icons=auto</code>, lazygit, k9s, yazi, broot, helix
-                        file-tree, chezit, ccstatusline, and the Claude Code TUI.
+                        file-tree, ccstatusline, and the Claude Code TUI.
                     </p>
                     <p class="note-row">
                         <strong>WSL hosts skip this step automatically</strong>
@@ -2848,14 +2863,18 @@ try {
                                 >~/.config/mise</code
                             >
                             / <code>%USERPROFILE%\.config\mise</code>) and
-                            chezmoi&rsquo;s config dir
-                            (<code>~/.config/chezmoi/</code>).
+                            any leftover pre-migration chezmoi config dir
+                            (<code>~/.config/chezmoi/</code>), if one is
+                            still present from before this host moved off
+                            chezmoi.
                         </p>
                         <p>
                             <strong>Does not wipe:</strong> installed tools
-                            (re-bootstrap detects and skips), deployed dotfiles
-                            in <code>$HOME</code> (chezmoi re-applies over
-                            them), SSH keys, system packages.
+                            (re-bootstrap detects and skips), deployed
+                            dotfiles in <code>$HOME</code> (<code
+                                >mise bootstrap</code
+                            >
+                            re-applies over them), SSH keys, system packages.
                         </p>
                         <div class="callout">
                             <strong>Self-deletion guard.</strong> Running
@@ -2908,7 +2927,17 @@ mise run check-updates</code></pre>
                             (rc files + the systemd user manager), pueued,
                             python-env, the dev extras (Claude Code, vcpkg,
                             fonts, the zjstatus plugin copy), the login shell,
-                            chezmoi drift, and the legacy-tool sweep (one
+                            dotfiles drift (<code>mise dot status</code>
+                            &mdash; a copy-mode edit under <code>$HOME</code>
+                            that hasn&rsquo;t been recorded back to
+                            <code>dotfiles/</code> with <code>wsr</code>/<code
+                                >mise dot add</code
+                            >), a dirty checkout (an uncommitted change under
+                            this repo itself &mdash; a hand-edited pin, an
+                            edited source file &mdash; blocks
+                            <code>update-hosts.sh</code>&rsquo;s
+                            <code>git pull --ff-only</code>), and the
+                            legacy-tool sweep (one
                             <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
                             row each, with the exact repair command &mdash;
                             typically <code>mise bootstrap --yes</code> or
@@ -2935,12 +2964,12 @@ mise run check-updates</code></pre>
                             rate limits) for the handful of pins in
                             <code>config.toml</code> <code>[vars]</code>
                             (<code>nerd_font_version</code>,
-                            <code>dozzle_version</code>,
                             <code>vcpkg_version</code>; the Make-era
                             <code>claude-cli</code> pin is gone &mdash;
                             Claude Code self-updates, no pin to check).
-                            <code>latest</code>-tracking tools (chezmoi, the
-                            <code>pypi:</code> tools, &hellip;) are reported
+                            <code>latest</code>-tracking tools (the
+                            <code>pypi:</code> tools &mdash; glances,
+                            asciinema, harlequin, &hellip;) are reported
                             as rolling. The scan is
                             <strong>report-only</strong>: bumping a mise pin
                             is <code>mise config set</code> (or
@@ -2975,8 +3004,13 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             dual/triple-edits, line-endings + executable bits
                             on the tracked shell-script set, PowerShell BOM
                             presence, sentinel-block open/close matching, and
-                            <code>.chezmoiignore</code> target-path patterns.
-                            It also runs <strong>shellcheck</strong> at
+                            the <code>[dotfiles]</code> tables themselves
+                            (every source exists, every mode is valid, every
+                            Windows entry is <code>copy</code>/<code
+                                >template</code
+                            >, and every <code>dotfiles/**/*.tera</code> file
+                            is referenced by exactly one entry). It also runs
+                            <strong>shellcheck</strong> at
                             warning+ on the repo's maintained shell scripts.
                             PowerShell scripts (<code>bootstrap.ps1</code>,
                             <code>manage-hosts.ps1</code>,
@@ -3013,57 +3047,11 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         </p>
                     </details>
 
-                    <details>
-                        <summary>
-                            Encrypted secrets (age)
-                        </summary>
-                        <p>
-                            chezmoi can keep real secrets encrypted in the repo
-                            using <strong>age</strong>. Without configuration,
-                            encryption is dormant &mdash; nothing changes.
-                        </p>
-                        <p><strong>One-time setup (per identity):</strong></p>
-                        <pre><code>age-keygen -o ~/.config/chezmoi/key.txt   # prints your public key (recipient)</code></pre>
-                        <p>
-                            Set the printed public key as
-                            <code>WORKSTATION_AGE_RECIPIENT</code> (export it
-                            before running <code>bootstrap.sh</code>, or re-run
-                            <code>chezmoi init</code>) to activate encryption.
-                            <code>bootstrap.sh</code> and
-                            <code>bootstrap.ps1</code> will warn (soft) if the
-                            recipient is set but the identity file is missing.
-                        </p>
-                        <p><strong>Adding a secret:</strong></p>
-                        <pre><code>chezmoi add --encrypt ~/.netrc   # an encrypted_*.age file appears in the source</code></pre>
-                        <p>
-                            The resulting <code>encrypted_*.age</code> file is
-                            safe to commit &mdash; it decrypts only where the
-                            identity (<code>~/.config/chezmoi/key.txt</code>) is
-                            present. The identity itself is
-                            <strong>never committed</strong>; the recipient
-                            public key is fine to commit.
-                        </p>
-                        <p><strong>New host:</strong></p>
-                        <p>
-                            Copy <code>key.txt</code> to
-                            <code>~/.config/chezmoi/</code> before running
-                            <code>chezmoi apply</code>. Without it, any
-                            <code>encrypted_*.age</code> files will fail to
-                            decrypt.
-                        </p>
-                        <p class="note-row">
-                            <strong>Back up the identity.</strong>
-                            <code>key.txt</code> is the master secret &mdash;
-                            losing it loses every encrypted file in the repo.
-                            Store it in a password manager alongside your
-                            <code>GITHUB_TOKEN</code>.
-                        </p>
-                    </details>
-
                     <h3 id="setup-windows">3. On Windows</h3>
                     <p class="lede">
                         The Windows host is a <strong>client</strong> &mdash; no
-                        provisioning Makefile (that's Linux-only), but chezmoi
+                        provisioning Makefile (that's Linux-only), but mise's
+                        own <code>[dotfiles]</code> table (config.windows.toml)
                         runs here too to deploy
                         the Windows Terminal <code>settings.json</code>
                         (themed Catppuccin Mocha), the PowerShell profile, and
@@ -3103,7 +3091,8 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             points at
                             <a href="https://www.warp.dev/download"
                                target="_blank" rel="noopener">warp.dev/download</a>.
-                            Chezmoi owns three tracked files &mdash;
+                            The tracked dotfiles own three files (mode =
+                            <code>copy</code>) &mdash;
                             <code>settings.toml</code> and
                             <code>keybindings.yaml</code> under
                             <code>%LOCALAPPDATA%\warp\Warp\config\</code>,
@@ -3140,8 +3129,10 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             warns and points at
                             <a href="https://aka.ms/terminal" target="_blank"
                                rel="noopener">aka.ms/terminal</a>.
-                            Chezmoi owns the whole
-                            <code>settings.json</code> (Catppuccin Mocha
+                            The tracked dotfiles own the whole
+                            <code>settings.json</code> (mode = <code
+                                >copy</code
+                            >; Catppuccin Mocha
                             scheme + app theme, Nushell default profile,
                             keybinds, profile defaults); bootstrap regenerates
                             only the <em>workstation</em> profile fragment
@@ -3151,11 +3142,6 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             <code>ssh -t &lt;user&gt;@&lt;ip&gt; zellij attach
                             --create main</code>). User-created profiles and
                             fragments from other apps are never removed.
-                        </li>
-                        <li>
-                            <strong>chezmoi</strong> &mdash; official
-                            <code>get.chezmoi.io</code> binary installer into
-                            <code>%LOCALAPPDATA%\workstation\bin</code>.
                         </li>
                         <li>
                             <strong>GitHub CLI</strong> (<code>gh</code>)
@@ -3177,7 +3163,10 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             <strong>Helix</strong> (<code>hx</code>) &mdash;
                             pinned, sha256-verified portable <code>.zip</code>
                             into <code>%LOCALAPPDATA%\workstation\helix</code>
-                            (binary + bundled runtime). The git/chezmoi editor.
+                            (binary + bundled runtime). The git/dotfiles editor
+                            (<code>wse</code> opens
+                            <code>mise dot edit</code>&rsquo;s source-state
+                            copy in it).
                         </li>
                         <li>
                             <strong>OpenCode</strong> and <strong>Oh My Pi</strong>
@@ -3219,20 +3208,24 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             <code>MISE_VERSION</code> mise itself is
                             installed with in <code>bootstrap.sh</code>, and
                             <code>min_version</code> in
-                            <code>config.toml</code>. Right after chezmoi
-                            applies, a bespoke step (<code>Invoke-MiseRuntimes</code>)
-                            runs <code>mise install</code> straight against
-                            <code>config.toml</code> +
-                            <code>config.dev.toml</code> at the root of this
-                            checkout &mdash; nothing is generated or copied,
-                            and <code>config.linux.toml</code> never loads
-                            here (the Windows <code>MISE_ENV</code> carries
-                            no <code>linux</code> token). That installs
-                            Node.js, Go, uv, gopls, the language servers and
-                            ccstatusline (the tools not marked
-                            <code>os = ["linux"]</code>), and puts
+                            <code>config.toml</code>. A single
+                            <code>mise bootstrap --only dotfiles,tools</code>
+                            (<code>Invoke-MiseBootstrap</code>) applies the
+                            dotfiles tree AND installs Node.js, Go, uv,
+                            gopls, the language servers and ccstatusline in
+                            one pass, straight against <code>config.toml</code>
+                            + <code>config.dev.toml</code> at the root of
+                            this checkout &mdash; nothing is generated or
+                            copied, and <code>config.linux.toml</code> never
+                            loads here (the Windows <code>MISE_ENV</code>
+                            carries no <code>linux</code> token; the tools
+                            installed are the ones not marked
+                            <code>os = ["linux"]</code>). Right after,
+                            <code>Invoke-MiseRuntimes</code> re-runs to keep
                             <code>%LOCALAPPDATA%\mise\shims</code> on the User
-                            PATH. Both Windows shells activate mise: Nushell
+                            PATH (self-heals every run) and sweep any
+                            leftover pre-mise installs. Both Windows shells
+                            activate mise: Nushell
                             through a generated
                             <code>%APPDATA%\nushell\vendor\autoload\mise.nu</code>
                             (regenerated every bootstrap &mdash; never
@@ -3389,7 +3382,7 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         yourself (hard-fail if missing).
                         <strong>VSCode</strong> is
                         installed by hand too &mdash; the script soft-warns if
-                        it&rsquo;s missing, but its chezmoi config deploys
+                        it&rsquo;s missing, but its tracked dotfiles deploy
                         regardless. <strong>zoxide</strong> is no longer
                         installed (the PowerShell profile no-ops without it).
                         Starship/Helix/Nushell/dnGrep/LogExpert versions
@@ -3418,7 +3411,7 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         pinned portable tool to
                         <code>%LOCALAPPDATA%\workstation\nu</code>; its config
                         deploys to <code>%APPDATA%\nushell\config.nu</code> (the
-                        <code>cz*</code>/<code>g*</code> aliases mirror the
+                        <code>ws*</code>/<code>g*</code> aliases mirror the
                         PowerShell profile), and the Starship prompt is generated
                         into
                         <code>%APPDATA%\nushell\vendor\autoload\starship.nu</code>.
@@ -3464,7 +3457,8 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         <code>firstWindowPreference</code> is
                         <code>persistedWindowLayout</code> so a relaunch
                         restores the previous tab layout. Its
-                        <code>settings.json</code> is chezmoi-tracked at
+                        <code>settings.json</code> is dotfiles-tracked (mode =
+                        <code>copy</code>) at
                         <code>%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json</code>,
                         the same sync-from-host pattern as the Zed/VSCode
                         configs.
@@ -3525,7 +3519,7 @@ cd "$env:USERPROFILE\.config\mise"
 .\bootstrap.ps1                                  # default flow (no admin)
 .\bootstrap.ps1 -RepoPath D:\dev\workstation     # alternate clone path
  .\bootstrap.ps1 -SkipToolInstall                 # Windows Terminal + the portable/installer tools already present
-.\bootstrap.ps1 -SkipChezmoi                     # clone + install but don&rsquo;t deploy dotfiles
+.\bootstrap.ps1 -SkipDotfiles                    # clone + install but don&rsquo;t deploy dotfiles
 .\bootstrap.ps1 -SkipKeyGen                      # skip the SSH-key prompt
 .\bootstrap.ps1 -ForceInstaller                  # re-install installer tools (Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond Compare) and re-seed Windows Terminal, even if present
 .\bootstrap.ps1 -SkipElevated                    # skip the UAC-prompting SSHFS-Win/WinFsp install
@@ -3556,7 +3550,7 @@ cd "$env:USERPROFILE\.config\mise"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">2</span
-                            ><span class="lbl">Install Warp + Windows Terminal + chezmoi + the portable tools (Starship, Helix, Nushell, &hellip;)</span
+                            ><span class="lbl">Install Warp + Windows Terminal + the portable tools (Starship, Helix, Nushell, &hellip;)</span
                             ><span class="note">binary, no admin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
@@ -3567,7 +3561,7 @@ cd "$env:USERPROFILE\.config\mise"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">4</span
-                            ><span class="lbl">chezmoi init --apply</span>
+                            ><span class="lbl">mise bootstrap --only dotfiles,tools</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -3589,7 +3583,7 @@ cd "$env:USERPROFILE\.config\mise"
                         (declining just skips it; suppress it entirely with
                         <code>-SkipElevated</code>).
                         Pass <code>-SkipToolInstall</code> to skip the
-                        chezmoi/Windows
+                        Warp/Windows
                         Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys
                         CLI/dnGrep/LogExpert
                         installs, the mise runtimes and the Python scripting env build,
@@ -3612,12 +3606,13 @@ cd "$env:USERPROFILE\.config\mise"
                         <code>GITHUB_TOKEN</code> persists into
                         <code>.git/config</code> (github.com-scoped) so
                         subsequent <code>git push</code>,
-                        <code>chezmoi update</code>, and
+                        <code>git pull</code>, and
                         <code>manage-hosts.ps1</code> ops authenticate without
                         re-passing the env var.
                     </p>
                     <p class="note-row">
-                        <strong>Warp config model:</strong> chezmoi deploys
+                        <strong>Warp config model:</strong> the dotfiles
+                        (mode = <code>copy</code>) deploy
                         <code>settings.toml</code> + <code>keybindings.yaml</code>
                         to <code>%LOCALAPPDATA%\warp\Warp\config\</code> and
                         the theme to
@@ -3629,15 +3624,17 @@ cd "$env:USERPROFILE\.config\mise"
                         generated <code>workstation-*.toml</code> Tab Configs
                         need a Warp restart. Warp&rsquo;s Settings panel writes
                         back to <code>settings.toml</code>, so re-sync the repo
-                        with <code>chezmoi re-add</code> after changing things
+                        with <code>wsr</code> (<code>mise dot add
+                        --changed</code>) after changing things
                         there &mdash; the same sync-from-host pattern as Windows
                         Terminal below. (Warp&rsquo;s own cloud settings-sync is
-                        deliberately off, so it can&rsquo;t fight chezmoi for
-                        authorship.)
+                        deliberately off, so it can&rsquo;t fight the dotfiles
+                        apply for authorship.)
                     </p>
                     <p class="note-row">
-                        <strong>Windows Terminal config model:</strong> chezmoi
-                        deploys the tracked <code>settings.json</code> straight
+                        <strong>Windows Terminal config model:</strong> the
+                        dotfiles (mode = <code>copy</code>) deploy the tracked
+                        <code>settings.json</code> straight
                         to the Store package&rsquo;s live
                         <code>LocalState</code> path
                         (<code>%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\</code>).
@@ -3655,31 +3652,30 @@ cd "$env:USERPROFILE\.config\mise"
                         added or removed hosts; and the Settings UI
                         <strong>re-serializes <code>settings.json</code></strong>
                         whenever you change something there, so re-sync the
-                        repo with <code>chezmoi re-add</code> (the same
-                        sync-from-host pattern as Zed) instead of hand-editing
-                        both copies.
+                        repo with <code>wsr</code> (<code>mise dot add
+                        --changed</code>, the same sync-from-host pattern as
+                        Zed) instead of hand-editing both copies.
                     </p>
                     <p class="note-row">
                         After bootstrap, restart your shell so the
-                        chezmoi-applied <code>$PROFILE</code> picks up &mdash;
+                        dotfiles-applied <code>$PROFILE</code> picks up &mdash;
                         starship prompt,
-                        <code>cz</code
-                        >/<code>cza</code>/<code>cze</code>/<code>czd</code>/<code>czu</code>/<code
-                            >czs</code
-                        >
+                        <code>wsa</code>/<code>wse</code>/<code>wsd</code>/<code
+                            >wss</code
+                        >/<code>wsr</code>/<code>wsu</code>
                         aliases, git aliases, etc.
                         <strong>Editing dotfiles:</strong> same workflow as
-                        Linux. <code>cze &lt;path&gt;</code> opens the
-                        source-state copy; <code>cza</code> applies;
-                        <code>czd</code> shows the diff;
-                        <code>cz cd</code> jumps to the source dir for direct
-                        git ops.
+                        Linux. <code>wse &lt;path&gt;</code> opens the
+                        source-state copy; <code>wsa</code> applies;
+                        <code>wsd</code> shows the diff; the checkout at
+                        <code>%USERPROFILE%\.config\mise</code> IS the source
+                        dir, so <code>cd</code> there directly for git ops.
                     </p>
 
                     <h4 id="setup-wsl">Bootstrapping WSL distros</h4>
                     <p>
                         WSL distros are first-class managed hosts &mdash; same
-                        tools, same chezmoi-tracked zshrc + starship prompt
+                        tools, same tracked zshrc + starship prompt
                         + aliases as a real Linux box. They&rsquo;re accessed
                         through Windows Terminal&rsquo;s
                         <em>AlmaLinux-9</em> WSL profile (or
@@ -3732,9 +3728,9 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                     </p>
 
                     <p class="note-row">
-                        <strong>Truecolor signaling.</strong> Every chezmoi-managed shell exports
-                        <code>COLORTERM=truecolor</code> on startup (see <code>dot_zshrc.tmpl</code> /
-                        <code>dot_bashrc.tmpl</code>), and Windows Terminal runs
+                        <strong>Truecolor signaling.</strong> Every tracked shell exports
+                        <code>COLORTERM=truecolor</code> on startup (see <code>dotfiles/zshrc.tera</code> /
+                        <code>dotfiles/bashrc.tera</code>), and Windows Terminal runs
                         <code>TERM=xterm-256color</code> &mdash; full 24-bit
                         RGB. Verify with the smooth-gradient one-liner in the
                         Troubleshooting section (renders without banding).
@@ -3751,12 +3747,15 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <code>wsl</code> token), from the tracked
                         <code>configs/wsl/wsl.conf</code>. The global
                         <code>%USERPROFILE%\.wslconfig</code> (WSL2 VM memory /
-                        CPU / networking, all distros) is deployed by chezmoi on
-                        the Windows host from <code>chezmoi/dot_wslconfig</code>.
+                        CPU / networking, all distros) is deployed by the
+                        mise dotfiles (mode = <code>copy</code>) on
+                        the Windows host from <code>dotfiles/wslconfig</code>.
                         <strong>Both need <code>wsl --shutdown</code></strong>
-                        from a Windows terminal to take effect. On the
-                        Windows side a chezmoi <code>run_onchange</code>
-                        script prints the reminder when
+                        from a Windows terminal to take effect. mise has no
+                        <code>run_onchange</code> equivalent (ruling 6), so on
+                        the Windows side a <code>bootstrap.ps1</code> step
+                        sha256-compares the source against a stored marker
+                        and prints the reminder when
                         <code>.wslconfig</code> changes; on Linux, remember
                         it yourself after a <code>/etc/wsl.conf</code>
                         change (the Make-era printed reminder is gone with
@@ -3979,7 +3978,8 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <kbd>CTRL</kbd>+<kbd>&uarr;</kbd>/<kbd>&darr;</kbd>
                         jump between them; duplicating a tab or pane reopens
                         the current directory (OSC 9;9); and long-running
-                        commands (<code>make</code>, <code>cza</code>/<code>czu</code>,
+                        commands (<code>make</code>, <code>mise</code>,
+                        <code>wsa</code>/<code>wsu</code>,
                         <code>dnf</code>, <code>cargo</code>, <code>npm</code>,
                         <code>uv</code>, git network verbs) show indeterminate
                         progress on the taskbar icon (OSC 9;4) until the next
@@ -3988,7 +3988,7 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         Suggestions palette
                         (<kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd>)
                         fuzzy-searches eight tracked snippets
-                        (<code>cza</code>/<code>czu</code>/<code>czd</code>/<code>czs</code>,
+                        (<code>wsa</code>/<code>wsu</code>/<code>wsd</code>/<code>wss</code>,
                         full dev bootstrap, lint, fleet update,
                         <code>zellij attach</code>) plus recent commands &mdash;
                         snippets insert editable text and never auto-execute.
@@ -4343,12 +4343,18 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         this natively). Kept in lockstep with the scripts by
                         the repo&rsquo;s invariant check.
                     </p>
-                    <h3>chezmoi (Linux or Windows)</h3>
+                    <h3>mise dotfiles (Linux or Windows)</h3>
                     <p>
-                        Same aliases on both OSes &mdash; defined in
-                        <code>dot_zshrc.tmpl</code> /
-                        <code>dot_bashrc.tmpl</code> (Linux) and the templated
-                        PowerShell profile (Windows):
+                        Same six workflow aliases on both OSes &mdash; defined
+                        in <code>dotfiles/zshrc.tera</code> /
+                        <code>dotfiles/bashrc.tera</code> (Linux, bash/zsh)
+                        and the templated PowerShell profile / Nushell config
+                        (Windows). Each target is one <code>[dotfiles]</code>
+                        entry, mode <code>template</code> or <code>copy</code>
+                        only &mdash; every deployed file is an independent
+                        copy under <code>$HOME</code>, never a symlink back
+                        into this checkout (see
+                        <a href="#layout">Repo layout</a>):
                     </p>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
@@ -4359,59 +4365,118 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         </thead>
                         <tbody>
                             <tr>
-                                <td><code>cze &lt;path&gt;</code></td>
+                                <td><code>wse &lt;path&gt;</code></td>
                                 <td>
-                                    Edit a dotfile in source state (e.g.
-                                    <code>cze ~/.zshrc</code>,
-                                    <code>cze $PROFILE</code>)
+                                    <code>mise dot edit</code> &mdash; edit a
+                                    dotfile&rsquo;s source (e.g.
+                                    <code>wse ~/.zshrc</code>,
+                                    <code>wse $PROFILE</code>)
                                 </td>
                             </tr>
                             <tr>
-                                <td><code>cza</code></td>
-                                <td>Apply pending changes locally</td>
-                            </tr>
-                            <tr>
-                                <td><code>czd</code></td>
-                                <td>Diff &mdash; see what would change</td>
-                            </tr>
-                            <tr>
-                                <td><code>czu</code></td>
-                                <td>Pull latest from repo and apply</td>
-                            </tr>
-                            <tr>
-                                <td><code>czs</code></td>
-                                <td>Status</td>
-                            </tr>
-                            <tr>
-                                <td><code>cz cd</code></td>
+                                <td><code>wsd</code></td>
                                 <td>
-                                    Jump to the source dir for direct git ops
+                                    <code>mise dot diff</code> &mdash; preview
+                                    pending changes to <code>$HOME</code>
                                 </td>
                             </tr>
                             <tr>
-                                <td><code>czt</code></td>
+                                <td><code>wsa</code></td>
                                 <td>
-                                    Launch
-                                    <a href="https://github.com/daptify14/chezit"
-                                        >chezit</a
-                                    >
-                                    &mdash; TUI with Status / Files / Info /
-                                    Commands tabs. Browse changes, view
-                                    diffs, stage / unstage, run chezmoi
-                                    commands interactively.
+                                    Apply &mdash; writes tracked state to
+                                    <code>$HOME</code>. Checks for an
+                                    un-recorded edit first (anything
+                                    <code>mise dot status</code> reports as
+                                    <code>differs</code>): if it finds one it
+                                    prints the diff and asks before
+                                    overwriting, instead of silently blowing
+                                    it away. (The raw form,
+                                    <code>mise bootstrap --only dotfiles
+                                    --yes</code>, skips that check.)
                                 </td>
                             </tr>
                             <tr>
-                                <td><code>czh</code></td>
+                                <td><code>wsr</code></td>
                                 <td>
-                                    Print the chezmoi cheatsheet (all
-                                    <code>cz*</code> aliases + common
-                                    edit&rarr;diff&rarr;apply flow + push
-                                    incantation).
+                                    <code>mise dot add --changed</code>
+                                    &mdash; record a copy-mode <em>file&rsquo;s</em>
+                                    edit (a GUI app rewrote it &mdash; Warp /
+                                    Windows Terminal / Zed / VS Code &mdash;
+                                    or you edited it by hand) back to its
+                                    source. Doesn&rsquo;t cover a
+                                    <em>directory</em> entry (e.g.
+                                    <code>~/.claude/agents</code>,
+                                    <code>~/.claude/commands</code>) &mdash;
+                                    for one of those, name the directory
+                                    itself: <code>mise dot add
+                                    ~/.claude/agents</code>.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>wss</code></td>
+                                <td>
+                                    <code>mise dot status</code> &mdash; list
+                                    every managed file and its state
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>wsu</code></td>
+                                <td>
+                                    <code>mise run update</code> &mdash;
+                                    <code>git pull</code> + <code>mise
+                                    install</code> + <code>mise
+                                    bootstrap</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>wsh</code></td>
+                                <td>
+                                    Print the workstation cheatsheet (all
+                                    <code>ws*</code> aliases + the common
+                                    edit&rarr;diff&rarr;apply flow + the push
+                                    incantation). bash/zsh only &mdash; no
+                                    Windows equivalent.
                                 </td>
                             </tr>
                         </tbody>
                     </table></div>
+                    <p class="note-row">
+                        Every <code>ws*</code> command always acts on
+                        <strong>this host&rsquo;s own checkout</strong>
+                        (<code>~/.config/mise</code> on Linux,
+                        <code>%USERPROFILE%\.config\mise</code> on Windows)
+                        &mdash; regardless of the current directory. mise
+                        resolves its config root by walking up from the
+                        current directory, so an unpinned command run from
+                        anywhere with its own <code>.config/mise</code>
+                        reachable in that walk (a Windows drive mount under
+                        WSL is the case that bit us) would silently manage a
+                        <em>different</em> checkout instead of erroring.
+                        Every <code>ws*</code> alias/function pins
+                        <code>mise -C</code> to the host&rsquo;s own home
+                        directory to rule that out, and <code>wsa</code>
+                        additionally refuses to apply if the config root mise
+                        actually resolved doesn&rsquo;t match.
+                    </p>
+                    <p>
+                        Every target is an independent file in
+                        <code>$HOME</code> now &mdash; there is no symlinked
+                        case any more, so editing the deployed file directly
+                        (by hand, or a Claude Code agent editing
+                        <code>~/.claude/CLAUDE.md</code>) does <strong>not</strong>
+                        update <code>dotfiles/</code>, and the next
+                        <code>wsa</code> silently overwrites that edit unless
+                        it&rsquo;s been recorded back first. The normal way to
+                        keep an edit is: <code>wsr</code> for a file entry, or
+                        <code>mise dot add &lt;directory&gt;</code> (naming
+                        the exact target path, e.g.
+                        <code>mise dot add ~/.claude/agents</code>) for a
+                        directory entry &mdash; <code>wsr</code>&rsquo;s
+                        <code>--changed</code> flag does not see inside a
+                        directory entry at all. Run <code>wse &lt;path&gt;</code>
+                        first if you&rsquo;d rather edit the source directly
+                        and skip the round-trip.
+                    </p>
                     <p>To push changes back to the repo:</p>
                     <pre><code>cd ~/.config/mise   # or wherever the source state lives
 git add -A && git commit -m "update zshrc" && git push</code></pre>
@@ -4608,8 +4673,10 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         <code>--dev</code>/<code>--prod</code> flag, runs
                         <code>scripts/lib/mise-install.sh</code> (tools),
                         then <code>mise bootstrap --yes</code> (packages,
-                        /etc files, services, compose, repos &mdash; every
-                        <code>[bootstrap.*]</code> table the loaded
+                        /etc files, services, compose, repos, dotfiles
+                        &mdash; every
+                        <code>[bootstrap.*]</code> table (plus
+                        <code>[dotfiles]</code>) the loaded
                         <code>config*.toml</code> files declare). You can
                         invoke <code>mise bootstrap</code> manually for
                         repeated runs without going through the whole
@@ -4617,7 +4684,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         works from any cwd inside the checkout, since this
                         repo IS mise&rsquo;s global config dir.
                     </p>
-                    <pre><code># Full re-provision (packages, /etc files, services, compose, repos, tools)
+                    <pre><code># Full re-provision (packages, /etc files, services, compose, repos, dotfiles, tools)
 mise bootstrap --yes
 
 # Dry run — print the plan, change nothing
@@ -4867,92 +4934,24 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                         <strong>Config changes need a fresh session.</strong>
                         Zellij reads <code>config.kdl</code> when a session is
                         <em>created</em>, so
-                        <code>chezmoi apply</code> alone changes nothing about a
+                        <code>wsa</code> alone changes nothing about a
                         running <code>main</code> &mdash;
                         <code>zellij kill-session main</code>, then reattach.
                     </p>
 
                     <h3 id="daily-services">Services</h3>
                     <p>
-                        The web-admin trio below (Docker engine, Cockpit,
-                        Dozzle) is <strong>dev_machine-only</strong> and
-                        skipped on WSL; <code>pueue</code> runs on every
-                        Linux host, both groups.
+                        <code>pueue</code> runs on every Linux host, both
+                        groups, WSL included. (Docker/Cockpit/rsyslog/Dozzle
+                        provisioning was removed from this repo entirely on
+                        2026-09-22 — mise no longer installs or configures
+                        any of them; a host that already had them keeps
+                        them, running and unmanaged, but there is nothing
+                        left here to document as a managed service.)
                     </p>
                     <ul>
                         <li>
-                            <strong>Docker engine</strong> — installed
-                            automatically by <code>mise bootstrap</code>
-                            (<code>config.native.toml</code>): Docker CE from
-                            Docker&rsquo;s official dnf repo
-                            (<code>[bootstrap.files]</code> drops the repo
-                            file pre-packages), service enabled
-                            (<code>[bootstrap.services.docker]</code>), and
-                            your user added to the <code>docker</code> group
-                            by the <code>native-post-packages</code>
-                            post-packages hook (log out/in once for
-                            sudo-less <code>docker</code> /
-                            <code>lazydocker</code>). If Docker is already
-                            present from a manual install, the step leaves it
-                            alone. Versions come from dnf — no pin to track.
-                        </li>
-                        <li>
-                            <strong>Cockpit</strong> — open
-                            <code>https://&lt;host&gt;:9090</code> in a
-                            browser; log in with your Linux user account
-                            (PAM). Self-signed cert on first hit — accept
-                            the warning. Covers services, journal,
-                            storage, network, packages, podman.
-                        </li>
-                        <li>
-                            <strong>Dozzle</strong> — a <code>docker
-                            compose</code> project at
-                            <code>/etc/dozzle</code>
-                            (<code>[bootstrap.compose.dozzle]</code> in
-                            <code>config.native.toml</code>, rendered from
-                            the tracked
-                            <code>configs/dozzle/compose.yaml.tera</code>);
-                            bound to localhost. SSH-tunnel to view:
-                            <code>ssh -L 8080:localhost:8080 &lt;host&gt;</code>,
-                            then
-                            <code>http://localhost:8080</code> on your
-                            workstation. Real-time Docker container logs.
-                            Bump the pinned image tag by editing
-                            <code>dozzle_version</code> in
-                            <code>config.toml</code> <code>[vars]</code>;
-                            the next <code>mise bootstrap</code> re-renders
-                            the compose file and recreates the container.
-                        </li>
-                        <li>
-                            <strong>Shell shortcuts</strong> — on any
-                            dev_machine, the chezmoi-tracked shells alias
-                            <code>dozzle-status</code>
-                            (<code>docker compose -f /etc/dozzle/compose.yaml
-                            ps</code>), <code>dozzle-logs</code>
-                            (<code>... logs -f</code>),
-                            <code>dozzle-restart</code>
-                            (<code>... restart</code>), and
-                            <code>cockpit-status</code> for fast health
-                            checks. Defined in
-                            <code>dot_zshrc.tmpl</code> /
-                            <code>dot_bashrc.tmpl</code>; harmless no-ops
-                            on prod_machine hosts where the services
-                            aren't installed.
-                        </li>
-                        <li>
-                            <strong>WSL note</strong> — all of
-                            <code>config.native.toml</code> is skipped
-                            automatically on WSL dev_machines (it only loads
-                            when <code>MISE_ENV</code> carries the
-                            <code>native</code> token, never <code>wsl</code>).
-                            The web-admin stack targets a standalone Linux
-                            dev box, and on WSL the engine belongs to Docker
-                            Desktop on the Windows host.
-                        </li>
-                        <li>
-                            <strong>pueue</strong> — unlike the services
-                            above, this one runs on every Linux host (both
-                            groups, WSL included): the daemon
+                            <strong>pueue</strong> — the daemon
                             (<code>pueued</code>) runs as a per-user systemd
                             unit declared in <code>config.linux.toml</code>
                             (<code>[bootstrap.services.pueued]</code>,
@@ -5153,12 +5152,107 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                         <code>config.dev.toml</code> for worked examples.
                     </p>
 
+                    <h3>Adding a dotfile</h3>
+                    <p>
+                        One <code>[dotfiles]</code> entry, keyed by the
+                        <strong>target</strong> path, plus the source file
+                        under <code>dotfiles/</code> (real name, no
+                        <code>dot_</code> prefixing). Add it to the
+                        <code>config*.toml</code> file whose MISE_ENV token
+                        should gate it &mdash; cross-platform in
+                        <code>config.toml</code>, Linux in
+                        <code>config.linux.toml</code>, Windows in
+                        <code>config.windows.toml</code>, dev-only (both
+                        OSes) in <code>config.dev.toml</code>, Linux-dev-only
+                        in <code>config.host.toml</code>:
+                    </p>
+                    <pre><code># config.linux.toml — [dotfiles]
+"~/.config/example/config.toml" = { source = "dotfiles/config/example/config.toml", mode = "copy" }</code></pre>
+                    <p class="note-row">
+                        Only two modes exist in this repo, on every platform
+                        (ruling 7 &mdash; no <code>[dotfiles]</code> entry
+                        symlinks, anywhere, by explicit user decision:
+                        copy semantics survive applications on either OS
+                        that don&rsquo;t respect symlinks): <code
+                            >copy</code
+                        >
+                        for a plain file (add
+                        <code>exclude = [".vendor", ".gitkeep"]</code> too if
+                        the source is a whole directory, e.g. a vendored
+                        plugin tree &mdash; copy on a directory leaves
+                        unmanaged siblings alone, same as it did on Linux
+                        before) &mdash; a copy-mode edit, whether made
+                        through an app (Zed/Warp/VS Code/Windows Terminal
+                        settings) or by hand under <code>$HOME</code>, needs
+                        recording back to source or the next apply silently
+                        overwrites it: <code>wsr</code> (<code>mise dot add
+                        --changed</code>) for a FILE entry, or
+                        <code>mise dot add &lt;target&gt;</code> naming the
+                        directory&rsquo;s own exact path for a DIRECTORY
+                        entry (<code>--changed</code> does not see inside
+                        one); <code>template</code> for a Tera
+                        <code>.tera</code> source that needs a rendered var
+                        (host name, OS branch, git identity) &mdash; guard
+                        every <code>vars.*</code> reference with
+                        <code>is defined</code> or <code>default()</code>,
+                        since one undefined variable or failing
+                        <code>exec()</code> aborts the ENTIRE
+                        <code>mise dot apply</code>/<code>mise
+                        bootstrap</code> run and writes nothing at all
+                        (ruling 3) &mdash; render it individually first
+                        (<code>mise dot apply --force -- "~/.config/..."</code>)
+                        and add it to <code>scripts/check-templates.sh</code>.
+                        Disabling an entry inherited from a less-specific
+                        file needs <code>enabled = false</code>
+                        <strong>and</strong> a repeated <code>mode</code> in
+                        the override (ruling 2 &mdash; <code>enabled =
+                        false</code> alone is silently ignored).
+                    </p>
+                    <ol>
+                        <li>
+                            <code>mise dot apply --yes -- "&lt;target&gt;"</code>
+                            &mdash; apply just that one entry.
+                        </li>
+                        <li>
+                            <code>mise dot status</code> / <code>mise dot
+                            diff</code> &mdash; confirm it lands the way you
+                            expect.
+                        </li>
+                        <li>
+                            <code>bash scripts/check-invariants.sh</code>
+                            &mdash; runs <code>check_dotfiles_config</code>
+                            (source exists, mode is valid, every Windows
+                            entry is <code>copy</code>/<code>template</code>,
+                            every <code>.tera</code> file is referenced by
+                            exactly one entry).
+                        </li>
+                        <li>Commit the config edit and the new source file.</li>
+                    </ol>
+                    <p class="note-row">
+                        <strong>First apply on a host still running the old
+                        chezmoi bootstrap:</strong> every target already
+                        exists as a real file, and
+                        <code>copy</code>/<code>template</code> refuse
+                        to overwrite one that already differs (even
+                        <code>--dry-run</code> exits 1)
+                        &mdash; <code>mise dot apply --force</code> or
+                        <code>mise bootstrap --force-dotfiles</code> resolves
+                        it (ruling 1). <code>bootstrap.sh</code>/<code
+                            >bootstrap.ps1</code
+                        > pass <code>--force-dotfiles</code> automatically,
+                        but only while
+                        <code>~/.local/state/workstation/dotfiles-migrated</code>
+                        is absent, so a later real conflict still fails
+                        loudly.
+                    </p>
+
                     <h3>Adding a dnf package</h3>
                     <p>
                         One line, in the right file. Dev-only C-toolchain /
                         core packages go in <code>config.host.toml</code>;
-                        anything needing docker/cockpit/rsyslog/NFS (non-WSL
-                        dev only) goes in <code>config.native.toml</code>.
+                        the NFS client group (non-WSL dev only — the only
+                        thing <code>config.native.toml</code> declares any
+                        more) goes in <code>config.native.toml</code>.
                         Both are <code>[bootstrap.packages]</code> tables of
                         <code>"dnf:&lt;name&gt;" = "latest"</code> entries,
                         installed as ONE
@@ -5265,7 +5359,7 @@ on_change = "restart"</code></pre>
                         <input
                             id="ts-filter" aria-label="Filter troubleshooting entries"
                             type="search"
-                            placeholder="Filter entries (e.g. &lsquo;chezmoi&rsquo;, &lsquo;PATH&rsquo;, &lsquo;terminal&rsquo;)…"
+                            placeholder="Filter entries (e.g. &lsquo;dotfiles&rsquo;, &lsquo;PATH&rsquo;, &lsquo;terminal&rsquo;)…"
                             autocomplete="off"
                         />
                         <div class="filter-meta" id="ts-count" role="status"></div>
@@ -5363,13 +5457,14 @@ on_change = "restart"</code></pre>
                                 conf.d layout) is moved aside first as
                                 <code>*.pre-relocation.&lt;timestamp&gt;</code>
                                 &mdash; delete it once the new layout is
-                                confirmed working. The script also writes
-                                <code>sourceDir</code> into chezmoi&rsquo;s
-                                own config
-                                (<code>~/.config/chezmoi/chezmoi.toml</code>),
-                                so <code>cza</code>/<code>czd</code>/&hellip;
-                                keep pointing at the new location without any
-                                manual fix-up. <code>scripts/update-hosts.sh</code>
+                                confirmed working. Any leftover pre-migration
+                                chezmoi config
+                                (<code>~/.config/chezmoi/</code>) is swept up
+                                separately, by <code>--reinstall</code> or
+                                <code>bootstrap.ps1</code>&rsquo;s own
+                                one-time sweep &mdash; nothing reads or writes
+                                it any more, since chezmoi itself is gone.
+                                <code>scripts/update-hosts.sh</code>
                                 detects either path on a host that
                                 hasn&rsquo;t re-bootstrapped since the move.
                             </p>
@@ -5428,7 +5523,7 @@ on_change = "restart"</code></pre>
                                     >http.https://github.com/.extraheader</code
                                 >
                                 so subsequent ops (push,
-                                <code>chezmoi update</code>, manual
+                                <code>scripts/update-hosts.sh</code>, manual
                                 <code>git pull</code>) all work &mdash;
                                 re-passing the env var on later runs just
                                 refreshes the stored value.
@@ -5575,7 +5670,7 @@ on_change = "restart"</code></pre>
                                     <strong>The session predates the
                                     change.</strong> Zellij reads its config
                                     when a session is <em>created</em>, so
-                                    <code>chezmoi apply</code> does nothing to a
+                                    <code>wsa</code> does nothing to a
                                     running <code>main</code>. Run
                                     <code>zellij kill-session main</code> and
                                     reattach.
@@ -5587,8 +5682,8 @@ on_change = "restart"</code></pre>
                                     the host <em>zellij runs on</em> &mdash;
                                     that&rsquo;s the remote box, not your
                                     laptop. If it&rsquo;s missing,
-                                    <code>chezmoi update &amp;&amp; chezmoi apply</code>
-                                    there.
+                                    <code>wsu</code> (<code>mise run
+                                    update</code>) there.
                                 </li>
                             </ul>
                             <p>
@@ -5625,11 +5720,12 @@ on_change = "restart"</code></pre>
                         <div class="ts-body">
                             <p>
                                 Two layers of self-healing apply &mdash; both
-                                are already configured by chezmoi.
+                                are already configured by the tracked
+                                dotfiles.
                             </p>
                             <p>
-                                <strong>Prevention.</strong> Chezmoi ships
-                                <code>~/.ssh/config</code> with
+                                <strong>Prevention.</strong> The tracked
+                                <code>~/.ssh/config</code> template ships
                                 <code>ServerAliveInterval 30</code>,
                                 <code>ServerAliveCountMax 3</code>, and
                                 <code>TCPKeepAlive yes</code>. Dead
@@ -5675,9 +5771,9 @@ on_change = "restart"</code></pre>
                             <p>
                                 Warp <strong>hot-reloads</strong>
                                 <code>settings.toml</code>, so a theme or font
-                                change lands as soon as chezmoi applies it
-                                (<code>cza</code> on WSL, or
-                                <code>chezmoi apply</code> in a Windows shell).
+                                change lands as soon as
+                                <code>wsa</code> applies it (same alias on
+                                WSL or in a Windows shell).
                                 <strong>Tab Configs are the exception</strong>
                                 &mdash; Warp reads
                                 <code>%APPDATA%\warp\Warp\data\tab_configs\</code>
@@ -5707,7 +5803,7 @@ on_change = "restart"</code></pre>
                                     <code>catppuccin-mocha.yaml</code>, and it
                                     must exist under
                                     <code>%APPDATA%\warp\Warp\data\themes\</code>.
-                                    A chezmoi apply restores it.
+                                    A <code>wsa</code> restores it.
                                 </li>
                                 <li>
                                     <strong>Opened PowerShell, not
@@ -5722,14 +5818,17 @@ on_change = "restart"</code></pre>
                                 </li>
                                 <li>
                                     <strong>Your edits keep coming
-                                    back</strong> &mdash; chezmoi owns
-                                    <code>settings.toml</code>. Change it in the
-                                    Settings panel if you like, then re-sync the
-                                    repo with <code>chezmoi re-add</code>.
+                                    back</strong> &mdash; the tracked
+                                    dotfiles own <code>settings.toml</code>
+                                    (mode = <code>copy</code>). Change it in
+                                    the Settings panel if you like, then
+                                    re-sync the repo with <code>wsr</code>
+                                    (<code>mise dot add --changed</code>).
                                     <strong>Don&rsquo;t enable Warp&rsquo;s
                                     settings sync</strong>
                                     (<code>is_settings_sync_enabled</code>);
-                                    cloud sync and chezmoi will fight over the
+                                    cloud sync and the next <code>wsa</code>
+                                    will fight over the
                                     file.
                                 </li>
                                 <li>
@@ -5761,14 +5860,13 @@ on_change = "restart"</code></pre>
                         <div class="ts-body">
                             <p>
                                 The tracked <code>settings.json</code> deploys
-                                via chezmoi straight to the Store
-                                package&rsquo;s
+                                (mode = <code>copy</code>) straight to the
+                                Store package&rsquo;s
                                 <code>LocalState</code> path &mdash; so an
                                 edit in the repo needs a
-                                <code>chezmoi apply</code>
-                                (<code>cza</code> on WSL, or
-                                <code>chezmoi apply</code> in a Windows
-                                shell) before Windows Terminal can see it.
+                                <code>wsa</code> (same alias on WSL or in
+                                a Windows shell) before Windows Terminal
+                                can see it.
                                 <code>settings.json</code> itself
                                 <strong>hot-reloads</strong>: the change lands
                                 in open windows within a second of the apply.
@@ -5804,6 +5902,17 @@ on_change = "restart"</code></pre>
                                     can require a one-time enable of the
                                     <em>workstation</em> entry before its
                                     profiles show up.
+                                </li>
+                                <li>
+                                    <strong>Your edits keep coming back</strong>
+                                    &mdash; the Settings UI re-serializes
+                                    <code>settings.json</code> on save; change
+                                    it there if you like, then
+                                    <code>wsr</code> (<code>mise dot add
+                                    --changed</code>) to record the edit back
+                                    to <code>dotfiles/windows/...</code>
+                                    before the next <code>wsa</code>
+                                    overwrites it with the stale source.
                                 </li>
                             </ul>
                         </div>
@@ -5876,7 +5985,7 @@ on_change = "restart"</code></pre>
                     <details data-ts>
                         <summary>
                             PowerShell aliases / <code>adminpw</code> /
-                            <code>cz*</code> don&rsquo;t load (the profile seems
+                            <code>ws*</code> don&rsquo;t load (the profile seems
                             ignored)
                         </summary>
                         <div class="ts-body">
@@ -5887,7 +5996,8 @@ on_change = "restart"</code></pre>
                                 <code>$PROFILE</code> from the redirected location
                                 (e.g.
                                 <code>%USERPROFILE%\OneDrive - &lt;Org&gt;\Documents\</code>),
-                                but chezmoi deploys the managed profile to the
+                                but the dotfiles deploy the managed profile
+                                (mode = <code>template</code>) to the
                                 <em>literal</em>
                                 <code>%USERPROFILE%\Documents\PowerShell\</code>
                                 &mdash; so your shell never loads it.
@@ -6022,12 +6132,12 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                 already-settled resource is skipped, so you
                                 aren&rsquo;t redoing work, only retrying what
                                 failed. If a single phase is wedged on
-                                something outside your control (Docker Hub
-                                unreachable, a proxied host, a flaky mirror),
-                                skip just that phase to make progress
-                                elsewhere:
+                                something outside your control (a flaky dnf
+                                mirror, a proxied host, an unreachable
+                                upstream), skip just that phase to make
+                                progress elsewhere:
                             </p>
-                            <pre><code>mise bootstrap --skip compose --yes        # e.g. Docker Hub unreachable
+                            <pre><code>mise bootstrap --skip packages --yes       # e.g. a flaky dnf mirror
 mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</code></pre>
                             <p>
                                 then re-run the full
@@ -6038,6 +6148,263 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
                                 <code>mise bootstrap plan</code> first to see
                                 what a phase would actually do before running
                                 it for real.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>mise dot apply</code>/<code>mise
+                            bootstrap</code> fails with
+                            <em>&ldquo;Variable &hellip; is not
+                            defined&rdquo;</em> (or a template renders
+                            garbage) &mdash; and NOTHING got applied
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                One broken template aborts the
+                                <strong>entire</strong> dotfiles apply and
+                                writes nothing at all &mdash; not just the
+                                one entry with the bad template. That is by
+                                design (ruling 3 in the migration plan): a
+                                single undefined Tera variable or a failing
+                                <code>exec()</code> in ANY <code>mode =
+                                "template"</code> entry fails the whole run,
+                                so a partial apply that leaves half the
+                                dotfiles tree stale never happens.
+                            </p>
+                            <p>
+                                mise puts the useful part first: the target,
+                                the source file, then the actual error
+                                (<code>error: Variable &lt;name&gt; is not
+                                defined</code> and a caret line), followed by
+                                generic <code>mise ERROR
+                                Version/Run</code> boilerplate you can
+                                ignore. To find the culprit yourself instead
+                                of reading a bulk-run failure, apply every
+                                <code>template</code>-mode entry
+                                individually:
+                            </p>
+                            <pre><code>mise dot apply --force --yes -- "&lt;target&gt;"   # one entry at a time, names the failure precisely
+bash scripts/check-templates.sh                    # does exactly this for every .tera file, all four MISE_ENV sets</code></pre>
+                            <p>
+                                Fix the template (guard the variable with
+                                <code>is defined</code> or
+                                <code>default(value=...)</code>, or make the
+                                <code>exec()</code> command fail-safe), then
+                                re-run the bulk apply
+                                (<code>wsa</code>). <code>scripts/check-templates.sh</code>
+                                runs in CI precisely so this is caught before
+                                it ever reaches a host.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>mise dot apply</code>/<code>mise
+                            bootstrap</code> refuses with
+                            <em>&ldquo;refusing to overwrite existing files
+                            (use --force)&rdquo;</em>
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                <code>copy</code>/<code>template</code>
+                                targets refuse to replace a pre-existing
+                                file that already <strong>differs</strong>
+                                &mdash; even <code>--dry-run</code> exits 1
+                                without <code>--force</code>. This is
+                                expected and <strong>correct</strong> on the
+                                first apply on any host that previously ran
+                                the old chezmoi-based bootstrap: every target
+                                chezmoi deployed is a real, differing file
+                                today, so mise won&rsquo;t silently reclaim
+                                it.
+                            </p>
+                            <p>
+                                <code>bootstrap.sh</code>/<code
+                                    >bootstrap.ps1</code
+                                >
+                                already handle this &mdash; they pass
+                                <code>--force-dotfiles</code> to <code>mise
+                                bootstrap</code> automatically, but
+                                <strong>only</strong> while the migration
+                                marker
+                                (<code>~/.local/state/workstation/dotfiles-migrated</code>)
+                                is absent. Once it&rsquo;s written (after the
+                                first successful apply), a later
+                                &ldquo;refusing to overwrite&rdquo; means a
+                                <em>real</em> conflict &mdash; a file you or
+                                another tool created at that exact path
+                                &mdash; and gets surfaced loudly instead of
+                                silently clobbered.
+                            </p>
+                            <p>
+                                To resolve one entry by hand: inspect what is
+                                actually there, then either
+                                <code>mise dot apply --force --yes --
+                                "&lt;target&gt;"</code>
+                                to let the dotfiles win, or move the
+                                conflicting file aside first if you want to
+                                keep it. Never reach for <code
+                                    >--force-dotfiles</code
+                                >
+                                / <code>--force</code> as a reflex outside
+                                the migration case above &mdash; it silently
+                                discards whatever was at that path.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            <code>scripts/update-hosts.sh</code> fails on a
+                            host with
+                            <em>&ldquo;fatal: Not possible to fast-forward,
+                            aborting&rdquo;</em> (or the pull just silently
+                            does nothing)
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                This checkout itself has an uncommitted
+                                change &mdash; note this is <strong>not</strong>
+                                caused by a dotfile drifting in
+                                <code>$HOME</code> any more (every
+                                <code>[dotfiles]</code> target is an
+                                independent <code>copy</code>/<code
+                                    >template</code
+                                >
+                                deploy now, outside the checkout; see
+                                <a href="#layout">Repo layout</a>) &mdash; it
+                                means something inside the repo itself
+                                changed: a hand-edited version pin in
+                                <code>config*.toml</code>, an interactive
+                                <code>wse</code> edit to a
+                                <code>dotfiles/</code> source file, a
+                                <code>wsr</code>/<code>mise dot add</code>
+                                write recording a live edit back, or mise
+                                itself rewriting a lock file.
+                                <code>scripts/update-hosts.sh</code> runs
+                                <code>git pull --ff-only</code> on every
+                                host, which refuses to run &mdash; and,
+                                depending on the git version, can fail
+                                outright rather than no-op &mdash; against
+                                local changes.
+                            </p>
+                            <p>
+                                Check for it directly on the host:
+                                <code>mise run health</code> has a
+                                <em>repo checkout</em> row that reports an
+                                uncommitted-change count. Fix by committing
+                                (then push, so the change isn&rsquo;t only
+                                local) or stashing:
+                            </p>
+                            <pre><code>cd ~/.config/mise
+git status --porcelain          # see what's dirty
+git add -A && git commit -m '...' && git push   # keep the edit
+# or:
+git stash                       # discard it from the working tree for now</code></pre>
+                            <p>
+                                then re-run <code>update-hosts.sh</code> (or
+                                just <code>git pull --ff-only</code>
+                                directly) on that host.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            A copy-mode file (Warp / Windows Terminal / Zed /
+                            VS Code settings) reverts to the old content
+                            after <code>wsa</code>
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Expected, and the whole reason these targets
+                                use <code>mode = "copy"</code>: the app
+                                rewrites the file in place (Warp&rsquo;s
+                                Settings panel, Windows Terminal serializing
+                                on every change, Zed/VS Code&rsquo;s settings
+                                UI), so the copy in <code>$HOME</code> and
+                                the source under <code>dotfiles/</code>
+                                drift apart the moment you change something
+                                through the app&rsquo;s own UI. The next
+                                <code>wsa</code> then overwrites your UI edit
+                                with the (now stale) tracked source &mdash;
+                                <code>wsa</code> DOES warn first if it
+                                notices (see the next entry for the general
+                                case and what that warning looks like).
+                            </p>
+                            <p>
+                                Record the live file back to source instead
+                                of hand-editing both copies:
+                            </p>
+                            <pre><code>wsr                    # mise dot add --changed — records every changed tracked file
+mise dot add --changed -- "&lt;target&gt;"   # or just the one you edited</code></pre>
+                            <p>
+                                then commit the updated source file. Do this
+                                <strong>before</strong> the next
+                                <code>wsa</code>/<code>wsu</code>, or the
+                                edit is lost.
+                            </p>
+                        </div>
+                    </details>
+
+                    <details data-ts>
+                        <summary>
+                            I edited a file in <code>$HOME</code> directly
+                            (e.g. <code>~/.claude/CLAUDE.md</code>) and
+                            <code>wsa</code> reverted it
+                        </summary>
+                        <div class="ts-body">
+                            <p>
+                                Every <code>[dotfiles]</code> target is now
+                                an independent <code>copy</code> under
+                                <code>$HOME</code>, not a symlink into this
+                                checkout &mdash; so an edit made straight to
+                                the deployed file (by hand, or a Claude Code
+                                agent editing its own
+                                <code>~/.claude/CLAUDE.md</code>) never
+                                reaches <code>dotfiles/</code> on its own.
+                                <code>wsa</code> checks
+                                <code>mise dot status</code> first and
+                                <strong>warns you</strong> when it finds a
+                                <code>differs</code> entry &mdash; it prints
+                                the diff and asks before overwriting, and
+                                refuses outright rather than guessing when
+                                run non-interactively. If you saw a plain
+                                overwrite with no warning, the edit was
+                                applied through the raw
+                                <code>mise bootstrap --only dotfiles
+                                --yes</code> form (scripted/CI use, or an
+                                older shell session before this check
+                                shipped) &mdash; that form has always
+                                overwritten silently, by design.
+                            </p>
+                            <p>
+                                Record the edit back to source
+                                <strong>before</strong> re-running
+                                <code>wsa</code>:
+                            </p>
+                            <pre><code>wsr                              # mise dot add --changed — FILE entries only
+mise dot add ~/.claude/agents    # DIRECTORY entries (agents, commands, hooks,
+                                  # skills, zellij, zsh/completions, gdb, local/bin) —
+                                  # name the directory's own target path;
+                                  # wsr's --changed does NOT see inside one</code></pre>
+                            <p>
+                                <code>mise dot add &lt;directory&gt;</code>
+                                captures every edit AND any brand-new file
+                                you dropped straight into that directory in
+                                one shot &mdash; but it&rsquo;s a
+                                <strong>replace</strong> of the source
+                                directory, not a merge, so a source-only
+                                placeholder that was never deployed (e.g.
+                                <code>.gitkeep</code> in an otherwise-empty
+                                <code>dotfiles/claude/agents/</code>) drops
+                                out of the source the first time you do this
+                                &mdash; expected, and harmless once the
+                                directory has real tracked content. Then
+                                commit the updated source file(s).
                             </p>
                         </div>
                     </details>
@@ -6067,75 +6434,14 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
                                 was added to a config file that loads
                                 unconditionally (unsupported here &mdash;
                                 <code>mise run health</code> would break on
-                                every host). Cockpit&rsquo;s firewall port
-                                stays the existing <code>firewall-cmd</code>
-                                snippet inside the
-                                <code>native-post-packages</code> hook task
-                                instead, which only runs during an actual
+                                every host). Open a port the existing
+                                <code>firewall-cmd</code> way instead, inside
+                                a <code>post-packages</code> hook task, which
+                                only runs during an actual
                                 <code>mise bootstrap --yes</code>, never
                                 during <code>plan</code>/<code>status</code>.
                                 Remove the table to restore unprivileged
                                 <code>plan</code>/<code>status</code>.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            <strong>Cockpit login fails — "Permission denied"</strong>
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Cockpit auths via PAM against local user accounts
-                                — your account must have a password set. SSH-key-
-                                only accounts can't log in to the Cockpit web UI.
-                                Fix: <code>sudo passwd $USER</code> on the host,
-                                then retry. (You'll still want to keep SSH on
-                                keys; this password is only for the Cockpit
-                                login form.)
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            <strong>Dozzle fails to start — "docker not found" /
-                                container won't pull</strong>
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Dozzle is a <code>docker compose</code>
-                                project at <code>/etc/dozzle</code>
-                                (<code>[bootstrap.compose.dozzle]</code> in
-                                <code>config.native.toml</code>). On non-WSL
-                                dev_machines the engine is installed
-                                automatically in the same file&rsquo;s
-                                <code>[bootstrap.packages]</code> table
-                                (packages install before the compose phase
-                                runs), so this mostly bites when that step
-                                was skipped, failed, or the host is missing
-                                <code>docker-compose-plugin</code> (needed
-                                for <code>docker compose</code> itself).
-                                Re-run <code>mise bootstrap --only
-                                packages,compose --yes</code>; check with
-                                <code>docker compose -f
-                                /etc/dozzle/compose.yaml ps</code>
-                                (<code>dozzle-status</code>). (A pre-existing
-                                manual Docker or Podman-shim install is left
-                                untouched and also satisfies the check.) If
-                                Docker is installed but the image pull
-                                fails, check <code>docker compose -f
-                                /etc/dozzle/compose.yaml logs</code>
-                                (<code>dozzle-logs</code>) — likely a
-                                registry-rate-limit or DNS issue. A
-                                container named <code>dozzle</code> already
-                                running from the old Make-era systemd unit
-                                blocks the compose project&rsquo;s port and
-                                name &mdash; the <code>native-post-packages</code>
-                                hook retires that unit before the compose
-                                phase runs; <code>systemctl status
-                                dozzle</code> should report the unit as gone,
-                                not just inactive.
                             </p>
                         </div>
                     </details>
@@ -6194,11 +6500,11 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
                                 needs to emit truecolor sequences &mdash; it
                                 won&rsquo;t unless
                                 <code>$COLORTERM=truecolor</code> is set in the
-                                shell (via the chezmoi-managed
-                                <code>dot_zshrc.tmpl</code> /
-                                <code>dot_bashrc.tmpl</code>). Run
-                                <code>chezmoi update &amp;&amp; chezmoi apply</code>
-                                (<code>czu &amp;&amp; cza</code>) on the affected
+                                shell (via the tracked
+                                <code>dotfiles/zshrc.tera</code> /
+                                <code>dotfiles/bashrc.tera</code>). Run
+                                <code>wsu</code> (<code>mise run
+                                update</code>) on the affected
                                 host, then verify with
                                 <code>echo "$COLORTERM"</code>
                                 (<code>truecolor</code> in a new shell).
@@ -6305,16 +6611,19 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
 
                     <details data-ts>
                         <summary>
-                            <code>czt</code> / chezmoi feels slow on WSL
-                            (a second or two per command)
+                            Shell startup / a PATH-scanning command feels
+                            slow on WSL (a second or two)
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Symptom: every <code>chezmoi</code> call stalls
-                                ~1.5&nbsp;s on a WSL host &mdash; and
-                                <code>czt</code> (the <code>chezit</code> TUI)
-                                fires several on launch and refresh, so it feels
-                                laggy. The process is mostly <em>idle</em>, not
+                                Symptom: opening a new tab, or any command
+                                that probes for other binaries on
+                                <code>$PATH</code> (e.g. <code>command -v
+                                &lt;tool&gt;</code> feature-detection in a
+                                shell rc, or the old chezmoi&rsquo;s
+                                clipboard-tool probing before it was
+                                retired), stalls ~1.5&nbsp;s on a WSL host.
+                                The process is mostly <em>idle</em>, not
                                 computing (low CPU, high wall-clock).
                             </p>
                             <p>
@@ -6322,13 +6631,13 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
                                 <code>appendWindowsPath=true</code> tacks the
                                 entire Windows <code>%PATH%</code> (~90
                                 <code>/mnt/c</code> dirs) onto <code>$PATH</code>.
-                                chezmoi probes clipboard tools
-                                (<code>wl-copy</code>, <code>xclip</code>,
-                                <code>xsel</code>) via <code>exec.LookPath</code>
-                                at startup; none exist on the Windows side, so
-                                each probe stat-walks <em>every</em>
+                                A lookup for a binary that doesn&rsquo;t exist
+                                stat-walks <em>every</em>
                                 <code>/mnt/c</code> dir over the slow 9p/drvfs
-                                mount. Hundreds of failed stats &asymp; 1.5&nbsp;s.
+                                mount before giving up. Hundreds of failed
+                                stats &asymp; 1.5&nbsp;s, and it compounds with
+                                every such probe a shell rc or tool runs at
+                                startup.
                             </p>
                             <p>Fix (two parts):</p>
                             <ul>
@@ -6361,9 +6670,10 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
                             <p>
                                 Verify in a fresh tab:
                                 <code>echo $PATH | tr ':' '\n' | grep -c /mnt/</code>
-                                drops from ~90 to ~2;
-                                <code>time chezmoi status</code> drops from
-                                ~1.6&nbsp;s to ~0.1&nbsp;s.
+                                drops from ~90 to ~2; a lookup for a
+                                nonexistent command (e.g. <code>time command
+                                -v not-a-real-binary</code>) drops from
+                                over a second to near-instant.
                             </p>
                             <p>
                                 Trade-off: other Windows executables
@@ -6392,7 +6702,7 @@ mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</
                                 &ge;&nbsp;2.5 after data-corruption reports
                                 (microsoft/WSL #13075) &mdash; so the tracked
                                 <code>sparseVhd=true</code> in
-                                <code>chezmoi/dot_wslconfig</code> is currently
+                                <code>dotfiles/wslconfig</code> is currently
                                 inert (it self-activates for newly created
                                 VHDs if Microsoft re-enables the feature), and
                                 <code>wsl --manage &lt;Distro&gt; --set-sparse
@@ -6460,7 +6770,7 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                             </p>
                             <ul>
                                 <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; mise aqua-registry tools, dev + prod; re-run <code>mise install rust-analyzer marksman taplo</code> or <code>mise bootstrap --yes</code>.</li>
-                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (installed as part of <code>mise bootstrap</code>, from <code>config.dev.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>cza</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
+                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (installed as part of <code>mise bootstrap</code>, from <code>config.dev.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>wsa</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
                                 <li><strong>clangd</strong> &mdash; not a mise tool; comes from dnf (<code>clang-tools-extra</code> in <code>config.host.toml</code>, see the C/C++ entry below). <code>mise run health</code> does not check it &mdash; verify with <code>command -v clangd</code>.</li>
                                 <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s <code>Invoke-MiseRuntimes</code> step, straight from <code>config.toml</code> + <code>config.dev.toml</code>; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
                             </ul>
@@ -6606,8 +6916,7 @@ mise bootstrap --only packages --yes</code></pre>
                                 <code>config.native.toml</code> &mdash; dev
                                 hosts only, and
                                 <strong>skipped entirely on WSL hosts</strong>
-                                by design (same policy as the Docker engine
-                                and Cockpit: the whole file only loads when
+                                by design (the whole file only loads when
                                 <code>MISE_ENV</code> carries the
                                 <code>native</code> token, never
                                 <code>wsl</code>). On a native dev host,
@@ -6680,7 +6989,9 @@ mise bootstrap --only packages --yes</code></pre>
                                 request means the plugin file is missing on
                                 that host &mdash;
                                 <code>~/.local/share/zellij/plugins/zjstatus.wasm</code>
-                                is installed by provisioning, not by chezmoi
+                                is installed by provisioning
+                                (<code>tasks/bootstrap</code>), not declared
+                                as a <code>[dotfiles]</code> entry
                                 (an <em>&ldquo;ERROR IN PLUGIN&rdquo;</em> bar
                                 means the same thing &mdash; the file is not
                                 where zellij looks; the log at

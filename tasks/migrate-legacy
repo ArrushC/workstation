@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-#MISE description="One-time sweeps of pre-mise artifacts: PR1 tool installs (/usr/local/bin or ~/.local/bin, helix runtime, eget, tool stamps), PR2 host-state (chezmoi-era pueued unit, /usr/local vcpkg, PATH profile.d file, the old stamps dir)"
+#MISE description="One-time sweeps of pre-mise artifacts: PR1 tool installs (/usr/local/bin or ~/.local/bin, helix runtime, eget, tool stamps), PR2 host-state (legacy pueued unit, /usr/local vcpkg, PATH profile.d file, the old stamps dir), PR3 chezmoi retirement (chezmoi.toml, its boltdb cache, the pre-relocation ~/.local/share/chezmoi leftover)"
 #MISE hide=true
-# Two independent, marker-guarded sweeps below — PR1 (marker
+# Three independent, marker-guarded sweeps below — PR1 (marker
 # ~/.local/state/workstation/legacy-tools-swept) then PR2 (marker
-# …/legacy-host-swept). Each marker only skips ITS OWN sweep, never the
-# other one: a host that finished the PR1 sweep before PR2 shipped must still
-# run the PR2 sweep the first time this task sees the new code, so neither
-# check may `exit 0` — only guard its own block.
+# …/legacy-host-swept) then PR3 (marker …/legacy-chezmoi-swept). Each marker
+# only skips ITS OWN sweep, never the others: a host that finished the PR1/
+# PR2 sweeps before PR3 shipped must still run the PR3 sweep the first time
+# this task sees the new code, so no check may `exit 0` — only guard its own
+# block.
 # sudo is used ONLY for /usr/local (+ /etc/profile.d) paths and ONLY when this
 # host is a dev machine (MISE_ENV contains `host`, or the Make era's
 # HAS_SUDO=true). Everything removed here is reinstalled by mise from
@@ -25,6 +26,7 @@ set -uo pipefail
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 marker="$state/legacy-tools-swept"
 host_marker="$state/legacy-host-swept"
+chezmoi_marker="$state/legacy-chezmoi-swept"
 marker_done=false
 if [ -f "$marker" ]; then
   echo "  legacy sweep already done ($marker)"
@@ -166,6 +168,59 @@ if ! $host_marker_done; then
     echo "  ✓ legacy host-state swept ($host_marker)"
   else
     printf '  ! legacy host-state sweep incomplete (%d path(s) left) — it retries on the next run\n' "$failed"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# PR3 sweep — chezmoi retired. Its own marker + array name (independent of
+# the two sweeps above — a host that already finished PR1/PR2 must still run
+# this one the first time it sees the new code). User-level only, no sudo:
+# chezmoi never wrote anything under /usr/local or /etc. The chezmoi BINARY
+# itself is not removed here — dropping its `[tools]` entry (config.linux.toml)
+# and mise's own pruning does that.
+# -----------------------------------------------------------------------------
+chezmoi_marker_done=false
+if [ -f "$chezmoi_marker" ]; then
+  echo "  legacy chezmoi sweep already done ($chezmoi_marker)"
+  chezmoi_marker_done=true
+fi
+if ! $chezmoi_marker_done; then
+  failed=0
+  # chezmoi.toml + its boltdb cache — never key.txt (the age identity, if a
+  # host ever had one, is out-of-band and not ours to touch or judge).
+  chezmoi_state_files=(
+    "$HOME/.config/chezmoi/chezmoistate.boltdb"
+    "$HOME/.config/chezmoi/chezmoi.toml"
+  )
+  rm_p "${chezmoi_state_files[@]}"
+  # Stale shims. `mise prune` drops the INSTALL when a tool leaves [tools],
+  # but never the shim, and `mise reshim` does not prune either (verified on
+  # 2026-09-22, mise 2026.9.9) — so `chezmoi`/`chezit` stay on PATH and answer
+  # with "mise ERROR No version is set for shim: chezmoi" instead of the plain
+  # "command not found" a retired tool should give.
+  shim_dir="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims"
+  for _shim in chezmoi chezit; do
+    [ -e "$shim_dir/$_shim" ] && rm_p "$shim_dir/$_shim"
+  done
+  # ~/.local/share/chezmoi is ALSO the pre-2026-09 location of this very repo
+  # checkout (relocate_repo() in bootstrap.sh moves it to ~/.config/mise) —
+  # never remove it while a .git dir is still there (means it hasn't been
+  # relocated yet, not ours to touch here) or while anything else lives in it
+  # (this WSL host keeps an unrelated .remember plugin data dir there).
+  chezmoi_share_dir="$HOME/.local/share/chezmoi"
+  if [ -d "$chezmoi_share_dir" ] && [ ! -e "$chezmoi_share_dir/.git" ]; then
+    if [ -z "$(ls -A "$chezmoi_share_dir" 2>/dev/null)" ]; then
+      rm_p "$chezmoi_share_dir"
+    else
+      printf '  · %s not empty (%s) — left in place, not ours to remove\n' \
+        "$chezmoi_share_dir" "$(ls -A "$chezmoi_share_dir" | tr '\n' ' ')"
+    fi
+  fi
+  if [ "$failed" -eq 0 ]; then
+    mkdir -p "$state" && : >"$chezmoi_marker"
+    echo "  ✓ legacy chezmoi state swept ($chezmoi_marker)"
+  else
+    printf '  ! legacy chezmoi sweep incomplete (%d path(s) left) — it retries on the next run\n' "$failed"
   fi
 fi
 exit 0

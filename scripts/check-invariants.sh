@@ -171,13 +171,149 @@ check_version_pins() {
   # vroot= literal is the one that actually decides where vcpkg lands. The rc
   # literal is asserted equal to that same $HOME/.local/share/vcpkg.
   local rc_z rc_b vroot_task want='$HOME/.local/share/vcpkg'
-  rc_z=$(grep -oE 'VCPKG_ROOT="[^"]*"' chezmoi/dot_zshrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  rc_b=$(grep -oE 'VCPKG_ROOT="[^"]*"' chezmoi/dot_bashrc.tmpl | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  rc_z=$(grep -oE 'VCPKG_ROOT="[^"]*"' dotfiles/zshrc.tera | head -1 | sed -E 's/.*="([^"]*)"/\1/')
+  rc_b=$(grep -oE 'VCPKG_ROOT="[^"]*"' dotfiles/bashrc.tera | head -1 | sed -E 's/.*="([^"]*)"/\1/')
   vroot_task=$(grep -oE 'vroot="[^"]*"' tasks/vcpkg | head -1 | sed -E 's/.*="([^"]*)"/\1/')
   if [ -n "$rc_z" ] && [ "$rc_z" = "$rc_b" ] && [ "$rc_z" = "$want" ] && [ "$vroot_task" = "$want" ]; then
     ok "vcpkg-root @ zshrc == bashrc == $want; tasks/vcpkg vroot == $want"
   else
     bad "vcpkg-root drift: zshrc='$rc_z' bashrc='$rc_b' tasks/vcpkg-vroot='$vroot_task' (want $want)"
+  fi
+}
+
+# MISE_ENV is computed identically in THREE places (a host's interactive rc
+# files plus the file systemd's user manager imports at login/re-exec — see
+# config/environment.d/10-mise.conf.tera's own header comment) — a triple-edit
+# pin, not a dual one. All three must carry the byte-identical Tera
+# conditional or a host can end up with a DIFFERENT MISE_ENV in an
+# interactive shell than in a systemd user unit (exactly the pueued-startup
+# class of bug docs/claude/invariants.md documents). PR3 converted all three
+# sources from chezmoi Go templates to Tera.
+#
+# 2026-09-19 fix: a text-only three-way comparison passes when all three
+# expressions are IDENTICALLY WRONG (which they were — see the fix report:
+# every {% if vars.group is defined ... %} guard was always false because
+# nothing ever wrote vars.group, so all three silently baked "linux" on
+# every host). Kept below as a cheap first pass, but the check that actually
+# catches that class of bug is the render comparison that follows it: each
+# template is rendered for real, twice (vars.group="dev_machine" and
+# "prod_machine"), into a scratch $HOME, and the baked MISE_ENV is asserted
+# against scripts/lib/mise-env.sh — the canonical source of these token sets
+# — run on THIS machine (same `uname -r` branch the templates themselves take,
+# so it's apples-to-apples).
+#
+# Render setup mirrors scripts/check-templates.sh's measured discovery rule
+# (see that script's header): a scratch $HOME only isolates mise's config
+# READ side when it carries its own .config/mise — with none, mise falls
+# BACK to the real account home's config, which is precisely the trap here
+# (a fallback to the real, ungrouped config.local.toml would render "linux"
+# for every group and the check would never catch the original bug). So
+# each render below builds its scratch $HOME a genuine .config/mise of its
+# own: every entry of the repo symlinked in verbatim EXCEPT config.local.toml,
+# which is written fresh with vars.group pinned to exactly the value under
+# test. Nothing under the real repo or the real $HOME is ever touched or
+# applied to — only a fresh /tmp scratch dir per render, removed right after.
+_render_baked_mise_env() {
+  local target=$1 group=$2 env=$3 home out path baked entry base
+  home="$(mktemp -d)"
+  mkdir -p "$home/.config/mise"
+  for entry in "$ROOT"/*; do
+    base=$(basename "$entry")
+    [ "$base" = "config.local.toml" ] && continue
+    ln -s "$entry" "$home/.config/mise/$base"
+  done
+  cat >"$home/.config/mise/config.local.toml" <<EOF
+[vars]
+group = "$group"
+EOF
+  # Two independent overrides, deliberately redundant: CI's invariants job
+  # sets MISE_CONFIG_DIR=$GITHUB_WORKSPACE for the whole step (see
+  # .github/workflows/lint.yml — needed so mise doesn't rewrite lock files'
+  # sidecar refs), which otherwise wins over HOME-based discovery entirely —
+  # measured directly: with an ambient MISE_CONFIG_DIR pointed at this repo,
+  # HOME alone rendered the real (group-less) config every time, exactly
+  # reproducing the CI failure this fixes. cd-ing into $home makes any
+  # cwd-ancestor config walk land on the scratch config too. Passing
+  # MISE_CONFIG_DIR="$home/.config/mise" explicitly overrides whatever the
+  # ambient value is (set by CI, or unset locally) for this one subshell only.
+  if ! out=$(cd "$home" && HOME="$home" MISE_CONFIG_DIR="$home/.config/mise" MISE_ENV="$env" mise dot apply --force --yes -- "$target" 2>&1); then
+    note "render $target [group=$group]: mise dot apply failed: $(printf '%s' "$out" | grep -vE '^mise ERROR (Version|Run with)' | head -3 | tr '\n' ' ')"
+    rm -rf "$home"
+    return 1
+  fi
+  path="$home/${target#\~/}"
+  if [ ! -e "$path" ]; then
+    note "render $target [group=$group]: apply exited 0 but $path was not written"
+    rm -rf "$home"
+    return 1
+  fi
+  # Matches both the rc-file form (export MISE_ENV="linux,dev,host,wsl") and
+  # environment.d's unquoted systemd form (MISE_ENV=linux,dev,host,wsl).
+  baked=$(grep -oE '(export )?MISE_ENV="?[a-z,]+"?' "$path" | head -1 | sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//')
+  rm -rf "$home"
+  [ -n "$baked" ] || return 1
+  printf '%s' "$baked"
+}
+
+check_mise_env_three_way() {
+  hdr "MISE_ENV computed identically (zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera)"
+  local zshenv_expr bashrc_expr envd_expr
+  zshenv_expr=$(grep -oE 'export MISE_ENV=".*"$' dotfiles/zshenv.tera | head -1 | sed -E 's/^export MISE_ENV="//; s/"$//')
+  bashrc_expr=$(grep -oE 'export MISE_ENV=".*"$' dotfiles/bashrc.tera | head -1 | sed -E 's/^export MISE_ENV="//; s/"$//')
+  envd_expr=$(grep -E '^MISE_ENV=' dotfiles/config/environment.d/10-mise.conf.tera | head -1 | sed -E 's/^MISE_ENV=//')
+  if [ -n "$zshenv_expr" ] && [ "$zshenv_expr" = "$bashrc_expr" ] && [ "$zshenv_expr" = "$envd_expr" ]; then
+    ok "zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera (expression text)"
+  else
+    bad "MISE_ENV expression drift: zshenv.tera='$zshenv_expr' bashrc.tera='$bashrc_expr' environment.d/10-mise.conf.tera='$envd_expr'"
+  fi
+
+  hdr "MISE_ENV renders match scripts/lib/mise-env.sh (catches an expression that is text-identical but wrong)"
+  if ! command -v mise >/dev/null 2>&1; then
+    note "mise not installed — cannot render dotfiles templates to verify baked MISE_ENV (CI enforces)"
+    return
+  fi
+  if [ ! -x scripts/lib/mise-env.sh ]; then
+    bad "scripts/lib/mise-env.sh missing or not executable — cannot establish the canonical MISE_ENV token sets"
+    return
+  fi
+
+  local dev_env prod_env
+  dev_env=$(scripts/lib/mise-env.sh dev)
+  prod_env=$(scripts/lib/mise-env.sh prod)
+  if [ -z "$dev_env" ] || [ -z "$prod_env" ]; then
+    bad "scripts/lib/mise-env.sh dev/prod produced no output — cannot verify renders against it"
+    return
+  fi
+
+  # shellcheck disable=SC2088  # the ~/... literals below are mise TARGET
+  # strings (dotfiles table keys), not paths for the shell to expand — mirrors
+  # scripts/check-templates.sh's own select_checker (same reasoning there).
+  local -a targets=("~/.zshenv" "~/.bashrc" "~/.config/environment.d/10-mise.conf")
+  local t d p all_agree=1
+  local -a devs=() prods=()
+  for t in "${targets[@]}"; do
+    d=$(_render_baked_mise_env "$t" "dev_machine" "$dev_env") || d=""
+    p=$(_render_baked_mise_env "$t" "prod_machine" "$prod_env") || p=""
+    devs+=("$d")
+    prods+=("$p")
+    if [ "$d" = "$dev_env" ]; then
+      ok "$t [vars.group=dev_machine]: renders MISE_ENV=\"$d\" == scripts/lib/mise-env.sh dev"
+    else
+      bad "$t [vars.group=dev_machine]: renders MISE_ENV=\"$d\" != scripts/lib/mise-env.sh dev (\"$dev_env\")"
+    fi
+    if [ "$p" = "$prod_env" ]; then
+      ok "$t [vars.group=prod_machine]: renders MISE_ENV=\"$p\" == scripts/lib/mise-env.sh prod"
+    else
+      bad "$t [vars.group=prod_machine]: renders MISE_ENV=\"$p\" != scripts/lib/mise-env.sh prod (\"$prod_env\")"
+    fi
+  done
+
+  for t in "${devs[@]}"; do [ "$t" = "${devs[0]}" ] || all_agree=0; done
+  for t in "${prods[@]}"; do [ "$t" = "${prods[0]}" ] || all_agree=0; done
+  if [ "$all_agree" -eq 1 ]; then
+    ok "zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera (rendered output, both groups)"
+  else
+    bad "rendered MISE_ENV disagrees across the three templates: dev=(${devs[*]}) prod=(${prods[*]})"
   fi
 }
 
@@ -225,8 +361,8 @@ $(printf '%s\n' "${coupled[@]}")"
   # check_version_pins is a dual/triple-edit host pin and must sit in the
   # bumper's EXCLUDE_VARS (Layer 2) — otherwise a blind bump rewrites
   # config.toml [vars] alone and immediately fails check_version_pins.
-  # dozzle_version/vcpkg_version are single-edit pins (never referenced via
-  # `tomlval config.toml vars.*` in check_version_pins) so are correctly NOT
+  # vcpkg_version is a single-edit pin (never referenced via
+  # `tomlval config.toml vars.*` in check_version_pins) so is correctly NOT
   # derived here, and zjstatus_zellij_floor is a coupling floor, not a pin
   # (read only by check_zjstatus_zellij_coupling) so is correctly absent too.
   local exclude_vars vpins vmissing="" vn=0
@@ -257,7 +393,7 @@ $(printf '%s\n' "${coupled[@]}")"
 check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
-  local -a files=(scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh chezmoi/dot_local/bin/executable_*)
+  local -a files=(scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh dotfiles/local/bin/*)
   [ -e .githooks/pre-commit ] && files+=(.githooks/pre-commit)
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then
@@ -280,6 +416,58 @@ check_line_endings_and_mode() {
   if [ "$crlf" -eq 0 ] && [ "$modebad" -eq 0 ] && [ "$missing" -eq 0 ]; then
     ok "${#files[@]} files: LF + 100755"
   fi
+}
+
+# The converse of check_line_endings_and_mode: every dotfile SOURCE must be
+# git mode 100644, except this explicit, deliberately hand-maintained
+# allowlist (find candidates with `git ls-files -s dotfiles/ | grep 100755`).
+# A NEW executable dotfile source must be added here on purpose, in the same
+# commit that adds it — that's the point of writing the list out literally
+# instead of deriving it. `template`-mode sources are the highest-stakes
+# case: `template`/`copy` both propagate the SOURCE's own git-tracked
+# executable bit onto $HOME (post-dotfiles-hook territory, ~/.ssh/~/.claude
+# excepted), and a filesystem that reports every file 0744 regardless of git
+# mode (DrvFs, over a Windows drive mount) turns that propagation into a
+# blanket, invisible chmod +x across every managed dotfile the moment `mise
+# dot apply`/`wsa` runs from there — this is exactly what corrupted
+# ~/.gitconfig, ~/.bashrc, ~/.zshrc, ~/.zshenv, ~/.config/cheat/conf.yml,
+# ~/.config/environment.d/10-mise.conf and ~/.gdbinit on 2026-09-22.
+DOTFILES_MODE_ALLOWLIST=(
+  "dotfiles/claude/hooks/dangerous-command-guard.sh" # ~/.claude/hooks copy entry — a Claude Code hook script
+  "dotfiles/claude/hooks/secret-guard.sh"            # ~/.claude/hooks copy entry — a Claude Code hook script
+  "dotfiles/claude/notify.sh"                        # ~/.claude/notify.sh copy entry — invoked directly as a hook command
+  "dotfiles/local/bin/batpipe"                       # ~/.local/bin copy entry — a LESSOPEN preprocessor invoked directly
+  "dotfiles/local/bin/winterop"                      # ~/.local/bin copy entry — a script invoked directly from the shell
+)
+check_dotfiles_mode() {
+  hdr "dotfiles/ sources: git mode 100644 except the allowlist"
+  local f a mode bad_count=0 n=0 allowed
+  local -a tracked
+  mapfile -t tracked < <(git ls-files dotfiles/)
+  for f in "${tracked[@]}"; do
+    n=$((n + 1))
+    mode=$(git ls-files --stage -- "$f" | awk '{print $1}')
+    allowed=0
+    for a in "${DOTFILES_MODE_ALLOWLIST[@]}"; do
+      [ "$f" = "$a" ] && {
+        allowed=1
+        break
+      }
+    done
+    if [ "$allowed" -eq 1 ]; then
+      if [ "$mode" != "100755" ]; then
+        bad "allowlisted as executable but git mode is $mode, want 100755: $f"
+        bad_count=$((bad_count + 1))
+      fi
+    elif [ "$mode" != "100644" ]; then
+      bad "git mode $mode, want 100644 (not in the executable allowlist): $f"
+      bad_count=$((bad_count + 1))
+      case "$f" in
+      *.tera) bad "  ^ a .tera TEMPLATE source — its executable bit propagates straight into \$HOME on the next apply" ;;
+      esac
+    fi
+  done
+  [ "$bad_count" -eq 0 ] && ok "$n tracked dotfiles/ sources, ${#DOTFILES_MODE_ALLOWLIST[@]} allowlisted executable"
 }
 
 check_bom() {
@@ -322,15 +510,15 @@ check_sentinels() {
   local s e
   # Anchor to a whole marker line — prose that merely mentions the token
   # must not count.
-  s=$(grep -cE '^[[:space:]]*# CCSTATUSLINE:START[[:space:]]*$' chezmoi/.chezmoiignore.tmpl)
-  e=$(grep -cE '^[[:space:]]*# CCSTATUSLINE:END[[:space:]]*$' chezmoi/.chezmoiignore.tmpl)
-  if [ "$s" = "1" ] && [ "$e" = "1" ]; then
-    ok "chezmoiignore  CCSTATUSLINE:START/END (1/1)"
-  else
-    bad "chezmoiignore CCSTATUSLINE sentinels START=$s END=$e (want 1/1)"
-  fi
-  s=$(grep -cE '<!-- TOOLS:START' chezmoi/private_dot_claude/CLAUDE.md)
-  e=$(grep -cE '<!-- TOOLS:END -->' chezmoi/private_dot_claude/CLAUDE.md)
+  #
+  # The chezmoi-era half of this check (# CCSTATUSLINE:START/END in
+  # chezmoi/.chezmoiignore.tmpl) has no successor to repoint at: PR3 Task 3
+  # moved the per-host ccstatusline opt-out to a # CCSTATUSLINE-OPTOUT:START/
+  # END block that scripts/setup-ccstatusline.sh writes into config.local.toml
+  # — per-host and git-ignored (ruling 2), so there is no longer a tracked,
+  # committed file for a repo-level invariant to assert against.
+  s=$(grep -cE '<!-- TOOLS:START' dotfiles/claude/CLAUDE.md)
+  e=$(grep -cE '<!-- TOOLS:END -->' dotfiles/claude/CLAUDE.md)
   if [ "$s" = "1" ] && [ "$e" = "1" ]; then
     ok "machine-memory  TOOLS:START/END (1/1)"
   else
@@ -340,7 +528,7 @@ check_sentinels() {
 
 check_tools_block() {
   hdr "machine-memory TOOLS block in sync"
-  local mem="chezmoi/private_dot_claude/CLAUDE.md" tmp
+  local mem="dotfiles/claude/CLAUDE.md" tmp
   if [ ! -f "$mem" ]; then
     bad "missing: $mem"
     return
@@ -425,7 +613,7 @@ PY
   fi
   # PR2 host-state files: config.host.toml / config.native.toml / config.wsl.toml
   # must parse and declare no [tools] (lock coverage above stays three files),
-  # and config.toml must carry the five [vars] pins the host-state tasks read.
+  # and config.toml must carry the four [vars] pins the host-state tasks read.
   if [ -z "$PY" ]; then
     note "no python with tomllib — host-state file / [vars] checks skipped locally (CI enforces)"
   else
@@ -447,7 +635,7 @@ PY
       fi
     done
     local vk vars_bad=0
-    for vk in python_version nerd_font_version dozzle_version vcpkg_version zjstatus_zellij_floor; do
+    for vk in python_version nerd_font_version vcpkg_version zjstatus_zellij_floor; do
       if "$PY" - "$vk" <<'PY'
 import sys, tomllib
 with open("config.toml", "rb") as fh:
@@ -461,7 +649,7 @@ PY
         vars_bad=1
       fi
     done
-    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has all five host pins"
+    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has all four host pins"
   fi
   if command -v mise >/dev/null 2>&1; then
     local tmp
@@ -570,12 +758,32 @@ for f in files:
 # (b)/(c): hooks — value shape ("mise run <task>"), task file exists, hook
 # NAME appears in exactly one config file.
 hook_re = re.compile(r"^mise run [a-z-]+$")
+# post-dotfiles (config.linux.toml) is not a "mise run <task>" hook — it's the
+# raw compound chmod restoring ~/.ssh and ~/.claude modes that copy/template
+# mode can't express (PR3 Task 2 carry-forward: the ONLY guarantee of the SSH
+# security posture). It must land byte-for-byte, so pin it to the exact
+# verified-safe literal here rather than just exempting the shape check: a
+# bare `chmod ... ; chmod ... ; true` LOOKS unconditional but is not — mise
+# runs hooks as `sh -o errexit -c '<hook>'`, and errexit aborts at the first
+# failing command in a `;`-chain (verified: on a prod host, MISE_ENV=linux
+# never loads config.dev.toml, so ~/.claude never exists, and the first
+# chmod's failure on that missing operand aborted the whole bootstrap before
+# `; true` was ever reached). Each command needs its own `|| true`.
+EXPECTED_POST_DOTFILES_HOOK = (
+    "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; "
+    "chmod 600 ~/.ssh/config 2>/dev/null || true"
+)
 seen = {}
 bad_hooks = []
 n_hooks = 0
 for f, d in loaded.items():
     for name, val in d.get("bootstrap", {}).get("hooks", {}).items():
         n_hooks += 1
+        if name == "post-dotfiles":
+            if val != EXPECTED_POST_DOTFILES_HOOK:
+                bad_hooks.append(f"{f}:post-dotfiles != the verified-safe literal (got {val!r})")
+            seen.setdefault(name, []).append(f)
+            continue
         if not hook_re.match(val):
             bad_hooks.append(f"{f}:{name}={val!r} (want 'mise run <task>')")
             continue
@@ -586,7 +794,7 @@ for f, d in loaded.items():
 if bad_hooks:
     print("FAIL|hooks|" + "; ".join(bad_hooks))
 else:
-    print(f"PASS|hooks|{n_hooks} hook(s) are 'mise run <task>' and the task file exists")
+    print(f"PASS|hooks|{n_hooks} hook(s) are 'mise run <task>' (task file exists) or the pinned post-dotfiles literal")
 dupes = [f"{name} in {fs}" for name, fs in seen.items() if len(fs) > 1]
 if dupes:
     print("FAIL|hook-unique|duplicated hook name(s) across config files: " + "; ".join(dupes))
@@ -680,11 +888,179 @@ PY
   fi
 }
 
+check_dotfiles_config() {
+  hdr "dotfiles-config invariants (config.toml/linux/dev/host/windows.toml [dotfiles])"
+  if [ -z "$PY" ]; then
+    note "no python with tomllib — dotfiles-config checks skipped locally (CI enforces)"
+    return
+  fi
+  local out result detail
+  out=$(
+    "$PY" - <<'PY'
+import glob, os, tomllib
+
+# config.local.toml (git-ignored, per-host) is deliberately excluded: it
+# exists precisely to REPEAT a key from one of these five files (the
+# { mode = ..., enabled = false } override pattern — findings.md §9), so a
+# "no entry in two files" check would misfire against its own documented use.
+# config.host.toml joined this list in PR3 Task 3 (gdbinit/gdb/herdr config
+# moved there from config.dev.toml so they stop deploying dead files on a
+# Windows dev host — see config.host.toml's own [dotfiles] comment).
+files = ["config.toml", "config.linux.toml", "config.dev.toml", "config.host.toml", "config.windows.toml"]
+loaded = {}
+for f in files:
+    try:
+        with open(f, "rb") as fh:
+            loaded[f] = tomllib.load(fh)
+        print(f"PASS|parse|{f} parses")
+    except FileNotFoundError:
+        print(f"FAIL|parse|{f} missing")
+    except Exception as e:
+        print(f"FAIL|parse|{f} failed to parse: {e}")
+
+VALID_MODES = {"symlink", "symlink-each", "copy", "template", "track"}
+entries = []  # (file, target, spec)
+for f, d in loaded.items():
+    for target, spec in d.get("dotfiles", {}).items():
+        if isinstance(spec, str):
+            spec = {"source": spec, "mode": "symlink"}
+        entries.append((f, target, spec))
+
+# (a) every entry's source exists.
+bad_src = []
+for f, target, spec in entries:
+    src = spec.get("source")
+    if src is None:
+        bad_src.append(f"{f}:{target} has no source")
+    elif not os.path.exists(src):
+        bad_src.append(f"{f}:{target} source missing: {src}")
+if bad_src:
+    print("FAIL|source-exists|" + "; ".join(bad_src))
+else:
+    print(f"PASS|source-exists|{len(entries)} entries, every source exists")
+
+# (b) every mode is one of the five.
+bad_mode = []
+for f, target, spec in entries:
+    mode = spec.get("mode")
+    if mode not in VALID_MODES:
+        bad_mode.append(f"{f}:{target} mode={mode!r} (want one of {sorted(VALID_MODES)})")
+if bad_mode:
+    print("FAIL|mode-valid|" + "; ".join(bad_mode))
+else:
+    print(f"PASS|mode-valid|every entry's mode is one of {sorted(VALID_MODES)}")
+
+# (c) ruling 7, broadened by the 2026-09-22 copy-migration (user decision:
+# chezmoi's copy semantics survive applications on either OS that don't
+# respect symlinks): no `[dotfiles]` entry, in ANY of the five files, on ANY
+# platform, is `symlink` or `symlink-each` any more — every entry is `copy`
+# or `template`. This used to iterate only the entries that actually LOAD on
+# a Windows host (config.toml + config.dev.toml + config.windows.toml —
+# config.linux.toml and config.host.toml never load there), because before
+# this migration a `symlink`/`symlink-each` entry was fine as long as it was
+# Linux-only; a bare `symlink` on Windows needs Developer Mode and silently
+# falls back to copy (functional but undeclared) and a directory `symlink`
+# becomes a junction instead of a copy. Now the rule is unconditional, so
+# checking "every entry" and "every Windows-loaded entry" catch the same
+# thing — this checks everything directly rather than re-deriving the
+# Windows-load gate. check-invariants I4 (final-fix-brief.md) is the reason
+# this iterates all 5 files rather than just config.windows.toml (a
+# `windows,dev` scratch apply proved config.toml/config.dev.toml entries
+# land on a Windows host too).
+bad_symlink = []
+n_total = 0
+for f, target, spec in entries:
+    n_total += 1
+    mode = spec.get("mode", "symlink")
+    if mode in ("symlink", "symlink-each"):
+        bad_symlink.append(f"{f}:{target} mode={mode!r} (want copy or template — symlink/symlink-each are retired everywhere, ruling 7)")
+if bad_symlink:
+    print("FAIL|no-symlink-anywhere|" + "; ".join(bad_symlink))
+else:
+    print(f"PASS|no-symlink-anywhere|{n_total} entries across all 5 config files are copy or template, none symlink/symlink-each")
+
+# (d) every entry with a directory source and an `exclude` list covers every
+# .vendor/.gitkeep sidecar actually present there. Used to only check
+# `symlink-each` entries (the only mode that took `exclude` pre-migration);
+# now every directory entry is `copy` instead, so this checks any entry that
+# DECLARES `exclude` at all, regardless of mode — the controller verified
+# `exclude` works for `copy` on a directory source the same way it worked
+# for `symlink-each`.
+bad_exclude = []
+n_each = 0
+for f, target, spec in entries:
+    if "exclude" not in spec:
+        continue
+    n_each += 1
+    src = spec.get("source")
+    exclude = set(spec.get("exclude", []))
+    if not src or not os.path.isdir(src):
+        continue
+    sidecars = {name for name in (".vendor", ".gitkeep") if os.path.exists(os.path.join(src, name))}
+    missing = sidecars - exclude
+    if missing:
+        bad_exclude.append(f"{f}:{target} source has {sorted(missing)} but exclude={sorted(exclude)}")
+if bad_exclude:
+    print("FAIL|dir-copy-exclude|" + "; ".join(bad_exclude))
+else:
+    print(f"PASS|dir-copy-exclude|{n_each} directory entries with an exclude list cover every .vendor/.gitkeep sidecar in their source")
+
+# (e) no target key appears in more than one of the four files.
+seen = {}
+for f, target, _spec in entries:
+    seen.setdefault(target, []).append(f)
+dupes = [f"{t} in {fs}" for t, fs in seen.items() if len(fs) > 1]
+if dupes:
+    print("FAIL|no-dupes|target(s) declared in more than one config file: " + "; ".join(dupes))
+else:
+    print(f"PASS|no-dupes|{len(seen)} distinct target(s), none declared in more than one config file")
+
+# (f) every .tera file under dotfiles/ is referenced by exactly one entry
+# (no orphans, no double-use of one template by two targets).
+tera_files = set(glob.glob("dotfiles/**/*.tera", recursive=True))
+tera_refs = {}
+for f, target, spec in entries:
+    src = spec.get("source")
+    if src and src.endswith(".tera"):
+        tera_refs.setdefault(src, []).append((f, target))
+bad_tera = []
+for src in sorted(tera_files):
+    refs = tera_refs.get(src, [])
+    if len(refs) == 0:
+        bad_tera.append(f"{src} is an orphan (no [dotfiles] entry references it)")
+    elif len(refs) > 1:
+        bad_tera.append(f"{src} is referenced by {len(refs)} entries: {refs}")
+for src in sorted(set(tera_refs) - tera_files):
+    bad_tera.append(f"{src} referenced by an entry but not found under dotfiles/**/*.tera")
+if bad_tera:
+    print("FAIL|tera-coverage|" + "; ".join(bad_tera))
+else:
+    print(f"PASS|tera-coverage|{len(tera_files)} dotfiles/**/*.tera file(s), each referenced by exactly one entry")
+PY
+  )
+  while IFS='|' read -r result _ detail; do
+    [ -n "$result" ] || continue
+    if [ "$result" = PASS ]; then
+      ok "$detail"
+    elif [ "$result" = NOTE ]; then
+      note "$detail"
+    else
+      bad "$detail"
+    fi
+  done <<<"$out"
+}
+
 check_lsp_plugin() {
   hdr "workstation-lsp plugin manifest"
-  local src="chezmoi/private_dot_claude/skills/workstation-lsp"
-  if [ ! -f "$src/dot_claude-plugin/plugin.json" ] || [ ! -f "$src/dot_lsp.json" ]; then
-    bad "missing workstation-lsp plugin source ($src/dot_claude-plugin/plugin.json + dot_lsp.json)"
+  local src="dotfiles/claude/skills/workstation-lsp"
+  # Both leading dots are load-bearing: Claude Code's own plugin-manifest
+  # convention needs .claude-plugin/plugin.json, and the LSP registry needs
+  # .lsp.json. dotfiles/ keeps them literally, matching the real ~/.claude
+  # tree (PR3 Task 2: workstation-lsp/ nests inside the `~/.claude/skills`
+  # [dotfiles] entry in config.dev.toml — copy mode, 2026-09-22 migration —
+  # so nested names deploy exactly as spelled here).
+  if [ ! -f "$src/.claude-plugin/plugin.json" ] || [ ! -f "$src/.lsp.json" ]; then
+    bad "missing workstation-lsp plugin source ($src/.claude-plugin/plugin.json + .lsp.json)"
     return
   fi
   if ! command -v claude >/dev/null 2>&1; then
@@ -694,8 +1070,8 @@ check_lsp_plugin() {
   local tmp
   tmp="$(mktemp -d)"
   mkdir -p "$tmp/.claude-plugin"
-  cp "$src/dot_claude-plugin/plugin.json" "$tmp/.claude-plugin/plugin.json"
-  cp "$src/dot_lsp.json" "$tmp/.lsp.json"
+  cp "$src/.claude-plugin/plugin.json" "$tmp/.claude-plugin/plugin.json"
+  cp "$src/.lsp.json" "$tmp/.lsp.json"
   [ -f "$src/SKILL.md" ] && cp "$src/SKILL.md" "$tmp/SKILL.md"
   if claude plugin validate "$tmp" --strict >/dev/null 2>&1; then
     ok "workstation-lsp manifest validates (claude plugin validate --strict)"
@@ -704,30 +1080,6 @@ check_lsp_plugin() {
     claude plugin validate "$tmp" --strict 2>&1 | sed 's/^/       /' | head -20
   fi
   rm -rf "$tmp"
-}
-
-check_chezmoiignore_targets() {
-  hdr "chezmoiignore uses target paths (not source-state names)"
-  local offenders
-  # Strip {{/* ... */}} Go-template comment blocks (their prose documents the
-  # dot_/private_dot_/.tmpl naming, which would false-positive), then keep only
-  # real pattern lines (a single token — not a # comment, {{ }} directive, or
-  # prose), then flag any that use a source-state name instead of a target path.
-  offenders=$(awk '
-    /\{\{\/\*/ { inblk=1 }
-    inblk { if ($0 ~ /\*\/\}\}/) inblk=0; next }
-    { print }
-  ' chezmoi/.chezmoiignore.tmpl |
-    sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' |
-    grep -vE '^(#|\{\{|$)' |
-    grep -E '^[^[:space:]]+$' |
-    grep -E '(^|/)(dot_|private_dot_)|\.tmpl$')
-  if [ -z "$offenders" ]; then
-    ok "no dot_/private_dot_/*.tmpl source-state patterns"
-  else
-    bad "source-state-style ignore patterns (silent no-op — use target paths):"
-    printf '%s\n' "$offenders" | sed 's/^/       /'
-  fi
 }
 
 # --- flag-parity: repo-script flags == completion-surface flags --------------
@@ -767,14 +1119,14 @@ _zsh_completion_flags() {
 # --flag tokens from one function body in completions.bash.
 _bash_completion_flags() {
   awk -v fn="$1" '$0 ~ "^"fn"\\(\\)" {f=1} f{print} f&&/^}/{exit}' \
-    chezmoi/dot_config/bash/completions.bash |
+    dotfiles/config/bash/completions.bash |
     grep -oE -- '--[a-z-]+' | sort -u
 }
 
 # Quoted "-Flag" values from one `let workstation_*_flags` list in config.nu.tmpl.
 _nu_completion_flags() {
   awk -v v="$1" '$0 ~ "^let "v {f=1} f{print} f&&/^\]/{exit}' \
-    chezmoi/AppData/Roaming/nushell/config.nu.tmpl |
+    dotfiles/windows/AppData/Roaming/nushell/config.nu.tera |
     grep -oE '"-[A-Za-z]+"' | tr -d '"' | sort -u
 }
 
@@ -793,19 +1145,19 @@ check_completion_parity() {
 
   want=$(_sh_script_flags bootstrap.sh --full --checkforupdates)
   _flags_eq "bootstrap.sh == _bootstrap.sh (zsh)" "$want" \
-    "$(_zsh_completion_flags chezmoi/dot_config/zsh/completions/_bootstrap.sh)"
+    "$(_zsh_completion_flags dotfiles/config/zsh/completions/_bootstrap.sh)"
   _flags_eq "bootstrap.sh == completions.bash" "$want" \
     "$(_bash_completion_flags _workstation_complete_bootstrap)"
 
   want=$(_sh_script_flags scripts/manage-hosts.sh)
   _flags_eq "manage-hosts.sh == _manage-hosts.sh (zsh)" "$want" \
-    "$(_zsh_completion_flags chezmoi/dot_config/zsh/completions/_manage-hosts.sh)"
+    "$(_zsh_completion_flags dotfiles/config/zsh/completions/_manage-hosts.sh)"
   _flags_eq "manage-hosts.sh == completions.bash" "$want" \
     "$(_bash_completion_flags _workstation_complete_manage_hosts)"
 
   want=$(_sh_script_flags scripts/update-hosts.sh)
   _flags_eq "update-hosts.sh == _update-hosts.sh (zsh)" "$want" \
-    "$(_zsh_completion_flags chezmoi/dot_config/zsh/completions/_update-hosts.sh)"
+    "$(_zsh_completion_flags dotfiles/config/zsh/completions/_update-hosts.sh)"
   _flags_eq "update-hosts.sh == completions.bash" "$want" \
     "$(_bash_completion_flags _workstation_complete_update_hosts)"
 
@@ -918,10 +1270,10 @@ check_shellcheck() {
   # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
   # vendored (eth-p/bat-extras) and deliberately excluded.
   local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
-    .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
-    chezmoi/private_dot_claude/executable_notify.sh
-    chezmoi/dot_local/bin/executable_winterop
-    chezmoi/dot_config/bash/completions.bash)
+    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh
+    dotfiles/claude/notify.sh
+    dotfiles/local/bin/winterop
+    dotfiles/config/bash/completions.bash)
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else
@@ -937,10 +1289,10 @@ check_shfmt() {
   fi
   # Same first-party set as shellcheck (vendored _cht.sh / batpipe excluded).
   local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
-    .claude/hooks/*.sh chezmoi/private_dot_claude/hooks/*.sh
-    chezmoi/private_dot_claude/executable_notify.sh
-    chezmoi/dot_local/bin/executable_winterop
-    chezmoi/dot_config/bash/completions.bash)
+    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh
+    dotfiles/claude/notify.sh
+    dotfiles/local/bin/winterop
+    dotfiles/config/bash/completions.bash)
   local out
   if out=$(shfmt -d -i 2 "${targets[@]}" 2>&1); then
     ok "clean over ${#targets[@]} shell files (shfmt -i 2)"
@@ -979,19 +1331,19 @@ check_gitleaks() {
 # dropped or duplicated guard is a failure rather than a silent behavior change.
 check_warp_guards() {
   hdr "Warp TERM_PROGRAM guards (scope + plugin-chain safety)"
-  local zsh=chezmoi/dot_zshrc.tmpl bash=chezmoi/dot_bashrc.tmpl
+  local zsh=dotfiles/zshrc.tera bash=dotfiles/bashrc.tera
   local n_zsh n_bash out
   n_zsh=$(grep -c 'TERM_PROGRAM:-.* != WarpTerminal' "$zsh" || true)
   n_bash=$(grep -c 'TERM_PROGRAM:-.* != WarpTerminal' "$bash" || true)
   if [ "$n_zsh" -eq 6 ]; then
-    ok "dot_zshrc.tmpl: 6 Warp guards (fzf, atuin, starship, shift-select, zstyles, fzf-tab)"
+    ok "zshrc.tera: 6 Warp guards (fzf, atuin, starship, shift-select, zstyles, fzf-tab)"
   else
-    bad "dot_zshrc.tmpl: $n_zsh Warp guards, want 6 — a guard was added, dropped, or reworded"
+    bad "zshrc.tera: $n_zsh Warp guards, want 6 — a guard was added, dropped, or reworded"
   fi
   if [ "$n_bash" -eq 2 ]; then
-    ok "dot_bashrc.tmpl: 2 Warp guards (fzf, starship)"
+    ok "bashrc.tera: 2 Warp guards (fzf, starship)"
   else
-    bad "dot_bashrc.tmpl: $n_bash Warp guards, want 2 — parity pair with dot_zshrc.tmpl"
+    bad "bashrc.tera: $n_bash Warp guards, want 2 — parity pair with zshrc.tera"
   fi
 
   # Depth-track top-level if/fi and report any plugin source loaded while
@@ -1018,7 +1370,7 @@ check_warp_guards() {
 
 check_zellij_config() {
   hdr "zellij config (theme dual-edit, OSC 52, KDL parse)"
-  local dir=chezmoi/dot_config/zellij
+  local dir=dotfiles/config/zellij
   local cfg="$dir/config.kdl"
   local theme hits bad_hash tmp
 
@@ -1174,8 +1526,10 @@ check_tsls_typescript_coupling() {
 
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
+check_mise_env_three_way
 check_bumper_exclude
 check_line_endings_and_mode
+check_dotfiles_mode
 check_bom
 check_ps_variable_drive_refs
 check_sentinels
@@ -1183,8 +1537,8 @@ check_tools_block
 check_mise_config_files
 check_vars_pin_coverage
 check_bootstrap_config
+check_dotfiles_config
 check_lsp_plugin
-check_chezmoiignore_targets
 check_completion_parity
 check_warp_guards
 check_zellij_config

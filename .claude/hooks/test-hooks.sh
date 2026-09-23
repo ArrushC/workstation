@@ -10,7 +10,7 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RH="$ROOT/.claude/hooks"
-GH="$ROOT/chezmoi/private_dot_claude/hooks"
+GH="$ROOT/dotfiles/claude/hooks"
 pass=0
 fail=0
 
@@ -71,7 +71,7 @@ ok "unguarded file -> silent" empty
 rm -rf "$T"
 
 echo "== parity-reminder (R3) =="
-run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/chezmoi/dot_zshrc.tmpl" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/scripts/manage-hosts.sh" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "manage-hosts.sh -> .ps1" has 'manage-hosts.ps1'
@@ -81,27 +81,27 @@ run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.dev.toml" '{tool_name:"E
 ok "config.dev.toml -> pins" has 'PortableTools'
 run "$RH/parity-reminder.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated -> silent" empty
-run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/chezmoi/dot_config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "chezmoi dotfile config.toml (helix) -> silent, not mise config" empty
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "dotfiles-tree config.toml (helix) -> silent, not mise config" empty
 
 echo "== secret-guard (G1) =="
-run "$GH/executable_secret-guard.sh" "$(j --arg f "/home/u/.ssh/id_rsa" '{tool_name:"Read",tool_input:{file_path:$f}}')"
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.ssh/id_rsa" '{tool_name:"Read",tool_input:{file_path:$f}}')"
 ok "deny read SSH private key" has '"permissionDecision":"deny"'
-run "$GH/executable_secret-guard.sh" "$(j --arg f "/home/u/.config/chezmoi/key.txt" '{tool_name:"Write",tool_input:{file_path:$f}}')"
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/chezmoi/key.txt" '{tool_name:"Write",tool_input:{file_path:$f}}')"
 ok "deny write age identity" has '"permissionDecision":"deny"'
-run "$GH/executable_secret-guard.sh" "$(j --arg f "/tmp/server.pem" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+run "$GH/secret-guard.sh" "$(j --arg f "/tmp/server.pem" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "deny edit cert (.pem)" has '"permissionDecision":"deny"'
-run "$GH/executable_secret-guard.sh" "$(j --arg f "/tmp/app.js" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+run "$GH/secret-guard.sh" "$(j --arg f "/tmp/app.js" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "allow normal edit" empty
-run "$GH/executable_secret-guard.sh" "$(j --arg f "/tmp/README.md" '{tool_name:"Read",tool_input:{file_path:$f}}')"
+run "$GH/secret-guard.sh" "$(j --arg f "/tmp/README.md" '{tool_name:"Read",tool_input:{file_path:$f}}')"
 ok "allow normal read" empty
-run "$GH/executable_secret-guard.sh" "$(j --arg c "cat ~/.config/chezmoi/key.txt" '{tool_name:"Bash",tool_input:{command:$c}}')"
+run "$GH/secret-guard.sh" "$(j --arg c "cat ~/.config/chezmoi/key.txt" '{tool_name:"Bash",tool_input:{command:$c}}')"
 ok "ask bash naming key.txt" has '"permissionDecision":"ask"'
-run "$GH/executable_secret-guard.sh" "$(j --arg c "ls -la" '{tool_name:"Bash",tool_input:{command:$c}}')"
+run "$GH/secret-guard.sh" "$(j --arg c "ls -la" '{tool_name:"Bash",tool_input:{command:$c}}')"
 ok "allow normal bash" empty
 
 echo "== dangerous-command-guard (G2) =="
-g() { run "$GH/executable_dangerous-command-guard.sh" "$(j --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}')"; }
+g() { run "$GH/dangerous-command-guard.sh" "$(j --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}')"; }
 g 'rm -rf /'
 ok "ask rm -rf /" has '"permissionDecision":"ask"'
 g 'rm -rf /tmp/build'
@@ -133,25 +133,25 @@ echo "== sync-tool-memory (R5) =="
 ST="$(mktemp -d)"
 printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$ST/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
-ok "config.toml -> cza nudge" has 'cza'
+ok "config.toml -> commit nudge" has 'commit'
 ok "block regenerated (stale gone)" bash -c '! grep -q stale "'"$ST"'/CLAUDE.md"'
 run "$RH/sync-tool-memory.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated path -> silent" empty
 run "$RH/sync-tool-memory.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
-run "$RH/sync-tool-memory.sh" "$(j --arg f "$ROOT/chezmoi/dot_config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "chezmoi dotfile config.toml (helix) -> silent, not mise config" empty
+run "$RH/sync-tool-memory.sh" "$(j --arg f "$ROOT/dotfiles/config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "dotfiles-tree config.toml (helix) -> silent, not mise config" empty
 # worktree: an edit in a SECOND checkout must regenerate THAT checkout's
 # memory file even when CLAUDE_PROJECT_DIR points at this (main) one.
 WT="$(mktemp -d)"
-mkdir -p "$WT/scripts" "$WT/chezmoi/private_dot_claude"
+mkdir -p "$WT/scripts" "$WT/dotfiles/claude"
 cp "$ROOT/scripts/gen-tool-memory.sh" "$WT/scripts/"
 cp "$ROOT/config.toml" "$ROOT/config.linux.toml" "$ROOT/config.dev.toml" \
   "$ROOT/config.host.toml" "$ROOT/config.native.toml" "$WT/"
-printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/chezmoi/private_dot_claude/CLAUDE.md"
+printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/dotfiles/claude/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$WT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | CLAUDE_PROJECT_DIR="$ROOT" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
-ok "worktree edit -> cza nudge" has 'cza'
-ok "worktree's own memory regenerated" bash -c '! grep -q stale "'"$WT"'/chezmoi/private_dot_claude/CLAUDE.md"'
+ok "worktree edit -> commit nudge" has 'commit'
+ok "worktree's own memory regenerated" bash -c '! grep -q stale "'"$WT"'/dotfiles/claude/CLAUDE.md"'
 rm -rf "$WT"
 rm -rf "$ST"
 

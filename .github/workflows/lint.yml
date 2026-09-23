@@ -72,11 +72,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install chezmoi
-        run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+      # Only the mise BINARY is needed here — `mise dot apply`/`mise
+      # bootstrap --only dotfiles` render into a throwaway $HOME and never
+      # touch [tools] or a lockfile, so install:false (no tool installs) is
+      # enough, same as the invariants job.
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.9
+          install: false
+          cache: true
       - name: Install zsh
         run: sudo apt-get update && sudo apt-get install -y zsh
-      # nushell here is a CI-ONLY syntax checker for config.nu.tmpl — NOT a
+      # nushell here is a CI-ONLY syntax checker for config.nu.tera — NOT a
       # fleet tool: no config.toml pin, deliberately NOT an enforced
       # dual-edit with bootstrap.ps1's Nushell pin (drift is harmless; this
       # only parses). Bump ad-hoc when the check needs newer syntax.
@@ -87,5 +94,9 @@ jobs:
           tar -xzf /tmp/nu.tgz -C /tmp
           sudo install -m 0755 /tmp/nu-${NU}-x86_64-unknown-linux-musl/nu /usr/local/bin/nu
           nu --version
-      - name: Render + syntax-check templates
-        run: PATH="$HOME/.local/bin:$PATH" bash scripts/check-templates.sh
+      # pwsh needs no install step: ubuntu-latest ships it already (proven by
+      # the `powershell` job above, which runs `shell: pwsh` with no pwsh
+      # install of its own) — so no Windows runner leg is needed for the
+      # PowerShell-profile template's syntax check either.
+      - name: Render + syntax-check dotfiles templates
+        run: bash scripts/check-templates.sh

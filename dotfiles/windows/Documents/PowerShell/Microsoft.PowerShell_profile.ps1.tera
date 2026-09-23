@@ -1,0 +1,212 @@
+# =============================================================================
+# $PROFILE — managed by mise dotfiles
+# Machine: {{ env.COMPUTERNAME | default(value="") }} | User: {{ env.USERNAME | default(value="") }}
+#
+# This file is rendered from dotfiles/windows/Documents/PowerShell/<name>.tera on apply.
+# For per-machine overrides that aren't tracked, drop the same logic into
+# Microsoft.PowerShell_profile.local.ps1 next to this file (sourced last).
+#
+# PARITY NOTE (Windows Terminal shell integration): config.nu carries
+# reedline-specific WT hooks (OSC 9;4 taskbar progress + osc9_9 cwd
+# reporting). Those are Nushell-only by design — this profile's parity
+# obligation with config.nu covers the ws*/g* aliases below, not the hooks.
+# =============================================================================
+
+# --- Encoding (UTF-8 in/out so emoji and ANSI render correctly) -------------
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding           = [System.Text.Encoding]::UTF8
+
+# --- Starship prompt --------------------------------------------------------
+if (Get-Command starship -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& starship init powershell)
+}
+
+# --- zoxide (smarter cd) ----------------------------------------------------
+if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& { (zoxide init powershell | Out-String) })
+}
+
+# --- mise (runtimes: node / Go / uv / LSP servers + per-project mise.toml) ----
+# The checkout at %USERPROFILE%\.config\mise IS mise's config dir
+# (config.toml + config.dev.toml — installed by bootstrap.ps1's
+# Invoke-MiseRuntimes). The hook puts the real bin dirs on PATH ahead of the
+# shims dir bootstrap added to the User PATH. Dot-sourced by the 5.1 profile
+# too — `mise activate pwsh` output is plain PowerShell.
+if (Get-Command mise -ErrorAction SilentlyContinue) {
+    # Windows PowerShell 5.1 (dot-sources this file) lacks the chpwd hook mise
+    # needs for per-directory switching; activation itself works there. Silence
+    # the warning mise prints about it on every 5.1 shell start.
+    if ($PSVersionTable.PSVersion.Major -lt 7) { $env:MISE_PWSH_CHPWD_WARNING = '0' }
+    (& mise activate pwsh) | Out-String | Invoke-Expression
+}
+
+# --- workstation aliases (mise dotfiles; mirror the Linux bashrc) -----------
+# Every ws* command pins `-C $env:USERPROFILE`: mise resolves its config root
+# by walking UP from the current directory, and this checkout IS
+# %USERPROFILE%\.config\mise -- so an unpinned ws* run from any directory
+# whose ancestors contain their own .config\mise (a second checkout, or --
+# under WSL -- the Linux checkout reached via \\wsl$\...) silently manages the
+# WRONG checkout instead of erroring. Confirmed live on this same class of
+# bug on Linux: an unpinned `wsa` run from a Windows drive mount rewrote
+# ~/.zshrc/~/.bashrc from a stale clone and made seven dotfiles executable.
+function wse { mise -C $env:USERPROFILE dot edit @args }
+function wsd { mise -C $env:USERPROFILE dot diff @args }
+function wss { mise -C $env:USERPROFILE dot status @args }
+function wsr { mise -C $env:USERPROFILE dot add --changed @args }
+# wsa — apply, but SURFACE drift first. Every [dotfiles] entry is `copy` (or
+# `template`) now -- no symlink pointed back into this checkout any more, so
+# a live edit under $HOME no longer round-trips implicitly, and copy-mode
+# apply otherwise overwrites an un-recorded live edit with zero diff and zero
+# warning (chezmoi prompted here; plain `mise bootstrap --only dotfiles
+# --yes` does not). This checks for any entry in `differs` state (NOT
+# `missing` -- a host's first-ever apply is expected to be all-missing, not a
+# drift warning) and shows its diff before doing anything, then asks.
+#
+# Belt and braces on top of the -C pin above: $status.files[0].origin
+# .config_root names the config root mise actually resolved. If it isn't
+# exactly $env:USERPROFILE, refuse instead of applying -- this catches the
+# pin ever silently failing (a future mise -C semantics change, a stray env
+# var) without re-deriving the pin's own logic. If the probe can't find that
+# property at all (empty/unexpected JSON shape), PROCEED -- a guard that
+# false-positives on a healthy host is worse than no guard.
+function wsa {
+    $status = mise -C $env:USERPROFILE dot status --json | ConvertFrom-Json
+    if ($status.files -and $status.files.Count -gt 0) {
+        $resolvedRoot = $status.files[0].origin.config_root
+        if ($resolvedRoot -and ($resolvedRoot -ne $env:USERPROFILE)) {
+            Write-Warning "wsa: refusing -- mise resolved the dotfiles config root as '$resolvedRoot', expected '$env:USERPROFILE'. This would apply the WRONG checkout. Not proceeding; investigate the -C pin before retrying."
+            return
+        }
+    }
+    $drifted = @($status.files | Where-Object { $_.state -eq 'differs' } | ForEach-Object { $_.target })
+    if ($drifted.Count -gt 0) {
+        Write-Warning "wsa: local edit(s) below differ from the repo and would be overwritten:"
+        $drifted | ForEach-Object { Write-Warning "  $_" }
+        mise -C $env:USERPROFILE dot diff -- @drifted
+        # Parity with the bash/zsh `wsa` ([ -t 0 ] && [ -r /dev/tty ]): with no
+        # console attached, Read-Host cannot prompt, so refuse rather than hang
+        # or throw. Same idiom bootstrap.ps1 uses for its own no-TTY branch.
+        if ([Console]::IsInputRedirected) {
+            Write-Warning "wsa: refusing to overwrite non-interactively -- inspect with 'mise dot diff', record with wsr (or 'mise dot add <path>' for a directory entry), or re-run in a console."
+            return
+        }
+        $reply = Read-Host "Apply anyway and overwrite the edit(s) above? [y/N]"
+        if ($reply -notmatch '^[Yy]') {
+            Write-Warning "wsa: aborted -- nothing applied. Record the edit(s) first: wsr (a file entry), or 'mise dot add <path>' for a directory entry (e.g. ~/.claude/agents, ~/.claude/commands -- wsr's --changed skips those) -- then re-run wsa."
+            return
+        }
+    }
+    mise -C $env:USERPROFILE bootstrap --only dotfiles --yes @args
+}
+# I8 fix (final-fix-brief.md): `mise run update` is tasks/update, a
+# #!/usr/bin/env bash script that calls `systemctl --user` and ends in an
+# unscoped `mise bootstrap --yes` -- none of that runs on Windows. Do the
+# Windows-safe equivalent directly: fast-forward pull, then the same
+# `--only dotfiles,tools` scope bootstrap.ps1 itself uses. The git pull is
+# already pinned via -C $env:WORKSTATION_REPO (a fixed path, not cwd-derived)
+# -- only the mise bootstrap call needed the -C fix.
+function wsu {
+    git -C $env:WORKSTATION_REPO pull --ff-only
+    if ($LASTEXITCODE -eq 0) { mise -C $env:USERPROFILE bootstrap --only dotfiles,tools --yes @args }
+}
+
+# --- git aliases ------------------------------------------------------------
+function gs  { git status @args }
+function ga  { git add @args }
+function gc  { git commit @args }
+function gp  { git push @args }
+function gl  { git log --oneline --graph --decorate @args }
+function gd  { git diff @args }
+function gco { git checkout @args }
+function gbr { git branch @args }
+
+# --- ssh helpers ------------------------------------------------------------
+# Windows OpenSSH has no ssh-copy-id; this mirrors it. Picks a ~/.ssh/*.pub
+# (prompts if several), confirms, then appends it to the target's
+# authorized_keys over ssh.
+function ssh-copy-id {
+    param([Parameter(Mandatory = $true)][string]$Target)
+    $pubKeys = Get-ChildItem "$HOME\.ssh\*.pub" -ErrorAction Stop
+    if (-not $pubKeys) { Write-Error "No public keys found in $HOME\.ssh"; return }
+    if ($pubKeys.Count -eq 1) {
+        $key = $pubKeys[0]
+    } else {
+        Write-Host "Available public keys:"
+        for ($i = 0; $i -lt $pubKeys.Count; $i++) { Write-Host "[$($i + 1)] $($pubKeys[$i].Name)" }
+        $choice = Read-Host "Select key number [1]"
+        if ([string]::IsNullOrWhiteSpace($choice)) { $choice = 1 }
+        if (($choice -as [int]) -lt 1 -or ($choice -as [int]) -gt $pubKeys.Count) { Write-Error "Invalid selection"; return }
+        $key = $pubKeys[[int]$choice - 1]
+    }
+    Write-Host "Using key: $($key.FullName)"
+    $confirm = Read-Host "Copy this key to $Target? [Y/n]"
+    if ($confirm -match "^[Nn]") { Write-Host "Cancelled."; return }
+    Get-Content $key.FullName | ssh $Target "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+}
+
+# --- Navigation -------------------------------------------------------------
+function .. { Set-Location .. }
+function ... { Set-Location ../.. }
+
+# --- workstation helpers ----------------------------------------------------
+# Quick path to the workstation repo. Defaults to bootstrap.ps1's default
+# clone path; override in $PROFILE.local if you cloned somewhere else
+# (e.g. via bootstrap.ps1 -RepoPath).
+$env:WORKSTATION_REPO = Join-Path $env:USERPROFILE ".config\mise"
+
+function Edit-Hosts {
+    & "$env:WORKSTATION_REPO\scripts\manage-hosts.ps1"
+}
+Set-Alias -Name hosts -Value Edit-Hosts
+
+# --- LAPS: copy this machine's local-admin password to the clipboard --------
+# Wraps Microsoft LAPS (AdmPwd.PS). Does NOT print the password — copies it to
+# the clipboard and shows only the computer name + expiry. Needs the AdmPwd.PS
+# module + AD read rights on ms-Mcs-AdmPwd. Guarded so it's a harmless no-op
+# (warning only when called) on machines without LAPS.
+#   adminpw                       # this machine -> clipboard
+#   adminpw -ComputerName OTHER   # another machine
+function Get-AdminPassword {
+    [CmdletBinding()]
+    param([string]$ComputerName = (hostname))
+
+    if (-not (Get-Command Get-AdmPwdPassword -ErrorAction SilentlyContinue)) {
+        Write-Warning "AdmPwd.PS (LAPS) not available on this machine."
+        return
+    }
+    try {
+        $r = Get-AdmPwdPassword -ComputerName $ComputerName -ErrorAction Stop
+    } catch {
+        Write-Warning "LAPS lookup failed for ${ComputerName}: $($_.Exception.Message)"
+        return
+    }
+    if (-not $r -or -not $r.Password) {
+        Write-Warning "No LAPS password returned for $ComputerName (no rights, or not LAPS-managed)."
+        return
+    }
+    $r.Password | Set-Clipboard
+    Write-Host ("admin password for {0} copied to clipboard" -f $r.ComputerName) -ForegroundColor Green
+    Write-Host ("  expires: {0}" -f $r.ExpirationTimestamp) -ForegroundColor DarkGray
+}
+Set-Alias -Name adminpw -Value Get-AdminPassword
+
+# --- PSReadLine: better history + tab completion ----------------------------
+if (Get-Module -ListAvailable -Name PSReadLine) {
+    Import-Module PSReadLine
+    Set-PSReadLineOption -EditMode Windows
+    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+    # Predictive IntelliSense needs PSReadLine 2.2+. Windows PowerShell 5.1 ships
+    # 2.0 (no -PredictionSource/-PredictionViewStyle), so version-guard these or
+    # 5.1 throws on every startup. Upgrade with: Install-Module PSReadLine -Force
+    if ((Get-Module PSReadLine).Version -ge [version]"2.2.0") {
+        Set-PSReadLineOption -PredictionSource History
+        Set-PSReadLineOption -PredictionViewStyle ListView
+    }
+}
+
+# --- Per-machine override (untracked) ---------------------------------------
+# Sourced last so it can override anything above.
+$localProfile = Join-Path $PSScriptRoot "Microsoft.PowerShell_profile.local.ps1"
+if (Test-Path $localProfile) {
+    . $localProfile
+}

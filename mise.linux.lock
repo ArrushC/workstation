@@ -64,17 +64,6 @@ checksum = "sha256:8c8405574d51d63ee89594bfed241f478d507d96af78e5c370dcbe65633d7
 url = "https://github.com/cheat/cheat/releases/download/5.1.0/cheat-linux-amd64.gz"
 url_api = "https://api.github.com/repos/cheat/cheat/releases/assets/356479028"
 
-[[tools.chezmoi]]
-version = "2.72.2"
-backend = "aqua:twpayne/chezmoi"
-specifiers = ["latest"]
-
-[tools.chezmoi."platforms.linux-x64"]
-checksum = "sha256:a2be1b8bcdf06c6f173e070bb3ddbcc52c50478fe9b57f6e6c63d15c7cff4f03"
-url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72.2_linux-glibc_amd64.tar.gz"
-url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/561706563"
-provenance = "cosign"
-
 [[tools.croc]]
 version = "11.5.0"
 backend = "aqua:schollz/croc"
@@ -300,19 +289,6 @@ asset_pattern = "procs-v{version}-x86_64-linux.zip"
 checksum = "sha256:81964faf9d5cd0e9f399d5d0954fb6fe4d4d9f7d3cbec4507633df5a45b11713"
 url = "https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.12-x86_64-linux.zip"
 url_api = "https://api.github.com/repos/dalance/procs/releases/assets/457525859"
-
-[[tools."github:daptify14/chezit"]]
-version = "0.4.0"
-backend = "github:daptify14/chezit"
-specifiers = ["0.4.0"]
-
-[tools."github:daptify14/chezit".options]
-matching = "linux_amd64"
-
-[tools."github:daptify14/chezit"."platforms.linux-x64"]
-checksum = "sha256:6879e4c10ceac39b9d835649f28f859b33d1407146b5e3d58a33b23a72c6400f"
-url = "https://github.com/daptify14/chezit/releases/download/v0.4.0/chezit_0.4.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/daptify14/chezit/releases/assets/545006591"
 
 [[tools."github:dathere/qsv"]]
 version = "22.0.1"

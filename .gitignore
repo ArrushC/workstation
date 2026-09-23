@@ -8,11 +8,7 @@ id_ed25519
 secrets/
 
 # Local machine overrides
-dot_bashrc.local
 .bashrc.local
-
-# chezmoi cache
-.chezmoicache/
 
 # Python
 __pycache__/

@@ -1,85 +1,13 @@
 # ~/.config/mise/config.native.toml — non-WSL Linux DEV extras (MISE_ENV token
-# `native`): Docker CE, Dozzle (compose), Cockpit, rsyslog drop-in, NFS client.
-# WSL hosts skip all of it (Docker Desktop / Windows own those roles there).
-
-# VERIFIED (mise 2026.9.9, `mise bootstrap --dry-run`): post-packages runs
-# right after the dnf batch — three phases before compose — even though
-# mise's own `--help` prose describes a later position; re-verify this order
-# after any mise version bump (it's what keeps the Make-era dozzle.service
-# retirement ahead of the compose phase, Ruling 9).
-[bootstrap.hooks]
-# Runs after the dnf batch, before services/compose: docker group membership,
-# cockpit's firewalld service (no [bootstrap.linux.firewall] — it aborts every
-# unprivileged `mise bootstrap plan`/`status`), and retiring the Make-era
-# dozzle.service so the compose project can bind the port and container name.
-"post-packages" = "mise run native-post-packages"
-
-# Docker CE from Docker's own repo (vendored file; the centos variant serves
-# AlmaLinux/Rocky — a RHEL host would need linux/rhel/docker-ce.repo instead).
-[bootstrap.files."/etc/yum.repos.d/docker-ce.repo"]
-source = "configs/docker/docker-ce.repo"
-owner = "root"
-group = "root"
-mode = "0644"
-phase = "pre-packages"
+# `native`): the NFS client package group only (nfs-utils, nfs4-acl-tools,
+# autofs). WSL hosts skip all of it (Windows owns the NFS/SMB client role
+# there). Docker/Cockpit/rsyslog/Dozzle provisioning was removed from this
+# repo (user decision, 2026-09-22) — mise no longer installs or configures
+# them; hosts that already have them from an earlier `mise bootstrap` (or the
+# Make era) keep whatever is installed and running, unmanaged, and nothing
+# here updates it any more.
 
 [bootstrap.packages]
-"dnf:containerd.io" = "latest"
-"dnf:docker-buildx-plugin" = "latest"
-"dnf:docker-ce" = "latest"
-"dnf:docker-ce-cli" = "latest"
-"dnf:docker-compose-plugin" = "latest"   # `docker compose` — required by [bootstrap.compose]
-"dnf:cockpit" = "latest"
-"dnf:cockpit-packagekit" = "latest"
-"dnf:cockpit-podman" = "latest"
-"dnf:cockpit-storaged" = "latest"
-"dnf:cockpit-system" = "latest"          # also provides cockpit-networkmanager on EL9
 "dnf:autofs" = "latest"                  # installed, NOT enabled — maps are per-host /etc config
 "dnf:nfs-utils" = "latest"
 "dnf:nfs4-acl-tools" = "latest"
-
-[bootstrap.services.docker]
-state = "running"
-enabled = true
-
-[bootstrap.files."/etc/cockpit/cockpit.conf"]
-source = "configs/cockpit/cockpit.conf"
-owner = "root"
-group = "root"
-mode = "0644"
-notify = ["cockpit.socket"]
-
-[bootstrap.services."cockpit.socket"]
-state = "running"
-enabled = true
-
-[bootstrap.files."/etc/rsyslog.d/30-workstation.conf"]
-source = "configs/rsyslog/30-workstation.conf"
-owner = "root"
-group = "root"
-mode = "0644"
-notify = ["rsyslog"]
-
-[bootstrap.services.rsyslog]
-state = "running"
-enabled = true
-on_change = "restart"
-
-# Dozzle: a compose project under /etc/dozzle (replaces the Make-era systemd
-# unit + dozzle.env). The image tag renders from vars.dozzle_version.
-[bootstrap.directories."/etc/dozzle"]
-owner = "root"
-mode = "0755"
-
-[bootstrap.files."/etc/dozzle/compose.yaml"]
-source = "configs/dozzle/compose.yaml.tera"
-template = true
-owner = "root"
-group = "root"
-mode = "0644"
-
-[bootstrap.compose.dozzle]
-project_dir = "/etc/dozzle"
-files = ["compose.yaml"]
-state = "running"
-sudo = true

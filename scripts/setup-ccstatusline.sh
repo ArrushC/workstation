@@ -2,17 +2,43 @@
 # setup-ccstatusline.sh — interactive setup of the Claude Code statusline
 # via ccstatusline. Four options: use tracked / this machine / set global /
 # skip. Invoked by `mise run statusline` and at the tail of `bootstrap.sh --dev`.
+#
+# The widget config is a mise [dotfiles] entry (config.dev.toml,
+# `~/.config/ccstatusline/settings.json`, mode = "copy" — like every
+# `[dotfiles]` entry now, 2026-09-22 copy-migration; this one was already
+# copy before that, I4/final-fix-brief.md, so nothing here changed behavior)
+# — the live file is an independent COPY of dotfiles/config/ccstatusline/
+# settings.json, not a symlink into the checkout, so editing it in place does
+# NOT dirty the repo (ruling 8 is retired) and does NOT round-trip on its own
+# — `mise dot add`/option 3 below is the only way back. A host that wants a
+# private, untracked config opts OUT of that entry entirely via
+# config.local.toml (mode = "copy", enabled = false — see the opt-out
+# primitives below, and note it deliberately matches the base entry's own
+# mode), which is what makes "define a new status line for THIS machine"
+# (option 2) mean something: once opted out, mise never touches the live
+# file again, so it's free to diverge for good.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHEZMOI_SRC="$REPO_ROOT/chezmoi"
-IGNORE_TMPL="$CHEZMOI_SRC/.chezmoiignore.tmpl"
-WIDGET_TRACKED_SRC="$CHEZMOI_SRC/dot_config/ccstatusline/settings.json"
+WIDGET_SOURCE="dotfiles/config/ccstatusline/settings.json"
+WIDGET_TRACKED_SRC="$REPO_ROOT/$WIDGET_SOURCE"
 WIDGET_DEST="$HOME/.config/ccstatusline/settings.json"
-# shellcheck disable=SC2034  # documents the tracked settings source; pairs with CLAUDE_SETTINGS_DEST
-CLAUDE_SETTINGS_TRACKED_SRC="$CHEZMOI_SRC/private_dot_claude/modify_private_settings.json"
-CLAUDE_SETTINGS_DEST="$HOME/.claude/settings.json"
+# Deliberately literal ~ — this is the [dotfiles] TARGET key (config.dev.toml
+# / config.local.toml) and the string `mise dot apply`/`mise dot add` expect
+# on the command line, not a path for the shell to expand.
+# shellcheck disable=SC2088
+WIDGET_TARGET='~/.config/ccstatusline/settings.json'
+LOCAL_CONFIG="$REPO_ROOT/config.local.toml"
+# `mise dot` commands below run from wherever this script was invoked from —
+# deliberately NOT `cd "$REPO_ROOT"` first. mise resolves the global config
+# via $HOME/.config/mise (this checkout IS that, by this whole project's
+# design), independent of cwd; verified in a scratch repo copy that `cd`ing
+# into a SECOND checkout of this same config before `mise dot add` makes it
+# fail to recognize the target as already-managed (it seeds a brand new
+# entry under a default ~/.dotfiles root instead of updating the real
+# source) even though `mise dot apply` tolerates the same `cd`. Simplest fix
+# that works for both commands: never `cd` here at all.
 
 BOLD=$'\033[1m'
 YELLOW=$'\033[33m'
@@ -21,9 +47,8 @@ RED=$'\033[31m'
 RESET=$'\033[0m'
 
 HOST="$(hostname -s)"
-# shellcheck disable=SC2034  # symmetry with SENTINEL_END; awk patterns below match the literal string
-SENTINEL_START='# CCSTATUSLINE:START'
-SENTINEL_END='# CCSTATUSLINE:END'
+SENTINEL_START='# CCSTATUSLINE-OPTOUT:START'
+SENTINEL_END='# CCSTATUSLINE-OPTOUT:END'
 
 # --- preflight --------------------------------------------------------------
 
@@ -49,60 +74,69 @@ preflight() {
     exit 0
     ;;
   esac
-  if [ ! -f "$HOME/.config/chezmoi/chezmoi.toml" ]; then
-    printf '%bchezmoi not initialized — run ./bootstrap.sh --dev first.%b\n' "$RED" "$RESET" >&2
+  if [ ! -f "$WIDGET_TRACKED_SRC" ]; then
+    printf '%bmissing %s — is this a full checkout?%b\n' "$RED" "$WIDGET_TRACKED_SRC" "$RESET" >&2
     exit 1
   fi
 }
 
-# --- sentinel block primitives ----------------------------------------------
-# Manages per-host opt-out lines between # CCSTATUSLINE:START / END markers
-# inside chezmoi/.chezmoiignore.tmpl. Each opted-out host contributes one
-# line of the form:
-#   {{ if eq .chezmoi.hostname "<host>" }}.config/ccstatusline/settings.json{{ end }}
-# NOTE: the path is the TARGET path (.config/ccstatusline/...), not the
-# source-state name (dot_config/...) — chezmoi matches .chezmoiignore against
-# target paths, so the dot_ form would silently match nothing.
+# --- opt-out primitives ------------------------------------------------------
+# Per-host opt-out (ruling 2, docs/superpowers/plans/2026-09-19-mise-dotfiles.md):
+# there is no `state = "absent"` key, and `{ enabled = false }` alone is
+# silently ignored — disabling an inherited [dotfiles] entry needs `enabled =
+# false` PLUS a repeated `mode`. config.local.toml is per-host and
+# git-ignored already (unlike the old shared .chezmoiignore.tmpl, which had
+# to embed the hostname inside sentinel-delimited lines because ONE file was
+# committed for every host) — so nothing here is hostname-conditional; the
+# sentinel block just marks OUR entry as ours to add/remove idempotently
+# without disturbing anything else a human or another tool put in
+# config.local.toml.
 
-sentinel_contains() {
-  local host="$1"
-  awk -v host="$host" '
-    /^# CCSTATUSLINE:START$/ { inblock=1; next }
-    /^# CCSTATUSLINE:END$/   { inblock=0 }
-    inblock && index($0, "\"" host "\"") > 0 { found=1; exit }
-    END { exit !found }
-  ' "$IGNORE_TMPL"
+optout_present() {
+  [ -f "$LOCAL_CONFIG" ] && grep -qxF "$SENTINEL_START" "$LOCAL_CONFIG"
 }
 
-sentinel_add() {
-  local host="$1"
-  if sentinel_contains "$host"; then return 0; fi
-  local stanza
-  stanza="$(printf '{{ if eq .chezmoi.hostname "%s" }}.config/ccstatusline/settings.json{{ end }}' "$host")"
+optout_add() {
+  if optout_present; then return 0; fi
+  if [ ! -f "$LOCAL_CONFIG" ]; then
+    printf '# %s — per-host overrides, git-ignored (see CLAUDE.md)\n' "$(basename "$LOCAL_CONFIG")" >"$LOCAL_CONFIG"
+  fi
+  if ! grep -qxF '[dotfiles]' "$LOCAL_CONFIG"; then
+    {
+      echo
+      echo '[dotfiles]'
+    } >>"$LOCAL_CONFIG"
+  fi
   local tmp
   tmp="$(mktemp)"
-  awk -v end="$SENTINEL_END" -v stanza="$stanza" '
-    $0 == end { print stanza; print; next }
+  awk -v start="$SENTINEL_START" -v end="$SENTINEL_END" -v target="$WIDGET_TARGET" -v source="$WIDGET_SOURCE" '
+    $0 == "[dotfiles]" && !done {
+      print
+      print start
+      printf "\"%s\" = { source = \"%s\", mode = \"copy\", enabled = false }\n", target, source
+      print end
+      done = 1
+      next
+    }
     { print }
-  ' "$IGNORE_TMPL" >"$tmp"
-  mv "$tmp" "$IGNORE_TMPL"
+  ' "$LOCAL_CONFIG" >"$tmp"
+  mv "$tmp" "$LOCAL_CONFIG"
 }
 
-sentinel_remove() {
-  local host="$1"
-  if ! sentinel_contains "$host"; then return 0; fi
+optout_remove() {
+  if ! optout_present; then return 0; fi
   local tmp
   tmp="$(mktemp)"
-  awk -v host="$host" '
-    /^# CCSTATUSLINE:START$/ { inblock=1; print; next }
-    /^# CCSTATUSLINE:END$/   { inblock=0; print; next }
-    inblock && index($0, "\"" host "\"") > 0 { next }
+  awk -v start="$SENTINEL_START" -v end="$SENTINEL_END" '
+    $0 == start { inblock = 1; next }
+    $0 == end   { inblock = 0; next }
+    inblock { next }
     { print }
-  ' "$IGNORE_TMPL" >"$tmp"
-  mv "$tmp" "$IGNORE_TMPL"
+  ' "$LOCAL_CONFIG" >"$tmp"
+  mv "$tmp" "$LOCAL_CONFIG"
 }
 
-# --- options (skeletons; filled in by later tasks) -------------------------
+# --- options -----------------------------------------------------------------
 
 option_use_tracked() {
   local tracked_content
@@ -113,56 +147,104 @@ option_use_tracked() {
     printf '%bTracked widget config is empty (just `{}`).%b Pick option 3 first to seed it from a real configuration.\n' "$YELLOW" "$RESET"
     return 0
   fi
-  if sentinel_contains "$HOST"; then
-    printf '%bRemoving %s from local-persist sentinel block...%b\n' "$BOLD" "$HOST" "$RESET"
-    sentinel_remove "$HOST"
+  if optout_present; then
+    printf '%bRemoving this host from config.local.toml opt-out...%b\n' "$BOLD" "$RESET"
+    optout_remove
   fi
-  printf '%bApplying tracked ccstatusline + Claude Code settings...%b\n' "$GREEN" "$RESET"
-  chezmoi apply "$WIDGET_DEST" "$CLAUDE_SETTINGS_DEST"
+  printf '%bApplying the tracked ccstatusline config...%b\n' "$GREEN" "$RESET"
+  # --force: this host's live file may be a real, independent file left over
+  # from a prior opt-out (option 2/3) rather than the managed symlink — mise
+  # refuses to overwrite a pre-existing real file otherwise (ruling 1). Safe
+  # here: a single target, explicitly chosen by the person running this menu
+  # — not the fleet-wide `--force-dotfiles` gate bootstrap.sh applies elsewhere.
+  mise dot apply --yes --force "$WIDGET_TARGET"
   printf '%bDone.%b\n' "$GREEN" "$RESET"
 }
 option_this_machine() {
+  if ! optout_present; then
+    printf '%bOpting this host out of the tracked config (config.local.toml)...%b\n' "$BOLD" "$RESET"
+    optout_add
+  fi
+  # Once opted out, mise no longer manages the target — if it's still a
+  # symlink an OLD chezmoi-era deploy (or a pre-I4 host that never re-applied
+  # after `mode` flipped to copy) left behind, materialize it into a real,
+  # independent file before the TUI edits it in place. Dead on any host
+  # bootstrapped since I4/the 2026-09-22 copy-migration (this target — like
+  # every `[dotfiles]` entry now — is `copy`, never `symlink`, so a fresh
+  # apply never leaves a symlink here to begin with); kept as one-time
+  # migration safety for a host that hasn't re-applied yet, harmless
+  # (`[ -L ]` on a regular file or nothing is just false) once it has.
+  if [ -L "$WIDGET_DEST" ]; then
+    local content
+    content="$(cat "$WIDGET_DEST")"
+    rm -f "$WIDGET_DEST"
+    mkdir -p "$(dirname "$WIDGET_DEST")"
+    printf '%s' "$content" >"$WIDGET_DEST"
+  fi
   printf '%bLaunching ccstatusline TUI...%b\n' "$BOLD" "$RESET"
   if ! ccstatusline </dev/tty; then
     printf '%bTUI exited non-zero or was cancelled — no changes.%b\n' "$YELLOW" "$RESET"
     return 0
   fi
-  printf '%bPersist this machine-local config across chezmoi updates? (y/N): %b' "$BOLD" "$RESET"
+  printf '%bKeep this machine-local config permanently (opt out of future updates)? (y/N): %b' "$BOLD" "$RESET"
   local ans
   read -r ans </dev/tty
   case "${ans,,}" in
   y | yes)
-    sentinel_add "$HOST"
-    printf '%bAdded %s to local-persist sentinel block — subsequent `chezmoi apply` runs will leave your local widget config alone.%b\n' "$GREEN" "$HOST" "$RESET"
+    printf '%bStaying opted out in config.local.toml — future `mise bootstrap`/`mise dot apply` runs will leave this file alone.%b\n' "$GREEN" "$RESET"
     ;;
   *)
-    printf '%bEphemeral — next `chezmoi update` will overwrite your local widget config with the tracked version.%b\n' "$YELLOW" "$RESET"
+    # Reclaim it NOW, not "on the next apply": the TUI just materialized the
+    # symlink into a real file, and a later plain `mise dot apply` (or a
+    # bulk one, once Task 4 wires `mise bootstrap` into bootstrap.sh) refuses
+    # to overwrite a pre-existing real file (ruling 1) — a bulk apply would
+    # abort every OTHER dotfile along with it. --force is safe here: a
+    # single target the person running this menu just explicitly chose to
+    # give up.
+    printf '%bRemoving the opt-out and reclaiming the tracked config now...%b\n' "$YELLOW" "$RESET"
+    optout_remove
+    mise dot apply --yes --force "$WIDGET_TARGET"
     ;;
   esac
 }
 option_set_global() {
+  if ! optout_present; then
+    printf '%bOpting this host out of the tracked config while you edit it...%b\n' "$BOLD" "$RESET"
+    optout_add
+  fi
+  # Same one-time migration safety as option_this_machine above — dead on
+  # any host bootstrapped since the copy migration.
+  if [ -L "$WIDGET_DEST" ]; then
+    local content
+    content="$(cat "$WIDGET_DEST")"
+    rm -f "$WIDGET_DEST"
+    mkdir -p "$(dirname "$WIDGET_DEST")"
+    printf '%s' "$content" >"$WIDGET_DEST"
+  fi
   printf '%bLaunching ccstatusline TUI...%b\n' "$BOLD" "$RESET"
   if ! ccstatusline </dev/tty; then
     printf '%bTUI exited non-zero or was cancelled — no changes.%b\n' "$YELLOW" "$RESET"
     return 0
   fi
-  if sentinel_contains "$HOST"; then
-    printf '%bRemoving %s from local-persist sentinel block (setting global overrides prior local-persist)...%b\n' "$BOLD" "$HOST" "$RESET"
-    sentinel_remove "$HOST"
-  fi
-  printf '%bPulling widget config back into chezmoi source...%b\n' "$GREEN" "$RESET"
-  # NOTE: only the widget config is re-added. ~/.claude/settings.json is NOT
-  # re-added because ccstatusline's TUI "Install to Claude Code" path
-  # overwrites the local file with a statusLine-only block, which would
-  # strip every other key (skipAutoPermissionPrompt, tui, theme, etc.) on
-  # every save. That merge-template is hand-managed via direct edits to
-  # chezmoi/private_dot_claude/modify_private_settings.json; the pin is
-  # `npm:ccstatusline` in config.dev.toml.
-  chezmoi re-add "$WIDGET_DEST"
+  # NOTE: only the widget config is captured back. ~/.claude/settings.json is
+  # NOT touched here — ccstatusline's TUI "Install to Claude Code" path
+  # overwrites that file with a statusLine-only block, which would strip
+  # every other key on every save. The statusLine command mise enforces
+  # there is edited directly in dotfiles/claude/settings.enforced.json (see
+  # scripts/lib/claude-settings-merge.sh); the pin is `npm:ccstatusline` in
+  # config.dev.toml.
+  # Remove the opt-out BEFORE `mise dot add`: while it's still active,
+  # config.local.toml's disabled entry (not config.dev.toml's real one) is
+  # what mise sees for this target, so `mise dot add` doesn't recognize it
+  # as already-managed and seeds a brand new entry instead (verified in a
+  # scratch config) — remove it first so `add` updates the real source.
+  printf '%bRemoving the opt-out — every host converges back onto the tracked config on its next apply...%b\n' "$BOLD" "$RESET"
+  optout_remove
+  printf '%bPulling this machine'"'"'s widget config back into the tracked source...%b\n' "$GREEN" "$RESET"
+  mise dot add --yes "$WIDGET_TARGET"
   cd "$REPO_ROOT"
-  git add \
-    chezmoi/dot_config/ccstatusline/settings.json \
-    chezmoi/.chezmoiignore.tmpl
+  # config.local.toml is never committed — .gitignore'd on purpose (per-host).
+  git add "$WIDGET_SOURCE"
   if git diff --cached --quiet; then
     printf '%bNo changes to commit — local config matched tracked.%b\n' "$YELLOW" "$RESET"
     return 0
@@ -179,7 +261,7 @@ option_skip() { printf '%bSkipped.%b\n' "$YELLOW" "$RESET"; }
 show_menu() {
   printf '\n%bccstatusline setup%b (host: %b%s%b)\n' \
     "$BOLD" "$RESET" "$YELLOW" "$HOST" "$RESET"
-  printf '  1) Use the chezmoi-tracked status line (same as every host)\n'
+  printf '  1) Use the tracked status line (same as every host)\n'
   printf '  2) Define a new status line for this machine (with persist sub-prompt)\n'
   printf '  3) Set a new global status line (configure + commit + push)\n'
   printf '  4) Skip\n\n'

@@ -1,0 +1,507 @@
+{
+    "$help": "https://aka.ms/terminal-documentation",
+    "$schema": "https://aka.ms/terminal-profiles-schema",
+    "actions": 
+    [
+        {
+            "command": 
+            {
+                "action": "copy",
+                "singleLine": false
+            },
+            "id": "User.copy.644BA8F2"
+        },
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "right"
+            },
+            "id": "User.moveFocus.right"
+        },
+        {
+            "command": "paste",
+            "id": "User.paste"
+        },
+        {
+            "command": "find",
+            "id": "User.find"
+        },
+        {
+            "command": 
+            {
+                "action": "splitPane",
+                "split": "down",
+                "splitMode": "duplicate"
+            },
+            "id": "User.splitPane.A6751878"
+        },
+        {
+            "command": 
+            {
+                "action": "splitPane",
+                "split": "right",
+                "splitMode": "duplicate"
+            },
+            "id": "User.splitPane.right"
+        },
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "up"
+            },
+            "id": "User.moveFocus.up"
+        },
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "left"
+            },
+            "id": "User.moveFocus.left"
+        },
+        {
+            "command": 
+            {
+                "action": "moveFocus",
+                "direction": "down"
+            },
+            "id": "User.moveFocus.down"
+        },
+        {
+            "command": "togglePaneZoom",
+            "id": "User.togglePaneZoom"
+        },
+        {
+            "command": 
+            {
+                "action": "adjustFontSize",
+                "delta": 1
+            },
+            "id": "User.adjustFontSize.inc"
+        },
+        {
+            "command": 
+            {
+                "action": "adjustFontSize",
+                "delta": -1
+            },
+            "id": "User.adjustFontSize.dec"
+        },
+        {
+            "command": "resetFontSize",
+            "id": "User.resetFontSize"
+        },
+        {
+            "command": 
+            {
+                "action": "scrollToMark",
+                "direction": "previous"
+            },
+            "id": "User.scrollToMark.prev"
+        },
+        {
+            "command": 
+            {
+                "action": "scrollToMark",
+                "direction": "next"
+            },
+            "id": "User.scrollToMark.next"
+        },
+        {
+            "command": "toggleBroadcastInput",
+            "id": "User.toggleBroadcastInput"
+        },
+        {
+            "command": 
+            {
+                "action": "showSuggestions",
+                "source": 
+                [
+                    "tasks",
+                    "commandHistory"
+                ],
+                "useCommandline": true
+            },
+            "id": "User.showSuggestions"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "wsa"
+            },
+            "id": "User.snippet.wsa",
+            "name": "Snippet: mise dotfiles apply"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "wsu"
+            },
+            "id": "User.snippet.wsu",
+            "name": "Snippet: workstation update (pull+apply)"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "wsd"
+            },
+            "id": "User.snippet.wsd",
+            "name": "Snippet: mise dotfiles diff"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "wss"
+            },
+            "id": "User.snippet.wss",
+            "name": "Snippet: mise dotfiles status"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; ./bootstrap.sh --dev"
+            },
+            "id": "User.snippet.makedev",
+            "name": "Snippet: full dev bootstrap (WSL)"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "mise run lint"
+            },
+            "id": "User.snippet.lint",
+            "name": "Snippet: lint + invariants (WSL)"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "bash ~/.config/mise/scripts/update-hosts.sh"
+            },
+            "id": "User.snippet.updatehosts",
+            "name": "Snippet: fleet update (WSL)"
+        },
+        {
+            "command": 
+            {
+                "action": "sendInput",
+                "input": "zellij attach --create main"
+            },
+            "id": "User.snippet.zellij",
+            "name": "Snippet: zellij attach main"
+        }
+    ],
+    "alwaysOnTop": false,
+    "copyFormatting": "none",
+    "copyOnSelect": true,
+    "defaultProfile": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
+    "disabledProfileSources": 
+    [
+        "Windows.Terminal.SSH"
+    ],
+    "firstWindowPreference": "persistedWindowLayout",
+    "keybindings": 
+    [
+        {
+            "id": "User.copy.644BA8F2",
+            "keys": "ctrl+c"
+        },
+        {
+            "id": "User.moveFocus.up",
+            "keys": "alt+shift+up"
+        },
+        {
+            "id": "User.splitPane.right",
+            "keys": "alt+shift+r"
+        },
+        {
+            "id": "User.togglePaneZoom",
+            "keys": "ctrl+shift+z"
+        },
+        {
+            "id": "User.paste",
+            "keys": "ctrl+v"
+        },
+        {
+            "id": "User.find",
+            "keys": "ctrl+shift+f"
+        },
+        {
+            "id": "User.adjustFontSize.dec",
+            "keys": "ctrl+minus"
+        },
+        {
+            "id": "User.adjustFontSize.inc",
+            "keys": "ctrl+plus"
+        },
+        {
+            "id": "User.splitPane.A6751878",
+            "keys": "alt+shift+d"
+        },
+        {
+            "id": "User.moveFocus.left",
+            "keys": "alt+shift+left"
+        },
+        {
+            "id": "User.moveFocus.right",
+            "keys": "alt+shift+right"
+        },
+        {
+            "id": "User.moveFocus.down",
+            "keys": "alt+shift+down"
+        },
+        {
+            "id": "User.resetFontSize",
+            "keys": "ctrl+0"
+        },
+        {
+            "id": "User.scrollToMark.prev",
+            "keys": "ctrl+up"
+        },
+        {
+            "id": "User.scrollToMark.next",
+            "keys": "ctrl+down"
+        },
+        {
+            "id": "User.toggleBroadcastInput",
+            "keys": "alt+shift+b"
+        },
+        {
+            "id": "User.showSuggestions",
+            "keys": "alt+shift+s"
+        }
+    ],
+    "newTabMenu": 
+    [
+        {
+            "allowEmpty": false,
+            "entries": 
+            [
+                {
+                    "commandline": null,
+                    "name": "SSH: .*",
+                    "source": null,
+                    "type": "matchProfiles"
+                }
+            ],
+            "icon": null,
+            "inline": "never",
+            "name": "SSH hosts",
+            "type": "folder"
+        },
+        {
+            "type": "remainingProfiles"
+        }
+    ],
+    "profiles": 
+    {
+        "defaults": 
+        {
+            "adjustIndistinguishableColors": "indexed",
+            "antialiasingMode": "grayscale",
+            "autoMarkPrompts": true,
+            "bellStyle": 
+            [
+                "audible",
+                "taskbar"
+            ],
+            "colorScheme": "Catppuccin Mocha",
+            "cursorShape": "bar",
+            "font": 
+            {
+                "face": "JetBrainsMono NFM",
+                "size": 10.5
+            },
+            "historySize": 100000,
+            "padding": "8, 8, 8, 8",
+            "showMarksOnScrollbar": true,
+            "useAcrylic": false
+        },
+        "list": 
+        [
+            {
+                "altGrAliasing": true,
+                "closeOnExit": "automatic",
+                "commandline": "%LOCALAPPDATA%\\workstation\\nu\\nu.exe",
+                "guid": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
+                "hidden": false,
+                "name": "Nushell",
+                "snapOnInput": true,
+                "startingDirectory": "%USERPROFILE%"
+            },
+            {
+                "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nologo",
+                "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+                "hidden": false,
+                "name": "Windows PowerShell"
+            },
+            {
+                "commandline": "%SystemRoot%\\System32\\cmd.exe",
+                "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
+                "hidden": false,
+                "name": "Command Prompt"
+            },
+            {
+                "guid": "{b453ae62-4e3d-5e58-b989-0a998ec441b8}",
+                "hidden": false,
+                "name": "Azure Cloud Shell",
+                "source": "Windows.Terminal.Azure"
+            },
+            {
+                "guid": "{2ece5bfe-50ed-5f3a-ab87-5cd4baafed2b}",
+                "hidden": false,
+                "name": "Git Bash",
+                "source": "Git"
+            },
+            {
+                "altGrAliasing": true,
+                "antialiasingMode": "grayscale",
+                "closeOnExit": "automatic",
+                "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nologo",
+                "cursorShape": "bar",
+                "elevate": true,
+                "font": 
+                {
+                    "face": "Cascadia Mono",
+                    "size": 12
+                },
+                "guid": "{dcfe3a4f-db5c-4671-9381-aa3c3a566981}",
+                "hidden": false,
+                "historySize": 9001,
+                "icon": "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png",
+                "name": "Windows PowerShell (Admin)",
+                "padding": "8, 8, 8, 8",
+                "snapOnInput": true,
+                "startingDirectory": "%USERPROFILE%",
+                "useAcrylic": false
+            },
+            {
+                "guid": "{4e55418b-7bb9-5495-8080-54bf581871fc}",
+                "hidden": false,
+                "name": "AlmaLinux-9",
+                "source": "Microsoft.WSL"
+            },
+            {
+                "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+                "hidden": false,
+                "name": "PowerShell",
+                "source": "Windows.Terminal.PowershellCore"
+            },
+            {
+                "guid": "{74a12389-00d3-5ded-aed2-e4548631211d}",
+                "hidden": false,
+                "name": "SSH: atc-cache-dev09",
+                "source": "workstation"
+            },
+            {
+                "guid": "{e85621f7-87ca-5095-ad8d-f5663b1b3165}",
+                "hidden": false,
+                "name": "SSH: atc-cache-dev10",
+                "source": "workstation"
+            },
+            {
+                "guid": "{2ba247de-501d-5257-8aa3-df2609b732a0}",
+                "hidden": false,
+                "name": "SSH: SLO-LT-4CWHKL3",
+                "source": "workstation"
+            },
+            {
+                "guid": "{d1e7937d-df8c-54bf-8510-6e6d350cd7de}",
+                "hidden": false,
+                "name": "SSH: cache-apl",
+                "source": "workstation"
+            },
+            {
+                "guid": "{05fb2ab1-232a-5f7a-b419-abd95b6bc86f}",
+                "hidden": false,
+                "name": "SSH: cache-bur1",
+                "source": "workstation"
+            },
+            {
+                "guid": "{97ed416c-3f69-5d3a-9a91-430fc009e789}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa1",
+                "source": "workstation"
+            },
+            {
+                "guid": "{d28f93f5-de53-582e-8ee6-2caedcaef74c}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa2",
+                "source": "workstation"
+            },
+            {
+                "guid": "{6587cffa-3a15-50fe-93e6-3d984660d531}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa3",
+                "source": "workstation"
+            },
+            {
+                "guid": "{5d227924-471f-5978-92ea-ef6f6ac9b2c8}",
+                "hidden": false,
+                "name": "SSH: dev-cache-qa4",
+                "source": "workstation"
+            }
+        ]
+    },
+    "schemes": 
+    [
+        {
+            "background": "#1E1E2E",
+            "black": "#45475A",
+            "blue": "#89B4FA",
+            "brightBlack": "#585B70",
+            "brightBlue": "#89B4FA",
+            "brightCyan": "#94E2D5",
+            "brightGreen": "#A6E3A1",
+            "brightPurple": "#F5C2E7",
+            "brightRed": "#F38BA8",
+            "brightWhite": "#A6ADC8",
+            "brightYellow": "#F9E2AF",
+            "cursorColor": "#F5E0DC",
+            "cyan": "#94E2D5",
+            "foreground": "#CDD6F4",
+            "green": "#A6E3A1",
+            "name": "Catppuccin Mocha",
+            "purple": "#F5C2E7",
+            "red": "#F38BA8",
+            "selectionBackground": "#585B70",
+            "white": "#BAC2DE",
+            "yellow": "#F9E2AF"
+        }
+    ],
+    "theme": "Catppuccin Mocha",
+    "themes": 
+    [
+        {
+            "name": "Catppuccin Mocha",
+            "tab": 
+            {
+                "background": "#1E1E2EFF",
+                "iconStyle": "monochrome",
+                "showCloseButton": "always",
+                "unfocusedBackground": null
+            },
+            "tabRow": 
+            {
+                "background": "#181825FF",
+                "unfocusedBackground": "#11111BFF"
+            },
+            "window": 
+            {
+                "applicationTheme": "dark",
+                "experimental.rainbowFrame": false,
+                "frame": null,
+                "unfocusedFrame": null,
+                "useMica": false
+            }
+        }
+    ]
+}

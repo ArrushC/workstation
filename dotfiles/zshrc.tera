@@ -1,0 +1,778 @@
+# =============================================================================
+# ~/.zshrc — managed by mise dotfiles
+# Machine: {{ exec(command="hostname") }} | User: {{ env.USER | default(value="") }}
+# =============================================================================
+
+# Not running interactively? Stop here.
+[[ -o interactive ]] || return
+
+# --- PATH --------------------------------------------------------------------
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- WSL: re-add curated Windows PATH dirs -----------------------------------
+# WSL2 with appendWindowsPath=true tacks the whole Windows %PATH% (~90 /mnt/c
+# dirs) onto $PATH. Every exec.LookPath / `command -v` for a binary not present
+# on the Windows side then stat-walks all of them across the slow 9p/drvfs
+# mount — e.g. a shell tool that stat-probes for optional binaries (wl-copy/
+# xclip/xsel) at startup, which can turn a normally-instant command into a
+# multi-second launch under ~90 stale PATH entries. Fix: appendWindowsPath=false in /etc/wsl.conf
+# drops the lot; this re-adds back ONLY the Windows dirs we still call from
+# WSL — PowerShell (notify.sh's toast hook → powershell.exe) and system32
+# (clip.exe). Each guard is a no-op if the dir is already on PATH, so this is
+# harmless on hosts still running appendWindowsPath=true. Add more Windows
+# dirs (e.g. VS Code's bin) in ~/.zshrc.local if you want them back.
+if [[ -n "$WSL_DISTRO_NAME" ]]; then
+  for _wd in \
+    "/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0" \
+    "/mnt/c/WINDOWS/system32"; do
+    case ":$PATH:" in
+      *":$_wd:"*|*":$_wd/:"*) ;;   # already present (Windows lists these with a trailing slash)
+      *) [[ -d "$_wd" ]] && PATH="$PATH:$_wd" ;;
+    esac
+  done
+  unset _wd
+  export PATH
+fi
+
+# --- Core env ----------------------------------------------------------------
+export EDITOR="hx"
+export VISUAL="hx"
+{% if vars.group is defined and vars.group == "dev_machine" %}
+# vcpkg (Microsoft C/C++ package manager) — dev_machine only. `mise run vcpkg`
+# (tasks/vcpkg) clones + bootstraps it into this dir (= $VCPKG_ROOT) and
+# symlinks the `vcpkg` binary onto PATH. KEEP IN SYNC with tasks/vcpkg's
+# vroot=.
+export VCPKG_ROOT="$HOME/.local/share/vcpkg"
+{% endif %}
+export PAGER="less"
+# Colorized man pages via bat when available; plain less otherwise.
+if command -v bat &>/dev/null; then
+  export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+  export MANROFFOPT="-c"
+else
+  export MANPAGER="less"
+fi
+# bat-highlighted `less`: batpipe (eth-p/bat-extras) as the LESSOPEN preprocessor.
+# `eval "$(batpipe)"` sets LESSOPEN->batpipe, appends -R to LESS, and sets
+# BATPIPE=color so source files are syntax-highlighted and dirs/tar/zip/gz/xz
+# get a readable preview in `less`. Guarded so a host without bat/batpipe falls
+# back to the system /usr/bin/lesspipe.sh (left installed, untouched).
+if command -v batpipe &>/dev/null && command -v bat &>/dev/null; then
+  eval "$(batpipe)"
+fi
+export COLORTERM=truecolor   # the fleet's terminals support 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
+
+# --- History -----------------------------------------------------------------
+# HISTSIZE = lines kept in memory; SAVEHIST = lines kept on disk.
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=10000
+SAVEHIST=20000
+setopt APPEND_HISTORY        # don't clobber on shell exit
+setopt INC_APPEND_HISTORY    # write each command as it's entered, not at exit
+setopt SHARE_HISTORY         # share history across concurrent sessions
+setopt HIST_IGNORE_DUPS      # don't store consecutive duplicates
+setopt HIST_IGNORE_ALL_DUPS  # remove older duplicates when a new one is added
+setopt HIST_FIND_NO_DUPS     # don't show dupes when searching
+setopt HIST_REDUCE_BLANKS    # trim whitespace before storing
+setopt HIST_IGNORE_SPACE     # a command typed with a leading space isn't recorded (one-offs/secrets)
+
+# --- Shell behavior ----------------------------------------------------------
+setopt EXTENDED_GLOB         # **/ recursion, ~ for negation, etc.
+setopt INTERACTIVE_COMMENTS  # # comments on the interactive command line
+setopt AUTO_CD               # bare directory name = cd into it
+setopt NUMERIC_GLOB_SORT     # sort numbered filenames naturally (file9 before file10)
+setopt NO_BEEP
+
+# --- Colors (dircolors / LS_COLORS) ------------------------------------------
+# Theme file-type/extension colors from ~/.dircolors (Catppuccin Mocha). Sets
+# and exports LS_COLORS, consumed by eza, GNU ls --color, fzf, and the
+# completion list-colors below. Falls back to dircolors' built-in palette if
+# the dotfile isn't applied yet. No-op if dircolors is absent.
+if command -v dircolors &>/dev/null; then
+  if [[ -r "$HOME/.dircolors" ]]; then
+    eval "$(dircolors -b "$HOME/.dircolors")"
+  else
+    eval "$(dircolors -b)"
+  fi
+fi
+
+# --- Completion --------------------------------------------------------------
+# -C skips the .zcompdump security check (faster startup). Rebuild .zcompdump
+# weekly to pick up newly installed completions:
+#   rm -f ~/.zcompdump && exec zsh
+
+# cht.sh ships a zsh completion (#compdef cht.sh) installed to
+# ~/.config/zsh/completions/_cht.sh (vendored), and the repo's own
+# first-party completions live next to it: _bootstrap.sh, _manage-hosts.sh,
+# _update-hosts.sh (flag completion for the repo scripts; kept in lockstep
+# with the scripts by check-invariants.sh, bash parity via
+# ~/.config/bash/completions.bash). Add that dir to fpath so compinit
+# autoloads them. MUST precede the compinit call below.
+fpath=("$HOME/.config/zsh/completions" $fpath)
+autoload -Uz compinit && compinit -C
+
+# Case-/delimiter-insensitive completion matching, applied in escalating passes:
+#   1. '' exact first (so an exact match isn't diluted) → 2. case-insensitive
+#   (`doc⇥` → `Documents`) → 3. partial-word across . _ - delimiters (`f.b` →
+#   `foo.bar`) → 4. left-anchored partial. fzf-tab honors this — candidates are
+#   still generated by zsh's completion system, then fzf filters that set.
+zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+
+# Color completion menus (filenames) with the same LS_COLORS palette.
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+
+# --- fzf ---------------------------------------------------------------------
+export FZF_DEFAULT_OPTS="
+  --height 40%
+  --layout=reverse
+  --border
+  --info=inline
+  --bind='ctrl-/:toggle-preview'
+  --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8
+  --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc
+  --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8
+  --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4
+"
+
+# fzf shell integration (Ctrl+T, Ctrl+R, Alt+C). Skipped under Warp: Warp owns
+# the input editor and documents fzf's ZLE integration as incompatible (the
+# standalone `fzf` command still works there). Guard is runtime-only, so
+# Windows Terminal / SSH / WSL sessions are unaffected.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
+  eval "$(fzf --zsh)"
+fi
+
+# fzf + ripgrep for file content search (falls back to find)
+if command -v rg &>/dev/null; then
+  export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
+else
+  export FZF_DEFAULT_COMMAND='find . -type f -not -path "*/.git/*"'
+fi
+
+# --- atuin (searchable shell history) ----------------------------------------
+# SQLite-backed history with a fuzzy Ctrl-R UI (filter by dir/host/exit code).
+# Sourced AFTER fzf above so atuin owns Ctrl-R; `--disable-up-arrow` leaves ↑/↓
+# free for zsh-history-substring-search (plugins block below). Local-only by
+# default — no account/sync unless you run `atuin login`. First run on a host
+# imports existing history via `atuin import auto`. Skipped under Warp — Warp
+# binds Ctrl-R to its own command search and owns the input editor.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v atuin &>/dev/null; then
+  eval "$(atuin init zsh --disable-up-arrow)"
+fi
+
+# --- zoxide (smarter cd) -----------------------------------------------------
+if command -v zoxide &>/dev/null; then
+  eval "$(zoxide init zsh)"
+  # z = jump, zi = interactive fuzzy jump
+fi
+
+# --- broot (fuzzy directory tree → cd) ---------------------------------------
+# `br` opens broot; filter/navigate the tree and Enter cd's to the chosen dir
+# (the function captures broot's --outcmd). First run creates ~/.config/broot.
+if command -v broot &>/dev/null; then
+  eval "$(broot --print-shell-function zsh)"
+fi
+
+# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
+# The global pins are declared in ~/.config/mise/config*.toml (this
+# checkout). `mise activate` installs a precmd/chpwd hook that puts the real
+# bin dirs on PATH (in front of the shims from ~/.zshenv) and layers any
+# project mise.toml on top as you cd.
+if command -v mise &>/dev/null; then
+  eval "$(mise activate zsh)"
+fi
+
+# --- starship prompt ---------------------------------------------------------
+# Skipped under Warp: Warp renders its own prompt (settings.toml keeps
+# `honor_ps1 = false`), so a starship PS1 would double up.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
+  eval "$(starship init zsh)"
+fi
+
+# --- Windows Terminal shell integration (WSL tabs) ---------------------------
+# Emits the FTCS/ConEmu sequences Windows Terminal turns into UI: OSC 133 A/C/D
+# prompt marks (scrollbar marks + ctrl+up/down prompt jumps, exit-code colored),
+# OSC 9;9 cwd (duplicate-tab/split reopens the current directory — WT needs a
+# WINDOWS path, hence wslpath -w), and OSC 9;4 taskbar progress (indeterminate
+# while a curated long-runner executes; cleared at the next prompt). Gated hard:
+# WT_SESSION crosses WSL interop only in local Windows Terminal tabs (unset over
+# SSH), and $ZELLIJ excludes multiplexed shells — zellij composites panes, so
+# the sequences would be swallowed there. _wt_precmd is PREPENDED to
+# precmd_functions so it reads the real $? before other hooks run, and it
+# returns that status so starship's exit-code module still sees it. bash gets
+# the prompt-side half only (see the PARITY NOTE in dot_bashrc.tmpl).
+if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
+  _wt_precmd() {
+    local _wt_status=$?
+    # Previous command's mark: D;<exit> colors it green/red on the scrollbar.
+    printf '\e]133;D;%s\a' "$_wt_status"
+    # CWD for duplicate-tab/split (Windows path form).
+    if command -v wslpath &>/dev/null; then
+      printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
+    fi
+    # Prompt-start mark, then clear any taskbar progress.
+    printf '\e]133;A\a'
+    printf '\e]9;4;0;0\a'
+    return "$_wt_status"
+  }
+  _wt_preexec() {
+    # Output-start mark for the command about to run.
+    printf '\e]133;C\a'
+    # Indeterminate taskbar progress for curated long-runners.
+    case "${1%% *}" in
+      make | mise | wsa | wsu | dnf | cargo | npm | uv) printf '\e]9;4;3;0\a' ;;
+      git)
+        case "$1" in
+          git\ push* | git\ pull* | git\ fetch* | git\ clone*) printf '\e]9;4;3;0\a' ;;
+        esac
+        ;;
+    esac
+  }
+  # Re-source guard: don't register twice (matches zoxide/starship convention).
+  (( ${precmd_functions[(I)_wt_precmd]} )) || precmd_functions=(_wt_precmd "${precmd_functions[@]}")
+  (( ${preexec_functions[(I)_wt_preexec]} )) || preexec_functions+=(_wt_preexec)
+fi
+
+# --- zellij: name the tab after the current directory -------------------------
+# Zero-install equivalent of the `zellij-tabula` plugin: rename the active tab
+# to the current directory's basename on every `cd`. `zellij action rename-tab`
+# measures 10-20ms and chpwd only fires when the directory actually changes, so
+# this runs synchronously — no background job, no job-control noise.
+#
+# $ZELLIJ is set only inside a zellij session, so this is inert everywhere else
+# (including the local Windows terminals). Opt out with
+# WORKSTATION_ZELLIJ_TAB_NAMES=0 in ~/.zshrc.local.
+#
+# Known and accepted: a tab holds several panes with independent directories, so
+# whichever pane you last cd'd in wins, and a manual rename (Ctrl+t r) is
+# overwritten on your next cd. That is inherent to naming a tab from a cwd.
+if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
+  _zj_tab_name() {
+    local n="${PWD##*/}"
+    [[ "$PWD" == "$HOME" ]] && n="~"
+    [[ -z "$n" ]] && n="/"
+    zellij action rename-tab "$n" 2>/dev/null
+  }
+  autoload -Uz add-zsh-hook
+  # Re-source guard: don't register twice (matches the _wt_precmd convention).
+  (( ${chpwd_functions[(I)_zj_tab_name]} )) || add-zsh-hook chpwd _zj_tab_name
+  _zj_tab_name
+fi
+
+# --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
+# Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
+# / Shift+Home/End) extend a visible highlight; typing replaces it; Backspace/
+# Delete removes it; Alt+W copies (kill-ring + system clipboard), Ctrl+W cuts,
+# Ctrl+Y pastes. Ctrl+C is intentionally left alone (stays SIGINT).
+#
+# This lives in the line editor ON PURPOSE: ZLE only handles keys at the prompt,
+# so any full-screen CLI tool (helix, fzf, less, `git rebase -i`, …) receives the
+# raw ESC[1;2D escape and applies its OWN binding — full override, no per-tool
+# config. Engine: vendored jirutka/zsh-shift-select (~/.config/zsh/plugins/).
+# bash gets movement-only parity (no highlight — readline limitation); the two
+# rc files are a parity pair, so the bash side lives in dot_bashrc.tmpl.
+zmodload zsh/parameter zsh/zleparameter 2>/dev/null
+# Skipped under Warp — Warp's input editor handles shift-selection natively and
+# its ZLE is not ours to rebind.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && -r "$HOME/.config/zsh/plugins/zsh-shift-select.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/zsh-shift-select.zsh"
+
+  # Supplement 1 — replace-on-type. The vendored plugin's deselect-and-input
+  # only collapses the selection then re-inputs the key (leaving the selected
+  # text in place). Override it so a single printable key first excises the
+  # selected text via direct $BUFFER slicing (no kill-ring pollution), then the
+  # re-pushed key self-inserts at the collapsed point — i.e. type-to-replace.
+  if (( ${+functions[shift-select::deselect-and-input]} )); then
+    function shift-select::deselect-and-input() {
+      if (( REGION_ACTIVE )) && [[ ${{ "{" }}#KEYS} -eq 1 && $KEYS == [[:print:]] ]]; then
+        local from=$MARK to=$CURSOR
+        (( from > to )) && { from=$CURSOR; to=$MARK; }
+        BUFFER="${BUFFER[1,from]}${BUFFER[to+1,-1]}"
+        CURSOR=$from
+      fi
+      zle deactivate-region -w
+      zle -K main
+      zle -U "$KEYS"
+    }
+  fi
+
+  # Supplement 2 — Alt+W (copy-region-as-kill) also copies the selection to the
+  # SYSTEM clipboard via OSC 52, so it works outside the shell and over SSH (the
+  # terminal performs the write). Kill-ring behavior is preserved. No-op without
+  # base64. The OSC 52 bytes are non-printing, so the line display is undisturbed.
+  if (( ${+widgets[copy-region-as-kill]} )) && command -v base64 >/dev/null 2>&1; then
+    function shift-select::copy-osc52() {
+      zle .copy-region-as-kill -w
+      local b64
+      b64=$(printf '%s' "$CUTBUFFER" | base64 | tr -d '\n')
+      print -rn -- $'\e]52;c;'"$b64"$'\a' >/dev/tty 2>/dev/null
+    }
+    zle -N copy-region-as-kill shift-select::copy-osc52
+  fi
+fi
+
+# --- zsh plugins (load order matters) ----------------------------------------
+# Five vendored, pinned plugins under ~/.config/zsh/plugins/ (see each dir's
+# .vendor for provenance). The order below is LOAD-BEARING:
+#   1. fzf-tab                — after compinit (above) + before widget-wrappers.
+#   2. zsh-autosuggestions    — after fzf-tab.
+#   3. zsh-syntax-highlighting — MUST be sourced LAST: it wraps ZLE widgets and
+#      has to see every widget defined above (incl. the shift-select ones).
+# Each source is [[ -r ]]-guarded so a not-yet-applied host degrades silently.
+# NOTE: these load before ~/.zshrc.local (sourced at the very bottom), so custom
+# ZLE widgets defined in a local override are not picked up by highlighting.
+
+# fzf-tab — replace zsh's default completion menu with an fzf picker. fzf-tab
+# does NOT read $FZF_DEFAULT_OPTS by default, so `use-fzf-default-opts yes` makes
+# the picker inherit the Catppuccin theme set above. `menu no` stops zsh's own
+# menu from racing fzf-tab; the descriptions `format` turns on completion groups
+# that `<` / `>` switch between.
+#
+# Both are skipped under Warp (Warp supplies its own completion UI, and `menu no`
+# without fzf-tab would leave plain zsh with no completion menu at all). SCOPE
+# WARNING: this guard covers ONLY the two zstyles and closes immediately below —
+# do NOT widen it. Commit c9709cf documents the last time its `fi` was allowed to
+# swallow the plugin-load section, silently disabling zsh-autosuggestions,
+# zsh-syntax-highlighting, zsh-you-should-use and zsh-history-substring-search.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal ]]; then
+  zstyle ':completion:*' menu no
+  zstyle ':completion:*:descriptions' format '[%d]'
+fi  # <- ends the zstyle-only guard; nothing else belongs inside it
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && -r "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.zsh"
+  zstyle ':fzf-tab:*' use-fzf-default-opts yes
+  zstyle ':fzf-tab:*' switch-group '<' '>'
+
+  # Preview the highlighted candidate: directory → eza listing, file → bat.
+  # $realpath is exported by fzf-tab for file/dir completions (empty for others,
+  # so non-path completions just show a blank preview — harmless). Ctrl-/ toggles
+  # the preview window (bound via FZF_DEFAULT_OPTS); --preview-window sizes it.
+  zstyle ':fzf-tab:complete:*:*' fzf-preview '
+    if   [[ -d $realpath ]]; then eza -1 --color=always --icons=auto -- "$realpath"
+    elif [[ -f $realpath ]]; then bat --color=always --style=numbers --line-range=:200 -- "$realpath"
+    else echo "$realpath"; fi'
+  zstyle ':fzf-tab:*' fzf-min-height 15
+  zstyle ':fzf-tab:*' fzf-flags --preview-window='right:55%:wrap'
+
+  # Continuous completion on Tab: pressing Tab on a highlighted directory accepts
+  # it and re-opens completion for its children in the SAME window (descend);
+  # Enter accepts and stops. Move within the list with ↑/↓. (Going UP a level is
+  # deliberately not offered here: fzf-tab's trigger only ever APPENDS, so a `..`
+  # entry accretes an ugly `../../` chain instead of navigating cleanly — use
+  # `cd ..`, `cd -`, or zoxide `zi` to go up.)
+  #
+  # fzf resolves a key bound via --bind BEFORE --expect, and fzf-tab's default
+  # binds include `tab:down`; so for `--expect=tab` (the continuous trigger) to
+  # actually fire we must replace fzf-bindings-default with the v1.3.0 default
+  # set MINUS `tab:down`. (Pinned to fzf-tab v1.3.0 — re-check on a version bump.)
+  zstyle ':fzf-tab:*' continuous-trigger 'tab'
+  zstyle ':fzf-tab:*' fzf-bindings-default \
+    'btab:up' 'change:top' 'ctrl-space:toggle' \
+    'bspace:backward-delete-char/eof' 'ctrl-h:backward-delete-char/eof'
+fi
+
+# zsh-autosuggestions — fish-style inline history hints. Accept the whole
+# suggestion with → (forward-char) or End. Suggestion color = Catppuccin Mocha
+# overlay0 (a muted grey-blue) so it reads as a hint, not real input.
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#6c7086'
+[[ -r "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] \
+  && source "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+
+# zsh-syntax-highlighting — live command-line coloring. MUST be the last
+# ZLE-touching source. Theme the token styles (Catppuccin Mocha) BEFORE sourcing
+# so they apply on the first prompt; enable the brackets highlighter too.
+ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
+typeset -gA ZSH_HIGHLIGHT_STYLES
+ZSH_HIGHLIGHT_STYLES[default]='fg=#cdd6f4'
+ZSH_HIGHLIGHT_STYLES[unknown-token]='fg=#f38ba8,bold'
+ZSH_HIGHLIGHT_STYLES[reserved-word]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[alias]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[suffix-alias]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[global-alias]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[builtin]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[function]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[command]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[precommand]='fg=#a6e3a1,underline'
+ZSH_HIGHLIGHT_STYLES[commandseparator]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[hashed-command]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[path]='fg=#cdd6f4,underline'
+ZSH_HIGHLIGHT_STYLES[globbing]='fg=#89b4fa'
+ZSH_HIGHLIGHT_STYLES[history-expansion]='fg=#cba6f7'
+ZSH_HIGHLIGHT_STYLES[single-hyphen-option]='fg=#fab387'
+ZSH_HIGHLIGHT_STYLES[double-hyphen-option]='fg=#fab387'
+ZSH_HIGHLIGHT_STYLES[single-quoted-argument]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[double-quoted-argument]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[dollar-quoted-argument]='fg=#f9e2af'
+ZSH_HIGHLIGHT_STYLES[command-substitution]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[process-substitution]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[back-quoted-argument]='fg=#94e2d5'
+ZSH_HIGHLIGHT_STYLES[comment]='fg=#6c7086,italic'
+ZSH_HIGHLIGHT_STYLES[redirection]='fg=#89dceb'
+ZSH_HIGHLIGHT_STYLES[named-fd]='fg=#89dceb'
+ZSH_HIGHLIGHT_STYLES[arg0]='fg=#a6e3a1'
+ZSH_HIGHLIGHT_STYLES[bracket-error]='fg=#f38ba8,bold'
+ZSH_HIGHLIGHT_STYLES[bracket-level-1]='fg=#89b4fa,bold'
+ZSH_HIGHLIGHT_STYLES[bracket-level-2]='fg=#a6e3a1,bold'
+ZSH_HIGHLIGHT_STYLES[bracket-level-3]='fg=#f9e2af,bold'
+[[ -r "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] \
+  && source "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
+# zsh-you-should-use — after you run a command that has an alias defined, nudges
+# you to use the alias (e.g. `💡 gs`). Pure preexec hook (no ZLE binding), so
+# load order is loose. `after` shows the hint below the output (least intrusive);
+# left in soft mode (it reminds, never blocks — that'd be YSU_HARDCORE=1).
+export YSU_MESSAGE_POSITION="after"
+[[ -r "$HOME/.config/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh" ]] \
+  && source "$HOME/.config/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh"
+
+# zsh-history-substring-search — type a prefix, then ↑/↓ walk through past
+# commands containing it. MUST be sourced LAST (after zsh-syntax-highlighting,
+# per upstream) so its widgets highlight correctly. Bind ↑/↓ in both xterm
+# (`^[[A`) and application-mode (`^[OA`) forms, plus the terminfo variants; atuin
+# left ↑/↓ free via --disable-up-arrow above.
+if [[ -r "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]]; then
+  # Themed match highlight (Catppuccin Mocha). The plugin's defaults are a harsh
+  # magenta/red background that clashes with the terminal theme; set these BEFORE
+  # sourcing (the plugin uses `: ${VAR=default}`, so a pre-set value wins).
+  # surface1 bg + green/red fg signal found / not-found.
+  typeset -g HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND='bg=#45475a,fg=#a6e3a1,bold'
+  typeset -g HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND='bg=#45475a,fg=#f38ba8,bold'
+  source "$HOME/.config/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh"
+  zmodload zsh/terminfo 2>/dev/null
+  bindkey '^[[A' history-substring-search-up
+  bindkey '^[[B' history-substring-search-down
+  bindkey '^[OA' history-substring-search-up
+  bindkey '^[OB' history-substring-search-down
+  [[ -n "${terminfo[kcuu1]}" ]] && bindkey "${terminfo[kcuu1]}" history-substring-search-up
+  [[ -n "${terminfo[kcud1]}" ]] && bindkey "${terminfo[kcud1]}" history-substring-search-down
+fi
+
+# --- nb (notes) --------------------------------------------------------------
+export NBRC_PATH="$HOME/.nbrc"
+export NB_DIR="$HOME/notes"
+
+# --- Aliases — navigation ----------------------------------------------------
+alias ..='cd ..'
+alias ...='cd ../..'
+alias l='eza --group-directories-first --icons=auto --hyperlink'
+alias la='eza -a --group-directories-first --icons=auto --hyperlink'
+alias ll='eza -lah --group-directories-first --icons=auto --git --time-style=long-iso --hyperlink'
+alias lt='eza --tree --level=2 --group-directories-first --icons=auto --hyperlink'
+alias lta='eza --tree --level=2 -a --git-ignore --group-directories-first --icons=auto --hyperlink'
+alias ltl='eza --tree --level=2 -lh --git --group-directories-first --icons=auto --time-style=long-iso --hyperlink'
+alias grep='grep --color=auto'
+
+# --- Aliases — git -----------------------------------------------------------
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline --graph --decorate'
+alias gd='git diff'
+alias gco='git checkout'
+alias gbr='git branch'
+
+# --- Aliases — tools ---------------------------------------------------------
+alias notes='nb'
+alias preview='glow'
+alias zj='zellij'
+alias zjl='zellij list-sessions'
+alias zja='zellij attach'
+alias py='python-cli' # newest installed Python, never downloads (see python-cli fn)
+alias devtoys='devtoys.cli' # DevToys CLI (dev-only install; harmless "command not found" on prod — web-admin-alias precedent)
+
+# --- Aliases — workstation (mise dotfiles) -----------------------------------
+# Every ws* command pins `-C "$HOME"`: mise resolves its config root by
+# walking UP from the current directory, and this checkout IS ~/.config/mise
+# — so an unpinned ws* run from anywhere containing its own .config/mise
+# ancestor (a Windows drive mount under WSL, a second checkout, ...) silently
+# manages the WRONG checkout instead of erroring. Confirmed live: `wsa` run
+# from /mnt/c/Users/<user> rewrote ~/.zshrc/~/.bashrc from a stale Windows
+# clone and made seven dotfiles executable (DrvFs reports 0744 regardless of
+# git mode, and `template`/`copy` both preserve the source's executable bit).
+alias wse='mise -C "$HOME" dot edit'
+alias wsd='mise -C "$HOME" dot diff'
+alias wss='mise -C "$HOME" dot status'
+alias wsr='mise -C "$HOME" dot add --changed'
+# wsu is pinned too: `mise run update` (tasks/update) resolves its OWN "root"
+# from $0's on-disk location, which follows the same cwd-walked config root —
+# unpinned, a wrong-cwd run would git-pull AND bootstrap the wrong checkout,
+# not just read it. Verified `mise -C "$HOME" run update --help` reports the
+# same `Source: ~/.config/mise/tasks/update` as the unpinned form does from
+# inside the repo, so pinning changes nothing for a normal invocation.
+alias wsu='mise -C "$HOME" run update'
+# wsa is a function (below, near wsh) — it checks for un-recorded drift
+# before applying, since copy mode has no chezmoi-style prompt of its own.
+
+# --- Functions ---------------------------------------------------------------
+
+# Screen clearing — `clear` wipes the scrollback too; `hide` is the soft
+# variant that preserves it. Not every terminfo the fleet sees advertises the
+# E3 capability, so the stock ncurses `clear` can emit only \e[H\e[2J (erase
+# the visible screen) and leave the scrollback intact. We re-add the
+# scrollback wipe (\e[3J) so `clear` truly clears. `hide` does the inverse:
+# it scrolls only the on-screen content (not a full screen) up into the
+# scrollback — nothing lost, scroll up to see it, and a clean screen adds
+# nothing so repeated `hide` doesn't inflate it. (Nushell's built-in `clear`
+# already wipes scrollback; its soft variant — aliased to `hide` there — is
+# `clear --keep-scrollback`.)
+clear() {
+  command clear "$@"
+  printf '\033[3J'
+}
+hide() {
+  # Scroll only the on-screen content ABOVE the prompt into the scrollback (so a
+  # clean screen adds nothing — no blank padding, no line-count jump; the old
+  # version scrolled a FULL screen of newlines every call). Ask the terminal
+  # where the cursor is (DSR: ESC[6n -> ESC[row;colR) via stty+dd — the same code
+  # works in bash and zsh — then scroll exactly that much. Falls back to clearing
+  # just the visible screen if the terminal doesn't answer.
+  local pos row saved n i
+  saved=$(stty -g </dev/tty 2>/dev/null) || {
+    printf '\033[H\033[J'
+    return
+  }
+  stty -echo -icanon min 0 time 2 </dev/tty 2>/dev/null
+  printf '\033[6n' >/dev/tty
+  pos=$(dd bs=32 count=1 2>/dev/null </dev/tty)
+  stty "$saved" </dev/tty 2>/dev/null
+  row=${pos#*\[}
+  row=${row%%;*}                            # ESC[row;colR -> row
+  case $row in *[!0-9]* | '') row=2 ;; esac # no usable reply -> fall back (n=0)
+  n=$((row - 2))                            # content lines above a single-line prompt
+  [ "$n" -lt 0 ] && n=0
+  if [ "$n" -gt 0 ]; then
+    printf '\033[%d;1H' "${LINES:-$(tput lines 2>/dev/null || echo 24)}" # to the bottom row
+    i=0
+    while [ "$i" -lt "$n" ]; do
+      printf '\n' # scroll just the content up into scrollback
+      i=$((i + 1))
+    done
+  fi
+  printf '\033[H\033[J' # home + clear the visible screen
+}
+
+# wsa — apply, but SURFACE drift first. Every [dotfiles] entry is `copy` (or
+# `template`) now — no symlink pointed back into this checkout any more, so a
+# live edit under $HOME no longer round-trips implicitly, and copy-mode apply
+# otherwise overwrites an un-recorded live edit with zero diff and zero
+# warning (chezmoi prompted here; plain `mise bootstrap --only dotfiles
+# --yes` does not). This checks for any entry in `differs` state (NOT
+# `missing` — a host's first-ever apply is expected to be all-missing, not a
+# drift warning) and shows its diff before doing anything. Interactive: asks.
+# Non-interactive (no tty): refuses rather than guessing — run
+# `mise bootstrap --only dotfiles --yes` directly for the old silent-overwrite
+# behavior. This is the one thing standing between an agent's un-recorded
+# `~/.claude/CLAUDE.md` edit and losing it on the next `wsa`.
+#
+# Belt and braces on top of the `-C "$HOME"` pin below: `.files[0].origin
+# .config_root` in the same `dot status --json` call names the config root
+# mise actually resolved. If it isn't exactly $HOME, refuse instead of
+# applying — this catches the pin ever silently failing (a future mise `-C`
+# semantics change, a stray env var) without re-deriving the pin's own logic.
+# If the probe can't find that field at all (jq missing, unexpected JSON
+# shape), PROCEED — a guard that false-positives on a healthy host is worse
+# than no guard.
+wsa() {
+  local status_json
+  status_json=$(mise -C "$HOME" dot status --json 2>/dev/null)
+  local resolved_root
+  resolved_root=$(printf '%s' "$status_json" | jq -r '.files[0].origin.config_root // empty' 2>/dev/null)
+  if [ -n "$resolved_root" ] && [ "$resolved_root" != "$HOME" ]; then
+    echo "wsa: refusing — mise resolved the dotfiles config root as '$resolved_root', not \$HOME ('$HOME'). This would apply the WRONG checkout. Not proceeding; investigate the -C pin before retrying." >&2
+    return 1
+  fi
+  local drifted
+  drifted=$(printf '%s' "$status_json" | jq -r '.files[]? | select(.state == "differs") | .target')
+  if [ -n "$drifted" ]; then
+    local -a targets
+    targets=(${(f)drifted})
+    echo "wsa: local edit(s) below differ from the repo and would be overwritten:" >&2
+    printf '  %s\n' "${targets[@]}" >&2
+    echo >&2
+    mise -C "$HOME" dot diff -- "${targets[@]}"
+    if [ -t 0 ] && [ -r /dev/tty ]; then
+      printf 'Apply anyway and overwrite the edit(s) above? [y/N] ' >/dev/tty
+      IFS= read -r reply </dev/tty
+      case "$reply" in
+      [Yy]*) ;;
+      *)
+        echo "wsa: aborted — nothing applied. Record the edit(s) first: wsr (a file entry), or 'mise dot add <path>' for a directory entry (e.g. ~/.claude/agents, ~/.claude/commands — wsr's --changed skips those) — then re-run wsa." >&2
+        return 1
+        ;;
+      esac
+    else
+      echo "wsa: refusing to overwrite non-interactively — inspect with 'mise dot diff', record with wsr / 'mise dot add <path>', or force with 'mise -C \"\$HOME\" bootstrap --only dotfiles --yes'." >&2
+      return 1
+    fi
+  fi
+  mise -C "$HOME" bootstrap --only dotfiles --yes "$@"
+}
+
+# wsh — workstation cheatsheet. Single source of truth for the ws* aliases +
+# the common edit→diff→apply flow + how to push tracked changes upstream.
+wsh() {
+  cat <<'EOF'
+workstation aliases (mise dotfiles — always act on this host's own checkout
+at ~/.config/mise, regardless of the current directory: every command below
+pins `-C "$HOME"`):
+  wse  mise dot edit <path>       edit a tracked file's source
+  wsd  mise dot diff              preview pending changes to ~
+  wsa  apply — warns + asks if $HOME has an un-recorded edit first
+  wsr  mise dot add --changed     record FILE-entry edits back to source
+       (a DIRECTORY entry — ~/.claude/agents, ~/.claude/commands,
+       ~/.claude/hooks, ~/.claude/skills, ~/.config/zellij, ~/.config/zsh/
+       completions, ~/.config/gdb, ~/.local/bin — needs `mise dot add
+       <that directory>` instead; --changed skips directory copies)
+  wss  mise dot status            list managed files + their state
+  wsu  mise run update            git pull + mise install + mise bootstrap
+
+Common flow:
+  wse ~/.zshrc        (edit in source state)
+  wsd                 (preview the change)
+  wsa                 (apply to ~)
+
+Common flow for a live edit under $HOME (e.g. Claude Code editing
+~/.claude/CLAUDE.md directly):
+  wsr                              (file entries)
+  mise dot add ~/.claude/agents    (a directory entry, by exact target path)
+  wsa                              (apply — now a no-op for what you just recorded)
+
+Push tracked changes upstream:
+  cd ~/.config/mise && git add -A && git commit -m '...' && git push
+
+Per-machine overrides (untracked):
+  ~/.zshrc.local                                               (Linux)
+  ...PowerShell\Microsoft.PowerShell_profile.local.ps1         (Windows)
+EOF
+}
+
+# fzf-powered history search (Ctrl+R is already enhanced by `fzf --zsh`;
+# this is the explicit-invocation alternative that picks unique entries).
+# `fc -l 1` lists history from event 1 (zsh's `history` defaults to last 16).
+fh() {
+  local cmd
+  cmd=$(fc -l 1 | awk '{$1=""; print substr($0,2)}' | sort -u | fzf --tac)
+  [[ -n "$cmd" ]] && eval "$cmd"
+}
+
+# fzf cd into any subdirectory
+fcd() {
+  local dir
+  dir=$(find "${1:-.}" -type d 2>/dev/null | fzf +m)
+  [[ -n "$dir" ]] && cd "$dir"
+}
+
+# fzf ssh — pick from ~/.ssh/config hosts
+fssh() {
+  local host
+  host=$(grep -E "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}' | fzf)
+  [[ -n "$host" ]] && ssh "$host"
+}
+
+# Start or attach to a named zellij session: zs [session] [layout]
+# A layout applies only when the session is being CREATED — `zellij attach
+# --create` accepts no --layout, hence the branch. Layouts live in
+# ~/.config/zellij/layouts: `dev` (editor + terminal + run) and `ops` (btop +
+# journal + shell). With no layout you get config.kdl's default_layout, which is
+# zellij's built-in single-pane `default`.
+# list-sessions lists resurrectable EXITED sessions too, which is deliberate:
+# a named session that already exists is always attached, never recreated.
+#
+# The layout flag is --new-session-with-layout, NOT --layout: with --session,
+# --layout means "add this layout to that session as new tabs" and fails with
+# "Session '<name>' not found" when it doesn't exist yet.
+zs() {
+  local session="${1:-main}" layout="${2:-}"
+  if [ -n "$layout" ] && ! zellij list-sessions --short 2>/dev/null | grep -qx "$session"; then
+    zellij --session "$session" --new-session-with-layout "$layout"
+  else
+    zellij attach --create "$session"
+  fi
+}
+
+# Run a command in a floating zellij pane: zr btop / zr lazygit / zr
+# The floating pane overlays the layout instead of resizing it, so it is the
+# right shape for a glance-and-dismiss command (Alt+f toggles floating panes
+# back into view, Ctrl+p e embeds one into the layout if you want to keep it).
+# With no arguments you get a floating shell. Covers what the `ghost` plugin
+# does, with nothing to install.
+zr() {
+  if [ "$#" -eq 0 ]; then
+    zellij run --floating --close-on-exit -- "${SHELL:-/bin/sh}"
+  else
+    zellij run --floating -- "$@"
+  fi
+}
+
+# Quick note with nb
+n() {
+  if [[ $# -eq 0 ]]; then
+    nb list
+  else
+    nb add "$*"
+  fi
+}
+
+# glow with fzf — browse and preview notes
+nf() {
+  local file
+  file=$(find "$NB_DIR" -name "*.md" 2>/dev/null | fzf --preview 'glow {}')
+  [[ -n "$file" ]] && glow "$file"
+}
+
+# yazi file manager — `y` opens it; on quit, cd to wherever you ended up.
+y() {
+  local tmp cwd
+  tmp="$(mktemp -t yazi-cwd.XXXXXX)"
+  yazi "$@" --cwd-file="$tmp"
+  if cwd="$(command cat -- "$tmp")" && [[ -n "$cwd" && "$cwd" != "$PWD" ]]; then
+    builtin cd -- "$cwd"
+  fi
+  command rm -f -- "$tmp"
+}
+
+# nnn file manager — `nn` opens it; on quit, cd to wherever you ended up.
+nn() {
+  local tmp
+  tmp="$(mktemp -t nnn-cwd.XXXXXX)"
+  # NNN_TMPFILE scoped to this call only (no env leak into a later bare `nnn`).
+  NNN_TMPFILE="$tmp" command nnn "$@"
+  [[ -s "$tmp" ]] && source "$tmp"
+  command rm -f -- "$tmp"
+}
+
+# python-cli — run the NEWEST Python that is already installed, never downloading
+# one. The OS deliberately pins `python`/`python3` to the platform interpreter
+# (3.9 on EL9) so dnf and system tooling keep working; this is the opt-in "use my
+# latest" command. uv enumerates every installed interpreter (system + uv-managed)
+# and we exec the highest version directly by its path — nothing is ever fetched
+# (no `uv run`/`uv python install` in the hot path). Give it a newer target once
+# with `uv python install 3.14` (or `sudo dnf install python3.14`) and python-cli
+# picks it up automatically. Falls back to system python3 if uv/jq are absent.
+# PARITY: identical body in dot_bashrc.tmpl.
+python-cli() {
+  local py=''
+  if command -v uv >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    py=$(uv python list --only-installed --output-format json 2>/dev/null |
+      jq -r 'map(select(.path))
+             | max_by(.version | split(".") | map(tonumber? // 0))
+             | .path // empty')
+  fi
+  [ -n "$py" ] || py=$(command -v python3)
+  [ -n "$py" ] || {
+    echo 'python-cli: no Python interpreter found' >&2
+    return 1
+  }
+  "$py" "$@"
+}
+
+# --- Machine-specific overrides ----------------------------------------------
+# Sourced last so they can override anything above
+{% if vars.project_root is defined %}
+export PROJECT_ROOT="{{ vars.project_root }}"
+{% else %}
+export PROJECT_ROOT="$HOME/projects"
+{% endif %}
+
+[[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"

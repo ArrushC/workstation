@@ -28,8 +28,8 @@
 #   latter echoes the location string whether or not the file was found:
 #     grep "Loaded plugin 'zjstatus.wasm'" /tmp/zellij-$UID/zellij-log/zellij.log
 #
-# USER-LEVEL like pip.sh — never under sudo. Nothing under ~/.local/share is
-# chezmoi-managed, so `chezmoi apply` never touches the plugin.
+# USER-LEVEL — never under sudo. The plugin lives under ~/.local/share, which
+# no [dotfiles] entry targets, so a dotfiles apply never touches it.
 #
 # Downloads to a temp file, checks the WebAssembly magic (\0asm) so a GitHub
 # error page or a truncated download can never be installed, then install(1)s

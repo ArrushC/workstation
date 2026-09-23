@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # session-end-notify.sh — Claude Code SessionEnd hook (repo-scoped).
 #
-# When a session in the workstation repo ends with uncommitted changes and/or a
-# pending `chezmoi apply`, fire a desktop toast so the work isn't forgotten.
+# When a session in the workstation repo ends with uncommitted changes and/or
+# entries `mise dot status` reports as not `applied`, fire a desktop toast so
+# the work isn't forgotten.
 # Reuses the global notify.sh (WSL toast / notify-send / bell). SessionEnd can't
 # inject context, so the only output is the toast side-effect. Fail-open; always
 # exit 0. Skips reason=clear/resume (neither is a real departure). The toast is
@@ -51,17 +52,26 @@ nd=0
 dirty="$(git -C "$root" status --porcelain 2>/dev/null)"
 [ -n "$dirty" ] && nd="$(printf '%s\n' "$dirty" | grep -c .)"
 
-# pending chezmoi apply
+# pending dotfiles apply
 np=0
-if command -v chezmoi >/dev/null 2>&1; then
-  pend="$(timeout 4s chezmoi status 2>/dev/null)" || pend=""
-  [ -n "$pend" ] && np="$(printf '%s\n' "$pend" | grep -c .)"
+if command -v mise >/dev/null 2>&1; then
+  json="$(timeout 4s mise dot status --json 2>/dev/null)" || json=""
+  if [ -n "$json" ]; then
+    if command -v jq >/dev/null 2>&1; then
+      np="$(printf '%s' "$json" | jq '[.files[]? | select(.state != "applied")] | length' 2>/dev/null)"
+    elif command -v python3 >/dev/null 2>&1; then
+      np="$(printf '%s' "$json" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print(sum(1 for f in d.get("files",[]) if f.get("state")!="applied"))' 2>/dev/null)"
+    fi
+    case "$np" in '' | *[!0-9]*) np=0 ;; esac
+  fi
 fi
 
 [ "$nd" -eq 0 ] && [ "$np" -eq 0 ] && exit 0
 
 msg="workstation: $nd uncommitted change(s)"
-[ "$np" -gt 0 ] && msg="$msg; chezmoi apply pending ($np)"
+[ "$np" -gt 0 ] && msg="$msg; dotfiles apply pending ($np)"
 
 # Fire the toast DETACHED so this hook returns immediately and the toast still
 # completes after SessionEnd tears the hook down. setsid reparents it into its
