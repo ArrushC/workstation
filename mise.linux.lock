@@ -94,16 +94,6 @@ checksum = "sha256:8e695c5f586a8c53d6c3b01be0b4a422ed218bfed2a56191caebe373a1c18
 url = "https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/383662069"
 
-[[tools.difftastic]]
-version = "0.70.0"
-backend = "aqua:Wilfred/difftastic"
-specifiers = ["0.70.0"]
-
-[tools.difftastic."platforms.linux-x64"]
-checksum = "sha256:2997d2bbe620534edbd79b0049f00ce84eef3fedb15c7822456d58e38d8b05c9"
-url = "https://github.com/Wilfred/difftastic/releases/download/0.70.0/difft-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/Wilfred/difftastic/releases/assets/505661744"
-
 [[tools.dive]]
 version = "0.13.1"
 backend = "aqua:wagoodman/dive"
@@ -210,6 +200,16 @@ asset_pattern = "jless-v{version}-x86_64-unknown-linux-gnu.zip"
 checksum = "blake3:de2367ba74a0806fdeb7e117e13713a64e4bb2b8fb9a650b782668a0c8213cd9"
 url = "https://github.com/PaulJuliusMartinez/jless/releases/download/v0.9.0/jless-v0.9.0-x86_64-unknown-linux-gnu.zip"
 url_api = "https://api.github.com/repos/PaulJuliusMartinez/jless/releases/assets/117306822"
+
+[[tools."github:Wilfred/difftastic"]]
+version = "0.70.0"
+backend = "github:Wilfred/difftastic"
+specifiers = ["0.70.0"]
+
+[tools."github:Wilfred/difftastic"."platforms.linux-x64"]
+checksum = "sha256:2997d2bbe620534edbd79b0049f00ce84eef3fedb15c7822456d58e38d8b05c9"
+url = "https://github.com/Wilfred/difftastic/releases/download/0.70.0/difft-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/Wilfred/difftastic/releases/assets/505661744"
 
 [[tools."github:YS-L/csvlens"]]
 version = "0.15.1"
@@ -759,19 +759,19 @@ url_api = "https://api.github.com/repos/sharkdp/numbat/releases/assets/526573044
 version = "2.4.0"
 backend = "pypi:asciinema"
 specifiers = ["latest"]
-uv = { path = "locks/mise.linux/pypi-asciinema/2.4.0", digest = "sha256:346b7481d38b97cf1a59a52cc71ed3b3a0bcd01708cebfb90b9909119292e3bb" }
+uv = { path = "locks/mise.linux/pypi-asciinema/2.4.0", digest = "sha256:8dd3b374ec017080eb02a09bbf0f821a7ce4a7a17c5e29f6e20e7c4ffa1ea1a7" }
 
 [[tools."pypi:glances"]]
 version = "4.5.6"
 backend = "pypi:glances"
 specifiers = ["latest"]
-uv = { path = "locks/mise.linux/pypi-glances/4.5.6", digest = "sha256:db88c5b51813fc16e4462c199205451f2e95583a8ccac89fcd2376e7d9553935" }
+uv = { path = "locks/mise.linux/pypi-glances/4.5.6", digest = "sha256:d899d58be30704d1ce172603fb70855fb42fc39577dacd63c3e8e2624a32d82d" }
 
 [[tools."pypi:harlequin"]]
 version = "2.14.0"
 backend = "pypi:harlequin"
 specifiers = ["latest"]
-uv = { path = "locks/mise.linux/pypi-harlequin/2.14.0", digest = "sha256:af35cc40542a4fe4b800ddc699da86b333c9123560d3483165ed92d3e185f6d1" }
+uv = { path = "locks/mise.linux/pypi-harlequin/2.14.0", digest = "sha256:45e3a3cb2b13902ff80ffb00e9620b3e547c6b50dce45db91eee7ad3335f313b" }
 
 [[tools.rclone]]
 version = "1.75.1"
