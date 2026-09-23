@@ -55,6 +55,16 @@ else
 fi
 
 printf '==> CRB (CodeReady Builder — required by many EPEL packages)\n'
+# Already on? `dnf repolist --enabled` needs no sudo. Without this check,
+# every wsu ran `sudo dnf config-manager --set-enabled` again: an interactive
+# host got a sudo prompt each time for a repo already enabled, and a
+# password-sudo host run without a TTY printed a false "could not
+# auto-enable CRB" warning.
+if dnf repolist --enabled -q 2>/dev/null | awk '{print $1}' |
+  grep -qxE 'crb|powertools|codeready-builder-for-rhel-[0-9]+-.*-rpms'; then
+  printf '  CRB already enabled\n'
+  exit 0
+fi
 rpm -q dnf-plugins-core >/dev/null 2>&1 || sudo dnf install -y dnf-plugins-core || true
 
 crb_ok=""
