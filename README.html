@@ -4445,8 +4445,15 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                                     Print the workstation cheatsheet (all
                                     <code>ws*</code> aliases + the common
                                     edit&rarr;diff&rarr;apply flow + the push
-                                    incantation). bash/zsh only &mdash; no
-                                    Windows equivalent.
+                                    incantation). Works in every managed
+                                    shell: bash and zsh on Linux, Nushell and
+                                    PowerShell on Windows. The Windows version
+                                    covers what differs there: only the
+                                    <code>~/.claude/*</code> directory entries,
+                                    and <code>wsu</code> is <code>git pull</code>
+                                    + a dotfiles-and-tools bootstrap, with
+                                    portable tools left to
+                                    <code>bootstrap.ps1</code>.
                                 </td>
                             </tr>
                         </tbody>

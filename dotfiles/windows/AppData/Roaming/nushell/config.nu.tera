@@ -130,6 +130,50 @@ def wsu [...args] {
         mise -C $env.USERPROFILE bootstrap --only dotfiles,tools --yes ...$args
     }
 }
+# wsh -- workstation cheatsheet, the Windows twin of the bash/zsh wsh (and
+# of the PowerShell profile's). Same ASCII text as the PowerShell one apart
+# from the -C pin's spelling and the override line's wording. Only the ~/.claude/* directory entries load on
+# Windows (config.dev.toml); the Linux-only ones (zellij, zsh completions,
+# gdb, ~/.local/bin) don't. Nushell has no per-machine override file.
+def wsh [] {
+    # str trim: drop the newlines just inside the raw string's delimiters, so
+    # the output matches the PowerShell here-string (no leading blank line).
+    print (r#'
+workstation commands (mise dotfiles). Each one acts on this host's own
+checkout at ~\.config\mise, whatever the current directory (every ws*
+command pins `mise -C $env.USERPROFILE`):
+  wse  mise dot edit <path>     edit a tracked file's source
+  wsd  mise dot diff            preview pending changes to ~
+  wsa  apply; warns and asks first if ~ has an unrecorded local edit
+  wsr  mise dot add --changed   record FILE-entry edits back to the source
+       (a DIRECTORY entry -- ~/.claude/agents, ~/.claude/commands,
+       ~/.claude/hooks, ~/.claude/skills -- needs `mise dot add <that
+       directory>` instead; --changed skips directory copies)
+  wss  mise dot status          list managed files and their state
+  wsu  git pull + mise bootstrap --only dotfiles,tools
+       (portable tools such as gh, opencode and omp come from
+       bootstrap.ps1: run .\bootstrap.ps1 when their pins change)
+  wsh  this help
+
+Common flow:
+  wse ~/.config/starship.toml   (edit the source)
+  wsd                           (preview the change)
+  wsa                           (apply to ~)
+
+When an app edits a deployed file itself (Zed, Warp or Windows Terminal
+saving their settings, or Claude Code editing ~/.claude/CLAUDE.md):
+  wsr                             (file entries)
+  mise dot add ~/.claude/agents   (a directory entry, by exact target path)
+  wsa                             (now a no-op for what you just recorded)
+
+Push tracked changes upstream:
+  cd ~\.config\mise; git add -A; git commit -m '...'; git push
+
+Per-machine overrides (untracked):
+  Microsoft.PowerShell_profile.local.ps1 next to the PS profile   (PowerShell)
+  ~/.ssh/config.local                                             (ssh)
+'# | str trim)
+}
 
 # --- git aliases ------------------------------------------------------------
 alias gs  = git status
