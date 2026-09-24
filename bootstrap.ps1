@@ -87,19 +87,19 @@
 # prompt (or -SkipElevated, or no winget + no network) soft-fails that step
 # only; everything else still completes with zero elevation.
 #
-# PRIVATE REPO — set GITHUB_TOKEN before running. It authenticates the bootstrap.ps1 fetch
-# AND the internal git clone/pull, then is persisted into the cloned repo's
-# .git/config (http.https://github.com/.extraheader, scoped to github.com) so
-# subsequent push/pull work without re-passing it.
+# PUBLIC REPO — no token needed. $env:GITHUB_TOKEN is optional: if set, the
+# internal git clone/pull sends it (for a private fork) and persists it into
+# the cloned repo's .git/config (http.https://github.com/.extraheader, scoped
+# to github.com), and the GitHub API calls below use it to lift the
+# 60-requests/hour unauthenticated rate limit.
 #
 # Bootstrap from a fresh Windows machine (NO elevation needed):
 #
-#   $env:GITHUB_TOKEN   = '<your-PAT>'
 #   $bootstrapFile = [System.IO.Path]::GetTempFileName()
 #   try {
 #       $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
 #       & $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
-#         --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+#         --output $bootstrapFile `
 #         https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
 #       if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
 #       $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
@@ -1051,8 +1051,8 @@ function Install-InstallerTool {
         }
     } else {
         # --- GitHub-release path (Obsidian/Zed/DevToys/DBeaver) ---
-        # Resolve the latest release. $env:GITHUB_TOKEN (already used for the private-repo
-        # clone) lifts the 60-req/hr anonymous API rate limit. A User-Agent is required
+        # Resolve the latest release. $env:GITHUB_TOKEN (optional) lifts the
+        # 60-req/hr anonymous API rate limit. A User-Agent is required
         # by the GitHub API.
         $headers = @{ "User-Agent" = "workstation-bootstrap" }
         if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
@@ -1389,7 +1389,7 @@ function Invoke-ToolInstall {
 }
 
 # =============================================================================
-# 3. CLONE REPO (with $env:GITHUB_TOKEN support for private repo)
+# 3. CLONE REPO (public; optional $env:GITHUB_TOKEN for a private fork)
 # =============================================================================
 function Invoke-CloneRepo {
     # One-time relocation: the checkout moved from .local\share\chezmoi to
@@ -1465,13 +1465,13 @@ Couldn't relocate the checkout: $legacyRepo -> $RepoPath
         if ($headerVal) {
             git -c "$GhHeaderKey=$headerVal" clone $DotfilesRepo $RepoPath
             if ($LASTEXITCODE -ne 0) {
-                Write-Fail "Clone failed. For a private repo, set `$env:GITHUB_TOKEN to a PAT with repo read."
+                Write-Fail "Clone failed. Check network access to github.com, and that `$env:GITHUB_TOKEN is a valid PAT (it is only needed for a private fork)."
             }
             git -C $RepoPath config $GhHeaderKey $headerVal
         } else {
             git clone $DotfilesRepo $RepoPath
             if ($LASTEXITCODE -ne 0) {
-                Write-Fail "Clone failed. If the repo is private, set `$env:GITHUB_TOKEN and re-run."
+                Write-Fail "Clone failed. Check network access to github.com (a private fork also needs `$env:GITHUB_TOKEN set to a PAT with repo read)."
             }
         }
         Write-Ok "Repo cloned"

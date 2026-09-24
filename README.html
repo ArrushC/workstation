@@ -171,12 +171,10 @@
                                 Pick <span class="badge prod">prod</span> for
                                 no-sudo / user-wide install,
                                 <span class="badge dev">dev</span> for sudo /
-                                system-wide. Sets a token, then pipes
-                                <code>bootstrap.sh</code>.
+                                system-wide. Pipes <code>bootstrap.sh</code>
+                                &mdash; the repo is public, no token needed.
                             </p>
-                            <pre><code>export GITHUB_TOKEN='&lt;your-PAT&gt;' && \
-curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh \
+                            <pre><code>curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh \
   | bash -s -- --prod</code></pre>
                         </article>
                         <article class="qs-card windows" id="quickstart-windows">
@@ -191,12 +189,11 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 and Starship under your user profile, applies
                                 dotfiles, and deploys the terminal configs.
                             </p>
-                            <pre><code>$env:GITHUB_TOKEN = '&lt;your-PAT&gt;'
-$bootstrapFile = [System.IO.Path]::GetTempFileName()
+                            <pre><code>$bootstrapFile = [System.IO.Path]::GetTempFileName()
 try {
     $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
     &amp; $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
-      --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+      --output $bootstrapFile `
       https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
     if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
     $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
@@ -2534,22 +2531,21 @@ try {
                             <tr>
                                 <td><code>GITHUB_TOKEN</code></td>
                                 <td>
-                                    Authenticates the curl fetch of
-                                    <code>bootstrap.sh</code> + the
-                                    script&rsquo;s internal
-                                    <code>git clone</code
-                                    >/<code>pull</code>.
-                                    Persisted into <code>.git/config</code> so
-                                    <code>wsu</code> and a manual
-                                    <code>git pull</code> keep working without
-                                    re-passing it.
+                                    <strong>Optional</strong> &mdash; the repo
+                                    is public. If set, the script&rsquo;s
+                                    internal <code>git clone</code
+                                    >/<code>pull</code> sends it (for a private
+                                    fork) and persists it into
+                                    <code>.git/config</code>, and the tools
+                                    that call the GitHub API use it to lift the
+                                    60-requests/hour anonymous rate limit.
                                     <strong>Never committed.</strong> Generate
                                     at
                                     <a href="https://github.com/settings/tokens"
                                         >github.com/settings/tokens</a
                                     >
-                                    with <code>repo</code> scope (classic) or
-                                    Contents:Read (fine-grained).
+                                    (no scopes needed for public repos;
+                                    Contents:Read for a private fork).
                                 </td>
                             </tr>
                         </tbody>
@@ -2588,9 +2584,7 @@ try {
                                     &middot; no <code>dnf</code> step.
                                 </p>
                                 <pre><code># === Bootstrap: prod machine (no sudo, user-level tools only) ===
-export GITHUB_TOKEN='&lt;your-PAT&gt;' && \
-curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
 exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
                             </div>
                             <div class="tab-panel panel-dev">
@@ -2602,9 +2596,7 @@ exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
                                     <code>/etc</code> files.
                                 </p>
                                 <pre><code># === Bootstrap: dev machine (sudo, + dnf system packages / etc files) ===
-export GITHUB_TOKEN='&lt;your-PAT&gt;' && \
-curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
                             </div>
                         </div>
                     </div>
@@ -2754,8 +2746,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 ./bootstrap.sh --dev  --reinstall --yes        # skip prompt
 
 # From outside the repo (script in memory, won&rsquo;t self-delete):
-curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod --reinstall --yes</code></pre>
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod --reinstall --yes</code></pre>
                             </div>
                             <div class="os-card windows">
                                 <span class="os-label">Windows</span>
@@ -2767,7 +2758,7 @@ $bootstrapFile = [System.IO.Path]::GetTempFileName()
 try {
     $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
     &amp; $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
-      --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+      --output $bootstrapFile `
       https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
     if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
     $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
@@ -3415,12 +3406,11 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         Git, WinGet, and PowerShell Gallery manage their own networking.</p>
                     <h4>Download and run (no elevation needed)</h4>
                     <pre><code># === Bootstrap: Windows client ===
-$env:GITHUB_TOKEN = '&lt;your-PAT&gt;'
 $bootstrapFile = [System.IO.Path]::GetTempFileName()
 try {
     $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
     &amp; $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
-      --header "Authorization: token $env:GITHUB_TOKEN" --output $bootstrapFile `
+      --output $bootstrapFile `
       https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
     if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
     $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
@@ -3520,9 +3510,9 @@ cd "$env:USERPROFILE\.config\mise"
                         prompt, seeds dnGrep&rsquo;s config redirect, and runs
                         BurntToast and the Nerd Font install (its step 7)
                         between the Warp Tab Configs and the SSH-key step.
-                        <code>GITHUB_TOKEN</code> persists into
-                        <code>.git/config</code> (github.com-scoped) so
-                        subsequent <code>git push</code>/<code>git pull</code>
+                        If you set the optional <code>GITHUB_TOKEN</code>, it
+                        persists into <code>.git/config</code> (github.com-scoped)
+                        so subsequent <code>git push</code>/<code>git pull</code>
                         (and <code>wsu</code>) authenticate without
                         re-passing the env var.
                     </p>
@@ -3614,9 +3604,7 @@ cd "$env:USERPROFILE\.config\mise"
                     <pre><code># Inside the WSL distro:
 sudo dnf install -y curl git tar python3 python3-pip    # RHEL / AlmaLinux / Fedora
 # or: sudo apt install -y curl git tar python3 python3-pip   # Debian / Ubuntu
-export GITHUB_TOKEN='&lt;your-PAT&gt;'
-curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
                     <p class="note-row">
                         Use <code>--dev</code> for WSL distros where you have
                         sudo (the common case &mdash; you own the WSL host).
@@ -5121,14 +5109,20 @@ on_change = "restart"</code></pre>
 
                     <details data-ts>
                         <summary>
-                            Private repo: clone fails with
+                            Clone or pull fails with
                             <em>&ldquo;Authentication failed&rdquo;</em> or 404
                         </summary>
                         <div class="ts-body">
                             <p>
-                                Set <code>GITHUB_TOKEN</code> to a PAT with
-                                <code>repo</code> (classic) or Contents:Read
-                                (fine-grained) scope and re-run.
+                                The repo is public, so this usually means a
+                                stale token: an expired or revoked
+                                <code>GITHUB_TOKEN</code> (in the environment,
+                                or persisted by an earlier run) makes GitHub
+                                reject the request instead of falling back to
+                                anonymous access. Clear it (below) or refresh
+                                it. Bootstrapping from a private fork needs a
+                                PAT with Contents:Read (fine-grained) or
+                                <code>repo</code> (classic) scope.
                             </p>
                             <p>
                                 The token is written into
