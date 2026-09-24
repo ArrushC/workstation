@@ -59,12 +59,11 @@
                         <li><a href="#completion">Completions</a></li>
                     </ol></li>
                     <li class="nav-group"><span>Operations</span><ol>
-                        <li><a href="#hosts"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h16v7H4zm0 11h16v7H4zM7 6h1m-1 11h1"/></svg>Host management</a></li>
                         <li><a href="#daily"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h4l3-8 4 16 3-8h3"/></svg>Daily workflows</a><ol class="sub">
                             <li><a href="#daily-zellij">Zellij</a></li>
                             <li><a href="#daily-services">Services</a></li>
                         </ol></li>
-                        <li><a href="#adding"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>Adding tools &amp; hosts</a></li>
+                        <li><a href="#adding"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>Adding tools &amp; dotfiles</a></li>
                         <li><a href="#troubleshooting"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 4m0 3v1M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></svg>Troubleshooting</a></li>
                     </ol></li>
                 </ol>
@@ -172,12 +171,10 @@
                                 Pick <span class="badge prod">prod</span> for
                                 no-sudo / user-wide install,
                                 <span class="badge dev">dev</span> for sudo /
-                                system-wide. Sets a token + identity, then pipes
+                                system-wide. Sets a token, then pipes
                                 <code>bootstrap.sh</code>.
                             </p>
-                            <pre><code>export GITHUB_TOKEN='&lt;your-PAT&gt;' \
-       GIT_USER_NAME='Arrush Chaturvedi' \
-       GIT_USER_EMAIL='contact@arrushc.com' && \
+                            <pre><code>export GITHUB_TOKEN='&lt;your-PAT&gt;' && \
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh \
   | bash -s -- --prod</code></pre>
@@ -194,9 +191,7 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                                 and Starship under your user profile, applies
                                 dotfiles, and deploys the terminal configs.
                             </p>
-                            <pre><code>$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
-$env:GIT_USER_NAME  = 'Arrush Chaturvedi'
-$env:GIT_USER_EMAIL = 'contact@arrushc.com'
+                            <pre><code>$env:GITHUB_TOKEN = '&lt;your-PAT&gt;'
 $bootstrapFile = [System.IO.Path]::GetTempFileName()
 try {
     $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -216,7 +211,6 @@ try {
                     <p class="hero-help">
                         Already set up? Jump to
                         <a href="#daily">Daily workflows</a> &middot;
-                        <a href="#hosts">Host management</a> &middot;
                         <a href="#troubleshooting">Troubleshooting</a>.
                     </p>
                 </header>
@@ -310,7 +304,7 @@ try {
                                 <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v16H3zM3 9h18M10 9v11"/></svg></span>
                                 Warp
                             </h3>
-                            <p>The day-to-day Windows terminal — opens into AlmaLinux-9 (WSL zsh); per-host SSH+Zellij launchers regenerate from hosts.conf as Tab Configs.</p>
+                            <p>The day-to-day Windows terminal — opens into AlmaLinux-9 (WSL zsh); launchers for the local shells regenerate as Tab Configs.</p>
                         </article>
                         <article class="stack-card">
                             <div class="layer-label">Terminal</div>
@@ -318,7 +312,7 @@ try {
                                 <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4zm0 10h16v6H4zm3-7h1m-1 10h1"/></svg></span>
                                 Windows Terminal
                             </h3>
-                            <p>The compatibility terminal, kept fully configured — Nushell's home, Windows' default terminal app; per-host SSH profiles regenerate from hosts.conf as a JSON fragment.</p>
+                            <p>The compatibility terminal, kept fully configured — Nushell's home, Windows' default terminal app.</p>
                         </article>
                     </div>
 
@@ -1933,11 +1927,10 @@ try {
                 <section id="machines">
                     <h2>Machine types</h2>
                     <p class="lede">
-                        Every host belongs to exactly one group in
-                        <code>hosts.conf</code>. The group decides which
+                        Every host is exactly one machine type, picked by the
                         <code>bootstrap.sh</code> flag
-                        (<code>--dev</code>/<code>--prod</code>) a host
-                        runs &mdash; no separate scope flag.
+                        (<code>--dev</code>/<code>--prod</code>) it runs
+                        &mdash; no separate scope flag.
                     </p>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
@@ -1999,10 +1992,9 @@ try {
                         <code>linux,dev,host,native</code> for dev, depending
                         on whether the host is WSL). <code>bootstrap.sh</code>
                         takes <code>--dev</code> / <code>--prod</code>
-                        directly (exactly one is required);
-                        <code>scripts/update-hosts.sh</code> derives the flag
-                        from each host's group column in
-                        <code>hosts.conf</code> for bulk remote updates.
+                        directly (exactly one is required) and records the
+                        choice as <code>vars.group</code> in the host&rsquo;s
+                        git-ignored <code>config.local.toml</code>.
                     </p>
                 </section>
 
@@ -2031,13 +2023,6 @@ try {
                                             (binary installs +
                                             `mise bootstrap --only
                                             dotfiles,tools`, no admin)</span
-                                        >
-                                    </li>
-                                    <li>
-                                        hosts.conf
-                                        <span class="note"
-                                            >&mdash; single source of truth for
-                                            host list</span
                                         >
                                     </li>
                                     <li>
@@ -2123,13 +2108,11 @@ try {
                                             >
                                         </li>
                                         <li>
-                                            health / check-updates / update /
-                                            update-hosts
+                                            health / check-updates / update
                                             <span class="note"
                                                 >&mdash; read-only report,
                                                 outdated-pin scan, pull +
-                                                reinstall this host, fan out
-                                                to the fleet</span
+                                                reinstall this host</span
                                             >
                                         </li>
                                         <li>
@@ -2182,32 +2165,6 @@ try {
                                 <details open>
                                     <summary>scripts/</summary>
                                     <ul>
-                                        <li>
-                                            manage-hosts.sh
-                                            <span class="note"
-                                                >&mdash; Linux host manager
-                                                (hosts.conf CRUD)</span
-                                            >
-                                        </li>
-                                        <li>
-                                            manage-hosts.ps1
-                                            <span class="note"
-                                                >&mdash; Windows host manager
-                                                (parity)</span
-                                            >
-                                        </li>
-                                        <li>
-                                            update-hosts.sh
-                                            <span class="note"
-                                                >&mdash; multi-host updater
-                                                (ssh-loop, runs
-                                                <code>git pull --ff-only
-                                                &amp;&amp;
-                                                ./bootstrap.sh
-                                                --&lt;mode&gt;
-                                                --yes</code>)</span
-                                            >
-                                        </li>
                                         <li>
                                             lib/mise-env.sh
                                             <span class="note"
@@ -2547,19 +2504,12 @@ try {
                             repo, change <code>DOTFILES_REPO</code> at the top
                             of the script to point at your fork's clone URL.
                         </li>
-                        <li>
-                            <code>hosts.conf</code> &mdash; add hosts with
-                            <code>./scripts/manage-hosts.sh --add ...</code> (or
-                            edit and <code>--format</code>), or let
-                            <code>bootstrap.sh</code> self-register them.
-                        </li>
                     </ul>
 
                     <h3 id="setup-linux">2. On each Linux host</h3>
                     <p class="lede">
                         <code>bootstrap.sh</code> needs only <code>curl</code>,
-                        <code>git</code>, <code>tar</code>, and
-                        <code>iproute</code> (<code>ip</code>) &mdash;
+                        <code>git</code>, and <code>tar</code> &mdash;
                         <code>unzip</code> is no longer required (mise
                         extracts its own archives). A single preflight check
                         reports <strong>all</strong> missing prereqs at once.
@@ -2572,7 +2522,7 @@ try {
                         install, no Python &ge; 3.9 gate.
                     </p>
 
-                    <h4>Env vars to set before running</h4>
+                    <h4>Env var to set before running</h4>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
@@ -2588,11 +2538,10 @@ try {
                                     <code>bootstrap.sh</code> + the
                                     script&rsquo;s internal
                                     <code>git clone</code
-                                    >/<code>pull</code>/<code>push</code>.
+                                    >/<code>pull</code>.
                                     Persisted into <code>.git/config</code> so
-                                    <code>scripts/update-hosts.sh</code>,
-                                    manual <code>git pull</code>, and the
-                                    auto-push step keep working without
+                                    <code>wsu</code> and a manual
+                                    <code>git pull</code> keep working without
                                     re-passing it.
                                     <strong>Never committed.</strong> Generate
                                     at
@@ -2603,26 +2552,13 @@ try {
                                     Contents:Read (fine-grained).
                                 </td>
                             </tr>
-                            <tr>
-                                <td><code>GIT_USER_NAME</code></td>
-                                <td>
-                                    Author name on the auto-registration commit
-                                    (falls back to <code>whoami</code>).
-                                </td>
-                            </tr>
-                            <tr>
-                                <td><code>GIT_USER_EMAIL</code></td>
-                                <td>
-                                    Author email on the auto-registration commit
-                                    (falls back to
-                                    <code>whoami@hostname</code>).
-                                </td>
-                            </tr>
                         </tbody>
                     </table></div>
                     <p class="note-row">
-                        Keep these in a password manager (1Password, Bitwarden,
-                        KeePass) so the token and identity travel together.
+                        Keep the token in a password manager (1Password,
+                        Bitwarden, KeePass). Your git name/email are asked for
+                        once on the first run and stored in the host&rsquo;s
+                        git-ignored <code>config.local.toml</code>.
                     </p>
 
                     <h4>Copy-paste one-liner</h4>
@@ -2652,9 +2588,7 @@ try {
                                     &middot; no <code>dnf</code> step.
                                 </p>
                                 <pre><code># === Bootstrap: prod machine (no sudo, user-level tools only) ===
-export GITHUB_TOKEN='&lt;your-PAT&gt;' \
-       GIT_USER_NAME='Arrush Chaturvedi' \
-       GIT_USER_EMAIL='contact@arrushc.com' && \
+export GITHUB_TOKEN='&lt;your-PAT&gt;' && \
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
 exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
@@ -2668,9 +2602,7 @@ exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
                                     <code>/etc</code> files.
                                 </p>
                                 <pre><code># === Bootstrap: dev machine (sudo, + dnf system packages / etc files) ===
-export GITHUB_TOKEN='&lt;your-PAT&gt;' \
-       GIT_USER_NAME='Arrush Chaturvedi' \
-       GIT_USER_EMAIL='contact@arrushc.com' && \
+export GITHUB_TOKEN='&lt;your-PAT&gt;' && \
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
                             </div>
@@ -2698,11 +2630,6 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">3</span
-                            ><span class="lbl">Self-register host</span>
-                        </div>
-                        <div class="arrow">&rarr;</div>
-                        <div class="step">
-                            <span class="num">4</span
                             ><span class="lbl">mise install + mise bootstrap</span
                             ><span class="note"
                                 >tools, then
@@ -2712,31 +2639,23 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
-                            <span class="num">5</span
+                            <span class="num">4</span
                             ><span class="lbl">Set zsh as default</span
                             ><span class="note"
                                 >sudo usermod -s on dev; warns
                                 with manual chsh on prod</span
                             >
                         </div>
-                        <div class="arrow">&rarr;</div>
-                        <div class="step">
-                            <span class="num">6</span
-                            ><span class="lbl">Commit + push</span
-                            ><span class="note">warn-don&rsquo;t-fail</span>
-                        </div>
                     </div>
                     <p class="note-row">
-                        Self-registration uses <code>hostname -s</code>,
-                        detected primary IP, <code>whoami</code>, and the group
-                        from <code>--dev</code>/<code>--prod</code>. Push
-                        failures (auth, conflict, no upstream) print a recovery
-                        command but don&rsquo;t abort &mdash; provisioning has
-                        already succeeded. Both modes are idempotent; re-run any
+                        Nothing is committed or pushed &mdash; there is no
+                        central host list; each host keeps itself current with
+                        <code>wsu</code>. Both modes are idempotent; re-run any
                         time. After bootstrap, copy your SSH key from a client
-                        &mdash; see
-                        <a href="#hosts">Host management &rarr; Copy SSH key</a
-                        >.
+                        with <code>ssh-copy-id &lt;user&gt;@&lt;host&gt;</code>
+                        (the Windows PowerShell and Nushell profiles ship an
+                        <code>ssh-copy-id</code> helper, since Windows OpenSSH
+                        has none).
                     </p>
 
                     <h4>
@@ -2911,7 +2830,7 @@ mise run check-updates</code></pre>
                         <p>
                             Both modes are <strong>read-only</strong> &mdash;
                             they exit before the provisioning flow starts and
-                            never install, register, or push anything. Use
+                            never install or change anything. Use
                             the same <code>--dev</code>/<code>--prod</code>
                             flag the host was bootstrapped with (it picks the
                             install scope being inspected).
@@ -2934,8 +2853,8 @@ mise run check-updates</code></pre>
                                 >mise dot add</code
                             >), a dirty checkout (an uncommitted change under
                             this repo itself &mdash; a hand-edited pin, an
-                            edited source file &mdash; blocks
-                            <code>update-hosts.sh</code>&rsquo;s
+                            edited source file &mdash; blocks the next
+                            <code>wsu</code>&rsquo;s
                             <code>git pull --ff-only</code>), and the
                             legacy-tool sweep (one
                             <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
@@ -2944,8 +2863,7 @@ mise run check-updates</code></pre>
                             <code>mise run &lt;task&gt;</code>). On Windows it
                             covers the portable and installer-class tools,
                             Warp, Windows Terminal, Nerd Fonts, BurntToast,
-                            the Start Menu shortcuts, the workstation
-                            SSH-profile fragment, the managed Warp Tab
+                            the Start Menu shortcuts, the managed Warp Tab
                             Configs, the dnGrep config seed, the profile
                             shim, and the SSH key.
                         </p>
@@ -3013,7 +2931,6 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             <strong>shellcheck</strong> at
                             warning+ on the repo's maintained shell scripts.
                             PowerShell scripts (<code>bootstrap.ps1</code>,
-                            <code>manage-hosts.ps1</code>,
                             <code>install-nerd-fonts.ps1</code>) are linted by
                             <strong>PSScriptAnalyzer</strong> at warning+ in
                             the same CI workflow; <code>mise run ps-lint</code>
@@ -3112,11 +3029,8 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             &mdash; and bootstrap regenerates only the
                             <code>workstation-*.toml</code> Tab Configs
                             (<code>%APPDATA%\warp\Warp\data\tab_configs\</code>:
-                            the local shells plus one
-                            <em>SSH: &lt;host&gt;</em> entry per
-                            <code>hosts.conf</code> row running
-                            <code>ssh -t &lt;user&gt;@&lt;ip&gt; zellij attach
-                            --create main</code>). Tab Configs you create
+                            one each for WSL AlmaLinux-9, PowerShell, and
+                            Nushell-compat). Tab Configs you create
                             yourself are never touched &mdash; the
                             <code>workstation-</code> prefix is the managed
                             namespace. Warp opens into AlmaLinux-9 (WSL zsh);
@@ -3145,14 +3059,12 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                                 >copy</code
                             >; Catppuccin Mocha
                             scheme + app theme, Nushell default profile,
-                            keybinds, profile defaults); bootstrap regenerates
-                            only the <em>workstation</em> profile fragment
-                            (<code>Fragments\workstation\hosts.json</code>
-                            &mdash; one <em>SSH: &lt;host&gt;</em> profile per
-                            <code>hosts.conf</code> row, each running
-                            <code>ssh -t &lt;user&gt;@&lt;ip&gt; zellij attach
-                            --create main</code>). User-created profiles and
-                            fragments from other apps are never removed.
+                            keybinds, profile defaults). Bootstrap generates no
+                            profile fragment any more; it deletes the retired
+                            <code>Fragments\workstation\</code> dir (per-host
+                            SSH profiles from earlier versions) once, if
+                            present. User-created profiles and fragments from
+                            other apps are never touched.
                         </li>
                         <li>
                             <strong>GitHub CLI</strong> (<code>gh</code>)
@@ -3434,9 +3346,8 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         <code>config.nu</code>) intentionally, upgrading
                         <em>incrementally</em> rather than skipping releases.
                         Nushell also tab-completes the repo&rsquo;s own
-                        scripts: <code>.\bootstrap.ps1 -</code> + Tab and
-                        <code>manage-hosts.ps1 -</code> + Tab list their flags
-                        with descriptions (an external completer in
+                        bootstrap: <code>.\bootstrap.ps1 -</code> + Tab lists
+                        its flags with descriptions (an external completer in
                         <code>config.nu</code>; classic PowerShell completes
                         <code>param()</code> flags natively, no setup).
                     </p>
@@ -3455,16 +3366,13 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         <strong>Catppuccin Mocha</strong> (color scheme + app
                         theme, applied to all profiles), and its default profile
                         is <strong>Nushell</strong> (PowerShell, cmd, Git Bash,
-                        WSL, and the SSH-host profiles remain available). The
+                        and WSL profiles remain available). The
                         tracked profile defaults are
                         <strong>JetBrainsMono NFM 10.5</strong>, a bar cursor,
                         <code>historySize</code> 100&nbsp;000, and an
-                        audible + taskbar bell. The new-tab dropdown groups the
-                        generated <em>SSH: &lt;host&gt;</em> entries into an
-                        <strong>SSH hosts</strong> folder
-                        (<code>newTabMenu</code>), Windows&rsquo; own
+                        audible + taskbar bell. Windows&rsquo; own
                         <code>Windows.Terminal.SSH</code> profile source is
-                        disabled so nothing competes with it, and
+                        disabled, and
                         <code>firstWindowPreference</code> is
                         <code>persistedWindowLayout</code> so a relaunch
                         restores the previous tab layout. Its
@@ -3507,9 +3415,7 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                         Git, WinGet, and PowerShell Gallery manage their own networking.</p>
                     <h4>Download and run (no elevation needed)</h4>
                     <pre><code># === Bootstrap: Windows client ===
-$env:GITHUB_TOKEN  = '&lt;your-PAT&gt;'
-$env:GIT_USER_NAME  = 'Arrush Chaturvedi'
-$env:GIT_USER_EMAIL = 'contact@arrushc.com'
+$env:GITHUB_TOKEN = '&lt;your-PAT&gt;'
 $bootstrapFile = [System.IO.Path]::GetTempFileName()
 try {
     $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -3577,8 +3483,8 @@ cd "$env:USERPROFILE\.config\mise"
                         <div class="arrow">&rarr;</div>
                         <div class="step">
                             <span class="num">5</span
-                            ><span class="lbl">Windows Terminal SSH-profile fragment + Warp Tab Configs</span
-                            ><span class="note">both from hosts.conf</span>
+                            ><span class="lbl">Warp Tab Configs</span
+                            ><span class="note">local shells</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -3613,12 +3519,11 @@ cd "$env:USERPROFILE\.config\mise"
                         (dnGrep, LogExpert), generates the Nushell Starship
                         prompt, seeds dnGrep&rsquo;s config redirect, and runs
                         BurntToast and the Nerd Font install (its step 7)
-                        between the SSH-profile fragment and the SSH-key step.
+                        between the Warp Tab Configs and the SSH-key step.
                         <code>GITHUB_TOKEN</code> persists into
                         <code>.git/config</code> (github.com-scoped) so
-                        subsequent <code>git push</code>,
-                        <code>git pull</code>, and
-                        <code>manage-hosts.ps1</code> ops authenticate without
+                        subsequent <code>git push</code>/<code>git pull</code>
+                        (and <code>wsu</code>) authenticate without
                         re-passing the env var.
                     </p>
                     <p class="note-row">
@@ -3649,18 +3554,15 @@ cd "$env:USERPROFILE\.config\mise"
                         to the Store package&rsquo;s live
                         <code>LocalState</code> path
                         (<code>%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\</code>).
-                        The hosts.conf-driven launch entries are
-                        <em>generated</em> separately, as a profile
+                        Nothing else is generated for it &mdash; earlier
+                        versions wrote per-host SSH profiles as a
                         <strong>fragment</strong> under
-                        <code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\</code>
-                        (<code>Invoke-WindowsTerminalFragments</code> in
-                        <code>bootstrap.ps1</code>, every run &mdash; only
-                        <code>*.json</code> inside that one app dir is
-                        rewritten, so other apps&rsquo; fragments and your own
-                        profiles are never touched). Two consequences:
-                        <strong>Windows Terminal reads fragments only at
-                        launch</strong>, so restart it after a bootstrap that
-                        added or removed hosts; and the Settings UI
+                        <code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\</code>;
+                        <code>bootstrap.ps1</code> now deletes that one app
+                        dir if it is still there
+                        (<code>Remove-RetiredTerminalHostProfiles</code>;
+                        restart Windows Terminal afterwards, since it reads
+                        fragments only at launch). The Settings UI
                         <strong>re-serializes <code>settings.json</code></strong>
                         whenever you change something there, so re-sync the
                         repo with <code>wsr</code> (<code>mise dot add
@@ -3693,8 +3595,8 @@ cd "$env:USERPROFILE\.config\mise"
                         <code>wsl.exe</code> from any shell), not SSH, so
                         <code>bootstrap.sh</code> auto-detects WSL
                         (<code>$WSL_DISTRO_NAME</code> /
-                        <code>/proc/version</code>) and skips the
-                        <code>hosts.conf</code> self-registration step. The
+                        <code>/proc/version</code>) and swaps the closing
+                        <code>ssh-copy-id</code> tip for a WSL one. The
                         rest of the flow (tool install, dotfiles apply) runs
                         unchanged.
                     </p>
@@ -3710,11 +3612,9 @@ cd "$env:USERPROFILE\.config\mise"
                         <code>wsl.exe</code> in any shell) and run:
                     </p>
                     <pre><code># Inside the WSL distro:
-sudo dnf install -y curl git python3 python3-pip iproute    # RHEL / AlmaLinux / Fedora
-# or: sudo apt install -y curl git python3 python3-pip iproute2   # Debian / Ubuntu
+sudo dnf install -y curl git tar python3 python3-pip    # RHEL / AlmaLinux / Fedora
+# or: sudo apt install -y curl git tar python3 python3-pip   # Debian / Ubuntu
 export GITHUB_TOKEN='&lt;your-PAT&gt;'
-export GIT_USER_NAME='Arrush Chaturvedi'
-export GIT_USER_EMAIL='contact@arrushc.com'
 curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
                     <p class="note-row">
@@ -3792,11 +3692,11 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         &ldquo;+&rdquo; menu (or
                         <kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>L</kbd>) lists the
                         generated <em>WSL: AlmaLinux-9</em>,
-                        <em>Windows PowerShell</em>,
-                        <em>Nushell (compatibility)</em>, and one
-                        <em>SSH: &lt;host&gt;</em> entry per
-                        <code>hosts.conf</code> row (each attaches the
-                        host&rsquo;s persistent Zellij session). The tracked
+                        <em>Windows PowerShell</em>, and
+                        <em>Nushell (compatibility)</em> entries (SSH to a
+                        host from any of them, e.g.
+                        <code>ssh -t &lt;user&gt;@&lt;host&gt; zellij attach
+                        --create main</code>). The tracked
                         <code>keybindings.yaml</code> adds these overrides on
                         top of Warp&rsquo;s defaults &mdash; the pane mnemonics
                         match Zellij&rsquo;s pane mode (<em>d</em> = down,
@@ -3904,25 +3804,18 @@ curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
                         alongside <a href="#setup-warp">Warp</a> &mdash; it is
                         Nushell&rsquo;s home, it keeps Windows&rsquo;
                         <em>default terminal application</em> role, and nothing
-                        here was traded away for Warp. It opens hosts through
+                        here was traded away for Warp. It opens shells through
                         its <strong>profiles</strong> &mdash; the dropdown next to
-                        the &ldquo;+&rdquo; new-tab button lists an
-                        <strong>SSH hosts</strong> folder first, holding one
-                        <em>SSH: &lt;host&gt;</em> entry per
-                        <code>hosts.conf</code> row (each attaches the
-                        host&rsquo;s persistent Zellij session; the tab is
-                        colored green for
-                        <span class="badge dev">dev</span> hosts, teal for
-                        <span class="badge prod">prod</span>), followed by the
-                        remaining profiles: <em>Nushell</em> (the default),
+                        the &ldquo;+&rdquo; new-tab button lists
+                        <em>Nushell</em> (the default),
                         <em>AlmaLinux-9</em>, <em>PowerShell</em>,
                         <em>Command Prompt</em>, and <em>Git Bash</em>.
                         The same profiles are addressable from the
                         <code>wt</code> CLI:
                     </p>
-                    <pre><code>wt -w 0 nt -p "SSH: cache-apl"     # new tab on a host, in the current window
-wt -p "AlmaLinux-9"                # new WINDOW in the WSL distro (no -w = new window)
-wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizontally</code></pre>
+                    <pre><code>wt -w 0 nt -p "PowerShell"    # new tab, in the current window
+wt -p "AlmaLinux-9"           # new WINDOW in the WSL distro (no -w = new window)
+wt -w 0 sp -H -p "Nushell"    # split the current window&rsquo;s tab horizontally</code></pre>
                     <p>
                         The tracked <code>settings.json</code> adds these
                         overrides on top of Windows Terminal&rsquo;s defaults
@@ -3994,13 +3887,13 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                         <code>dnf</code>, <code>cargo</code>, <code>npm</code>,
                         <code>uv</code>, git network verbs) show indeterminate
                         progress on the taskbar icon (OSC 9;4) until the next
-                        prompt. SSH tabs attach to Zellij, which composites its
+                        prompt. An SSH tab running Zellij composites its
                         own panes, so marks intentionally stop there. The
                         Suggestions palette
                         (<kbd>ALT</kbd>+<kbd>SHIFT</kbd>+<kbd>S</kbd>)
-                        fuzzy-searches eight tracked snippets
+                        fuzzy-searches seven tracked snippets
                         (<code>wsa</code>/<code>wsu</code>/<code>wsd</code>/<code>wss</code>,
-                        full dev bootstrap, lint, fleet update,
+                        full dev bootstrap, lint,
                         <code>zellij attach</code>) plus recent commands &mdash;
                         snippets insert editable text and never auto-execute.
                     </p>
@@ -4174,183 +4067,15 @@ wt -w 0 sp -H -p "SSH: cache-apl"  # split the current window&rsquo;s tab horizo
                     </p>
                 </section>
 
-                <section id="hosts">
-                    <h2>Host management</h2>
-                    <p class="lede">
-                        <code>hosts.conf</code> is the single source of truth.
-                        <strong>Two</strong> outputs are regenerated from it, one
-                        per managed terminal, both on every Windows
-                        <code>bootstrap.ps1</code> run:
-                    </p>
-                    <ul>
-                        <li>
-                            the Warp <strong>Tab Configs</strong>
-                            (<code>%APPDATA%\warp\Warp\data\tab_configs\workstation-ssh-&lt;host&gt;.toml</code>,
-                            one per row) &mdash;
-                            <code>Invoke-WarpTabConfigs</code>;
-                        </li>
-                        <li>
-                            the workstation <strong>SSH-profile fragment</strong>
-                            for Windows Terminal
-                            (<code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\hosts.json</code>,
-                            one <em>SSH: &lt;host&gt;</em> profile per row)
-                            &mdash;
-                            <code>Invoke-WindowsTerminalFragments</code>.
-                        </li>
-                    </ul>
-                    <p>
-                        Both run the same
-                        <code>ssh -t &lt;user&gt;@&lt;ip&gt; zellij attach
-                        --create main</code>, so a host opened in either
-                        terminal attaches the <em>same</em> remote session
-                        &mdash; that&rsquo;s zellij working as designed, not a
-                        conflict. Each generator owns only its own prefix, so
-                        launch entries you create yourself survive. On Linux
-                        nothing is generated &mdash; the provisioning scripts
-                        read <code>hosts.conf</code> directly.
-                    </p>
-                    <p>
-                        <code>scripts/update-hosts.sh</code> reads
-                        <code>hosts.conf</code> directly when doing bulk
-                        remote updates &mdash; the group column drives the
-                        per-host <code>--dev</code>/<code>--prod</code> flag
-                        passed to <code>bootstrap.sh</code>. It&rsquo;s a
-                        <strong>prod-host</strong> tool: prod never needs
-                        sudo, so the fleet run is fully non-interactive. Dev
-                        hosts are bootstrapped by hand, interactively, one at
-                        a time &mdash; see &ldquo;Remote fleet
-                        updates&rdquo; in <a href="#daily">Daily
-                        workflows</a>.
-                    </p>
-                    <div class="callout">
-                        <strong
-                            >Group must be <code>dev_machine</code> or
-                            <code>prod_machine</code>.</strong
-                        >
-                        Both manage-hosts scripts validate the input and
-                        reject anything else &mdash; an unknown group means
-                        <code>update-hosts.sh</code> can't derive
-                        <code>MODE</code> from it. Interactive prompt
-                        defaults to <code>prod_machine</code>.
-                    </div>
-                    <p class="note-row">
-                        <strong
-                            >Don&rsquo;t hand-pad
-                            <code>hosts.conf</code>.</strong
-                        >
-                        The save routine recalculates column widths from data;
-                        manual padding gets normalised away on next save.
-                        <strong>Auto-sorted</strong> by group, then by name, on
-                        every save &mdash; manual reordering won&rsquo;t
-                        survive.
-                    </p>
-
-                    <h3>Commands</h3>
-                    <div class="grid-2">
-                        <div class="os-card linux">
-                            <span class="os-label">Linux</span>
-                            <pre><code>./scripts/manage-hosts.sh                # interactive menu
-./scripts/manage-hosts.sh --list         # print table
-./scripts/manage-hosts.sh --format       # re-pad hosts.conf
-./scripts/manage-hosts.sh --add --name N --ip I \
-    --user U --group dev_machine --skip-confirm
-./scripts/manage-hosts.sh --remove         # interactive
-./scripts/manage-hosts.sh --remove --name N --skip-confirm</code></pre>
-                        </div>
-                        <div class="os-card windows">
-                            <span class="os-label">Windows</span>
-                            <pre><code>.\scripts\manage-hosts.ps1               # interactive menu
-.\scripts\manage-hosts.ps1 -List
-.\scripts\manage-hosts.ps1 -Format
-.\scripts\manage-hosts.ps1 -Add -Name N -Ip I `
-    -User U -Group prod_machine -SkipConfirm
-.\scripts\manage-hosts.ps1 -Remove         # interactive
-.\scripts\manage-hosts.ps1 -Remove -Name N -SkipConfirm</code></pre>
-                        </div>
-                    </div>
-
-                    <h3>Copy SSH key</h3>
-                    <p>
-                        After a host is registered, you still need your public
-                        key in its <code>~/.ssh/authorized_keys</code> before
-                        the Windows Terminal SSH profiles or
-                        <code>update-hosts.sh</code> can connect
-                        without a password.
-                    </p>
-                    <div class="grid-2">
-                        <div class="os-card linux">
-                            <span class="os-label">Linux</span>
-                            <pre><code>./scripts/manage-hosts.sh --copy-id --name dev-01  # explicit
-./scripts/manage-hosts.sh --copy-id                # interactive picker
-./scripts/manage-hosts.sh --copy-id --all          # bulk: every host in hosts.conf
-./scripts/manage-hosts.sh --copy-id --all --skip-confirm   # bulk, scripted</code></pre>
-                        </div>
-                        <div class="os-card windows">
-                            <span class="os-label">Windows</span>
-                            <pre><code>.\scripts\manage-hosts.ps1 -CopyId -Name dev-01    # explicit
-.\scripts\manage-hosts.ps1 -CopyId                 # interactive picker
-.\scripts\manage-hosts.ps1 -CopyId -All            # bulk: every host
-.\scripts\manage-hosts.ps1 -CopyId -All -SkipConfirm</code></pre>
-                        </div>
-                    </div>
-                    <ul>
-                        <li>
-                            Looks the host up in <code>hosts.conf</code> and
-                            uses its <code>User</code>/<code>Ip</code> columns.
-                        </li>
-                        <li>
-                            If <code>id_ed25519</code> is missing, prompts to
-                            generate one with
-                            <code>ssh-keygen -t ed25519 -N ""</code> (no
-                            passphrase). Decline and the command exits without
-                            copying.
-                        </li>
-                        <li>
-                            Linux uses native <code>ssh-copy-id</code> if
-                            available; otherwise falls back to a manual SSH
-                            method that de-duplicates the file. Windows always
-                            uses the manual method (no
-                            <code>ssh-copy-id</code> in Windows OpenSSH).
-                        </li>
-                        <li>
-                            <strong>Bulk
-                                (<code>--all</code>&nbsp;/&nbsp;<code>-All</code>):</strong>
-                            menu option <strong>6</strong>, or the flag above.
-                            Loops over every host in <code>hosts.conf</code>;
-                            the keygen prompt fires at most once, then each
-                            host prints
-                            <code
-                                ><kbd>name</kbd>
-                                (user@ip)&hellip;&nbsp;✓</code
-                            >
-                            or <code>✗</code> live. Final summary lists any
-                            failures. The loop is <em>best-effort</em> &mdash;
-                            a single failed host (offline, password fatigue,
-                            key already present blocking append) does
-                            <em>not</em> abort the run, and the exit code is
-                            still 0. Useful right after bootstrapping a fresh
-                            client.
-                        </li>
-                        <li>
-                            After a successful <code>--add</code>, both scripts
-                            print a tip line that pre-fills the host name for
-                            you.
-                        </li>
-                    </ul>
-                </section>
-
                 <section id="daily">
                     <h2>Daily workflows</h2>
 
                     <p class="note-row">
                         <strong>Tab completion:</strong> the repo&rsquo;s own
-                        scripts complete their flags &mdash;
-                        <code>bootstrap.sh</code>,
-                        <code>manage-hosts.sh</code> and
-                        <code>update-hosts.sh</code> in zsh and bash on Linux
-                        (plus <code>--group</code> values); on Windows,
-                        Nushell completes <code>bootstrap.ps1</code> and
-                        <code>manage-hosts.ps1</code> flags (PowerShell does
+                        bootstrap scripts complete their flags &mdash;
+                        <code>bootstrap.sh</code> in zsh and bash on Linux;
+                        on Windows, Nushell completes
+                        <code>bootstrap.ps1</code> flags (PowerShell does
                         this natively). Kept in lockstep with the scripts by
                         the repo&rsquo;s invariant check.
                     </p>
@@ -4611,76 +4336,19 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         &mdash; they last until the next rebuild.
                     </p>
 
-                    <h3>
-                        Remote fleet updates (control machine &rarr; all
-                        hosts via SSH)
-                    </h3>
+                    <h3>Updating other hosts</h3>
                     <p class="note-row">
-                        <code>scripts/update-hosts.sh</code>
-                        (<code>mise run update-hosts</code>) ssh's into every
-                        managed host in <code>hosts.conf</code>, <code>cd</code>s
-                        into the checkout (<code>~/.config/mise</code>, or
-                        the pre-relocation <code>~/.local/share/chezmoi</code>
-                        on a host that hasn&rsquo;t bootstrapped since the
-                        move), and runs
-                        <code>git pull --ff-only &amp;&amp; ./bootstrap.sh
-                        --&lt;dev|prod&gt; --yes</code> &mdash; the full
-                        bootstrap flow, not just <code>mise bootstrap</code>,
-                        so a host also picks up a relocated checkout or a
-                        newly-pinned <code>mise</code>. It is a
-                        <strong>prod-host</strong> tool &mdash; prod hosts
-                        never sudo, so the whole run is non-interactive and
-                        safe to fire at the fleet in parallel.
-                        <strong>Dev</strong> hosts are bootstrapped
-                        <em>interactively, by hand, one at a time</em> instead
-                        (their dnf package batch and <code>mise bootstrap
-                        plan</code>/<code>status</code> calls can hit a sudo
-                        password prompt, which a non-interactive SSH run can
-                        never satisfy):
-                        <code>ssh -t &lt;host&gt; 'cd ~/.config/mise
-                        2&gt;/dev/null || cd ~/.local/share/chezmoi; git pull
-                        --ff-only &amp;&amp; ./bootstrap.sh --dev'</code>.
-                        Replaces the pre-migration
-                        <code>ansible-playbook playbooks/linux.yml --limit
-                        ...</code>.
+                        There is no central host list and no fleet rollout
+                        &mdash; each host updates itself. SSH into it and run
+                        <code>wsu</code> there (<code>mise run update</code>:
+                        <code>git pull --ff-only</code>, then
+                        <code>mise install</code> + <code>mise
+                        bootstrap</code>). Use an interactive
+                        <code>ssh -t</code> session for a
+                        <span class="badge dev">dev</span> host: its dnf
+                        batch and <code>/etc</code> files can prompt for the
+                        sudo password.
                     </p>
-                    <div class="tabs">
-                        <input
-                            type="radio"
-                            id="ar-all"
-                            name="tabset-ar"
-                            checked
-                        />
-                        <input type="radio" id="ar-group" name="tabset-ar" />
-                        <input type="radio" id="ar-host" name="tabset-ar" />
-                        <input type="radio" id="ar-check" name="tabset-ar" />
-                        <div class="tab-labels">
-                            <label for="ar-all">All prod hosts</label>
-                            <label for="ar-group">By group</label>
-                            <label for="ar-host">Single host</label>
-                            <label for="ar-check">Dry run</label>
-                        </div>
-                        <div class="tab-panels">
-                            <div class="tab-panel ar-panel-all">
-                                <pre><code># Every PROD host in hosts.conf, parallel (default -P 4), no sudo.
-# Bootstrap dev hosts by hand instead — see the note above.
-./scripts/update-hosts.sh --group prod_machine</code></pre>
-                            </div>
-                            <div class="tab-panel ar-panel-group">
-                                <pre><code>./scripts/update-hosts.sh --group prod_machine
-# --group dev_machine works too, but can sudo-prompt non-interactively —
-# bootstrap dev hosts by hand instead (see the note above).</code></pre>
-                            </div>
-                            <div class="tab-panel ar-panel-host">
-                                <pre><code>./scripts/update-hosts.sh --name atc-cache-dev09</code></pre>
-                            </div>
-                            <div class="tab-panel ar-panel-check">
-                                <pre><code># Print planned actions for each host, don&rsquo;t ssh.
-./scripts/update-hosts.sh --check
-./scripts/update-hosts.sh --check --group prod_machine</code></pre>
-                            </div>
-                        </div>
-                    </div>
 
                     <h3>
                         Local re-provisioning (what bootstrap.sh runs)
@@ -4741,9 +4409,10 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                     <p>
                         Zellij is the persistence layer: it runs on the
                         <em>remote</em> host, so a dropped SSH tab never takes
-                        your work with it. Every generated Warp Tab Config and
-                        Windows Terminal profile lands you in
-                        <code>zellij attach --create main</code>.
+                        your work with it. Connect with
+                        <code>ssh -t &lt;user&gt;@&lt;host&gt; zellij attach
+                        --create main</code> to land in (or create) the
+                        host&rsquo;s <code>main</code> session.
                     </p>
                     <p>
                         A new session opens as a <strong>single full-width
@@ -5052,7 +4721,7 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                 </section>
 
                 <section id="adding">
-                    <h2>Adding tools &amp; hosts</h2>
+                    <h2>Adding tools &amp; dotfiles</h2>
 
                     <h3>Adding a new tool</h3>
                     <p>
@@ -5099,7 +4768,7 @@ direnv = "2.34.0"</code></pre>
                         </li>
                         <li>
                             Refresh both lockfiles for the platforms the
-                            fleet runs:
+                            workstation runs on:
                             <code>MISE_ENV=linux,dev,host,native mise lock
                             --global --platform linux-x64</code> and
                             <code>MISE_ENV=windows,dev mise lock --global
@@ -5283,7 +4952,7 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                     <pre><code># config.host.toml — [bootstrap.packages]
 "dnf:tig" = "latest"</code></pre>
                     <pre><code>dnf repoquery tig          # confirm the exact name resolves on EL9
-mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap plan</code></pre>
+mise bootstrap --only packages --yes   # or: MISE_ENV=&lt;your set&gt; mise bootstrap plan</code></pre>
                     <p class="note-row">
                         Names already dropped by the 2026-09-17 EL9 spike
                         (don&rsquo;t re-add them): <code>fswatch</code> and
@@ -5332,43 +5001,6 @@ on_change = "restart"</code></pre>
                         <code>firewall-cmd</code> way, inside a
                         <code>post-packages</code> hook task instead.
                     </p>
-
-                    <h3>Adding a new host</h3>
-                    <div class="flow">
-                        <div class="step">
-                            <span class="num">1</span
-                            ><span class="lbl"
-                                >On new host:
-                                <code>bootstrap.sh --prod</code> or
-                                <code>--dev</code></span
-                            >
-                        </div>
-                        <div class="arrow">&rarr;</div>
-                        <div class="step">
-                            <span class="num">2</span
-                            ><span class="lbl"
-                                >Elsewhere: <code>git pull</code> +
-                                <code>--sync</code> / <code>-Sync</code></span
-                            >
-                        </div>
-                        <div class="arrow">&rarr;</div>
-                        <div class="step">
-                            <span class="num">3</span
-                            ><span class="lbl"
-                                >Commit + push the host-list files</span
-                            >
-                        </div>
-                    </div>
-                    <p class="note-row">
-                        Self-registration appends the host to
-                        <code>hosts.conf</code>; both terminals&rsquo; launchers
-                        pick it up on the next <code>bootstrap.ps1</code> run on
-                        Windows &mdash; the Warp Tab Configs and the Windows
-                        Terminal SSH profiles. Restart the terminal afterwards
-                        (Windows Terminal reads fragments at launch; Warp reads
-                        Tab Configs at launch too, though it hot-reloads
-                        <code>settings.toml</code>).
-                    </p>
                 </section>
 
                 <section id="troubleshooting">
@@ -5400,51 +5032,18 @@ on_change = "restart"</code></pre>
                             <p>
                                 <strong>RHEL/Fedora:</strong>
                                 <code
-                                    >sudo dnf install curl git tar
-                                    iproute</code
+                                    >sudo dnf install curl git tar</code
                                 >
                             </p>
                             <p>
                                 <strong>Debian/Ubuntu:</strong>
                                 <code
-                                    >sudo apt install curl git tar
-                                    iproute2</code
+                                    >sudo apt install curl git tar</code
                                 >
                             </p>
                             <p>
                                 Bootstrap deliberately collects every gap up
                                 front so you only have to install once.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            Bootstrap finishes with
-                            <em
-                                >&ldquo;Push failed (auth, conflict, or no
-                                upstream)&rdquo;</em
-                            >
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Provisioning succeeded &mdash; only the
-                                host-list push didn&rsquo;t.
-                            </p>
-                            <p>
-                                Recover with
-                                <code
-                                    >cd ~/.config/mise &amp;&amp; git
-                                    push</code
-                                >.
-                            </p>
-                            <p>
-                                Common causes: no SSH key for the git remote, a
-                                divergent upstream (<code
-                                    >git pull --rebase</code
-                                >
-                                first), or you&rsquo;ve forked and never set the
-                                remote.
                             </p>
                         </div>
                     </details>
@@ -5482,9 +5081,6 @@ on_change = "restart"</code></pre>
                                 <code>bootstrap.ps1</code>&rsquo;s own
                                 one-time sweep &mdash; nothing reads or writes
                                 it any more, since chezmoi itself is gone.
-                                <code>scripts/update-hosts.sh</code>
-                                detects either path on a host that
-                                hasn&rsquo;t re-bootstrapped since the move.
                             </p>
                         </div>
                     </details>
@@ -5540,9 +5136,8 @@ on_change = "restart"</code></pre>
                                 <code
                                     >http.https://github.com/.extraheader</code
                                 >
-                                so subsequent ops (push,
-                                <code>scripts/update-hosts.sh</code>, manual
-                                <code>git pull</code>) all work &mdash;
+                                so subsequent ops (push, <code>wsu</code>,
+                                manual <code>git pull</code>) all work &mdash;
                                 re-passing the env var on later runs just
                                 refreshes the stored value.
                             </p>
@@ -5559,8 +5154,8 @@ on_change = "restart"</code></pre>
 
                     <details data-ts>
                         <summary>
-                            <code>manage-hosts.sh --copy-id</code> keeps
-                            prompting for a password every connection
+                            SSH keeps prompting for a password after
+                            <code>ssh-copy-id</code>
                         </summary>
                         <div class="ts-body">
                             <p>
@@ -5757,10 +5352,9 @@ on_change = "restart"</code></pre>
                             </p>
                             <p>
                                 <strong>Recovery.</strong> When a pipe does
-                                break, open the host&rsquo;s
-                                <em>SSH: &lt;host&gt;</em> profile again from
-                                the <strong>SSH hosts</strong> folder in
-                                Windows Terminal&rsquo;s new-tab dropdown.
+                                break, reconnect from a new tab with
+                                <code>ssh -t &lt;user&gt;@&lt;host&gt; zellij
+                                attach --create main</code>.
                                 Zellij&rsquo;s
                                 <code>attach --create main</code> reattaches
                                 the existing remote session, so you land back
@@ -5796,18 +5390,17 @@ on_change = "restart"</code></pre>
                                 &mdash; Warp reads
                                 <code>%APPDATA%\warp\Warp\data\tab_configs\</code>
                                 at launch, so a regenerated set needs a full
-                                Warp restart before new
-                                <em>SSH: &lt;host&gt;</em> entries appear in the
+                                Warp restart before it shows up in the
                                 &ldquo;+&rdquo; menu.
                             </p>
                             <p>If something is still wrong:</p>
                             <ul>
                                 <li>
-                                    <strong>No <em>SSH: &lt;host&gt;</em>
-                                    entries</strong> &mdash; re-run
+                                    <strong>Missing Tab Configs</strong>
+                                    &mdash; re-run
                                     <code>.\bootstrap.ps1</code>;
                                     <code>Invoke-WarpTabConfigs</code> rebuilds
-                                    them from <code>hosts.conf</code> every run.
+                                    the local-shell entries every run.
                                     <code>.\bootstrap.ps1 -Doctor</code> counts
                                     them. If it says <em>Warp is not
                                     installed</em> while Warp clearly is, the
@@ -5850,10 +5443,10 @@ on_change = "restart"</code></pre>
                                     file.
                                 </li>
                                 <li>
-                                    <strong>The same host opened in both
-                                    terminals mirrors itself</strong> &mdash;
-                                    expected. Both launchers run
-                                    <code>zellij attach --create main</code>, so
+                                    <strong>The same host opened in two tabs
+                                    mirrors itself</strong> &mdash; expected
+                                    when both run
+                                    <code>zellij attach --create main</code>:
                                     they attach the <em>same</em> remote
                                     session and zellij sizes it to the smallest
                                     client. Detach one, or start a
@@ -5872,8 +5465,8 @@ on_change = "restart"</code></pre>
 
                     <details data-ts>
                         <summary>
-                            Windows Terminal shows old settings / missing
-                            SSH hosts
+                            Windows Terminal shows old settings / leftover
+                            SSH host profiles
                         </summary>
                         <div class="ts-body">
                             <p>
@@ -5890,37 +5483,17 @@ on_change = "restart"</code></pre>
                                 in open windows within a second of the apply.
                             </p>
                             <p>
-                                <strong>Fragments are the exception</strong>
-                                &mdash; Windows Terminal reads
-                                <code>Fragments\</code> only at launch, so a
-                                regenerated
-                                <code>Fragments\workstation\hosts.json</code>
-                                needs a <strong>full restart</strong> (close
-                                every window) before new
-                                <em>SSH: &lt;host&gt;</em> profiles appear.
+                                <strong>Leftover per-host SSH
+                                profiles</strong> &mdash; earlier versions
+                                generated them as a profile fragment under
+                                <code>Fragments\workstation\</code>. Re-run
+                                <code>.\bootstrap.ps1</code> (it deletes that
+                                dir), then <strong>fully restart</strong>
+                                Windows Terminal (close every window): it
+                                reads <code>Fragments\</code> only at launch.
                             </p>
-                            <p>
-                                If a host is still missing after the restart:
-                            </p>
+                            <p>If something is still wrong:</p>
                             <ul>
-                                <li>
-                                    Stale or absent fragment &mdash; re-run
-                                    <code>.\bootstrap.ps1</code>;
-                                    <code>Invoke-WindowsTerminalFragments</code>
-                                    rebuilds it from <code>hosts.conf</code>
-                                    on every run (verify with
-                                    <code>.\bootstrap.ps1 -Doctor</code>,
-                                    which counts the profiles in it).
-                                </li>
-                                <li>
-                                    Brand-new fragment source &mdash; recent
-                                    Windows Terminal builds list fragment
-                                    providers on
-                                    <em>Settings &rarr; Extensions</em> and
-                                    can require a one-time enable of the
-                                    <em>workstation</em> entry before its
-                                    profiles show up.
-                                </li>
                                 <li>
                                     <strong>Your edits keep coming back</strong>
                                     &mdash; the Settings UI re-serializes
@@ -6042,21 +5615,6 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
                     <details data-ts>
                         <summary>
-                            <code>hosts.ini</code> is out of sync with
-                            <code>hosts.conf</code>
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                Run
-                                <code>./scripts/manage-hosts.sh --sync</code>.
-                                Never edit <code>hosts.ini</code> directly
-                                &mdash; it&rsquo;s auto-generated.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
                             Bootstrap errored with
                             <em
                                 >&ldquo;Missing required flag: --dev or
@@ -6074,26 +5632,6 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                                 The old <code>--full</code> flag was removed; if
                                 you still have it in a script or paste buffer,
                                 replace it with <code>--dev</code>.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            <code>manage-hosts.{sh,ps1} --add</code> errored
-                            with <em>&ldquo;Invalid group&rdquo;</em>
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                The only valid groups are
-                                <code>dev_machine</code> and
-                                <code>prod_machine</code> &mdash; anything else
-                                means <code>update-hosts.sh</code> can't
-                                derive a <code>MODE</code> from it.
-                            </p>
-                            <p>
-                                Re-run with one of those two values (default is
-                                <code>prod_machine</code>).
                             </p>
                         </div>
                     </details>
@@ -6276,7 +5814,7 @@ bash scripts/check-templates.sh                    # does exactly this for every
 
                     <details data-ts>
                         <summary>
-                            <code>scripts/update-hosts.sh</code> fails on a
+                            <code>wsu</code> fails on a
                             host with
                             <em>&ldquo;fatal: Not possible to fast-forward,
                             aborting&rdquo;</em> (or the pull just silently
@@ -6302,9 +5840,10 @@ bash scripts/check-templates.sh                    # does exactly this for every
                                 <code>wsr</code>/<code>mise dot add</code>
                                 write recording a live edit back, or mise
                                 itself rewriting a lock file.
-                                <code>scripts/update-hosts.sh</code> runs
-                                <code>git pull --ff-only</code> on every
-                                host, which refuses to run &mdash; and,
+                                <code>wsu</code> (<code>mise run
+                                update</code>) starts with
+                                <code>git pull --ff-only</code>, which
+                                refuses to run &mdash; and,
                                 depending on the git version, can fail
                                 outright rather than no-op &mdash; against
                                 local changes.
@@ -6323,7 +5862,7 @@ git add -A && git commit -m '...' && git push   # keep the edit
 # or:
 git stash                       # discard it from the working tree for now</code></pre>
                             <p>
-                                then re-run <code>update-hosts.sh</code> (or
+                                then re-run <code>wsu</code> (or
                                 just <code>git pull --ff-only</code>
                                 directly) on that host.
                             </p>

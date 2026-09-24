@@ -238,8 +238,7 @@
 
     // Preserve native radio behavior while allowing navigation into inactive panels.
     const tabInputs = new Map([
-        ["panel-prod", "pprod"], ["panel-dev", "pdev"], ["ar-panel-all", "ar-all"],
-        ["ar-panel-group", "ar-group"], ["ar-panel-host", "ar-host"], ["ar-panel-check", "ar-check"],
+        ["panel-prod", "pprod"], ["panel-dev", "pdev"],
     ]);
     function reveal(target) {
         // Only a filter that is hiding the target gets reset; every other in-page

@@ -1366,7 +1366,7 @@ main>section>h2::before {
     content: "GETTING STARTED";
 }
 
-:is(#hosts, #daily, #adding, #troubleshooting)>h2::before {
+:is(#daily, #adding, #troubleshooting)>h2::before {
     content: "OPERATIONS";
 }
 
@@ -1815,31 +1815,19 @@ details[open]>summary {
 }
 
 #pprod:checked~.tab-labels label[for="pprod"],
-#pdev:checked~.tab-labels label[for="pdev"],
-#ar-all:checked~.tab-labels label[for="ar-all"],
-#ar-group:checked~.tab-labels label[for="ar-group"],
-#ar-host:checked~.tab-labels label[for="ar-host"],
-#ar-check:checked~.tab-labels label[for="ar-check"] {
+#pdev:checked~.tab-labels label[for="pdev"] {
     background: var(--surface);
     color: var(--accent);
     box-shadow: 0 1px 3px #00000010;
 }
 
 #pprod:checked~.tab-panels .panel-prod,
-#pdev:checked~.tab-panels .panel-dev,
-#ar-all:checked~.tab-panels .ar-panel-all,
-#ar-group:checked~.tab-panels .ar-panel-group,
-#ar-host:checked~.tab-panels .ar-panel-host,
-#ar-check:checked~.tab-panels .ar-panel-check {
+#pdev:checked~.tab-panels .panel-dev {
     display: block;
 }
 
 #pprod:focus-visible~.tab-labels label[for="pprod"],
-#pdev:focus-visible~.tab-labels label[for="pdev"],
-#ar-all:focus-visible~.tab-labels label[for="ar-all"],
-#ar-group:focus-visible~.tab-labels label[for="ar-group"],
-#ar-host:focus-visible~.tab-labels label[for="ar-host"],
-#ar-check:focus-visible~.tab-labels label[for="ar-check"] {
+#pdev:focus-visible~.tab-labels label[for="pdev"] {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
 }

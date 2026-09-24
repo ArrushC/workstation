@@ -65,12 +65,12 @@
 #   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
 #                     tools (dnGrep/LogExpert — their .zips ship none);
 #                     idempotent + duplicate-proof.
-#   5c. windows terminal fragments — regenerate hosts.conf-driven SSH launch
-#                     profiles for Windows Terminal (managed workstation
-#                     fragment dir only; self-heals every run).
-#   5d. warp tab configs — regenerate the Warp launch entries (local shells +
-#                     one SSH/Zellij entry per hosts.conf row); only
-#                     workstation-*.toml is owned, self-heals every run.
+#   5c. retired wt profiles — delete the Windows Terminal SSH-profile fragment
+#                     earlier versions generated from the (now removed) hosts
+#                     list; the managed workstation fragment dir only.
+#   5d. warp tab configs — regenerate the Warp launch entries for the local
+#                     shells; only workstation-*.toml is owned, self-heals
+#                     every run (and so clears the old per-host SSH tabs).
 #   5e. nushell prompt — generate the starship prompt into nushell's
 #                     vendor/autoload dir (self-heals every run).
 #   5f. dngrep cfg  — seed dnGrep.config.xml (if absent) so dnGrep keeps its
@@ -87,17 +87,14 @@
 # prompt (or -SkipElevated, or no winget + no network) soft-fails that step
 # only; everything else still completes with zero elevation.
 #
-# PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME,
-# GIT_USER_EMAIL before running. The token authenticates the bootstrap.ps1 fetch
+# PRIVATE REPO — set GITHUB_TOKEN before running. It authenticates the bootstrap.ps1 fetch
 # AND the internal git clone/pull, then is persisted into the cloned repo's
 # .git/config (http.https://github.com/.extraheader, scoped to github.com) so
-# subsequent push/pull and manage-hosts.ps1 ops work without re-passing it.
+# subsequent push/pull work without re-passing it.
 #
 # Bootstrap from a fresh Windows machine (NO elevation needed):
 #
 #   $env:GITHUB_TOKEN   = '<your-PAT>'
-#   $env:GIT_USER_NAME  = 'Arrush Chaturvedi'
-#   $env:GIT_USER_EMAIL = 'contact@arrushc.com'
 #   $bootstrapFile = [System.IO.Path]::GetTempFileName()
 #   try {
 #       $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -175,7 +172,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# --- ANSI escape codes (matches manage-hosts.{ps1,sh}) ----------------------
+# --- ANSI escape codes -------------------------------------------------------
 $Esc    = [char]27
 $Bold   = "$Esc" + "[1m"
 $Reset  = "$Esc" + "[0m"
@@ -848,22 +845,6 @@ function Remove-FromUserPath {
     }
     $env:PATH = (@(($env:PATH).Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
         Where-Object { $_.TrimEnd('\') -ine $Dir.TrimEnd('\') }) -join ';')
-}
-
-function New-Uuid5 {
-    # RFC 4122 v5 GUID. Windows Terminal's fragment convention: name bytes are UTF-16LE
-    # (namespace {f65ddb7e-706b-4499-8a50-40313caf510a} -> app -> profile name).
-    param([Parameter(Mandatory)][Guid]$Namespace, [Parameter(Mandatory)][string]$Name)
-    $ns = $Namespace.ToByteArray()
-    [Array]::Reverse($ns, 0, 4); [Array]::Reverse($ns, 4, 2); [Array]::Reverse($ns, 6, 2)  # to big-endian
-    $nameBytes = [System.Text.Encoding]::Unicode.GetBytes($Name)
-    $sha1 = [System.Security.Cryptography.SHA1]::Create()
-    try { $hash = $sha1.ComputeHash($ns + $nameBytes) } finally { $sha1.Dispose() }
-    $b = $hash[0..15]
-    $b[6] = [byte](($b[6] -band 0x0F) -bor 0x50)   # version 5
-    $b[8] = [byte](($b[8] -band 0x3F) -bor 0x80)   # RFC 4122 variant
-    [Array]::Reverse($b, 0, 4); [Array]::Reverse($b, 4, 2); [Array]::Reverse($b, 6, 2)     # back to GUID layout
-    return [Guid]::new([byte[]]$b)
 }
 
 function Install-PortableTool {
@@ -2135,75 +2116,33 @@ function Invoke-StartMenuShortcuts {
 }
 
 # =============================================================================
-# 5c. WINDOWS TERMINAL FRAGMENTS — deterministic SSH launch profiles for
-#      Windows Terminal, generated from hosts.conf via WT's dynamic profile
-#      fragment extension point (Fragments\<app>\*.json under
-#      %LOCALAPPDATA%\Microsoft\Windows Terminal). GUIDs are stable RFC 4122
-#      v5 (New-Uuid5, chained namespace -> "workstation" app -> profile name)
-#      so profile identity survives regeneration. The workstation app dir is
-#      wholly owned by this function: only *.json files inside it are wiped,
-#      never the dir itself or any other app's fragment dir. Runs every
-#      bootstrap so host removals/edits self-heal.
+# 5c. RETIRED WINDOWS TERMINAL HOST PROFILES — earlier versions generated one
+#      SSH launch profile per hosts.conf row into Windows Terminal's dynamic
+#      fragment dir (Fragments\workstation under %LOCALAPPDATA%\Microsoft\
+#      Windows Terminal). The hosts list is gone (2026-09-24), so delete that
+#      fragment instead of leaving stale host profiles in the new-tab menu.
+#      The workstation app dir was wholly owned by the old generator; nothing
+#      else writes there. Idempotent: a no-op once the dir is gone.
 # =============================================================================
-function Invoke-WindowsTerminalFragments {
+function Remove-RetiredTerminalHostProfiles {
+    $fragDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation"
+    if (-not (Test-Path $fragDir)) { return }
     try {
-        $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
-                   (Get-Command wt.exe -ErrorAction SilentlyContinue)
-        if (-not $present) {
-            Write-Warn "Windows Terminal not detected — skipping SSH profile fragment generation."
-            return
-        }
-        $fragDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation"
-        if (-not (Test-Path $fragDir)) { New-Item -ItemType Directory -Path $fragDir -Force | Out-Null }
-        # The 'workstation' app dir IS the managed namespace: wipe only *.json inside it.
-        Get-ChildItem -Path $fragDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force
-
-        $hostsFile = Join-Path $RepoPath "hosts.conf"
-        if (-not (Test-Path $hostsFile)) {
-            Write-Warn "hosts.conf not found at $hostsFile — no Windows Terminal SSH profiles generated."
-            return
-        }
-        $appNs = New-Uuid5 -Namespace ([Guid]"f65ddb7e-706b-4499-8a50-40313caf510a") -Name "workstation"
-        $sshIcon = [string][char]0xE839
-        $profiles = @()
-        foreach ($line in Get-Content $hostsFile) {
-            $trimmed = $line.Trim()
-            if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
-            $parts = $trimmed -split '\s+'
-            if ($parts.Count -lt 4) { Write-Warn "Skipping malformed hosts.conf row: $line"; continue }
-            $hostName = $parts[0]; $ip = $parts[1]; $sshUser = $parts[2]; $group = $parts[3]
-            $tabColor = if ($group -eq "dev_machine") { "#a6e3a1" } else { "#94e2d5" }  # Mocha green / teal
-            $profileName = "SSH: $hostName"
-            $profiles += [ordered]@{
-                guid        = (New-Uuid5 -Namespace $appNs -Name $profileName).ToString("B")
-                name        = $profileName
-                commandline = "ssh -t $sshUser@$ip zellij attach --create main"
-                tabTitle    = $hostName
-                tabColor    = $tabColor
-                icon        = $sshIcon
-            }
-        }
-        $json = ConvertTo-Json -InputObject ([ordered]@{ profiles = $profiles }) -Depth 5
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
-        # PS 5.1's ConvertTo-Json joins lines with CRLF; normalize to pure LF
-        # (with one trailing newline) so the fragment matches the repo's
-        # LF-terminated convention for generated JSON.
-        [System.IO.File]::WriteAllText((Join-Path $fragDir "hosts.json"), (($json -replace "`r`n", "`n") + "`n"), $utf8)
-        Write-Ok "Windows Terminal SSH profiles regenerated from hosts.conf ($($profiles.Count) host(s), $fragDir) — restart Windows Terminal to pick them up"
+        Remove-Item -LiteralPath $fragDir -Recurse -Force
+        Write-Ok "Removed the retired Windows Terminal SSH host profiles ($fragDir) — restart Windows Terminal to drop them from the menu"
     } catch {
-        Write-Warn "Could not generate Windows Terminal SSH profile fragment: $($_.Exception.Message)"
+        Write-Warn "Could not remove the retired Windows Terminal host-profile fragment ${fragDir}: $($_.Exception.Message)"
     }
 }
 
 # =============================================================================
 # 5d. WARP TAB CONFIGS — deterministic launch entries for the shells Warp
-#      supports, plus one SSH+Zellij entry per hosts.conf row. Warp's + menu is
-#      its launch surface (it has no profile list), so unlike Windows Terminal
-#      the local shells need generated entries too. Files beginning with
-#      workstation- are owned by this function; user-created Tab Configs are
-#      never touched. Runs every bootstrap so host removals and edits self-heal.
-#      Sibling of Invoke-WindowsTerminalFragments: same input (hosts.conf),
-#      disjoint output paths, so the two generators never contend.
+#      supports. Warp's + menu is its launch surface (it has no profile list),
+#      so unlike Windows Terminal the local shells need generated entries.
+#      Files beginning with workstation- are owned by this function;
+#      user-created Tab Configs are never touched. Every run wipes and
+#      rewrites them, which also cleared the per-host SSH tabs earlier
+#      versions generated from the (now removed) hosts list.
 #      NOTE: Warp supports pwsh/PowerShell 5/WSL2/Git Bash only — NOT Nushell
 #      (it shows an unsupported-shell banner and falls back). The Nushell entry
 #      is therefore a deliberate compatibility shim: pwsh launches the portable
@@ -2265,46 +2204,7 @@ is_focused = true
         foreach ($entry in $configs.GetEnumerator()) {
             [System.IO.File]::WriteAllText((Join-Path $dir $entry.Key), $entry.Value.Trim() + "`n", $utf8)
         }
-
-        $hostsFile = Join-Path $RepoPath "hosts.conf"
-        $hostCount = 0
-        if (Test-Path $hostsFile) {
-            foreach ($line in Get-Content $hostsFile) {
-                $trimmed = $line.Trim()
-                if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
-                $parts = $trimmed -split '\s+'
-                if ($parts.Count -lt 4) {
-                    Write-Warn "Skipping malformed hosts.conf row: $line"
-                    continue
-                }
-                $hostName = $parts[0]
-                $ip       = $parts[1]
-                $sshUser  = $parts[2]
-                $group    = $parts[3]
-                $slug     = ($hostName.ToLower() -replace '[^a-z0-9-]', '-')
-                $color    = if ($group -eq 'dev_machine') { 'green' } else { 'cyan' }
-                $body = @"
-name = "SSH: $hostName"
-title = "$hostName"
-color = "$color"
-
-[[panes]]
-id = "main"
-type = "terminal"
-shell = "pwsh"
-commands = ['ssh -t $sshUser@$ip zellij attach --create main']
-is_focused = true
-"@
-                [System.IO.File]::WriteAllText(
-                    (Join-Path $dir "workstation-ssh-$slug.toml"),
-                    $body.Trim() + "`n",
-                    $utf8)
-                $hostCount++
-            }
-        } else {
-            Write-Warn "hosts.conf not found at $hostsFile — generated only the local Warp Tab Configs."
-        }
-        Write-Ok "Warp Tab Configs regenerated from hosts.conf ($hostCount host(s) + 3 local, $dir)"
+        Write-Ok "Warp Tab Configs regenerated ($($configs.Count) local shells, $dir)"
     } catch {
         Write-Warn "Could not generate Warp Tab Configs: $($_.Exception.Message)"
     }
@@ -3131,19 +3031,10 @@ function Invoke-Doctor {
     if (Test-Path $dnGrepCfg) { Write-Ok "dnGrep config seeded ($dnGrepCfg)" }
     else { Write-Warn "dnGrep config not seeded — settings would die with a pin bump; re-run .\bootstrap.ps1 (re-seeds it)" }
 
-    $fragFile = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation\hosts.json"
-    if (Test-Path $fragFile) {
-        try {
-            $fragCount = ((Get-Content $fragFile -Raw | ConvertFrom-Json).profiles | Measure-Object).Count
-            Write-Ok "$fragCount Windows Terminal SSH profile(s) in the workstation fragment"
-        } catch { Write-Warn "Windows Terminal fragment unreadable — re-run .\bootstrap.ps1" }
-    } else { Write-Warn "Windows Terminal SSH fragment missing — re-run .\bootstrap.ps1" }
-
     $warpTabDir  = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
     $warpTabs    = @(Get-ChildItem -Path $warpTabDir -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue)
-    $warpSshTabs = @($warpTabs | Where-Object { $_.Name -like "workstation-ssh-*" })
     if ($warpTabs.Count -gt 0) {
-        Write-Ok "$($warpTabs.Count) managed Warp Tab Config(s) present ($($warpSshTabs.Count) SSH host(s))"
+        Write-Ok "$($warpTabs.Count) managed Warp Tab Config(s) present"
     } else {
         Write-Warn "managed Warp Tab Configs missing — re-run .\bootstrap.ps1 (regenerates them)"
     }
@@ -3303,8 +3194,8 @@ Invoke-CloneRepo
 Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles apply + a tools pass, then the .wslconfig restart reminder
 Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers/ccstatusline from config*.toml at the repo root (self-heals the shims PATH)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
-Invoke-WindowsTerminalFragments # regenerate Windows Terminal SSH profiles from hosts.conf (self-heals)
-Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + hosts.conf SSH/Zellij) — self-heals
+Remove-RetiredTerminalHostProfiles # delete the old hosts-list SSH profiles from Windows Terminal (no-op once gone)
+Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells) — self-heals
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
 Invoke-NushellMise        # generate the Nushell mise activation (vendor/autoload — self-heals)
@@ -3325,13 +3216,11 @@ Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset} — mise-insta
 Write-Host "git aliases, etc."
 Write-Host ""
 Write-Host "${Bold}Two terminals are managed.${Reset} Warp is the day-to-day one: it opens into"
-Write-Host "AlmaLinux-9 (WSL zsh), and its + menu carries the generated Tab Configs — one"
-Write-Host "per hosts.conf host (SSH + zellij), plus WSL/PowerShell/Nushell-compat."
-Write-Host "Windows Terminal stays fully configured as the compatibility path: Nushell is"
-Write-Host "its default profile, hosts live in the SSH hosts folder of the new-tab dropdown,"
-Write-Host "and it keeps the Windows default-terminal-application role (Warp cannot take it)."
-Write-Host "Restart Windows Terminal if it was running (fragments are read at launch);"
-Write-Host "Warp hot-reloads its settings but needs a restart to notice new Tab Configs."
+Write-Host "AlmaLinux-9 (WSL zsh), and its + menu carries the generated Tab Configs for"
+Write-Host "WSL, PowerShell and Nushell-compat. Windows Terminal stays fully configured as"
+Write-Host "the compatibility path: Nushell is its default profile, and it keeps the"
+Write-Host "Windows default-terminal-application role (Warp cannot take it). Warp"
+Write-Host "hot-reloads its settings but needs a restart to notice new Tab Configs."
 Write-Host ""
 Write-Host "Not installed by this script (install yourself if you want it):"
 Write-Host "  VSCode  — its dotfiles are already deployed."
@@ -3349,16 +3238,6 @@ if (Test-Path $appList) {
     Write-Host ""
 }
 
-Write-Host "Next steps:"
-Write-Host "  1. Add a host to hosts.conf:"
-Write-Host "       cd $RepoPath"
-Write-Host "       .\scripts\manage-hosts.ps1     # interactive menu"
-Write-Host "  2. Copy your SSH key to a registered host:"
-Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -Name <host-name>"
-Write-Host "       .\scripts\manage-hosts.ps1 -CopyId -All     # or, bulk to every host"
-Write-Host "  3. Launch Warp — pick a generated SSH host from the + menu (or Windows"
-Write-Host "     Terminal — same hosts, under the SSH hosts folder in the new-tab dropdown)."
-Write-Host ""
 Write-Host "Editing dotfiles (new Nushell/PowerShell shell):"
 Write-Host "  wse <path>   # edit a tracked file in the repo source"
 Write-Host "  wsd          # see what would change"

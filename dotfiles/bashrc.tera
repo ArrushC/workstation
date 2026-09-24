@@ -122,8 +122,8 @@ fi
 # login-only loader.
 [[ -f /etc/bash_completion ]] && source /etc/bash_completion
 
-# First-party completions for the repo's own scripts (bootstrap.sh,
-# manage-hosts.sh, update-hosts.sh — flag words + --group values), deployed
+# First-party completions for the repo's own script (bootstrap.sh — its
+# flag words), deployed
 # by mise dotfiles to ~/.config/bash/completions.bash. PARITY NOTE: zsh gets
 # richer versions (descriptions + exclusions) via
 # ~/.config/zsh/completions/_* (see dot_zshrc.tmpl); all surfaces are kept

@@ -13,8 +13,8 @@ Host *
     # Connection multiplexing — keep a TCP socket open for 60s after the
     # first ssh exits, so subsequent ssh/scp/rsync invocations to the
     # same host reuse it (no re-handshake, no re-auth). Equivalent to
-    # what the old ansible.cfg set; now applies to scripts/update-hosts.sh
-    # bulk updates AND interactive ssh.
+    # what the old ansible.cfg set; applies to interactive ssh and to
+    # scripted ssh/scp/rsync alike.
     #
     # Linux/macOS only. Windows OpenSSH multiplexes over a handle that is
     # not a Winsock socket, so getsockname() returns WSAENOTSOCK

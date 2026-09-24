@@ -278,13 +278,13 @@ if mise dot status --missing >/dev/null 2>&1; then
 else
   row_warn "dotfiles" "drift — inspect: mise dot status · apply: mise dot apply"
 fi
-# ruling 8: symlinked dotfiles live inside the git checkout, so editing one
-# dirties the repo — and update-hosts.sh's `git pull --ff-only` then fails.
+# A dirty checkout (a hand-edited pin, a wse/wsr/`mise dot add` write to a
+# source under dotfiles/) makes the next wsu's `git pull --ff-only` fail.
 repo_dirty=$(git -C "$root" status --porcelain 2>/dev/null | wc -l)
 if [ "$repo_dirty" -eq 0 ]; then
   row_ok "repo checkout" "clean ($root)"
 else
-  row_warn "repo checkout" "$repo_dirty uncommitted change(s) in $root — commit or stash before update-hosts.sh runs (its git pull --ff-only fails on local changes)"
+  row_warn "repo checkout" "$repo_dirty uncommitted change(s) in $root — commit or stash before the next wsu (its git pull --ff-only fails on local changes)"
 fi
 if [ -f "$state/legacy-tools-swept" ] && [ -f "$state/legacy-host-swept" ] && [ -f "$state/legacy-chezmoi-swept" ]; then
   row_ok "legacy sweep" "all three markers present"

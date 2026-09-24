@@ -480,7 +480,7 @@ check_dotfiles_mode() {
 check_bom() {
   hdr "UTF-8 BOM on PowerShell files"
   local f b allgood=1
-  local -a files=(scripts/manage-hosts.ps1 bootstrap.ps1 scripts/install-nerd-fonts.ps1)
+  local -a files=(bootstrap.ps1 scripts/install-nerd-fonts.ps1)
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then
       bad "missing: $f"
@@ -1190,25 +1190,9 @@ check_completion_parity() {
   _flags_eq "bootstrap.sh == completions.bash" "$want" \
     "$(_bash_completion_flags _workstation_complete_bootstrap)"
 
-  want=$(_sh_script_flags scripts/manage-hosts.sh)
-  _flags_eq "manage-hosts.sh == _manage-hosts.sh (zsh)" "$want" \
-    "$(_zsh_completion_flags dotfiles/config/zsh/completions/_manage-hosts.sh)"
-  _flags_eq "manage-hosts.sh == completions.bash" "$want" \
-    "$(_bash_completion_flags _workstation_complete_manage_hosts)"
-
-  want=$(_sh_script_flags scripts/update-hosts.sh)
-  _flags_eq "update-hosts.sh == _update-hosts.sh (zsh)" "$want" \
-    "$(_zsh_completion_flags dotfiles/config/zsh/completions/_update-hosts.sh)"
-  _flags_eq "update-hosts.sh == completions.bash" "$want" \
-    "$(_bash_completion_flags _workstation_complete_update_hosts)"
-
   want=$(_ps_script_flags bootstrap.ps1)
   _flags_eq "bootstrap.ps1 == config.nu (nushell)" "$want" \
     "$(_nu_completion_flags workstation_bootstrap_flags)"
-
-  want=$(_ps_script_flags scripts/manage-hosts.ps1)
-  _flags_eq "manage-hosts.ps1 == config.nu (nushell)" "$want" \
-    "$(_nu_completion_flags workstation_manage_hosts_flags)"
 }
 
 # --- python-env lib-list parity ----------------------------------------------

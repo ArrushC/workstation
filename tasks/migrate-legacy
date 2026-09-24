@@ -18,7 +18,7 @@
 # any root-owned files it happens to find are not ours to remove — walking
 # them would only ever report a permanent, unfixable failure and keep the
 # marker withheld forever.
-# Fleet runs (update-hosts.sh) are non-interactive, so a dev host whose sudo
+# Unattended runs (wsu over a non-interactive ssh) have no TTY, so a dev host whose sudo
 # needs a password must never block on a prompt: a one-shot `sudo -n true`
 # probe decides up front (once, shared by both sweeps below), and rm_p uses
 # `sudo -n` too so a later, unrelated sudo timeout can't reintroduce a hang.

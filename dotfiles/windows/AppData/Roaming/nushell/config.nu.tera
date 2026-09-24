@@ -201,11 +201,6 @@ alias hide = clear --keep-scrollback
 # override in a vendor/autoload/*.nu file if you cloned elsewhere.
 $env.WORKSTATION_REPO = ($env.USERPROFILE | path join ".config" "mise")
 
-# Open the interactive host manager (PowerShell script — Windows-side tooling).
-def hosts [] {
-    powershell -NoProfile -File ($env.WORKSTATION_REPO | path join "scripts" "manage-hosts.ps1")
-}
-
 # ssh-copy-id — Windows OpenSSH has none; port of the PowerShell profile helper.
 # Picks a ~/.ssh/*.pub (prompts if several), confirms, then appends it to the
 # target's authorized_keys over ssh.
@@ -251,14 +246,14 @@ def adminpw [] {
 # --- Repo-script flag completion (external completer) ------------------------
 # Nushell only completes flags for commands with declared signatures; external
 # commands (the repo's .ps1 scripts) otherwise fall back to file completion —
-# the "NO RECORDS FOUND" menu. This external completer recognises the two
-# flag-bearing repo scripts BY BASENAME — `.\bootstrap.ps1`, a full path, and
-# `scripts\manage-hosts.ps1` all match — and returns their flags with
-# descriptions; anything else returns null -> Nushell's default file
-# completion (behavior everywhere else is unchanged). Flag lists mirror each
-# script's param() block and are kept in lockstep by check-invariants.sh's
-# flag-parity check (which parses the two `let workstation_*_flags` lists —
-# keep their `let`/closing-bracket lines at column 0). Classic PowerShell
+# the "NO RECORDS FOUND" menu. This external completer recognises the
+# flag-bearing repo script BY BASENAME — `.\bootstrap.ps1` and a full path
+# both match — and returns its flags with descriptions; anything else
+# returns null -> Nushell's default file completion (behavior everywhere
+# else is unchanged). The flag list mirrors the script's param() block and
+# is kept in lockstep by check-invariants.sh's flag-parity check (which
+# parses `let workstation_bootstrap_flags` — keep its `let`/closing-bracket
+# lines at column 0). Classic PowerShell
 # needs none of this: it tab-completes param() flags natively.
 # PRE-1.0 CHURN: the external-completer API is a known churn surface —
 # re-check this block on every Nushell pin bump (see CLAUDE.md).
@@ -278,20 +273,6 @@ let workstation_bootstrap_flags = [
     { value: "-CheckForUpdates", description: "read-only update scan, then exit" }
 ]
 
-let workstation_manage_hosts_flags = [
-    { value: "-List", description: "list hosts from hosts.conf" }
-    { value: "-Format", description: "re-pad hosts.conf columns" }
-    { value: "-Add", description: "add a host to hosts.conf" }
-    { value: "-Remove", description: "remove a host from hosts.conf" }
-    { value: "-CopyId", description: "push your SSH public key to a host" }
-    { value: "-All", description: "apply the key-copy to every host" }
-    { value: "-Name", description: "host name" }
-    { value: "-Ip", description: "host IP address" }
-    { value: "-User", description: "SSH user" }
-    { value: "-Group", description: "host group (dev_machine | prod_machine)" }
-    { value: "-SkipConfirm", description: "skip confirmation prompts" }
-]
-
 $env.config.completions.external = {
     enable: true
     max_results: 100
@@ -299,8 +280,6 @@ $env.config.completions.external = {
         let cmd = ($spans | first | path basename | str downcase)
         let flags = if $cmd == "bootstrap.ps1" {
             $workstation_bootstrap_flags
-        } else if $cmd == "manage-hosts.ps1" {
-            $workstation_manage_hosts_flags
         } else {
             null
         }

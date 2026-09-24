@@ -73,8 +73,6 @@ rm -rf "$T"
 echo "== parity-reminder (R3) =="
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "zshrc -> bashrc reminder" has 'bashrc'
-run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/scripts/manage-hosts.sh" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "manage-hosts.sh -> .ps1" has 'manage-hosts.ps1'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "config.toml -> vars pins" has 'python_version'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.dev.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"

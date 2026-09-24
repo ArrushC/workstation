@@ -9,7 +9,6 @@ $settings = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
 
 $targets = @(
     'bootstrap.ps1',
-    'scripts/manage-hosts.ps1',
     'scripts/install-nerd-fonts.ps1',
     'scripts/test-curl.ps1',
     'scripts/check-ps.ps1'
