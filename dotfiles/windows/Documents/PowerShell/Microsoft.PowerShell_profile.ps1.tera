@@ -196,11 +196,6 @@ function ... { Set-Location ../.. }
 # (e.g. via bootstrap.ps1 -RepoPath).
 $env:WORKSTATION_REPO = Join-Path $env:USERPROFILE ".config\mise"
 
-function Edit-Hosts {
-    & "$env:WORKSTATION_REPO\scripts\manage-hosts.ps1"
-}
-Set-Alias -Name hosts -Value Edit-Hosts
-
 # --- LAPS: copy this machine's local-admin password to the clipboard --------
 # Wraps Microsoft LAPS (AdmPwd.PS). Does NOT print the password — copies it to
 # the clipboard and shows only the computer name + expiry. Needs the AdmPwd.PS

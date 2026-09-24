@@ -2,7 +2,7 @@
 # mise-env.sh <dev|prod> — print the MISE_ENV token set for THIS Linux host.
 #   prod → linux
 #   dev  → linux,dev,host,wsl   (WSL guest)  |  linux,dev,host,native (bare metal / VM)
-# Single source for bootstrap.sh, tasks/* and update-hosts.sh; the rc
+# Single source for bootstrap.sh and tasks/*; the rc
 # files persist the same value (chezmoi templates until PR3, Tera after).
 set -euo pipefail
 mode="${1:?usage: mise-env.sh <dev|prod>}"

@@ -8,8 +8,7 @@
 # a regression Claude just introduced cannot survive the turn:
 #   - strip CRLF from "run-directly" shell scripts
 #   - restore the on-disk +x bit and the 100755 git index mode
-#   - restore the EF BB BF BOM on manage-hosts.ps1 / bootstrap.ps1 /
-#     install-nerd-fonts.ps1
+#   - restore the EF BB BF BOM on bootstrap.ps1 / install-nerd-fonts.ps1
 # It reports what it changed back to Claude (additionalContext) so the model
 # re-reads the file. Silent + exit 0 when there is nothing to fix.
 #
@@ -52,7 +51,7 @@ case "$norm" in
 esac
 is_ps1_bom=0
 case "$norm" in
-*/scripts/manage-hosts.ps1 | */bootstrap.ps1 | */scripts/install-nerd-fonts.ps1)
+*/bootstrap.ps1 | */scripts/install-nerd-fonts.ps1)
   is_ps1_bom=1
   ;;
 esac

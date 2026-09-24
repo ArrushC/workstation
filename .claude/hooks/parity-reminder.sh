@@ -58,12 +58,6 @@ case "$norm" in
 esac
 if [ -z "$msg" ]; then
   case "$base" in
-  manage-hosts.sh)
-    msg="Parity pair: manage-hosts.sh and manage-hosts.ps1 must stay feature-identical (flags, menu, prompts, glyphs). Change both in the same commit."
-    ;;
-  manage-hosts.ps1)
-    msg="Parity pair: manage-hosts.ps1 and manage-hosts.sh must stay feature-identical. Change both in the same commit. (Also keep the UTF-8 BOM on the .ps1.)"
-    ;;
   python-env.sh)
     msg="Parity pair: python-env.sh (PY_LIBS list) mirrors Invoke-PythonEnv in bootstrap.ps1 (\$PythonLibs). Change both in the same commit. See CLAUDE.md."
     ;;

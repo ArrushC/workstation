@@ -77,7 +77,7 @@ link.remove();
 filter.value = ""; filter.dispatchEvent(input());
 
 // 3. Back fires popstate AND hashchange in browsers; the page must navigate once
-const target = $("#hosts") || $$("main section[id]")[1];
+const target = $("#daily") || $$("main section[id]")[1];
 window.history.replaceState(null, "", `#${target.id}`);
 scrolls = 0;
 window.dispatchEvent(new window.PopStateEvent("popstate", { state: null }));

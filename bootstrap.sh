@@ -2,9 +2,9 @@
 # =============================================================================
 # bootstrap.sh — workstation setup (mise seed)
 #
-# Exactly one of --dev or --prod is required — it picks both the hosts.conf
-# group this host registers as AND the MISE_ENV token set `mise bootstrap`
-# loads (scripts/lib/mise-env.sh maps MACHINE_TYPE → MISE_ENV):
+# Exactly one of --dev or --prod is required — it picks the MISE_ENV token
+# set `mise bootstrap` loads (scripts/lib/mise-env.sh maps MACHINE_TYPE →
+# MISE_ENV):
 #
 #   DEV  (host you own, sudo for system packages + /etc files; tools are user-level):
 #     ./bootstrap.sh --dev
@@ -15,8 +15,9 @@
 #
 # MISE_ENV picks which config*.toml [bootstrap.*] tables load (dnf packages,
 # /etc files, services, compose, repos, hooks) — dev hosts load host state
-# that needs sudo, prod hosts load none. Same resolution happens whether you
-# bootstrap locally or update remotely via scripts/update-hosts.sh.
+# that needs sudo, prod hosts load none. Each host updates itself afterwards
+# with `wsu` (`mise run update`); there is no central host list or fleet
+# rollout (removed 2026-09-24).
 #
 # REINSTALL — wipe the cloned repo + any leftover pre-migration chezmoi
 # state, then re-bootstrap fresh. Does NOT remove installed tools or deployed
@@ -27,7 +28,7 @@
 #     ./bootstrap.sh --dev --reinstall --yes
 #
 # DOCTOR / CHECK-FOR-UPDATES — read-only report modes that exit before any
-# provisioning happens (nothing is cloned, installed, registered, or pushed):
+# provisioning happens (nothing is cloned, installed, or changed):
 #
 #     ./bootstrap.sh --dev --doctor              # health: tools, services, repo, dotfiles
 #     ./bootstrap.sh --dev --check-for-updates   # repo first, then pins vs upstream tags
@@ -37,19 +38,15 @@
 # `mise run health` / `mise run check-updates`, which carry ALL per-tool and
 # per-host-state knowledge (tasks/, config*.toml).
 #
-# PRIVATE REPO + commit attribution — set GITHUB_TOKEN, GIT_USER_NAME, and
-# GIT_USER_EMAIL before running. The token is used for both the bootstrap.sh
-# fetch AND the script's internal git clone/pull/push; the name/email drive
-# the auto-registration commit's author identity.
+# PRIVATE REPO — set GITHUB_TOKEN before running. It is used for both the
+# bootstrap.sh fetch AND the script's internal git clone/pull.
 #
-#   export GITHUB_TOKEN='<your-PAT>' \
-#          GIT_USER_NAME='Arrush Chaturvedi' \
-#          GIT_USER_EMAIL='contact@arrushc.com'
+#   export GITHUB_TOKEN='<your-PAT>'
 #   curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
 #     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
 # Flow (both modes):
-#   1. preflight             — check curl/git/tar/iproute
+#   1. preflight             — check curl/git/tar
 #   1a. do_reinstall (opt.)  — wipe the cloned repo + any leftover
 #                              pre-migration chezmoi state (--reinstall); then
 #                              falls through to a fresh run
@@ -60,8 +57,6 @@
 #                              (sha256-verified)
 #   2.6. MISE_ENV             — resolved from MACHINE_TYPE via
 #                              scripts/lib/mise-env.sh and exported
-#   3. self_register         — add this host to hosts.conf
-#                              (auto-skipped inside WSL — see is_wsl below)
 #   3.5. user-manager env    — `systemctl --user set-environment MISE_ENV=…`
 #                              so the live systemd user manager sees it too
 #                              (the pueued shim needs MISE_ENV to resolve mise)
@@ -80,14 +75,11 @@
 #                              SSH/WSL sessions land in zsh. Best-effort:
 #                              prints the manual chsh command on prod or
 #                              when usermod isn't permitted.
-#   5. push_host_changes     — commit+push hosts.conf updates (warn-don't-fail)
-#                              (no-op inside WSL since self_register made no edits)
 #
 # WSL — running inside a WSL distro is supported and treated as a managed host
 # for tools + dotfiles, but NOT as an SSH target. is_wsl() (defined below)
-# detects WSL via $WSL_DISTRO_NAME or /proc/version's microsoft marker and
-# short-circuits self_register so hosts.conf is never touched. The
-# end-of-bootstrap copy-id tip is also suppressed.
+# detects WSL via $WSL_DISTRO_NAME or /proc/version's microsoft marker; the
+# end-of-bootstrap ssh-copy-id tip is replaced by a WSL-specific one.
 #
 # Tool versions, dnf packages, /etc files, services, PATH wiring, dotfiles —
 # everything lives in config*.toml [bootstrap.*]/[dotfiles] tables and global
@@ -112,11 +104,9 @@ fail() {
   exit 1
 }
 
-# WSL detection — used to skip hosts.conf self-registration and the SSH
-# copy-id tip. WSL distros are launched directly by the Windows-side
-# terminal (Windows Terminal's WSL profile, `wsl.exe`), not SSH'd into, so
-# registering them as SSH targets would pollute the inventory with an IP
-# that's only reachable from the host Windows machine.
+# WSL detection — used to swap the end-of-bootstrap ssh-copy-id tip for a
+# WSL one. WSL distros are launched directly by the Windows-side terminal
+# (Windows Terminal's WSL profile, `wsl.exe`), not SSH'd into.
 #   - WSL_DISTRO_NAME is exported by WSL 2 inside the distro
 #   - /proc/version's "microsoft" marker is the universal backup signal
 is_wsl() {
@@ -192,9 +182,8 @@ Usage: ./bootstrap.sh (--dev | --prod) [flags]
 Required (exactly one):
   --dev         Host you own. Sudo available for system packages + /etc
                 files (dnf on RHEL/Fedora today); tools install user-level.
-                Registers as group dev_machine.
   --prod        Host you don't fully own. No sudo. Installs user-wide to
-                ~/.local/bin. Registers as group prod_machine.
+                ~/.local/bin.
 
 Optional flags:
   --reinstall   Wipe the cloned repo and any leftover pre-migration chezmoi
@@ -234,7 +223,8 @@ Curl-pipe form (private repo with token):
 Run ./bootstrap.sh --help for all flags."
 fi
 
-# Derived value used by self_register (hosts.conf group column).
+# Derived value written to config.local.toml as vars.group (ensure_config_local),
+# which the rc templates read to bake the right MISE_ENV.
 GROUP_NAME="${MACHINE_TYPE}_machine"
 
 # The report modes are read-only — combining them with the wipe flag is
@@ -341,13 +331,12 @@ preflight() {
   command -v curl &>/dev/null || missing+=("curl")
   command -v git &>/dev/null || missing+=("git")
   command -v tar &>/dev/null || missing+=("tar (for archive extraction)")
-  command -v ip &>/dev/null || missing+=("iproute (for self-registration)")
 
   if ((${#missing[@]} > 0)); then
     fail "Missing required prerequisites: ${missing[*]}
 Install via your distro's package manager, e.g.
-  RHEL/Fedora:   sudo dnf install curl git tar iproute
-  Debian/Ubuntu: sudo apt install curl git tar iproute2"
+  RHEL/Fedora:   sudo dnf install curl git tar
+  Debian/Ubuntu: sudo apt install curl git tar"
   fi
 
   ok "Prerequisites OK"
@@ -371,59 +360,6 @@ relocate_repo() {
   mkdir -p "$(dirname "$REPO_DIR")"
   mv "$LEGACY_REPO_DIR" "$REPO_DIR" || fail "could not move $LEGACY_REPO_DIR to $REPO_DIR"
   ok "checkout now at $REPO_DIR"
-}
-
-# =============================================================================
-# 2. SELF-REGISTER — add this host to hosts.conf + regenerate inventory
-# =============================================================================
-self_register() {
-  # WSL distros are launched directly by the Windows-side terminal (Windows
-  # Terminal's WSL profile), not SSH'd into. Registering them in hosts.conf would
-  # generate a redundant SSH Tab Config and record a WSL-internal IP that's
-  # only reachable from the host Windows machine. Skip.
-  if is_wsl; then
-    log "Detected WSL (${WSL_DISTRO_NAME:-via /proc/version}) — skipping hosts.conf self-registration"
-    ok "WSL is reached through the Windows terminal's WSL integration, not SSH"
-    return
-  fi
-
-  local manage_script="$REPO_DIR/scripts/manage-hosts.sh"
-
-  # We invoke via `bash "$manage_script"` below, so the executable bit isn't
-  # required — just the file. -x would skip on any clone where git didn't
-  # preserve mode 0755 (Windows checkouts, fresh clones with core.filemode=false).
-  if [[ ! -f "$manage_script" ]]; then
-    warn "manage-hosts.sh not found at $manage_script — skipping self-registration."
-    return
-  fi
-
-  local host_name host_ip host_user
-  host_name=$(hostname -s 2>/dev/null || hostname)
-  host_user=$(whoami)
-
-  host_ip=$(ip route get 1.1.1.1 2>/dev/null |
-    awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
-
-  if [[ -z "$host_ip" ]]; then
-    host_ip=$(ip addr show 2>/dev/null |
-      awk '/inet / && !/127\.0\.0\.1/ {split($2,a,"/"); print a[1]}' | head -1)
-  fi
-
-  if [[ -z "$host_ip" ]]; then
-    warn "Could not detect IP address — skipping self-registration."
-    return
-  fi
-
-  log "Self-registration: ${host_name} (${host_user}@${host_ip}) as ${GROUP_NAME}"
-  # Any downstream step that reads hosts.conf sees the current inventory from
-  # the single --add pass; the Windows-side Windows Terminal SSH profiles
-  # (fragment) regenerate from it on the next bootstrap.ps1 run.
-  bash "$manage_script" --add \
-    --name "$host_name" \
-    --ip "$host_ip" \
-    --user "$host_user" \
-    --group "$GROUP_NAME" \
-    --skip-confirm
 }
 
 # =============================================================================
@@ -614,9 +550,9 @@ PYEOF
       # commit) and vars.group (undefined — zshenv.tera/bashrc.tera's
       # MISE_ENV expression falls to its "else" branch) wrong, with no
       # signal beyond a scrollback warning easy to miss under
-      # `curl | bash`. update-hosts.sh runs PROD hosts this same way on
-      # purpose (ssh -o BatchMode=yes, no TTY, no interactive prompt to
-      # give) and prod's "else" branch IS the correct MISE_ENV ("linux")
+      # `curl | bash`. A PROD host bootstrapped with no TTY (curl | bash
+      # over a non-interactive ssh) has no prompt to give, and prod's
+      # "else" branch IS the correct MISE_ENV ("linux")
       # even with vars.group undefined, so prod must keep skipping quietly.
       # A --dev host has no such safety net: the "else" branch bakes
       # "linux" — indistinguishable from prod, silently dropping every
@@ -715,7 +651,7 @@ run_bootstrap() {
 
   log "mise bootstrap — packages, /etc files, services, compose, repos, dotfiles, tools gate, then the bootstrap task"
   if [[ "$MACHINE_TYPE" == "dev" ]]; then
-    log "Dev mode — sudo will prompt for the dnf batch and /etc files (fleet runs on dev hosts are interactive by design)"
+    log "Dev mode — sudo will prompt for the dnf batch and /etc files (dev runs are interactive by design)"
   fi
   if ! mise bootstrap --yes "${dotfiles_flags[@]}"; then
     fail "mise bootstrap failed — see the failing phase above.
@@ -803,64 +739,9 @@ set_default_shell() {
 }
 
 # =============================================================================
-# 5. PUSH HOST CHANGES — commit hosts.conf, push upstream.
-#    Warn-don't-fail: mise bootstrap already succeeded by now, so we never abort here.
-# =============================================================================
-push_host_changes() {
-  cd "$REPO_DIR"
-
-  # Anything to commit (working tree OR already-staged)?
-  if git diff --quiet hosts.conf 2>/dev/null &&
-    git diff --cached --quiet hosts.conf 2>/dev/null; then
-    log "No host-list changes to commit"
-    return 0
-  fi
-
-  # Non-interactive runs (fleet updates via update-hosts.sh) must never write
-  # to the shared repo on the caller's behalf — commit+push only when stdin
-  # is a TTY (an interactive ./bootstrap.sh run).
-  if [[ ! -t 0 ]]; then
-    warn "hosts.conf changed but this is a non-interactive run — commit it by hand: cd $REPO_DIR && git add hosts.conf && git commit -m 'hosts: …' && git push"
-    return 0
-  fi
-
-  log "Committing host registration..."
-  git add hosts.conf 2>/dev/null || true
-
-  # Identity priority for the auto-commit:
-  #   1. GIT_USER_NAME / GIT_USER_EMAIL env vars (set in the bootstrap one-liner)
-  #   2. Existing git config (e.g. ~/.gitconfig, a rendered mise dotfiles template)
-  #   3. Synthetic fallback (whoami@hostname) so the commit never fails outright
-  local cfg_args=()
-  if [[ -n "${GIT_USER_NAME:-}" ]]; then
-    cfg_args+=(-c "user.name=$GIT_USER_NAME")
-  elif ! git config user.name >/dev/null 2>&1; then
-    cfg_args+=(-c "user.name=$(whoami)")
-  fi
-  if [[ -n "${GIT_USER_EMAIL:-}" ]]; then
-    cfg_args+=(-c "user.email=$GIT_USER_EMAIL")
-  elif ! git config user.email >/dev/null 2>&1; then
-    cfg_args+=(-c "user.email=$(whoami)@$(hostname)")
-  fi
-
-  if ! git "${cfg_args[@]}" commit -m "chore(hosts): register $(hostname -s)" 2>/dev/null; then
-    warn "Commit failed — inspect with:  cd $REPO_DIR && git status"
-    return 0
-  fi
-
-  log "Pushing host registration..."
-  if git push 2>/dev/null; then
-    ok "Host registration pushed"
-  else
-    warn "Push failed (auth, conflict, or no upstream). Recover with:"
-    warn "  cd $REPO_DIR && git push"
-  fi
-}
-
-# =============================================================================
 # DOCTOR / CHECK-FOR-UPDATES — read-only report modes (--doctor /
 # --check-for-updates). Both exit before the provisioning flow starts:
-# nothing is cloned, installed, registered, or pushed. This script owns only
+# nothing is cloned, installed, or changed. This script owns only
 # the repo-level checks (prereqs, git state, dotfiles drift, login shell) and
 # delegates ALL per-tool and host-state knowledge to `mise run health` /
 # `mise run check-updates`.
@@ -1055,10 +936,8 @@ MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
 export MISE_ENV
 log "mise environment: MISE_ENV=$MISE_ENV"
 
-self_register
 run_bootstrap
 set_default_shell
-push_host_changes
 
 # --- ccstatusline setup (dev only) -----------------------------------------
 # Interactive prompt for the Claude Code statusline. Re-runnable any time
@@ -1090,8 +969,7 @@ if is_wsl; then
   echo -e "  in ${YELLOW}~${RESET} with the dotfiles-tracked aliases active."
 else
   echo -e "Enable passwordless SSH from your client:"
-  echo -e "  ${YELLOW}./scripts/manage-hosts.sh --copy-id --name $(hostname -s)${RESET}  (Linux)"
-  echo -e "  ${YELLOW}.\\scripts\\manage-hosts.ps1 -CopyId -Name $(hostname -s)${RESET}  (Windows)"
+  echo -e "  ${YELLOW}ssh-copy-id $(whoami)@$(hostname -s)${RESET}  (Linux/WSL, and Windows via the PowerShell profile's ssh-copy-id)"
 fi
 if [ "$MACHINE_TYPE" = "dev" ]; then
   echo -e "Re-configure the Claude Code statusline any time:"

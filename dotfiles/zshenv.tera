@@ -19,7 +19,7 @@ esac
 # node / go / uv / gopls / the LSP servers are mise-managed, declared in
 # ~/.config/mise/config*.toml (this checkout). Interactive shells get the
 # real bin dirs from `mise activate zsh` (~/.zshrc); everything else — Make
-# over update-hosts.sh, `ssh host cmd`, IDE/LSP spawns — only sees them
+# via `ssh host cmd`, IDE/LSP spawns — only sees them
 # through mise's shims dir. Prepended AFTER ~/.local/bin so the shims sit in
 # front of it. PARITY: dot_bashrc.tmpl carries the bash twin above its
 # interactive guard.
