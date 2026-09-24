@@ -38,12 +38,13 @@
 # `mise run health` / `mise run check-updates`, which carry ALL per-tool and
 # per-host-state knowledge (tasks/, config*.toml).
 #
-# PRIVATE REPO — set GITHUB_TOKEN before running. It is used for both the
-# bootstrap.sh fetch AND the script's internal git clone/pull.
+# PUBLIC REPO — no token needed:
 #
-#   export GITHUB_TOKEN='<your-PAT>'
-#   curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
-#     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev
+#
+# GITHUB_TOKEN is optional: if set, the internal git clone/pull sends it (for
+# a private fork), and the tools that call the GitHub API use it to lift the
+# 60-requests/hour unauthenticated rate limit.
 #
 # Flow (both modes):
 #   1. preflight             — check curl/git/tar
@@ -216,9 +217,8 @@ Pick one based on the host you're bootstrapping:
   ./bootstrap.sh --dev      # Host you own        — sudo for system packages + /etc files; tools are user-level
   ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
 
-Curl-pipe form (private repo with token):
-  curl -fsSL -H \"Authorization: token \$GITHUB_TOKEN\" \\
-    https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
+Curl-pipe form:
+  curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
 
 Run ./bootstrap.sh --help for all flags."
 fi
@@ -272,8 +272,7 @@ do_reinstall() {
     if [[ "$script_real" == "$REPO_DIR"* || "$script_real" == "$LEGACY_REPO_DIR"* ]]; then
       fail "Refusing to reinstall — running script is inside $REPO_DIR or $LEGACY_REPO_DIR.
 Either pipe the remote script (runs from memory):
-  curl -fsSL -H \"Authorization: token \$GITHUB_TOKEN\" \\
-    https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --${MACHINE_TYPE} --reinstall
+  curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --${MACHINE_TYPE} --reinstall
 
 Or copy this script out of the repo first:
   cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --${MACHINE_TYPE} --reinstall"
@@ -886,9 +885,10 @@ export PATH="$BIN:$HOME/.local/share/mise/shims:$PATH"
 relocate_repo
 
 # --- Repo --------------------------------------------------------------------
-# If GITHUB_TOKEN is set, use it via http.extraheader (scoped to github.com).
-# This works for both public and private repos. The token is persisted into
-# the cloned repo's .git/config so subsequent push/pull all auth.
+# The repo is public, so no token is needed. If GITHUB_TOKEN is set anyway
+# (e.g. bootstrapping from a private fork), use it via http.extraheader
+# (scoped to github.com); it is persisted into the cloned repo's .git/config
+# so subsequent push/pull auth too.
 #
 # We use HTTP Basic with a base64-encoded "x-access-token:<PAT>" pair — the
 # same scheme GitHub Actions' `actions/checkout` uses. `Authorization: bearer`
@@ -905,11 +905,11 @@ if [[ ! -d "$REPO_DIR/.git" ]]; then
   log "Cloning workstation repo into $REPO_DIR..."
   if [[ -n "$GH_HEADER_VAL" ]]; then
     git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$REPO_DIR" ||
-      fail "Clone failed. For a private repo, set GITHUB_TOKEN to a PAT with repo read access."
+      fail "Clone failed. Check network access to github.com, and that GITHUB_TOKEN is a valid PAT (it is only needed for a private fork)."
     git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
   else
     git clone "$DOTFILES_REPO" "$REPO_DIR" ||
-      fail "Clone failed. If the repo is private, set GITHUB_TOKEN and re-run."
+      fail "Clone failed. Check network access to github.com (a private fork also needs GITHUB_TOKEN set to a PAT with repo read)."
   fi
   ok "Repo cloned"
 else
