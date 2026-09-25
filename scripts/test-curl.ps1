@@ -29,6 +29,7 @@ $helper = Get-TestFunction $bootstrapPath 'Invoke-CurlRequest'
 $fontHelper = Get-TestFunction (Join-Path $repoRoot 'scripts/install-nerd-fonts.ps1') 'Invoke-CurlRequest'
 Assert-Test ($helper -ceq $fontHelper) 'Bootstrap/font HTTP helpers drifted'
 . ([scriptblock]::Create($helper))
+. ([scriptblock]::Create((Get-TestFunction $bootstrapPath 'Get-GitHubApiHeaders')))
 . ([scriptblock]::Create((Get-TestFunction $bootstrapPath 'Get-LatestWingetVersion')))
 
 # Bind an ephemeral loopback port without HttpListener URL ACL requirements.
