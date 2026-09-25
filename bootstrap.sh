@@ -2,35 +2,41 @@
 # =============================================================================
 # bootstrap.sh — workstation setup (mise seed)
 #
-# Exactly one of --dev or --prod is required — it picks the MISE_ENV token
-# set `mise bootstrap` loads (scripts/lib/mise-env.sh maps MACHINE_TYPE →
-# MISE_ENV):
+# No required flags. The first run asks whether this host is yours (or reads
+# WORKSTATION_MODE, or a saved answer — see resolve_host_config) and picks the
+# MISE_ENV token set `mise bootstrap` loads (scripts/lib/mise-env.sh maps
+# owned/shared -> MISE_ENV):
 #
-#   DEV  (host you own, sudo for system packages + /etc files; tools are user-level):
-#     ./bootstrap.sh --dev
+#   OWNED  (host you own, sudo for system packages + /etc files; tools are user-level):
+#     ./bootstrap.sh
 #
-#   PROD (host you don't fully own, no sudo, install to ~/.local/bin):
-#     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
-#     or: ./bootstrap.sh --prod
+#   SHARED (host you don't fully own, no sudo, install to ~/.local/bin):
+#     curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
+#     or: ./bootstrap.sh
+#
+# The answer is saved in ~/.config/mise/config.local.toml (vars.mode) so later
+# runs (incl. --doctor/--check-for-updates) don't ask again. Unattended first
+# run: WORKSTATION_MODE=owned|shared.
 #
 # MISE_ENV picks which config*.toml [bootstrap.*] tables load (dnf packages,
-# /etc files, services, compose, repos, hooks) — dev hosts load host state
-# that needs sudo, prod hosts load none. Each host updates itself afterwards
+# /etc files, services, compose, repos, hooks) — owned hosts load host state
+# that needs sudo, shared hosts load none. Each host updates itself afterwards
 # with `wsu` (`mise run update`); there is no central host list or fleet
 # rollout (removed 2026-09-24).
 #
-# REINSTALL — wipe the cloned repo, then re-bootstrap fresh. Does NOT remove
-# installed tools or deployed dotfiles (those are idempotent under
-# re-bootstrap). Combine with --dev/--prod and optional --yes:
+# REINSTALL — wipe the cloned repo (incl. config.local.toml — the mode is
+# asked again on the next run), then let the rest of the script re-bootstrap
+# fresh. Does NOT remove installed tools or deployed dotfiles (those are
+# idempotent under re-bootstrap). Combine with optional --yes:
 #
-#     ./bootstrap.sh --prod --reinstall          # prod-scope wipe + rebuild, prompts
-#     ./bootstrap.sh --dev --reinstall --yes
+#     ./bootstrap.sh --reinstall
+#     ./bootstrap.sh --reinstall --yes
 #
 # DOCTOR / CHECK-FOR-UPDATES — read-only report modes that exit before any
 # provisioning happens (nothing is cloned, installed, or changed):
 #
-#     ./bootstrap.sh --dev --doctor              # health: tools, services, repo, dotfiles
-#     ./bootstrap.sh --dev --check-for-updates   # repo first, then pins vs upstream tags
+#     ./bootstrap.sh --doctor              # health: tools, services, repo, dotfiles
+#     ./bootstrap.sh --check-for-updates   # repo first, then pins vs upstream tags
 #
 # This script owns only the repo-level checks (prereqs, git branch/
 # ahead/behind/dirty, dotfiles drift, login shell) — these modes front
@@ -39,27 +45,27 @@
 #
 # PUBLIC REPO — no token needed:
 #
-#   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev
+#   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
 # GITHUB_TOKEN is optional: if set, the internal git clone/pull sends it (for
 # a private fork), and the tools that call the GitHub API use it to lift the
 # 60-requests/hour unauthenticated rate limit.
 #
-# Flow (both modes):
+# Flow:
 #   1. preflight             — check curl/git/tar
 #   1a. do_reinstall (opt.)  — wipe the cloned repo (--reinstall); then falls
 #                              through to a fresh run
 #   2. clone repo            — into ~/.config/mise (or git pull if present)
 #   2.5. install_mise        — the pinned mise binary into ~/.local/bin
 #                              (sha256-verified)
-#   2.6. MISE_ENV             — resolved from MACHINE_TYPE via
-#                              scripts/lib/mise-env.sh and exported
+#   2.6. resolve_host_config — mode (owned/shared) + name/email, saved to
+#                              config.local.toml BEFORE any dotfiles render —
+#                              see the function's own header.
+#   2.7. MISE_ENV             — resolved from MODE via scripts/lib/mise-env.sh
+#                              and exported
 #   3.5. user-manager env    — `systemctl --user set-environment MISE_ENV=…`
 #                              so the live systemd user manager sees it too
 #                              (the pueued shim needs MISE_ENV to resolve mise)
-#   3.6. ensure_config_local — write config.local.toml (per-host
-#                              vars.name/vars.email) BEFORE any dotfiles
-#                              render — see the function's own header.
 #   4. mise install (tools)  — scripts/lib/mise-install.sh installs every
 #                              tool the active MISE_ENV declares
 #   4.5. mise bootstrap      — packages, /etc files, services, compose,
@@ -67,11 +73,11 @@
 #                              run only, see run_bootstrap), tools gate, then
 #                              the `bootstrap` task
 #   4c. set_default_shell    — `sudo usermod -s "$(command -v zsh)" "$USER"`
-#                              on --dev only. ~/.zshrc is a mise dotfiles
-#                              template; we switch the login shell so new
-#                              SSH/WSL sessions land in zsh. Best-effort:
-#                              prints the manual chsh command on prod or
-#                              when usermod isn't permitted.
+#                              on owned hosts only. ~/.zshrc is a mise
+#                              dotfiles template; we switch the login shell so
+#                              new SSH/WSL sessions land in zsh. Best-effort:
+#                              prints the manual chsh command on shared hosts
+#                              or when usermod isn't permitted.
 #
 # WSL — running inside a WSL distro is supported and treated as a managed host
 # for tools + dotfiles, but NOT as an SSH target. is_wsl() (defined below)
@@ -97,7 +103,7 @@ log() { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
 ok() { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
 fail() {
-  echo -e "${RED} ✗${RESET} $*"
+  echo -e "${RED} ✗${RESET} $*" >&2
   exit 1
 }
 
@@ -108,6 +114,112 @@ fail() {
 #   - /proc/version's "microsoft" marker is the universal backup signal
 is_wsl() {
   [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null
+}
+
+# config.local.toml is machine-written `key = "value"` lines under [vars], so
+# plain awk reads and writes it — no Python needed before tools exist.
+config_get() { # config_get <file> <key>
+  [[ -f "$1" ]] || return 0
+  KEY="$2" awk '
+    /^\[/ { in_vars = ($0 == "[vars]"); next }
+    in_vars && index($0, ENVIRON["KEY"]) == 1 && substr($0, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/ {
+      sub(/^[^=]*=[[:space:]]*"/, ""); sub(/"[[:space:]]*$/, ""); gsub(/\\"/, "\""); gsub(/\\\\/, "\\"); print; exit
+    }' "$1"
+}
+
+config_set() { # config_set <file> <key> <value>
+  local file=$1 key=$2 val=$3 tmp
+  val=${val//\\/\\\\}
+  val=${val//\"/\\\"}
+  mkdir -p "$(dirname "$file")"
+  [[ -f "$file" ]] || : >"$file"
+  tmp=$(mktemp)
+  KEY="$key" LINE="$key = \"$val\"" awk '
+    /^\[/ {
+      if (in_vars && !done) { print ENVIRON["LINE"]; done = 1 }
+      in_vars = ($0 == "[vars]"); if (in_vars) seen = 1
+      print; next
+    }
+    in_vars && index($0, ENVIRON["KEY"]) == 1 && substr($0, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/ {
+      if (!done) { print ENVIRON["LINE"]; done = 1 }
+      next
+    }
+    { print }
+    END { if (!done) { if (!seen) print "[vars]"; print ENVIRON["LINE"] } }' "$file" >"$tmp" && mv "$tmp" "$file"
+}
+
+valid_mode() { [[ "${1:-}" == owned || "${1:-}" == shared ]]; }
+
+# Prompts read fd 3: /dev/tty in real runs (so `curl | bash` still prompts),
+# a here-string in tests.
+open_prompt_fd() {
+  { true <&3; } 2>/dev/null && return 0
+  exec 3</dev/tty 2>/dev/null
+}
+
+prompt_mode() {
+  local choice
+  {
+    echo "Is this host yours?"
+    echo "  1) owned    my machine — sudo, full install"
+    echo "  2) shared   someone else's — no sudo,"
+    echo "              user-level toolbelt only"
+  } >&2
+  while :; do
+    printf 'Choose [1/2]: ' >&2
+    IFS= read -r choice <&3 || fail "No answer to the setup-mode question."
+    case "$choice" in
+    1 | owned) echo owned && return 0 ;;
+    2 | shared) echo shared && return 0 ;;
+    *) echo "  Please answer 1 or 2." >&2 ;;
+    esac
+  done
+}
+
+# Mode: saved in config.local.toml, else WORKSTATION_MODE, else a prompt.
+# Name/email are asked on a first run; without a terminal they are left
+# unset (templates guard them) rather than blocking an unattended run.
+resolve_host_config() {
+  local cfg="$REPO_DIR/config.local.toml" name email
+  MODE=$(config_get "$cfg" mode)
+  if [[ -n "$MODE" ]]; then
+    valid_mode "$MODE" || fail "$cfg has mode = \"$MODE\" — expected owned or shared. Fix or delete that line and re-run."
+    ok "mode: $MODE (saved in config.local.toml)"
+  elif [[ -n "${WORKSTATION_MODE:-}" ]]; then
+    valid_mode "$WORKSTATION_MODE" || fail "WORKSTATION_MODE=$WORKSTATION_MODE — expected owned or shared."
+    MODE=$WORKSTATION_MODE
+    ok "mode: $MODE (from WORKSTATION_MODE)"
+  elif open_prompt_fd; then
+    MODE=$(prompt_mode)
+    ok "mode: $MODE"
+  else
+    fail "No terminal to ask the setup mode on.
+   Re-run interactively:  ssh -t <host> '...'
+   or answer up front:    WORKSTATION_MODE=shared   (or owned)"
+  fi
+  config_set "$cfg" mode "$MODE"
+
+  name=$(config_get "$cfg" name)
+  email=$(config_get "$cfg" email)
+  if [[ -n "$name" && -n "$email" ]]; then
+    return 0
+  fi
+  if ! open_prompt_fd; then
+    warn "No terminal to ask your name/email on — add them to $cfg ([vars] name = \"…\", email = \"…\") for git commits."
+    return 0
+  fi
+  log "First-time setup — name/email for git commits and the SSH config comment..."
+  if [[ -z "$name" ]]; then
+    printf '  Name: ' >&2
+    IFS= read -r name <&3 || true
+  fi
+  if [[ -z "$email" ]]; then
+    printf '  Email: ' >&2
+    IFS= read -r email <&3 || true
+  fi
+  [[ -z "$name" ]] || config_set "$cfg" name "$name"
+  [[ -z "$email" ]] || config_set "$cfg" email "$email"
+  ok "name/email saved to $cfg"
 }
 
 DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
@@ -126,104 +238,65 @@ MISE_SHA256="986f36c5efef4302f6252f1b1e58c32052f3696fcf19b1ed44a1976b3c2b4ffc" #
 GH_HEADER_KEY="http.https://github.com/.extraheader"
 
 # --- Argument parsing -------------------------------------------------------
-# Accepts in any order: --dev | --prod (exactly one required), --reinstall,
-# --yes/-y, --doctor | --check-for-updates (read-only report modes).
-MACHINE_TYPE=""
-REINSTALL=false
-YES=false
-ACTION=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  --dev)
-    [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
-    MACHINE_TYPE="dev"
-    shift
-    ;;
-  --prod)
-    [[ -n "$MACHINE_TYPE" ]] && fail "--dev and --prod are mutually exclusive"
-    MACHINE_TYPE="prod"
-    shift
-    ;;
-  --doctor)
-    [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
-    ACTION="doctor"
-    shift
-    ;;
-  --check-for-updates | --checkforupdates)
-    [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
-    ACTION="check-updates"
-    shift
-    ;;
-  --reinstall)
-    REINSTALL=true
-    shift
-    ;;
-  --yes | -y)
-    YES=true
-    shift
-    ;;
-  -h | --help)
-    cat <<'EOF'
-Usage: ./bootstrap.sh (--dev | --prod) [flags]
+# Accepts in any order: --reinstall, --yes/-y, --doctor | --check-for-updates
+# (read-only report modes). No mode flag — see resolve_host_config.
+parse_args() {
+  REINSTALL=false
+  YES=false
+  ACTION=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --doctor)
+      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
+      ACTION="doctor"
+      shift
+      ;;
+    --check-for-updates | --checkforupdates)
+      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
+      ACTION="check-updates"
+      shift
+      ;;
+    --reinstall)
+      REINSTALL=true
+      shift
+      ;;
+    --yes | -y)
+      YES=true
+      shift
+      ;;
+    -h | --help)
+      cat <<'EOF'
+Usage: ./bootstrap.sh [flags]
 
-Required (exactly one):
-  --dev         Host you own. Sudo available for system packages + /etc
-                files (dnf on RHEL/Fedora today); tools install user-level.
-  --prod        Host you don't fully own. No sudo. Installs user-wide to
-                ~/.local/bin.
+Sets up this host with mise. The first run asks whether the host is yours:
+  owned   your machine — sudo: system packages, /etc files, services, zsh
+          login shell, plus the full developer toolbelt
+  shared  someone else's — no sudo: the user-level toolbelt only
+The answer is saved in ~/.config/mise/config.local.toml (vars.mode).
+Unattended first run: WORKSTATION_MODE=owned|shared.
 
-Optional flags:
-  --reinstall   Wipe the cloned repo, then bootstrap fresh. Does NOT remove
-                installed tools or deployed dotfiles (those are no-op
-                idempotent on re-bootstrap).
+Flags:
+  --reinstall   Wipe the cloned repo (incl. config.local.toml), then bootstrap
+                fresh. Installed tools and deployed dotfiles stay.
   --yes, -y     Skip the --reinstall confirmation prompt.
-  --doctor      Read-only health report, then exit (provisions nothing):
-                prereqs, repo git state (branch, ahead/behind, dirty),
-                dotfiles drift, login shell, then every managed
-                tool/host-state/service via 'mise run health'.
+  --doctor      Read-only health report, then exit.
   --check-for-updates
-                Read-only update scan, then exit: the workstation repo
-                first (fetch + commits-behind), then every pinned tool
-                against its upstream release tags via 'mise run check-updates'
-                (git ls-remote — no GitHub API, no rate limits).
-                --checkforupdates is accepted as an alias.
+                Read-only update scan, then exit (--checkforupdates alias).
   -h, --help    Show this message.
 EOF
-    exit 0
-    ;;
-  *) fail "Unknown argument: $1 (try --help)" ;;
-  esac
-done
-
-if [[ -z "$MACHINE_TYPE" ]]; then
-  fail "Missing required flag: --dev or --prod.
-
-Pick one based on the host you're bootstrapping:
-  ./bootstrap.sh --dev      # Host you own        — sudo for system packages + /etc files; tools are user-level
-  ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
-
-Curl-pipe form:
-  curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod
-
-Run ./bootstrap.sh --help for all flags."
-fi
-
-# Derived value written to config.local.toml as vars.group (ensure_config_local),
-# which the rc templates read to bake the right MISE_ENV.
-GROUP_NAME="${MACHINE_TYPE}_machine"
-
-# The report modes are read-only — combining them with the wipe flag is
-# almost certainly a mistake, so refuse rather than surprise.
-if [[ -n "$ACTION" && "$REINSTALL" == true ]]; then
-  fail "--reinstall can't be combined with --doctor/--check-for-updates (they are read-only and exit early)"
-fi
+      exit 0
+      ;;
+    *) fail "Unknown argument: $1 (try --help)" ;;
+    esac
+  done
+}
 
 # =============================================================================
 # 0. REINSTALL (optional) — wipe the cloned repo, then let the rest of the
 #    script re-bootstrap fresh. Installed tools and deployed dotfiles are
 #    left alone — re-running the bootstrap is idempotent on those, so the
-#    net effect is a fresh repo + fresh config.local.toml prompt (Step 3.6,
-#    ensure_config_local).
+#    net effect is a fresh repo + fresh config.local.toml prompt
+#    (resolve_host_config).
 # =============================================================================
 do_reinstall() {
   log "Reinstall mode — wipe + re-bootstrap"
@@ -251,10 +324,10 @@ do_reinstall() {
     if [[ "$script_real" == "$REPO_DIR"* ]]; then
       fail "Refusing to reinstall — running script is inside $REPO_DIR.
 Either pipe the remote script (runs from memory):
-  curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --${MACHINE_TYPE} --reinstall
+  curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
 
 Or copy this script out of the repo first:
-  cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --${MACHINE_TYPE} --reinstall"
+  cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --reinstall"
     fi
   fi
 
@@ -322,96 +395,11 @@ install_mise() {
 }
 
 # =============================================================================
-# 3.6. ENSURE CONFIG.LOCAL.TOML — per-host `[vars]` (name/email/group), read
-# by mise's Tera dotfiles templates as vars.name/vars.email/vars.group (every
-# reference guarded — Ruling 3 — so a missing file doesn't abort the apply,
-# but a real value still shapes the rendered ~/.gitconfig etc.), so this MUST
-# run before the first `mise bootstrap` dotfiles apply. vars.group
-# additionally gates which MISE_ENV token set zshenv.tera/bashrc.tera/
-# 10-mise.conf.tera bake in (dev_machine -> linux,owned,host,…; anything else
-# -> linux) — see scripts/lib/mise-env.sh, the canonical source of those
-# token sets. Idempotent: once the file exists, it is left untouched.
-# =============================================================================
-ensure_config_local() {
-  local target="$REPO_DIR/config.local.toml"
-
-  if [[ -f "$target" ]]; then
-    ok "config.local.toml already present ($target)"
-    return 0
-  fi
-
-  local name="" email="" group=""
-
-  [[ -n "$group" ]] || group="$GROUP_NAME"
-
-  if [[ -z "$name" || -z "$email" ]]; then
-    if ! exec 3</dev/tty 2>/dev/null; then
-      # I6 fix (final-fix-brief.md): a silent skip-and-continue here used to
-      # leave BOTH ~/.gitconfig (empty name/email — git then refuses to
-      # commit) and vars.group (undefined — zshenv.tera/bashrc.tera's
-      # MISE_ENV expression falls to its "else" branch) wrong, with no
-      # signal beyond a scrollback warning easy to miss under
-      # `curl | bash`. A PROD host bootstrapped with no TTY (curl | bash
-      # over a non-interactive ssh) has no prompt to give, and prod's
-      # "else" branch IS the correct MISE_ENV ("linux")
-      # even with vars.group undefined, so prod must keep skipping quietly.
-      # A --dev host has no such safety net: the "else" branch bakes
-      # "linux" — indistinguishable from prod, silently dropping every
-      # dev-only tool/dotfile — so hard-fail there instead of limping on
-      # mis-configured. --reinstall removes config.local.toml, so a --dev
-      # --reinstall run over a non-interactive channel (no TTY) is exactly
-      # the case this catches.
-      if [[ "$MACHINE_TYPE" == "dev" ]]; then
-        fail "No TTY to prompt for a git identity — refusing to bootstrap a --dev host with an undefined vars.group (would silently bake MISE_ENV=\"linux\", indistinguishable from prod) and an empty ~/.gitconfig identity (git would then refuse to commit).
-Fix: run bootstrap.sh --dev from a real terminal once, or pre-create $target by hand:
-  cat > $target <<'CFG'
-  [vars]
-  name = \"Your Name\"
-  email = \"you@example.com\"
-  group = \"$group\"
-  CFG"
-      fi
-      warn "No TTY to prompt for a git identity — skipping config.local.toml."
-      warn "Create it by hand before the next bootstrap run:"
-      warn "  cat > $target <<'CFG'"
-      warn "  [vars]"
-      warn "  name = \"Your Name\""
-      warn "  email = \"you@example.com\""
-      warn "  group = \"$group\""
-      warn "  CFG"
-      return 0
-    fi
-    exec 3<&-
-    log "First-time setup — name/email for git commits and the SSH config comment..."
-    [[ -n "$name" ]] || read -rp "  Name: " name </dev/tty
-    [[ -n "$email" ]] || read -rp "  Email: " email </dev/tty
-  fi
-
-  name="${name//\\/\\\\}"
-  name="${name//\"/\\\"}"
-  email="${email//\\/\\\\}"
-  email="${email//\"/\\\"}"
-  group="${group//\\/\\\\}"
-  group="${group//\"/\\\"}"
-
-  mkdir -p "$(dirname "$target")"
-  cat >"$target" <<CFG
-# config.local.toml — per-host, git-ignored.
-[vars]
-name = "$name"
-email = "$email"
-group = "$group"
-CFG
-  ok "wrote $target"
-}
-
-# =============================================================================
-# 3.5/3.6/4/4.5. RUN BOOTSTRAP — carry MISE_ENV onto the live systemd user
-# manager, ensure config.local.toml exists, install tools, then run `mise
-# bootstrap` (packages, /etc files, services, compose, repos, dotfiles, tools
-# gate, then the `bootstrap` task itself). Sudo (dev only) is scoped to the
-# dnf batch and /etc files inside mise's own elevation — this script never
-# runs sudo directly.
+# 3.5/4/4.5. RUN BOOTSTRAP — carry MISE_ENV onto the live systemd user
+# manager, install tools, then run `mise bootstrap` (packages, /etc files,
+# services, compose, repos, dotfiles, tools gate, then the `bootstrap` task
+# itself). Sudo (owned hosts only) is scoped to the dnf batch and /etc files
+# inside mise's own elevation — this script never runs sudo directly.
 # =============================================================================
 run_bootstrap() {
   # The user manager must carry MISE_ENV for the pueued shim; environment.d
@@ -420,11 +408,10 @@ run_bootstrap() {
     systemctl --user set-environment "MISE_ENV=$MISE_ENV" || warn "could not set MISE_ENV on the systemd user manager"
   fi
 
-  # config.local.toml must exist BEFORE the first dotfiles apply below — the
-  # Tera templates guard every vars.* reference, but a real value still
-  # shapes the rendered git identity (Step 3.6).
-  ensure_config_local
-
+  # config.local.toml (mode, and name/email if given) is already written by
+  # resolve_host_config in main(), before this function runs — the Tera
+  # templates guard every vars.* reference, but a real value still shapes
+  # the rendered git identity.
   log "mise install (tools) — MISE_ENV=$MISE_ENV"
   "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
 
@@ -442,8 +429,8 @@ run_bootstrap() {
   fi
 
   log "mise bootstrap — packages, /etc files, services, compose, repos, dotfiles, tools gate, then the bootstrap task"
-  if [[ "$MACHINE_TYPE" == "dev" ]]; then
-    log "Dev mode — sudo will prompt for the dnf batch and /etc files (dev runs are interactive by design)"
+  if [[ "$MODE" == "owned" ]]; then
+    log "owned host — sudo will prompt for the dnf batch and /etc files"
   fi
   if ! mise bootstrap --yes "${dotfiles_flags[@]}"; then
     fail "mise bootstrap failed — see the failing phase above.
@@ -452,7 +439,7 @@ A dotfiles conflict aborts the WHOLE dotfiles phase (one bad entry blocks
 every entry — nothing gets applied). If the failure names a target that
 already exists as a real file:
   1. resolve that one entry directly:  mise dot apply --force <the path mise named above>
-  2. then re-run:                      ./bootstrap.sh --${MACHINE_TYPE}
+  2. then re-run:                      ./bootstrap.sh
 For any other phase (packages, services, compose, repos, tools), re-running
 this script is idempotent — fix what's reported above and run again."
   fi
@@ -472,24 +459,24 @@ this script is idempotent — fix what's reported above and run again."
 # switching the login shell is what makes new SSH/WSL sessions actually read
 # it. `chsh` isn't installed by default on AlmaLinux 9 (needs util-linux-user)
 # and even when present requires PAM auth (interactive password). `sudo
-# usermod -s` edits /etc/passwd directly — works under our existing dev-mode
+# usermod -s` edits /etc/passwd directly — works under our existing owned-mode
 # sudo flow.
 #
-# Prod hosts have no sudo, so we just print the manual chsh command. Same
-# fallback on dev hosts where usermod fails (most often: $SUDO_ASKPASS missing
-# under curl|bash from a remote machine).
+# Shared hosts have no sudo, so we just print the manual chsh command. Same
+# fallback on owned hosts where usermod fails (most often: $SUDO_ASKPASS
+# missing under curl|bash from a remote machine).
 # =============================================================================
 set_default_shell() {
   local zsh_path
   zsh_path=$(command -v zsh || true)
   if [[ -z "$zsh_path" ]]; then
-    if [[ "$MACHINE_TYPE" == "dev" ]]; then
+    if [[ "$MODE" == "owned" ]]; then
       warn "zsh not on PATH — default shell unchanged. Re-run after a manual install:"
       warn "  sudo dnf install -y zsh   (or apt install zsh)"
     else
-      # Prod has no sudo, so the dnf hint is wrong; surface that limitation
-      # plainly and tell the user what state the host is in (zshrc deployed,
-      # just dormant) so the fix path is obvious.
+      # Shared has no sudo, so the dnf hint is wrong; surface that
+      # limitation plainly and tell the user what state the host is in
+      # (zshrc deployed, just dormant) so the fix path is obvious.
       warn "zsh not on PATH — ~/.zshrc has been deployed but is dormant on this host."
       warn "Ask the admin to install zsh (\`sudo dnf install -y zsh\`), then either"
       warn "re-run this script or chsh manually."
@@ -506,11 +493,11 @@ set_default_shell() {
     return 0
   fi
 
-  if [[ "$MACHINE_TYPE" != "dev" ]]; then
-    # No sudo on prod. chsh would work interactively but we can't drive it
-    # cleanly under curl|bash. Tell the user and move on. On minimal RHEL
-    # bases chsh itself ships in util-linux-user — flag the secondary
-    # install in case `command -v chsh` also fails.
+  if [[ "$MODE" != "owned" ]]; then
+    # No sudo on shared hosts. chsh would work interactively but we can't
+    # drive it cleanly under curl|bash. Tell the user and move on. On
+    # minimal RHEL bases chsh itself ships in util-linux-user — flag the
+    # secondary install in case `command -v chsh` also fails.
     warn "Default shell is $current_shell, not zsh. Change it manually on this host:"
     warn "  chsh -s $zsh_path        (interactive — needs your account password)"
     if ! command -v chsh &>/dev/null; then
@@ -541,7 +528,7 @@ set_default_shell() {
 require_repo() {
   if [[ ! -d "$REPO_DIR/.git" ]]; then
     fail "No workstation repo at $REPO_DIR — bootstrap this host first:
-  ./bootstrap.sh --${MACHINE_TYPE}"
+  ./bootstrap.sh"
   fi
 }
 
@@ -585,9 +572,7 @@ report_repo_state() {
 
 do_doctor() {
   require_repo
-  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
-  export MISE_ENV
-  log "Doctor — read-only health report (MODE=${MACHINE_TYPE}); nothing is installed or changed"
+  log "Doctor — read-only health report; nothing is installed or changed"
   echo ""
 
   # Same prereq list as preflight, but report-all instead of hard-fail.
@@ -604,6 +589,16 @@ do_doctor() {
 
   report_repo_state
   echo ""
+
+  MODE=$(config_get "$REPO_DIR/config.local.toml" mode)
+  if ! valid_mode "$MODE"; then
+    warn "mode not set — run ./bootstrap.sh once to choose owned or shared"
+    report_repo_state
+    exit 1
+  fi
+  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
+  export MISE_ENV
+  ok "mode: $MODE"
 
   log "dotfiles"
   if ! command -v mise >/dev/null 2>&1; then
@@ -624,12 +619,12 @@ do_doctor() {
   elif [[ -z "$zsh_path" ]]; then
     warn "zsh not installed — login shell is $login_shell"
   else
-    warn "login shell is $login_shell, not zsh — fix: sudo usermod -s $zsh_path $USER (dev) / chsh -s $zsh_path (prod)"
+    warn "login shell is $login_shell, not zsh — fix: sudo usermod -s $zsh_path $USER (owned) / chsh -s $zsh_path (shared)"
   fi
   echo ""
 
   log "mise"
-  if command -v mise >/dev/null 2>&1; then ok "mise $(mise --version 2>/dev/null | awk '{print $1}') on PATH ($(command -v mise)) — pinned $MISE_VERSION"; else warn "mise not on PATH — re-run ./bootstrap.sh --${MACHINE_TYPE}"; fi
+  if command -v mise >/dev/null 2>&1; then ok "mise $(mise --version 2>/dev/null | awk '{print $1}') on PATH ($(command -v mise)) — pinned $MISE_VERSION"; else warn "mise not on PATH — re-run ./bootstrap.sh"; fi
   echo ""
 
   log "Tools, host state, services — mise run health"
@@ -639,9 +634,15 @@ do_doctor() {
 
 do_check_updates() {
   require_repo
-  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
+  MODE=$(config_get "$REPO_DIR/config.local.toml" mode)
+  if ! valid_mode "$MODE"; then
+    warn "mode not set — run ./bootstrap.sh once to choose owned or shared"
+    report_repo_state
+    exit 1
+  fi
+  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
   export MISE_ENV
-  log "Check for updates (MODE=${MACHINE_TYPE}) — workstation repo first, then tool pins vs upstream"
+  log "Check for updates (mode=${MODE}) — workstation repo first, then tool pins vs upstream"
   echo ""
 
   report_repo_state
@@ -655,106 +656,120 @@ do_check_updates() {
 # =============================================================================
 # MAIN
 # =============================================================================
-# Read-only report modes exit here, before any provisioning state changes.
-if [[ -n "$ACTION" ]]; then
-  case "$ACTION" in
-  doctor) do_doctor ;;
-  check-updates) do_check_updates ;;
-  esac
-  exit 0
-fi
+main() {
+  parse_args "$@"
 
-if [[ "$REINSTALL" == true ]]; then
-  do_reinstall
-fi
-preflight
-mkdir -p "$BIN"
-export PATH="$BIN:$HOME/.local/share/mise/shims:$PATH"
+  # The report modes are read-only — combining them with the wipe flag is
+  # almost certainly a mistake, so refuse rather than surprise.
+  if [[ -n "$ACTION" && "$REINSTALL" == true ]]; then
+    fail "--reinstall can't be combined with --doctor/--check-for-updates (they are read-only and exit early)"
+  fi
 
-# --- Repo --------------------------------------------------------------------
-# The repo is public, so no token is needed. If GITHUB_TOKEN is set anyway
-# (e.g. bootstrapping from a private fork), use it via http.extraheader
-# (scoped to github.com); it is persisted into the cloned repo's .git/config
-# so subsequent push/pull auth too.
-#
-# We use HTTP Basic with a base64-encoded "x-access-token:<PAT>" pair — the
-# same scheme GitHub Actions' `actions/checkout` uses. `Authorization: bearer`
-# works for the REST/raw API (and that's how curl fetches bootstrap.sh) but
-# is NOT accepted by git's smart-HTTP endpoint on github.com — GitHub falls
-# through to credential prompting, which breaks any non-interactive clone.
-GH_HEADER_VAL=""
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-  GH_HEADER_B64=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
-  GH_HEADER_VAL="Authorization: Basic $GH_HEADER_B64"
-fi
+  # Read-only report modes exit here, before any provisioning state changes.
+  if [[ -n "$ACTION" ]]; then
+    case "$ACTION" in
+    doctor) do_doctor ;;
+    check-updates) do_check_updates ;;
+    esac
+    exit 0
+  fi
 
-if [[ ! -d "$REPO_DIR/.git" ]]; then
-  log "Cloning workstation repo into $REPO_DIR..."
-  if [[ -n "$GH_HEADER_VAL" ]]; then
-    git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$REPO_DIR" ||
-      fail "Clone failed. Check network access to github.com, and that GITHUB_TOKEN is a valid PAT (it is only needed for a private fork)."
-    git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+  if [[ "$REINSTALL" == true ]]; then
+    do_reinstall
+  fi
+  preflight
+  mkdir -p "$BIN"
+  export PATH="$BIN:$HOME/.local/share/mise/shims:$PATH"
+
+  # --- Repo --------------------------------------------------------------------
+  # The repo is public, so no token is needed. If GITHUB_TOKEN is set anyway
+  # (e.g. bootstrapping from a private fork), use it via http.extraheader
+  # (scoped to github.com); it is persisted into the cloned repo's .git/config
+  # so subsequent push/pull auth too.
+  #
+  # We use HTTP Basic with a base64-encoded "x-access-token:<PAT>" pair — the
+  # same scheme GitHub Actions' `actions/checkout` uses. `Authorization: bearer`
+  # works for the REST/raw API (and that's how curl fetches bootstrap.sh) but
+  # is NOT accepted by git's smart-HTTP endpoint on github.com — GitHub falls
+  # through to credential prompting, which breaks any non-interactive clone.
+  GH_HEADER_VAL=""
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    GH_HEADER_B64=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+    GH_HEADER_VAL="Authorization: Basic $GH_HEADER_B64"
+  fi
+
+  if [[ ! -d "$REPO_DIR/.git" ]]; then
+    log "Cloning workstation repo into $REPO_DIR..."
+    if [[ -n "$GH_HEADER_VAL" ]]; then
+      git -c "${GH_HEADER_KEY}=${GH_HEADER_VAL}" clone "$DOTFILES_REPO" "$REPO_DIR" ||
+        fail "Clone failed. Check network access to github.com, and that GITHUB_TOKEN is a valid PAT (it is only needed for a private fork)."
+      git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+    else
+      git clone "$DOTFILES_REPO" "$REPO_DIR" ||
+        fail "Clone failed. Check network access to github.com (a private fork also needs GITHUB_TOKEN set to a PAT with repo read)."
+    fi
+    ok "Repo cloned"
   else
-    git clone "$DOTFILES_REPO" "$REPO_DIR" ||
-      fail "Clone failed. Check network access to github.com (a private fork also needs GITHUB_TOKEN set to a PAT with repo read)."
-  fi
-  ok "Repo cloned"
-else
-  log "Repo already present at $REPO_DIR — pulling latest..."
-  # Refresh the stored token if a new one was passed in this invocation.
-  if [[ -n "$GH_HEADER_VAL" ]]; then
-    git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
-  fi
-  # A failed pull means we'd run mise bootstrap against a stale-or-broken tree —
-  # better to bail out and let the user inspect.
-  if ! git -C "$REPO_DIR" pull --ff-only; then
-    fail "git pull --ff-only failed in $REPO_DIR.
+    log "Repo already present at $REPO_DIR — pulling latest..."
+    # Refresh the stored token if a new one was passed in this invocation.
+    if [[ -n "$GH_HEADER_VAL" ]]; then
+      git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$GH_HEADER_VAL"
+    fi
+    # A failed pull means we'd run mise bootstrap against a stale-or-broken tree —
+    # better to bail out and let the user inspect.
+    if ! git -C "$REPO_DIR" pull --ff-only; then
+      fail "git pull --ff-only failed in $REPO_DIR.
 This usually means stale credentials in .git/config, or local commits/conflicts.
 Inspect with:
   cd $REPO_DIR && git status && git log --oneline -5
 
 To start over from scratch (wipes the cloned repo, not your tools/dotfiles):
-  ./bootstrap.sh --${MACHINE_TYPE} --reinstall"
+  ./bootstrap.sh --reinstall"
+    fi
   fi
-fi
 
-install_mise
-MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MACHINE_TYPE")"
-export MISE_ENV
-log "mise environment: MISE_ENV=$MISE_ENV"
+  install_mise
+  resolve_host_config
+  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
+  export MISE_ENV
+  log "mise environment: MISE_ENV=$MISE_ENV"
 
-run_bootstrap
-set_default_shell
+  run_bootstrap
+  set_default_shell
 
-# --- ccstatusline setup (dev only) -----------------------------------------
-# Interactive prompt for the Claude Code statusline. Re-runnable any time
-# via `mise run statusline` from anywhere.
-if [[ "$MACHINE_TYPE" == dev && -t 0 ]]; then
-  mise run statusline || true
-fi
+  # --- ccstatusline setup (owned hosts only) ----------------------------------
+  # Interactive prompt for the Claude Code statusline. Re-runnable any time
+  # via `mise run statusline` from anywhere.
+  if [[ "$MODE" == owned && -t 0 ]]; then
+    mise run statusline || true
+  fi
 
-echo ""
-echo -e "${BOLD}Bootstrap complete.${RESET}"
+  echo ""
+  echo -e "${BOLD}Bootstrap complete.${RESET}"
 
-# Only print the "you're on zsh" tip when the user actually is. set_default_shell
-# may have bailed out (prod with no sudo, missing zsh binary, usermod refused) and
-# already printed its own follow-up command, so we just stay quiet here. Read the
-# authoritative shell from /etc/passwd — $SHELL was set by the parent process.
-_login_shell=$(getent passwd "$USER" | cut -d: -f7)
-_zsh_path=$(command -v zsh || true)
-if [[ -n "$_zsh_path" && "$_login_shell" == "$_zsh_path" ]]; then
-  echo -e "Log out + back in (or open a new tab) to land in zsh as your login shell."
-fi
+  # Only print the "you're on zsh" tip when the user actually is. set_default_shell
+  # may have bailed out (shared host with no sudo, missing zsh binary, usermod
+  # refused) and already printed its own follow-up command, so we just stay
+  # quiet here. Read the authoritative shell from /etc/passwd — $SHELL was
+  # set by the parent process.
+  _login_shell=$(getent passwd "$USER" | cut -d: -f7)
+  _zsh_path=$(command -v zsh || true)
+  if [[ -n "$_zsh_path" && "$_login_shell" == "$_zsh_path" ]]; then
+    echo -e "Log out + back in (or open a new tab) to land in zsh as your login shell."
+  fi
 
-if is_wsl; then
-  echo -e "Running inside WSL — opening a new Windows Terminal tab into this distro lands you"
-  echo -e "  in ${YELLOW}~${RESET} with the dotfiles-tracked aliases active."
-else
-  echo -e "Enable passwordless SSH from your client:"
-  echo -e "  ${YELLOW}ssh-copy-id $(whoami)@$(hostname -s)${RESET}  (Linux/WSL, and Windows via the PowerShell profile's ssh-copy-id)"
-fi
-if [ "$MACHINE_TYPE" = "dev" ]; then
-  echo -e "Re-configure the Claude Code statusline any time:"
-  echo -e "  ${YELLOW}mise run statusline${RESET}"
-fi
-echo -e "Health check any time: ${YELLOW}mise run health${RESET}"
+  if is_wsl; then
+    echo -e "Running inside WSL — opening a new Windows Terminal tab into this distro lands you"
+    echo -e "  in ${YELLOW}~${RESET} with the dotfiles-tracked aliases active."
+  else
+    echo -e "Enable passwordless SSH from your client:"
+    echo -e "  ${YELLOW}ssh-copy-id $(whoami)@$(hostname -s)${RESET}  (Linux/WSL, and Windows via the PowerShell profile's ssh-copy-id)"
+  fi
+  if [ "$MODE" = "owned" ]; then
+    echo -e "Re-configure the Claude Code statusline any time:"
+    echo -e "  ${YELLOW}mise run statusline${RESET}"
+  fi
+  echo -e "Health check any time: ${YELLOW}mise run health${RESET}"
+}
+
+[[ "${WORKSTATION_BOOTSTRAP_LIB:-}" == 1 ]] || main "$@"

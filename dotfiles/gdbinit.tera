@@ -1,9 +1,9 @@
 {#
 ~/.gdbinit — load GEF (GDB Enhanced Features) into every gdb session.
 
-dev_machine + Linux only: this file and the gef.py it sources are declared only
-in config.host.toml (dev+host gated), so they never deploy on prod_machine or
-Windows. gef.py is vendored at dotfiles/config/gdb/gef.py, pinned to GEF
+Owned + Linux only: this file and the gef.py it sources are declared only
+in config.host.toml (owned+host gated), so they never deploy on shared hosts
+or Windows. gef.py is vendored at dotfiles/config/gdb/gef.py, pinned to GEF
 release 2024.06 — the LAST release supporting Python 3.6–3.9 (EL9 gdb embeds
 Python 3.9; GEF 2025.01+ needs 3.10 and would SyntaxError on load). Provenance +
 the don't-bump-past-2024.06 constraint live in its .vendor sidecar.

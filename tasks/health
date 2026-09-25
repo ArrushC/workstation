@@ -58,11 +58,6 @@ row_skip() {
 
 mode="shared"
 env_has owned && mode="owned"
-# mise-env.sh (Task 4: vars.mode + owned|shared arguments) and bootstrap.sh's
-# own --dev/--prod flag still take the dev|prod token, distinct from the
-# shared/owned $mode label above — keep them derived separately.
-envarg="prod"
-env_has owned && envarg="dev"
 
 hdr "workstation health — MISE_ENV=${MISE_ENV:-unset} · read-only"
 echo ""
@@ -145,7 +140,7 @@ print("real:" + "; ".join(real[:6]) if real else
     fi
     ;;
   *)
-    row_bad "bootstrap state" "drift — run ./bootstrap.sh --$envarg"
+    row_bad "bootstrap state" "drift — run ./bootstrap.sh"
     ;;
   esac
 fi
@@ -166,12 +161,12 @@ echo ""
 # set-environment fixes that one, so it's a warn rather than a hard failure).
 # I1 (final-fix-brief.md): a bare presence grep for `export MISE_ENV=` passes
 # on ANY value, so a host that baked the wrong token set (e.g. plain "linux"
-# on a dev host) reported a false green. Compare the actual BAKED value in
-# each file against scripts/lib/mise-env.sh "$envarg" — the canonical token
+# on an owned host) reported a false green. Compare the actual BAKED value in
+# each file against scripts/lib/mise-env.sh "$mode" — the canonical token
 # set for THIS host — mirroring the render comparison
 # check_mise_env_three_way makes in scripts/check-invariants.sh.
 hdr "MISE_ENV persisted"
-canonical_env=$("$root/scripts/lib/mise-env.sh" "$envarg" 2>/dev/null || true)
+canonical_env=$("$root/scripts/lib/mise-env.sh" "$mode" 2>/dev/null || true)
 _baked_mise_env() {
   # Matches both the rc-file form (export MISE_ENV="linux,owned,host,wsl") and
   # environment.d's unquoted systemd form (MISE_ENV=linux,owned,host,wsl).
@@ -179,7 +174,7 @@ _baked_mise_env() {
     sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//'
 }
 if [ -z "$canonical_env" ]; then
-  row_bad "MISE_ENV rc" "scripts/lib/mise-env.sh $envarg produced no output — cannot verify baked rc files"
+  row_bad "MISE_ENV rc" "scripts/lib/mise-env.sh $mode produced no output — cannot verify baked rc files"
 else
   zshenv_baked=$(_baked_mise_env "$HOME/.zshenv")
   bashrc_baked=$(_baked_mise_env "$HOME/.bashrc")

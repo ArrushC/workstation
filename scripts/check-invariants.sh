@@ -196,25 +196,25 @@ check_version_pins() {
 # nothing ever wrote vars.group, so all three silently baked "linux" on
 # every host). Kept below as a cheap first pass, but the check that actually
 # catches that class of bug is the render comparison that follows it: each
-# template is rendered for real, twice (vars.group="dev_machine" and
-# "prod_machine"), into a scratch $HOME, and the baked MISE_ENV is asserted
-# against scripts/lib/mise-env.sh — the canonical source of these token sets
-# — run on THIS machine (same `uname -r` branch the templates themselves take,
-# so it's apples-to-apples).
+# template is rendered for real, twice (vars.mode="owned" and "shared"),
+# into a scratch $HOME, and the baked MISE_ENV is asserted against
+# scripts/lib/mise-env.sh — the canonical source of these token sets — run
+# on THIS machine (same `uname -r` branch the templates themselves take, so
+# it's apples-to-apples).
 #
 # Render setup mirrors scripts/check-templates.sh's measured discovery rule
 # (see that script's header): a scratch $HOME only isolates mise's config
 # READ side when it carries its own .config/mise — with none, mise falls
 # BACK to the real account home's config, which is precisely the trap here
-# (a fallback to the real, ungrouped config.local.toml would render "linux"
-# for every group and the check would never catch the original bug). So
+# (a fallback to the real, mode-less config.local.toml would render "linux"
+# for every mode and the check would never catch the original bug). So
 # each render below builds its scratch $HOME a genuine .config/mise of its
 # own: every entry of the repo symlinked in verbatim EXCEPT config.local.toml,
-# which is written fresh with vars.group pinned to exactly the value under
+# which is written fresh with vars.mode pinned to exactly the value under
 # test. Nothing under the real repo or the real $HOME is ever touched or
 # applied to — only a fresh /tmp scratch dir per render, removed right after.
 _render_baked_mise_env() {
-  local target=$1 group=$2 env=$3 home out path baked entry base
+  local target=$1 mode=$2 env=$3 home out path baked entry base
   home="$(mktemp -d)"
   mkdir -p "$home/.config/mise"
   for entry in "$ROOT"/*; do
@@ -224,7 +224,7 @@ _render_baked_mise_env() {
   done
   cat >"$home/.config/mise/config.local.toml" <<EOF
 [vars]
-group = "$group"
+mode = "$mode"
 EOF
   # Two independent overrides, deliberately redundant: CI's invariants job
   # sets MISE_CONFIG_DIR=$GITHUB_WORKSPACE for the whole step (see
@@ -237,13 +237,13 @@ EOF
   # MISE_CONFIG_DIR="$home/.config/mise" explicitly overrides whatever the
   # ambient value is (set by CI, or unset locally) for this one subshell only.
   if ! out=$(cd "$home" && HOME="$home" MISE_CONFIG_DIR="$home/.config/mise" MISE_ENV="$env" mise dot apply --force --yes -- "$target" 2>&1); then
-    note "render $target [group=$group]: mise dot apply failed: $(printf '%s' "$out" | grep -vE '^mise ERROR (Version|Run with)' | head -3 | tr '\n' ' ')"
+    note "render $target [mode=$mode]: mise dot apply failed: $(printf '%s' "$out" | grep -vE '^mise ERROR (Version|Run with)' | head -3 | tr '\n' ' ')"
     rm -rf "$home"
     return 1
   fi
   path="$home/${target#\~/}"
   if [ ! -e "$path" ]; then
-    note "render $target [group=$group]: apply exited 0 but $path was not written"
+    note "render $target [mode=$mode]: apply exited 0 but $path was not written"
     rm -rf "$home"
     return 1
   fi
@@ -277,11 +277,11 @@ check_mise_env_three_way() {
     return
   fi
 
-  local dev_env prod_env
-  dev_env=$(scripts/lib/mise-env.sh dev)
-  prod_env=$(scripts/lib/mise-env.sh prod)
-  if [ -z "$dev_env" ] || [ -z "$prod_env" ]; then
-    bad "scripts/lib/mise-env.sh dev/prod produced no output — cannot verify renders against it"
+  local owned_env shared_env
+  owned_env=$(scripts/lib/mise-env.sh owned)
+  shared_env=$(scripts/lib/mise-env.sh shared)
+  if [ -z "$owned_env" ] || [ -z "$shared_env" ]; then
+    bad "scripts/lib/mise-env.sh owned/shared produced no output — cannot verify renders against it"
     return
   fi
 
@@ -290,30 +290,30 @@ check_mise_env_three_way() {
   # scripts/check-templates.sh's own select_checker (same reasoning there).
   local -a targets=("~/.zshenv" "~/.bashrc" "~/.config/environment.d/10-mise.conf")
   local t d p all_agree=1
-  local -a devs=() prods=()
+  local -a owneds=() shareds=()
   for t in "${targets[@]}"; do
-    d=$(_render_baked_mise_env "$t" "dev_machine" "$dev_env") || d=""
-    p=$(_render_baked_mise_env "$t" "prod_machine" "$prod_env") || p=""
-    devs+=("$d")
-    prods+=("$p")
-    if [ "$d" = "$dev_env" ]; then
-      ok "$t [vars.group=dev_machine]: renders MISE_ENV=\"$d\" == scripts/lib/mise-env.sh dev"
+    d=$(_render_baked_mise_env "$t" "owned" "$owned_env") || d=""
+    p=$(_render_baked_mise_env "$t" "shared" "$shared_env") || p=""
+    owneds+=("$d")
+    shareds+=("$p")
+    if [ "$d" = "$owned_env" ]; then
+      ok "$t [vars.mode=owned]: renders MISE_ENV=\"$d\" == scripts/lib/mise-env.sh owned"
     else
-      bad "$t [vars.group=dev_machine]: renders MISE_ENV=\"$d\" != scripts/lib/mise-env.sh dev (\"$dev_env\")"
+      bad "$t [vars.mode=owned]: renders MISE_ENV=\"$d\" != scripts/lib/mise-env.sh owned (\"$owned_env\")"
     fi
-    if [ "$p" = "$prod_env" ]; then
-      ok "$t [vars.group=prod_machine]: renders MISE_ENV=\"$p\" == scripts/lib/mise-env.sh prod"
+    if [ "$p" = "$shared_env" ]; then
+      ok "$t [vars.mode=shared]: renders MISE_ENV=\"$p\" == scripts/lib/mise-env.sh shared"
     else
-      bad "$t [vars.group=prod_machine]: renders MISE_ENV=\"$p\" != scripts/lib/mise-env.sh prod (\"$prod_env\")"
+      bad "$t [vars.mode=shared]: renders MISE_ENV=\"$p\" != scripts/lib/mise-env.sh shared (\"$shared_env\")"
     fi
   done
 
-  for t in "${devs[@]}"; do [ "$t" = "${devs[0]}" ] || all_agree=0; done
-  for t in "${prods[@]}"; do [ "$t" = "${prods[0]}" ] || all_agree=0; done
+  for t in "${owneds[@]}"; do [ "$t" = "${owneds[0]}" ] || all_agree=0; done
+  for t in "${shareds[@]}"; do [ "$t" = "${shareds[0]}" ] || all_agree=0; done
   if [ "$all_agree" -eq 1 ]; then
-    ok "zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera (rendered output, both groups)"
+    ok "zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera (rendered output, both modes)"
   else
-    bad "rendered MISE_ENV disagrees across the three templates: dev=(${devs[*]}) prod=(${prods[*]})"
+    bad "rendered MISE_ENV disagrees across the three templates: owned=(${owneds[*]}) shared=(${shareds[*]})"
   fi
 }
 
@@ -1129,8 +1129,7 @@ check_lsp_plugin() {
 # the two .ps1 scripts -> the workstation_*_flags records in config.nu.tmpl.
 # Long-form flags only. Trailing args to _sh_script_flags are EXCLUSIONS —
 # flags the script accepts but completions deliberately omit
-# (bootstrap.sh: the removed-flag --full fail arm, the --checkforupdates
-# compat alias).
+# (bootstrap.sh: the --checkforupdates compat alias).
 
 # Long flags a bash script accepts: its case arms (any nesting depth),
 # alternatives split, short forms dropped. $2+ = exclusions.
@@ -1184,7 +1183,7 @@ check_completion_parity() {
   hdr "script-flag <-> completion parity"
   local want
 
-  want=$(_sh_script_flags bootstrap.sh --full --checkforupdates)
+  want=$(_sh_script_flags bootstrap.sh --checkforupdates)
   _flags_eq "bootstrap.sh == _bootstrap.sh (zsh)" "$want" \
     "$(_zsh_completion_flags dotfiles/config/zsh/completions/_bootstrap.sh)"
   _flags_eq "bootstrap.sh == completions.bash" "$want" \
@@ -1250,6 +1249,17 @@ check_mise_install_lib() {
     ok "${out#PASS: }"
   else
     bad "scripts/test-mise-install.sh failed:"
+    printf '%s\n' "$out" | sed 's/^/       /' | head -10
+  fi
+}
+
+check_bootstrap_mode() {
+  hdr "bootstrap.sh mode resolution (scripts/test-bootstrap-mode.sh)"
+  local out
+  if out=$(bash scripts/test-bootstrap-mode.sh 2>&1); then
+    ok "${out#PASS: }"
+  else
+    bad "scripts/test-bootstrap-mode.sh failed:"
     printf '%s\n' "$out" | sed 's/^/       /' | head -10
   fi
 }
@@ -1572,6 +1582,7 @@ check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling
 check_zellij_plugin_installer
 check_mise_install_lib
+check_bootstrap_mode
 check_python_env_parity
 check_curl_helper_parity
 check_shellcheck

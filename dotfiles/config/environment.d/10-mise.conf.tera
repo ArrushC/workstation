@@ -2,4 +2,4 @@
 # systemd's user manager imports every ~/.config/environment.d/*.conf at
 # login, so this gives MISE_ENV to every future user unit and D-Bus-activated
 # service, not just pueued.service (which also sets it directly — see there).
-MISE_ENV={% if vars.group is defined and vars.group == "dev_machine" %}linux,owned,host,{% if "microsoft" in (exec(command="uname -r") | lower) %}wsl{% else %}native{% endif %}{% else %}linux{% endif %}
+MISE_ENV={% if vars.mode is defined and vars.mode == "owned" %}linux,owned,host,{% if "microsoft" in (exec(command="uname -r") | lower) %}wsl{% else %}native{% endif %}{% else %}linux{% endif %}

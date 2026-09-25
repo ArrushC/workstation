@@ -41,7 +41,7 @@ if (($# == 1)); then
   IFS='|' read -r name version repo tag <<<"$1"
 
   if [[ "$version" == "latest" ]]; then
-    echo "rolling|$name|tracks latest — self-updates; reinstall: rm ~/.local/bin/claude and re-run ./bootstrap.sh --dev"
+    echo "rolling|$name|tracks latest — self-updates; reinstall: rm ~/.local/bin/claude and re-run ./bootstrap.sh"
     exit 0
   fi
   if [[ "$repo" == "-" || -z "$repo" ]]; then
@@ -167,6 +167,6 @@ echo ""
 printf '   %s update(s) available · %s up to date · %s rolling · %s unchecked\n' \
   "$n_update" "$n_ok" "$n_roll" "$n_unk"
 if ((n_update > 0)); then
-  printf '   to update: edit the pin in config.toml [vars], then ./bootstrap.sh --<dev|prod>\n'
+  printf '   to update: edit the pin in config.toml [vars], then ./bootstrap.sh\n'
   printf '   (mind the dual/triple-edit pins — CCSTATUSLINE, JETBRAINSMONO, HELIX; see CLAUDE.md)\n'
 fi

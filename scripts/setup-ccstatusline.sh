@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # setup-ccstatusline.sh — interactive setup of the Claude Code statusline
 # via ccstatusline. Four options: use tracked / this machine / set global /
-# skip. Invoked by `mise run statusline` and at the tail of `bootstrap.sh --dev`.
+# skip. Invoked by `mise run statusline` and at the tail of bootstrap.sh on
+# an owned host.
 #
 # The widget config is a mise [dotfiles] entry (config.owned.toml,
 # `~/.config/ccstatusline/settings.json`, mode = "copy" — like every

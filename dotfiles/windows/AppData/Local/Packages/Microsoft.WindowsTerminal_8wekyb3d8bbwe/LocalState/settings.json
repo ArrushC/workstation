@@ -166,10 +166,10 @@
             "command":
             {
                 "action": "sendInput",
-                "input": "cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; ./bootstrap.sh --dev"
+                "input": "cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; ./bootstrap.sh"
             },
             "id": "User.snippet.makedev",
-            "name": "Snippet: full dev bootstrap (WSL)"
+            "name": "Snippet: full bootstrap (WSL)"
         },
         {
             "command":

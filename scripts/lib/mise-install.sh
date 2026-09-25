@@ -17,7 +17,7 @@
 # unreadable declaration force-reinstalls instead of assuming "unchanged":
 # re-running the postinstall is cheap, skipping it leaves stale LSP servers.
 set -euo pipefail
-: "${MISE_ENV:?mise-install.sh: MISE_ENV must be set (scripts/lib/mise-env.sh <dev|prod>)}"
+: "${MISE_ENV:?mise-install.sh: MISE_ENV must be set (scripts/lib/mise-env.sh <owned|shared>)}"
 repo="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 mkdir -p "$state"

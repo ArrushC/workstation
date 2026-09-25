@@ -25,9 +25,9 @@ note:           Leading-dot filename (.vendor) → excluded by the symlink-each 
                 `exclude` list; provenance only, never deployed.
                 gef.py deploys 0644 to ~/.config/gdb/gef.py and is sourced by the tracked
                 ~/.gdbinit (dotfiles/gdbinit.tera) so plain `gdb` loads the GEF UI.
-                dev_machine only + Linux-only: both ~/.gdbinit and ~/.config/gdb are declared
-                only in config.host.toml (dev+host gated), so they never deploy on
-                prod_machine or Windows. The OTHER GDB front-end, pwndbg, is installed separately as a
+                Owned + Linux-only: both ~/.gdbinit and ~/.config/gdb are declared
+                only in config.host.toml (owned+host gated), so they never deploy on
+                shared hosts or Windows. The OTHER GDB front-end, pwndbg, is installed separately as a
                 standalone `pwndbg` command — it is a mise tool now
                 (`github:pwndbg/pwndbg` in config.owned.toml) and does NOT hook
                 ~/.gdbinit, so the two never collide. No config.toml [vars] entry — pinned only here.

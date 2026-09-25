@@ -12,7 +12,7 @@
 
 _workstation_complete_bootstrap() {
   local cur=${COMP_WORDS[COMP_CWORD]}
-  mapfile -t COMPREPLY < <(compgen -W '--dev --prod --reinstall --yes --doctor --check-for-updates --help' -- "$cur")
+  mapfile -t COMPREPLY < <(compgen -W '--reinstall --yes --doctor --check-for-updates --help' -- "$cur")
 }
 
 complete -F _workstation_complete_bootstrap bootstrap.sh ./bootstrap.sh

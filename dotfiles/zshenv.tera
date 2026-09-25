@@ -5,7 +5,7 @@
 # =============================================================================
 
 # --- ~/.local/bin: user-level tools for NON-interactive shells ---------------
-# python-env's launchers (wpy/textual/typer), claude, and on prod_machine every
+# python-env's launchers (wpy/textual/typer), claude, and on a shared host every
 # eget-installed tool live here; ~/.zshrc only prepends it for interactive
 # shells. (This host's pre-chezmoi ~/.zshenv, written by another installer,
 # carried exactly this line — preserved on takeover.) Guarded: zsh re-reads
@@ -31,4 +31,4 @@ esac
 # --- MISE_ENV: which config.<env>.toml files mise loads on this host ---------
 # Computed once by bootstrap.sh (scripts/lib/mise-env.sh) and persisted here so
 # every zsh — interactive, `ssh host cmd`, cron — sees the same tool set.
-export MISE_ENV="{% if vars.group is defined and vars.group == "dev_machine" %}linux,owned,host,{% if "microsoft" in (exec(command="uname -r") | lower) %}wsl{% else %}native{% endif %}{% else %}linux{% endif %}"
+export MISE_ENV="{% if vars.mode is defined and vars.mode == "owned" %}linux,owned,host,{% if "microsoft" in (exec(command="uname -r") | lower) %}wsl{% else %}native{% endif %}{% else %}linux{% endif %}"

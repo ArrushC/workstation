@@ -37,8 +37,8 @@ fi
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
 export VISUAL="hx"
-{% if vars.group is defined and vars.group == "dev_machine" %}
-# vcpkg (Microsoft C/C++ package manager) — dev_machine only. `mise run vcpkg`
+{% if vars.mode is defined and vars.mode == "owned" %}
+# vcpkg (Microsoft C/C++ package manager) — owned hosts only. `mise run vcpkg`
 # (tasks/vcpkg) clones + bootstraps it into this dir (= $VCPKG_ROOT) and
 # symlinks the `vcpkg` binary onto PATH. KEEP IN SYNC with tasks/vcpkg's
 # vroot=.

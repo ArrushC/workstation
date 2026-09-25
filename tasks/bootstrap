@@ -37,7 +37,7 @@ fi
 # answer — read from /dev/tty (under `curl … | bash`, plain stdin is the
 # piped script itself, not a terminal; when there's no controlling tty the
 # redirect itself fails fast instead of hanging — the same pattern
-# ensure_config_local() in bootstrap.sh uses for its own first-run prompt).
+# resolve_host_config() in bootstrap.sh uses for its own first-run prompts).
 # Success is judged by the post-condition (~/notes exists), never by nb's
 # own exit code — nb's wizard exits 0 on stdin EOF having created nothing
 # (found while verifying this step in a scratch $HOME).

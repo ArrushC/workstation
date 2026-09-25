@@ -6,7 +6,7 @@
 # repo:
 #   - dotfiles deploy state (does $HOME match the source you're editing? —
 #     `mise dot status`)
-#   - host identity & scope (hostname, dev/prod group, distro / EL family)
+#   - host identity & scope (hostname, owned/shared mode, distro / EL family)
 #   - WSL & interop capability (interop enabled?, powershell.exe reachable?)
 #   - guardrail readiness (jq/shfmt/gitleaks/shellcheck + pre-commit hook)
 #
@@ -79,8 +79,10 @@ seg_host() {
   local host mode osr id ver plat el osseg
   host="$(uname -n 2>/dev/null)"
   # owned/shared is the `owned` token in the live MISE_ENV (rc-exported; see
-  # tasks/bootstrap's own env_has idiom) — not a per-host config file, which
-  # may not exist (config.local.toml carries only vars.name/email).
+  # tasks/bootstrap's own env_has idiom) — not read from config.local.toml's
+  # own vars.mode directly: the live MISE_ENV reflects what THIS shell
+  # session actually has active, and the file may not exist yet (a fresh
+  # clone before the first bootstrap run).
   mode=""
   if [ -n "${MISE_ENV:-}" ]; then
     case ",${MISE_ENV}," in
