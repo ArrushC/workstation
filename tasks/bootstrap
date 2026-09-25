@@ -30,7 +30,7 @@ if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
 fi
 # 3. zjstatus.wasm → zellij's DATA plugin dir (mise installs the tool; zellij loads plugins from its data dir, never a bin dir)
 "$root/scripts/lib/zellij-plugin.sh" zjstatus "file://$(mise where github:dj95/zjstatus)/zjstatus.wasm"
-# 5. nb notebook init at ~/notes, once (was run_once_after_init.sh.tmpl).
+# 4. nb notebook init at ~/notes, once (was run_once_after_init.sh.tmpl).
 # Marker-guarded rather than a content-hashed run_once: a missing nb or a
 # failed/incomplete init must not abort the bootstrap, and must retry on the
 # next run instead of giving up forever. nb's first-run wizard needs a real
@@ -59,7 +59,7 @@ if [ ! -f "$nb_marker" ]; then
     echo "  nb not found on PATH — skipping notebook init (retries next run)" >&2
   fi
 fi
-# 6. Claude plugin marketplace + the 8 user-scope plugins, once (dev only;
+# 5. Claude plugin marketplace + the 8 user-scope plugins, once (dev only;
 # was run_once_install-claude-plugins.sh.tmpl). Idempotent even without the
 # marker (marketplace add / plugin install both no-op when already present)
 # — the marker just skips the claude invocations entirely once they've all
@@ -94,7 +94,7 @@ if env_has owned && [ ! -f "$claude_plugins_marker" ]; then
     echo "  claude not found on PATH — skipping plugin install (retries next run)" >&2
   fi
 fi
-# 7. ~/.claude/settings.json three-layer merge (dev only;
+# 6. ~/.claude/settings.json three-layer merge (dev only;
 # scripts/lib/claude-settings-merge.sh — ruling 5, mise has no
 # modify_-template equivalent). Runs every bootstrap, not marker-guarded:
 # ongoing enforcement, not a one-time script. The script itself is
@@ -103,7 +103,7 @@ if env_has owned; then
   "$root/scripts/lib/claude-settings-merge.sh" ||
     echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
 fi
-# 7b. ~/.claude/settings.local.json — seed-if-absent (I5, final-fix-brief.md;
+# 6b. ~/.claude/settings.local.json — seed-if-absent (I5, final-fix-brief.md;
 # dev only). Ruling 5 keeps this file out of [dotfiles] the same as
 # settings.json (Claude Code rewrites the live file), but unlike
 # settings.json there is no enforced layer reapplied on every run here — a
@@ -124,7 +124,7 @@ if env_has owned; then
     fi
   fi
 fi
-# 8. herdr plugin at its pinned ref, once (dev only; was
+# 7. herdr plugin at its pinned ref, once (dev only; was
 # run_once_install-herdr-plugins.sh.tmpl). PIN lives in the marker filename
 # itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
 # re-fires the install the same way a content-hashed run_once used to.
@@ -142,7 +142,7 @@ if env_has owned && [ ! -f "$herdr_plugins_marker" ]; then
     echo "  herdr not found on PATH — skipping herdr plugin install (retries next run)" >&2
   fi
 fi
-# 9. tldr page cache seed, once (was run_once_seed-tldr-cache.sh.tmpl).
+# 8. tldr page cache seed, once (was run_once_seed-tldr-cache.sh.tmpl).
 # Ongoing freshness after the first seed is auto_update in
 # ~/.config/tealdeer/config.toml, not this step.
 tldr_marker="$state/tldr-cache"
