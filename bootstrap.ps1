@@ -6,8 +6,8 @@
 # WinGet, then runs `mise bootstrap --only dotfiles,tools` to deploy the
 # tracked dotfiles and install the runtime tools those files declare.
 # Windows is always the `owned` mode (MISE_ENV=windows,owned). Git is a
-# hard prerequisite (install it yourself); Zed/VSCode are hand-installed --
-# their dotfiles still deploy without them.
+# hard prerequisite (install it yourself); VSCode is hand-installed --
+# its dotfiles still deploy without it.
 #
 # ONE exception to "no admin": $ElevatedTools (SSHFS-Win + its WinFsp
 # kernel-driver dependency) can pop a UAC prompt on first install. Declining
@@ -16,12 +16,20 @@
 # Public repo, no token needed. $env:GITHUB_TOKEN is optional: lifts the
 # 60-req/hr anonymous GitHub API rate limit; used for a private-fork clone.
 #
-# Bootstrap a fresh machine (no elevation needed):
-#   $curl = Get-Command curl.exe -CommandType Application | Select-Object -First 1
-#   & $curl.Source --disable --fail --silent --show-error --location `
-#     --output "$env:TEMP\bootstrap.ps1" `
-#     https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
-#   & ([scriptblock]::Create([IO.File]::ReadAllText("$env:TEMP\bootstrap.ps1")))
+# Bootstrap a fresh machine (no elevation needed) -- the checked curl.exe
+# download, same form as README.html's Windows quickstart:
+#   $bootstrapFile = [System.IO.Path]::GetTempFileName()
+#   try {
+#       $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+#       & $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
+#         --output $bootstrapFile `
+#         https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
+#       if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
+#       $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
+#       & ([scriptblock]::Create($bootstrap))
+#   } finally {
+#       Remove-Item -LiteralPath $bootstrapFile -Force
+#   }
 #
 # Or clone + run:
 #   git clone https://github.com/ArrushC/workstation.git "$env:USERPROFILE\.config\mise"
@@ -183,7 +191,7 @@ $PortableTools = @(
     },
     @{
         # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
-        # Linux dev-only mise tools (see config.owned.toml's opencode / omp
+        # Linux owned-only mise tools (see config.owned.toml's opencode / omp
         # entries). Bun-compiled x64 binaries: both REQUIRE AVX2
         # (any CPU since ~2013).
         Name       = "OpenCode"
@@ -211,7 +219,7 @@ $PortableTools = @(
     },
     @{
         # DevToys CLI — scriptable command-line half of DevToys; the Windows
-        # half of the Linux dev-only devtoys-cli mise tool (config.owned.toml).
+        # half of the Linux owned-only devtoys-cli mise tool (config.owned.toml).
         # The *_portable zip is self-contained .NET (the plain zip needs a
         # system .NET 8 runtime — never use it). NOT Layout 'single': the
         # single-file DevToys.CLI.exe REQUIRES its sibling Plugins\ tree.
@@ -236,7 +244,7 @@ $PortableTools = @(
         # portable zips — flat root, self-contained .NET. dnGrep stores its
         # settings NEXT TO THE EXE when that dir is writable (always true
         # here), and the 'tree' wipe on a pin bump would destroy them — so
-        # step 5e (Invoke-DnGrepConfig) seeds a dnGrep.config.xml redirecting
+        # Invoke-DnGrepConfig seeds a dnGrep.config.xml redirecting
         # its data dir to %APPDATA%\dnGREP. Windows-only GUI tool: no
         # config.toml [vars] pin, no dual-edit (Nushell precedent).
         Name       = "dnGrep"
@@ -617,7 +625,7 @@ function Invoke-Preflight {
 
     # Git is a hard prerequisite — you install it yourself. Needed for the
     # clone and for git operations mise performs against this same checkout
-    # (dotfiles history — ruling 8). This script does NOT install Git.
+    # (mise tracks dotfiles history in it). This script does NOT install Git.
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         Write-Fail @"
 Git is required but isn't on PATH.
@@ -666,8 +674,7 @@ function Install-PortableTool {
     # done. A version bump changes the stamp name, so the old stamp won't
     # match → reinstall. Deliberately NOT Get-Command: PATH resolution depends
     # on the CALLING session's environment, so a session started before the
-    # tool's dir joined the User PATH re-installed forever (bit DevToys CLI —
-    # the only tool with its own PATH dir — 2026-07-14). The Add-ToUserPath
+    # tool's dir joined the User PATH re-installed forever. The Add-ToUserPath
     # below keeps the User PATH entry self-healing on the skip path (idempotent
     # and silent when already present).
     if ((Test-Path $stamp) -and (Test-Path (Join-Path $binDir "$($Tool.Exe).exe"))) {
@@ -1240,21 +1247,6 @@ function Invoke-CloneRepo {
     }
 }
 
-# Invoke-MiseBootstrap -- `mise bootstrap --only dotfiles,tools` applies the
-# [dotfiles] entries (config.toml/config.owned.toml/config.windows.toml) to
-# %USERPROFILE% AND installs the tools those same files declare, in one
-# call; `--only dotfiles,tools` skips [bootstrap.files] entirely, so no
-# sudo-only /etc entry can ever fire here. -SkipToolInstall drops to `--only
-# dotfiles` so it doesn't silently install tools anyway (Invoke-MiseRuntimes
-# below has its own, separate -SkipToolInstall gate).
-#
-# A host still on the old chezmoi-based deploy has every dotfiles target
-# already on disk as a real file, and template/copy modes refuse to
-# overwrite one that already differs -- so the FIRST apply here needs
-# --force-dotfiles (mirrors bootstrap.sh's own apply()). Passed only until
-# $MigratedMarker exists, so a later real conflict still surfaces loudly.
-# Invoke-MiseRuntimes (below) runs afterward for a separate reason -- see
-# its own comment.
 $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 
 function Initialize-MiseEnv {
@@ -1341,6 +1333,21 @@ function Invoke-WslConfigReminder {
     Write-Warn "for the new WSL2 settings to take effect (restarts all distros)."
 }
 
+# Invoke-MiseBootstrap -- `mise bootstrap --only dotfiles,tools` applies the
+# [dotfiles] entries (config.toml/config.owned.toml/config.windows.toml) to
+# %USERPROFILE% AND installs the tools those same files declare, in one
+# call; `--only dotfiles,tools` skips [bootstrap.files] entirely, so no
+# sudo-only /etc entry can ever fire here. -SkipToolInstall drops to `--only
+# dotfiles` so it doesn't silently install tools anyway (Invoke-MiseRuntimes
+# below has its own, separate -SkipToolInstall gate).
+#
+# A host still on the old chezmoi-based deploy has every dotfiles target
+# already on disk as a real file, and template/copy modes refuse to
+# overwrite one that already differs -- so the FIRST apply here needs
+# --force-dotfiles (mirrors bootstrap.sh's own apply()). Passed only until
+# $MigratedMarker exists, so a later real conflict still surfaces loudly.
+# Invoke-MiseRuntimes (below) runs afterward for a separate reason -- see
+# its own comment.
 function Invoke-MiseBootstrap {
     if ($SkipDotfiles) {
         Write-Log "mise dotfiles+tools bootstrap skipped (-SkipDotfiles)"
@@ -1405,21 +1412,6 @@ reported above and re-run.
     Invoke-WslConfigReminder
 }
 
-# node/Go/uv/gopls/the LSP servers/ccstatusline via mise -- the Windows
-# half of the Linux mise-driven install. Invoke-MiseBootstrap's own tools
-# phase already installed these; this is NOT redundant with that -- it's
-# the Windows-specific idempotency layer on the same `mise install`:
-# sweeps the retired portable uv, force-reinstalls node only when its npm
-# postinstall (the LSP servers) needs to re-run, and self-heals the shims
-# PATH. Gated by its own change-detection stamp, so a repeat run right
-# after Invoke-MiseBootstrap is a fast no-op. Reads config.toml +
-# config.owned.toml + config.windows.toml directly from the checkout root
-# (config.linux.toml never loads -- MISE_ENV carries no `linux` token on
-# Windows). When Windows can't replace a locked node install (a running
-# editor LSP holds it open), falls back to running node's declared
-# postinstall directly against the existing install so the language
-# servers still refresh. -SkipToolInstall skips this too, independently
-# of -SkipDotfiles.
 $MiseConfigFiles = @("config.toml", "config.owned.toml", "config.windows.toml")
 $MiseShims       = Join-Path $env:LOCALAPPDATA "mise\shims"
 $MiseEnv         = "windows,owned"
@@ -1433,8 +1425,7 @@ function Get-MiseRuntimesStamp {
     # FIXED order, not Sort-Object: the two names differ only by a middle
     # token, and culture-aware sorting orders them differently under .NET
     # Framework (5.1, NLS) and .NET Core (pwsh 7, ICU) — the stamp must not
-    # depend on which PowerShell ran the bootstrap (bit the first Windows run,
-    # 2026-09-16).
+    # depend on which PowerShell ran the bootstrap.
     $files = @($MiseConfigFiles | ForEach-Object { Join-Path $RepoPath $_ })
     if (-not (Test-Path -LiteralPath $files[0])) { return $null }
     $existing = @($files | Where-Object { Test-Path -LiteralPath $_ })
@@ -1445,6 +1436,20 @@ function Get-MiseRuntimesStamp {
     return Join-Path $WsStamps "mise-runtimes.$hash.stamp"
 }
 
+# node/Go/uv/gopls/the LSP servers/ccstatusline via mise -- the Windows
+# half of the Linux mise-driven install. Invoke-MiseBootstrap's own tools
+# phase already installed these; this is NOT redundant with that -- it's
+# the Windows-specific idempotency layer on the same `mise install`:
+# force-reinstalls node only when its npm postinstall (the LSP servers)
+# needs to re-run, and self-heals the shims PATH. Gated by its own
+# change-detection stamp, so a repeat run right after Invoke-MiseBootstrap
+# is a fast no-op. Reads config.toml + config.owned.toml +
+# config.windows.toml directly from the checkout root (config.linux.toml
+# never loads -- MISE_ENV carries no `linux` token on Windows). When
+# Windows can't replace a locked node install (a running editor LSP holds
+# it open), falls back to running node's declared postinstall directly
+# against the existing install so the language servers still refresh.
+# -SkipToolInstall skips this too, independently of -SkipDotfiles.
 function Invoke-MiseRuntimes {
     if ($SkipToolInstall) {
         Write-Log "mise runtimes skipped (-SkipToolInstall)"
@@ -1782,9 +1787,8 @@ function Invoke-DnGrepConfig {
     # enumerates DataDirectory at startup (AppTheme.LoadExternalThemes does
     # Directory.GetFiles over it) and CRASHES with DirectoryNotFoundException
     # if it's missing — it auto-creates only its DEFAULT data folder, never a
-    # config-file value (caught on first launch, 2026-07-15). On the
-    # already-present path, read the dirs from the file itself so a
-    # user-customized location is healed too.
+    # config-file value. On the already-present path, read the dirs from the
+    # file itself so a user-customized location is healed too.
     if (Test-Path $cfg) {
         try {
             $existing = [xml](Get-Content -Raw $cfg)
@@ -2014,11 +2018,6 @@ function Invoke-InstallClaudeCode {
     }
 }
 
-# The blessed uv-built venv (Windows half of the Linux `python-env` mise
-# task). uv (mise-managed, via `mise which uv`) installs the pinned CPython
-# and rebuilds the env from scratch; wpy/textual/typer .cmd shims land in
-# $WsBin. Stamp bakes the pin + lib list, so a bump rebuilds on the next
-# bootstrap (a lib upgrade alone is "delete the stamp, re-run").
 # Get-PythonEnvStamp — the exact stamp path Invoke-PythonEnv writes on
 # success (pin + a hash of the lib list). Doctor calls this SAME helper so
 # its "already built" check can never drift onto a stale stamp left behind
@@ -2030,6 +2029,11 @@ function Get-PythonEnvStamp {
     return Join-Path $WsStamps "python-env.$PythonEnvVersion.$libHash.stamp"
 }
 
+# The blessed uv-built venv (Windows half of the Linux `python-env` mise
+# task). uv (mise-managed, via `mise which uv`) installs the pinned CPython
+# and rebuilds the env from scratch; wpy/textual/typer .cmd shims land in
+# $WsBin. Stamp bakes the pin + lib list, so a bump rebuilds on the next
+# bootstrap (a lib upgrade alone is "delete the stamp, re-run").
 function Invoke-PythonEnv {
     if ($SkipToolInstall) {
         Write-Log "Python env skipped (-SkipToolInstall)"
