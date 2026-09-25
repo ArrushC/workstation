@@ -1472,56 +1472,56 @@ function ConvertFrom-TomlDoubleQuoted {
     return $sb.ToString()
 }
 
+# config.local.toml is machine-written `key = "value"` lines under [vars];
+# set one key in place, keeping every other table. UTF-8 without BOM, LF.
+function Set-ConfigLocalVar {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Key, [Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+    $escaped = $Value -replace '\\', '\\' -replace '"', '\"'
+    $line = "$Key = `"$escaped`""
+    $lines = if (Test-Path -LiteralPath $Path) { [System.IO.File]::ReadAllText($Path) -split "`r?`n" } else { @() }
+    if ($lines.Count -gt 0 -and $lines[-1] -eq '') {
+        # PowerShell's 0..-1 counts down, so a one-element array needs its own case.
+        $lines = if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] } else { @() }
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    $inVars = $false; $seen = $false; $done = $false
+    foreach ($l in $lines) {
+        if ($l -match '^\[') {
+            if ($inVars -and -not $done) { $out.Add($line); $done = $true }
+            $inVars = ($l -eq '[vars]'); if ($inVars) { $seen = $true }
+            $out.Add($l); continue
+        }
+        if ($inVars -and $l -match ('^' + [regex]::Escape($Key) + '\s*=')) {
+            if (-not $done) { $out.Add($line); $done = $true }
+            continue
+        }
+        $out.Add($l)
+    }
+    if (-not $done) { if (-not $seen) { $out.Add('[vars]') }; $out.Add($line) }
+    $dir = Split-Path $Path -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    [System.IO.File]::WriteAllText($Path, (($out -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Windows is always an owned host (no shared mode here). Name/email are asked
+# once, interactively; a non-interactive run leaves them for the user to add.
 function Invoke-EnsureConfigLocal {
-    # config.local.toml -- per-host, git-ignored [vars] name/email/group the
-    # Tera dotfiles templates render into the git identity (~/.gitconfig),
-    # the SSH config comment, and -- vars.group -- the baked MISE_ENV token
-    # set in zshenv.tera/bashrc.tera/10-mise.conf.tera (dev_machine ->
-    # linux,owned,host,...; anything else -> linux; see scripts/lib/mise-env.sh,
-    # the canonical source of those token sets). Must exist BEFORE the
-    # dotfiles apply below. Idempotent: once the file exists, it is left
-    # untouched.
     $target = Join-Path $RepoPath "config.local.toml"
-    if (Test-Path -LiteralPath $target) {
-        Write-Ok "config.local.toml already present ($target)"
+    Set-ConfigLocalVar -Path $target -Key 'mode' -Value 'owned'
+    $text = [System.IO.File]::ReadAllText($target)
+    $hasName = $text -match '(?m)^name\s*='
+    $hasEmail = $text -match '(?m)^email\s*='
+    if ($hasName -and $hasEmail) {
+        Write-Ok "config.local.toml ready ($target, mode = owned)"
         return
     }
-
-    $name  = ""
-    $email = ""
-    $group = "dev_machine"
-
-    if ((-not $name) -or (-not $email)) {
-        $nonInteractive = $SkipToolInstall -or [Console]::IsInputRedirected
-        if ($nonInteractive) {
-            $reason = if ($SkipToolInstall) { "-SkipToolInstall" } else { "no interactive console" }
-            Write-Warn "Skipping the config.local.toml prompt ($reason)."
-            Write-Warn "Create it by hand before the next bootstrap run ($target):"
-            Write-Warn '  [vars]'
-            Write-Warn '  name = "Your Name"'
-            Write-Warn '  email = "you@example.com"'
-            Write-Warn "  group = `"$group`""
-            return
-        }
-        Write-Log "First-time setup -- name/email for git commits and the SSH config comment..."
-        if (-not $name)  { $name  = Read-Host "  Name" }
-        if (-not $email) { $email = Read-Host "  Email" }
+    if ($SkipToolInstall -or [Console]::IsInputRedirected) {
+        Write-Warn "No interactive console — add [vars] name / email to $target for git commits."
+        return
     }
-
-    $name  = $name  -replace '\\', '\\' -replace '"', '\"'
-    $email = $email -replace '\\', '\\' -replace '"', '\"'
-    $group = $group -replace '\\', '\\' -replace '"', '\"'
-
-    $dir = Split-Path $target -Parent
-    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    $content = @"
-# config.local.toml -- per-host, git-ignored.
-[vars]
-name = "$name"
-email = "$email"
-group = "$group"
-"@ + "`n"
-    [System.IO.File]::WriteAllText($target, $content, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Log "First-time setup -- name/email for git commits and the SSH config comment..."
+    if (-not $hasName) { Set-ConfigLocalVar -Path $target -Key 'name' -Value (Read-Host "  Name") }
+    if (-not $hasEmail) { Set-ConfigLocalVar -Path $target -Key 'email' -Value (Read-Host "  Email") }
     Write-Ok "wrote $target"
 }
 
@@ -2123,7 +2123,7 @@ function Invoke-NushellMise {
 # 6. BURNTTOAST — PowerShell module that lets `New-BurntToastNotification`
 #    surface native Windows 10/11 toasts. Used by the WSL2 branch of
 #    dotfiles/claude/notify.sh (deployed to
-#    ~/.claude/notify.sh on dev_machine Linux hosts), which calls powershell.exe
+#    ~/.claude/notify.sh on owned Linux hosts), which calls powershell.exe
 #    from WSL2 to ping the Windows side when Claude Code needs attention. Falls
 #    back to System.Windows.Forms.MessageBox if the module is absent.
 #    CurrentUser scope — no admin, idempotent, soft-fails to a warning.
