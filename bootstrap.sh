@@ -7,8 +7,8 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
-# First run asks which of two modes this host is (or WORKSTATION_MODE=owned|
-# shared, or a saved vars.mode in config.local.toml — see resolve_host_config):
+# First run asks which of two modes this host is (or a saved vars.mode in
+# config.local.toml, or WORKSTATION_MODE=owned|shared — see resolve_host_config):
 #   owned   your machine  — sudo, full toolbelt, zsh login shell
 #   shared  someone else's — no sudo, user-level toolbelt only
 #
@@ -57,6 +57,29 @@ MISE_SHA256="986f36c5efef4302f6252f1b1e58c32052f3696fcf19b1ed44a1976b3c2b4ffc" #
 # git push, git pull, and manual git ops all authenticate.
 GH_HEADER_KEY="http.https://github.com/.extraheader"
 
+# --- Usage ---------------------------------------------------------------------
+usage() {
+  cat <<'EOF'
+Usage: ./bootstrap.sh [flags]
+
+Sets up this host with mise. The first run asks whether the host is yours:
+  owned   your machine — sudo: system packages, /etc files, services, zsh
+          login shell, plus the full developer toolbelt
+  shared  someone else's — no sudo: the user-level toolbelt only
+The answer is saved in ~/.config/mise/config.local.toml (vars.mode).
+Unattended first run: WORKSTATION_MODE=owned|shared.
+
+Flags:
+  --reinstall   Wipe the cloned repo (incl. config.local.toml), then bootstrap
+                fresh. Installed tools and deployed dotfiles stay.
+  --yes, -y     Skip the --reinstall confirmation prompt.
+  --doctor      Read-only health report, then exit.
+  --check-for-updates
+                Read-only update scan, then exit (--checkforupdates alias).
+  -h, --help    Show this message.
+EOF
+}
+
 # --- Argument parsing ---------------------------------------------------------
 # Accepts in any order: --reinstall, --yes/-y, --doctor | --check-for-updates
 # (read-only report modes). No mode flag — see resolve_host_config.
@@ -85,25 +108,7 @@ parse_args() {
       shift
       ;;
     -h | --help)
-      cat <<'EOF'
-Usage: ./bootstrap.sh [flags]
-
-Sets up this host with mise. The first run asks whether the host is yours:
-  owned   your machine — sudo: system packages, /etc files, services, zsh
-          login shell, plus the full developer toolbelt
-  shared  someone else's — no sudo: the user-level toolbelt only
-The answer is saved in ~/.config/mise/config.local.toml (vars.mode).
-Unattended first run: WORKSTATION_MODE=owned|shared.
-
-Flags:
-  --reinstall   Wipe the cloned repo (incl. config.local.toml), then bootstrap
-                fresh. Installed tools and deployed dotfiles stay.
-  --yes, -y     Skip the --reinstall confirmation prompt.
-  --doctor      Read-only health report, then exit.
-  --check-for-updates
-                Read-only update scan, then exit (--checkforupdates alias).
-  -h, --help    Show this message.
-EOF
+      usage
       exit 0
       ;;
     *) fail "Unknown argument: $1 (try --help)" ;;
@@ -370,13 +375,12 @@ apply() {
   log "mise install (tools) — MISE_ENV=$MISE_ENV"
   "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
 
-  # A host bootstrapped before the marker existed may still have real files
-  # at these dotfiles targets — symlink/copy/template modes all refuse a
-  # pre-existing real file, so even --dry-run would exit 1 without
-  # --force-dotfiles. Pass it ONLY until this host's own marker exists, so
-  # any LATER conflict (a real mistake) is still surfaced loudly instead of
-  # silently reclaimed. The marker file name (dotfiles-migrated) is kept so
-  # existing hosts do not force again.
+  # Forces only on the first apply: a fresh host's pre-existing files (e.g.
+  # /etc/skel's ~/.bashrc) would otherwise make copy/template refuse. Pass
+  # it ONLY until this host's own marker exists, so any LATER conflict (a
+  # real mistake) is still surfaced loudly instead of silently reclaimed.
+  # The marker file name (dotfiles-migrated) is kept so existing hosts do
+  # not force again.
   local marker="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/dotfiles-migrated"
   local dotfiles_flags=()
   if [[ ! -f "$marker" ]]; then
@@ -455,11 +459,12 @@ print_next_steps() {
   echo ""
   echo -e "${BOLD}Bootstrap complete.${RESET}"
 
-  # Only print the "you're on zsh" tip when the user actually is.
-  # set_login_shell may have bailed out (shared host, missing zsh binary,
-  # usermod refused) and already printed its own follow-up command, so we
-  # just stay quiet here. Read the authoritative shell from /etc/passwd —
-  # $SHELL was set by the parent process.
+  # Only print the "you're on zsh" tip when the user actually is. On shared
+  # hosts set_login_shell never runs, so this stays quiet on its own; on
+  # owned hosts it may have bailed out (missing zsh binary, usermod
+  # refused) and already printed its own follow-up command. Read the
+  # authoritative shell from /etc/passwd — $SHELL was set by the parent
+  # process.
   local login_shell zsh_path
   login_shell=$(getent passwd "$USER" | cut -d: -f7)
   zsh_path=$(command -v zsh || true)
@@ -479,6 +484,23 @@ print_next_steps() {
     echo -e "  ${YELLOW}mise run statusline${RESET}"
   fi
   echo -e "Health check any time: ${YELLOW}mise run health${RESET}"
+}
+
+# Reads the --reinstall confirmation from fd 3, like the other prompts —
+# under `curl | bash -s -- --reinstall`, plain stdin is the piped script
+# itself, so a plain `read` there hits EOF and set -e used to exit silently
+# right after the "Will REMOVE" block. Returns 0 to proceed, 1 to abort.
+confirm_reinstall() {
+  if [[ "$YES" == true ]]; then
+    return 0
+  fi
+  if ! open_prompt_fd; then
+    fail "No terminal to confirm --reinstall on. Re-run with --yes to skip the confirmation."
+  fi
+  local confirm=""
+  printf '  Proceed? [y/N]: ' >&2
+  IFS= read -r confirm <&3 || true
+  [[ "$confirm" =~ ^[Yy]$ ]]
 }
 
 # =============================================================================
@@ -520,12 +542,9 @@ Or copy this script out of the repo first:
     fi
   fi
 
-  if [[ "$YES" != true ]]; then
-    read -rp "  Proceed? [y/N]: " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-      warn "Aborted."
-      exit 0
-    fi
+  if ! confirm_reinstall; then
+    warn "Aborted."
+    exit 0
   fi
 
   if [[ -d "$REPO_DIR" ]]; then
@@ -691,6 +710,12 @@ main() {
   doctor) do_doctor ;;
   check-updates) do_check_updates ;;
   esac
+  # do_doctor/do_check_updates always exit internally — this is a backstop
+  # so a report mode can never fall through into provisioning, even if a
+  # future do_* forgets to exit.
+  if [[ -n "$ACTION" ]]; then
+    fail "internal error: $ACTION did not exit"
+  fi
 
   if [[ "$REINSTALL" == true ]]; then
     do_reinstall

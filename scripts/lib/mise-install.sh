@@ -7,7 +7,7 @@
 # ~/.local/state/workstation/; when node was ALREADY installed and the marker
 # is stale, node is force-reinstalled once. Then `mise prune` drops versions no
 # config references. User-level; never sudo. Used directly by bootstrap.sh's
-# run_bootstrap() (PR2+), ahead of `mise bootstrap` itself.
+# apply(), ahead of `mise bootstrap` itself.
 #
 # The declaration is read with an explicit `-f config.owned.toml`: a bare
 # `mise config get tools.node` reads only the HIGHEST-PRECEDENCE loaded file,

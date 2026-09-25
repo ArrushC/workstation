@@ -8,7 +8,7 @@ env_has() {
   case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
   return 1
 }
-# Same guard as bootstrap.sh's run_bootstrap(): the generated pueued unit
+# Same guard as bootstrap.sh's apply(): the generated pueued unit
 # carries no Environment= line, so a manager whose live env predates
 # ~/.config/environment.d/10-mise.conf needs MISE_ENV pushed onto it before
 # `mise bootstrap` restarts the service, or the shim sees "No version is set

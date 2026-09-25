@@ -101,4 +101,36 @@ WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; config_set "$1" mode owned; co
 grep -q '^mode = "owned"$' "$T/c9/config.local.toml" || fail "CRLF header: mode not added"
 grep -qx 'Old' "$T/c9/got" || fail "CRLF header: config_get did not read back the existing value"
 
-echo "PASS: bootstrap.sh mode resolution (saved, WORKSTATION_MODE, prompt, no-terminal failure, pty stderr safety, CRLF header, config.local.toml writer)"
+# 10. confirm_reinstall reads the --reinstall confirmation from fd 3, not
+# plain stdin (which under curl | bash is the piped script itself, so a
+# plain `read` there hits EOF and set -e used to exit silently — the bug
+# this guards against). YES=true bypasses the prompt entirely; "n" aborts;
+# "y" proceeds; with no fd 3 and no terminal it fails with the --yes hint.
+confirm() { # confirm <stdin-for-fd3|-> -> EXIT=0|1 (or the fail() message)
+  local input=$1
+  if [ "$input" = - ]; then
+    env WORKSTATION_BOOTSTRAP_LIB=1 setsid -w bash -c \
+      'source "$0"; YES=false; if confirm_reinstall; then echo EXIT=0; else echo EXIT=$?; fi' \
+      "$root/bootstrap.sh" </dev/null 2>&1
+  else
+    env WORKSTATION_BOOTSTRAP_LIB=1 setsid -w bash -c \
+      'source "$0"; YES=false; if confirm_reinstall; then echo EXIT=0; else echo EXIT=$?; fi' \
+      "$root/bootstrap.sh" 3<<<"$input" </dev/null 2>&1
+  fi
+}
+
+out=$(env WORKSTATION_BOOTSTRAP_LIB=1 setsid -w bash -c \
+  'source "$0"; YES=true; if confirm_reinstall; then echo EXIT=0; else echo EXIT=$?; fi' \
+  "$root/bootstrap.sh" </dev/null 2>&1) || fail "confirm YES=true: exit $? — $out"
+grep -q 'EXIT=0$' <<<"$out" || fail "YES=true did not bypass the prompt: $out"
+
+out=$(confirm n) || fail "confirm n: exit $? — $out"
+grep -q 'EXIT=1$' <<<"$out" || fail "'n' did not abort: $out"
+
+out=$(confirm y) || fail "confirm y: exit $? — $out"
+grep -q 'EXIT=0$' <<<"$out" || fail "'y' did not proceed: $out"
+
+if out=$(confirm -); then fail "no-terminal reinstall confirm succeeded: $out"; fi
+grep -q 'Re-run with --yes' <<<"$out" || fail "no-terminal reinstall confirm missing --yes hint: $out"
+
+echo "PASS: bootstrap.sh mode resolution (saved, WORKSTATION_MODE, prompt, no-terminal failure, pty stderr safety, CRLF header, config.local.toml writer, --reinstall confirmation)"
