@@ -8,7 +8,7 @@ env_has() {
   case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
   return 1
 }
-if ! env_has dev; then
+if ! env_has owned; then
   echo "  fonts: dev hosts only"
   exit 0
 fi

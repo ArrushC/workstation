@@ -13,7 +13,7 @@ shell-expand `~`, so we emit the full path. GEF is non-destructive: every native
 gdb command still works; it just adds the dashboard/context UI.
 
 The OTHER GDB front-end, pwndbg, is installed as a SEPARATE standalone `pwndbg`
-command (a mise tool, config.dev.toml) and does NOT hook in here — so `gdb` → GEF,
+command (a mise tool, config.owned.toml) and does NOT hook in here — so `gdb` → GEF,
 `pwndbg` → pwndbg, and the two never collide. To use vanilla gdb for a session:
 `gdb -nx`.
 -#}

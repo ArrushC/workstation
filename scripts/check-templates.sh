@@ -128,7 +128,7 @@ discover_targets() {
 import sys, tomllib
 
 env_tokens = set(sys.argv[1].split(","))
-FILES = ["config.toml", "config.linux.toml", "config.dev.toml", "config.host.toml", "config.windows.toml"]
+FILES = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 
 def token_for(fname):
     if fname == "config.toml":
@@ -242,7 +242,7 @@ apply_and_check() {
   return 0
 }
 
-ENVS=("linux" "linux,dev,host,wsl" "linux,dev,host,native" "windows,dev")
+ENVS=("linux" "linux,owned,host,wsl" "linux,owned,host,native" "windows,owned")
 
 for env in "${ENVS[@]}"; do
   hdr "individual render + syntax check — MISE_ENV=$env"

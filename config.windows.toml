@@ -1,6 +1,6 @@
 # ~/.config/mise/config.windows.toml — Windows-only dotfiles surface
 # (MISE_ENV token `windows`; loads only on the Windows host, alongside
-# config.toml and config.dev.toml — see config.toml's file-map comment).
+# config.toml and config.owned.toml — see config.toml's file-map comment).
 #
 # Ruling 7 (docs/superpowers/plans/2026-09-19-mise-dotfiles.md, broadened by
 # the 2026-09-22 copy-migration): EVERY `[dotfiles]` entry, on every
@@ -41,7 +41,7 @@
 "~/AppData/Roaming/Code/User/keybindings.json" = { source = "dotfiles/windows/AppData/Roaming/Code/User/keybindings.json", mode = "copy" }
 
 # Zed's settings UI / command palette writes these in place (same as the
-# Linux ~/.config/zed/settings.json entry in config.dev.toml).
+# Linux ~/.config/zed/settings.json entry in config.owned.toml).
 "~/AppData/Roaming/Zed/settings.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/settings.json", mode = "copy" }
 "~/AppData/Roaming/Zed/keymap.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/keymap.json", mode = "copy" }
 

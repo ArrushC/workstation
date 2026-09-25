@@ -9,7 +9,7 @@ This directory is a Claude Code **skills-dir plugin** whose only purpose is to
 register the workstation toolbelt's installed language servers with Claude Code's
 `LSP` tool (see the sibling `.lsp.json`). It exposes no user-facing skill behavior.
 
-- **Server binaries** come from mise (`config.dev.toml`, installed by
+- **Server binaries** come from mise (`config.owned.toml`, installed by
   `mise bootstrap` / `./bootstrap.sh --dev`; plus clangd from the C/C++ dnf
   group). This plugin only *registers* them; it installs nothing.
 - **Diagnostics** are on by default; to silence one server, add `"diagnostics": false`

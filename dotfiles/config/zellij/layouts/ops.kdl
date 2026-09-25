@@ -4,7 +4,7 @@
 // Opt-in: `zellij -l ops`, or `zs <session> ops`.
 //
 // Built only from BOTH-SCOPES tools (btop and lazyjournal both live in
-// config.linux.toml, not the dev-only config.dev.toml), so this works on a
+// config.linux.toml, not the dev-only config.owned.toml), so this works on a
 // prod host — which is where you actually want it.
 //
 // If lazyjournal lacks journal permissions on a given host it errors inside its

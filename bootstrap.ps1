@@ -48,7 +48,7 @@
 #                     mise's own global config dir now; matches bootstrap.sh's
 #                     relocated $HOME/.config/mise checkout on Linux).
 #   4. mise bootstrap — `mise bootstrap --only dotfiles,tools` applies the
-#                     [dotfiles] entries from config.toml/config.dev.toml/
+#                     [dotfiles] entries from config.toml/config.owned.toml/
 #                     config.windows.toml to %USERPROFILE% (PowerShell profile,
 #                     Warp + Windows Terminal settings, Zed/VSCode settings,
 #                     .wslconfig, …) AND installs the runtime tools those same
@@ -269,7 +269,7 @@ $WsMise       = Join-Path $WsRoot "mise"
 $WsStamps     = Join-Path $WsRoot "stamps"
 
 # Pinned portable tools. version + sha256 live HERE (same self-contained pattern
-# as scripts\install-nerd-fonts.ps1) — NOT config.linux.toml/config.dev.toml,
+# as scripts\install-nerd-fonts.ps1) — NOT config.linux.toml/config.owned.toml,
 # because mise's Linux-side [bootstrap.*] tables never run on Windows.
 # Bump = update Version + refresh Sha256 (compute over the
 # downloaded .zip). Layout 'single' copies <Exe>.exe into Dest; 'tree' extracts
@@ -365,7 +365,7 @@ $PortableTools = @(
         # copies for native .exe shims — without it shims degrade to .cmd
         # wrappers), so 'tree' into its OWN dir with BinSubdir pointing the
         # PATH at bin\. WHAT mise installs is declared by config.toml +
-        # config.dev.toml at the root of the checkout — %USERPROFILE%\.config\mise
+        # config.owned.toml at the root of the checkout — %USERPROFILE%\.config\mise
         # IS the checkout (Invoke-CloneRepo relocates a pre-2026-09 clone
         # there), read directly by Invoke-MiseRuntimes after the dotfiles+tools
         # bootstrap. uv is one of those tools now (it was a portable tool of
@@ -384,7 +384,7 @@ $PortableTools = @(
     },
     @{
         # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
-        # Linux dev-only mise tools (see config.dev.toml's opencode / omp
+        # Linux dev-only mise tools (see config.owned.toml's opencode / omp
         # entries). Bun-compiled x64 binaries: both REQUIRE AVX2
         # (any CPU since ~2013).
         Name       = "OpenCode"
@@ -396,7 +396,7 @@ $PortableTools = @(
         Dest       = $WsBin
         Repo       = "anomalyco/opencode"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND opencode in config.dev.toml"
+        UpdateHint = "dual-edit: `$PortableTools here AND opencode in config.owned.toml"
     },
     @{
         Name       = "Oh My Pi"
@@ -408,11 +408,11 @@ $PortableTools = @(
         Dest       = $WsBin
         Repo       = "can1357/oh-my-pi"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND github:can1357/oh-my-pi in config.dev.toml"
+        UpdateHint = "dual-edit: `$PortableTools here AND github:can1357/oh-my-pi in config.owned.toml"
     },
     @{
         # DevToys CLI — scriptable command-line half of DevToys; the Windows
-        # half of the Linux dev-only devtoys-cli mise tool (config.dev.toml).
+        # half of the Linux dev-only devtoys-cli mise tool (config.owned.toml).
         # The *_portable zip is self-contained .NET (the plain zip needs a
         # system .NET 8 runtime — never use it). NOT Layout 'single': the
         # single-file DevToys.CLI.exe REQUIRES its sibling Plugins\ tree.
@@ -427,7 +427,7 @@ $PortableTools = @(
         Dest       = $WsDevToysCli
         Repo       = "DevToys-app/DevToys"
         TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND the DevToys-app/DevToys tool in config.dev.toml (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
+        UpdateHint = "dual-edit: `$PortableTools here AND the DevToys-app/DevToys tool in config.owned.toml (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
     },
     @{
         # dnGrep — search/replace GUI (grep for Windows). Portable, NOT
@@ -1410,7 +1410,7 @@ function Invoke-CloneRepo {
 
 # =============================================================================
 # 4. MISE BOOTSTRAP — DOTFILES + TOOLS. `mise bootstrap --only dotfiles,tools`
-#    applies the [dotfiles] entries from config.toml/config.dev.toml/
+#    applies the [dotfiles] entries from config.toml/config.owned.toml/
 #    config.windows.toml to %USERPROFILE% (PowerShell profile, Warp +
 #    Windows Terminal settings, Zed/VSCode settings, the .wslconfig copy, …)
 #    AND installs the runtime tools those same files declare (node/Go/uv/
@@ -1477,7 +1477,7 @@ function Invoke-EnsureConfigLocal {
     # Tera dotfiles templates render into the git identity (~/.gitconfig),
     # the SSH config comment, and -- vars.group -- the baked MISE_ENV token
     # set in zshenv.tera/bashrc.tera/10-mise.conf.tera (dev_machine ->
-    # linux,dev,host,...; anything else -> linux; see scripts/lib/mise-env.sh,
+    # linux,owned,host,...; anything else -> linux; see scripts/lib/mise-env.sh,
     # the canonical source of those token sets). Must exist BEFORE the
     # dotfiles apply below. Idempotent: once the file exists, it is left
     # untouched.
@@ -1630,7 +1630,7 @@ reported above and re-run.
 #    its npm postinstall (the LSP servers) needs to re-run, and self-healing
 #    the shims PATH — gated by its OWN change-detection stamp, so a repeat
 #    run right after step 4 is a fast no-op. WHAT to install is declared by
-#    config.toml + config.dev.toml + config.windows.toml at the ROOT of the
+#    config.toml + config.owned.toml + config.windows.toml at the ROOT of the
 #    checkout — %USERPROFILE%\.config\mise IS the checkout (Invoke-CloneRepo
 #    relocates a pre-2026-09 clone there), so mise reads them directly;
 #    nothing is generated or copied, and config.linux.toml never loads here
@@ -1650,12 +1650,12 @@ reported above and re-run.
 #    -SkipToolInstall skips it too (both steps honour the same flag now,
 #    independently of -SkipDotfiles — see Invoke-MiseBootstrap).
 # =============================================================================
-$MiseConfigFiles = @("config.toml", "config.dev.toml", "config.windows.toml")
+$MiseConfigFiles = @("config.toml", "config.owned.toml", "config.windows.toml")
 $MiseShims       = Join-Path $env:LOCALAPPDATA "mise\shims"
-$MiseEnv         = "windows,dev"
+$MiseEnv         = "windows,owned"
 
 # Get-MiseRuntimesStamp — the exact stamp path Invoke-MiseRuntimes writes on
-# success: a hash of $MiseConfigFiles (config.toml + config.dev.toml +
+# success: a hash of $MiseConfigFiles (config.toml + config.owned.toml +
 # config.windows.toml) under $RepoPath. Doctor calls this SAME helper so its
 # verdict can never drift onto a stale stamp (the Get-PythonEnvStamp
 # precedent). $null when config.toml is missing (repo not cloned yet, or the
@@ -1718,7 +1718,7 @@ function Invoke-MiseRuntimes {
         # already installed — a NODE_VERSION bump therefore installs once.
         & mise where node *> $null
         $hadNode = ($LASTEXITCODE -eq 0)
-        $nodeDeclared = [bool](Select-String -Path (Join-Path $RepoPath "config.dev.toml") -Pattern '^node\s*=' -Quiet)
+        $nodeDeclared = [bool](Select-String -Path (Join-Path $RepoPath "config.owned.toml") -Pattern '^node\s*=' -Quiet)
 
         & mise install --yes
         if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
@@ -1739,13 +1739,13 @@ function Invoke-MiseRuntimes {
                 # (most commonly Windows holding a file under it open), running
                 # that SAME postinstall command directly against the
                 # already-installed node/npm gets the identical result without
-                # replacing anything. Read it fresh from config.dev.toml every
+                # replacing anything. Read it fresh from config.owned.toml every
                 # time (never hardcode it) with an explicit `-f`, the same way
                 # scripts/lib/mise-install.sh reads it on Linux — a bare
                 # `mise config get` resolves only the highest-precedence loaded
                 # file, which here is config.windows.toml (declares no tools).
                 $postinstallOk = $false
-                $nodeConfigPath = Join-Path $RepoPath "config.dev.toml"
+                $nodeConfigPath = Join-Path $RepoPath "config.owned.toml"
                 $declOutput = & mise config get -f $nodeConfigPath "tools.node.postinstall" 2>&1
                 $declExit = $LASTEXITCODE
                 $postinstallCmd = $null
@@ -1753,7 +1753,7 @@ function Invoke-MiseRuntimes {
 
                 if ([string]::IsNullOrWhiteSpace($postinstallCmd)) {
                     # Unreadable declaration: nothing safe to run (a hardcoded
-                    # guess could silently drift from config.dev.toml) — skip
+                    # guess could silently drift from config.owned.toml) — skip
                     # straight to the warn below instead of half-fixing it.
                     Write-Warn "  could not read tools.node.postinstall from $nodeConfigPath — skipping the postinstall fallback"
                 } else {

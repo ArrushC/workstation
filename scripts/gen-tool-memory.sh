@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # gen-tool-memory.sh — regenerate the <!-- TOOLS:START/END --> inventory block
 # in the machine-level Claude memory file from mise's single sources of truth:
-# config.toml / config.linux.toml / config.dev.toml [tools] tables, the host
+# config.toml / config.linux.toml / config.owned.toml [tools] tables, the host
 # pins in config.toml [vars] (+ the claude-cli rolling `latest` pin, hard-
 # coded — it has no [vars] entry), and the dnf package keys in
 # config.host.toml / config.native.toml.
@@ -67,7 +67,7 @@ def fmt_version(spec):
 sections = [
     ("Cross-platform tools (config.toml)", "config.toml"),
     ("Linux toolbelt, both scopes (config.linux.toml)", "config.linux.toml"),
-    ("Dev tools (config.dev.toml)", "config.dev.toml"),
+    ("Owned-host tools (config.owned.toml)", "config.owned.toml"),
 ]
 
 for title, fname in sections:

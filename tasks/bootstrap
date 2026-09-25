@@ -9,7 +9,7 @@ env_has() {
   return 1
 }
 # 1. Claude Code — official installer, skip-if-present, self-updates (dev only; rolling, no pin)
-if env_has dev; then
+if env_has owned; then
   if command -v claude >/dev/null 2>&1; then
     echo "  claude present ($(command -v claude))"
   else
@@ -65,7 +65,7 @@ fi
 # — the marker just skips the claude invocations entirely once they've all
 # succeeded.
 claude_plugins_marker="$state/claude-plugins"
-if env_has dev && [ ! -f "$claude_plugins_marker" ]; then
+if env_has owned && [ ! -f "$claude_plugins_marker" ]; then
   if command -v claude >/dev/null 2>&1; then
     echo "==> claude plugin marketplace + plugins"
     claude_marketplace="claude-plugins-official"
@@ -99,7 +99,7 @@ fi
 # modify_-template equivalent). Runs every bootstrap, not marker-guarded:
 # ongoing enforcement, not a one-time script. The script itself is
 # soft-failing; the `||` here is belt-and-braces.
-if env_has dev; then
+if env_has owned; then
   "$root/scripts/lib/claude-settings-merge.sh" ||
     echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
 fi
@@ -111,7 +111,7 @@ fi
 # gets the tracked default ({"spinnerTipsEnabled": false}) without a
 # `[dotfiles]` entry ever clobbering a live edit Claude Code (or the user)
 # makes afterward.
-if env_has dev; then
+if env_has owned; then
   claude_local_src="$root/dotfiles/claude/settings.local.json"
   claude_local_dest="$HOME/.claude/settings.local.json"
   if [ -f "$claude_local_src" ] && [ ! -e "$claude_local_dest" ]; then
@@ -130,7 +130,7 @@ fi
 # re-fires the install the same way a content-hashed run_once used to.
 herdr_plugin_ref="v1.7.0"
 herdr_plugins_marker="$state/herdr-plugins-$herdr_plugin_ref"
-if env_has dev && [ ! -f "$herdr_plugins_marker" ]; then
+if env_has owned && [ ! -f "$herdr_plugins_marker" ]; then
   if command -v herdr >/dev/null 2>&1; then
     echo "==> herdr plugin (smarzban/herdr-file-viewer@$herdr_plugin_ref)"
     if herdr plugin install smarzban/herdr-file-viewer --ref "$herdr_plugin_ref" --yes; then

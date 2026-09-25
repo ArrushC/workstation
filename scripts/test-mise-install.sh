@@ -26,7 +26,7 @@ esac
 echo "fake mise: unexpected args: $*" >&2; exit 99
 EOF
 chmod +x "$T/bin/mise"
-export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux,dev,host,wsl
+export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux,owned,host,wsl
 export FAKE_LOG="$T/log" FAKE_NODE="$T/node-installed" FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@1" }'
 fail() {
   echo "FAIL: $*" >&2

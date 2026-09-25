@@ -1,4 +1,4 @@
-# config.dev.toml — dev-machine tools on BOTH OSes (loads when MISE_ENV has `dev`).
+# config.owned.toml — dev-machine tools on BOTH OSes (loads when MISE_ENV has `owned`).
 # Linux-only entries carry os = ["linux"]; everything else also installs on the
 # Windows host (%USERPROFILE%\.config\mise is this same checkout there).
 [tools]
@@ -21,19 +21,19 @@ opencode = { version = "1.18.32", os = ["linux"] }              # Windows half s
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", os = ["linux"], asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }
 
 # ---------------------------------------------------------------------------
-# Dotfiles gated on `dev` regardless of OS — chezmoi's ignore block only
+# Dotfiles gated on `owned` regardless of OS — chezmoi's ignore block only
 # listed Linux-form paths for this same dev gate (ruling 10's asymmetry); a
 # hypothetical Windows prod host would have deployed ~/.claude ungated. Here
-# the dev token on this file's own name fixes that by construction.
+# the owned token on this file's own name fixes that by construction.
 #
-# gdbinit/gdb and herdr's config used to live here too, gated on `dev` alone
+# gdbinit/gdb and herdr's config used to live here too, gated on `owned` alone
 # — functionally inert on a Windows dev host (nothing reads ~/.gdbinit there,
 # and herdr itself is Linux-only, `herdr = { …, os = ["linux"] }` above).
 # PR3 Task 3 controller review moved them to config.host.toml, gated on
-# `host` (Linux dev hosts only — `windows,dev` carries no `host` token),
+# `host` (Linux dev hosts only — `windows,owned` carries no `host` token),
 # which drops the dead Windows deploy while still landing on every Linux dev
-# host (`host` is present in both `linux,dev,host,wsl` and
-# `linux,dev,host,native`).
+# host (`host` is present in both `linux,owned,host,wsl` and
+# `linux,owned,host,native`).
 # ---------------------------------------------------------------------------
 [dotfiles]
 # Every entry here is `copy` — no `symlink`/`symlink-each` anywhere any more
@@ -54,7 +54,7 @@ opencode = { version = "1.18.32", os = ["linux"] }              # Windows half s
 # (`mise dot add --changed`) before the next apply overwrites it.
 "~/.config/ccstatusline/settings.json" = { source = "dotfiles/config/ccstatusline/settings.json", mode = "copy" }
 # ~/.config/zed/settings.json lives in config.host.toml (I7,
-# final-fix-brief.md / 2026-09-22 I7 fix): this file is gated on `dev`
+# final-fix-brief.md / 2026-09-22 I7 fix): this file is gated on `owned`
 # regardless of OS, so it was ALSO rendering on a Windows dev host — at a
 # Linux-only path Zed for Windows never reads (~/AppData/Roaming/Zed/
 # settings.json is config.windows.toml's real entry) — same class of

@@ -328,7 +328,7 @@ install_mise() {
 # but a real value still shapes the rendered ~/.gitconfig etc.), so this MUST
 # run before the first `mise bootstrap` dotfiles apply. vars.group
 # additionally gates which MISE_ENV token set zshenv.tera/bashrc.tera/
-# 10-mise.conf.tera bake in (dev_machine -> linux,dev,host,…; anything else
+# 10-mise.conf.tera bake in (dev_machine -> linux,owned,host,…; anything else
 # -> linux) — see scripts/lib/mise-env.sh, the canonical source of those
 # token sets. Idempotent: once the file exists, it is left untouched.
 # =============================================================================

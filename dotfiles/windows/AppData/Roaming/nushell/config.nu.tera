@@ -133,7 +133,7 @@ def wsu [...args] {
 # wsh -- workstation cheatsheet, the Windows twin of the bash/zsh wsh (and
 # of the PowerShell profile's). Same ASCII text as the PowerShell one apart
 # from the -C pin's spelling and the override line's wording. Only the ~/.claude/* directory entries load on
-# Windows (config.dev.toml); the Linux-only ones (zellij, zsh completions,
+# Windows (config.owned.toml); the Linux-only ones (zellij, zsh completions,
 # gdb, ~/.local/bin) don't. Nushell has no per-machine override file.
 def wsh [] {
     # str trim: drop the newlines just inside the raw string's delimiters, so

@@ -76,16 +76,16 @@ print(len(d.get("files",[])))' 2>/dev/null)"
 
 # --- bucket: host identity & scope -------------------------------------------
 seg_host() {
-  local host group osr id ver plat el osseg
+  local host mode osr id ver plat el osseg
   host="$(uname -n 2>/dev/null)"
-  # dev/prod is the `dev` token in the live MISE_ENV (rc-exported; see
+  # owned/shared is the `owned` token in the live MISE_ENV (rc-exported; see
   # tasks/bootstrap's own env_has idiom) — not a per-host config file, which
   # may not exist (config.local.toml carries only vars.name/email).
-  group=""
+  mode=""
   if [ -n "${MISE_ENV:-}" ]; then
     case ",${MISE_ENV}," in
-    *,dev,*) group="dev_machine" ;;
-    *) group="prod_machine" ;;
+    *,owned,*) mode="owned" ;;
+    *) mode="shared" ;;
     esac
   fi
   osr=/etc/os-release
@@ -97,7 +97,7 @@ seg_host() {
   [ -n "$id" ] && osseg="os=$id${ver:+ $ver}"
   [ -n "$osseg" ] && [ -n "$el" ] && [ "$el" != "$plat" ] && osseg="$osseg ($el)"
   printf 'host=%s' "${host:-?}"
-  [ -n "$group" ] && printf ' group=%s' "$group"
+  [ -n "$mode" ] && printf ' mode=%s' "$mode"
   [ -n "$osseg" ] && printf ' %s' "$osseg"
 }
 

@@ -9,7 +9,7 @@
 # config references. User-level; never sudo. Used directly by bootstrap.sh's
 # run_bootstrap() (PR2+), ahead of `mise bootstrap` itself.
 #
-# The declaration is read with an explicit `-f config.dev.toml`: a bare
+# The declaration is read with an explicit `-f config.owned.toml`: a bare
 # `mise config get tools.node` reads only the HIGHEST-PRECEDENCE loaded file,
 # which since PR2 is config.host.toml/config.wsl.toml (they declare no tools),
 # so it errors and the cksum would silently be the empty-input constant —
@@ -29,10 +29,10 @@ if mise where node >/dev/null 2>&1; then had_node=true; fi
 mise install
 
 if mise where node >/dev/null 2>&1; then
-  decl="$(mise config get -f "$repo/config.dev.toml" tools.node 2>/dev/null || true)"
+  decl="$(mise config get -f "$repo/config.owned.toml" tools.node 2>/dev/null || true)"
   if [ -z "$decl" ]; then
     printf '  ! could not read tools.node from %s — forcing the node reinstall so the npm postinstall cannot be silently skipped\n' \
-      "$repo/config.dev.toml" >&2
+      "$repo/config.owned.toml" >&2
     sum=""
   else
     sum="$(printf '%s' "$decl" | cksum | cut -d' ' -f1)"

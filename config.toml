@@ -3,7 +3,7 @@
 # Which files load is picked by MISE_ENV (scripts/lib/mise-env.sh):
 #   config.toml          always            (cross-platform: uv)
 #   config.linux.toml    linux             (the Linux toolbelt, both scopes)
-#   config.dev.toml      dev               (dev tools on both OSes)
+#   config.owned.toml    owned             (dev tools on both OSes)
 #   config.host.toml     host              (Linux dev: dnf + /etc)
 #   config.native.toml   native            (non-WSL dev: NFS client)
 #   config.wsl.toml      wsl               (/etc/wsl.conf)

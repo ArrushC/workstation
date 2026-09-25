@@ -52,8 +52,8 @@ case "$norm" in
 */config.toml)
   msg="config.toml [vars]: python_version is a three-way pin with tools.python and bootstrap.ps1 \$PythonEnvVersion; nerd_font_version triple-edits scripts/lib/font.sh (SHA arm) and scripts/install-nerd-fonts.ps1."
   ;;
-*/config.linux.toml | */config.dev.toml)
-  msg="Tool pins changed. jq/gh/helix (config.linux.toml) and opencode/omp/DevToys (config.dev.toml) dual-edit bootstrap.ps1 \$PortableTools; min_version dual-edits MISE_VERSION in bootstrap.sh + bootstrap.ps1. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
+*/config.linux.toml | */config.owned.toml)
+  msg="Tool pins changed. jq/gh/helix (config.linux.toml) and opencode/omp/DevToys (config.owned.toml) dual-edit bootstrap.ps1 \$PortableTools; min_version dual-edits MISE_VERSION in bootstrap.sh + bootstrap.ps1. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
   ;;
 esac
 if [ -z "$msg" ]; then

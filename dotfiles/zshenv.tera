@@ -31,4 +31,4 @@ esac
 # --- MISE_ENV: which config.<env>.toml files mise loads on this host ---------
 # Computed once by bootstrap.sh (scripts/lib/mise-env.sh) and persisted here so
 # every zsh — interactive, `ssh host cmd`, cron — sees the same tool set.
-export MISE_ENV="{% if vars.group is defined and vars.group == "dev_machine" %}linux,dev,host,{% if "microsoft" in (exec(command="uname -r") | lower) %}wsl{% else %}native{% endif %}{% else %}linux{% endif %}"
+export MISE_ENV="{% if vars.group is defined and vars.group == "dev_machine" %}linux,owned,host,{% if "microsoft" in (exec(command="uname -r") | lower) %}wsl{% else %}native{% endif %}{% else %}linux{% endif %}"

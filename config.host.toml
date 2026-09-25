@@ -1,5 +1,5 @@
 # ~/.config/mise/config.host.toml — Linux DEV host state (MISE_ENV token `host`).
-# Loaded only on dev hosts (linux,dev,host,{wsl|native}); prod hosts never see it,
+# Loaded only on dev hosts (linux,owned,host,{wsl|native}); prod hosts never see it,
 # so nothing here may be needed without sudo. Sudo is requested by mise itself,
 # by default (no repo setting — mise's dnf backend re-execs itself with sudo
 # unconditionally), for the dnf batch and by the hook task.
@@ -84,12 +84,12 @@
 
 # ---------------------------------------------------------------------------
 # Dotfiles: Linux DEV only (`host` token — loads on Linux dev hosts only,
-# never on `windows,dev`, which carries no `host` token). Moved from
-# config.dev.toml (dev-only, both OSes) by PR3 Task 3 controller review:
+# never on `windows,owned`, which carries no `host` token). Moved from
+# config.owned.toml (dev-only, both OSes) by PR3 Task 3 controller review:
 # gdbinit/gdb are read by nothing on Windows, and herdr's config was a dead
-# file there too (herdr itself is Linux-only, config.dev.toml's own
+# file there too (herdr itself is Linux-only, config.owned.toml's own
 # `herdr = { …, os = ["linux"] }`). `host` lands identically on every Linux
-# dev host — both `linux,dev,host,wsl` and `linux,dev,host,native` carry it.
+# dev host — both `linux,owned,host,wsl` and `linux,owned,host,native` carry it.
 # zed's settings.json joined this file for the same reason (I7,
 # 2026-09-22 copy-migration review): it used to live in config.linux.toml,
 # which carries no `dev` gate at all, so it deployed on Linux PROD hosts too

@@ -104,7 +104,7 @@ taplo = "0.10.0"
 
 # ---------------------------------------------------------------------------
 # Dotfiles: everything Linux-only, not dev-gated (dev-only targets — the
-# ~/.claude tree, ccstatusline — live in config.dev.toml; Linux-dev-only
+# ~/.claude tree, ccstatusline — live in config.owned.toml; Linux-dev-only
 # targets — gdbinit/gdb, herdr's config — in config.host.toml; Windows
 # targets in config.windows.toml; cross-platform targets in config.toml.
 # zed's settings.json is NOT here — I7 (2026-09-22 copy-migration review): it
@@ -119,7 +119,7 @@ taplo = "0.10.0"
 # which a plain file `symlink` and a whole-directory `symlink` both fail at
 # in different ways). Directories that chezmoi managed as directories
 # (zellij, zsh/completions, the claude hooks/agents/commands/skills trees in
-# config.dev.toml) keep exclude = [".vendor", ".gitkeep"] on a directory
+# config.owned.toml) keep exclude = [".vendor", ".gitkeep"] on a directory
 # `copy` entry rather than a whole-directory symlink: mise's `symlink` on a
 # directory REPLACES it wholesale on apply, silently deleting any unmanaged
 # sibling file a user or another tool drops in there (reproduced against
@@ -188,7 +188,7 @@ taplo = "0.10.0"
 # able to fail the bootstrap. mise runs bootstrap hooks as `sh -o errexit -c
 # '<this>'` (confirmed against a real --dry-run render): a bare `; true` tail
 # is NOT enough on its own, because errexit aborts at the FIRST failing
-# command in a `;`-chain — on a prod host (MISE_ENV=linux, no config.dev.toml,
+# command in a `;`-chain — on a prod host (MISE_ENV=linux, no config.owned.toml,
 # so ~/.claude never exists) the first chmod's failure on the missing
 # ~/.claude operand would abort before the second chmod ever runs. Each
 # command therefore gets its own `|| true` so no single command's failure is

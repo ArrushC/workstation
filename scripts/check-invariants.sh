@@ -43,7 +43,7 @@ for _p in wpy python3; do
   fi
 done
 # tomlval <file> <dotted.key> — print a TOML value (string, or a table's `version`).
-# Keys with dots/colons inside quotes are supported: tomlval config.dev.toml 'tools."github:DevToys-app/DevToys"'
+# Keys with dots/colons inside quotes are supported: tomlval config.owned.toml 'tools."github:DevToys-app/DevToys"'
 tomlval() {
   [ -n "$PY" ] || return 1
   "$PY" - "$1" "$2" <<'PY'
@@ -109,28 +109,28 @@ check_version_pins() {
       bad "helix drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.dev.toml tools.opencode)
+    v=$(tomlval config.owned.toml tools.opencode)
     ref=$(ps1_tool_version OpenCode)
     if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "opencode @ $v  (config.dev.toml == bootstrap.ps1)"
+      ok "opencode @ $v  (config.owned.toml == bootstrap.ps1)"
     else
-      bad "opencode drift: config.dev.toml='$v' bootstrap.ps1='$ref'"
+      bad "opencode drift: config.owned.toml='$v' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.dev.toml 'tools."github:can1357/oh-my-pi"')
+    v=$(tomlval config.owned.toml 'tools."github:can1357/oh-my-pi"')
     ref=$(ps1_tool_version "Oh My Pi")
     if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "omp @ $v  (config.dev.toml == bootstrap.ps1)"
+      ok "omp @ $v  (config.owned.toml == bootstrap.ps1)"
     else
-      bad "omp drift: config.dev.toml='$v' bootstrap.ps1='$ref'"
+      bad "omp drift: config.owned.toml='$v' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.dev.toml 'tools."github:DevToys-app/DevToys"')
+    v=$(tomlval config.owned.toml 'tools."github:DevToys-app/DevToys"')
     ref=$(ps1_tool_version "DevToys CLI")
     if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "devtoys-cli @ $v  (config.dev.toml == bootstrap.ps1)"
+      ok "devtoys-cli @ $v  (config.owned.toml == bootstrap.ps1)"
     else
-      bad "devtoys-cli drift: config.dev.toml='$v' bootstrap.ps1='$ref'"
+      bad "devtoys-cli drift: config.owned.toml='$v' bootstrap.ps1='$ref'"
     fi
 
     v=$(grep -oE '^MISE_VERSION="[0-9][0-9.]+"' bootstrap.sh | grep -oE '[0-9][0-9.]+')
@@ -247,8 +247,8 @@ EOF
     rm -rf "$home"
     return 1
   fi
-  # Matches both the rc-file form (export MISE_ENV="linux,dev,host,wsl") and
-  # environment.d's unquoted systemd form (MISE_ENV=linux,dev,host,wsl).
+  # Matches both the rc-file form (export MISE_ENV="linux,owned,host,wsl") and
+  # environment.d's unquoted systemd form (MISE_ENV=linux,owned,host,wsl).
   baked=$(grep -oE '(export )?MISE_ENV="?[a-z,]+"?' "$path" | head -1 | sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//')
   rm -rf "$home"
   [ -n "$baked" ] || return 1
@@ -562,7 +562,7 @@ check_tools_block() {
 check_mise_config_files() {
   hdr "mise config*.toml parse + lockfile coverage + min_version"
   local f
-  for f in config.toml config.linux.toml config.dev.toml mise.lock mise.linux.lock mise.dev.lock; do
+  for f in config.toml config.linux.toml config.owned.toml mise.lock mise.linux.lock mise.owned.lock; do
     [ -f "$f" ] || {
       bad "missing: $f"
       return
@@ -577,9 +577,9 @@ def load(f):
     with open(f, "rb") as fh:
         return tomllib.load(fh)
 
-lockmap = {"config.toml": "mise.lock", "config.linux.toml": "mise.linux.lock", "config.dev.toml": "mise.dev.lock"}
+lockmap = {"config.toml": "mise.lock", "config.linux.toml": "mise.linux.lock", "config.owned.toml": "mise.owned.lock"}
 missing = []
-for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("config.dev.toml", True)):
+for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("config.owned.toml", True)):
     ltools = load(lockmap[f]).get("tools", {})
     for name, spec in load(f).get("tools", {}).items():
         short = name.split(":", 1)[1] if ":" in name and not name.startswith(("go:", "pypi:", "pipx:", "npm:", "http:")) else name
@@ -608,7 +608,7 @@ for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("confi
             blocks = entries if isinstance(entries, list) else [entries]
             lock_vers = sorted({e.get("version") for e in blocks})
             if pin not in lock_vers:
-                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux,dev,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,dev mise lock --global --platform windows-x64")
+                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64")
 if missing:
     print("\n".join(missing))
     sys.exit(1)
@@ -616,7 +616,7 @@ PY
   then
     ok "every [tools] entry has a lock entry (linux-x64; windows-x64 where it installs on Windows)"
   else
-    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,dev,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,dev mise lock --global --platform windows-x64"
+    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64"
   fi
   # PR2 host-state files: config.host.toml / config.native.toml / config.wsl.toml
   # must parse and declare no [tools] (lock coverage above stays three files),
@@ -662,7 +662,7 @@ PY
     local tmp
     tmp="$(mktemp -d)"
     ln -s "$PWD" "$tmp/mise"
-    if XDG_CONFIG_HOME="$tmp" MISE_ENV=linux,dev,host,native mise config ls >/dev/null 2>&1 &&
+    if XDG_CONFIG_HOME="$tmp" MISE_ENV=linux,owned,host,native mise config ls >/dev/null 2>&1 &&
       env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$tmp" mise tasks validate >/dev/null 2>&1; then
       ok "mise loads the config files and validates tasks/"
     else
@@ -693,7 +693,7 @@ PY
       lock_ok=0
       ;;
     esac
-  done < <(grep -ho 'path = "[^"]*"' mise.lock mise.linux.lock mise.dev.lock 2>/dev/null | sed -E 's/^path = "(.*)"$/\1/')
+  done < <(grep -ho 'path = "[^"]*"' mise.lock mise.linux.lock mise.owned.lock 2>/dev/null | sed -E 's/^path = "(.*)"$/\1/')
   if [ "$lock_ok" -eq 1 ]; then
     ok "every lock sidecar path ref is under locks/ and the directory exists"
   fi
@@ -706,7 +706,7 @@ PY
   if [ -n "$PY" ]; then
     local missing
     missing="$(
-      "$PY" - mise.lock mise.linux.lock mise.dev.lock <<'PYEOF'
+      "$PY" - mise.lock mise.linux.lock mise.owned.lock <<'PYEOF'
 import sys, tomllib
 for f in sys.argv[1:]:
     try:
@@ -772,7 +772,7 @@ PY
 # Task 3): parse, hook shape + task existence + name uniqueness, file source
 # existence + phase, package key shape + uniqueness + dropped names, the two
 # no-sudo rulings (docs/superpowers/plans/2026-09-17-mise-host.md Rulings
-# 1-2), and prod/Windows safety (config.toml/config.dev.toml never gain a
+# 1-2), and prod/Windows safety (config.toml/config.owned.toml never gain a
 # [bootstrap] table). (h) is a live `mise bootstrap plan` — soft-skipped
 # unless both mise and dnf are on PATH (CI has no dnf).
 check_bootstrap_config() {
@@ -806,7 +806,7 @@ hook_re = re.compile(r"^mise run [a-z-]+$")
 # bare `chmod ... ; chmod ... ; true` LOOKS unconditional but is not — mise
 # runs hooks as `sh -o errexit -c '<hook>'`, and errexit aborts at the first
 # failing command in a `;`-chain (verified: on a prod host, MISE_ENV=linux
-# never loads config.dev.toml, so ~/.claude never exists, and the first
+# never loads config.owned.toml, so ~/.claude never exists, and the first
 # chmod's failure on that missing operand aborted the whole bootstrap before
 # `; true` was ever reached). Each command needs its own `|| true`.
 EXPECTED_POST_DOTFILES_HOOK = (
@@ -890,9 +890,9 @@ if ruling_hits:
 else:
     print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (rulings 1-2)")
 
-# (g): config.toml / config.dev.toml carry no [bootstrap] table (prod hosts / Windows never load one).
+# (g): config.toml / config.owned.toml carry no [bootstrap] table (prod hosts / Windows never load one).
 prod_hits = []
-for f in ("config.toml", "config.dev.toml"):
+for f in ("config.toml", "config.owned.toml"):
     try:
         with open(f, "rb") as fh:
             d = tomllib.load(fh)
@@ -902,9 +902,9 @@ for f in ("config.toml", "config.dev.toml"):
     if "bootstrap" in d:
         prod_hits.append(f"{f} has a [bootstrap] table (prod hosts / Windows must never load one)")
 if prod_hits:
-    print("FAIL|prod-safety|" + "; ".join(prod_hits))
+    print("FAIL|shared-safety|" + "; ".join(prod_hits))
 else:
-    print("PASS|prod-safety|config.toml and config.dev.toml carry no [bootstrap] table")
+    print("PASS|shared-safety|config.toml and config.owned.toml carry no [bootstrap] table")
 PY
     )
     while IFS='|' read -r result _ detail; do
@@ -919,10 +919,10 @@ PY
 
   # (h) live plan — dev host with dnf only; CI has no dnf.
   if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
-    if MISE_ENV=linux,dev,host,native mise bootstrap plan --json >/dev/null 2>&1; then
-      ok "mise bootstrap plan --json (MISE_ENV=linux,dev,host,native) exits 0"
+    if MISE_ENV=linux,owned,host,native mise bootstrap plan --json >/dev/null 2>&1; then
+      ok "mise bootstrap plan --json (MISE_ENV=linux,owned,host,native) exits 0"
     else
-      bad "mise bootstrap plan --json (MISE_ENV=linux,dev,host,native) failed"
+      bad "mise bootstrap plan --json (MISE_ENV=linux,owned,host,native) failed"
     fi
   else
     note "mise and/or dnf not on PATH — skipped the live 'mise bootstrap plan' check (CI has no dnf)"
@@ -945,9 +945,9 @@ import glob, os, tomllib
 # { mode = ..., enabled = false } override pattern — findings.md §9), so a
 # "no entry in two files" check would misfire against its own documented use.
 # config.host.toml joined this list in PR3 Task 3 (gdbinit/gdb/herdr config
-# moved there from config.dev.toml so they stop deploying dead files on a
+# moved there from config.owned.toml so they stop deploying dead files on a
 # Windows dev host — see config.host.toml's own [dotfiles] comment).
-files = ["config.toml", "config.linux.toml", "config.dev.toml", "config.host.toml", "config.windows.toml"]
+files = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
     try:
@@ -996,7 +996,7 @@ else:
 # respect symlinks): no `[dotfiles]` entry, in ANY of the five files, on ANY
 # platform, is `symlink` or `symlink-each` any more — every entry is `copy`
 # or `template`. This used to iterate only the entries that actually LOAD on
-# a Windows host (config.toml + config.dev.toml + config.windows.toml —
+# a Windows host (config.toml + config.owned.toml + config.windows.toml —
 # config.linux.toml and config.host.toml never load there), because before
 # this migration a `symlink`/`symlink-each` entry was fine as long as it was
 # Linux-only; a bare `symlink` on Windows needs Developer Mode and silently
@@ -1006,7 +1006,7 @@ else:
 # thing — this checks everything directly rather than re-deriving the
 # Windows-load gate. check-invariants I4 (final-fix-brief.md) is the reason
 # this iterates all 5 files rather than just config.windows.toml (a
-# `windows,dev` scratch apply proved config.toml/config.dev.toml entries
+# `windows,owned` scratch apply proved config.toml/config.owned.toml entries
 # land on a Windows host too).
 bad_symlink = []
 n_total = 0
@@ -1098,7 +1098,7 @@ check_lsp_plugin() {
   # convention needs .claude-plugin/plugin.json, and the LSP registry needs
   # .lsp.json. dotfiles/ keeps them literally, matching the real ~/.claude
   # tree (PR3 Task 2: workstation-lsp/ nests inside the `~/.claude/skills`
-  # [dotfiles] entry in config.dev.toml — copy mode, 2026-09-22 migration —
+  # [dotfiles] entry in config.owned.toml — copy mode, 2026-09-22 migration —
   # so nested names deploy exactly as spelled here).
   if [ ! -f "$src/.claude-plugin/plugin.json" ] || [ ! -f "$src/.lsp.json" ]; then
     bad "missing workstation-lsp plugin source ($src/.claude-plugin/plugin.json + .lsp.json)"
@@ -1497,10 +1497,10 @@ check_go_gopls_coupling() {
     note "no python with tomllib — go/gopls coupling skipped locally (CI enforces)"
     return
   fi
-  gov=$(tomlval config.dev.toml tools.go)
-  goplsv=$(tomlval config.dev.toml 'tools."go:golang.org/x/tools/gopls"')
+  gov=$(tomlval config.owned.toml tools.go)
+  goplsv=$(tomlval config.owned.toml 'tools."go:golang.org/x/tools/gopls"')
   if [ -z "$gov" ] || [ -z "$goplsv" ]; then
-    bad "could not read tools.go / tools.\"go:golang.org/x/tools/gopls\" from config.dev.toml"
+    bad "could not read tools.go / tools.\"go:golang.org/x/tools/gopls\" from config.owned.toml"
     return
   fi
 
@@ -1521,18 +1521,18 @@ check_go_gopls_coupling() {
   if [ "$(printf '%s\n%s\n' "$floor" "$gov" | sort -V | tail -1)" = "$gov" ]; then
     ok "gopls $goplsv needs go >= $floor; pinned go is $gov"
   else
-    bad "gopls $goplsv requires go >= $floor but tools.go (config.dev.toml) is $gov — \`mise install\` would fail on gopls, leaving it stale or absent; bump both together"
+    bad "gopls $goplsv requires go >= $floor but tools.go (config.owned.toml) is $gov — \`mise install\` would fail on gopls, leaving it stale or absent; bump both together"
   fi
 }
 
 check_tsls_typescript_coupling() {
   hdr "typescript-language-server <-> typescript major"
   local post tsv tslsv major
-  post=$(grep -E '^node = ' config.dev.toml)
+  post=$(grep -E '^node = ' config.owned.toml)
   tslsv=$(grep -oE 'typescript-language-server@[0-9.]+' <<<"$post" | cut -d@ -f2)
   tsv=$(grep -oE 'typescript@[0-9.]+' <<<"$post" | cut -d@ -f2)
   if [ -z "$tsv" ] || [ -z "$tslsv" ]; then
-    bad "could not read typescript / typescript-language-server versions from config.dev.toml's node postinstall"
+    bad "could not read typescript / typescript-language-server versions from config.owned.toml's node postinstall"
     return
   fi
   # typescript-language-server (every release through 6.0.0) drives

@@ -17,7 +17,7 @@ for anything a language server answers better:
 
 These servers are registered with Claude Code's `LSP` tool by the bundled
 `workstation-lsp` plugin (`~/.claude/skills/workstation-lsp/`); their binaries
-come from mise (`config.dev.toml`, installed by `./bootstrap.sh --dev`).
+come from mise (`config.owned.toml`, installed by `./bootstrap.sh --dev`).
 Coverage on this host:
 
 | Language | Server |
@@ -143,7 +143,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `asciinema` latest
 - `harlequin` latest
 
-### Dev tools (config.dev.toml)
+### Owned-host tools (config.owned.toml)
 - `node` 26.10.0
 - `typescript-language-server` 6.0.0
 - `typescript` 5.9.3
