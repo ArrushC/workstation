@@ -65,9 +65,6 @@
 #   5b. start-menu lnks — per-user Start Menu shortcuts for the GUI portable
 #                     tools (dnGrep/LogExpert — their .zips ship none);
 #                     idempotent + duplicate-proof.
-#   5c. retired wt profiles — delete the Windows Terminal SSH-profile fragment
-#                     earlier versions generated from the (now removed) hosts
-#                     list; the managed workstation fragment dir only.
 #   5d. warp tab configs — regenerate the Warp launch entries for the local
 #                     shells; only workstation-*.toml is owned, self-heals
 #                     every run (and so clears the old per-host SSH tabs).
@@ -135,8 +132,7 @@
 #   -SkipElevated       skip the best-effort ELEVATED installs ($ElevatedTools:
 #                       SSHFS-Win + WinFsp). Everything else stays admin-free;
 #                       this is the only step that can pop a UAC prompt.
-#   -Reinstall          wipe the cloned repo (+ any leftover pre-migration
-#                       chezmoi config) first, then run the normal flow. Does
+#   -Reinstall          wipe the cloned repo, then run the normal flow. Does
 #                       NOT remove installed tools or deployed dotfiles — the
 #                       bootstrap is idempotent over those.
 #                       Prompts unless -Yes is also passed.
@@ -652,25 +648,15 @@ $ElevatedTools = @(
 )
 
 # =============================================================================
-# 0. REINSTALL (optional) — wipe the cloned repo (+ any leftover pre-migration
-#    chezmoi config), then let the rest of the script re-bootstrap fresh.
-#    Installed tools and deployed dotfiles are left alone — re-running is
-#    idempotent over those.
+# 0. REINSTALL (optional) — wipe the cloned repo, then let the rest of the
+#    script re-bootstrap fresh. Installed tools and deployed dotfiles are
+#    left alone — re-running is idempotent over those.
 # =============================================================================
 function Invoke-Reinstall {
-    # Leftover from a host that ran the OLD chezmoi-based bootstrap.ps1 —
-    # chezmoi itself is gone (see Task 5), but this directory can still be
-    # sitting there from before the migration; sweep it the same way
-    # bootstrap.sh's do_reinstall() does on Linux.
-    $chezmoiCfg = Join-Path $env:USERPROFILE ".config\chezmoi"
-
     Write-Log "Reinstall mode — wipe + re-bootstrap"
     Write-Host ""
     Write-Host "  Will REMOVE:"
     Write-Host "    - $RepoPath  (cloned workstation repo)"
-    if (Test-Path $chezmoiCfg) {
-        Write-Host "    - $chezmoiCfg\chezmoistate.boltdb, chezmoi.toml  (leftover pre-migration chezmoi state, if any -- key.txt, if any, is preserved)"
-    }
     Write-Host ""
     Write-Host "  Will NOT remove (leaving for re-bootstrap to no-op over):"
     Write-Host "    - Binary tools under $WsRoot (re-bootstrap detects + skips them)"
@@ -713,22 +699,6 @@ be deleted, leaving this invocation orphaned. Either:
         Write-Ok "Repo removed"
     } else {
         Write-Log "$RepoPath not present — nothing to remove"
-    }
-
-    if (Test-Path $chezmoiCfg) {
-        # I9 fix (final-fix-brief.md): tasks/migrate-legacy's own chezmoi
-        # sweep (the bootstrap.sh side) deliberately removes only
-        # chezmoistate.boltdb + chezmoi.toml, never key.txt (the age
-        # identity, if a host ever had one, is out-of-band and not ours to
-        # touch or judge). A whole-directory delete here disagreed and would
-        # take key.txt with it. Match that sweep exactly: same two paths,
-        # nothing else.
-        Write-Log "Removing leftover $chezmoiCfg state (chezmoistate.boltdb, chezmoi.toml)..."
-        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $chezmoiCfg "chezmoistate.boltdb")
-        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $chezmoiCfg "chezmoi.toml")
-        Write-Ok "leftover pre-migration chezmoi state removed (key.txt, if any, preserved)"
-    } else {
-        Write-Log "$chezmoiCfg not present — nothing to remove"
     }
 
     Write-Host ""
@@ -1392,57 +1362,6 @@ function Invoke-ToolInstall {
 # 3. CLONE REPO (public; optional $env:GITHUB_TOKEN for a private fork)
 # =============================================================================
 function Invoke-CloneRepo {
-    # One-time relocation: the checkout moved from .local\share\chezmoi to
-    # .config\mise (the repo IS mise's global config dir). A pre-existing
-    # .config\mise (the chezmoi-deployed conf.d era) is moved aside.
-    $legacyRepo = Join-Path $env:USERPROFILE ".local\share\chezmoi"
-    if (-not (Test-Path "$RepoPath\.git") -and (Test-Path "$legacyRepo\.git")) {
-        if (Test-Path $RepoPath) {
-            $aside = "$RepoPath.pre-relocation.$(Get-Date -Format yyyyMMddHHmmss)"
-            try {
-                Move-Item -LiteralPath $RepoPath -Destination $aside -ErrorAction Stop
-            } catch {
-                Write-Fail @"
-Couldn't move the old $RepoPath (mise conf.d) aside to ${aside}:
-  $($_.Exception.Message)
-  Something still holds it open — usually a shell whose current directory is
-  inside it, or an editor with the folder open. Close or cd them out of it,
-  then re-run this script.
-"@
-            }
-            Write-Warn "moved the old $RepoPath (mise conf.d) to $aside — delete it once the new layout works"
-        }
-        $parent = Split-Path $RepoPath -Parent
-        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
-
-        # Windows won't move a directory any process is sitting in. Release our
-        # own two holds first — the provider location AND the .NET process cwd
-        # (Set-Location never updates the latter in PowerShell 5.1).
-        $home_ = $env:USERPROFILE
-        if ((Get-Location).Path.StartsWith($legacyRepo, [StringComparison]::OrdinalIgnoreCase)) {
-            Set-Location -LiteralPath $home_
-        }
-        if ([Environment]::CurrentDirectory.StartsWith($legacyRepo, [StringComparison]::OrdinalIgnoreCase)) {
-            [Environment]::CurrentDirectory = $home_
-        }
-        try {
-            Move-Item -LiteralPath $legacyRepo -Destination $RepoPath -ErrorAction Stop
-        } catch {
-            Write-Fail @"
-Couldn't relocate the checkout: $legacyRepo -> $RepoPath
-  $($_.Exception.Message)
-  Something still holds the old checkout open — usually a shell whose current directory
-  is inside it (another terminal tab, or the Nushell/PowerShell that launched this script),
-  or an editor with the folder open. Close or cd them out of it (cd ~), then re-run:
-    & "$legacyRepo\bootstrap.ps1"
-"@
-        }
-        Write-Ok "Relocated the checkout: $legacyRepo -> $RepoPath"
-        # The script (and, when run in-process, the user's shell) now sits in a
-        # path that no longer exists — move it into the relocated checkout.
-        Set-Location -LiteralPath $RepoPath
-    }
-
     # HTTP Basic with base64-encoded "x-access-token:<PAT>" — same scheme
     # actions/checkout uses. "Authorization: bearer" works for the REST/raw API
     # (how curl.exe fetches bootstrap.ps1) but is NOT accepted by git's smart-HTTP
@@ -1553,103 +1472,6 @@ function ConvertFrom-TomlDoubleQuoted {
     return $sb.ToString()
 }
 
-function Get-LegacyChezmoiIdentity {
-    # Reads name/email/group out of a pre-migration chezmoi.toml's [data]
-    # table, if present -- the Windows analog of bootstrap.sh's
-    # ensure_config_local() tomllib parse (see ConvertFrom-TomlDoubleQuoted
-    # for why this side hand-parses instead).
-    param([string]$Path)
-    $result = @{ Name = ""; Email = ""; Group = "" }
-    if (-not (Test-Path -LiteralPath $Path)) { return $result }
-    $inData = $false
-    foreach ($line in (Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction SilentlyContinue)) {
-        $t = $line.Trim()
-        if ($t -match '^\[(.+)\]$') {
-            $inData = ($Matches[1].Trim() -eq 'data')
-            continue
-        }
-        if (-not $inData) { continue }
-        if ($t -match '^(name|email|group)\s*=\s*"(.*)"\s*$') {
-            $val = ConvertFrom-TomlDoubleQuoted $Matches[2]
-            switch ($Matches[1]) {
-                'name'  { $result.Name  = $val }
-                'email' { $result.Email = $val }
-                'group' { $result.Group = $val }
-            }
-        }
-    }
-    return $result
-}
-
-function Test-ConfigLocalHasGroup {
-    # Minimal table-aware TOML read for the repair path below -- no full TOML
-    # parser is available this early in a fresh bootstrap (see
-    # ConvertFrom-TomlDoubleQuoted's header), but config.local.toml is only
-    # ever written by Invoke-EnsureConfigLocal, so its shape is fully known:
-    # one comment line, one [vars] table, name/email/group keys.
-    param([string]$Path)
-    $inVars = $false
-    foreach ($line in (Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction SilentlyContinue)) {
-        $t = $line.Trim()
-        if ($t -match '^\[(.+)\]$') {
-            $inVars = ($Matches[1].Trim() -eq 'vars')
-            continue
-        }
-        if ($inVars -and $t -match '^group\s*=') { return $true }
-    }
-    return $false
-}
-
-function Repair-ConfigLocalGroup {
-    # Idempotent repair for a config.local.toml written by an earlier
-    # bootstrap.ps1 that predates vars.group (2026-09-19 fix: MISE_ENV was
-    # baking as "linux" on every host because nothing ever wrote vars.group
-    # -- see the fix report). Windows hosts are always the dev group (there
-    # is no Windows-prod MISE_ENV token set -- see $MiseEnv = "windows,dev"
-    # above), so the repaired value is always "dev_machine".
-    #
-    # I2 fix (final-fix-brief.md): a bare AppendAllText glues onto whatever
-    # the file's last byte happens to be. A config.local.toml written before
-    # this writer appended a trailing newline (or hand-edited without one)
-    # ends its last line with no `\`n`, so a blind append produced e.g.
-    # `email = "x"group = "dev_machine"` -- invalid TOML immediately, and
-    # unparseable by any later run (this repair included, on run 2). Read the
-    # file back and insert the new key right after the `[vars]` header
-    # instead of at EOF, then re-check with Test-ConfigLocalHasGroup to prove
-    # the insert actually landed before trusting it -- never a bare `>>`
-    # equivalent.
-    param([string]$Path)
-    if (Test-ConfigLocalHasGroup -Path $Path) { return }
-    $group = "dev_machine" -replace '\\', '\\' -replace '"', '\"'
-    $newLine = 'group = "' + $group + '"'
-
-    $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.AddRange([string[]](Get-Content -LiteralPath $Path -Encoding UTF8))
-    $inserted = $false
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i].Trim() -eq '[vars]') {
-            $lines.Insert($i + 1, $newLine)
-            $inserted = $true
-            break
-        }
-    }
-    if (-not $inserted) {
-        # No [vars] table at all (shouldn't happen -- Invoke-EnsureConfigLocal
-        # always writes one) -- prepend a fresh one rather than risk an EOF
-        # append landing in whatever table happens to be last.
-        $lines.Insert(0, $newLine)
-        $lines.Insert(0, '[vars]')
-    }
-    $outContent = ($lines -join "`n") + "`n"
-    [System.IO.File]::WriteAllText($Path, $outContent, (New-Object System.Text.UTF8Encoding($false)))
-
-    if (-not (Test-ConfigLocalHasGroup -Path $Path)) {
-        Write-Warn "failed to repair ${Path}: vars.group still missing after rewrite -- inspect by hand"
-        return
-    }
-    Write-Ok "repaired ${Path}: inserted vars.group=dev_machine under [vars] (was missing)"
-}
-
 function Invoke-EnsureConfigLocal {
     # config.local.toml -- per-host, git-ignored [vars] name/email/group the
     # Tera dotfiles templates render into the git identity (~/.gitconfig),
@@ -1657,41 +1479,23 @@ function Invoke-EnsureConfigLocal {
     # set in zshenv.tera/bashrc.tera/10-mise.conf.tera (dev_machine ->
     # linux,dev,host,...; anything else -> linux; see scripts/lib/mise-env.sh,
     # the canonical source of those token sets). Must exist BEFORE the
-    # dotfiles apply below. Idempotent: once the file is present, only a
-    # missing vars.group is repaired (Repair-ConfigLocalGroup); name/email
-    # are never touched again.
-    #
-    # Migration: a host that ran the old chezmoi-based bootstrap has
-    # name/email/group cached in %USERPROFILE%\.config\chezmoi\chezmoi.toml's
-    # [data] table -- read from there instead of prompting. Fresh hosts (no
-    # chezmoi.toml, or nothing usable in it) fall back to an interactive
-    # prompt; -SkipToolInstall or a non-interactive console (no real input --
-    # a scheduled/remote invocation) skips the prompt and warns instead,
-    # mirroring bootstrap.sh's /dev/tty guard. group falls back to
-    # "dev_machine" (Windows hosts are always the dev group) whenever
-    # chezmoi.toml has none to migrate.
+    # dotfiles apply below. Idempotent: once the file exists, it is left
+    # untouched.
     $target = Join-Path $RepoPath "config.local.toml"
     if (Test-Path -LiteralPath $target) {
-        Repair-ConfigLocalGroup -Path $target
         Write-Ok "config.local.toml already present ($target)"
         return
     }
 
-    $legacyToml = Join-Path $env:USERPROFILE ".config\chezmoi\chezmoi.toml"
-    $identity = Get-LegacyChezmoiIdentity -Path $legacyToml
-    $name  = $identity.Name
-    $email = $identity.Email
-    $group = $identity.Group
-    if ($name -or $email -or $group) {
-        Write-Log "Migrating name/email/group from $legacyToml"
-    }
-    if (-not $group) { $group = "dev_machine" }
+    $name  = ""
+    $email = ""
+    $group = "dev_machine"
 
     if ((-not $name) -or (-not $email)) {
         $nonInteractive = $SkipToolInstall -or [Console]::IsInputRedirected
         if ($nonInteractive) {
             $reason = if ($SkipToolInstall) { "-SkipToolInstall" } else { "no interactive console" }
-            Write-Warn "Skipping the config.local.toml prompt ($reason) and no $legacyToml to migrate from."
+            Write-Warn "Skipping the config.local.toml prompt ($reason)."
             Write-Warn "Create it by hand before the next bootstrap run ($target):"
             Write-Warn '  [vars]'
             Write-Warn '  name = "Your Name"'
@@ -1888,18 +1692,6 @@ function Invoke-MiseRuntimes {
     # Idempotent; Invoke-MiseBootstrap also calls this (they're independently
     # skippable — see its header comment).
     Initialize-MiseEnv
-
-    # One-time sweep of the retired portable uv (a $PortableTools entry until
-    # 2026-09): its dir sat on the User PATH ahead of mise's shims, so the stale
-    # copy would shadow mise's uv in every non-activated shell. Idempotent —
-    # the Linux counterpart is lib/mise.sh sweep-legacy.
-    $legacyUv = Join-Path $WsRoot "uv"
-    if (Test-Path $legacyUv) {
-        Remove-Item -Recurse -Force $legacyUv -ErrorAction SilentlyContinue
-        Get-ChildItem -Path $WsStamps -Filter "uv.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-        Write-Ok "Swept the retired portable uv ($legacyUv — uv is a mise runtime now)"
-    }
-    Remove-FromUserPath $legacyUv
 
     $stamp = Get-MiseRuntimesStamp
     if ($null -eq $stamp) {
@@ -2112,26 +1904,6 @@ function Invoke-StartMenuShortcuts {
         } catch {
             Write-Warn "Could not create the $($tool.Name) Start Menu shortcut: $($_.Exception.Message)"
         }
-    }
-}
-
-# =============================================================================
-# 5c. RETIRED WINDOWS TERMINAL HOST PROFILES — earlier versions generated one
-#      SSH launch profile per hosts.conf row into Windows Terminal's dynamic
-#      fragment dir (Fragments\workstation under %LOCALAPPDATA%\Microsoft\
-#      Windows Terminal). The hosts list is gone (2026-09-24), so delete that
-#      fragment instead of leaving stale host profiles in the new-tab menu.
-#      The workstation app dir was wholly owned by the old generator; nothing
-#      else writes there. Idempotent: a no-op once the dir is gone.
-# =============================================================================
-function Remove-RetiredTerminalHostProfiles {
-    $fragDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation"
-    if (-not (Test-Path $fragDir)) { return }
-    try {
-        Remove-Item -LiteralPath $fragDir -Recurse -Force
-        Write-Ok "Removed the retired Windows Terminal SSH host profiles ($fragDir) — restart Windows Terminal to drop them from the menu"
-    } catch {
-        Write-Warn "Could not remove the retired Windows Terminal host-profile fragment ${fragDir}: $($_.Exception.Message)"
     }
 }
 
@@ -3194,7 +2966,6 @@ Invoke-CloneRepo
 Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles apply + a tools pass, then the .wslconfig restart reminder
 Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers/ccstatusline from config*.toml at the repo root (self-heals the shims PATH)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
-Remove-RetiredTerminalHostProfiles # delete the old hosts-list SSH profiles from Windows Terminal (no-op once gone)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells) — self-heals
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
