@@ -121,9 +121,21 @@ is_wsl() {
 config_get() { # config_get <file> <key>
   [[ -f "$1" ]] || return 0
   KEY="$2" awk '
-    /^\[/ { in_vars = ($0 == "[vars]"); next }
-    in_vars && index($0, ENVIRON["KEY"]) == 1 && substr($0, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/ {
-      sub(/^[^=]*=[[:space:]]*"/, ""); sub(/"[[:space:]]*$/, ""); gsub(/\\"/, "\""); gsub(/\\\\/, "\\"); print; exit
+    # Tolerant [vars] header match: leading/trailing space, a trailing
+    # comment, or a CRLF line ending must still be recognized. Any OTHER
+    # "[...]" header line (matched by the leading /^[[:space:]]*\[/, checked
+    # first) leaves the vars table.
+    /^[[:space:]]*\[/ {
+      in_vars = ($0 ~ /^[[:space:]]*\[[[:space:]]*vars[[:space:]]*\][[:space:]]*(#.*)?\r?$/)
+      next
+    }
+    in_vars {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (index(line, ENVIRON["KEY"]) == 1 && substr(line, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/) {
+        sub(/^[^=]*=[[:space:]]*"/, "", line); sub(/"[[:space:]]*\r?$/, "", line)
+        gsub(/\\"/, "\"", line); gsub(/\\\\/, "\\", line); print line; exit
+      }
     }' "$1"
 }
 
@@ -135,14 +147,20 @@ config_set() { # config_set <file> <key> <value>
   [[ -f "$file" ]] || : >"$file"
   tmp=$(mktemp)
   KEY="$key" LINE="$key = \"$val\"" awk '
-    /^\[/ {
+    # Same tolerant [vars] header match as config_get — see its comment.
+    /^[[:space:]]*\[/ {
       if (in_vars && !done) { print ENVIRON["LINE"]; done = 1 }
-      in_vars = ($0 == "[vars]"); if (in_vars) seen = 1
+      in_vars = ($0 ~ /^[[:space:]]*\[[[:space:]]*vars[[:space:]]*\][[:space:]]*(#.*)?\r?$/)
+      if (in_vars) seen = 1
       print; next
     }
-    in_vars && index($0, ENVIRON["KEY"]) == 1 && substr($0, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/ {
-      if (!done) { print ENVIRON["LINE"]; done = 1 }
-      next
+    in_vars {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (index(line, ENVIRON["KEY"]) == 1 && substr(line, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/) {
+        if (!done) { print ENVIRON["LINE"]; done = 1 }
+        next
+      }
     }
     { print }
     END { if (!done) { if (!seen) print "[vars]"; print ENVIRON["LINE"] } }' "$file" >"$tmp" && mv "$tmp" "$file"
@@ -154,7 +172,13 @@ valid_mode() { [[ "${1:-}" == owned || "${1:-}" == shared ]]; }
 # a here-string in tests.
 open_prompt_fd() {
   { true <&3; } 2>/dev/null && return 0
-  exec 3</dev/tty 2>/dev/null
+  # `exec 3</dev/tty 2>/dev/null` (no command word) applies BOTH redirects to
+  # the shell PERMANENTLY, not just to this attempt — a missing controlling
+  # terminal would then silently redirect fd 2 to /dev/null for the rest of
+  # the run. Scoping `2>/dev/null` to a `{ }` group keeps it (and any "No
+  # such device" diagnostic) local to this one open attempt; `exec 3<...`
+  # inside the group still opens fd 3 permanently, which is what we want.
+  { exec 3</dev/tty; } 2>/dev/null
 }
 
 prompt_mode() {
@@ -219,7 +243,11 @@ resolve_host_config() {
   fi
   [[ -z "$name" ]] || config_set "$cfg" name "$name"
   [[ -z "$email" ]] || config_set "$cfg" email "$email"
-  ok "name/email saved to $cfg"
+  if [[ -n "$name" && -n "$email" ]]; then
+    ok "name/email saved to $cfg"
+  else
+    warn "name/email incomplete — add the missing value(s) to $cfg ([vars] name = \"…\", email = \"…\")"
+  fi
 }
 
 DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
@@ -592,8 +620,8 @@ do_doctor() {
 
   MODE=$(config_get "$REPO_DIR/config.local.toml" mode)
   if ! valid_mode "$MODE"; then
+    # report_repo_state already ran above — don't fetch/report twice.
     warn "mode not set — run ./bootstrap.sh once to choose owned or shared"
-    report_repo_state
     exit 1
   fi
   MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
@@ -729,7 +757,14 @@ To start over from scratch (wipes the cloned repo, not your tools/dotfiles):
   fi
 
   install_mise
+  # Close any fd 3 this process inherited first, so open_prompt_fd genuinely
+  # opens /dev/tty itself rather than reading whatever the caller happened
+  # to pass in; close it again right after so /dev/tty isn't inherited by
+  # mise/sudo/the bootstrap task below. Scoped `2>/dev/null` (see
+  # open_prompt_fd) so a "not open" close never leaks or clobbers stderr.
+  { exec 3<&-; } 2>/dev/null || true
   resolve_host_config
+  { exec 3<&-; } 2>/dev/null || true
   MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
   export MISE_ENV
   log "mise environment: MISE_ENV=$MISE_ENV"

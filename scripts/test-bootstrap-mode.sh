@@ -73,4 +73,32 @@ out=$(run "$T/c7" - WORKSTATION_MODE=shared) || fail "unattended shared failed: 
 grep -q '^mode = "shared"$' "$T/c7/config.local.toml" || fail "unattended mode not saved"
 grep -q 'name/email' <<<"$out" || fail "missing identity warning: $out"
 
-echo "PASS: bootstrap.sh mode resolution (saved, WORKSTATION_MODE, prompt, no-terminal failure, config.local.toml writer)"
+# 8. Under a REAL pty (fd 3 NOT pre-opened, so open_prompt_fd has to exec
+# 3</dev/tty itself), the prompt menu and a later stderr write must both
+# still be visible. Regression test for the Critical bug where a bare
+# `exec 3</dev/tty 2>/dev/null` (no command word) redirects fd 2 to
+# /dev/null PERMANENTLY the moment /dev/tty opens, silencing every later
+# message (including a later `fail`) for the rest of the run.
+if command -v script >/dev/null 2>&1; then
+  mkdir -p "$T/c8"
+  inner="env WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source \"$root/bootstrap.sh\"; REPO_DIR=\"$T/c8\"; resolve_host_config; echo probe >&2'"
+  out=$(printf '2\nA\na@x\n' | timeout 15 script -qec "$inner" /dev/null 2>&1) || true
+  grep -q 'Is this host yours?' <<<"$out" || fail "pty: prompt menu missing (stderr clobbered?): $out"
+  grep -q 'probe' <<<"$out" || fail "pty: stderr write after the prompt missing (stderr clobbered): $out"
+  grep -q '^mode = "shared"$' "$T/c8/config.local.toml" || fail "pty: prompt answer not saved"
+else
+  echo "SKIP: pty regression case (no 'script' binary on PATH)"
+fi
+
+# 9. A [vars] header with a trailing space and a CRLF line ending is still
+# recognized: config_set must not append a duplicate [vars] table, and the
+# existing value must still be readable.
+mkdir -p "$T/c9"
+printf '[vars] \r\nname = "Old"\r\n' >"$T/c9/config.local.toml"
+WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; config_set "$1" mode owned; config_get "$1" name' \
+  "$root/bootstrap.sh" "$T/c9/config.local.toml" >"$T/c9/got" || fail "CRLF header: config_set/get failed"
+[ "$(grep -c '^\[vars\]' "$T/c9/config.local.toml")" = 1 ] || fail "CRLF header: duplicate [vars] table"
+grep -q '^mode = "owned"$' "$T/c9/config.local.toml" || fail "CRLF header: mode not added"
+grep -qx 'Old' "$T/c9/got" || fail "CRLF header: config_get did not read back the existing value"
+
+echo "PASS: bootstrap.sh mode resolution (saved, WORKSTATION_MODE, prompt, no-terminal failure, pty stderr safety, CRLF header, config.local.toml writer)"
