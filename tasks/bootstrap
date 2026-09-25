@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="End-of-bootstrap steps: Claude Code + plugins, zjstatus plugin, legacy sweep, nb/herdr/tldr lifecycle steps, Claude settings merge — runs after python-env, fonts, vcpkg"
+#MISE description="End-of-bootstrap steps: Claude Code + plugins, zjstatus plugin, nb/herdr/tldr lifecycle steps, Claude settings merge — runs after python-env, fonts, vcpkg"
 #MISE depends=["python-env", "fonts", "vcpkg"]
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
@@ -30,8 +30,6 @@ if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
 fi
 # 3. zjstatus.wasm → zellij's DATA plugin dir (mise installs the tool; zellij loads plugins from its data dir, never a bin dir)
 "$root/scripts/lib/zellij-plugin.sh" zjstatus "file://$(mise where github:dj95/zjstatus)/zjstatus.wasm"
-# 4. one-time sweeps of pre-mise artifacts (marker-guarded, idempotent).
-"$root/tasks/migrate-legacy"
 # 5. nb notebook init at ~/notes, once (was run_once_after_init.sh.tmpl).
 # Marker-guarded rather than a content-hashed run_once: a missing nb or a
 # failed/incomplete init must not abort the bootstrap, and must retry on the

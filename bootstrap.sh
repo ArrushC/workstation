@@ -19,10 +19,9 @@
 # with `wsu` (`mise run update`); there is no central host list or fleet
 # rollout (removed 2026-09-24).
 #
-# REINSTALL — wipe the cloned repo + any leftover pre-migration chezmoi
-# state, then re-bootstrap fresh. Does NOT remove installed tools or deployed
-# dotfiles (those are idempotent under re-bootstrap). Combine with --dev/--prod
-# and optional --yes:
+# REINSTALL — wipe the cloned repo, then re-bootstrap fresh. Does NOT remove
+# installed tools or deployed dotfiles (those are idempotent under
+# re-bootstrap). Combine with --dev/--prod and optional --yes:
 #
 #     ./bootstrap.sh --prod --reinstall          # prod-scope wipe + rebuild, prompts
 #     ./bootstrap.sh --dev --reinstall --yes
@@ -48,11 +47,8 @@
 #
 # Flow (both modes):
 #   1. preflight             — check curl/git/tar
-#   1a. do_reinstall (opt.)  — wipe the cloned repo + any leftover
-#                              pre-migration chezmoi state (--reinstall); then
-#                              falls through to a fresh run
-#   1.5. relocate_repo       — one-time move of a pre-2026-09 checkout from
-#                              ~/.local/share/chezmoi to ~/.config/mise (idempotent)
+#   1a. do_reinstall (opt.)  — wipe the cloned repo (--reinstall); then falls
+#                              through to a fresh run
 #   2. clone repo            — into ~/.config/mise (or git pull if present)
 #   2.5. install_mise        — the pinned mise binary into ~/.local/bin
 #                              (sha256-verified)
@@ -61,7 +57,7 @@
 #   3.5. user-manager env    — `systemctl --user set-environment MISE_ENV=…`
 #                              so the live systemd user manager sees it too
 #                              (the pueued shim needs MISE_ENV to resolve mise)
-#   3.6. ensure_config_local — write/migrate config.local.toml (per-host
+#   3.6. ensure_config_local — write config.local.toml (per-host
 #                              vars.name/vars.email) BEFORE any dotfiles
 #                              render — see the function's own header.
 #   4. mise install (tools)  — scripts/lib/mise-install.sh installs every
@@ -117,7 +113,6 @@ is_wsl() {
 DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
 # The checkout IS mise's global config dir (config*.toml, mise.lock, tasks/ live at its root).
 REPO_DIR="$HOME/.config/mise"
-LEGACY_REPO_DIR="$HOME/.local/share/chezmoi" # pre-2026-09 location; relocate_repo() moves it
 BIN="$HOME/.local/bin"
 # The ONE pin bootstrap owns: mise itself (everything else is in config*.toml).
 # DUAL-EDIT with bootstrap.ps1 $PortableTools (mise) and min_version in config.toml —
@@ -159,15 +154,6 @@ while [[ $# -gt 0 ]]; do
     ACTION="check-updates"
     shift
     ;;
-  --full)
-    fail "--full was removed.
-
-Use one of the new mutually-exclusive flags:
-  ./bootstrap.sh --dev      # Host you own        — sudo for system packages + /etc files; tools are user-level
-  ./bootstrap.sh --prod     # Host you don't own  — no sudo, ~/.local/bin only
-
-Run ./bootstrap.sh --help for the full flag list."
-    ;;
   --reinstall)
     REINSTALL=true
     shift
@@ -187,10 +173,9 @@ Required (exactly one):
                 ~/.local/bin.
 
 Optional flags:
-  --reinstall   Wipe the cloned repo and any leftover pre-migration chezmoi
-                state, then bootstrap fresh. Does NOT remove installed
-                tools or deployed dotfiles (those are no-op idempotent on
-                re-bootstrap).
+  --reinstall   Wipe the cloned repo, then bootstrap fresh. Does NOT remove
+                installed tools or deployed dotfiles (those are no-op
+                idempotent on re-bootstrap).
   --yes, -y     Skip the --reinstall confirmation prompt.
   --doctor      Read-only health report, then exit (provisions nothing):
                 prereqs, repo git state (branch, ahead/behind, dirty),
@@ -234,23 +219,17 @@ if [[ -n "$ACTION" && "$REINSTALL" == true ]]; then
 fi
 
 # =============================================================================
-# 0. REINSTALL (optional) — wipe the cloned repo + any leftover pre-migration
-#    chezmoi config, then let the rest of the script re-bootstrap fresh.
-#    Installed tools and deployed dotfiles are left alone — re-running the
-#    bootstrap is idempotent on those, so the net effect is a fresh repo +
-#    fresh config.local.toml prompt (Step 3.6, ensure_config_local).
+# 0. REINSTALL (optional) — wipe the cloned repo, then let the rest of the
+#    script re-bootstrap fresh. Installed tools and deployed dotfiles are
+#    left alone — re-running the bootstrap is idempotent on those, so the
+#    net effect is a fresh repo + fresh config.local.toml prompt (Step 3.6,
+#    ensure_config_local).
 # =============================================================================
 do_reinstall() {
   log "Reinstall mode — wipe + re-bootstrap"
   echo ""
   echo "  Will REMOVE:"
   echo "    - $REPO_DIR   (cloned workstation repo)"
-  if [[ -d "$LEGACY_REPO_DIR" ]]; then
-    echo "    - $LEGACY_REPO_DIR   (pre-relocation checkout, not yet swept)"
-  fi
-  if [[ -d "$HOME/.config/chezmoi" ]]; then
-    echo "    - $HOME/.config/chezmoi/{chezmoistate.boltdb,chezmoi.toml}   (leftover pre-migration chezmoi state, if any — key.txt, if any, is preserved)"
-  fi
   echo ""
   echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
   echo "    - Installed tools in ~/.local/bin (tools are user-level since PR1)"
@@ -269,8 +248,8 @@ do_reinstall() {
   if [[ -n "$script_path" && -f "$script_path" ]]; then
     local script_real
     script_real=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
-    if [[ "$script_real" == "$REPO_DIR"* || "$script_real" == "$LEGACY_REPO_DIR"* ]]; then
-      fail "Refusing to reinstall — running script is inside $REPO_DIR or $LEGACY_REPO_DIR.
+    if [[ "$script_real" == "$REPO_DIR"* ]]; then
+      fail "Refusing to reinstall — running script is inside $REPO_DIR.
 Either pipe the remote script (runs from memory):
   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --${MACHINE_TYPE} --reinstall
 
@@ -293,26 +272,6 @@ Or copy this script out of the repo first:
     ok "Repo removed"
   else
     log "$REPO_DIR not present — nothing to remove"
-  fi
-
-  if [[ -d "$LEGACY_REPO_DIR" ]]; then
-    log "Removing $LEGACY_REPO_DIR..."
-    rm -rf "$LEGACY_REPO_DIR"
-    ok "Legacy repo removed"
-  else
-    log "$LEGACY_REPO_DIR not present — nothing to remove"
-  fi
-
-  if [[ -d "$HOME/.config/chezmoi" ]]; then
-    # I9 fix (final-fix-brief.md): tasks/migrate-legacy's own chezmoi sweep
-    # deliberately removes only chezmoistate.boltdb + chezmoi.toml, never
-    # key.txt (the age identity, if a host ever had one, is out-of-band and
-    # not ours to touch or judge — see that task's own comment). A whole-
-    # directory rm -rf here disagreed and would take key.txt with it. Match
-    # tasks/migrate-legacy exactly: same two paths, nothing else.
-    log "Removing leftover $HOME/.config/chezmoi state (chezmoistate.boltdb, chezmoi.toml)..."
-    rm -f "$HOME/.config/chezmoi/chezmoistate.boltdb" "$HOME/.config/chezmoi/chezmoi.toml"
-    ok "leftover pre-migration chezmoi state removed (key.txt, if any, preserved)"
   fi
 
   echo ""
@@ -342,26 +301,6 @@ Install via your distro's package manager, e.g.
 }
 
 # =============================================================================
-# 1.5 RELOCATE — the checkout moved from ~/.local/share/chezmoi to ~/.config/mise
-# (this repo IS mise's global config dir since 2026-09). One-time, idempotent.
-# A pre-existing ~/.config/mise (the chezmoi-deployed conf.d era) is moved aside.
-# =============================================================================
-relocate_repo() {
-  [[ -d "$REPO_DIR/.git" ]] && return 0
-  [[ -d "$LEGACY_REPO_DIR/.git" ]] || return 0
-  log "Relocating the workstation checkout: $LEGACY_REPO_DIR → $REPO_DIR"
-  if [[ -e "$REPO_DIR" ]]; then
-    local aside
-    aside="$REPO_DIR.pre-relocation.$(date +%Y%m%d%H%M%S)"
-    mv "$REPO_DIR" "$aside" || fail "could not move aside $REPO_DIR"
-    warn "moved the old $REPO_DIR (chezmoi-deployed mise conf.d) to $aside — delete it once the new layout works"
-  fi
-  mkdir -p "$(dirname "$REPO_DIR")"
-  mv "$LEGACY_REPO_DIR" "$REPO_DIR" || fail "could not move $LEGACY_REPO_DIR to $REPO_DIR"
-  ok "checkout now at $REPO_DIR"
-}
-
-# =============================================================================
 # 2.5 MISE — the pinned mise binary into ~/.local/bin (sha256-verified). mise
 # installs every other tool from config*.toml; the Make layer only orchestrates.
 # =============================================================================
@@ -383,162 +322,25 @@ install_mise() {
 }
 
 # =============================================================================
-# 3.6. ENSURE CONFIG.LOCAL.TOML — per-host `[vars]` (name/email/group) that
-# used to live in chezmoi.toml's [data] block. mise's Tera dotfiles templates
-# read them as vars.name/vars.email/vars.group (every reference guarded —
-# Ruling 3 — so a missing file doesn't abort the apply, but a real value
-# still shapes the rendered ~/.gitconfig etc.), so this MUST run before the
-# first `mise bootstrap` dotfiles apply. vars.group additionally gates which
-# MISE_ENV token set zshenv.tera/bashrc.tera/10-mise.conf.tera bake in
-# (dev_machine -> linux,dev,host,…; anything else -> linux) — see
-# scripts/lib/mise-env.sh, the canonical source of those token sets.
-# Idempotent: once the file exists, only a missing vars.group is repaired
-# (see repair_config_local_group below); name/email are never touched again.
-#
-# Migration: a host that already ran chezmoi has name/email/group cached in
-# ~/.config/chezmoi/chezmoi.toml's [data] table — read them from there
-# instead of prompting (parsed with tomllib, never sed/grep: TOML string
-# escaping is not regex-safe). Fresh hosts (no chezmoi.toml, or python
-# lacking tomllib) fall back to prompting via /dev/tty, reusing the same
-# FD-open guard PR2's chezmoi-init step used: `[[ ! -r /dev/tty ]]` is an
-# access(2) test that returns true (readable) even under `ssh host 'cmd'`
-# with no controlling terminal, so it never actually detects "no TTY" — open
-# the descriptor for real instead, which fails when there truly is none.
-# group falls back to this run's $GROUP_NAME ("${MACHINE_TYPE}_machine")
-# whenever chezmoi.toml has none to migrate.
+# 3.6. ENSURE CONFIG.LOCAL.TOML — per-host `[vars]` (name/email/group), read
+# by mise's Tera dotfiles templates as vars.name/vars.email/vars.group (every
+# reference guarded — Ruling 3 — so a missing file doesn't abort the apply,
+# but a real value still shapes the rendered ~/.gitconfig etc.), so this MUST
+# run before the first `mise bootstrap` dotfiles apply. vars.group
+# additionally gates which MISE_ENV token set zshenv.tera/bashrc.tera/
+# 10-mise.conf.tera bake in (dev_machine -> linux,dev,host,…; anything else
+# -> linux) — see scripts/lib/mise-env.sh, the canonical source of those
+# token sets. Idempotent: once the file exists, it is left untouched.
 # =============================================================================
-# Idempotent repair for a config.local.toml written by an earlier bootstrap.sh
-# that predates vars.group (2026-09-19 fix: MISE_ENV was baking as "linux" on
-# every host because nothing ever wrote vars.group — see the fix report).
-# Appends `group = "$GROUP_NAME"` when the file exists but never got one.
-# Parsed with tomllib — never sed/grep — for the same TOML-escaping reason
-# ensure_config_local's own migration path below uses it. No-ops (with a
-# warning) when no tomllib-capable interpreter is on PATH; the next
-# bootstrap run that has one will repair it then.
-repair_config_local_group() {
-  local target="$1" py="$2"
-  if [[ -z "$py" ]]; then
-    warn "no tomllib-capable python on PATH — cannot check $target for vars.group (skipping repair)"
-    return 0
-  fi
-  if "$py" - "$target" <<'PYEOF'
-import sys
-import tomllib
-
-with open(sys.argv[1], "rb") as f:
-    data = tomllib.load(f)
-sys.exit(0 if (data.get("vars") or {}).get("group") else 1)
-PYEOF
-  then
-    return 0 # vars.group already present — nothing to do
-  fi
-  local group="$GROUP_NAME"
-  # I2 fix (final-fix-brief.md): a bare `>>` append glues onto whatever table
-  # happens to be last in the file. scripts/setup-ccstatusline.sh legitimately
-  # appends a [dotfiles] table to this same config.local.toml, so an EOF
-  # append after that runs lands `group = "..."` inside [dotfiles] instead of
-  # [vars] (run 1: a bogus dotfiles.group key; run 2: the file no longer
-  # parses at all — "Cannot overwrite a value" — and mise can't load its
-  # global config). Insert the key on the line right after the `[vars]`
-  # header instead, via tomllib — never a bare `>>` — and re-parse afterward
-  # to prove the insert landed in the right table before trusting it.
-  if ! "$py" - "$target" "$group" <<'PYEOF'
-import sys
-import tomllib
-
-path, group = sys.argv[1], sys.argv[2]
-esc = group.replace("\\", "\\\\").replace('"', '\\"')
-new_line = 'group = "%s"\n' % esc
-
-with open(path, "r", encoding="utf-8") as f:
-    lines = f.readlines()
-
-out = []
-inserted = False
-for line in lines:
-    out.append(line)
-    if not inserted and line.strip() == "[vars]":
-        out.append(new_line)
-        inserted = True
-if not inserted:
-    # No [vars] table at all (shouldn't happen — ensure_config_local always
-    # writes one) — prepend a fresh one rather than risk an EOF append
-    # landing in whatever table happens to be last.
-    out = ["[vars]\n", new_line] + out
-
-with open(path, "w", encoding="utf-8") as f:
-    f.writelines(out)
-
-# Re-parse to prove the rewrite didn't corrupt the file and the key landed
-# in [vars], not wherever EOF happened to be.
-with open(path, "rb") as f:
-    check = tomllib.load(f)
-if (check.get("vars") or {}).get("group") != group:
-    sys.exit(1)
-PYEOF
-  then
-    warn "failed to repair $target's vars.group safely — inspect by hand ([vars] table, vars.group=$GROUP_NAME)"
-    return 1
-  fi
-  ok "repaired $target: inserted vars.group=$GROUP_NAME under [vars] (was missing)"
-}
-
 ensure_config_local() {
   local target="$REPO_DIR/config.local.toml"
 
-  local py candidate
-  for candidate in "$BIN/wpy" python3 python; do
-    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import tomllib' >/dev/null 2>&1; then
-      py="$candidate"
-      break
-    fi
-  done
-
   if [[ -f "$target" ]]; then
-    repair_config_local_group "$target" "${py:-}"
     ok "config.local.toml already present ($target)"
     return 0
   fi
 
-  local name="" email="" group="" legacy_toml="$HOME/.config/chezmoi/chezmoi.toml"
-
-  if [[ -f "$legacy_toml" && -n "${py:-}" ]]; then
-    local parsed
-    parsed=$(
-      "$py" - "$legacy_toml" <<'PYEOF'
-import sys
-import tomllib
-
-path = sys.argv[1]
-try:
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
-except Exception:
-    sys.exit(0)
-
-d = data.get("data") or {}
-name = d.get("name") or ""
-email = d.get("email") or ""
-group = d.get("group") or ""
-if name:
-    print("name\t" + name)
-if email:
-    print("email\t" + email)
-if group:
-    print("group\t" + group)
-PYEOF
-    )
-    while IFS=$'\t' read -r k v; do
-      case "$k" in
-      name) name="$v" ;;
-      email) email="$v" ;;
-      group) group="$v" ;;
-      esac
-    done <<<"$parsed"
-    if [[ -n "$name" || -n "$email" || -n "$group" ]]; then
-      log "Migrating name/email/group from $legacy_toml"
-    fi
-  fi
+  local name="" email="" group=""
 
   [[ -n "$group" ]] || group="$GROUP_NAME"
 
@@ -556,12 +358,11 @@ PYEOF
       # A --dev host has no such safety net: the "else" branch bakes
       # "linux" — indistinguishable from prod, silently dropping every
       # dev-only tool/dotfile — so hard-fail there instead of limping on
-      # mis-configured. --reinstall removes config.local.toml AND the
-      # legacy chezmoi.toml identity source together, so a --dev
-      # --reinstall run over a non-interactive channel (no TTY, nothing to
-      # migrate from) is exactly the case this catches.
+      # mis-configured. --reinstall removes config.local.toml, so a --dev
+      # --reinstall run over a non-interactive channel (no TTY) is exactly
+      # the case this catches.
       if [[ "$MACHINE_TYPE" == "dev" ]]; then
-        fail "No TTY and no $legacy_toml to migrate a git identity from — refusing to bootstrap a --dev host with an undefined vars.group (would silently bake MISE_ENV=\"linux\", indistinguishable from prod) and an empty ~/.gitconfig identity (git would then refuse to commit).
+        fail "No TTY to prompt for a git identity — refusing to bootstrap a --dev host with an undefined vars.group (would silently bake MISE_ENV=\"linux\", indistinguishable from prod) and an empty ~/.gitconfig identity (git would then refuse to commit).
 Fix: run bootstrap.sh --dev from a real terminal once, or pre-create $target by hand:
   cat > $target <<'CFG'
   [vars]
@@ -570,7 +371,7 @@ Fix: run bootstrap.sh --dev from a real terminal once, or pre-create $target by 
   group = \"$group\"
   CFG"
       fi
-      warn "No TTY and no $legacy_toml to migrate from — skipping config.local.toml."
+      warn "No TTY to prompt for a git identity — skipping config.local.toml."
       warn "Create it by hand before the next bootstrap run:"
       warn "  cat > $target <<'CFG'"
       warn "  [vars]"
@@ -606,25 +407,17 @@ CFG
 
 # =============================================================================
 # 3.5/3.6/4/4.5. RUN BOOTSTRAP — carry MISE_ENV onto the live systemd user
-# manager, retire the legacy (pre-mise) pueued unit, ensure config.local.toml
-# exists, install tools, then run `mise bootstrap` (packages, /etc files,
-# services, compose, repos, dotfiles, tools gate, then the `bootstrap` task
-# itself). Sudo (dev only) is scoped to the dnf batch and /etc files inside
-# mise's own elevation — this script never runs sudo directly.
+# manager, ensure config.local.toml exists, install tools, then run `mise
+# bootstrap` (packages, /etc files, services, compose, repos, dotfiles, tools
+# gate, then the `bootstrap` task itself). Sudo (dev only) is scoped to the
+# dnf batch and /etc files inside mise's own elevation — this script never
+# runs sudo directly.
 # =============================================================================
 run_bootstrap() {
-  # The user manager must carry MISE_ENV for the pueued shim (dev.mise.pueued.service);
-  # environment.d covers the next login, this covers the live manager.
+  # The user manager must carry MISE_ENV for the pueued shim; environment.d
+  # covers the next login, this covers the live manager.
   if systemctl --user show-environment >/dev/null 2>&1; then
     systemctl --user set-environment "MISE_ENV=$MISE_ENV" || warn "could not set MISE_ENV on the systemd user manager"
-  fi
-  # Legacy (pre-mise) pueued unit: retire BEFORE mise's services phase starts
-  # dev.mise.pueued (same daemon/socket, different unit name).
-  if [[ -f "$HOME/.config/systemd/user/pueued.service" ]]; then
-    systemctl --user disable --now pueued.service 2>/dev/null || true
-    rm -f "$HOME/.config/systemd/user/pueued.service"
-    systemctl --user daemon-reload 2>/dev/null || true
-    ok "retired the legacy pueued.service (mise owns dev.mise.pueued.service now)"
   fi
 
   # config.local.toml must exist BEFORE the first dotfiles apply below — the
@@ -635,12 +428,12 @@ run_bootstrap() {
   log "mise install (tools) — MISE_ENV=$MISE_ENV"
   "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
 
-  # Ruling 1: the first dotfiles apply on a host migrating off chezmoi finds
-  # every target already a real file (chezmoi's own deploy) — symlink/copy/
-  # template modes all refuse a pre-existing real file, so even --dry-run
-  # would exit 1 without --force-dotfiles. Pass it ONLY until this host's own
-  # migration marker exists, so any LATER conflict (a real mistake) is still
-  # surfaced loudly instead of silently reclaimed.
+  # Ruling 1: a host bootstrapped before the migration marker existed may
+  # still have real files at these dotfiles targets — symlink/copy/template
+  # modes all refuse a pre-existing real file, so even --dry-run would exit 1
+  # without --force-dotfiles. Pass it ONLY until this host's own migration
+  # marker exists, so any LATER conflict (a real mistake) is still surfaced
+  # loudly instead of silently reclaimed.
   local migrated_marker="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/dotfiles-migrated"
   local dotfiles_flags=()
   if [[ ! -f "$migrated_marker" ]]; then
@@ -747,11 +540,6 @@ set_default_shell() {
 # =============================================================================
 require_repo() {
   if [[ ! -d "$REPO_DIR/.git" ]]; then
-    if [[ -d "$LEGACY_REPO_DIR/.git" ]]; then
-      REPO_DIR="$LEGACY_REPO_DIR"
-      warn "checkout not yet relocated to ~/.config/mise — run ./bootstrap.sh --${MACHINE_TYPE} once"
-      return 0
-    fi
     fail "No workstation repo at $REPO_DIR — bootstrap this host first:
   ./bootstrap.sh --${MACHINE_TYPE}"
   fi
@@ -805,7 +593,7 @@ do_doctor() {
   # Same prereq list as preflight, but report-all instead of hard-fail.
   log "Prerequisites"
   local cmd
-  for cmd in curl git tar ip; do
+  for cmd in curl git tar; do
     if command -v "$cmd" &>/dev/null; then
       ok "$cmd"
     else
@@ -882,7 +670,6 @@ fi
 preflight
 mkdir -p "$BIN"
 export PATH="$BIN:$HOME/.local/share/mise/shims:$PATH"
-relocate_repo
 
 # --- Repo --------------------------------------------------------------------
 # The repo is public, so no token is needed. If GITHUB_TOKEN is set anyway
@@ -948,11 +735,6 @@ fi
 
 echo ""
 echo -e "${BOLD}Bootstrap complete.${RESET}"
-
-echo -e "${YELLOW}Replace this shell now:${RESET} run ${YELLOW}exec zsh${RESET} (or open a new tab)."
-echo -e "  The shell you ran this from still has its mise/starship prompt hooks bound to the"
-echo -e "  pre-migration /usr/local binaries, which the legacy sweep just removed — its prompt"
-echo -e "  will print 'no such file or directory' on every keystroke until it is replaced."
 
 # Only print the "you're on zsh" tip when the user actually is. set_default_shell
 # may have bailed out (prod with no sudo, missing zsh binary, usermod refused) and

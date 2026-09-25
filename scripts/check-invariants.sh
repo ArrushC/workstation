@@ -1243,7 +1243,7 @@ check_zellij_plugin_installer() {
 }
 
 check_mise_install_lib() {
-  hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/migrate-legacy, tasks/verify-tools)"
+  hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/verify-tools)"
   local out
   # Offline behavioural test with a fake `mise` on PATH and a scratch HOME.
   if out=$(bash scripts/test-mise-install.sh 2>&1); then
