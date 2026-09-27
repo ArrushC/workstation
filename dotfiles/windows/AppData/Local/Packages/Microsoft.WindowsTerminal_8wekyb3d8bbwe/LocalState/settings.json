@@ -166,7 +166,7 @@
             "command":
             {
                 "action": "sendInput",
-                "input": "cd ~/.config/mise 2>/dev/null || cd ~/.local/share/chezmoi; ./bootstrap.sh"
+                "input": "cd ~/.config/mise && ./bootstrap.sh"
             },
             "id": "User.snippet.makedev",
             "name": "Snippet: full bootstrap (WSL)"
