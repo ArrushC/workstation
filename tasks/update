@@ -1,21 +1,36 @@
 #!/usr/bin/env bash
-#MISE description="git pull --ff-only + mise install + mise bootstrap on this host"
+#MISE description="git pull --ff-only, then mise install + mise bootstrap for this host's saved mode"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 # shellcheck disable=SC2034  # part of the common task preamble; unused by this task
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
-env_has() {
-  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
-  return 1
-}
-# Same guard as bootstrap.sh's apply(): the generated pueued unit
-# carries no Environment= line, so a manager whose live env predates
-# ~/.config/environment.d/10-mise.conf needs MISE_ENV pushed onto it before
-# `mise bootstrap` restarts the service, or the shim sees "No version is set
-# for shim: pueued".
-git -C "$root" pull --ff-only && "$root/scripts/lib/mise-install.sh" &&
-  {
-    systemctl --user show-environment >/dev/null 2>&1 && systemctl --user set-environment "MISE_ENV=${MISE_ENV:-}"
-    true
-  } &&
-  mise bootstrap --yes
+
+git -C "$root" pull --ff-only
+
+# MISE_ENV comes from the saved mode, not the calling shell: a stale shell
+# value can load the wrong config set, and mise-install.sh's `mise prune`
+# would then remove tools. Read after the pull, with bootstrap.sh's own
+# config_get in a child shell so its helpers and `set` options stay there.
+cfg="$root/config.local.toml"
+mode=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" mode' _ "$root/bootstrap.sh" "$cfg")
+case "$mode" in
+owned | shared) ;;
+*)
+  printf ' ✗ no valid mode in %s%s — run %s/bootstrap.sh (it asks) or set mode = "owned" or "shared" under [vars]\n' \
+    "$cfg" "${mode:+ (found \"$mode\")}" "$root" >&2
+  exit 1
+  ;;
+esac
+MISE_ENV="$("$root/scripts/lib/mise-env.sh" "$mode")"
+export MISE_ENV
+printf '==> mode: %s — MISE_ENV=%s\n' "$mode" "$MISE_ENV"
+
+"$root/scripts/lib/mise-install.sh"
+# Same guard as bootstrap.sh's apply(): the generated pueued unit carries no
+# Environment= line, so the live user manager needs MISE_ENV before `mise
+# bootstrap` restarts the service, or the shim sees "No version is set for
+# shim: pueued".
+if systemctl --user show-environment >/dev/null 2>&1; then
+  systemctl --user set-environment "MISE_ENV=$MISE_ENV" || true
+fi
+mise bootstrap --yes
