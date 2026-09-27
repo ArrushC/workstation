@@ -13,13 +13,13 @@ fail() {
 
 # run <case-dir> <stdin-for-fd3|-> [VAR=value ...] — resolve_host_config in a
 # fresh shell with REPO_DIR=<case-dir>; prints MODE on success. "-" means no
-# fd 3 is supplied (and setsid removes the controlling terminal).
+# fd 3 (an inherited one is closed) and setsid removes the controlling terminal.
 run() {
   local dir=$1 input=$2
   shift 2
   if [ "$input" = - ]; then
     env "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
-      'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; resolve_host_config; echo "MODE=$MODE"' "$root/bootstrap.sh" </dev/null 2>&1
+      'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; resolve_host_config; echo "MODE=$MODE"' "$root/bootstrap.sh" </dev/null 3<&- 2>&1
   else
     env "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
       'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; resolve_host_config; echo "MODE=$MODE"' "$root/bootstrap.sh" 3<<<"$input" </dev/null 2>&1
@@ -31,6 +31,9 @@ mkdir -p "$T/c1"
 printf '[vars]\nname = "N"\nemail = "e@x"\nmode = "shared"\n' >"$T/c1/config.local.toml"
 out=$(run "$T/c1" - WORKSTATION_MODE=owned) || fail "saved mode: exit $? — $out"
 grep -q '^MODE=shared$' <<<"$out" || fail "saved mode did not win: $out"
+grep -q 'WORKSTATION_MODE=owned ignored' <<<"$out" || fail "no warning that WORKSTATION_MODE was ignored: $out"
+out=$(run "$T/c1" - WORKSTATION_MODE=shared) || fail "saved mode (same env): exit $? — $out"
+if grep -q 'ignored' <<<"$out"; then fail "warned although WORKSTATION_MODE matches the saved mode: $out"; fi
 
 # 2. WORKSTATION_MODE is used and saved (name/email from fd 3).
 mkdir -p "$T/c2"
@@ -111,7 +114,7 @@ confirm() { # confirm <stdin-for-fd3|-> -> EXIT=0|1 (or the fail() message)
   if [ "$input" = - ]; then
     env WORKSTATION_BOOTSTRAP_LIB=1 setsid -w bash -c \
       'source "$0"; YES=false; if confirm_reinstall; then echo EXIT=0; else echo EXIT=$?; fi' \
-      "$root/bootstrap.sh" </dev/null 2>&1
+      "$root/bootstrap.sh" </dev/null 3<&- 2>&1
   else
     env WORKSTATION_BOOTSTRAP_LIB=1 setsid -w bash -c \
       'source "$0"; YES=false; if confirm_reinstall; then echo EXIT=0; else echo EXIT=$?; fi' \
@@ -121,7 +124,7 @@ confirm() { # confirm <stdin-for-fd3|-> -> EXIT=0|1 (or the fail() message)
 
 out=$(env WORKSTATION_BOOTSTRAP_LIB=1 setsid -w bash -c \
   'source "$0"; YES=true; if confirm_reinstall; then echo EXIT=0; else echo EXIT=$?; fi' \
-  "$root/bootstrap.sh" </dev/null 2>&1) || fail "confirm YES=true: exit $? — $out"
+  "$root/bootstrap.sh" </dev/null 3<&- 2>&1) || fail "confirm YES=true: exit $? — $out"
 grep -q 'EXIT=0$' <<<"$out" || fail "YES=true did not bypass the prompt: $out"
 
 out=$(confirm n) || fail "confirm n: exit $? — $out"
@@ -133,4 +136,48 @@ grep -q 'EXIT=0$' <<<"$out" || fail "'y' did not proceed: $out"
 if out=$(confirm -); then fail "no-terminal reinstall confirm succeeded: $out"; fi
 grep -q 'Re-run with --yes' <<<"$out" || fail "no-terminal reinstall confirm missing --yes hint: $out"
 
-echo "PASS: bootstrap.sh mode resolution (saved, WORKSTATION_MODE, prompt, no-terminal failure, pty stderr safety, CRLF header, config.local.toml writer, --reinstall confirmation)"
+# 11. config_get reads hand-edited TOML: a trailing comment, literal
+# ('single-quoted') strings, a '#' inside quotes, escapes in basic strings.
+mkdir -p "$T/c11"
+cat >"$T/c11/config.local.toml" <<'TOML'
+[vars]
+mode = "owned" # laptop
+name = 'O\x "q"'   # literal: no escapes
+email = "a # b" # not part of the value
+k1 = "Q \"q\" \\ z"
+k2 = 'shared'
+k3 = "t"	# tab before the comment
+TOML
+get() { WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; config_get "$1" "$2"' "$root/bootstrap.sh" "$T/c11/config.local.toml" "$1"; }
+[ "$(get mode)" = 'owned' ] || fail "config_get: trailing comment after a basic string: got [$(get mode)]"
+[ "$(get name)" = 'O\x "q"' ] || fail "config_get: literal string: got [$(get name)]"
+[ "$(get email)" = 'a # b' ] || fail "config_get: '#' inside quotes: got [$(get email)]"
+[ "$(get k1)" = 'Q "q" \ z' ] || fail "config_get: basic-string escapes: got [$(get k1)]"
+[ "$(get k2)" = 'shared' ] || fail "config_get: literal string without comment: got [$(get k2)]"
+[ "$(get k3)" = 't' ] || fail "config_get: tab before a comment: got [$(get k3)]"
+out=$(run "$T/c11" -) || fail "commented saved mode rejected: $out"
+grep -q '^MODE=owned$' <<<"$out" || fail "commented saved mode not used: $out"
+
+# 12. --reinstall with no WORKSTATION_MODE and no terminal fails BEFORE the
+# wipe (the mode question after it could not be answered); with a mode it
+# wipes. config.local.toml is listed under "Will REMOVE".
+reinstall() { # reinstall <dir> [VAR=value ...] -> wipe outcome
+  local dir=$1
+  shift
+  env "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
+    'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; YES=true; do_reinstall; echo "REINSTALL-DONE"' \
+    "$root/bootstrap.sh" </dev/null 3<&- 2>&1
+}
+mkdir -p "$T/c12/repo" && : >"$T/c12/repo/config.local.toml"
+if out=$(reinstall "$T/c12/repo"); then fail "unattended --reinstall without a mode went ahead: $out"; fi
+[ -f "$T/c12/repo/config.local.toml" ] || fail "--reinstall wiped the checkout before failing on the mode"
+grep -q 'WORKSTATION_MODE=shared' <<<"$out" || fail "--reinstall no-mode message lacks the WORKSTATION_MODE hint: $out"
+grep -q 'ssh -t' <<<"$out" || fail "--reinstall no-mode message lacks the interactive hint: $out"
+grep -q 'config.local.toml (mode, name, email)' <<<"$out" || fail "--reinstall does not list config.local.toml under Will REMOVE: $out"
+if out=$(reinstall "$T/c12/repo" WORKSTATION_MODE=prod); then fail "--reinstall accepted an invalid WORKSTATION_MODE: $out"; fi
+[ -d "$T/c12/repo" ] || fail "--reinstall wiped the checkout before rejecting WORKSTATION_MODE=prod"
+out=$(reinstall "$T/c12/repo" WORKSTATION_MODE=shared) || fail "--reinstall with WORKSTATION_MODE failed: $out"
+grep -q 'REINSTALL-DONE' <<<"$out" || fail "--reinstall with WORKSTATION_MODE did not finish: $out"
+[ ! -e "$T/c12/repo" ] || fail "--reinstall with WORKSTATION_MODE did not wipe the checkout"
+
+echo "PASS: bootstrap.sh mode resolution (saved, WORKSTATION_MODE, prompt, no-terminal failure, pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall confirmation and mode check)"

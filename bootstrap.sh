@@ -124,8 +124,9 @@ parse_args() {
 
 # --- Config helpers + mode functions ------------------------------------------
 
-# config.local.toml is machine-written `key = "value"` lines under [vars], so
-# plain awk reads and writes it — no Python needed before tools exist.
+# config.local.toml is `key = "value"` lines under [vars], so plain awk reads
+# and writes it — no Python needed before tools exist. The reader also takes
+# hand edits: a trailing comment and 'literal' strings.
 config_get() { # config_get <file> <key>
   [[ -f "$1" ]] || return 0
   KEY="$2" awk '
@@ -141,8 +142,30 @@ config_get() { # config_get <file> <key>
       line = $0
       sub(/^[[:space:]]+/, "", line)
       if (index(line, ENVIRON["KEY"]) == 1 && substr(line, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/) {
-        sub(/^[^=]*=[[:space:]]*"/, "", line); sub(/"[[:space:]]*\r?$/, "", line)
-        gsub(/\\"/, "\"", line); gsub(/\\\\/, "\\", line); print line; exit
+        sub(/^[^=]*=[[:space:]]*/, "", line)
+        q = substr(line, 1, 1); out = ""
+        if (q == "\"") {
+          # Basic string: \" and \\ unescape; the closing quote ends it.
+          for (i = 2; i <= length(line); i++) {
+            c = substr(line, i, 1)
+            if (c == "\\") {
+              n = substr(line, i + 1, 1)
+              if (n == "\"" || n == "\\") { out = out n; i++; continue }
+            }
+            if (c == "\"") break
+            out = out c
+          }
+        } else if (q == "\047") {
+          # Literal string: no escapes; the next single quote ends it.
+          out = substr(line, 2)
+          j = index(out, "\047")
+          if (j) out = substr(out, 1, j - 1)
+        } else {
+          # Unquoted (not valid TOML): the value up to a comment.
+          out = line
+          sub(/[[:space:]]*(#.*)?\r?$/, "", out)
+        }
+        print out; exit
       }
     }' "$1"
 }
@@ -313,6 +336,9 @@ resolve_host_config() {
   if [[ -n "$MODE" ]]; then
     valid_mode "$MODE" || fail "$cfg has mode = \"$MODE\" — expected owned or shared. Fix or delete that line and re-run."
     ok "mode: $MODE (saved in config.local.toml)"
+    if [[ -n "${WORKSTATION_MODE:-}" && "$WORKSTATION_MODE" != "$MODE" ]]; then
+      warn "WORKSTATION_MODE=$WORKSTATION_MODE ignored — this host is saved as $MODE in config.local.toml; edit or delete that line to change it"
+    fi
   elif [[ -n "${WORKSTATION_MODE:-}" ]]; then
     valid_mode "$WORKSTATION_MODE" || fail "WORKSTATION_MODE=$WORKSTATION_MODE — expected owned or shared."
     MODE=$WORKSTATION_MODE
@@ -514,6 +540,7 @@ do_reinstall() {
   echo ""
   echo "  Will REMOVE:"
   echo "    - $REPO_DIR   (cloned workstation repo)"
+  echo "    - config.local.toml (mode, name, email) — asked again after the wipe"
   echo ""
   echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
   echo "    - Installed tools in ~/.local/bin (tools are user-level)"
@@ -540,6 +567,16 @@ Either pipe the remote script (runs from memory):
 Or copy this script out of the repo first:
   cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --reinstall"
     fi
+  fi
+
+  # The wipe takes the saved mode with it, so make sure it can be supplied
+  # again before deleting anything.
+  if [[ -n "${WORKSTATION_MODE:-}" ]]; then
+    valid_mode "$WORKSTATION_MODE" || fail "WORKSTATION_MODE=$WORKSTATION_MODE — expected owned or shared. Nothing was removed."
+  elif ! open_prompt_fd; then
+    fail "No terminal to ask the setup mode on after the wipe — nothing was removed.
+   Re-run interactively:  ssh -t <host> '...'
+   or answer up front:    WORKSTATION_MODE=shared   (or owned)"
   fi
 
   if ! confirm_reinstall; then
@@ -704,6 +741,10 @@ do_check_updates() {
 # MAIN
 # =============================================================================
 main() {
+  # Prompts read fd 3; an inherited one is not our terminal, so drop it
+  # before any prompt. Scoped `2>/dev/null` (see open_prompt_fd) so a "not
+  # open" close never leaks or clobbers stderr.
+  { exec 3<&-; } 2>/dev/null || true
   parse_args "$@"
 
   case "$ACTION" in
@@ -719,6 +760,8 @@ main() {
 
   if [[ "$REINSTALL" == true ]]; then
     do_reinstall
+    # Don't keep /dev/tty open across the clone and mise install.
+    { exec 3<&-; } 2>/dev/null || true
   fi
   preflight
   mkdir -p "$BIN"
@@ -727,11 +770,8 @@ main() {
   clone_or_update_repo
   install_mise
 
-  # Inherited fd 3 is dropped so the prompt reads /dev/tty, not whatever the
-  # caller happened to pass in; fd 3 is closed again afterwards so /dev/tty
-  # isn't inherited by mise/sudo/the bootstrap task below. Scoped
-  # `2>/dev/null` (see open_prompt_fd) so a "not open" close never leaks or
-  # clobbers stderr.
+  # fd 3 is opened fresh for the prompts, then closed so /dev/tty isn't
+  # inherited by mise/sudo/the bootstrap task below.
   { exec 3<&-; } 2>/dev/null || true
   resolve_host_config
   { exec 3<&-; } 2>/dev/null || true
