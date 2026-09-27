@@ -236,10 +236,6 @@
         if (event.key === "Escape" && mobile.matches) { setContents(false); tocButton.focus(); }
     });
 
-    // Preserve native radio behavior while allowing navigation into inactive panels.
-    const tabInputs = new Map([
-        ["panel-prod", "pprod"], ["panel-dev", "pdev"],
-    ]);
     function reveal(target) {
         // Only a filter that is hiding the target gets reset; every other in-page
         // link (heading anchors, TOC, cross-references) leaves active filters alone.
@@ -248,9 +244,6 @@
         if (quickstart) selectPlatform(quickstart.classList.contains("windows") ? "windows" : "linux");
         for (let node = target; node && node !== main; node = node.parentElement) {
             if (node.tagName === "DETAILS") node.open = true;
-            if (node.classList.contains("tab-panel")) {
-                tabInputs.forEach((id, cls) => { if (node.classList.contains(cls)) document.getElementById(id).checked = true; });
-            }
         }
     }
     function navigate(target, { push = true, smooth = true } = {}) {

@@ -17,7 +17,7 @@ for anything a language server answers better:
 
 These servers are registered with Claude Code's `LSP` tool by the bundled
 `workstation-lsp` plugin (`~/.claude/skills/workstation-lsp/`); their binaries
-come from mise (`config.owned.toml`, installed by `./bootstrap.sh --dev`).
+come from mise (`config.owned.toml`, installed by `./bootstrap.sh` in owned mode).
 Coverage on this host:
 
 | Language | Server |

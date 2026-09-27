@@ -20,14 +20,15 @@ cheat <topic>             # view a sheet (e.g. cheat tar)
 cheat -e <topic>          # create/edit a personal sheet in $EDITOR
 cheat -s <keyword>        # search across sheets
 cht.sh <lang> <query>     # online answer (e.g. cht.sh python 'reverse a list')
-cht.sh --shell            # interactive cheat.sh REPL (rlwrap on dev)
+cht.sh --shell            # interactive cheat.sh REPL (rlwrap on owned hosts)
 
 # --- provisioning (mise) ---
-./bootstrap.sh --dev       # full bootstrap (dev: system-wide, sudo)
-./bootstrap.sh --prod      # full bootstrap (prod: ~/.local, no sudo)
+./bootstrap.sh                              # asks: owned (sudo, system-wide) or shared (~/.local, no sudo)
+curl ... | WORKSTATION_MODE=shared bash     # unattended first run, no prompt
+# saved in config.local.toml's [vars] mode — edit/delete that line to change it, then re-run
 mise bootstrap status      # what mise bootstrap would still change
 mise run health             # tools, host state, services report
-mise run update             # mise outdated + dnf check-update (dev)
+mise run update             # mise outdated + dnf check-update (owned)
 mise run python-env         # rebuild the blessed uv-managed Python venv
 mise run fonts               # install the pinned Nerd Font
 mise run statusline         # (re)configure the Claude Code statusline

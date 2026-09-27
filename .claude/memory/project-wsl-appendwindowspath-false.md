@@ -16,6 +16,6 @@ The adopted fix:
 
 **How to apply:**
 - If a user reports shell startup or any LookPath-heavy CLI feeling slow on a WSL host, check `grep appendWindowsPath /etc/wsl.conf` and `echo $PATH | tr ':' '\n' | grep -c /mnt/` (~89 = not fixed) before theorizing. Confirm with `time` on the slow command (~1–2 s and low CPU = this issue).
-- Other WSL hosts get the `wsl.conf` flip from `./bootstrap.sh --dev` (the `wsl` token loads `config.wsl.toml`), then still need a `wsl --shutdown`; the tracked rc re-add is a no-op until the restart.
+- Other WSL hosts get the `wsl.conf` flip from `./bootstrap.sh` in owned mode (the `wsl` token loads `config.wsl.toml`), then still need a `wsl --shutdown`; the tracked rc re-add is a no-op until the restart.
 - Trade-off accepted: other Windows `.exe`s (`explorer.exe`, VS Code `code`) leave the WSL `$PATH`; re-add per-host in `~/.zshrc.local`.
 - Documented in README §troubleshooting ("Shell startup / a PATH-scanning command feels slow on WSL") + a `CLAUDE_CHANGELOG.md` row.

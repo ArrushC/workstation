@@ -92,7 +92,7 @@
                                 <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
                                 <svg class="architecture-lines" viewBox="0 0 440 300" fill="none" aria-hidden="true"><path d="M220 150H95V62M220 150H355V68M220 150H100V243M220 150H350V237" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 6"/><circle cx="220" cy="150" r="5" fill="currentColor"/></svg>
                                 <div class="architecture-core" aria-hidden="true"><span>w<span>.</span></span><small>workstation</small></div>
-                                <div class="architecture-node node-linux" aria-hidden="true"><span class="node-symbol">&gt;_</span><span><b>Linux</b><small>dev + prod hosts</small></span></div>
+                                <div class="architecture-node node-linux" aria-hidden="true"><span class="node-symbol">&gt;_</span><span><b>Linux</b><small>owned + shared hosts</small></span></div>
                                 <div class="architecture-node node-windows" aria-hidden="true"><span class="node-symbol">⊞</span><span><b>Windows</b><small>your terminal, configured</small></span></div>
                                 <div class="architecture-node node-make" aria-hidden="true"><span class="node-symbol">⌘</span><span><b>mise</b><small>provision everything</small></span></div>
                                 <div class="architecture-node node-dotfiles" aria-hidden="true"><span class="node-symbol">~/</span><span><b>[dotfiles]</b><small>dotfiles that travel</small></span></div>
@@ -110,7 +110,7 @@
                             </div>
                             <div class="body">
                                 <!-- prettier-ignore -->
-                                <div class="ln"><span class="pr">&#10095;</span> <span class="cmd">./bootstrap.sh --dev</span></div>
+                                <div class="ln"><span class="pr">&#10095;</span> <span class="cmd">./bootstrap.sh</span></div>
                                 <!-- prettier-ignore -->
                                 <div class="ln"><span class="ok">&#10003;</span> mise install &mdash; 146 CLI tools <span class="mut">&middot;&middot;&middot;</span> done</div>
                                 <!-- prettier-ignore -->
@@ -125,20 +125,21 @@
 
                     <div class="feature-bento">
                         <a class="feature-card feature-tools" href="#toolbelt"><div class="feature-top"><span class="eyebrow">THE TOOL DIRECTORY</span><span class="feature-arrow" aria-hidden="true">↗</span></div><div class="feature-number"><span data-tool-total>146</span><span>tools.<br />All in your corner.</span></div><div class="mini-chips" aria-hidden="true"><span>fzf</span><span>zellij</span><span>helix</span><span>+ more</span></div></a>
-                        <a class="feature-card feature-scope" href="#machines"><div class="feature-top"><span class="eyebrow">INSTALL ON YOUR TERMS</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Your machine.<br />Your scope.</h2><div class="scope-pills"><span><i aria-hidden="true"></i> DEV <small>system-wide</small></span><span><i aria-hidden="true"></i> PROD <small>user-wide</small></span></div></a>
+                        <a class="feature-card feature-scope" href="#machines"><div class="feature-top"><span class="eyebrow">INSTALL ON YOUR TERMS</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Your machine.<br />Your scope.</h2><div class="scope-pills"><span><i aria-hidden="true"></i> OWNED <small>system-wide</small></span><span><i aria-hidden="true"></i> SHARED <small>user-wide</small></span></div></a>
                         <a class="feature-card feature-flow" href="#daily"><div class="feature-top"><span class="eyebrow">FIND YOUR FLOW</span><span class="feature-arrow" aria-hidden="true">↗</span></div><h2>Less setup.<br />More making.</h2><div class="flow-keys" aria-hidden="true"><kbd>wse</kbd><span>→</span><kbd>wsa</kbd><span>→</span><span class="flow-check">✓</span></div></a>
                     </div>
                         <p class="overview-note">
                             Dev-environment provisioning for Linux hosts, plus
                             Warp and Windows Terminal on Windows.
-                            One command, <code>./bootstrap.sh --dev</code> or
-                            <code>--prod</code>, drives system packages, <code>/etc</code>
+                            One command, <code>./bootstrap.sh</code> &mdash;
+                            it asks whether the host is owned or shared &mdash;
+                            drives system packages, <code>/etc</code>
                             files, services, and dotfiles via <code>mise
                             bootstrap</code>; <code>mise</code>
                             (this checkout IS mise&rsquo;s global config dir &mdash;
                             tool pins in <code>config.toml</code> /
                             <code>config.linux.toml</code> /
-                            <code>config.dev.toml</code>, host state in
+                            <code>config.owned.toml</code>, host state in
                             <code>config.host.toml</code> /
                             <code>config.native.toml</code> /
                             <code>config.wsl.toml</code>)
@@ -168,14 +169,14 @@
                                 on a Linux host
                             </h3>
                             <p class="qs-sub">
-                                Pick <span class="badge prod">prod</span> for
-                                no-sudo / user-wide install,
-                                <span class="badge dev">dev</span> for sudo /
-                                system-wide. Pipes <code>bootstrap.sh</code>
+                                Asks whether the host is
+                                <span class="badge shared">shared</span>
+                                (no-sudo / user-wide install) or
+                                <span class="badge owned">owned</span>
+                                (sudo / system-wide). Pipes <code>bootstrap.sh</code>
                                 &mdash; the repo is public, no token needed.
                             </p>
-                            <pre><code>curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh \
-  | bash -s -- --prod</code></pre>
+                            <pre><code>curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash</code></pre>
                         </article>
                         <article class="qs-card windows" id="quickstart-windows">
                             <h3>
@@ -318,20 +319,19 @@ try {
                         CLI tools installed on every host by
                         <code>mise</code> from <code>config.toml</code> /
                         <code>config.linux.toml</code> /
-                        <code>config.dev.toml</code> at the repo root
+                        <code>config.owned.toml</code> at the repo root
                         (<code>bootstrap.sh</code> runs
                         <code>scripts/lib/mise-install.sh</code>, then
                         <code>mise bootstrap --yes</code>, whose tools
                         phase is <code>mise install</code>).
-                        Default install is a static binary on both
-                        <code>dev_machine</code> and <code>prod_machine</code>.
-                        Scope tags: <code>(dnf)</code> =
-                        <span class="badge dev">dev_machine</span> only via dnf,
+                        Default install is a static binary in both
+                        modes. Scope tags: <code>(dnf)</code> =
+                        <span class="badge owned">owned</span> hosts only via dnf,
                         <code>(pip)</code> = via mise&rsquo;s
                         <code>pypi:</code> backend (both
                         hosts), <code>(ins)</code> = via upstream installer,
-                        <code>(dev)</code> =
-                        <span class="badge dev">dev_machine</span> only via a
+                        <code>(owned)</code> =
+                        <span class="badge owned">owned</span> hosts only via a
                         bespoke installer (portable build / git clone).
                         Hover any chip for a one-line purpose.
                     </p>
@@ -554,8 +554,8 @@ try {
                                     data-tip="Classic process viewer"
                                     >htop <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — classic process viewer (dev_machine
-                                        only via dnf)</span
+                                        — classic process viewer (owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -564,8 +564,8 @@ try {
                                     data-tip="Multi-pane `tail` viewer"
                                     >multitail <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — multi-pane `tail` viewer (dev_machine
-                                        only via dnf)</span
+                                        — multi-pane `tail` viewer (owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -575,7 +575,7 @@ try {
                                     >goaccess <small>(dnf)</small
                                     ><span class="sr-only">
                                         — real-time web log analyzer
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -708,7 +708,7 @@ try {
                                     data-tip="Network port scanner"
                                     >nmap <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — network port scanner (dev_machine only
+                                        — network port scanner (owned hosts only
                                         via dnf)</span
                                     ></span
                                 >
@@ -718,8 +718,8 @@ try {
                                     data-tip="Live traceroute + ping"
                                     >mtr <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — live traceroute + ping (dev_machine
-                                        only via dnf)</span
+                                        — live traceroute + ping (owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -729,7 +729,7 @@ try {
                                     >tcpdump <small>(dnf)</small
                                     ><span class="sr-only">
                                         — packet capture / inspection
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -738,7 +738,7 @@ try {
                                     data-tip="Combined traceroute + ping TUI (trippy)"
                                     >trip<span class="sr-only">
                                         — combined traceroute + ping TUI
-                                        (trippy; static, dev + prod)</span
+                                        (trippy; static, both modes)</span
                                     ></span
                                 >
                                 <span
@@ -757,7 +757,7 @@ try {
                                     >bind-utils <small>(dnf)</small
                                     ><span class="sr-only">
                                         — classic DNS tools (dig / nslookup /
-                                        host / delv; dev_machine only via
+                                        host / delv; owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -790,12 +790,12 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Efficient file/dir sync (usually pre-installed on prod)"
+                                    data-tip="Efficient file/dir sync (usually pre-installed on shared hosts)"
                                     >rsync <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — efficient file/dir sync (dev_machine
+                                        — efficient file/dir sync (owned hosts
                                         only via dnf; usually pre-installed on
-                                        prod)</span
+                                        shared hosts)</span
                                     ></span
                                 >
                                 <span
@@ -814,7 +814,7 @@ try {
                                     ><span class="sr-only">
                                         — NFS client tools: mount.nfs,
                                         showmount, nfsstat, nfsiostat
-                                        (dev_machine only via dnf; skipped on
+                                        (owned hosts only via dnf; skipped on
                                         WSL)</span
                                     ></span
                                 >
@@ -825,7 +825,7 @@ try {
                                     >nfs4-acl-tools <small>(dnf)</small
                                     ><span class="sr-only">
                                         — NFSv4 ACL tools: nfs4_getfacl /
-                                        nfs4_setfacl (dev_machine only via dnf;
+                                        nfs4_setfacl (owned hosts only via dnf;
                                         skipped on WSL)</span
                                     ></span
                                 >
@@ -836,7 +836,7 @@ try {
                                     >autofs <small>(dnf)</small
                                     ><span class="sr-only">
                                         — on-demand automounter daemon
-                                        (dev_machine only via dnf; skipped on
+                                        (owned hosts only via dnf; skipped on
                                         WSL; installed but not enabled)</span
                                     ></span
                                 >
@@ -845,7 +845,7 @@ try {
                                 The NFS client group (<code>nfs-utils</code>,
                                 <code>nfs4-acl-tools</code>,
                                 <code>autofs</code>) is
-                                <span class="badge dev">dev_machine</span> only
+                                <span class="badge owned">owned</span> hosts only
                                 and <strong>skips WSL hosts entirely</strong>.
                                 <code>autofs</code> is installed but never
                                 enabled &mdash; write your maps
@@ -1009,11 +1009,11 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="DevToys CLI — scriptable DevToys utilities: convert, encode/decode, hash, format (dev_machine only; shell alias devtoys); also in the Windows portable belt"
+                                    data-tip="DevToys CLI — scriptable DevToys utilities: convert, encode/decode, hash, format (owned hosts only; shell alias devtoys); also in the Windows portable belt"
                                     >devtoys.cli<span class="sr-only">
                                         — DevToys CLI: scriptable developer
                                         utilities (json/yaml convert, base64,
-                                        hash, jwt; dev_machine only; shell
+                                        hash, jwt; owned hosts only; shell
                                         alias devtoys in zsh/bash; Windows
                                         gets the pinned portable tree via
                                         bootstrap.ps1)</span
@@ -1148,7 +1148,7 @@ try {
                                     >shellcheck <small>(dnf)</small
                                     ><span class="sr-only">
                                         — bash script linter, the gold standard
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                             </div>
@@ -1174,7 +1174,7 @@ try {
                                     data-tip="Syscall tracer"
                                     >strace <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — syscall tracer (dev_machine only via
+                                        — syscall tracer (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1185,7 +1185,7 @@ try {
                                     >perf <small>(dnf)</small
                                     ><span class="sr-only">
                                         — Linux performance profiler
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1195,7 +1195,7 @@ try {
                                     >gdb <small>(dnf)</small
                                     ><span class="sr-only">
                                         — debugger for compiled code
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1206,7 +1206,7 @@ try {
                                     ><span class="sr-only">
                                         — remote-debug stub (gdb-gdbserver); run on
                                         the target, attach gdb from the host
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1215,8 +1215,8 @@ try {
                                     data-tip="List open files / sockets"
                                     >lsof <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — list open files / sockets (dev_machine
-                                        only via dnf)</span
+                                        — list open files / sockets (owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                             </div>
@@ -1232,7 +1232,7 @@ try {
                                     >gcc / g++ <small>(dnf)</small
                                     ><span class="sr-only">
                                         — GNU C/C++ compilers; gcc is core, g++
-                                        (gcc-c++) is dev_machine only via dnf</span
+                                        (gcc-c++) is owned hosts only via dnf</span
                                     ></span
                                 >
                                 <span
@@ -1242,7 +1242,7 @@ try {
                                     >clang / llvm <small>(dnf)</small
                                     ><span class="sr-only">
                                         — LLVM C/C++ compiler + toolchain
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1252,8 +1252,8 @@ try {
                                     >clangd <small>(dnf)</small
                                     ><span class="sr-only">
                                         — C/C++ language server, the LSP backend
-                                        Helix uses (clang-tools-extra; dev_machine
-                                        only via dnf)</span
+                                        Helix uses (clang-tools-extra; owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1263,7 +1263,7 @@ try {
                                     >clang-tidy <small>(dnf)</small
                                     ><span class="sr-only">
                                         — clang-based linter + static analysis
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1272,7 +1272,7 @@ try {
                                     data-tip="Code formatter (clang-format -i)"
                                     >clang-format <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — C/C++ code formatter (dev_machine only
+                                        — C/C++ code formatter (owned hosts only
                                         via dnf)</span
                                     ></span
                                 >
@@ -1283,7 +1283,7 @@ try {
                                     >cppcheck <small>(dnf)</small
                                     ><span class="sr-only">
                                         — static analyzer, strives for zero false
-                                        positives (dev_machine only via dnf)</span
+                                        positives (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1305,7 +1305,7 @@ try {
                                     ><span class="sr-only">
                                         — runs unmodified binaries; complements the
                                         sanitizers, catches uninitialized-memory
-                                        reads ASan misses (dev_machine only via
+                                        reads ASan misses (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1315,7 +1315,7 @@ try {
                                     data-tip="LLVM debugger"
                                     >lldb <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — LLVM debugger (dev_machine only via
+                                        — LLVM debugger (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1333,22 +1333,22 @@ try {
                                     class="chip"
                                     tabindex="0"
                                     data-tip="GDB front-end, standalone `pwndbg` command (portable build)"
-                                    >pwndbg <small>(dev)</small
+                                    >pwndbg <small>(owned)</small
                                     ><span class="sr-only">
                                         — GDB front-end installed as a standalone
                                         pwndbg command via the portable build
-                                        (dev_machine only)</span
+                                        (owned hosts only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
                                     data-tip="GDB Enhanced Features — auto-loaded into plain `gdb` via ~/.gdbinit"
-                                    >gef <small>(dev)</small
+                                    >gef <small>(owned)</small
                                     ><span class="sr-only">
                                         — GDB Enhanced Features, vendored gef.py
                                         auto-loaded into plain gdb via a tracked
-                                        ~/.gdbinit (dev_machine only)</span
+                                        ~/.gdbinit (owned hosts only)</span
                                     ></span
                                 >
                                 <span
@@ -1358,7 +1358,7 @@ try {
                                     >heaptrack <small>(dnf)</small
                                     ><span class="sr-only">
                                         — heap memory profiler, lower overhead than
-                                        Valgrind/Massif (dev_machine only via
+                                        Valgrind/Massif (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1369,7 +1369,7 @@ try {
                                     >cmake / meson / ninja <small>(dnf)</small
                                     ><span class="sr-only">
                                         — build systems; note the ninja binary is
-                                        ninja-build on RHEL (dev_machine only via
+                                        ninja-build on RHEL (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1381,7 +1381,7 @@ try {
                                     ><span class="sr-only">
                                         — generates compile_commands.json
                                         (bear -- make) so clangd works on
-                                        Make-based projects (dev_machine only via
+                                        Make-based projects (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1392,18 +1392,18 @@ try {
                                     >ccache <small>(dnf)</small
                                     ><span class="sr-only">
                                         — compiler cache, speeds up rebuilds
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
                                     data-tip="Microsoft C/C++ package manager (sets $VCPKG_ROOT)"
-                                    >vcpkg <small>(dev)</small
+                                    >vcpkg <small>(owned)</small
                                     ><span class="sr-only">
                                         — Microsoft C/C++ package manager; git-cloned
                                         + bootstrapped, exports VCPKG_ROOT
-                                        (dev_machine only)</span
+                                        (owned hosts only)</span
                                     ></span
                                 >
                             </div>
@@ -1415,11 +1415,11 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Polyglot tool manager — owns every tool in the toolbelt now (config.toml/config.linux.toml/config.dev.toml + mise.lock at the repo root)"
+                                    data-tip="Polyglot tool manager — owns every tool in the toolbelt now (config.toml/config.linux.toml/config.owned.toml + mise.lock at the repo root)"
                                     >mise<span class="sr-only">
                                         — polyglot tool manager; owns every
                                         tool in this toolbelt, declared in
-                                        config.toml/config.linux.toml/config.dev.toml
+                                        config.toml/config.linux.toml/config.owned.toml
                                         at the repo root and installed by
                                         `mise bootstrap`</span
                                     ></span
@@ -1427,12 +1427,11 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Fast Python installer + venv (mise tool, both scopes; replaces pip + venv)"
+                                    data-tip="Fast Python installer + venv (mise tool, both modes; replaces pip + venv)"
                                     >uv (+ uvx)<span class="sr-only">
                                         — fast Python installer + venv;
-                                        a mise tool on both dev_machine
-                                        and prod_machine (replaces pip +
-                                        venv)</span
+                                        a mise tool in both modes (replaces
+                                        pip + venv)</span
                                     ></span
                                 >
                                 <span
@@ -1443,29 +1442,28 @@ try {
                                         — blessed uv-managed Python scripting
                                         environment with Textual, Click and
                                         friends, reached via the wpy launcher
-                                        on both dev_machine and
-                                        prod_machine</span
+                                        in both modes</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Go toolchain via mise (dev_machine only)"
-                                    >go <small>(dev)</small
+                                    data-tip="Go toolchain via mise (owned hosts only)"
+                                    >go <small>(owned)</small
                                     ><span class="sr-only">
                                         — official Go toolchain, installed
-                                        user-level by mise (dev_machine only,
-                                        config.dev.toml)</span
+                                        user-level by mise (owned hosts only,
+                                        config.owned.toml)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Node.js via mise (dev_machine only — npx for ccstatusline + the npm language servers)"
-                                    >node <small>(dev)</small
+                                    data-tip="Node.js via mise (owned hosts only — npx for ccstatusline + the npm language servers)"
+                                    >node <small>(owned)</small
                                     ><span class="sr-only">
                                         — Node.js, installed user-level by mise
-                                        (dev_machine only); provides npx for
+                                        (owned hosts only); provides npx for
                                         ccstatusline and carries the npm
                                         language servers as its postinstall</span
                                     ></span
@@ -1483,80 +1481,80 @@ try {
                                     >clangd <small>(dnf)</small
                                     ><span class="sr-only">
                                         — C/C++ language server (clang-tools-extra
-                                        via dnf, dev_machine only; not a mise
+                                        via dnf, owned hosts only; not a mise
                                         tool — comes from config.host.toml)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Rust language server (mise aqua-registry tool, dev + prod)"
+                                    data-tip="Rust language server (mise aqua-registry tool, both modes)"
                                     >rust-analyzer<span class="sr-only">
                                         — Rust language server; mise
-                                        aqua-registry tool, dev + prod</span
+                                        aqua-registry tool, both modes</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Markdown language server (mise aqua-registry tool, dev + prod)"
+                                    data-tip="Markdown language server (mise aqua-registry tool, both modes)"
                                     >marksman<span class="sr-only">
                                         — Markdown language server; mise
-                                        aqua-registry tool, dev + prod</span
+                                        aqua-registry tool, both modes</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="TOML formatter + language server (mise aqua-registry tool, dev + prod)"
+                                    data-tip="TOML formatter + language server (mise aqua-registry tool, both modes)"
                                     >taplo<span class="sr-only">
                                         — TOML formatter + language server;
-                                        mise aqua-registry tool, dev + prod</span
+                                        mise aqua-registry tool, both modes</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Go language server (mise go: backend, dev_machine only)"
-                                    >gopls <small>(dev)</small
+                                    data-tip="Go language server (mise go: backend, owned hosts only)"
+                                    >gopls <small>(owned)</small
                                     ><span class="sr-only">
                                         — Go language server; built by mise&rsquo;s
                                         go: backend against the pinned Go
-                                        (dev_machine only)</span
+                                        (owned hosts only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Lua language server (mise registry install, dev_machine only)"
-                                    >lua-language-server <small>(dev)</small
+                                    data-tip="Lua language server (mise registry install, owned hosts only)"
+                                    >lua-language-server <small>(owned)</small
                                     ><span class="sr-only">
                                         — Lua language server; installed by mise
                                         from its registry as a full tree
                                         (multi-file, not a single binary)
-                                        dev_machine only</span
+                                        owned hosts only</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Type-strict Python LSP (mise pypi: backend via uv, dev_machine only)"
-                                    >basedpyright <small>(dev)</small
+                                    data-tip="Type-strict Python LSP (mise pypi: backend via uv, owned hosts only)"
+                                    >basedpyright <small>(owned)</small
                                     ><span class="sr-only">
                                         — type-strict Python language server;
                                         installed by mise&rsquo;s pypi: backend
-                                        (dev_machine
+                                        (owned hosts
                                         only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="TypeScript/JS language server (npm postinstall of mise's node, dev_machine only)"
-                                    >typescript-language-server <small>(dev)</small
+                                    data-tip="TypeScript/JS language server (npm postinstall of mise's node, owned hosts only)"
+                                    >typescript-language-server <small>(owned)</small
                                     ><span class="sr-only">
                                         — TypeScript + JavaScript language
-                                        server; npm install (dev_machine only;
+                                        server; npm install (owned hosts only;
                                         npm postinstall of mise&rsquo;s
                                         node)</span
                                     ></span
@@ -1564,41 +1562,42 @@ try {
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="Bash language server (npm postinstall of mise's node, dev_machine only)"
-                                    >bash-language-server <small>(dev)</small
+                                    data-tip="Bash language server (npm postinstall of mise's node, owned hosts only)"
+                                    >bash-language-server <small>(owned)</small
                                     ><span class="sr-only">
                                         — Bash language server; npm install
-                                        (dev_machine only)</span
+                                        (owned hosts only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="YAML language server (npm postinstall of mise's node, dev_machine only)"
-                                    >yaml-language-server <small>(dev)</small
+                                    data-tip="YAML language server (npm postinstall of mise's node, owned hosts only)"
+                                    >yaml-language-server <small>(owned)</small
                                     ><span class="sr-only">
                                         — YAML language server; npm install
-                                        (dev_machine only)</span
+                                        (owned hosts only)</span
                                     ></span
                                 >
                                 <span
                                     class="chip"
                                     tabindex="0"
-                                    data-tip="JSON language server (npm postinstall of mise's node via vscode-langservers-extracted, dev_machine only)"
-                                    >vscode-json-language-server <small>(dev)</small
+                                    data-tip="JSON language server (npm postinstall of mise's node via vscode-langservers-extracted, owned hosts only)"
+                                    >vscode-json-language-server <small>(owned)</small
                                     ><span class="sr-only">
                                         — JSON language server from
                                         vscode-langservers-extracted; npm
-                                        install (dev_machine only)</span
+                                        install (owned hosts only)</span
                                     ></span
                                 >
                             </div>
                             <p class="card-note">
                                 Install with
-                                <code>./bootstrap.sh --dev</code> (mise
+                                <code>./bootstrap.sh</code> as an owned host
+                                (mise
                                 installs every server declared in
                                 <code>config.linux.toml</code>/<code
-                                    >config.dev.toml</code
+                                    >config.owned.toml</code
                                 >, as part of the tools phase &mdash;
                                 <code>mise run health</code> reports what did
                                 not install). <code>clangd</code> is not a
@@ -1611,10 +1610,9 @@ try {
                                 <code>mise install</code> retries.
                                 <code>rust-analyzer</code>,
                                 <code>marksman</code>, and <code>taplo</code>
-                                install on both <code>dev_machine</code> and
-                                <code>prod_machine</code> (mise aqua-registry
+                                install in both modes (mise aqua-registry
                                 tools). On
-                                <code>dev_machine</code>, all servers are
+                                owned hosts, all servers are
                                 automatically registered with Claude&nbsp;Code's
                                 <code>LSP</code> tool via the bundled
                                 <code>workstation-lsp</code> plugin (deployed
@@ -1689,7 +1687,7 @@ try {
                                     data-tip="Alternative shell"
                                     >zsh <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — alternative shell (dev_machine only
+                                        — alternative shell (owned hosts only
                                         via dnf)</span
                                     ></span
                                 >
@@ -1700,7 +1698,7 @@ try {
                                     >parallel <small>(dnf)</small
                                     ><span class="sr-only">
                                         — GNU parallel; run commands in parallel
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1710,7 +1708,7 @@ try {
                                     >pv <small>(dnf)</small
                                     ><span class="sr-only">
                                         — pipe viewer; monitor data through
-                                        pipes (dev_machine only via dnf)</span
+                                        pipes (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1720,7 +1718,7 @@ try {
                                     >entr <small>(dnf)</small
                                     ><span class="sr-only">
                                         — run commands on file changes
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1729,7 +1727,7 @@ try {
                                     data-tip="Runs commands when watched files change (Rust)"
                                     >watchexec<span class="sr-only">
                                         — runs commands when watched files
-                                        change (watchexec, Rust; dev + prod)</span
+                                        change (watchexec, Rust; both modes)</span
                                     ></span
                                 >
                                 <span
@@ -1739,7 +1737,7 @@ try {
                                     >inotify-tools <small>(dnf)</small
                                     ><span class="sr-only">
                                         — inotifywait / inotifywatch; watch
-                                        filesystem events (dev_machine only via
+                                        filesystem events (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1750,7 +1748,7 @@ try {
                                     >fswatch <small>(dnf)</small
                                     ><span class="sr-only">
                                         — cross-platform file change monitor
-                                        (dev_machine only via dnf)</span
+                                        (owned hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1759,8 +1757,8 @@ try {
                                     data-tip="Directory tree listing"
                                     >tree <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — directory tree listing (dev_machine
-                                        only via dnf)</span
+                                        — directory tree listing (owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1769,8 +1767,8 @@ try {
                                     data-tip="Cron daemon + crontab"
                                     >cronie <small>(dnf)</small
                                     ><span class="sr-only">
-                                        — cron daemon + crontab (dev_machine
-                                        only via dnf)</span
+                                        — cron daemon + crontab (owned
+                                        hosts only via dnf)</span
                                     ></span
                                 >
                                 <span
@@ -1780,7 +1778,7 @@ try {
                                     >time <small>(dnf)</small
                                     ><span class="sr-only">
                                         — GNU /usr/bin/time, richer than the
-                                        bash builtin (dev_machine only via
+                                        bash builtin (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1791,7 +1789,7 @@ try {
                                     >xxd <small>(dnf)</small
                                     ><span class="sr-only">
                                         — hex dump utility, provided by
-                                        vim-common (dev_machine only via
+                                        vim-common (owned hosts only via
                                         dnf)</span
                                     ></span
                                 >
@@ -1871,7 +1869,7 @@ try {
                                     ><span class="sr-only">
                                         — Claude Code CLI; Anthropic's coding
                                         agent (installed via official
-                                        install.sh, dev_machine only)</span
+                                        install.sh, owned hosts only)</span
                                     ></span
                                 >
                                 <span
@@ -1882,7 +1880,7 @@ try {
                                         — agent multiplexer: tmux/zellij-like but
                                         aware of AI coding-agent state
                                         (working/idle/blocked/done); a
-                                        dev_machine addition alongside zellij, not
+                                        owned-host addition alongside zellij, not
                                         a replacement. The herdr-file-viewer
                                         plugin (git-aware file browser) is
                                         auto-installed on apply, bound to
@@ -1898,7 +1896,7 @@ try {
                                     >opencode<span class="sr-only">
                                         — OpenCode: open-source terminal coding
                                         agent (Bun-compiled single binary,
-                                        dev_machine only; Windows gets the
+                                        owned hosts only; Windows gets the
                                         pinned portable .zip via
                                         bootstrap.ps1)</span
                                     ></span
@@ -1911,7 +1909,7 @@ try {
                                         — Oh My Pi: maintained hard fork of the
                                         Pi coding agent adding LSP, a DAP
                                         debugger, subagents and plan mode
-                                        (dev_machine only; Windows gets the
+                                        (owned hosts only; Windows gets the
                                         pinned portable .exe via
                                         bootstrap.ps1)</span
                                     ></span
@@ -1924,15 +1922,15 @@ try {
                 <section id="machines">
                     <h2>Machine types</h2>
                     <p class="lede">
-                        Every host is exactly one machine type, picked by the
-                        <code>bootstrap.sh</code> flag
-                        (<code>--dev</code>/<code>--prod</code>) it runs
-                        &mdash; no separate scope flag.
+                        Every host is exactly one mode, <strong>owned</strong>
+                        or <strong>shared</strong>. <code>bootstrap.sh</code>
+                        asks at an interactive prompt on first run &mdash; no
+                        flag to remember.
                     </p>
                     <div class="table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>
                         <thead>
                             <tr>
-                                <th>Group</th>
+                                <th>Mode</th>
                                 <th>Sudo</th>
                                 <th>System packages / <code>/etc</code></th>
                                 <th>Used for</th>
@@ -1941,7 +1939,7 @@ try {
                         <tbody>
                             <tr>
                                 <td>
-                                    <span class="badge dev">dev_machine</span>
+                                    <span class="badge owned">owned</span>
                                 </td>
                                 <td>Yes</td>
                                 <td>
@@ -1949,29 +1947,32 @@ try {
                                     <code>/etc</code> files
                                 </td>
                                 <td>
-                                    Hosts you own &mdash; the one scope where
+                                    Your machine &mdash; the one mode where
                                     <code>mise bootstrap</code> also installs
-                                    system packages and writes system-owned
-                                    <code>/etc</code> files.
+                                    system packages, writes system-owned
+                                    <code>/etc</code> files, and switches the
+                                    login shell to zsh via <code>sudo
+                                    usermod</code>.
                                 </td>
                             </tr>
                             <tr>
                                 <td>
-                                    <span class="badge prod">prod_machine</span>
+                                    <span class="badge shared">shared</span>
                                 </td>
                                 <td>No</td>
                                 <td>none</td>
                                 <td>
-                                    Hosts you don&rsquo;t fully own &mdash;
+                                    Someone else&rsquo;s machine &mdash;
                                     user-wide only, no system packages, no
-                                    <code>/etc</code> files.
+                                    <code>/etc</code> files, no login-shell
+                                    change.
                                 </td>
                             </tr>
                         </tbody>
                     </table></div>
                     <p class="note-row">
-                        <strong>Every mise tool installs identically on both
-                        scopes</strong> &mdash; user-level under
+                        <strong>Every mise tool installs identically in both
+                        modes</strong> &mdash; user-level under
                         <code>~/.local/share/mise/installs</code>, reached
                         through <code>~/.local/share/mise/shims</code> or
                         <code>mise activate</code>. That includes Helix: its
@@ -1982,16 +1983,34 @@ try {
                         and <code>/etc</code> files only, never tools).
                     </p>
                     <p class="note-row">
-                        Scope maps to the <code>MISE_ENV</code> token set
+                        <code>bootstrap.sh</code> resolves the mode in order:
+                        the saved <code>mode</code> line in the host&rsquo;s
+                        git-ignored <code>config.local.toml</code>; else the
+                        <code>WORKSTATION_MODE</code> environment variable
+                        (<code>owned</code> or <code>shared</code>), for an
+                        unattended first run such as
+                        <code>curl … | WORKSTATION_MODE=shared bash</code>;
+                        else an interactive prompt on <code>/dev/tty</code>,
+                        which still works under <code>curl | bash</code>. The
+                        chosen mode is written back to
+                        <code>config.local.toml</code>, so later runs of
+                        <code>./bootstrap.sh</code> don&rsquo;t ask again.
+                        <strong>To change a host&rsquo;s mode</strong>, edit
+                        or delete the <code>mode</code> line in
+                        <code>config.local.toml</code> and re-run
+                        <code>./bootstrap.sh</code>.
+                        <strong>Windows is always owned</strong> &mdash;
+                        <code>bootstrap.ps1</code> writes
+                        <code>mode = "owned"</code> without asking.
+                    </p>
+                    <p class="note-row">
+                        Mode maps to the <code>MISE_ENV</code> token set
                         computed by <code>scripts/lib/mise-env.sh</code>
-                        (<code>linux</code> for prod;
-                        <code>linux,dev,host,wsl</code> or
-                        <code>linux,dev,host,native</code> for dev, depending
-                        on whether the host is WSL). <code>bootstrap.sh</code>
-                        takes <code>--dev</code> / <code>--prod</code>
-                        directly (exactly one is required) and records the
-                        choice as <code>vars.group</code> in the host&rsquo;s
-                        git-ignored <code>config.local.toml</code>.
+                        (<code>linux</code> for shared;
+                        <code>linux,owned,host,wsl</code> or
+                        <code>linux,owned,host,native</code> for owned,
+                        depending on whether the host is WSL;
+                        <code>windows,owned</code> for Windows).
                     </p>
                 </section>
 
@@ -2024,7 +2043,7 @@ try {
                                     </li>
                                     <li>
                                         config.toml / config.linux.toml /
-                                        config.dev.toml
+                                        config.owned.toml
                                         <span class="note"
                                             >&mdash; mise tool declarations +
                                             [vars] host pins (this checkout IS
@@ -2038,14 +2057,14 @@ try {
                                             >&mdash; host state as
                                             [bootstrap.*] tables (dnf
                                             packages, /etc files, services);
-                                            loaded only on dev hosts, picked
+                                            loaded only on owned hosts, picked
                                             by the host/native/wsl MISE_ENV
                                             tokens</span
                                         >
                                     </li>
                                     <li>
                                         mise.lock / mise.linux.lock /
-                                        mise.dev.lock
+                                        mise.owned.lock
                                         <span class="note"
                                             >&mdash; per-file lockfiles;
                                             never hand-edit</span
@@ -2057,6 +2076,25 @@ try {
                                             >&mdash; per-tool lock sidecars
                                             for dependency-locked pypi:/npm:
                                             tools; never hand-edit</span
+                                        >
+                                    </li>
+                                    <li>
+                                        scripts/test-bootstrap-mode.sh
+                                        <span class="note"
+                                            >&mdash; unit tests for
+                                            bootstrap.sh&rsquo;s mode
+                                            resolution (saved
+                                            config.local.toml, WORKSTATION_MODE,
+                                            the interactive prompt)</span
+                                        >
+                                    </li>
+                                    <li>
+                                        scripts/test-config-local.ps1
+                                        <span class="note"
+                                            >&mdash; the same, for
+                                            bootstrap.ps1&rsquo;s
+                                            Set-ConfigLocalVar /
+                                            Invoke-EnsureConfigLocal</span
                                         >
                                     </li>
                                 </ul>
@@ -2098,7 +2136,7 @@ try {
                                             <span class="note"
                                                 >&mdash; end-of-bootstrap
                                                 steps: Claude Code + plugins,
-                                                zjstatus plugin, legacy sweep,
+                                                zjstatus plugin,
                                                 nb/herdr/tldr lifecycle steps,
                                                 the Claude settings
                                                 merge</span
@@ -2117,7 +2155,7 @@ try {
                                             <span class="note"
                                                 >&mdash; the blessed Python
                                                 env, Nerd Font, and vcpkg
-                                                (each dev-only; REBUILD=1
+                                                (each owned-only; REBUILD=1
                                                 forces python-env to
                                                 rebuild)</span
                                             >
@@ -2143,18 +2181,14 @@ try {
                                             >
                                         </li>
                                         <li>
-                                            enable-el-repos /
-                                            native-post-packages /
-                                            verify-tools / migrate-legacy
+                                            enable-el-repos / verify-tools
                                             <span class="note"
                                                 >&mdash; hidden install-time
-                                                helpers: the
-                                                pre-/post-packages hooks
-                                                config.host.toml /
-                                                config.native.toml declare,
-                                                the post-install capability
-                                                gate, and the one-time
-                                                legacy sweep</span
+                                                helpers: the pre-packages
+                                                EPEL/CRB hook
+                                                config.host.toml declares,
+                                                and the post-install
+                                                capability gate</span
                                             >
                                         </li>
                                     </ul>
@@ -2166,7 +2200,7 @@ try {
                                             lib/mise-env.sh
                                             <span class="note"
                                                 >&mdash; MISE_ENV token set
-                                                for dev|prod (+ WSL vs
+                                                for owned|shared (+ WSL vs
                                                 native)</span
                                             >
                                         </li>
@@ -2198,7 +2232,7 @@ try {
                                             lib/enable-el-repos.sh
                                             <span class="note"
                                                 >&mdash; EPEL + CRB on RHEL
-                                                family dev hosts
+                                                family owned hosts
                                                 (config.host.toml
                                                 pre-packages hook)</span
                                             >
@@ -2341,7 +2375,7 @@ try {
                                             <li>
                                                 herdr/config.toml, gdb/
                                                 <span class="note"
-                                                    >&mdash; Linux dev hosts
+                                                    >&mdash; Linux owned hosts
                                                     only (config.host.toml)</span
                                                 >
                                             </li>
@@ -2351,8 +2385,8 @@ try {
                                                 tealdeer/config.toml,
                                                 environment.d/10-mise.conf.tera
                                                 <span class="note"
-                                                    >&mdash; dev-only / Linux
-                                                    dev</span
+                                                    >&mdash; owned-only / Linux
+                                                    owned</span
                                                 >
                                             </li>
                                             <li>
@@ -2558,48 +2592,23 @@ try {
                     </p>
 
                     <h4>Copy-paste one-liner</h4>
-                    <div class="tabs">
-                        <input
-                            type="radio"
-                            id="pprod"
-                            name="tabset-bs"
-                            checked
-                        />
-                        <input type="radio" id="pdev" name="tabset-bs" />
-                        <div class="tab-labels">
-                            <label for="pprod">
-                                <span class="badge prod">prod</span>
-                                <span>No-sudo install</span>
-                            </label>
-                            <label for="pdev">
-                                <span class="badge dev">dev</span>
-                                <span>Sudo + system packages</span>
-                            </label>
-                        </div>
-                        <div class="tab-panels">
-                            <div class="tab-panel panel-prod">
-                                <p class="tab-meta">
-                                    Tools &rarr; mise-managed, user-level
-                                    (<code>~/.local/share/mise</code>)
-                                    &middot; no <code>dnf</code> step.
-                                </p>
-                                <pre><code># === Bootstrap: prod machine (no sudo, user-level tools only) ===
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod && \
-exec zsh   # or: source ~/.bashrc, if you can't chsh on this host</code></pre>
-                            </div>
-                            <div class="tab-panel panel-dev">
-                                <p class="tab-meta">
-                                    Tools &rarr; mise-managed, user-level
-                                    (same as prod) &middot; additionally
-                                    installs system packages via
-                                    <code>dnf</code> + managed
-                                    <code>/etc</code> files.
-                                </p>
-                                <pre><code># === Bootstrap: dev machine (sudo, + dnf system packages / etc files) ===
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
-                            </div>
-                        </div>
-                    </div>
+                    <p class="tab-meta">
+                        Tools &rarr; mise-managed, user-level
+                        (<code>~/.local/share/mise</code>) in both modes.
+                        <span class="badge owned">owned</span> additionally
+                        installs system packages via <code>dnf</code> +
+                        managed <code>/etc</code> files, and switches the
+                        login shell to zsh; <span class="badge shared">shared</span>
+                        stays no-sudo, user-wide only. Answer at the prompt,
+                        or set <code>WORKSTATION_MODE</code> up front for an
+                        unattended run.
+                    </p>
+                    <pre><code># === Interactive — asks owned or shared ===
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash && \
+exec zsh   # or: source ~/.bashrc, if you can't chsh on this host
+
+# === Unattended first run — no prompt ===
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | WORKSTATION_MODE=shared bash</code></pre>
 
                     <h4>What <code>bootstrap.sh</code> does, in order</h4>
                     <div class="flow">
@@ -2634,8 +2643,9 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                             <span class="num">4</span
                             ><span class="lbl">Set zsh as default</span
                             ><span class="note"
-                                >sudo usermod -s on dev; warns
-                                with manual chsh on prod</span
+                                >owned hosts only &mdash; sudo usermod -s;
+                                shared hosts leave the login shell
+                                untouched</span
                             >
                         </div>
                     </div>
@@ -2651,12 +2661,12 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                     </p>
 
                     <h4>
-                        <span class="badge dev">dev</span> Claude Code
+                        <span class="badge owned">owned</span> Claude Code
                         statusline prompt
                     </h4>
                     <p>
-                        At the tail of <code>bootstrap.sh --dev</code>, after
-                        the dotfiles apply, you&rsquo;ll be prompted to
+                        At the tail of <code>bootstrap.sh</code> on an owned
+                        host, after the dotfiles apply, you&rsquo;ll be prompted to
                         configure the Claude Code statusline via
                         <a href="https://github.com/sirmalloc/ccstatusline"
                             >ccstatusline</a
@@ -2667,7 +2677,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                             <strong>Use the tracked status line</strong>
                             &mdash; apply the tracked widget config + Claude
                             Code settings (same look as every other
-                            <code>dev_machine</code>).
+                            owned host).
                         </li>
                         <li>
                             <strong>Define a new status line for this machine</strong>
@@ -2687,7 +2697,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                             re-added to the tracked dotfiles source
                             (<code>dotfiles/config/ccstatusline/settings.json</code>),
                             committed, and pushed so every other
-                            <code>dev_machine</code> picks it up on next sync.
+                            owned host picks it up on next sync.
                         </li>
                         <li><strong>Skip</strong> &mdash; no setup this run.</li>
                     </ol>
@@ -2696,23 +2706,23 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                         Needs the mise-managed Linux-native Node.js on PATH
                         (installed as part of <code>mise bootstrap</code>'s
                         tools phase; the task itself runs through the mise
-                        shims), so a fresh dev_machine doesn&rsquo;t need
+                        shims), so a fresh owned host doesn&rsquo;t need
                         <code>npx</code> on PATH beforehand. Both the
                         ccstatusline and Node versions are pinned in
-                        <code>config.dev.toml</code> (<code
+                        <code>config.owned.toml</code> (<code
                             >npm:ccstatusline</code
                         >
                         and <code>tools.node</code>).
                     </p>
 
                     <h4>
-                        <span class="badge dev">dev</span> JetBrainsMono Nerd
+                        <span class="badge owned">owned</span> JetBrainsMono Nerd
                         Font Mono
                     </h4>
                     <p>
                         <code>mise bootstrap</code> runs the
                         <code>fonts</code> task (a post-tools mise task,
-                        dev + non-WSL only), which installs
+                        owned + non-WSL only), which installs
                         <strong>JetBrainsMono Nerd Font Mono</strong> to
                         <code>~/.local/share/fonts/JetBrainsMonoNerdFontMono/</code>
                         and refreshes the fontconfig cache. The font is required
@@ -2742,11 +2752,11 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                         <div class="grid-2">
                             <div class="os-card linux">
                                 <span class="os-label">Linux</span>
-                                <pre><code>./bootstrap.sh --prod --reinstall              # prompts before wiping
-./bootstrap.sh --dev  --reinstall --yes        # skip prompt
+                                <pre><code>./bootstrap.sh --reinstall              # prompts before wiping
+./bootstrap.sh --reinstall --yes        # skip prompt
 
 # From outside the repo (script in memory, won&rsquo;t self-delete):
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --prod --reinstall --yes</code></pre>
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall</code></pre>
                             </div>
                             <div class="os-card windows">
                                 <span class="os-label">Windows</span>
@@ -2772,11 +2782,11 @@ try {
                             <strong>Wipes:</strong> the cloned repo (<code
                                 >~/.config/mise</code
                             >
-                            / <code>%USERPROFILE%\.config\mise</code>) and
-                            any leftover pre-migration chezmoi config dir
-                            (<code>~/.config/chezmoi/</code>), if one is
-                            still present from before this host moved off
-                            chezmoi.
+                            / <code>%USERPROFILE%\.config\mise</code>),
+                            including the git-ignored
+                            <code>config.local.toml</code> &mdash; so the
+                            owned/shared mode (and name/email) is asked
+                            again on the next run.
                         </p>
                         <p>
                             <strong>Does not wipe:</strong> installed tools
@@ -2805,8 +2815,8 @@ try {
                         <div class="grid-2">
                             <div class="os-card linux">
                                 <span class="os-label">Linux</span>
-                                <pre><code>./bootstrap.sh --dev --doctor              # health report (read-only)
-./bootstrap.sh --dev --check-for-updates   # update scan (read-only)
+                                <pre><code>./bootstrap.sh --doctor              # health report (read-only)
+./bootstrap.sh --check-for-updates   # update scan (read-only)
 
 # Same engines, invoked directly:
 mise run health
@@ -2821,10 +2831,12 @@ mise run check-updates</code></pre>
                         <p>
                             Both modes are <strong>read-only</strong> &mdash;
                             they exit before the provisioning flow starts and
-                            never install or change anything. Use
-                            the same <code>--dev</code>/<code>--prod</code>
-                            flag the host was bootstrapped with (it picks the
-                            install scope being inspected).
+                            never install or change anything, and never
+                            prompt. They read the owned/shared mode already
+                            saved in <code>config.local.toml</code>; on a
+                            host that has never been bootstrapped (no saved
+                            mode), they report &ldquo;mode not
+                            set&rdquo; instead of guessing.
                         </p>
                         <p>
                             <strong><code>--doctor</code></strong> runs
@@ -2867,8 +2879,8 @@ mise run check-updates</code></pre>
                             <code>mise outdated --bump</code> for every tool
                             declared in <code>config.toml</code> /
                             <code>config.linux.toml</code> /
-                            <code>config.dev.toml</code>, a dnf
-                            <code>check-update</code> on dev hosts, plus
+                            <code>config.owned.toml</code>, a dnf
+                            <code>check-update</code> on owned hosts, plus
                             <code>git ls-remote</code> (no GitHub API, no
                             rate limits) for the handful of pins in
                             <code>config.toml</code> <code>[vars]</code>
@@ -3087,11 +3099,11 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             (<code>omp</code>) &mdash; AI coding agents; pinned,
                             sha256-verified portable binaries into
                             <code>%LOCALAPPDATA%\workstation\bin</code>. The
-                            Windows halves of the Linux dev-only mise tools
+                            Windows halves of the Linux owned-only mise tools
                             (<code>opencode</code> and
                             <code>github:can1357/oh-my-pi</code>, both
                             <code>os = ["linux"]</code> in
-                            <code>config.dev.toml</code> so mise never
+                            <code>config.owned.toml</code> so mise never
                             installs them here &mdash; the pin is a manual
                             dual-edit with this file).
                         </li>
@@ -3103,10 +3115,10 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             <code>%LOCALAPPDATA%\workstation\devtoys-cli</code>
                             (the single-file exe needs its sibling
                             <code>Plugins\</code> tree). The Windows half of
-                            the Linux dev-only mise tool
+                            the Linux owned-only mise tool
                             (<code>github:DevToys-app/DevToys</code>,
                             <code>os = ["linux"]</code> in
-                            <code>config.dev.toml</code>; version is a
+                            <code>config.owned.toml</code>; version is a
                             manual dual-edit with this file).
                         </li>
                         <li>
@@ -3128,7 +3140,7 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             dotfiles tree AND installs Node.js, Go, uv,
                             gopls, the language servers and ccstatusline in
                             one pass, straight against <code>config.toml</code>
-                            + <code>config.dev.toml</code> at the root of
+                            + <code>config.owned.toml</code> at the root of
                             this checkout &mdash; nothing is generated or
                             copied, and <code>config.linux.toml</code> never
                             loads here (the Windows <code>MISE_ENV</code>
@@ -3287,8 +3299,8 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             the background (nothing to pin). Skipped when
                             <code>claude</code> already resolves; soft-fails
                             with a manual-retry hint. The WSL2 copy (installed
-                            by <code>./bootstrap.sh --dev</code> inside the
-                            distro) is independent and unaffected.
+                            by <code>./bootstrap.sh</code> as an owned host
+                            inside the distro) is independent and unaffected.
                         </li>
                     </ul>
                     <p>
@@ -3442,9 +3454,6 @@ cd "$env:USERPROFILE\.config\mise"
                         environment variable is all mise needs to find its
                         tool declarations. Override the path with
                         <code>-RepoPath</code> if you keep the repo elsewhere.
-                        A pre-2026-09 clone at the old
-                        <code>%USERPROFILE%\.local\share\chezmoi</code> is
-                        moved aside automatically on first run.
                     </p>
 
                     <h4>What <code>bootstrap.ps1</code> does</h4>
@@ -3604,11 +3613,11 @@ cd "$env:USERPROFILE\.config\mise"
                     <pre><code># Inside the WSL distro:
 sudo dnf install -y curl git tar python3 python3-pip    # RHEL / AlmaLinux / Fedora
 # or: sudo apt install -y curl git tar python3 python3-pip   # Debian / Ubuntu
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --dev</code></pre>
+curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash</code></pre>
                     <p class="note-row">
-                        Use <code>--dev</code> for WSL distros where you have
-                        sudo (the common case &mdash; you own the WSL host).
-                        Tools install mise-managed and user-level (same as
+                        Answer <strong>owned</strong> at the prompt for WSL
+                        distros where you have sudo (the common case &mdash;
+                        you own the WSL host). Tools install mise-managed and user-level (same as
                         every other scope); starship + aliases + fzf +
                         zoxide + zellij all become available on next shell.
                     </p>
@@ -3960,7 +3969,7 @@ wt -w 0 sp -H -p "Nushell"    # split the current window&rsquo;s tab horizontall
                         pinned plugins from
                         <code>~/.config/zsh/plugins/</code> — zsh-only (bash
                         keeps system completion + readline history search);
-                        deploy on both dev and prod; Windows-ignored. Three
+                        deploy in both modes; Windows-ignored. Three
                         wired tools — <strong>atuin</strong>,
                         <strong>broot</strong>, <strong>yazi</strong> — round
                         out history search and directory navigation.
@@ -4233,7 +4242,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </div>
 
                     <h3>
-                        <span class="badge dev">dev</span> Claude Code
+                        <span class="badge owned">owned</span> Claude Code
                         statusline
                     </h3>
                     <p>
@@ -4247,7 +4256,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     <pre><code>mise run statusline</code></pre>
                     <p class="note-row">
                         Same prompt that fires at the tail of
-                        <code>bootstrap.sh --dev</code>. See
+                        <code>bootstrap.sh</code> on an owned host. See
                         <a href="#setup-linux"
                             >Setup &rarr; Claude Code statusline prompt</a
                         >
@@ -4261,22 +4270,22 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         and everything else. Pins live in
                         <code>config.toml</code> /
                         <code>config.linux.toml</code> /
-                        <code>config.dev.toml</code> at the repo root (this
+                        <code>config.owned.toml</code> at the repo root (this
                         checkout IS mise&rsquo;s global config dir); consumed
                         by the ccstatusline <code>statusLine</code> command, the
                         Claude&nbsp;Code <code>LSP</code> plugin, and anything
                         else that needs <code>npx</code>, <code>go</code> or
                         <code>uv</code>. Install or refresh the whole set with:
                     </p>
-                    <pre><code>mise bootstrap --yes   # runs on every host; MISE_ENV picks the scope</code></pre>
+                    <pre><code>mise bootstrap --yes   # runs on every host; MISE_ENV picks the mode</code></pre>
                     <p class="note-row">
                         Everything lands user-level under
                         <code>~/.local/share/mise</code>; the only privileged
                         step is the dnf batch itself (a single
                         <code>sudo dnf install -y</code> per run &mdash; mise
-                        elevates itself) plus the one-time sweep of the
-                        pre-mise <code>/usr/local/bin</code> artifacts on
-                        <code>dev_machine</code> (<code>tasks/migrate-legacy</code>).
+                        elevates itself). <code>mise run health</code> flags
+                        any leftover pre-mise <code>/usr/local/bin</code>
+                        artifacts on owned hosts.
                         Interactive shells see the tools through
                         <code>mise activate</code>; non-interactive ones
                         (<code>ssh host cmd</code>, IDE spawns) through
@@ -4303,8 +4312,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         typer, polars, duckdb</strong> preinstalled;
                         <code>textual</code> and <code>typer</code>
                         CLIs are on PATH too. Built
-                        on both <code>dev_machine</code> and
-                        <code>prod_machine</code>.
+                        in both modes.
                     </p>
                     <pre><code>REBUILD=1 mise run python-env   # runs on both scopes; upgrades to latest libs</code></pre>
                     <p class="note-row">
@@ -4333,7 +4341,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         <code>mise install</code> + <code>mise
                         bootstrap</code>). Use an interactive
                         <code>ssh -t</code> session for a
-                        <span class="badge dev">dev</span> host: its dnf
+                        <span class="badge owned">owned</span> host: its dnf
                         batch and <code>/etc</code> files can prompt for the
                         sudo password.
                     </p>
@@ -4343,8 +4351,8 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                     </h3>
                     <p class="note-row">
                         <code>bootstrap.sh</code> installs pinned mise,
-                        computes <code>MISE_ENV</code> from its
-                        <code>--dev</code>/<code>--prod</code> flag, runs
+                        computes <code>MISE_ENV</code> from the saved
+                        owned/shared mode, runs
                         <code>scripts/lib/mise-install.sh</code> (tools),
                         then <code>mise bootstrap --yes</code> (packages,
                         /etc files, services, compose, repos, dotfiles
@@ -4363,7 +4371,7 @@ mise bootstrap --yes
 
 # Dry run — print the plan, change nothing
 mise bootstrap plan
-MISE_ENV=linux,dev,host,native mise bootstrap plan   # inspect a scope you're not currently in
+MISE_ENV=linux,owned,host,native mise bootstrap plan   # inspect a scope you're not currently in
 
 # Read-only status of everything mise bootstrap manages
 mise bootstrap status
@@ -4716,10 +4724,10 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                         One line, in the right file &mdash; every tool is a
                         <code>mise</code> pin now.
                         <code>config.linux.toml</code> is the Linux toolbelt
-                        (both scopes); <code>config.dev.toml</code> is
-                        dev_machine-only tools on <strong>both</strong>
+                        (both modes); <code>config.owned.toml</code> is
+                        owned-hosts-only tools on <strong>both</strong>
                         OSes (add <code>os = ["linux"]</code> to a table
-                        entry when it&rsquo;s dev-only <em>and</em>
+                        entry when it&rsquo;s owned-only <em>and</em>
                         Linux-only). Prefer mise&rsquo;s
                         <strong>aqua registry</strong> short name (~65
                         tools already use it, e.g. <code>fzf =
@@ -4757,9 +4765,9 @@ direnv = "2.34.0"</code></pre>
                         <li>
                             Refresh both lockfiles for the platforms the
                             workstation runs on:
-                            <code>MISE_ENV=linux,dev,host,native mise lock
+                            <code>MISE_ENV=linux,owned,host,native mise lock
                             --global --platform linux-x64</code> and
-                            <code>MISE_ENV=windows,dev mise lock --global
+                            <code>MISE_ENV=windows,owned mise lock --global
                             --platform windows-x64</code> (skip the second
                             for a tool marked <code>os = ["linux"]</code>).
                         </li>
@@ -4767,7 +4775,7 @@ direnv = "2.34.0"</code></pre>
                             Commit the edited <code>config*.toml</code>, the
                             <code>mise.lock</code> /
                             <code>mise.linux.lock</code> /
-                            <code>mise.dev.lock</code> files, and any new
+                            <code>mise.owned.lock</code> files, and any new
                             sidecar under <code>locks/**</code>
                             (dependency-locked <code>pypi:</code>/<code
                                 >npm:</code
@@ -4797,7 +4805,7 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                     <p>
                         Edit the version in <code>config.toml</code> /
                         <code>config.linux.toml</code> /
-                        <code>config.dev.toml</code> (or run
+                        <code>config.owned.toml</code> (or run
                         <code>mise config set tools.&lt;name&gt;
                         &lt;version&gt;</code> &mdash; note that it drops a
                         same-line comment on the bumped string entry and a
@@ -4824,7 +4832,7 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                         <code>pwndbg</code>&rsquo;s
                         <code>bin_path = "pwndbg/bin"</code> in
                         <code>config.linux.toml</code> /
-                        <code>config.dev.toml</code> for worked examples.
+                        <code>config.owned.toml</code> for worked examples.
                     </p>
 
                     <h3>Adding a dotfile</h3>
@@ -4837,8 +4845,8 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                         should gate it &mdash; cross-platform in
                         <code>config.toml</code>, Linux in
                         <code>config.linux.toml</code>, Windows in
-                        <code>config.windows.toml</code>, dev-only (both
-                        OSes) in <code>config.dev.toml</code>, Linux-dev-only
+                        <code>config.windows.toml</code>, owned-only (both
+                        OSes) in <code>config.owned.toml</code>, Linux-owned-only
                         in <code>config.host.toml</code>:
                     </p>
                     <pre><code># config.linux.toml — [dotfiles]
@@ -4904,9 +4912,9 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                         <li>Commit the config edit and the new source file.</li>
                     </ol>
                     <p class="note-row">
-                        <strong>First apply on a host still running the old
-                        chezmoi bootstrap:</strong> every target already
-                        exists as a real file, and
+                        <strong>First dotfiles apply on a fresh host:</strong>
+                        a pre-existing file (e.g. <code>/etc/skel</code>&rsquo;s
+                        <code>~/.bashrc</code>) already occupies a target, and
                         <code>copy</code>/<code>template</code> refuse
                         to overwrite one that already differs (even
                         <code>--dry-run</code> exits 1)
@@ -4915,17 +4923,18 @@ tasks/verify-tools            # capability gate — arch/loader/glibc</code></pr
                         it (ruling 1). <code>bootstrap.sh</code>/<code
                             >bootstrap.ps1</code
                         > pass <code>--force-dotfiles</code> automatically,
-                        but only while
-                        <code>~/.local/state/workstation/dotfiles-migrated</code>
+                        but only while the first-apply marker,
+                        <code>~/.local/state/workstation/dotfiles-migrated</code>,
                         is absent, so a later real conflict still fails
                         loudly.
                     </p>
 
                     <h3>Adding a dnf package</h3>
                     <p>
-                        One line, in the right file. Dev-only C-toolchain /
-                        core packages go in <code>config.host.toml</code>;
-                        the NFS client group (non-WSL dev only — the only
+                        One line, in the right file. Owned-only
+                        C-toolchain / core packages go in
+                        <code>config.host.toml</code>; the NFS client group
+                        (non-WSL owned hosts only — the only
                         thing <code>config.native.toml</code> declares any
                         more) goes in <code>config.native.toml</code>.
                         Both are <code>[bootstrap.packages]</code> tables of
@@ -5038,71 +5047,37 @@ on_change = "restart"</code></pre>
 
                     <details data-ts>
                         <summary>
-                            The checkout moved
-                            (<code>~/.local/share/chezmoi</code> is gone)
+                            Changing a host between owned and shared
                         </summary>
                         <div class="ts-body">
                             <p>
-                                This repo <strong>is</strong> mise&rsquo;s
-                                global config dir now
-                                (<code>config.toml</code> +
-                                <code>mise.lock</code> live at its root), so
-                                <code>bootstrap.sh</code> /
-                                <code>bootstrap.ps1</code> relocate it from
-                                the old <code>~/.local/share/chezmoi</code> /
-                                <code>%USERPROFILE%\.local\share\chezmoi</code>
-                                to <code>~/.config/mise</code> /
-                                <code>%USERPROFILE%\.config\mise</code> on
-                                first run.
+                                The mode isn&rsquo;t a flag any more &mdash;
+                                it&rsquo;s read from the <code>mode</code>
+                                line in the host&rsquo;s git-ignored
+                                <code>config.local.toml</code> (under
+                                <code>[vars]</code>). To switch a host, edit
+                                or delete that line and re-run
+                                <code>./bootstrap.sh</code>: with the line
+                                deleted, the script prompts again (or reads
+                                <code>WORKSTATION_MODE</code>, if set); with
+                                it edited directly, the new value takes
+                                effect on the next run.
                             </p>
                             <p>
-                                The move is automatic and one-time. A
-                                pre-existing <code>~/.config/mise</code>
-                                from before the relocation (the chezmoi-era
-                                conf.d layout) is moved aside first as
-                                <code>*.pre-relocation.&lt;timestamp&gt;</code>
-                                &mdash; delete it once the new layout is
-                                confirmed working. Any leftover pre-migration
-                                chezmoi config
-                                (<code>~/.config/chezmoi/</code>) is swept up
-                                separately, by <code>--reinstall</code> or
-                                <code>bootstrap.ps1</code>&rsquo;s own
-                                one-time sweep &mdash; nothing reads or writes
-                                it any more, since chezmoi itself is gone.
-                            </p>
-                        </div>
-                    </details>
-
-                    <details data-ts>
-                        <summary>
-                            Windows: <em>&ldquo;Cannot move item &hellip; is
-                            in use&rdquo;</em> during the one-time relocation
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                The relocation above (moving
-                                <code>~\.local\share\chezmoi</code> to
-                                <code>~\.config\mise</code>) fails with
-                                <code>Move-Item : Cannot move item because the
-                                item at &hellip; is in use</code>. Windows
-                                refuses to move a directory that any process
-                                holds as its current directory &mdash; almost
-                                always a shell (or editor) sitting inside the
-                                old checkout, including the very shell running
-                                <code>.\bootstrap.ps1</code> in-process.
-                                <code>bootstrap.ps1</code> releases its own
-                                hold on the directory before moving it, but
-                                can&rsquo;t release one held by a different
-                                process (another terminal tab, an editor
-                                window, or the shell that launched it).
-                            </p>
-                            <p>
-                                <code>cd ~</code> in every shell open inside
-                                <code>~\.local\share\chezmoi</code>, close any
-                                editor with that folder open, then re-run:
-                                <code
-                                    >&amp; "$HOME\.local\share\chezmoi\bootstrap.ps1"</code
-                                >.
+                                Going from <strong>shared</strong> to
+                                <strong>owned</strong> then installs system
+                                packages, writes managed <code>/etc</code>
+                                files, and switches the login shell &mdash;
+                                nothing already deployed user-level is
+                                removed. Going from <strong>owned</strong> to
+                                <strong>shared</strong> does
+                                <strong>not</strong> uninstall dnf packages,
+                                revert <code>/etc</code> files, or change the
+                                login shell back; those stay until removed by
+                                hand. Windows hosts are always
+                                <strong>owned</strong> &mdash;
+                                <code>bootstrap.ps1</code> writes
+                                <code>mode = "owned"</code> and never asks.
                             </p>
                         </div>
                     </details>
@@ -5607,28 +5582,6 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                         </div>
                     </details>
 
-                    <details data-ts>
-                        <summary>
-                            Bootstrap errored with
-                            <em
-                                >&ldquo;Missing required flag: --dev or
-                                --prod&rdquo;</em
-                            >
-                        </summary>
-                        <div class="ts-body">
-                            <p>
-                                The script no longer has a default scope &mdash;
-                                exactly one of <code>--dev</code> (sudo,
-                                system-wide) or <code>--prod</code> (no sudo,
-                                user-wide) must be passed.
-                            </p>
-                            <p>
-                                The old <code>--full</code> flag was removed; if
-                                you still have it in a script or paste buffer,
-                                replace it with <code>--dev</code>.
-                            </p>
-                        </div>
-                    </details>
 
                     <details data-ts>
                         <summary>
@@ -5677,7 +5630,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
                             </p>
                             <p>
                                 Re-running
-                                <code>./bootstrap.sh --dev|--prod</code> is
+                                <code>./bootstrap.sh</code> is
                                 <strong>idempotent</strong> and resumes: every
                                 already-settled resource is skipped, so you
                                 aren&rsquo;t redoing work, only retrying what
@@ -5691,7 +5644,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 mise bootstrap --skip files,services --yes # comma-separated, or repeat --skip</code></pre>
                             <p>
                                 then re-run the full
-                                <code>./bootstrap.sh --dev|--prod</code> once
+                                <code>./bootstrap.sh</code> once
                                 the underlying cause is fixed &mdash; a
                                 skipped phase leaves real drift behind (see
                                 <code>mise run health</code>). Use
@@ -5765,10 +5718,10 @@ bash scripts/check-templates.sh                    # does exactly this for every
                                 &mdash; even <code>--dry-run</code> exits 1
                                 without <code>--force</code>. This is
                                 expected and <strong>correct</strong> on the
-                                first apply on any host that previously ran
-                                the old chezmoi-based bootstrap: every target
-                                chezmoi deployed is a real, differing file
-                                today, so mise won&rsquo;t silently reclaim
+                                first dotfiles apply on any fresh host: a
+                                pre-existing file (e.g. <code>/etc/skel</code>&rsquo;s
+                                <code>~/.bashrc</code>) already occupies a
+                                target, so mise won&rsquo;t silently reclaim
                                 it.
                             </p>
                             <p>
@@ -5778,7 +5731,7 @@ bash scripts/check-templates.sh                    # does exactly this for every
                                 already handle this &mdash; they pass
                                 <code>--force-dotfiles</code> to <code>mise
                                 bootstrap</code> automatically, but
-                                <strong>only</strong> while the migration
+                                <strong>only</strong> while the first-apply
                                 marker
                                 (<code>~/.local/state/workstation/dotfiles-migrated</code>)
                                 is absent. Once it&rsquo;s written (after the
@@ -6314,16 +6267,16 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 is gone with <code>makefile/</code>).
                                 <code>mise bootstrap</code>'s tools phase
                                 (also reachable directly as
-                                <code>./bootstrap.sh --dev</code> or
-                                <code>scripts/lib/mise-install.sh</code>) is
+                                <code>./bootstrap.sh</code> on an owned host
+                                or <code>scripts/lib/mise-install.sh</code>) is
                                 what installs the whole stack, via mise.
                                 Servers and their mechanisms:
                             </p>
                             <ul>
-                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; mise aqua-registry tools, dev + prod; re-run <code>mise install rust-analyzer marksman taplo</code> or <code>mise bootstrap --yes</code>.</li>
-                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (installed as part of <code>mise bootstrap</code>, from <code>config.dev.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>wsa</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
+                                <li><strong>rust-analyzer / marksman / taplo</strong> &mdash; mise aqua-registry tools, both modes; re-run <code>mise install rust-analyzer marksman taplo</code> or <code>mise bootstrap --yes</code>.</li>
+                                <li><strong>gopls / lua-language-server / basedpyright / typescript-language-server / bash-language-server / yaml-language-server / vscode-json-language-server</strong> &mdash; mise-managed (installed as part of <code>mise bootstrap</code>, from <code>config.owned.toml</code>). <code>mise ls --missing</code> lists what did not install; <code>mise doctor</code> must report <code>activated: yes</code> and <code>shims_on_path: yes</code> (else <code>wsa</code> and open a new shell). A stale npm server after a pin bump means node&rsquo;s postinstall did not re-run: <code>mise install --force node</code>. TypeScript itself is pinned to the 5.x line on purpose: TypeScript 7 ships no <code>tsserver.js</code> and the server cannot start against it.</li>
                                 <li><strong>clangd</strong> &mdash; not a mise tool; comes from dnf (<code>clang-tools-extra</code> in <code>config.host.toml</code>, see the C/C++ entry below). <code>mise run health</code> does not check it &mdash; verify with <code>command -v clangd</code>.</li>
-                                <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s <code>Invoke-MiseRuntimes</code> step, straight from <code>config.toml</code> + <code>config.dev.toml</code>; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
+                                <li><strong>Windows</strong> &mdash; the same servers install via <code>bootstrap.ps1</code>'s <code>Invoke-MiseRuntimes</code> step, straight from <code>config.toml</code> + <code>config.owned.toml</code>; <code>mise ls --missing</code> and <code>.\bootstrap.ps1 -Doctor</code> are the checks; open a new terminal after the first run (User PATH).</li>
                             </ul>
                             <p>
                                 Re-run the stack:
@@ -6352,7 +6305,7 @@ wsl --manage &lt;Distro&gt; --set-sparse true --allow-unsafe</code></pre>
                                 <code>meson</code>, <code>ninja-build</code>,
                                 <code>heaptrack</code>, the sanitizer runtimes)
                                 install via dnf on
-                                <span class="badge dev">dev_machine</span> only,
+                                <span class="badge owned">owned</span> hosts only,
                                 <strong>best-effort</strong>. Several come from
                                 EPEL/CRB, not BaseOS &mdash; the
                                 <code>config.host.toml</code>
@@ -6398,7 +6351,7 @@ mise bootstrap --only packages --yes</code></pre>
                                 (<code>~/.local/share/vcpkg</code>, a
                                 user-owned shallow clone at the pinned tag,
                                 installed by <code>mise run vcpkg</code> and
-                                exported by the shell rc on dev hosts). Being
+                                exported by the shell rc on owned hosts). Being
                                 user-owned, classic-mode
                                 <code>vcpkg install &lt;pkg&gt;</code> (which
                                 writes into the tree) needs no sudo any more
@@ -6426,8 +6379,7 @@ mise bootstrap --only packages --yes</code></pre>
                         <div class="ts-body">
                             <p>
                                 The blessed Python env is built by
-                                provisioning on both dev_machine and
-                                prod_machine. Rebuild it from scratch:
+                                provisioning in both modes. Rebuild it from scratch:
                             </p>
                             <p>
                                 <strong>Linux:</strong>
@@ -6456,7 +6408,7 @@ mise bootstrap --only packages --yes</code></pre>
                         <summary>
                             NFS tools (<code>showmount</code>,
                             <code>nfsstat</code>, <code>autofs</code>) are
-                            missing on a dev host
+                            missing on an owned host
                         </summary>
                         <div class="ts-body">
                             <p>
@@ -6464,13 +6416,13 @@ mise bootstrap --only packages --yes</code></pre>
                                 <code>nfs4-acl-tools</code>,
                                 <code>autofs</code>) is a
                                 <code>[bootstrap.packages]</code> entry in
-                                <code>config.native.toml</code> &mdash; dev
+                                <code>config.native.toml</code> &mdash; owned
                                 hosts only, and
                                 <strong>skipped entirely on WSL hosts</strong>
                                 by design (the whole file only loads when
                                 <code>MISE_ENV</code> carries the
                                 <code>native</code> token, never
-                                <code>wsl</code>). On a native dev host,
+                                <code>wsl</code>). On a native owned host,
                                 re-run
                                 <code>mise bootstrap --only packages --yes</code>.
                             </p>
