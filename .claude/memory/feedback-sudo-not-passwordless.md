@@ -1,13 +1,13 @@
 ---
 name: feedback-sudo-not-passwordless
-description: "On this dev host, sudo prompts for a password — Claude can't run sudo-requiring provisioning (./bootstrap.sh in owned mode, host-state mise bootstrap phases) non-interactively. Hand them to the user via the `!` prefix."
+description: "On this owned WSL host, sudo prompts for a password — Claude can't run sudo-requiring provisioning (./bootstrap.sh in owned mode, host-state mise bootstrap phases) non-interactively. Hand them to the user via the `!` prefix."
 metadata:
   node_type: memory
   type: feedback
   originSessionId: fc4d8a44-599f-450d-923c-6d8d1e188620
 ---
 
-In a Claude Code session on this dev host (AlmaLinux 9 under WSL2), `sudo` is NOT passwordless — `sudo -n true` fails. So any provisioning step that needs root can't be run by me non-interactively: `sudo` blocks on a password prompt and hangs the command.
+In a Claude Code session on this owned host (AlmaLinux 9 under WSL2), `sudo` is NOT passwordless — `sudo -n true` fails. So any provisioning step that needs root can't be run by me non-interactively: `sudo` blocks on a password prompt and hangs the command.
 
 **Why:** Established 2026-06-20 while deploying the C/C++ toolbelt, back when the Make recipes shelled out to `sudo dnf …` / `sudo install …`. This is also why two CRB bugs ([#24] then [#25]) slipped past my pre-merge checks — I could only lint + dry-run, never exercise the live, sudo-gated EPEL/CRB path. The same holds after the Make→mise migration: mise elevates itself for the host-state phases (`[bootstrap.packages]` dnf, `[bootstrap.files]` under `/etc`), and those prompt for the password. `tasks/migrate-legacy` (a one-time pre-mise `/usr/local/bin` sweep) is gone entirely as of 2026-09-25, with the rest of the chezmoi/Make migration code.
 

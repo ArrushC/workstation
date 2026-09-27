@@ -7,7 +7,7 @@ metadata:
 
 When reviewing/accepting `makefile/versions.mk` bumps, changelog research is
 necessary but NOT sufficient. **Sandbox-install the bumped tools and actually
-execute them on AlmaLinux 9** (the dev/prod target distro) before declaring a
+execute them on AlmaLinux 9** (the target distro in both modes) before declaring a
 bump safe.
 
 Two real blockers in the 2026-06-15 weekly bump passed source-cited changelog

@@ -1325,8 +1325,8 @@ try {
                                     data-tip="Modern from-scratch TUI debugger (fast on big binaries)"
                                     >nnd<span class="sr-only">
                                         — modern from-scratch TUI debugger, single
-                                        binary, fast on large binaries (dev +
-                                        prod)</span
+                                        binary, fast on large binaries (both
+                                        modes)</span
                                     ></span
                                 >
                                 <span
@@ -2314,8 +2314,8 @@ try {
                                         <li>
                                             gdbinit.tera
                                             <span class="note"
-                                                >&mdash; template; Linux dev
-                                                only (config.host.toml)</span
+                                                >&mdash; template; Linux owned
+                                                hosts only (config.host.toml)</span
                                             >
                                         </li>
                                         <li>
@@ -2624,23 +2624,33 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
-                            <span class="num">2.5</span
+                            <span class="num">3</span
                             ><span class="lbl">Install mise</span
                             ><span class="note">pinned, sha256-verified, into ~/.local/bin</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
-                            <span class="num">3</span
+                            <span class="num">4</span
+                            ><span class="lbl">Mode</span
+                            ><span class="note"
+                                >saved vars.mode &rarr; WORKSTATION_MODE
+                                &rarr; the owned/shared prompt; written to
+                                config.local.toml with name/email</span
+                            >
+                        </div>
+                        <div class="arrow">&rarr;</div>
+                        <div class="step">
+                            <span class="num">5</span
                             ><span class="lbl">mise install + mise bootstrap</span
                             ><span class="note"
-                                >tools, then
+                                >MISE_ENV from the mode; tools, then
                                 packages/files/services/compose/repos/dotfiles
                                 (--force-dotfiles on the first run)</span
                             >
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
-                            <span class="num">4</span
+                            <span class="num">6</span
                             ><span class="lbl">Set zsh as default</span
                             ><span class="note"
                                 >owned hosts only &mdash; sudo usermod -s;
@@ -2784,9 +2794,14 @@ try {
                             >
                             / <code>%USERPROFILE%\.config\mise</code>),
                             including the git-ignored
-                            <code>config.local.toml</code> &mdash; so the
-                            owned/shared mode (and name/email) is asked
-                            again on the next run.
+                            <code>config.local.toml</code> &mdash; so
+                            name/email are asked again on the next run.
+                            On Linux the owned/shared mode is asked again
+                            too (or read from <code>WORKSTATION_MODE</code>;
+                            with neither a terminal nor the variable,
+                            <code>--reinstall</code> stops before wiping
+                            anything). Windows never asks: it writes
+                            <code>mode = "owned"</code> again.
                         </p>
                         <p>
                             <strong>Does not wipe:</strong> installed tools
@@ -2842,13 +2857,19 @@ mise run check-updates</code></pre>
                             <strong><code>--doctor</code></strong> runs
                             <code>mise run health</code>, which reports
                             what is installed, missing, stale, or broken:
+                            the saved mode (a problem when
+                            <code>config.local.toml</code> has none; a
+                            warning when your shell&rsquo;s
+                            <code>MISE_ENV</code> disagrees with it &mdash;
+                            log in again),
                             <code>mise bootstrap status --missing</code>
                             (every declared dnf package / /etc file / service
                             / repo / tool), whether the mise-managed toolbelt
                             is complete, <code>MISE_ENV</code> persistence
                             (rc files + the systemd user manager), pueued,
-                            python-env, the dev extras (Claude Code, vcpkg,
-                            fonts, the zjstatus plugin copy), the login shell,
+                            python-env, the owned-host extras (Claude Code,
+                            vcpkg, fonts), the zjstatus plugin copy, the
+                            login shell,
                             dotfiles drift (<code>mise dot status</code>
                             &mdash; a copy-mode edit under <code>$HOME</code>
                             that hasn&rsquo;t been recorded back to
@@ -2858,8 +2879,8 @@ mise run check-updates</code></pre>
                             this repo itself &mdash; a hand-edited pin, an
                             edited source file &mdash; blocks the next
                             <code>wsu</code>&rsquo;s
-                            <code>git pull --ff-only</code>), and the
-                            legacy-tool sweep (one
+                            <code>git pull --ff-only</code>), and pre-mise
+                            leftovers to remove by hand (one
                             <code>&#10003;</code>/<code>!</code>/<code>&#10007;</code>
                             row each, with the exact repair command &mdash;
                             typically <code>mise bootstrap --yes</code> or
@@ -4158,7 +4179,8 @@ wt -w 0 sp -H -p "Nushell"    # split the current window&rsquo;s tab horizontall
                                     <code>mise run update</code> &mdash;
                                     <code>git pull</code> + <code>mise
                                     install</code> + <code>mise
-                                    bootstrap</code>
+                                    bootstrap</code>, for the mode saved in
+                                    <code>config.local.toml</code>
                                 </td>
                             </tr>
                             <tr>
@@ -4314,7 +4336,7 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         CLIs are on PATH too. Built
                         in both modes.
                     </p>
-                    <pre><code>REBUILD=1 mise run python-env   # runs on both scopes; upgrades to latest libs</code></pre>
+                    <pre><code>REBUILD=1 mise run python-env   # runs on both modes; upgrades to latest libs</code></pre>
                     <p class="note-row">
                         Libraries track latest at install time; only the
                         Python runtime itself is pinned
@@ -4339,7 +4361,10 @@ function work { Set-Location "D:\dev\myproject" }</code></pre>
                         <code>wsu</code> there (<code>mise run update</code>:
                         <code>git pull --ff-only</code>, then
                         <code>mise install</code> + <code>mise
-                        bootstrap</code>). Use an interactive
+                        bootstrap</code> with the <code>MISE_ENV</code> of
+                        the mode saved in <code>config.local.toml</code>,
+                        not the shell&rsquo;s; it refuses to run when no
+                        valid mode is saved). Use an interactive
                         <code>ssh -t</code> session for a
                         <span class="badge owned">owned</span> host: its dnf
                         batch and <code>/etc</code> files can prompt for the
@@ -4455,7 +4480,7 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                                 <td>
                                     <code>btop</code> on top; a
                                     <code>lazyjournal</code> pane and a shell
-                                    below &mdash; both tools ship to prod hosts
+                                    below &mdash; both tools ship to shared hosts
                                     too
                                 </td>
                             </tr>
@@ -4737,7 +4762,7 @@ mise uninstall gitui &amp;&amp; mise install gitui</code></pre>
                         floor EL9 can&rsquo;t meet, the wrong build) or
                         there&rsquo;s no GitHub release at all.
                     </p>
-                    <pre><code># config.linux.toml — [tools] (both scopes; aqua registry short name)
+                    <pre><code># config.linux.toml — [tools] (both modes; aqua registry short name)
 direnv = "2.34.0"</code></pre>
                     <p class="note-row">
                         A tool the registry gets wrong needs an explicit
@@ -5070,11 +5095,17 @@ on_change = "restart"</code></pre>
                                 files, and switches the login shell &mdash;
                                 nothing already deployed user-level is
                                 removed. Going from <strong>owned</strong> to
-                                <strong>shared</strong> does
+                                <strong>shared</strong> stops loading
+                                <code>config.owned.toml</code>, and that
+                                run&rsquo;s <code>mise prune</code> removes
+                                the tool versions only it declared (the
+                                owned-only mise tools). It does
                                 <strong>not</strong> uninstall dnf packages,
                                 revert <code>/etc</code> files, or change the
                                 login shell back; those stay until removed by
-                                hand. Windows hosts are always
+                                hand. Either way, log in again afterwards so
+                                your shells pick up the new
+                                <code>MISE_ENV</code>. Windows hosts are always
                                 <strong>owned</strong> &mdash;
                                 <code>bootstrap.ps1</code> writes
                                 <code>mode = "owned"</code> and never asks.
@@ -6385,7 +6416,7 @@ mise bootstrap --only packages --yes</code></pre>
                                 <strong>Linux:</strong>
                                 <code
                                     >REBUILD=1 mise run python-env   # runs
-                                    on both scopes</code
+                                    on both modes</code
                                 >
                             </p>
                             <p>
@@ -6502,7 +6533,7 @@ mise bootstrap --only packages --yes</code></pre>
                                 says which path it tried):
                             </p>
                             <pre><code>mise run bootstrap              # user-level, no sudo — re-copies zjstatus.wasm
-                                 # into zellij's data dir (runs on both scopes)
+                                 # into zellij's data dir (runs on both modes)
 zellij kill-session main        # config and plugins load when a session is created</code></pre>
                             <p>
                                 <strong>Boxes instead of pills</strong> mean the

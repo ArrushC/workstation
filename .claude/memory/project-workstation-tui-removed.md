@@ -20,7 +20,7 @@ Removed 2026-09-06 by user decision: "using the tui for this workstation is caus
 
 **Host-side effects of the removal (matters for anyone verifying a live host, or debugging "why did my venv rebuild"):**
 - `python-env.sh`'s stamp is `cksum`-keyed on the script's own content, so removing the editable-install lines changes the stamp filename — the next provision (then `make python-env`; now `mise run python-env`) rebuilds the venv from scratch, now without the `tui/` package.
-- The script self-heals two stale artifacts from earlier provisions: `rm -f ~/.local/bin/workstation` (the old launcher symlink) and `rm -rf ~/.cache/workstation-tui` (the TUI's health/updates/history caches) — both run unconditionally on every `python-env.sh` invocation, dev and prod.
+- The script self-heals two stale artifacts from earlier provisions: `rm -f ~/.local/bin/workstation` (the old launcher symlink) and `rm -rf ~/.cache/workstation-tui` (the TUI's health/updates/history caches) — both run unconditionally on every `python-env.sh` invocation, in both modes.
 - `bootstrap.ps1`'s `Invoke-PythonEnv` similarly self-heals `%LOCALAPPDATA%\workstation\bin\workstation.cmd` via `Remove-Item -ErrorAction SilentlyContinue`.
 - Nothing else on a host needs manual cleanup — no service, no cron, no systemd unit was TUI-owned.
 
