@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="mise outdated --bump, dnf check-update (dev), and config.toml [vars] pins vs upstream release tags"
+#MISE description="mise outdated --bump, dnf check-update (owned hosts), and config.toml [vars] pins vs upstream release tags"
 #MISE env={PYTHON_VERSION="{{ vars.python_version }}", NERD_FONT_VERSION="{{ vars.nerd_font_version }}", VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"

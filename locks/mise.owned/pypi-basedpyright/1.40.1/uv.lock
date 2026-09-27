@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.10"
 
 [options]
-exclude-newer = "2026-09-22T10:32:37.317747501Z"
+exclude-newer = "2026-09-24T12:01:13.962051745Z"
 
 [[package]]
 name = "basedpyright"

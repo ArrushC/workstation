@@ -4,25 +4,23 @@
 # the rendered output. Replaces the chezmoi-based render pass PR3 Task 1
 # retired (chezmoi execute-template cannot parse Tera's {% %} syntax at all).
 #
-# mise's global-config discovery has a FALLBACK, which is the whole reason
-# this script needs the symlink below. Measured on 2026-09-19 (mise 2026.9.9):
+# mise's global-config discovery has a FALLBACK. Measured on 2026-09-19
+# (mise 2026.9.9):
 #   HOME=X mise …  and X/.config/mise/config.toml EXISTS  -> X's config loads
 #   HOME=X mise …  and X/.config/mise         is ABSENT   -> mise falls back
 #                                                            to the REAL
 #                                                            account home's
 #                                                            ~/.config/mise
-# So a scratch HOME with no config of its own does NOT isolate the read side:
-# it silently reads whatever the account home has. On every real host the
-# account home IS this checkout (bootstrap.sh clones there by design), so the
-# fallback happens to land on the right config and overriding HOME alone
-# "works". On a CI runner the account home (/home/runner) is NOT the checkout
-# ($GITHUB_WORKSPACE), the fallback finds nothing, and `dot apply`/`bootstrap`
-# silently no-op — no error, nothing written. Fixed once below by symlinking
-# <account-home>/.config/mise at the checkout when nothing is there (additive
-# only, never overwrites a real one; removed again by the EXIT trap). The
-# dotfiles TARGET side (where "~/..." actually lands) is a SEPARATE mechanism
-# that always honors the per-call `HOME=` override, which is what keeps every
-# render in this script off the real $HOME.
+# So a scratch HOME with no config of its own renders whatever the account
+# home has: another checkout's templates, or nothing at all on a CI runner.
+# Each scratch HOME below therefore gets its own .config/mise (make_home):
+# this checkout's entries symlinked in, dotfiles/ copied (so the
+# post-dotfiles chmod hook can't touch the real source), and a
+# config.local.toml whose vars.mode matches the token set — without it only
+# the shared branches of the templates ever render. MISE_CONFIG_DIR and the
+# cwd point there too, the same setup as check-invariants.sh's MISE_ENV
+# render check. The dotfiles TARGET side ("~/...") honors the per-call
+# `HOME=`, which keeps every render off the real $HOME.
 #
 # Design (docs/superpowers/plans/2026-09-19-mise-dotfiles.md ruling 3: ONE
 # broken template aborts the WHOLE `mise dot apply`/`mise bootstrap`, and
@@ -63,25 +61,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-# A scratch HOME only isolates the config READ side when it carries its own
-# .config/mise; with none, mise falls back to the real account home's config
-# (measured 2026-09-19, mise 2026.9.9 — see the header block). On every real
-# host the account home IS this checkout, which is why overriding HOME alone
-# "worked" in every local test. A CI runner's account home (/home/runner) is
-# NOT the checkout ($GITHUB_WORKSPACE), so the fallback finds nothing and
-# `dot apply`/`dot bootstrap` silently no-op instead of erroring. Fix: if the
-# real account home has no ~/.config/mise yet, symlink it at the checkout —
-# additive only, never overwrites a real one, removed again by the EXIT trap,
-# and writes nothing under the dotfiles TARGET side (that's still isolated
-# per-call by the scratch `HOME=` override below).
-REAL_HOME="$HOME"
-CREATED_MISE_SYMLINK=0
-if [ "$(readlink -f "$REAL_HOME/.config/mise" 2>/dev/null)" != "$REPO_ROOT" ] && [ ! -e "$REAL_HOME/.config/mise" ]; then
-  mkdir -p "$REAL_HOME/.config"
-  ln -s "$REPO_ROOT" "$REAL_HOME/.config/mise"
-  CREATED_MISE_SYMLINK=1
-fi
-
 GREEN=$'\033[0;32m'
 RED=$'\033[0;31m'
 BLUE=$'\033[0;34m'
@@ -115,11 +94,33 @@ if [ -z "$PY" ]; then
 fi
 
 WORK="$(mktemp -d)"
-cleanup() {
-  rm -rf "$WORK"
-  [ "$CREATED_MISE_SYMLINK" -eq 1 ] && rm -f "$REAL_HOME/.config/mise"
+trap 'rm -rf "$WORK"' EXIT
+
+# make_home <env> <dir> — a scratch $HOME with its own .config/mise (see the
+# header): this checkout, plus a config.local.toml with the mode the token
+# set implies.
+make_home() {
+  local env=$1 home=$2 cfg entry base mode=shared
+  case ",$env," in *,owned,*) mode=owned ;; esac
+  cfg="$home/.config/mise"
+  mkdir -p "$cfg"
+  for entry in "$REPO_ROOT"/*; do
+    base=$(basename "$entry")
+    case "$base" in
+    config.local.toml) ;;
+    dotfiles) cp -R "$entry" "$cfg/dotfiles" ;;
+    *) ln -s "$entry" "$cfg/$base" ;;
+    esac
+  done
+  printf '[vars]\nname = "Template Check"\nemail = "template-check@example.invalid"\nmode = "%s"\n' "$mode" >"$cfg/config.local.toml"
 }
-trap cleanup EXIT
+
+# in_home <env> <home> <cmd…> — run a mise command against that scratch HOME.
+in_home() {
+  local env=$1 home=$2
+  shift 2
+  (cd "$home" && HOME="$home" MISE_CONFIG_DIR="$home/.config/mise" MISE_ENV="$env" "$@")
+}
 
 # discover_targets <MISE_ENV> — prints one "~/..." target per line: every
 # mode="template" [dotfiles] entry active under that token set.
@@ -128,7 +129,7 @@ discover_targets() {
 import sys, tomllib
 
 env_tokens = set(sys.argv[1].split(","))
-FILES = ["config.toml", "config.linux.toml", "config.dev.toml", "config.host.toml", "config.windows.toml"]
+FILES = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 
 def token_for(fname):
     if fname == "config.toml":
@@ -214,7 +215,7 @@ select_checker() {
 apply_and_check() {
   local env=$1 home=$2 target=$3 suffix=${4:-} label out err path
   label="$target [$env]$suffix"
-  if ! out=$(HOME="$home" MISE_ENV="$env" mise dot apply --force --yes -- "$target" 2>&1); then
+  if ! out=$(in_home "$env" "$home" mise dot apply --force --yes -- "$target" 2>&1); then
     # Keep the part that says WHY. mise puts the useful lines first (the
     # entry, the source file, `error: Variable ... is not defined`, the
     # caret line) and follows them with two generic "mise ERROR Version/Run
@@ -228,6 +229,19 @@ apply_and_check() {
     bad "$label: apply exited 0 but $path was not written. mise said: $(printf '%s' "$out" | tail -5 | tr '\n' ' ') | HOME=$home ls: $(ls -la "$home" 2>&1 | tr '\n' ' ')"
     return 1
   fi
+  # The mode-gated block must follow config.local.toml's mode.
+  # shellcheck disable=SC2088  # mise target strings, not paths
+  case "$target" in
+  "~/.zshrc" | "~/.bashrc")
+    if [[ ",$env," == *,owned,* ]] && ! grep -q 'VCPKG_ROOT' "$path"; then
+      bad "$label: rendered without the owned-only VCPKG_ROOT block (vars.mode not seen?)"
+      return 1
+    elif [[ ",$env," != *,owned,* ]] && grep -q 'VCPKG_ROOT' "$path"; then
+      bad "$label: shared render carries the owned-only VCPKG_ROOT block"
+      return 1
+    fi
+    ;;
+  esac
   select_checker "$target"
   if [ -n "$CHECK_CMD" ]; then
     if err=$("$CHECK_CMD" "$path" 2>&1); then
@@ -242,7 +256,7 @@ apply_and_check() {
   return 0
 }
 
-ENVS=("linux" "linux,dev,host,wsl" "linux,dev,host,native" "windows,dev")
+ENVS=("linux" "linux,owned,host,wsl" "linux,owned,host,native" "windows,owned")
 
 for env in "${ENVS[@]}"; do
   hdr "individual render + syntax check — MISE_ENV=$env"
@@ -253,7 +267,7 @@ for env in "${ENVS[@]}"; do
   fi
 
   indiv_home="$WORK/indiv-${env//[,\/]/_}"
-  mkdir -p "$indiv_home"
+  make_home "$env" "$indiv_home"
   env_ok=1
   while IFS= read -r t; do
     [ -n "$t" ] || continue
@@ -268,8 +282,8 @@ for env in "${ENVS[@]}"; do
   fi
 
   bulk_home="$WORK/bulk-${env//[,\/]/_}"
-  mkdir -p "$bulk_home"
-  if out=$(HOME="$bulk_home" MISE_ENV="$env" mise bootstrap --only dotfiles --force-dotfiles --yes 2>&1); then
+  make_home "$env" "$bulk_home"
+  if out=$(in_home "$env" "$bulk_home" mise bootstrap --only dotfiles --force-dotfiles --yes 2>&1); then
     ok "MISE_ENV=$env: mise bootstrap --only dotfiles --force-dotfiles --yes applied cleanly"
     bulk_ok=1
     while IFS= read -r t; do

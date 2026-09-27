@@ -1,7 +1,9 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Integration checks only: extract functions without executing provisioning.
 [CmdletBinding()]
 param()
+# Same StrictMode as bootstrap.ps1, so a strict-only failure shows up here.
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
@@ -29,6 +31,7 @@ $helper = Get-TestFunction $bootstrapPath 'Invoke-CurlRequest'
 $fontHelper = Get-TestFunction (Join-Path $repoRoot 'scripts/install-nerd-fonts.ps1') 'Invoke-CurlRequest'
 Assert-Test ($helper -ceq $fontHelper) 'Bootstrap/font HTTP helpers drifted'
 . ([scriptblock]::Create($helper))
+. ([scriptblock]::Create((Get-TestFunction $bootstrapPath 'Get-GitHubApiHeaders')))
 . ([scriptblock]::Create((Get-TestFunction $bootstrapPath 'Get-LatestWingetVersion')))
 
 # Bind an ephemeral loopback port without HttpListener URL ACL requirements.

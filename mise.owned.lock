@@ -119,7 +119,7 @@ url = "https://nodejs.org/dist/v26.10.0/node-v26.10.0-win-x64.zip"
 
 [[tools."npm:ccstatusline"]]
 version = "2.2.30"
-aube = { path = "locks/mise.dev/npm-ccstatusline/2.2.30", digest = "sha256:df2c07c76c465a27faaae3a947d2eeb3ac2ecf3638f2ee82b878c3676638b79c" }
+aube = { path = "locks/mise.owned/npm-ccstatusline/2.2.30", digest = "sha256:df2c07c76c465a27faaae3a947d2eeb3ac2ecf3638f2ee82b878c3676638b79c" }
 backend = "npm:ccstatusline"
 specifiers = ["2.2.30"]
 
@@ -142,4 +142,4 @@ url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/58000
 version = "1.40.1"
 backend = "pypi:basedpyright"
 specifiers = ["1.40.1"]
-uv = { path = "locks/mise.dev/pypi-basedpyright/1.40.1", digest = "sha256:c3b71f78a9b89d6db261cc3b1da7dbd796d60010832b8003154c18d5dae2b888" }
+uv = { path = "locks/mise.owned/pypi-basedpyright/1.40.1", digest = "sha256:112e805c9c079b9bb7f6dc371b1137335dd4b7e3cb697e07d4ce117ee5c55565" }

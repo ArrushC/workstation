@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Read-only health report: bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, dev extras, legacy leftovers"
+#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, owned extras, leftovers"
 #MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
 # Replaces makefile/lib/doctor.sh + the Make `doctor` target. Ports its
 # hdr/row_ok/row_warn/row_bad/row_skip report shape. READ-ONLY: no installs,
@@ -9,14 +9,9 @@
 # every remaining check still has to run so the summary counts are complete.
 set -uo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
-env_has() {
-  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
-  return 1
-}
 
 # A python with `json` for parsing `mise bootstrap status --json` (below).
-# wpy is python-env's launcher (both scopes); mise's own python and the system
+# wpy is python-env's launcher (both modes); mise's own python and the system
 # interpreter are the fallbacks. Empty when none exists — the one caller treats
 # that as "cannot classify" and fails the row rather than passing it.
 PY=""
@@ -57,10 +52,38 @@ row_skip() {
   n_skip=$((n_skip + 1))
 }
 
-mode="prod"
-env_has dev && mode="dev"
+# The saved mode is the source of truth, not the calling shell's MISE_ENV:
+# a stale or missing value there would make every check below agree with
+# itself. Read with bootstrap.sh's own config_get in a child shell.
+cfg="$root/config.local.toml"
+mode=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" mode' _ "$root/bootstrap.sh" "$cfg" 2>/dev/null)
+canonical_env=""
+case "$mode" in
+owned | shared) canonical_env=$("$root/scripts/lib/mise-env.sh" "$mode" 2>/dev/null) ;;
+esac
+# canon_has <token> — is <token> in the saved mode's MISE_ENV set?
+canon_has() {
+  case ",$canonical_env," in *,"$1",*) return 0 ;; esac
+  return 1
+}
+shell_env="${MISE_ENV:-}"
 
-hdr "workstation health — MISE_ENV=${MISE_ENV:-unset} · read-only"
+hdr "workstation health — mode=${mode:-unset} · MISE_ENV=${shell_env:-unset} · read-only"
+echo ""
+
+hdr "mode (config.local.toml)"
+if [ -n "$canonical_env" ]; then
+  row_ok "mode" "$mode (saved in config.local.toml) — MISE_ENV $canonical_env"
+  if [ "$shell_env" = "$canonical_env" ]; then
+    row_ok "MISE_ENV shell" "matches the saved mode"
+  else
+    row_warn "MISE_ENV shell" "this shell has \"${shell_env:-unset}\", the saved mode needs \"$canonical_env\" — log in again (or open a new shell)"
+  fi
+  # The mise checks below then see the saved mode's config set.
+  export MISE_ENV="$canonical_env"
+else
+  row_bad "mode" "no valid mode in $cfg${mode:+ (found \"$mode\")} — run $root/bootstrap.sh (it asks) or set mode = \"owned\" or \"shared\" under [vars]"
+fi
 echo ""
 
 # 1. mise bootstrap status — packages/files/services/compose/repos per origin
@@ -73,7 +96,7 @@ if [ "$bootstrap_rc" -eq 0 ]; then
   row_ok "bootstrap state" "current"
 else
   # Drift. One case is NOT a problem: a host with no systemd user manager (a
-  # prod box reached without a logind session) reports the pueued user service
+  # shared host reached without a logind session) reports the pueued user service
   # as `unavailable: systemd user manager not available`, yet `mise bootstrap`
   # itself skips that service cleanly and exits 0 — so the advice below could
   # never clear the row. Classify from `--json`'s exact state/action fields
@@ -141,7 +164,7 @@ print("real:" + "; ".join(real[:6]) if real else
     fi
     ;;
   *)
-    row_bad "bootstrap state" "drift — run ./bootstrap.sh --$mode"
+    row_bad "bootstrap state" "drift — run ./bootstrap.sh"
     ;;
   esac
 fi
@@ -162,20 +185,19 @@ echo ""
 # set-environment fixes that one, so it's a warn rather than a hard failure).
 # I1 (final-fix-brief.md): a bare presence grep for `export MISE_ENV=` passes
 # on ANY value, so a host that baked the wrong token set (e.g. plain "linux"
-# on a dev host) reported a false green. Compare the actual BAKED value in
+# on an owned host) reported a false green. Compare the actual BAKED value in
 # each file against scripts/lib/mise-env.sh "$mode" — the canonical token
-# set for THIS host — mirroring the render comparison
+# set for THIS host's saved mode — mirroring the render comparison
 # check_mise_env_three_way makes in scripts/check-invariants.sh.
 hdr "MISE_ENV persisted"
-canonical_env=$("$root/scripts/lib/mise-env.sh" "$mode" 2>/dev/null || true)
 _baked_mise_env() {
-  # Matches both the rc-file form (export MISE_ENV="linux,dev,host,wsl") and
-  # environment.d's unquoted systemd form (MISE_ENV=linux,dev,host,wsl).
+  # Matches both the rc-file form (export MISE_ENV="linux,owned,host,wsl") and
+  # environment.d's unquoted systemd form (MISE_ENV=linux,owned,host,wsl).
   grep -oE '(export )?MISE_ENV="?[a-z,]+"?' "$1" 2>/dev/null | head -1 |
     sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//'
 }
 if [ -z "$canonical_env" ]; then
-  row_bad "MISE_ENV rc" "scripts/lib/mise-env.sh $mode produced no output — cannot verify baked rc files"
+  row_skip "MISE_ENV rc" "no valid mode (see the mode row) — nothing to compare the baked rc files against"
 else
   zshenv_baked=$(_baked_mise_env "$HOME/.zshenv")
   bashrc_baked=$(_baked_mise_env "$HOME/.bashrc")
@@ -186,10 +208,13 @@ else
     row_bad "MISE_ENV rc" "want \"$canonical_env\" ($mode) — got zshenv=\"${zshenv_baked:-<missing>}\" bashrc=\"${bashrc_baked:-<missing>}\" environment.d=\"${envd_baked:-<missing>}\" — mise dot apply / bootstrap.sh writes all three"
   fi
 fi
-if systemctl --user show-environment 2>/dev/null | grep -q '^MISE_ENV='; then
-  row_ok "MISE_ENV live" "set in the systemd user manager"
+live_env=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^MISE_ENV=//p' | head -1)
+if [ -z "$live_env" ]; then
+  row_warn "MISE_ENV live" "not set in the systemd user manager — re-login or: systemctl --user set-environment MISE_ENV=${canonical_env:-...}"
+elif [ -z "$canonical_env" ] || [ "$live_env" = "$canonical_env" ]; then
+  row_ok "MISE_ENV live" "set in the systemd user manager ($live_env)"
 else
-  row_warn "MISE_ENV live" "not set — re-login or: systemctl --user set-environment MISE_ENV=${MISE_ENV:-...}"
+  row_warn "MISE_ENV live" "systemd user manager has \"$live_env\", want \"$canonical_env\" — re-login or: systemctl --user set-environment MISE_ENV=$canonical_env"
 fi
 echo ""
 
@@ -204,7 +229,7 @@ else
   row_warn "pueued" "dev.mise.pueued.service not active — mise bootstrap --only services"
 fi
 if [ -f "$HOME/.config/systemd/user/pueued.service" ]; then
-  row_warn "pueued (old unit)" "legacy pueued.service still present — ./bootstrap.sh retires it"
+  row_warn "pueued (old unit)" "legacy pueued.service still present — remove it: systemctl --user disable --now pueued.service; rm ~/.config/systemd/user/pueued.service"
 fi
 echo ""
 
@@ -222,9 +247,9 @@ else
 fi
 echo ""
 
-# 6. zjstatus — both scopes: tasks/bootstrap installs the plugin
-# unconditionally (config.linux.toml, the zellij + zjstatus tools, loads on
-# both dev and prod), so this row must not be gated on dev.
+# 6. zjstatus — both modes: tasks/bootstrap installs the plugin
+# unconditionally (config.linux.toml, the zellij + zjstatus tools, loads in
+# both modes), so this row must not be gated on owned.
 hdr "zjstatus"
 # Same [PLUGIN DIR] lookup as scripts/lib/zellij-plugin.sh.
 plugin_dir="${ZELLIJ_PLUGIN_DIR:-}"
@@ -239,9 +264,9 @@ else
 fi
 echo ""
 
-# 7. dev-only extras
-if env_has dev; then
-  hdr "dev extras"
+# 7. owned-only extras
+if [ "$mode" = owned ]; then
+  hdr "owned extras"
   if command -v claude >/dev/null 2>&1; then
     row_ok "claude" "$(command -v claude)"
   else
@@ -252,7 +277,7 @@ if env_has dev; then
   else
     row_bad "vcpkg" "missing — mise run vcpkg"
   fi
-  if env_has native; then
+  if canon_has native; then
     fdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
     if [ -d "$fdir" ] && [ -n "$(find "$fdir" -maxdepth 1 -name '*.ttf' -print -quit 2>/dev/null)" ]; then
       row_ok "fonts" "$fdir has TTFs"
@@ -286,12 +311,7 @@ if [ "$repo_dirty" -eq 0 ]; then
 else
   row_warn "repo checkout" "$repo_dirty uncommitted change(s) in $root — commit or stash before the next wsu (its git pull --ff-only fails on local changes)"
 fi
-if [ -f "$state/legacy-tools-swept" ] && [ -f "$state/legacy-host-swept" ] && [ -f "$state/legacy-chezmoi-swept" ]; then
-  row_ok "legacy sweep" "all three markers present"
-else
-  row_warn "legacy sweep" "not fully swept yet — mise run bootstrap"
-fi
-if env_has dev; then
+if [ "$mode" = owned ]; then
   stale=()
   for b in mise starship fzf; do
     [ -e "/usr/local/bin/$b" ] && stale+=("$b")
@@ -299,7 +319,7 @@ if env_has dev; then
   if [ "${#stale[@]}" -eq 0 ]; then
     row_ok "legacy /usr/local" "no stale binaries"
   else
-    row_warn "legacy /usr/local" "still present: ${stale[*]} — mise run bootstrap"
+    row_warn "legacy /usr/local" "pre-mise binaries left over (mise's shims come first on PATH) — remove by hand: sudo rm ${stale[*]/#//usr/local/bin/}"
   fi
 fi
 echo ""

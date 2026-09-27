@@ -28,7 +28,7 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
 
 # --- mise (runtimes: node / Go / uv / LSP servers + per-project mise.toml) ----
 # The checkout at %USERPROFILE%\.config\mise IS mise's config dir
-# (config.toml + config.dev.toml — installed by bootstrap.ps1's
+# (config.toml + config.owned.toml — installed by bootstrap.ps1's
 # Invoke-MiseRuntimes). The hook puts the real bin dirs on PATH ahead of the
 # shims dir bootstrap added to the User PATH. Dot-sourced by the 5.1 profile
 # too — `mise activate pwsh` output is plain PowerShell.
@@ -112,7 +112,7 @@ function wsu {
 # wsh -- workstation cheatsheet, the Windows twin of the bash/zsh wsh (and
 # of config.nu's). Keep the printed text ASCII: PowerShell 5.1 reads this
 # BOM-less profile in the ANSI codepage, so an em dash would print garbled.
-# Only the ~/.claude/* directory entries load on Windows (config.dev.toml);
+# Only the ~/.claude/* directory entries load on Windows (config.owned.toml);
 # the Linux-only ones (zellij, zsh completions, gdb, ~/.local/bin) don't.
 function wsh {
     Write-Host @'

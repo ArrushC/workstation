@@ -2,7 +2,7 @@
 # bump-versions.sh — propose version-pin bumps across the two layers that
 # remain after the tool AND host-pin move to mise:
 #
-#   (1) mise tool pins in config.toml / config.linux.toml / config.dev.toml,
+#   (1) mise tool pins in config.toml / config.linux.toml / config.owned.toml,
 #       via `mise outdated --bump --json` + set_pin + `mise lock`.
 #   (2) the handful of host pins config.toml [vars] owns directly (vcpkg —
 #       python/nerd-fonts are dual/triple-edit, reported not
@@ -49,7 +49,7 @@ outdated_fail="" # captured stderr when `mise outdated` itself fails (non-empty 
 exit_code=0
 
 # -----------------------------------------------------------------------------
-# Layer 1: mise tool pins (config.toml / config.linux.toml / config.dev.toml)
+# Layer 1: mise tool pins (config.toml / config.linux.toml / config.owned.toml)
 # -----------------------------------------------------------------------------
 #
 # Pins that need more than a one-line edit are bumped by dedicated code
@@ -152,7 +152,7 @@ normalize_lock_sidecars() {
     cp -a "$ROOT/.mise/locks/." "$ROOT/locks/" &&
     rm -rf "${ROOT:?}/.mise" &&
     sed -i 's#path = "\.mise/locks/#path = "locks/#g' \
-      "$ROOT/mise.lock" "$ROOT/mise.linux.lock" "$ROOT/mise.dev.lock" || {
+      "$ROOT/mise.lock" "$ROOT/mise.linux.lock" "$ROOT/mise.owned.lock" || {
     echo "ERROR: normalize_lock_sidecars failed" >&2
     return 1
   }
@@ -327,7 +327,7 @@ lock_platform() {
 }
 
 mise_err_file="$(mktemp)"
-if ! outdated="$(mise_global linux,dev,host,native mise outdated --bump --json 2>"$mise_err_file")"; then
+if ! outdated="$(mise_global linux,owned,host,native mise outdated --bump --json 2>"$mise_err_file")"; then
   outdated_fail="$(cat "$mise_err_file")"
   printf 'bump-versions.sh: mise outdated failed:\n%s\n' "$outdated_fail" >&2
   exit_code=1
@@ -390,7 +390,7 @@ if [ -z "$outdated_fail" ]; then
   # gopls: bump only when the floor its go.mod declares is at or below the
   # go pin this run leaves (go may have just moved).
   if [ -n "${gopls_new:-}" ]; then
-    go_pin="${bump_new[go]:-$(grep -m1 -E '^go = "' config.dev.toml | sed -E 's/^go = "([^"]*)".*/\1/')}"
+    go_pin="${bump_new[go]:-$(grep -m1 -E '^go = "' config.owned.toml | sed -E 's/^go = "([^"]*)".*/\1/')}"
     floor="$(gopls_floor "$gopls_new")"
     if [ -z "$floor" ]; then
       manual="${manual}- \`go:golang.org/x/tools/gopls\`: $gopls_cur → $gopls_new — could not read its go.mod floor (offline?) (manual)\n"
@@ -413,7 +413,7 @@ if [ -z "$outdated_fail" ]; then
   # node's postinstall LSP servers: newest release within each package's
   # CURRENT major (typescript: the 5.x line, see the header). A new major is
   # reported, not taken.
-  node_line="$(grep -m1 -E '^node = \{' config.dev.toml)"
+  node_line="$(grep -m1 -E '^node = \{' config.owned.toml)"
   for spec in $(grep -oE '[a-z@/.-]+@[0-9]+\.[0-9]+\.[0-9]+' <<<"$node_line"); do
     pkg="${spec%@*}" pcur="${spec##*@}" major="${pcur%%.*}"
     pnew="$(npm_latest_in_major "$pkg" "$major")"
@@ -427,11 +427,11 @@ if [ -z "$outdated_fail" ]; then
     fi
     [ -n "$pnew" ] && version_gt "$pnew" "$pcur" || continue
     if $DRY; then
-      bumped="${bumped}- \`$pkg\` (config.dev.toml node postinstall): $pcur → $pnew\n"
+      bumped="${bumped}- \`$pkg\` (config.owned.toml node postinstall): $pcur → $pnew\n"
     elif PIN_OLD="$spec" PIN_NEW="$pkg@$pnew" perl -i -pe \
-      's/(?<=[ "])\Q$ENV{PIN_OLD}\E(?=[ "])/$ENV{PIN_NEW}/ if /^node = \{/' config.dev.toml &&
-      grep -qF "$pkg@$pnew" config.dev.toml; then
-      bumped="${bumped}- \`$pkg\` (config.dev.toml node postinstall): $pcur → $pnew\n"
+      's/(?<=[ "])\Q$ENV{PIN_OLD}\E(?=[ "])/$ENV{PIN_NEW}/ if /^node = \{/' config.owned.toml &&
+      grep -qF "$pkg@$pnew" config.owned.toml; then
+      bumped="${bumped}- \`$pkg\` (config.owned.toml node postinstall): $pcur → $pnew\n"
     else
       failed="${failed}- \`$pkg\` (node postinstall): could not rewrite $spec (manual)\n"
     fi
@@ -446,17 +446,17 @@ if [ -z "$outdated_fail" ]; then
     # inside the tracked checkout, and tasks/update's `git pull --ff-only`
     # refused the dirty tree. Install the pinned uv first. MISE_LOCKFILE=false
     # stops this install rewriting the lock files itself.
-    if ! mise_global linux,dev,host,native env MISE_LOCKFILE=false mise install uv; then
+    if ! mise_global linux,owned,host,native env MISE_LOCKFILE=false mise install uv; then
       printf 'bump-versions.sh: mise install uv failed; pypi: dependency locks will be skipped\n' >&2
       failed="${failed}- \`mise install uv\` failed — pypi: dependency locks not regenerated (manual)\n"
       exit_code=1
     fi
-    if ! lock_platform linux,dev,host,native linux-x64; then
+    if ! lock_platform linux,owned,host,native linux-x64; then
       printf 'bump-versions.sh: mise lock --platform linux-x64 failed\n' >&2
       failed="${failed}- \`mise lock --platform linux-x64\` failed (manual)\n"
       exit_code=1
     fi
-    if ! lock_platform windows,dev windows-x64; then
+    if ! lock_platform windows,owned windows-x64; then
       printf 'bump-versions.sh: mise lock --platform windows-x64 failed\n' >&2
       failed="${failed}- \`mise lock --platform windows-x64\` failed (manual)\n"
       exit_code=1

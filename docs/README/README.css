@@ -1502,7 +1502,7 @@ main>section>h2::before {
     white-space: nowrap;
 }
 
-.badge.prod {
+.badge.shared {
     color: var(--green);
     background: var(--green-soft);
 }
@@ -1812,24 +1812,6 @@ details[open]>summary {
     color: var(--muted);
     font-size: 12px;
     margin: 0 0 12px;
-}
-
-#pprod:checked~.tab-labels label[for="pprod"],
-#pdev:checked~.tab-labels label[for="pdev"] {
-    background: var(--surface);
-    color: var(--accent);
-    box-shadow: 0 1px 3px #00000010;
-}
-
-#pprod:checked~.tab-panels .panel-prod,
-#pdev:checked~.tab-panels .panel-dev {
-    display: block;
-}
-
-#pprod:focus-visible~.tab-labels label[for="pprod"],
-#pdev:focus-visible~.tab-labels label[for="pdev"] {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
 }
 
 /* Search and filters */

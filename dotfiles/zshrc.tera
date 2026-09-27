@@ -37,8 +37,8 @@ fi
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
 export VISUAL="hx"
-{% if vars.group is defined and vars.group == "dev_machine" %}
-# vcpkg (Microsoft C/C++ package manager) — dev_machine only. `mise run vcpkg`
+{% if vars.mode is defined and vars.mode == "owned" %}
+# vcpkg (Microsoft C/C++ package manager) — owned hosts only. `mise run vcpkg`
 # (tasks/vcpkg) clones + bootstraps it into this dir (= $VCPKG_ROOT) and
 # symlinks the `vcpkg` binary onto PATH. KEEP IN SYNC with tasks/vcpkg's
 # vroot=.
@@ -479,7 +479,7 @@ alias zj='zellij'
 alias zjl='zellij list-sessions'
 alias zja='zellij attach'
 alias py='python-cli' # newest installed Python, never downloads (see python-cli fn)
-alias devtoys='devtoys.cli' # DevToys CLI (dev-only install; harmless "command not found" on prod — web-admin-alias precedent)
+alias devtoys='devtoys.cli' # DevToys CLI (owned-only install; harmless "command not found" on a shared host — web-admin-alias precedent)
 
 # --- Aliases — workstation (mise dotfiles) -----------------------------------
 # Every ws* command pins `-C "$HOME"`: mise resolves its config root by

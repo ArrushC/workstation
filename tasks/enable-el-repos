@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="pre-packages hook: EPEL + CRB on RHEL-family dev hosts (config.host.toml)"
+#MISE description="pre-packages hook: EPEL + CRB on RHEL-family owned hosts (config.host.toml)"
 #MISE hide=true
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
