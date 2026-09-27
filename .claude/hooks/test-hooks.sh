@@ -176,9 +176,11 @@ STUB
 chmod +x "$SE/stub.sh"
 # slow stub: records immediately, then lingers — proves the hook does NOT wait
 # on the notifier (the toast is fired detached so SessionEnd can't cancel it).
+# It logs to its own file: detached, its write can land after the next case
+# has truncated notified.log and break that case's "silent" check.
 cat >"$SE/slowstub.sh" <<STUB
 #!/usr/bin/env bash
-printf '%s\n' "\$*" >>"$SE/notified.log"
+printf '%s\n' "\$*" >>"$SE/slow.log"
 sleep 3
 STUB
 chmod +x "$SE/slowstub.sh"

@@ -169,7 +169,7 @@ $PortableTools = @(
     },
     @{
         # mise — the runtime manager (node / Go / uv / gopls / the LSP
-        # servers): the Windows half of the Linux both-scopes EGET_TOOL. The
+        # servers): the Windows twin of the mise binary bootstrap.sh pins. The
         # zip nests mise\bin\mise.exe + mise-shim.exe (the template mise
         # copies for native .exe shims — without it shims degrade to .cmd
         # wrappers), so 'tree' into its OWN dir with BinSubdir pointing the
@@ -1311,9 +1311,13 @@ function Invoke-EnsureConfigLocal {
     }
     Write-Log "First-time setup -- name/email for git commits and the SSH config comment..."
     # An empty answer writes nothing (like bootstrap.sh), so the next run asks again.
-    if (-not $hasName) { $answer = Read-Host "  Name"; if ($answer) { Set-ConfigLocalVar -Path $target -Key 'name' -Value $answer } }
-    if (-not $hasEmail) { $answer = Read-Host "  Email"; if ($answer) { Set-ConfigLocalVar -Path $target -Key 'email' -Value $answer } }
-    Write-Ok "wrote $target"
+    if (-not $hasName) { $answer = Read-Host "  Name"; if ($answer) { Set-ConfigLocalVar -Path $target -Key 'name' -Value $answer; $hasName = $true } }
+    if (-not $hasEmail) { $answer = Read-Host "  Email"; if ($answer) { Set-ConfigLocalVar -Path $target -Key 'email' -Value $answer; $hasEmail = $true } }
+    if ($hasName -and $hasEmail) {
+        Write-Ok "name/email saved to $target"
+    } else {
+        Write-Warn "name/email incomplete -- add them to $target ([vars] name / email) for git commits; the next run asks again."
+    }
 }
 
 function Invoke-WslConfigReminder {
