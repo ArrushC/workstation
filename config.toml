@@ -2,10 +2,10 @@
 #
 # Which files load is picked by MISE_ENV (scripts/lib/mise-env.sh):
 #   config.toml          always            (cross-platform: uv)
-#   config.linux.toml    linux             (the Linux toolbelt, both scopes)
-#   config.owned.toml    owned             (dev tools on both OSes)
-#   config.host.toml     host              (Linux dev: dnf + /etc)
-#   config.native.toml   native            (non-WSL dev: NFS client)
+#   config.linux.toml    linux             (the Linux toolbelt, both modes)
+#   config.owned.toml    owned             (owned-host tools on both OSes)
+#   config.host.toml     host              (Linux owned: dnf + /etc)
+#   config.native.toml   native            (non-WSL owned: NFS client)
 #   config.wsl.toml      wsl               (/etc/wsl.conf)
 #   config.windows.toml  windows           (Windows-only dotfiles surface)
 #   config.local.toml    always, git-ignored — per-host overrides
@@ -22,7 +22,7 @@ vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by ta
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
 [tools]
-# uv — the Python installer behind python-env (both scopes, both OSes).
+# uv — the Python installer behind python-env (both modes, both OSes).
 # Pinned above 0.12.10: `mise lock` refuses to write Python dependency
 # locks (pypi:/pipx: tools — basedpyright, glances, asciinema, harlequin)
 # below that floor ("Python dependency locks require uv >= 0.12.10").
@@ -47,9 +47,9 @@ python = "3.14.7"
 # config used to be the other example here, but it's actually Linux-only in
 # effect (Windows reads %APPDATA%\helix\config.toml, not ~/.config/helix/
 # config.toml) — PR3 Task 3 controller review moved it to config.linux.toml
-# so a Windows dev host no longer lands that dead file too; the Windows
+# so a Windows host no longer lands that dead file too; the Windows
 # config still read_file()-inlines the same source (config.windows.toml).
-# Everything else (Linux-only, dev-only, Windows-only) lives in the
+# Everything else (Linux-only, owned-only, Windows-only) lives in the
 # token-gated config.*.toml file that loads it — see the file map above.
 # ---------------------------------------------------------------------------
 [dotfiles]

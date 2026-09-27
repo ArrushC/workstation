@@ -772,7 +772,7 @@ PY
 # Task 3): parse, hook shape + task existence + name uniqueness, file source
 # existence + phase, package key shape + uniqueness + dropped names, the two
 # no-sudo rulings (docs/superpowers/plans/2026-09-17-mise-host.md Rulings
-# 1-2), and prod/Windows safety (config.toml/config.owned.toml never gain a
+# 1-2), and shared/Windows safety (config.toml/config.owned.toml never gain a
 # [bootstrap] table). (h) is a live `mise bootstrap plan` — soft-skipped
 # unless both mise and dnf are on PATH (CI has no dnf).
 check_bootstrap_config() {
@@ -805,7 +805,7 @@ hook_re = re.compile(r"^mise run [a-z-]+$")
 # verified-safe literal here rather than just exempting the shape check: a
 # bare `chmod ... ; chmod ... ; true` LOOKS unconditional but is not — mise
 # runs hooks as `sh -o errexit -c '<hook>'`, and errexit aborts at the first
-# failing command in a `;`-chain (verified: on a prod host, MISE_ENV=linux
+# failing command in a `;`-chain (verified: on a shared host, MISE_ENV=linux
 # never loads config.owned.toml, so ~/.claude never exists, and the first
 # chmod's failure on that missing operand aborted the whole bootstrap before
 # `; true` was ever reached). Each command needs its own `|| true`.
@@ -890,7 +890,7 @@ if ruling_hits:
 else:
     print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (rulings 1-2)")
 
-# (g): config.toml / config.owned.toml carry no [bootstrap] table (prod hosts / Windows never load one).
+# (g): config.toml / config.owned.toml carry no [bootstrap] table (shared hosts / Windows never load one).
 prod_hits = []
 for f in ("config.toml", "config.owned.toml"):
     try:
@@ -900,7 +900,7 @@ for f in ("config.toml", "config.owned.toml"):
         prod_hits.append(f"{f} failed to parse: {e}")
         continue
     if "bootstrap" in d:
-        prod_hits.append(f"{f} has a [bootstrap] table (prod hosts / Windows must never load one)")
+        prod_hits.append(f"{f} has a [bootstrap] table (shared hosts / Windows must never load one)")
 if prod_hits:
     print("FAIL|shared-safety|" + "; ".join(prod_hits))
 else:
@@ -917,7 +917,7 @@ PY
     done <<<"$out"
   fi
 
-  # (h) live plan — dev host with dnf only; CI has no dnf.
+  # (h) live plan — owned host with dnf only; CI has no dnf.
   if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
     if MISE_ENV=linux,owned,host,native mise bootstrap plan --json >/dev/null 2>&1; then
       ok "mise bootstrap plan --json (MISE_ENV=linux,owned,host,native) exits 0"
@@ -946,7 +946,7 @@ import glob, os, tomllib
 # "no entry in two files" check would misfire against its own documented use.
 # config.host.toml joined this list in PR3 Task 3 (gdbinit/gdb/herdr config
 # moved there from config.owned.toml so they stop deploying dead files on a
-# Windows dev host — see config.host.toml's own [dotfiles] comment).
+# Windows host — see config.host.toml's own [dotfiles] comment).
 files = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
@@ -1105,7 +1105,7 @@ check_lsp_plugin() {
     return
   fi
   if ! command -v claude >/dev/null 2>&1; then
-    note "claude not installed — skipped LSP plugin validate (dev hosts enforce; CI has no claude)"
+    note "claude not installed — skipped LSP plugin validate (owned hosts enforce; CI has no claude)"
     return
   fi
   local tmp

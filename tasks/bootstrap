@@ -8,7 +8,7 @@ env_has() {
   case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
   return 1
 }
-# 1. Claude Code — official installer, skip-if-present, self-updates (dev only; rolling, no pin)
+# 1. Claude Code — official installer, skip-if-present, self-updates (owned only; rolling, no pin)
 if env_has owned; then
   if command -v claude >/dev/null 2>&1; then
     echo "  claude present ($(command -v claude))"
@@ -59,7 +59,7 @@ if [ ! -f "$nb_marker" ]; then
     echo "  nb not found on PATH — skipping notebook init (retries next run)" >&2
   fi
 fi
-# 5. Claude plugin marketplace + the 8 user-scope plugins, once (dev only;
+# 5. Claude plugin marketplace + the 8 user-scope plugins, once (owned only;
 # was run_once_install-claude-plugins.sh.tmpl). Idempotent even without the
 # marker (marketplace add / plugin install both no-op when already present)
 # — the marker just skips the claude invocations entirely once they've all
@@ -94,7 +94,7 @@ if env_has owned && [ ! -f "$claude_plugins_marker" ]; then
     echo "  claude not found on PATH — skipping plugin install (retries next run)" >&2
   fi
 fi
-# 6. ~/.claude/settings.json three-layer merge (dev only;
+# 6. ~/.claude/settings.json three-layer merge (owned only;
 # scripts/lib/claude-settings-merge.sh — ruling 5, mise has no
 # modify_-template equivalent). Runs every bootstrap, not marker-guarded:
 # ongoing enforcement, not a one-time script. The script itself is
@@ -104,7 +104,7 @@ if env_has owned; then
     echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
 fi
 # 6b. ~/.claude/settings.local.json — seed-if-absent (I5, final-fix-brief.md;
-# dev only). Ruling 5 keeps this file out of [dotfiles] the same as
+# owned only). Ruling 5 keeps this file out of [dotfiles] the same as
 # settings.json (Claude Code rewrites the live file), but unlike
 # settings.json there is no enforced layer reapplied on every run here — a
 # plain seed, set ONLY when the live file doesn't exist yet, so a fresh host
@@ -124,7 +124,7 @@ if env_has owned; then
     fi
   fi
 fi
-# 7. herdr plugin at its pinned ref, once (dev only; was
+# 7. herdr plugin at its pinned ref, once (owned only; was
 # run_once_install-herdr-plugins.sh.tmpl). PIN lives in the marker filename
 # itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
 # re-fires the install the same way a content-hashed run_once used to.

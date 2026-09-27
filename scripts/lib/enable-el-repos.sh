@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# enable-el-repos.sh — EPEL + CRB on RHEL-family dev hosts. Invoked by
+# enable-el-repos.sh — EPEL + CRB on RHEL-family owned hosts. Invoked by
 # tasks/enable-el-repos (config.host.toml's pre-packages hook), NOT directly.
 # Replaced the Make-era packages-epel target (was makefile/packages.mk).
 #
@@ -22,7 +22,7 @@
 # --set-enabled is dnf4 syntax (EL9); a future EL10/dnf5 host would need
 # `config-manager setopt <repo>.enabled=1` instead.
 #
-# sudo — dev hosts only, always interactive or with cached credentials (mise
+# sudo — owned hosts only, always interactive or with cached credentials (mise
 # elevates the packages phase the same way; this hook runs before it, via
 # config.host.toml's [bootstrap.hooks] "pre-packages"). Exit 0 always, except
 # when `sudo dnf install -y epel-release` fails on an EL host — the packages

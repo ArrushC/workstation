@@ -54,7 +54,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `uv` 0.12.17
 - `python` 3.14.7
 
-### Linux toolbelt, both scopes (config.linux.toml)
+### Linux toolbelt, both modes (config.linux.toml)
 - `fzf` 0.74.4
 - `zoxide` 0.10.0
 - `starship` 1.26.0
@@ -167,10 +167,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `vcpkg` 2026.07.29
 - `claude` latest
 
-### System packages (dnf, dev-only)
+### System packages (dnf, owned hosts)
 - ShellCheck bash-completion bear bind-utils ccache clang clang-tools-extra cmake cppcheck cronie curl gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson mtr multitail ncurses ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3 python3-pip ripgrep rlwrap rsync rsyslog strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zsh
 
-### System packages (dnf, dev-only, non-WSL)
+### System packages (dnf, owned hosts, non-WSL)
 - autofs nfs-utils nfs4-acl-tools
 
 <!-- TOOLS:END -->

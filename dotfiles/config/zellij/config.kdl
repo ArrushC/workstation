@@ -4,9 +4,9 @@
 // tab-bar/status-bar chrome. Deliberately not our own layouts/dev.kdl — this is
 // the layout every session gets, including each `ssh -t <host> zellij attach
 // --create main` from a Warp Tab Config or a Windows Terminal fragment, and
-// landing in a three-way editor/terminal/run split to read one log on a prod
-// host is the wrong default. `dev` is one flag away: `zellij -l dev`, or the
-// `zs main dev` helper in the rc files.
+// landing in a three-way editor/terminal/run split to read one log on a
+// shared host is the wrong default. `dev` is one flag away: `zellij -l dev`,
+// or the `zs main dev` helper in the rc files.
 //
 // Using the BUILT-IN default rather than shipping a layouts/default.kdl is also
 // deliberate: a custom layout replaces zellij's built-in *swap layouts*, which
@@ -110,7 +110,7 @@ web_sharing "disabled"
 //
 // This line used to read `copy_command "xclip -selection clipboard"`, which was
 // dead in two ways at once: xclip is installed by nothing in this repo, and a
-// headless prod host has no X display to talk to anyway. Every yank in a remote
+// headless remote host has no X display to talk to anyway. Every yank in a remote
 // session silently went nowhere. Both managed Windows terminals accept OSC 52
 // writes (Warp via osc52_clipboard_access = "write_only"; Windows Terminal
 // natively), so unsetting it is what makes copy work at all.

@@ -30,7 +30,7 @@
 # still fully REPLACES (never concatenates with) a live PreToolUse array,
 # while a live-only `hooks.Stop` is preserved as a sibling.
 #
-# Invoked from tasks/bootstrap, dev only. Soft-failing by design: every
+# Invoked from tasks/bootstrap, owned hosts only. Soft-failing by design: every
 # expected failure mode (no jq, missing dotfiles source, invalid existing
 # JSON, a write failure) prints a warning to stderr and exits 0 — the caller
 # additionally wraps the call in `||` as belt-and-braces, but this script

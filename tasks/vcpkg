@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="vcpkg C/C++ package manager: shallow clone at the pinned tag into ~/.local/share/vcpkg + ~/.local/bin/vcpkg (dev)"
+#MISE description="vcpkg C/C++ package manager: shallow clone at the pinned tag into ~/.local/share/vcpkg + ~/.local/bin/vcpkg (owned hosts)"
 #MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
@@ -9,7 +9,7 @@ env_has() {
   return 1
 }
 if ! env_has owned; then
-  echo "  vcpkg: dev hosts only"
+  echo "  vcpkg: owned hosts only"
   exit 0
 fi
 mkdir -p "$state"

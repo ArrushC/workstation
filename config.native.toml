@@ -1,4 +1,4 @@
-# ~/.config/mise/config.native.toml — non-WSL Linux DEV extras (MISE_ENV token
+# ~/.config/mise/config.native.toml — non-WSL Linux OWNED extras (MISE_ENV token
 # `native`): the NFS client package group only (nfs-utils, nfs4-acl-tools,
 # autofs). WSL hosts skip all of it (Windows owns the NFS/SMB client role
 # there). Docker/Cockpit/rsyslog/Dozzle provisioning was removed from this

@@ -1,4 +1,4 @@
-# config.linux.toml — the Linux toolbelt, BOTH scopes (loads when MISE_ENV has `linux`).
+# config.linux.toml — the Linux toolbelt, BOTH modes (loads when MISE_ENV has `linux`).
 # User-level under ~/.local/share/mise; interactive shells see the real bin
 # dirs via `mise activate`, everything else via ~/.local/share/mise/shims.
 [tools]
@@ -103,15 +103,15 @@ taplo = "0.10.0"
 "pypi:harlequin" = "latest"
 
 # ---------------------------------------------------------------------------
-# Dotfiles: everything Linux-only, not dev-gated (dev-only targets — the
-# ~/.claude tree, ccstatusline — live in config.owned.toml; Linux-dev-only
+# Dotfiles: everything Linux-only, not owned-gated (owned-only targets — the
+# ~/.claude tree, ccstatusline — live in config.owned.toml; Linux-owned-only
 # targets — gdbinit/gdb, herdr's config — in config.host.toml; Windows
 # targets in config.windows.toml; cross-platform targets in config.toml.
 # zed's settings.json is NOT here — I7 (2026-09-22 copy-migration review): it
-# was moved to config.host.toml, the Linux-dev-only `host` token, matching
-# the gdb/herdr precedent (config.linux.toml has no `dev` gate at all, so an
-# entry here deploys on Linux PROD hosts too — neither mise nor chezmoi ever
-# did that for zed; chezmoi's own dev-gate excluded ~/.config/zed there).
+# was moved to config.host.toml, the Linux-owned-only `host` token, matching
+# the gdb/herdr precedent (config.linux.toml has no owned gate at all, so an
+# entry here deploys on Linux shared hosts too — neither mise nor chezmoi ever
+# did that for zed; chezmoi's own gate excluded ~/.config/zed there).
 #
 # Every entry below is `copy` (or `template`) — no `symlink`/`symlink-each`
 # anywhere any more (2026-09-22 copy-migration, user decision: chezmoi's copy
@@ -155,7 +155,7 @@ taplo = "0.10.0"
 # read_file()-inlines the same source on Windows. Moved here from config.toml
 # (PR3 Task 3 controller review): Windows reads %APPDATA%\helix\config.toml,
 # not ~/.config/helix/config.toml, so config.toml's cross-platform load
-# deployed a dead file there — `linux` scopes it to Linux (both prod and dev).
+# deployed a dead file there — `linux` scopes it to Linux (both modes).
 "~/.config/helix/config.toml" = { source = "dotfiles/config/helix/config.toml", mode = "copy" }
 "~/.config/zellij" = { source = "dotfiles/config/zellij", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # layouts/, themes/ nested; copy on a directory leaves unmanaged files alone, same guarantee symlink-each used to give
 "~/.config/zsh/completions" = { source = "dotfiles/config/zsh/completions", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # copy so unmanaged completions (e.g. _workstation) survive
@@ -174,8 +174,8 @@ taplo = "0.10.0"
 "~/.local/bin" = { source = "dotfiles/local/bin", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 
 # ---------------------------------------------------------------------------
-# Host state that needs no sudo (both scopes). Sudo-requiring state lives in
-# config.host.toml / config.native.toml / config.wsl.toml (dev-only tokens).
+# Host state that needs no sudo (both modes). Sudo-requiring state lives in
+# config.host.toml / config.native.toml / config.wsl.toml (owned-only tokens).
 # ---------------------------------------------------------------------------
 [bootstrap.hooks]
 # Capability gate over every mise-installed Linux binary (scripts/lib/verify-binary.sh).
@@ -188,7 +188,7 @@ taplo = "0.10.0"
 # able to fail the bootstrap. mise runs bootstrap hooks as `sh -o errexit -c
 # '<this>'` (confirmed against a real --dry-run render): a bare `; true` tail
 # is NOT enough on its own, because errexit aborts at the FIRST failing
-# command in a `;`-chain — on a prod host (MISE_ENV=linux, no config.owned.toml,
+# command in a `;`-chain — on a shared host (MISE_ENV=linux, no config.owned.toml,
 # so ~/.claude never exists) the first chmod's failure on the missing
 # ~/.claude operand would abort before the second chmod ever runs. Each
 # command therefore gets its own `|| true` so no single command's failure is
@@ -208,7 +208,7 @@ taplo = "0.10.0"
 # it. systemd expands %h in ExecStart; the shim needs MISE_ENV, which the user
 # manager gets from ~/.config/environment.d/10-mise.conf (next login) and from
 # bootstrap.sh's `systemctl --user set-environment MISE_ENV=…` (this login) —
-# never baked here, because the value differs per host (wsl vs native vs prod).
+# never baked here, because the value differs per host (wsl vs native vs shared).
 [bootstrap.services.pueued]
 scope = "user"
 command = "%h/.local/share/mise/shims/pueued -v"
