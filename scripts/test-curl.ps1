@@ -1,7 +1,9 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Integration checks only: extract functions without executing provisioning.
 [CmdletBinding()]
 param()
+# Same StrictMode as bootstrap.ps1, so a strict-only failure shows up here.
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 

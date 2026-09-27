@@ -1263,20 +1263,25 @@ function Set-ConfigLocalVar {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Key, [Parameter(Mandatory)][AllowEmptyString()][string]$Value)
     $escaped = $Value -replace '\\', '\\' -replace '"', '\"'
     $line = "$Key = `"$escaped`""
-    $lines = if (Test-Path -LiteralPath $Path) { [System.IO.File]::ReadAllText($Path) -split "`r?`n" } else { @() }
+    # @() keeps an empty or one-line file an array; a bare if-expression
+    # unrolls to $null or a string, and .Count on those throws under StrictMode.
+    $lines = @(if (Test-Path -LiteralPath $Path) { [System.IO.File]::ReadAllText($Path) -split "`r?`n" })
     if ($lines.Count -gt 0 -and $lines[-1] -eq '') {
         # PowerShell's 0..-1 counts down, so a one-element array needs its own case.
-        $lines = if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] } else { @() }
+        $lines = @(if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] })
     }
     $out = New-Object System.Collections.Generic.List[string]
     $inVars = $false; $seen = $false; $done = $false
+    # Same tolerance as bootstrap.sh's config_set: a spaced or commented
+    # [vars] header and indented keys; any other [ header leaves the table.
+    $keyPattern = '^\s*' + [regex]::Escape($Key) + '\s*='
     foreach ($l in $lines) {
-        if ($l -match '^\[') {
+        if ($l -match '^\s*\[') {
             if ($inVars -and -not $done) { $out.Add($line); $done = $true }
-            $inVars = ($l -eq '[vars]'); if ($inVars) { $seen = $true }
+            $inVars = $l -match '^\s*\[\s*vars\s*\]\s*(#.*)?$'; if ($inVars) { $seen = $true }
             $out.Add($l); continue
         }
-        if ($inVars -and $l -match ('^' + [regex]::Escape($Key) + '\s*=')) {
+        if ($inVars -and $l -match $keyPattern) {
             if (-not $done) { $out.Add($line); $done = $true }
             continue
         }
@@ -1294,8 +1299,8 @@ function Invoke-EnsureConfigLocal {
     $target = Join-Path $RepoPath "config.local.toml"
     Set-ConfigLocalVar -Path $target -Key 'mode' -Value 'owned'
     $text = [System.IO.File]::ReadAllText($target)
-    $hasName = $text -match '(?m)^name\s*='
-    $hasEmail = $text -match '(?m)^email\s*='
+    $hasName = $text -match '(?m)^[ \t]*name[ \t]*='
+    $hasEmail = $text -match '(?m)^[ \t]*email[ \t]*='
     if ($hasName -and $hasEmail) {
         Write-Ok "config.local.toml ready ($target, mode = owned)"
         return
@@ -1305,8 +1310,9 @@ function Invoke-EnsureConfigLocal {
         return
     }
     Write-Log "First-time setup -- name/email for git commits and the SSH config comment..."
-    if (-not $hasName) { Set-ConfigLocalVar -Path $target -Key 'name' -Value (Read-Host "  Name") }
-    if (-not $hasEmail) { Set-ConfigLocalVar -Path $target -Key 'email' -Value (Read-Host "  Email") }
+    # An empty answer writes nothing (like bootstrap.sh), so the next run asks again.
+    if (-not $hasName) { $answer = Read-Host "  Name"; if ($answer) { Set-ConfigLocalVar -Path $target -Key 'name' -Value $answer } }
+    if (-not $hasEmail) { $answer = Read-Host "  Email"; if ($answer) { Set-ConfigLocalVar -Path $target -Key 'email' -Value $answer } }
     Write-Ok "wrote $target"
 }
 
@@ -1341,10 +1347,10 @@ function Invoke-WslConfigReminder {
 # dotfiles` so it doesn't silently install tools anyway (Invoke-MiseRuntimes
 # below has its own, separate -SkipToolInstall gate).
 #
-# A host still on the old chezmoi-based deploy has every dotfiles target
-# already on disk as a real file, and template/copy modes refuse to
-# overwrite one that already differs -- so the FIRST apply here needs
-# --force-dotfiles (mirrors bootstrap.sh's own apply()). Passed only until
+# The first dotfiles apply on this host can find targets already on disk as
+# real files, and template/copy modes refuse to overwrite one that differs
+# -- so that FIRST apply passes --force-dotfiles (mirrors bootstrap.sh's own
+# apply()). Passed only until
 # $MigratedMarker exists, so a later real conflict still surfaces loudly.
 # Invoke-MiseRuntimes (below) runs afterward for a separate reason -- see
 # its own comment.
@@ -2339,7 +2345,9 @@ function Invoke-Doctor {
     $miseCmd = Get-Command mise -ErrorAction SilentlyContinue
     if ($miseCmd) {
         Write-Ok "mise on PATH ($($miseCmd.Source))"
-        Initialize-MiseEnv
+        # Process scope only: doctor is read-only, and its "MISE_ENV persisted"
+        # row below must report the User value as it was.
+        $env:MISE_ENV = $MiseEnv
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
         & mise dot status --missing *> $null
         $statusRc = $LASTEXITCODE
