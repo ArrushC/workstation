@@ -1681,9 +1681,91 @@ function Invoke-StartMenuShortcuts {
     }
 }
 
+# SSH host launchers: every concrete Host alias in the untracked
+# ~\.ssh\config.local becomes an "SSH: <alias>" entry in Windows Terminal's
+# new-tab menu and Warp's + menu, running `ssh -t <alias> zellij attach
+# --create main`. The hosts stay on this machine; the public repo has none.
+# Patterns (* ?), negations (!) and aliases that would need quoting on a
+# command line are skipped; Include lines inside config.local aren't followed.
+function Get-SshLauncherHosts {
+    param([string]$Path = (Join-Path $env:USERPROFILE ".ssh\config.local"))
+    $aliases = New-Object System.Collections.Generic.List[string]
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+        if ($line -notmatch '^\s*Host(?:\s*=\s*|\s+)(.+)$') { continue }
+        foreach ($token in (($Matches[1] -replace '\s#.*$', '').Trim() -split '\s+')) {
+            if (-not $token -or $token -match '[*?!]') { continue }
+            if ($token -notmatch '^[A-Za-z0-9._@-]+$') {
+                Write-Warn "Skipping SSH host alias with unsafe characters: $token"
+                continue
+            }
+            if (-not $aliases.Contains($token)) { $aliases.Add($token) }
+        }
+    }
+    $aliases.ToArray()
+}
+
+# RFC 4122 v5 GUID, Windows Terminal's fragment convention: name bytes are
+# UTF-16LE (namespace {f65ddb7e-706b-4499-8a50-40313caf510a} -> app ->
+# profile name), so a profile keeps its identity across regenerations.
+function New-Uuid5 {
+    param([Parameter(Mandatory)][Guid]$Namespace, [Parameter(Mandatory)][string]$Name)
+    $ns = $Namespace.ToByteArray()
+    [Array]::Reverse($ns, 0, 4); [Array]::Reverse($ns, 4, 2); [Array]::Reverse($ns, 6, 2)  # to big-endian
+    $nameBytes = [System.Text.Encoding]::Unicode.GetBytes($Name)
+    $sha1 = [System.Security.Cryptography.SHA1]::Create()
+    try { $hash = $sha1.ComputeHash($ns + $nameBytes) } finally { $sha1.Dispose() }
+    $b = $hash[0..15]
+    $b[6] = [byte](($b[6] -band 0x0F) -bor 0x50)   # version 5
+    $b[8] = [byte](($b[8] -band 0x3F) -bor 0x80)   # RFC 4122 variant
+    [Array]::Reverse($b, 0, 4); [Array]::Reverse($b, 4, 2); [Array]::Reverse($b, 6, 2)     # back to GUID layout
+    return [Guid]::new([byte[]]$b)
+}
+
+# Windows Terminal reads profile fragments from Fragments\<app>\*.json at
+# launch. The "workstation" app dir is owned here: its *.json are rewritten
+# every run, so a host removed from config.local disappears. Nothing else is
+# touched -- not other apps' fragments, not the tracked settings.json.
+function Invoke-WindowsTerminalFragments {
+    $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
+               (Get-Command wt.exe -ErrorAction SilentlyContinue)
+    if (-not $present) {
+        Write-Warn "Windows Terminal not detected — skipping its SSH host profiles."
+        return
+    }
+    $fragDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation"
+    try {
+        Get-ChildItem -Path $fragDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+        $hosts = @(Get-SshLauncherHosts)
+        if ($hosts.Count -eq 0) {
+            Write-Ok "Windows Terminal: no SSH host profiles (no Host entries in ~\.ssh\config.local)"
+            return
+        }
+        if (-not (Test-Path $fragDir)) { New-Item -ItemType Directory -Path $fragDir -Force | Out-Null }
+        $appNs = New-Uuid5 -Namespace ([Guid]"f65ddb7e-706b-4499-8a50-40313caf510a") -Name "workstation"
+        $profiles = @(foreach ($h in $hosts) {
+            [ordered]@{
+                guid        = (New-Uuid5 -Namespace $appNs -Name "SSH: $h").ToString("B")
+                name        = "SSH: $h"
+                commandline = "ssh -t $h zellij attach --create main"
+                tabTitle    = $h
+                tabColor    = "#94e2d5"
+                icon        = [string][char]0xE839
+            }
+        })
+        $json = ConvertTo-Json -InputObject ([ordered]@{ profiles = $profiles }) -Depth 5
+        # PS 5.1 joins JSON lines with CRLF; write LF, UTF-8 without a BOM.
+        [System.IO.File]::WriteAllText((Join-Path $fragDir "hosts.json"), (($json -replace "`r`n", "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "Windows Terminal SSH host profiles: $($hosts.Count) from ~\.ssh\config.local — restart Windows Terminal to see them"
+    } catch {
+        Write-Warn "Could not write the Windows Terminal SSH host profiles: $($_.Exception.Message)"
+    }
+}
+
 # Deterministic Warp launch entries. Warp's + menu is its launch surface
 # (no profile list), so unlike Windows Terminal the local shells need
-# generated entries. Files prefixed workstation- are owned by this
+# generated entries, plus one "SSH: <alias>" entry per Get-SshLauncherHosts
+# host. Files prefixed workstation- are owned by this
 # function; every run wipes and rewrites them; user-created configs are
 # never touched. Warp supports pwsh/PowerShell 5/WSL2/Git Bash only, NOT
 # Nushell -- the Nushell entry is a compatibility shim (pwsh launches the
@@ -1744,7 +1826,28 @@ is_focused = true
         foreach ($entry in $configs.GetEnumerator()) {
             [System.IO.File]::WriteAllText((Join-Path $dir $entry.Key), $entry.Value.Trim() + "`n", $utf8)
         }
-        Write-Ok "Warp Tab Configs regenerated ($($configs.Count) local shells, $dir)"
+        $hosts = @(Get-SshLauncherHosts)
+        $slugs = @{}
+        foreach ($h in $hosts) {
+            # ssh aliases are case-sensitive but file names here are not.
+            $slug = $h.ToLower() -replace '[^a-z0-9-]', '-'
+            while ($slugs.ContainsKey($slug)) { $slug = "$slug-" }
+            $slugs[$slug] = $true
+            $body = @"
+name = "SSH: $h"
+title = "$h"
+color = "cyan"
+
+[[panes]]
+id = "main"
+type = "terminal"
+shell = "pwsh"
+commands = ['ssh -t $h zellij attach --create main']
+is_focused = true
+"@
+            [System.IO.File]::WriteAllText((Join-Path $dir "workstation-ssh-$slug.toml"), $body.Trim() + "`n", $utf8)
+        }
+        Write-Ok "Warp Tab Configs regenerated ($($configs.Count) local shells + $($hosts.Count) SSH host(s), $dir)"
     } catch {
         Write-Warn "Could not generate Warp Tab Configs: $($_.Exception.Message)"
     }
@@ -2518,6 +2621,16 @@ function Invoke-Doctor {
         Write-Warn "managed Warp Tab Configs missing — re-run .\bootstrap.ps1 (regenerates them)"
     }
 
+    $sshHosts = @(Get-SshLauncherHosts)
+    $wtHostsFile = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation\hosts.json"
+    if ($sshHosts.Count -eq 0) {
+        Write-Ok "no SSH host launchers (no Host entries in ~\.ssh\config.local)"
+    } elseif (Test-Path $wtHostsFile) {
+        Write-Ok "$($sshHosts.Count) SSH host launcher(s) from ~\.ssh\config.local (Windows Terminal + Warp)"
+    } else {
+        Write-Warn "~\.ssh\config.local has $($sshHosts.Count) host(s) but no Windows Terminal profiles — re-run .\bootstrap.ps1"
+    }
+
     $realDocs    = [Environment]::GetFolderPath("MyDocuments")
     $literalDocs = Join-Path $env:USERPROFILE "Documents"
     if ([string]::IsNullOrEmpty($realDocs) -or ($realDocs -eq $literalDocs)) {
@@ -2674,7 +2787,8 @@ Invoke-CloneRepo
 Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles apply + a tools pass, then the .wslconfig restart reminder
 Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers/ccstatusline from config*.toml at the repo root (self-heals the shims PATH)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
-Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells) — self-heals
+Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
+Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
 Invoke-NushellMise        # generate the Nushell mise activation (vendor/autoload — self-heals)
