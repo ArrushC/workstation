@@ -21,10 +21,12 @@ metadata:
 
 **New tests:** `scripts/test-bootstrap-mode.sh` (offline, wired into `check-invariants.sh`) covers the resolution order above; `scripts/test-config-local.ps1` covers the Windows side (CI's `windows-http` job, PS 5.1 + pwsh).
 
-**Rollout:** WSL and Windows hosts both set `mode = "owned"` (WSL interactively at first bootstrap; Windows automatically, no prompt).
+**`wsu` / health guard:** `tasks/update` refuses without a valid `vars.mode` and exports `MISE_ENV` from it before `mise install`/`mise prune`, so a stale shell env can't prune the owned tools; `tasks/health` flags a missing mode and derives the expected `MISE_ENV` from it.
+
+**Rollout (done 2026-09-27, PR #3 → `3c67f89`):** the WSL host and the Windows host both run `mode = "owned"`. On each, the `group = "dev_machine"` line was replaced by `mode = "owned"`, the checkout pulled, then the NEW bootstrap run (WSL needed no sudo: every package was already installed). WSL health: 15 ok, 0 problems; Windows `-Doctor`: no ✗. Any other existing host (e.g. the native dev host, prod hosts) is still unmigrated.
 
 **How to apply:**
 - Never reintroduce `--dev`/`--prod` flags, a `group` key, or `dev_machine`/`prod_machine` values — the mode lives in `vars.mode` (`owned`/`shared`) only, resolved by a prompt/env var, never a flag.
-- An unmigrated host (still expecting the old flags, or with a stale checkout) bootstraps fresh with `./bootstrap.sh --reinstall` — it wipes the repo and `config.local.toml`, so the mode gets asked again the new way.
+- Migrating a remaining host: set `mode = "owned"`/`"shared"` in its `config.local.toml`, `git -C ~/.config/mise pull --ff-only`, then run the NEW `~/.config/mise/bootstrap.sh`. Never `wsu` first — the old `tasks/update` runs the new `mise-install.sh` under the stale `linux,dev,…` env and `mise prune` drops the owned tools. Alternatively bootstrap fresh with `curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall` (the curl form, so the NEW script runs; it wipes the repo and `config.local.toml`, so the mode is asked again).
 - `tasks/health` and `.claude/hooks/session-context.sh` report `mode=owned|shared` now, not a dev/prod group.
 - Related: [[project-mise-everything]] (the `vars.group` gap this supersedes), [[project-hosts-list-removed]], [[feedback-sudo-not-passwordless]].

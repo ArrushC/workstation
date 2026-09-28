@@ -3,8 +3,6 @@
     "allow": [
       "Bash(bash -n /c/Git/workstation/bootstrap.sh)",
       "Bash(bash bootstrap.sh)",
-      "Bash(bash bootstrap.sh --full)",
-      "Bash(bash bootstrap.sh --dev --prod)",
       "Bash(bash bootstrap.sh --help)",
       "Bash(cp ansible/inventory/hosts.ini /tmp/hosts.ini.bash)",
       "Bash(cp ansible/inventory/hosts.ini /tmp/hosts.ini.bash-regen)",
