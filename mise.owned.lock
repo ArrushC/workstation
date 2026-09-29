@@ -21,19 +21,19 @@ url = "https://github.com/DevToys-app/DevToys/releases/download/v2.0.9.0/devtoys
 url_api = "https://api.github.com/repos/DevToys-app/DevToys/releases/assets/338070567"
 
 [[tools."github:can1357/oh-my-pi"]]
-version = "18.2.8"
+version = "18.3.4"
 backend = "github:can1357/oh-my-pi"
-specifiers = ["18.2.8"]
+specifiers = ["18.3.4"]
 
 [tools."github:can1357/oh-my-pi"."platforms.linux-x64"]
-checksum = "sha256:b0c01da7339d87fd5d26d7faa7b61c131a50648399962783899fd93a6d8b1d65"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.2.8/omp-linux-x64"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/579521031"
+checksum = "sha256:e8d13ea8da6281f183108bc25ae94c4a1a5159a2072d188ea8c30bbfce4735b8"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-linux-x64"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/592158580"
 
 [tools."github:can1357/oh-my-pi"."platforms.windows-x64"]
-checksum = "sha256:b95431cb63b073c36c3664f6d9e2611de8d28d6e6e21ede657c8f83f0e7034b3"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.2.8/omp-windows-x64.exe"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/579521062"
+checksum = "sha256:7abb9e215412e7cd457b527365cf5700d8cdd383d162d1ca0d9e7f0610ddbab1"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-windows-x64.exe"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/592158578"
 
 [[tools."github:pwndbg/pwndbg"]]
 version = "2026.09.15"

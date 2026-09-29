@@ -51,7 +51,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 <!-- regenerated on config*.toml edits by .claude/hooks/sync-tool-memory.sh; run `wsa` to deploy -->
 
 ### Cross-platform tools (config.toml)
-- `uv` 0.12.17
+- `uv` 0.12.19
 - `python` 3.14.7
 
 ### Linux toolbelt, both modes (config.linux.toml)
@@ -70,7 +70,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
 - `lnav` 0.14.1
-- `gopass` 1.17.2
+- `gopass` 1.17.3
 - `age` 1.3.2
 - `gitui` 0.28.1
 - `lazygit` 0.65.1
@@ -84,7 +84,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.75.1
-- `croc` 11.5.3
+- `croc` 11.5.4
 - `hyperfine` 1.20.0
 - `gh` 2.101.0
 - `sops` 3.13.3
@@ -96,7 +96,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `cheat` 5.1.0
 - `fx` 39.2.0
 - `ripgrep` 15.2.0
-- `miller` 6.21.0
+- `miller` 6.22.0
 - `doggo` 1.4.0
 - `miniserve` 0.35.0
 - `numbat` 1.24.0
@@ -105,12 +105,12 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gitleaks` 8.30.1
 - `dust` 1.2.6
 - `hexyl` 0.17.0
-- `gum` 2.0.1
+- `gum` 2.0.2
 - `rust-analyzer` 2026-09-21
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
-- `usql` 0.21.5
-- `fastfetch` 2.68.1
+- `usql` 0.21.6
+- `fastfetch` 2.69.0
 - `procs` 0.14.12
 - `bandwhich` 0.23.1
 - `tealdeer` 1.9.0
@@ -123,7 +123,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `dsq` 0.23.0
 - `gitlogue` 0.11.0
 - `jless` 0.9.0
-- `broot` 1.60.1
+- `broot` 1.60.2
 - `nnd` 0.80
 - `gping` 1.21.0
 - `yazi` 26.9.1
@@ -145,7 +145,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Owned-host tools (config.owned.toml)
 - `node` 26.10.0
-- `typescript-language-server` 6.0.0
+- `typescript-language-server` 6.0.1
 - `typescript` 5.9.3
 - `bash-language-server` 5.8.1
 - `yaml-language-server` 1.24.0
@@ -157,7 +157,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ccstatusline` 2.2.30
 - `herdr` 0.9.1
 - `opencode` 1.18.32
-- `oh-my-pi` 18.2.8
+- `oh-my-pi` 18.3.4
 - `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
 

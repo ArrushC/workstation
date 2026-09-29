@@ -65,14 +65,14 @@ url = "https://github.com/cheat/cheat/releases/download/5.1.0/cheat-linux-amd64.
 url_api = "https://api.github.com/repos/cheat/cheat/releases/assets/356479028"
 
 [[tools.croc]]
-version = "11.5.3"
+version = "11.5.4"
 backend = "aqua:schollz/croc"
-specifiers = ["11.5.3"]
+specifiers = ["11.5.4"]
 
 [tools.croc."platforms.linux-x64"]
-checksum = "sha256:73b44449937a3f656571c4f016cb2fd0e722544568d7a17dcc3b82475ad250ad"
-url = "https://github.com/schollz/croc/releases/download/v11.5.3/croc_v11.5.3_Linux-64bit.tar.gz"
-url_api = "https://api.github.com/repos/schollz/croc/releases/assets/561827361"
+checksum = "sha256:577f2c4170fac3f8ab244e325cdeea5644788e1cd7620f592a5d365ee349d556"
+url = "https://github.com/schollz/croc/releases/download/v11.5.4/croc_v11.5.4_Linux-64bit.tar.gz"
+url_api = "https://api.github.com/repos/schollz/croc/releases/assets/591524497"
 
 [[tools.ctop]]
 version = "0.7.7"
@@ -176,17 +176,17 @@ url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857134"
 provenance = "github-attestations"
 
 [[tools."github:Canop/broot"]]
-version = "1.60.1"
+version = "1.60.2"
 backend = "github:Canop/broot"
-specifiers = ["1.60.1"]
+specifiers = ["1.60.2"]
 
 [tools."github:Canop/broot".options]
 asset_pattern = "broot_{version}.zip"
 
 [tools."github:Canop/broot"."platforms.linux-x64"]
-checksum = "sha256:de4a054424ac01ef73fb30c3b3fac0cda437e7426388085d7467b5e0aaa1cb55"
-url = "https://github.com/Canop/broot/releases/download/v1.60.1/broot_1.60.1.zip"
-url_api = "https://api.github.com/repos/Canop/broot/releases/assets/551127327"
+checksum = "sha256:e238e610ee1fa2cd52353efeb60b43ece470d047529e9b9071c0714c46ced545"
+url = "https://github.com/Canop/broot/releases/download/v1.60.2/broot_1.60.2.zip"
+url_api = "https://api.github.com/repos/Canop/broot/releases/assets/590682619"
 
 [[tools."github:PaulJuliusMartinez/jless"]]
 version = "0.9.0"
@@ -317,17 +317,17 @@ url = "https://github.com/dj95/zjstatus/releases/download/v0.25.0/zjstatus.wasm"
 url_api = "https://api.github.com/repos/dj95/zjstatus/releases/assets/532710175"
 
 [[tools."github:fastfetch-cli/fastfetch"]]
-version = "2.68.1"
+version = "2.69.0"
 backend = "github:fastfetch-cli/fastfetch"
-specifiers = ["2.68.1"]
+specifiers = ["2.69.0"]
 
 [tools."github:fastfetch-cli/fastfetch".options]
 asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz"
 
 [tools."github:fastfetch-cli/fastfetch"."platforms.linux-x64"]
-checksum = "sha256:3eeaec3570dcfa53b4f3054cf1f735de62186fdfaf105aa69635e0805937ba85"
-url = "https://github.com/fastfetch-cli/fastfetch/releases/download/2.68.1/fastfetch-linux-amd64-polyfilled.tar.gz"
-url_api = "https://api.github.com/repos/fastfetch-cli/fastfetch/releases/assets/539503721"
+checksum = "sha256:3b97d4a18106987ed8fdae06f853a3381a1ba1623c97fe6261d32cd0e8514e1f"
+url = "https://github.com/fastfetch-cli/fastfetch/releases/download/2.69.0/fastfetch-linux-amd64-polyfilled.tar.gz"
+url_api = "https://api.github.com/repos/fastfetch-cli/fastfetch/releases/assets/588203827"
 
 [[tools."github:fujiapple852/trippy"]]
 version = "0.13.0"
@@ -455,17 +455,17 @@ url = "https://github.com/unhappychoice/gitlogue/releases/download/v0.11.0/gitlo
 url_api = "https://api.github.com/repos/unhappychoice/gitlogue/releases/assets/536320141"
 
 [[tools."github:xo/usql"]]
-version = "0.21.5"
+version = "0.21.6"
 backend = "github:xo/usql"
-specifiers = ["0.21.5"]
+specifiers = ["0.21.6"]
 
 [tools."github:xo/usql".options]
 asset_pattern = "usql_static-{version}-linux-amd64.tar.bz2"
 
 [tools."github:xo/usql"."platforms.linux-x64"]
-checksum = "sha256:30a4463107d7d089acbd07e2c7b46865722e6fee2fcd114e95bc8d449a4ae465"
-url = "https://github.com/xo/usql/releases/download/v0.21.5/usql_static-0.21.5-linux-amd64.tar.bz2"
-url_api = "https://api.github.com/repos/xo/usql/releases/assets/560756002"
+checksum = "sha256:046b25a4ce8d16b200d38a47e85c45c5eb694eb5ae071a21436d39fe08a897bc"
+url = "https://github.com/xo/usql/releases/download/v0.21.6/usql_static-0.21.6-linux-amd64.tar.bz2"
+url_api = "https://api.github.com/repos/xo/usql/releases/assets/582302124"
 
 [[tools.gitleaks]]
 version = "8.30.1"
@@ -499,14 +499,14 @@ url_api = "https://api.github.com/repos/charmbracelet/glow/releases/assets/51046
 provenance = "cosign"
 
 [[tools.gopass]]
-version = "1.17.2"
+version = "1.17.3"
 backend = "aqua:gopasspw/gopass"
-specifiers = ["1.17.2"]
+specifiers = ["1.17.3"]
 
 [tools.gopass."platforms.linux-x64"]
-checksum = "sha256:95df834e451dec445565b8132efd4d9d18cb889b56d0fc65382d4ac3efdefb08"
-url = "https://github.com/gopasspw/gopass/releases/download/v1.17.2/gopass-1.17.2-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/gopasspw/gopass/releases/assets/555209290"
+checksum = "sha256:a9646cdd28a2a9e5503407f10823df6761e036e04657a488ab6160c67fa1e1c8"
+url = "https://github.com/gopasspw/gopass/releases/download/v1.17.3/gopass-1.17.3-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/gopasspw/gopass/releases/assets/581984090"
 provenance = "cosign"
 
 [[tools.grex]]
@@ -520,14 +520,14 @@ url = "https://github.com/pemistahl/grex/releases/download/v1.4.6/grex-v1.4.6-x8
 url_api = "https://api.github.com/repos/pemistahl/grex/releases/assets/316379863"
 
 [[tools.gum]]
-version = "2.0.1"
+version = "2.0.2"
 backend = "aqua:charmbracelet/gum"
-specifiers = ["2.0.1"]
+specifiers = ["2.0.2"]
 
 [tools.gum."platforms.linux-x64"]
-checksum = "sha256:4dfe4547f960813864c803b3617aa64427fa32ca566707fde949e08975297c48"
-url = "https://github.com/charmbracelet/gum/releases/download/v2.0.1/gum_2.0.1_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/charmbracelet/gum/releases/assets/556563001"
+checksum = "sha256:d842e06d93dbed90af48cb8dd10698db6f22e331fc40346bb37bbc753109edc2"
+url = "https://github.com/charmbracelet/gum/releases/download/v2.0.2/gum_2.0.2_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/gum/releases/assets/585508723"
 provenance = "cosign"
 
 [[tools.helix]]
@@ -725,14 +725,14 @@ url = "https://github.com/micro-editor/micro/releases/download/v2.0.15/micro-2.0
 url_api = "https://api.github.com/repos/micro-editor/micro/releases/assets/334842982"
 
 [[tools.miller]]
-version = "6.21.0"
+version = "6.22.0"
 backend = "aqua:johnkerl/miller"
-specifiers = ["6.21.0"]
+specifiers = ["6.22.0"]
 
 [tools.miller."platforms.linux-x64"]
-checksum = "sha256:22daf43f3afc7c497da0b9480a0d4ef0d39c9bf68b2460068dd0187ed44f7b80"
-url = "https://github.com/johnkerl/miller/releases/download/v6.21.0/miller-6.21.0-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/johnkerl/miller/releases/assets/508818093"
+checksum = "sha256:0551f8696e8f42dae1c67c782bbe04e0589e718268722fa98561e2566e4623b8"
+url = "https://github.com/johnkerl/miller/releases/download/v6.22.0/miller-6.22.0-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/johnkerl/miller/releases/assets/589277832"
 
 [[tools.miniserve]]
 version = "0.35.0"
