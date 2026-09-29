@@ -12,6 +12,7 @@ $targets = @(
     'scripts/install-nerd-fonts.ps1',
     'scripts/test-curl.ps1',
     'scripts/test-config-local.ps1',
+    'scripts/test-ssh-launchers.ps1',
     'scripts/check-ps.ps1'
 ) | ForEach-Object { Join-Path $repoRoot $_ }
 
