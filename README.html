@@ -302,7 +302,7 @@ try {
                                 <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v16H3zM3 9h18M10 9v11"/></svg></span>
                                 Warp
                             </h3>
-                            <p>The day-to-day Windows terminal — opens into AlmaLinux-9 (WSL zsh); launchers for the local shells regenerate as Tab Configs.</p>
+                            <p>The day-to-day Windows terminal — opens into AlmaLinux-9 (WSL zsh); launchers for the local shells and your SSH hosts regenerate as Tab Configs.</p>
                         </article>
                         <article class="stack-card">
                             <div class="layer-label">Terminal</div>
@@ -3054,7 +3054,9 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                             <code>workstation-*.toml</code> Tab Configs
                             (<code>%APPDATA%\warp\Warp\data\tab_configs\</code>:
                             one each for WSL AlmaLinux-9, PowerShell, and
-                            Nushell-compat). Tab Configs you create
+                            Nushell-compat, plus one per SSH host in
+                            <a href="#ssh-host-launchers"><code>~/.ssh/config.local</code></a>).
+                            Tab Configs you create
                             yourself are never touched &mdash; the
                             <code>workstation-</code> prefix is the managed
                             namespace. Warp opens into AlmaLinux-9 (WSL zsh);
@@ -3083,12 +3085,13 @@ mise run install-hooks   # installs .githooks/pre-commit (git pre-commit hook)</
                                 >copy</code
                             >; Catppuccin Mocha
                             scheme + app theme, Nushell default profile,
-                            keybinds, profile defaults). Bootstrap generates no
-                            profile fragment any more; it deletes the retired
-                            <code>Fragments\workstation\</code> dir (per-host
-                            SSH profiles from earlier versions) once, if
-                            present. User-created profiles and fragments from
-                            other apps are never touched.
+                            keybinds, profile defaults). Bootstrap also writes
+                            one profile fragment,
+                            <code>Fragments\workstation\hosts.json</code>: an
+                            <em>SSH: &lt;host&gt;</em> profile per host in
+                            <a href="#ssh-host-launchers"><code>~/.ssh/config.local</code></a>.
+                            User-created profiles and fragments from other
+                            apps are never touched.
                         </li>
                         <li>
                             <strong>GitHub CLI</strong> (<code>gh</code>)
@@ -3504,7 +3507,7 @@ cd "$env:USERPROFILE\.config\mise"
                         <div class="step">
                             <span class="num">5</span
                             ><span class="lbl">Warp Tab Configs</span
-                            ><span class="note">local shells</span>
+                            ><span class="note">local shells + SSH hosts</span>
                         </div>
                         <div class="arrow">&rarr;</div>
                         <div class="step">
@@ -3574,14 +3577,13 @@ cd "$env:USERPROFILE\.config\mise"
                         to the Store package&rsquo;s live
                         <code>LocalState</code> path
                         (<code>%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\</code>).
-                        Nothing else is generated for it &mdash; earlier
-                        versions wrote per-host SSH profiles as a
+                        The <a href="#ssh-host-launchers">SSH host
+                        profiles</a> are the one generated part: a
                         <strong>fragment</strong> under
-                        <code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\</code>;
-                        <code>bootstrap.ps1</code> now deletes that one app
-                        dir if it is still there
-                        (<code>Remove-RetiredTerminalHostProfiles</code>;
-                        restart Windows Terminal afterwards, since it reads
+                        <code>%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\</code>,
+                        rewritten by every <code>bootstrap.ps1</code> run
+                        and never written into <code>settings.json</code>
+                        (restart Windows Terminal afterwards: it reads
                         fragments only at launch). The Settings UI
                         <strong>re-serializes <code>settings.json</code></strong>
                         whenever you change something there, so re-sync the
@@ -3711,10 +3713,11 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                         <kbd>CTRL</kbd>+<kbd>ALT</kbd>+<kbd>L</kbd>) lists the
                         generated <em>WSL: AlmaLinux-9</em>,
                         <em>Windows PowerShell</em>, and
-                        <em>Nushell (compatibility)</em> entries (SSH to a
-                        host from any of them, e.g.
-                        <code>ssh -t &lt;user&gt;@&lt;host&gt; zellij attach
-                        --create main</code>). The tracked
+                        <em>Nushell (compatibility)</em> entries, plus an
+                        <em>SSH: &lt;host&gt;</em> entry per
+                        <a href="#ssh-host-launchers">SSH host</a> that runs
+                        <code>ssh -t &lt;host&gt; zellij attach --create
+                        main</code>. The tracked
                         <code>keybindings.yaml</code> adds these overrides on
                         top of Warp&rsquo;s defaults &mdash; the pane mnemonics
                         match Zellij&rsquo;s pane mode (<em>d</em> = down,
@@ -3827,13 +3830,36 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
                         the &ldquo;+&rdquo; new-tab button lists
                         <em>Nushell</em> (the default),
                         <em>AlmaLinux-9</em>, <em>PowerShell</em>,
-                        <em>Command Prompt</em>, and <em>Git Bash</em>.
-                        The same profiles are addressable from the
+                        <em>Command Prompt</em>, and <em>Git Bash</em>, plus
+                        an <em>SSH: &lt;host&gt;</em> profile per
+                        <a href="#ssh-host-launchers">SSH host</a> (it
+                        attaches that host&rsquo;s zellij <code>main</code>
+                        session). The same profiles are addressable from the
                         <code>wt</code> CLI:
                     </p>
                     <pre><code>wt -w 0 nt -p "PowerShell"    # new tab, in the current window
 wt -p "AlmaLinux-9"           # new WINDOW in the WSL distro (no -w = new window)
 wt -w 0 sp -H -p "Nushell"    # split the current window&rsquo;s tab horizontally</code></pre>
+                    <p id="ssh-host-launchers">
+                        <strong>SSH host launchers.</strong> Every concrete
+                        <code>Host</code> alias in the un-tracked
+                        <code>%USERPROFILE%\.ssh\config.local</code> becomes
+                        an <em>SSH: &lt;alias&gt;</em> profile here and an
+                        <em>SSH: &lt;alias&gt;</em> Tab Config in
+                        <a href="#setup-warp">Warp</a>, running
+                        <code>ssh -t &lt;alias&gt; zellij attach --create
+                        main</code> &mdash; one click back into that
+                        host&rsquo;s zellij session. Patterns
+                        (<code>Host *</code>, <code>Host web-*</code>) and
+                        <code>!</code> negations are skipped. The hosts stay
+                        on your machine; the public repo has none. Re-run
+                        <code>.\bootstrap.ps1</code> after editing the file,
+                        then restart the terminal (both read these at launch):
+                    </p>
+                    <pre><code># %USERPROFILE%\.ssh\config.local  (git-ignored; ~/.ssh/config includes it)
+Host build1
+    HostName build1.example.com
+    User deploy</code></pre>
                     <p>
                         The tracked <code>settings.json</code> adds these
                         overrides on top of Windows Terminal&rsquo;s defaults
@@ -5369,7 +5395,11 @@ on_change = "restart"</code></pre>
                                 the tracked config has
                                 <code>Include config.local</code> at the
                                 top, so per-host overrides win over the
-                                global <code>Host *</code> defaults.
+                                global <code>Host *</code> defaults. On
+                                Windows each <code>Host</code> alias there
+                                also becomes a terminal launcher &mdash; see
+                                <a href="#ssh-host-launchers">SSH host
+                                launchers</a>.
                             </p>
                         </div>
                     </details>
@@ -5483,12 +5513,14 @@ on_change = "restart"</code></pre>
                                 in open windows within a second of the apply.
                             </p>
                             <p>
-                                <strong>Leftover per-host SSH
-                                profiles</strong> &mdash; earlier versions
-                                generated them as a profile fragment under
-                                <code>Fragments\workstation\</code>. Re-run
-                                <code>.\bootstrap.ps1</code> (it deletes that
-                                dir), then <strong>fully restart</strong>
+                                <strong>SSH host profiles missing or
+                                stale</strong> &mdash; they come from the
+                                <code>Host</code> aliases in
+                                <code>%USERPROFILE%\.ssh\config.local</code>
+                                (<a href="#ssh-host-launchers">SSH host
+                                launchers</a>). Re-run
+                                <code>.\bootstrap.ps1</code> after editing
+                                it, then <strong>fully restart</strong>
                                 Windows Terminal (close every window): it
                                 reads <code>Fragments\</code> only at launch.
                             </p>

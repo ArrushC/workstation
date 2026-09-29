@@ -86,14 +86,17 @@ On the Windows host after `bootstrap.ps1` + the dotfiles apply, restart Warp, th
 ## Windows Terminal (the compatibility path — must stay fully working)
 On the Windows host after `bootstrap.ps1` + the dotfiles apply, restart WT, then:
 - Catppuccin Mocha chrome + scheme; JetBrainsMono NFM 10.5; bar cursor (defaults, all profiles).
-- CTRL+SHIFT+T lands in Nushell (defaultProfile); the new-tab dropdown lists only the local
-  profiles (no "SSH hosts" folder, no `SSH: <host>` entries).
+- CTRL+SHIFT+T lands in Nushell (defaultProfile); the new-tab dropdown lists the local
+  profiles plus one `SSH: <alias>` per concrete `Host` in `%USERPROFILE%\.ssh\config.local`
+  (none if that file is absent), and no second, zellij-less copy of each host (the built-in
+  `Windows.Terminal.SSH` source stays disabled).
+- Picking `SSH: <alias>` lands in that host's zellij `main` session.
 - `ssh -t <user>@<host> zellij attach --create main` from any tab lands in the remote zellij session.
 - alt+shift+d / alt+shift+r split panes; alt+shift+arrows move focus; ctrl+shift+z zooms.
 - A hand-made profile in settings.json AND a foreign-named fragment file
-  (`Fragments\other-app\x.json`) both survive a bootstrap re-run; the retired
-  `Fragments\workstation\` dir is gone afterwards (`Remove-RetiredTerminalHostProfiles`).
-- Doctor: WT present (it no longer reports a fragment/SSH-profile count).
+  (`Fragments\other-app\x.json`) both survive a bootstrap re-run; `Fragments\workstation\hosts.json`
+  is rewritten (and removed when config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`.
+- Doctor: an "SSH host launcher(s)" row (count from `~\.ssh\config.local`).
 - In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes — this is THE
   regression check for the Warp rc guards (they are `TERM_PROGRAM`-conditional, so a WT session
   must behave exactly as it did before Warp returned; if anything here is missing, a guard is
