@@ -1,115 +1,121 @@
 # Quick verification
 
-> Claude-internal reference, split out of `CLAUDE.md` to keep it lean. Reach for
-> these after a change in the matching area. Grouped roughly by subsystem.
+> Recipes for verifying a change, grouped by subsystem. The rules they protect are in CLAUDE.md.
+> Automated checks (`mise run lint` = `scripts/check-invariants.sh`, `bash scripts/check-templates.sh`,
+> and the `lint.yml` CI jobs) cover most static invariants; the recipes below are what they don't.
 
-After changes:
+## Host state and tools (read-only, no sudo)
 
-- **The go-to mise-bootstrap recipes** (reach for these first for anything touching `config*.toml` `[bootstrap.*]` tables): `MISE_ENV=<set> mise bootstrap plan --json | jq .summary` — the declarative diff, machine-readable (`create`/`update`/`remove`/`unchanged` counts; 0/0/0/N on a stable host); `mise bootstrap status --missing` — human-readable, only rows that need attention; `mise run health` — the full report `bootstrap.sh --doctor` runs, includes non-declarative checks (the saved mode, `MISE_ENV` persistence, pueued, python-env, dotfiles drift, a dirty checkout) that `bootstrap status` doesn't cover; `mise tasks validate` — catches a malformed `#MISE` task header before it reaches CI. All four are read-only and safe with no sudo (see the no-firewall-table invariant in `docs/claude/invariants.md` for why that's true even for `plan`/`status`).
-- **`mise dot status` / `mise dot diff` / a scratch-`$HOME` apply — the go-to recipes for anything touching `[dotfiles]`.** `mise dot status` (`wss`) lists every entry, its mode, source, gating config file, and state (`applied` / `differs (...)` / `missing`); `mise dot diff` (`wsd`) shows the pending change for entries that differ. To resolve or test ONE entry without touching every dotfile: `mise dot apply --force --yes -- "~/.some/target"` — `--force` is required on a target that's currently a real (non-symlinked) file; without it, and even with `--dry-run`, mise refuses with `mise ERROR files: refusing to overwrite existing files (use --force): <target>` (exit 1) — this is ruling 1's `--force-dotfiles` gate, one level down (`mise bootstrap --force-dotfiles` is the whole-apply form `bootstrap.sh`/`bootstrap.ps1` pass automatically on a host's first dotfiles apply). **NEVER run `mise dot apply`/`mise bootstrap` against the real `$HOME`** from an agent session — use a scratch `HOME`: `SCRATCH=$(mktemp -d) && HOME="$SCRATCH" MISE_ENV=<set> mise dot apply --force --yes -- "<target>"` then inspect `$SCRATCH`, then `rm -rf "$SCRATCH"`. **Gotcha:** mise's global-config discovery FALLS BACK to the real account home's `~/.config/mise` when the scratch `HOME` has no `.config/mise` of its own (measured 2026-09-19, mise 2026.9.9) — on a real host the account home already IS this checkout, so a bare `HOME=` override "just works" by accident; from a second checkout (a worktree) it silently renders the account home's checkout instead, and in CI it silently no-ops. `scripts/check-templates.sh`'s header documents this; its `make_home` gives each scratch `HOME` its own `.config/mise` (this checkout's entries symlinked in, `dotfiles/` copied, a `config.local.toml` with the `vars.mode` the token set implies) and its `in_home` also sets `MISE_CONFIG_DIR` and the cwd there. Mirror that pattern (or just run `check-templates.sh` itself) rather than re-deriving it. `bash scripts/check-templates.sh` is the one-shot health check for the whole `[dotfiles]` template surface: for each of the four real `MISE_ENV` token sets it applies + syntax-checks every `mode = "template"` entry INDIVIDUALLY (so a failure names the exact target and env — ruling 3: a bulk apply alone never does, since one bad template aborts the whole run and writes nothing), then does one bulk `mise bootstrap --only dotfiles --force-dotfiles --yes` per token set and re-verifies. The owned sets render with `mode = "owned"`, so the owned-only blocks (the `VCPKG_ROOT` export in `~/.zshrc`/`~/.bashrc`) are checked too. A clean run ends `all rendered templates pass, across all four MISE_ENV sets`.
-- **pueued's `MISE_ENV` chain** (after touching `config.linux.toml`'s `[bootstrap.services.pueued]`, `dotfiles/config/environment.d/10-mise.conf.tera`, or `bootstrap.sh`'s `systemctl --user set-environment` line): `systemctl --user cat dev.mise.pueued.service` — confirm there is NO `Environment=MISE_ENV=...` line in the unit itself (there never should be one — see `docs/claude/invariants.md`); `systemctl --user show-environment | grep MISE_ENV` — confirm the live user manager has it set; `cat ~/.config/environment.d/10-mise.conf` — confirm it's there for the NEXT login too; `systemctl --user status dev.mise.pueued.service` — `active (running)`. If pueued is failing to start with a PATH/shim-resolution error, check all three in that order before touching the service definition.
-- Windows HTTP transport: run `scripts/test-curl.ps1` under BOTH Windows shells the way the GitHub runner does — dot-source, then exit with `$LASTEXITCODE` (actions/runner appends exactly that to every `pwsh`/`powershell` step, so a stray non-zero curl exit left at the end of the script fails the job even when every assertion passed; the script therefore resets `$global:LASTEXITCODE` on success). From a Windows prompt: `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". .\scripts\test-curl.ps1; exit $LASTEXITCODE"` and the same with `pwsh.exe`; from WSL: `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". '$(wslpath -w scripts/test-curl.ps1)'; exit \$LASTEXITCODE"`. Expect `curl integration checks passed on PowerShell <ver>` and exit 0 (the `curl: (22) …` lines on stderr are the deliberate failure fixtures). The test extracts functions without provisioning; a local TCP fixture checks redirects, auth headers, retries, a second curl.exe on PATH, binary/UTF-8 integrity, JSON array and version selection, failed-download handling (incl. the HTTP status surviving into the thrown message), and temporary-file cleanup. CI runs both shells (`windows-http` job). Keep the bootstrap and font-script `Invoke-CurlRequest` copies byte-identical — `check-invariants.sh` diffs them (`check_curl_helper_parity`) and the test asserts it too; `scripts/check-ps.ps1` includes the test file.
-- README console (`README.html` + `docs/README/README.{css,js}`): `npm install --no-save --no-package-lock --no-audit --no-fund jsdom@30.0.1 && node scripts/check-readme.mjs` → `README checks passed (20 tool cards, 143 chips, 32 troubleshooting entries)` (counts drift as content does). Then open `README.html` from disk in a browser and eyeball: dark default, platform tabs, type a term in the tool filter and click a card's `#` anchor (filter must survive), search a tool name (result title = clean category name), Back after clicking a TOC link (one scroll). `node --check docs/README/README.js` for syntax. No `<script src="docs/README/vendor/...">` may reappear — the Three.js dir is gone.
-- zellij tab bar (zjstatus): `bash scripts/test-zellij-plugin.sh` → `PASS: …installs to the data dir…` (offline; also run by check-invariants). Sandbox (mirrors `mise bootstrap`'s own tools-phase + `bootstrap` task commands): `MISE_DATA_DIR=/tmp/zj-data mise install github:dj95/zjstatus` (installs the tool), then `SRC=$(MISE_DATA_DIR=/tmp/zj-data mise where github:dj95/zjstatus); HOME=/tmp/zj-home scripts/lib/zellij-plugin.sh zjstatus "file://$SRC/zjstatus.wasm"` (copies it into zellij's data dir under the scratch `HOME`) → `head -c4 /tmp/zj-home/.local/share/zellij/plugins/zjstatus.wasm | od -c` prints `\0 a s m` (the DATA dir — `zellij setup --check` prints it as `[PLUGIN DIR]`; NOT `.config/zellij/plugins`). Headless probe with the REPO config: stage a dir with `config.kdl`, `layouts/`, `themes/`, then `mark=$(wc -l < /tmp/zellij-$UID/zellij-log/zellij.log)`, `script -qfc "zellij --config-dir <dir> -s probe" /dev/null >/dev/null 2>&1 &`, `sleep 6`, and JUDGE BY THE LOG: `tail -n +$((mark+1)) /tmp/zellij-$UID/zellij-log/zellij.log | grep -E "Loaded plugin|No such file"` must show `Loaded plugin 'zjstatus.wasm'` and no `No such file` — `zellij action dump-layout` echoes `file:zjstatus.wasm` in the tab-bar slot either way (that is how the wrong-dir first cut passed review). `--new-session-with-layout dev` must additionally dump `swap_tiled_layout name="vertical"` plus the editor/terminal/run panes; `zellij kill-session probe && zellij delete-session probe`. `bash scripts/check-invariants.sh` must show `tab-bar alias -> file:zjstatus.wasm`, `zjstatus 0.25.0 needs zellij >= 0.45.0`, the installer PASS and `zjstatus pills: N rounded-left + N rounded-right glyphs present` (`grep -c $'\xee\x82\xb6' dotfiles/config/zellij/config.kdl` — the half-circles are invisible in most editors and were dropped once; square blocks in the bar = this). Live host: `wsa`, `zellij kill-session main`, reattach, press `y` at the one-time permission request in the bar; `~/.cache/zellij/permissions.kdl` then exists.
-- `mise ls` — every declared tool, one line each. If a tool is missing, its pin never made it into `config.toml`/`config.linux.toml`/`config.owned.toml`, or `MISE_ENV` doesn't include the file it's declared in (check with `mise env`).
-- `mise bootstrap status` — the host-state roster: every dnf package, `/etc` file, service, repo, dotfile and compose project the loaded `config*.toml` files declare, each `installed`/`unchanged`/`missing`/`drifted`. `mise bootstrap status --missing` narrows to only what needs attention.
-- `MISE_ENV=linux,owned,host,native mise bootstrap plan` (or `MISE_ENV=linux,owned,host,wsl` for a WSL dry-run, or plain `MISE_ENV=linux` for shared) — dry-run: prints the declarative plan (create/update/unchanged/remove) without executing anything, safe unprivileged (no `[bootstrap.linux.firewall]` table in this repo — see `docs/claude/invariants.md`). Inspect a scope you're not currently in by overriding `MISE_ENV` for the one call. **`mise bootstrap plan`/`--dry-run` still refuse a dotfiles conflict the same as a real apply** — a target that's already a real file exits 1 with the same `refusing to overwrite` error unless `--force-dotfiles` is passed, even in dry-run mode.
-- `mise tasks ls` — every global task with its description (the `#MISE description=...` header); `mise tasks validate` catches malformed task headers/dependencies before they land in CI.
-- Sudo-free sandbox install + capability gate (mise owns install location and parallelism itself; no separate sandbox harness needed):
+- `MISE_ENV=<set> mise bootstrap plan --json | jq .summary` gives create/update/remove/unchanged
+  counts (0/0/0/N on a stable host). `mise bootstrap status --missing` lists only rows needing
+  attention. Sets: `linux` (shared), `linux,owned,host,native`, `linux,owned,host,wsl`. Safe unprivileged
+  because there is no firewall table. Both refuse a dotfiles conflict like a real apply unless
+  `--force-dotfiles` is passed.
+- `mise run health` is the full report (saved mode, `MISE_ENV` persistence, pueued, python-env,
+  dotfiles drift, dirty checkout); exit 1 on a hard failure. `./bootstrap.sh --doctor` and
+  `--check-for-updates` print the repo section first, never provision, and exit 1 with "mode not set"
+  when no mode is saved. `mise tasks validate` catches malformed `#MISE` headers; `mise ls --missing`
+  should be empty.
+- Sandbox install plus capability gate (no sudo):
   ```
   MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox MISE_STATE_DIR=/tmp/mise-sandbox-state \
     MISE_CACHE_DIR=/tmp/mise-sandbox-cache MISE_ENV=linux,owned,host,native mise install \
     && MISE_DATA_DIR=/tmp/mise-sandbox tasks/verify-tools
   ```
-  Finishes well under a minute on a warm network; `ls /tmp/mise-sandbox/installs | wc -l` should roughly match `mise ls | grep -c .`. `tasks/verify-tools` prints `✓ verify-tools: N ELF binaries pass (arch, loader, glibc floor)` — a failure means an explicit `github:` `asset_pattern` is needed for that tool. Re-run `mise install` alone is a fast no-op. No `GITHUB_TOKEN` requirement the way eget had one, but set it anyway to avoid the GitHub API's unauthenticated rate limit on a from-scratch run with many `github:`-backend tools.
-- `./bootstrap.sh --dev` and `./bootstrap.sh --full` must both error with `Unknown argument: ...` — neither flag exists any more; the mode is a prompt (or `WORKSTATION_MODE`), not a flag. `./bootstrap.sh` with no saved mode, no `WORKSTATION_MODE`, and no controlling terminal (`setsid ./bootstrap.sh </dev/null` — `</dev/null` alone leaves `/dev/tty` open) must error asking for one of the two. It clones/pulls the repo and installs mise before it reaches the mode check, so run it in a scratch `HOME`. `--reinstall` in the same situation must fail BEFORE the wipe.
-- `ssh -G <managed-host> | grep -iE 'serveralive|tcpkeepalive|connecttimeout'` after `wsa` — confirms keepalive defaults: `serveraliveinterval 30`, `serveralivecountmax 3`, `tcpkeepalive yes`, `connecttimeout 10`.
-- `WORKSTATION_MODE=owned ./bootstrap.sh` and `WORKSTATION_MODE=shared ./bootstrap.sh` on fresh hosts — idempotent; `config.local.toml` gets the matching `vars.mode` (`owned`/`shared`); no commit/push step runs. The closing tip is a plain `ssh-copy-id <user>@<host>`. Interactively: `./bootstrap.sh` with a TTY and no saved mode prompts (`1) owned` / `2) shared`); re-running reads the saved value and does not prompt again. Windows: `.\bootstrap.ps1` always writes `mode = "owned"` with no prompt.
-- `WORKSTATION_MODE=owned ./bootstrap.sh` *inside WSL* — the closing tip is WSL-specific (no `ssh-copy-id` line).
-- Fresh WSL tab after Windows `wsa` (or a full `.\bootstrap.ps1`) — `pwd` is `/home/<user>`, not `/mnt/c/...`.
-- `bootstrap.ps1` on fresh Windows (no admin) — git prerequisite check (hard-fail with install link if absent), the pinned portable tools (Starship, Helix, Nushell, jq, OpenCode, omp, mise, DevToys CLI, dnGrep, LogExpert — chezmoi is NOT one of these any more, Task 5) install admin-free under `%LOCALAPPDATA%\workstation\` and join the User PATH, then `mise bootstrap --only dotfiles,tools --yes` applies the dotfiles tree. Start Menu gains `dnGrep.lnk`/`LogExpert.lnk`; `Test-Path "$env:LOCALAPPDATA\workstation\dngrep\dnGrep.config.xml"` is `True` (and its `DataDirectory` reads `%APPDATA%\dnGREP` expanded). A second run prints "already installed" for every portable tool — no re-downloads. LogExpert launching needs the hand-installed .NET 10 Desktop Runtime. PS syntax-parse: `powershell -NoProfile -Command "[void][System.Management.Automation.Language.Parser]::ParseFile('bootstrap.ps1',[ref]$null,[ref]$null);'ok'"`.
-- **mise runtimes on Windows** (after touching `Invoke-MiseBootstrap`, `Invoke-MiseRuntimes`, `Invoke-NushellMise`, the mise `$PortableTools` entry, `Invoke-PythonEnv`, or the two shell templates): the user runs `.\bootstrap.ps1` in a Windows terminal (first run: mise portable install, then `mise bootstrap --only dotfiles,tools` — dotfiles apply + a tools pass together, then a few minutes of `Invoke-MiseRuntimes` self-heal + the Python env rebuild). Read-only probes from WSL via `powershell.exe -NoProfile -Command …`: `mise doctor` (data dir `%LOCALAPPDATA%\mise`, config `~\.config\mise`; `shims_on_path: yes` from ANY new shell — the User PATH — but `activated: yes` ONLY in an activated shell: nu, or pwsh/powershell with the profile loaded, so `activated: no` under the `-NoProfile` probe is expected), `mise ls --missing` (empty), `Get-Command node, go, uv, gopls, typescript-language-server, lua-language-server, basedpyright-langserver` (all under `%LOCALAPPDATA%\mise\shims`), `Test-Path "$(mise where node)\node_modules\typescript\lib\tsserver.js"` (True — the 5.x pin), `Test-Path "$(mise where node)\typescript-language-server.cmd"` (True — the npm postinstall ran) plus `typescript-language-server --version` through the shim (6.0.0), the uv-sweep evidence `Test-Path "$env:LOCALAPPDATA\workstation\uv"` (False) and `(Get-Command uv).Source` under `…\mise\shims`, `nu -c 'which node'`, `pwsh -Command 'Get-Command node'` AND `powershell -Command 'Get-Command node'` (profile activation — NO `-NoProfile`; 5.1 loads the same profile through its loader), `powershell -Command "'profile-ok'"` (prints `profile-ok` with NO red error text above it — mise's pwsh activation must be 5.1-safe), `.\bootstrap.ps1 -Doctor` (✓ mise 2026.9.1 portable, ✓ mise runtimes installed, ✓ shims dir on the User PATH, ✓ Nushell mise activation, ✓ Python env, ✓ dotfiles in sync), `.\bootstrap.ps1 -CheckForUpdates` (a mise row against jdx/mise tags). A second `.\bootstrap.ps1` prints "mise runtimes already installed" (stamp hit). Decide BEFORE the run what owns node: a winget `OpenJS.NodeJS.LTS` sits on the User PATH ahead of the shims dir, so either `winget uninstall OpenJS.NodeJS.LTS` (mise owns node now — recommended, and what the `Get-Command node` probe expects) or keep it and accept that non-activated shells (cmd, Git Bash, `-NoProfile`) resolve that node while activated nu/pwsh get mise's.
-- **python-env** (after touching `scripts/lib/python-env.sh`, `tasks/python-env`, or `bootstrap.ps1`'s `Invoke-PythonEnv`): Linux — `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')" && textual --version` (first run builds: uv installs the pinned CPython, creates the venv, installs the 9 libs, (re)writes the `wpy`/`textual`/`typer` launchers; a second identical run prints "already up to date" — stamp hit). `mise run health | grep python-env` shows a `✓` row with the resolved `wpy` version. Rebuild-trigger test: touching `~/.local/state/workstation/python-env.stamp`'s mtime does NOT rebuild (content is compared, not mtime) but editing `scripts/lib/python-env.sh`'s content DOES — the next `mise run python-env` sees a changed cksum in the stamp comparison and rebuilds; `git checkout -- scripts/lib/python-env.sh` restores the original. Force an upgrade of the latest-tracking libs regardless of the stamp: `REBUILD=1 mise run python-env` (single idempotent task now — no more two-target race to worry about). Windows analog: `.\bootstrap.ps1` builds `%LOCALAPPDATA%\workstation\python-env`; from a fresh Nushell tab, `wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"` and `textual --version`; a second bootstrap run reports the env already built (stamp hit, no rebuild); `-Doctor` lists the env version; deleting `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-running forces a rebuild; `-SkipToolInstall` skips both the mise runtimes step (uv included) and the env build ("Python env not built"). Non-interactive-ssh check: `ssh <shared-host> 'cd ~/.config/mise && mise run python-env'` must succeed without an interactive shell (mise resolves its own shims dir internally, no PATH prepend needed the way the old Make recipe required).
-- **The tools install path** (after touching `scripts/lib/mise-env.sh`, `scripts/lib/mise-install.sh`, `tasks/verify-tools`, `config.toml`/`config.linux.toml`/`config.owned.toml`, `dotfiles/zshenv.tera`, or the bashrc guard block): offline — `bash scripts/test-mise-install.sh` (PASS line) + `scripts/check-invariants.sh` (TOML parse + lockfile coverage + `min_version` checks green). On a real host: `bash scripts/lib/mise-install.sh` then `mise bootstrap --yes` (or the whole thing at once — `./bootstrap.sh`) — installs everything in the active `MISE_ENV`'s config files, then `config.linux.toml`'s `post-tools` hook runs `tasks/verify-tools`. Then: `mise doctor` (activated: yes, shims_on_path: yes), `mise ls --missing` empty, `zsh -c 'command -v node'` and `bash -c 'command -v node'` → `~/.local/share/mise/shims/node`, `req='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}'; ( printf 'Content-Length: %d\r\n\r\n%s' "${#req}" "$req"; sleep 5 ) | timeout 20 typescript-language-server --stdio 2>&1 | grep -oE 'Using Typescript version [^"]*|Could not find a valid TypeScript[^"]*' | head -1` (expect `Using Typescript version (bundled) 5.9.3` — TS 7 has no tsserver.js and would print the "Could not find" half), `gopls version`, `basedpyright --version`, `lua-language-server --version`, `ls ~/.local/share/zellij/plugins/zjstatus.wasm` present, `mise run health` shows `✓ mise tools`, `✓ zjstatus`, `✓ legacy /usr/local` (`tasks/migrate-legacy` — the one-time pre-mise `/usr/local/bin` sweep — is gone, 2026-09-25; this row is now a read-only check for leftovers, on owned hosts only). (`basedpyright-langserver` and `vscode-json-language-server` are pure stdio servers with no `--version` flag — an empty `mise ls --missing` is their check.) Re-run `mise bootstrap --yes` a second time — should be a fast no-op past the initial install pass.
-- `git diff README.html docs/README/README.css docs/README/README.js` — verify user-facing surface still matches reality. Open in a browser — primitives (tabs, flow chips, accordion filter) must render, not just diff cleanly. If unstyled, the asset paths in `README.html` (`href="docs/README/README.css"`, `src="docs/README/README.js"`) are wrong or the files were moved out of `docs/README/`.
-- `MISE_ENV=linux,owned,host,native mise bootstrap status` / `mise bootstrap plan` — the host-state roster is NFS-client packages only (`dnf:autofs`/`dnf:nfs-utils`/`dnf:nfs4-acl-tools`), `create` on a fresh host or `unchanged` on an already-provisioned one. With `MISE_ENV=linux,owned,host,wsl` (or a real WSL host) none of `config.native.toml`'s entries appear at all — the whole file doesn't load with that token set.
-- `MISE_ENV=linux mise bootstrap plan` — no `config.native.toml` entries at all (owned-only; the file never loads on `MISE_ENV=linux`).
-- **Docker/Cockpit/rsyslog/Dozzle provisioning was removed entirely 2026-09-22** (user decision) — there is no live verification recipe for them any more; `grep -rn -i 'dozzle\|cockpit\|rsyslog\|docker' --exclude-dir=.git .` should turn up only historical/changelog text and unrelated docker tooling (`lazydocker`, docker aliases, the starship `docker_context` module), never a live `[bootstrap.*]` reference in `config.native.toml`. Hosts that already had them from an earlier `mise bootstrap` (or the Make era) keep them, running and unmanaged — `mise run health`/`mise bootstrap status` do not report on them. Full history in `CLAUDE_CHANGELOG.md`.
-- **`copy_command` must stay UNSET in `dotfiles/config/zellij/config.kdl`.** Zellij uses OSC 52 by default, and OSC 52 is the only clipboard path that crosses SSH — zellij runs on the *remote* host. Setting `copy_command` (xclip/wl-copy/pbcopy) overrides OSC 52 with a binary that runs there, where there is no display and no such binary; every yank then silently fails. This was live in the config until 2026-08-31. Both managed Windows terminals accept OSC 52 writes (Warp's `osc52_clipboard_access = "write_only"`, WT natively). Verify by yanking in a remote zellij pane and pasting locally — and remember zellij reads config at **session creation**, so `zellij kill-session main` first. Leave `dangerously_enable_paste_buffer_read` unset (it would let a remote pane READ the local clipboard).
-- After editing `dotfiles/config/zellij/config.kdl`: stage it **with the `layouts/` AND `themes/` dirs** into a temp config dir and run `ZELLIJ_CONFIG_DIR=<tmp> zellij setup --check` — must report a clean parse. The file is KDL, so comments are `//`, **never `#`** (a single `#` line fails the *whole* file; zellij then silently falls back to built-in defaults at runtime — theme / keybinds / `scroll_buffer_size` all dropped with no error), and keybinds use **space-separated** modifiers (`bind "Ctrl s"`, not `"Ctrl-s"`) on the pinned zellij 0.44.3. `default_layout` is zellij's BUILT-IN `default`, so it needs nothing staged, but `theme` does: an unstaged `themes/` makes the theme name dangle. **A dangling theme name is silent** — `setup --check` still reports *Well defined* and zellij falls back to its built-in catppuccin-mocha (green accent) at runtime; `scripts/check-invariants.sh`'s `check_zellij_config` is the only thing that catches it, by matching `theme "<name>"` against the block names in `themes/*.kdl`. Stage `layouts/` too if you set `default_layout` to one of ours (`dev`, `ops`) or `setup --check` raises a spurious `layout was not found`. `scroll_buffer_size` is read at session creation — a running `main` session keeps its old buffer until recreated.
-- `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` on every Linux **owned host** after `mise run fonts` (or a full `mise bootstrap`) — should return `6`. WSL hosts deliberately return `0` (font is on the Windows side; `tasks/fonts` no-ops on the `wsl` token). Shared hosts return `0` (`tasks/fonts` is owned-only).
-- After `bootstrap.ps1` on Windows: `(Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Windows\Fonts\JetBrainsMonoNerdFontMono-*.ttf").Count` — should return `6`. `(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts').PSObject.Properties.Name -like 'JetBrainsMonoNerdFontMono-*' | Measure-Object` should also show `Count: 6`.
-- `tldr tar | head -1` on any host after `wsa` — prints the tar page's first line (not "Page cache not found"); confirms the tealdeer cache seed + `auto_update` config landed.
-- `man ls | head` in a post-apply shell — renders colorized (bat) when `bat` is on PATH; confirms the `MANPAGER` block. `command -v pkg-config && pkg-config --version` — non-empty version string.
-- After touching the health/check-updates surface (`bootstrap.sh` report modes, `tasks/health`, `tasks/check-updates`, or `config*.toml`): `mise run health` (also `./bootstrap.sh --doctor`) — header shows the saved mode and the calling shell's `MISE_ENV`; a mode section (a problem when `vars.mode` is missing or invalid, a warning when the shell's `MISE_ENV` disagrees with it — every later row uses the saved mode's token set); a `mise bootstrap status --missing` section (empty on a healthy host), an `mise tools` summary, `MISE_ENV` persistence rows (rc files + systemd user manager), a pueued row (`dev.mise.pueued.service active`, plus a warning if the legacy pre-mise `pueued.service` unit is still present), python-env / owned extras / dotfiles-drift / repo-checkout-dirty / legacy `/usr/local` rows, exit code 1 if any row is a hard failure. `mise run check-updates` (also `./bootstrap.sh --check-for-updates`) — prints `mise outdated --bump` output for the whole toolbelt, a dnf `check-update` on owned hosts, then `git ls-remote` checks for the `[vars]` pins (`nerd_font_version`, `vcpkg_version`; `python_version` and `zjstatus_zellij_floor` are report-only dual-edit pins, not upstream-checked the same way) resolving to `ok`/`update`/`ahead`/`rolling`/`unknown` on a networked host. `./bootstrap.sh --doctor` and `--check-for-updates` — repo section prints FIRST (fetch, branch, ahead/behind, dirty), both exit 0 without provisioning anything; either one on a host with no saved mode reports "mode not set" and exits 1, never prompting (they read only the saved mode; `WORKSTATION_MODE` has no effect on them); combining `--doctor`/`--check-for-updates` with `--reinstall` must error. Windows: `.\bootstrap.ps1 -Doctor` / `-CheckForUpdates` — same shape; `-Doctor -CheckForUpdates` must error.
-- Reviewing the weekly `version-bumps.yml` PR: `scripts/bump-versions.sh` bumps mise pins via `mise outdated --bump` → `mise config set` → refreshed lockfiles. **Bumping a STRING entry (`tool = "1.2.3"`) drops BOTH its trailing same-line comment AND the comment line directly above it; bumping a TABLE entry's `.version` (`tool = { version = "1.2.3", … }`) preserves both** (verified against mise 2026.9.9) — expect a bumped string-pin line to lose its surrounding comments in the diff even though nothing else changed; re-add them by hand in the PR if they carried real information (an asset-pattern rationale, an EL9-glibc-floor note), or the next bump silently drops them again. Table-entry bumps need no such recovery.
-- After editing `dotfiles/local/bin/winterop`: on a WSL host `winterop selftest` prints `selftest: PASS` (env detect + powershell run + path convert + env read); `winterop` (no args) reports `environment : wsl2` with the interop-channel table; `winterop clip set X` then `winterop clip get` round-trips; `winterop host` / `winterop run '(Get-Date).Year'` reach the Windows side. Must be shellcheck-clean (it's in `check-invariants.sh`'s shellcheck `targets`) and LF + 100755. In a non-WSL VM, `winterop` prints the SSH / shared-folder / RDP guidance and live subcommands refuse with that pointer (by design — no live driving).
+  Expect `✓ verify-tools: N ELF binaries pass`. A failure means that tool needs an explicit
+  `github:` `asset_pattern`. Set `GITHUB_TOKEN` to avoid API rate limits.
+- Tools install path (after touching `mise-env.sh`, `mise-install.sh`, `verify-tools`, the rc guard
+  block): `bash scripts/test-mise-install.sh` (PASS), then on a real host `mise doctor`
+  (activated + shims_on_path yes) and `zsh -c 'command -v node'` resolving to the mise shim. A
+  second `mise bootstrap --yes` is a fast no-op.
+- Locks: never hand-edit. Regeneration (from outside the checkout, then sidecar-path normalisation)
+  is implemented in `scripts/bump-versions.sh`; `check-invariants.sh` verifies lock coverage.
+- pueued: `systemctl --user cat dev.mise.pueued.service` has no `Environment=MISE_ENV=` line;
+  `systemctl --user show-environment | grep MISE_ENV` and `~/.config/environment.d/10-mise.conf`
+  carry it; the service is `active (running)`.
+- python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
+  A second run prints "already up to date"; `REBUILD=1` forces an upgrade. Library-list parity with
+  `bootstrap.ps1` is checked by `check-invariants.sh`.
+- Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
+  WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
+  `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.
+- Misc after `wsa`: `tldr tar | head -1` prints a page (tealdeer cache seeded); `man ls | head` is
+  bat-coloured; `ssh -G <host> | grep -iE 'serveralive|tcpkeepalive|connecttimeout'` shows 30/3/yes/10.
+- `winterop` (after editing it): on WSL `winterop selftest` prints `selftest: PASS`; `winterop clip
+  set X` then `clip get` round-trips. shellcheck and LF+0755 are covered by `check-invariants.sh`.
+- Weekly `version-bumps.yml` PR: bumping a STRING pin drops its same-line and preceding comment;
+  a TABLE pin's `.version` keeps both. Re-add comments that carried real information (asset-pattern
+  rationale, glibc-floor note).
+
+## Dotfiles
+
+- `mise dot status` (`wss`) lists each entry with `applied`/`differs`/`missing`; `mise dot diff`
+  (`wsd`) shows pending changes.
+- **Never run `mise dot apply`/`mise bootstrap` against the real `$HOME` from an agent.** Use a
+  scratch home: `SCRATCH=$(mktemp -d) && HOME="$SCRATCH" MISE_ENV=<set> mise dot apply --force --yes -- "<target>"`,
+  inspect `$SCRATCH`, then `rm -rf "$SCRATCH"`. `--force` is needed when the target is an existing
+  file (the single-entry form of `--force-dotfiles`). mise falls back to the account home's
+  `~/.config/mise` when the scratch `HOME` has none, so from a worktree it silently renders the wrong
+  checkout; `scripts/check-templates.sh` (`make_home`/`in_home`) shows the working pattern, or just
+  run it. It renders every template individually for all four token sets, syntax-checks, then
+  bulk-applies; clean output ends `all rendered templates pass, across all four MISE_ENV sets`.
+- Windows: `.\bootstrap.ps1 -Doctor` shows mise, runtimes, PATH shims, Nushell activation, Python
+  env and dotfiles sync; a second `.\bootstrap.ps1` reports "already installed"/stamp hits. Parse
+  check: `powershell -NoProfile -Command "[void][System.Management.Automation.Language.Parser]::ParseFile('bootstrap.ps1',[ref]$null,[ref]$null);'ok'"`.
+  `scripts/test-curl.ps1` (HTTP helper) runs in both shells in the `windows-http` CI job.
+
+## zellij
+
+- `copy_command` must stay unset (OSC 52 is the only clipboard path over SSH). Verify by yanking in a
+  remote pane and pasting locally; zellij reads config at session creation, so `zellij kill-session main`
+  first. `check_zellij_config` covers the theme name, KDL comments, `web_server`, tab-bar alias and
+  `zellij setup --check`.
+- zjstatus: `bash scripts/test-zellij-plugin.sh` (also in `check-invariants.sh`). To probe a live
+  session with the repo config, judge by zellij's log, not `dump-layout`:
+  `grep -E "Loaded plugin|No such file" /tmp/zellij-$UID/zellij-log/zellij.log` must show
+  `Loaded plugin 'zjstatus.wasm'`. On a host: `wsa`, `zellij kill-session main`, reattach, press `y`
+  at the permission prompt.
 
 ## Warp (the primary Windows terminal)
-On the Windows host after `bootstrap.ps1` + the dotfiles apply, restart Warp, then:
-- Warp opens straight into **AlmaLinux-9 (WSL zsh)** — `new_session_shell_override`. Catppuccin
-  Mocha renders (custom theme picked up from the relative path) and the font is JetBrainsMono NFM.
-- The `+` menu lists exactly the three generated Tab Configs: `WSL: AlmaLinux-9`,
-  `Windows PowerShell`, `Nushell (compatibility)` — no per-host `SSH: <host>` entries (a leftover
-  `workstation-ssh-*.toml` from before 2026-09-24 is wiped on the first bootstrap re-run).
-- `alt+shift+d` / `alt+shift+r` split; `alt+shift+arrows` move focus; `ctrl+shift+z` zooms —
-  the same Zellij mnemonics as WT, so muscle memory transfers.
-- **Guard check — run this FIRST; it decides whether the rc guards are live or dead code.**
-  In a Warp WSL tab: `echo $TERM_PROGRAM; env | grep -iE 'WARP|TERM_PROGRAM'; echo "$WSLENV"`.
-  The pre-retirement recipe for this same host asserted `WarpTerminal` here
-  (`git show 19b3b75^:docs/claude/verification.md`), and Warp is understood to inject its own
-  `WSLENV` (carrying `TERM_PROGRAM`, `WARP_IS_LOCAL_SHELL_SESSION`, `WARP_HONOR_PS1`) when it
-  opens a WSL shell — but that is a year of Warp releases ago, so **treat the probe as the
-  source of truth, not this sentence.**
-  - **`WarpTerminal` printed** → guards are live. Confirm: **no** starship prompt (Warp renders
-    its own), **no** fzf Ctrl-T/Ctrl-R, **no** atuin Ctrl-R, **no** fzf-tab menu — *but*
-    zsh-autosuggestions, zsh-syntax-highlighting, zsh-you-should-use and
-    zsh-history-substring-search MUST all still work. That quartet is the `c9709cf` regression
-    surface; if any of them is dead, a guard's `fi` has been widened again (and
-    `check_warp_guards` in `check-invariants.sh` should have caught it — fix that too).
-  - **Empty** → the guards never fire in the primary session. Fallback ladder, cheapest first:
-    (a) widen the guard predicate to whichever `WARP_*` variable the probe shows *does* cross;
-    (b) put the value in the launch command itself —
-    `new_session_shell_override = { custom = "wsl.exe --distribution AlmaLinux-9 --cd ~ -- env TERM_PROGRAM=WarpTerminal zsh -l" }`
-    (deterministic, same distro and cwd; a config change, so get sign-off);
-    (c) drop the guards rather than ship dead code. Note that setting a user-scope `WSLENV`
-    yourself is **not** on this ladder — Warp is reported to overwrite `WSLENV` rather than
-    merge it (warpdotdev/Warp#6241), which would defeat exactly that fix. Whatever the probe
-    shows, record the answer in the spec + this file so the next person doesn't re-derive it.
-- A hand-made Tab Config (any name NOT starting with `workstation-`) survives a bootstrap
-  re-run; every `workstation-*.toml` is rewritten. Doctor reports the managed count (3).
-- `mise dot status` on `settings.toml` after poking Warp's Settings panel → re-capture with
-  `wsr` (`mise dot add --changed`) (expected drift, not a bug).
-- Nushell in Warp is knowingly degraded: the compat Tab Config launches nu via pwsh and Warp
-  shows its unsupported-shell banner. That is the documented trade — Nushell's home is WT.
 
-## Windows Terminal (the compatibility path — must stay fully working)
-On the Windows host after `bootstrap.ps1` + the dotfiles apply, restart WT, then:
-- Catppuccin Mocha chrome + scheme; JetBrainsMono NFM 10.5; bar cursor (defaults, all profiles).
-- CTRL+SHIFT+T lands in Nushell (defaultProfile); the new-tab dropdown lists the local
-  profiles plus one `SSH: <alias>` per concrete `Host` in `%USERPROFILE%\.ssh\config.local`
-  (none if that file is absent), and no second, zellij-less copy of each host (the built-in
-  `Windows.Terminal.SSH` source stays disabled).
-- Picking `SSH: <alias>` lands in that host's zellij `main` session.
-- `ssh -t <user>@<host> zellij attach --create main` from any tab lands in the remote zellij session.
-- alt+shift+d / alt+shift+r split panes; alt+shift+arrows move focus; ctrl+shift+z zooms.
-- A hand-made profile in settings.json AND a foreign-named fragment file
-  (`Fragments\other-app\x.json`) both survive a bootstrap re-run; `Fragments\workstation\hosts.json`
-  is rewritten (and removed when config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`.
-- Doctor: an "SSH host launcher(s)" row (count from `~\.ssh\config.local`).
-- In a WSL tab: starship prompt renders, atuin Ctrl-R works, fzf-tab completes — this is THE
-  regression check for the Warp rc guards (they are `TERM_PROGRAM`-conditional, so a WT session
-  must behave exactly as it did before Warp returned; if anything here is missing, a guard is
-  firing where it shouldn't);
-  check a remote zellij pane for exactly one OSC 133 prompt-zone set.
-- Marks: in a WSL zsh tab run `true` then `false` — two scrollbar marks (success/error colored);
-  ctrl+up / ctrl+down jump between prompts; duplicate pane (alt+shift+d) reopens the same WSL dir.
-- alt+shift+b: broadcast icon appears on every pane in the tab; typing reaches all panes.
-- alt+shift+s: Suggestions palette lists the 7 "Snippet: …" entries; picking one inserts
-  the text WITHOUT executing. (If stable WT lacks showSuggestions — MS docs banner still says
-  Preview — drop the action + README row per the 2026-07-31 spec's documented fallback.)
-- Taskbar: run `mise run lint` in a WSL tab — indeterminate
-  progress on the WT taskbar icon, cleared at the next prompt (needs Windows accessibility
-  "Show animations" ON; same for a `cargo`/`npm`/`uv`/git-network command in a Nushell tab).
-- `$env:WT_SESSION` non-empty in a pwsh tab; scroll a long output to confirm the effective
-  historySize (record the real ceiling in file-care.md if WT clamps below 100000).
+After `bootstrap.ps1` and the dotfiles apply, restart Warp, then:
+- It opens into AlmaLinux-9 (WSL zsh) with Catppuccin Mocha and JetBrainsMono NFM; the `+` menu lists
+  exactly `WSL: AlmaLinux-9`, `Windows PowerShell`, `Nushell (compatibility)`. A hand-made Tab Config
+  (name not starting `workstation-`) survives a bootstrap re-run; `workstation-*.toml` are rewritten.
+- `mise dot status` drift on `settings.toml` after using Warp's Settings panel is expected; re-capture
+  with `wsr`. Nushell in Warp is knowingly degraded (unsupported-shell banner); its home is WT.
+- **Guard probe, run first:** in a Warp WSL tab, `echo $TERM_PROGRAM; env | grep -iE 'WARP|TERM_PROGRAM'; echo "$WSLENV"`.
+  The probe, not documentation, is the source of truth.
+  - `WarpTerminal` printed: guards are live. No starship prompt, no fzf Ctrl-T/Ctrl-R, no atuin
+    Ctrl-R, no fzf-tab menu, but zsh-autosuggestions, syntax-highlighting, you-should-use and
+    history-substring-search must all still work. If one is dead, a guard's `fi` was widened
+    (`check_warp_guards` should have caught it).
+  - Empty: the guards never fire. Fallback ladder, cheapest first: (a) widen the guard predicate to a
+    `WARP_*` variable that does cross; (b) put the value in the launch command,
+    `new_session_shell_override = { custom = "wsl.exe --distribution AlmaLinux-9 --cd ~ -- env TERM_PROGRAM=WarpTerminal zsh -l" }`
+    (a config change; get sign-off); (c) drop the guards rather than ship dead code. Setting a
+    user-scope `WSLENV` is not on the ladder: Warp overwrites rather than merges it
+    (warpdotdev/Warp#6241).
+
+## Windows Terminal (the compatibility path; must stay fully working)
+
+After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
+- Catppuccin Mocha chrome and scheme, JetBrainsMono NFM 10.5, bar cursor. CTRL+SHIFT+T lands in
+  Nushell. The dropdown lists local profiles plus one `SSH: <alias>` per concrete `Host` in
+  `%USERPROFILE%\.ssh\config.local`, with no zellij-less duplicate (built-in `Windows.Terminal.SSH`
+  stays disabled); an alias lands in that host's zellij `main` session.
+- alt+shift+d / alt+shift+r split, alt+shift+arrows move focus, ctrl+shift+z zooms.
+- A hand-made profile in `settings.json` and a foreign fragment (`Fragments\other-app\x.json`) both
+  survive a bootstrap re-run; `Fragments\workstation\hosts.json` is rewritten (removed when
+  config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`. Doctor shows an "SSH host
+  launcher(s)" row.
+- In a WSL tab, starship renders, atuin Ctrl-R works and fzf-tab completes. This is the regression
+  check for the Warp guards: WT must behave as before Warp returned. A remote zellij pane shows
+  exactly one OSC 133 prompt-zone set.
+- Marks: `true` then `false` gives two coloured scrollbar marks; ctrl+up/down jump between prompts;
+  alt+shift+d reopens the same WSL dir. alt+shift+b broadcasts to all panes.
+- alt+shift+s lists the 7 "Snippet: …" entries and inserts without executing (if stable WT lacks
+  `showSuggestions`, drop the action and its README row).
+- Taskbar progress shows during `mise run lint` in a WSL tab and clears at the next prompt (needs
+  Windows "Show animations"). `$env:WT_SESSION` is non-empty in pwsh; scroll a long output to confirm
+  the effective historySize (record the real ceiling in CLAUDE.md if WT clamps below 100000).

@@ -8,7 +8,7 @@
 # interactive, so these exports must precede the return below (the
 # interactive-only ~/.local/bin export further down stays for readability).
 # Shims go in front of ~/.local/bin; interactive shells layer `mise activate
-# bash` (further down) on top. PARITY: dot_zshenv.tmpl is the zsh twin (zsh
+# bash` (further down) on top. PARITY: zshenv.tera is the zsh twin (zsh
 # reads .zshenv for every invocation instead).
 case ":$PATH:" in
 *":$HOME/.local/bin:"*) ;;
@@ -94,7 +94,7 @@ shopt -s histappend                        # append on exit instead of clobberin
 shopt -s checkwinsize     # refresh LINES/COLUMNS after each command
 shopt -s globstar         # ** matches files/dirs recursively
 # PARITY NOTE (numeric glob sort): zsh sets NUMERIC_GLOB_SORT so a glob expands
-# file9 before file10 (see dot_zshrc.tmpl). bash has no equivalent option — its
+# file9 before file10 (see zshrc.tera). bash has no equivalent option — its
 # glob results sort by plain LC_COLLATE byte order — so this is zsh-only.
 
 # --- Colors (dircolors / LS_COLORS) ------------------------------------------
@@ -126,19 +126,19 @@ fi
 # flag words), deployed
 # by mise dotfiles to ~/.config/bash/completions.bash. PARITY NOTE: zsh gets
 # richer versions (descriptions + exclusions) via
-# ~/.config/zsh/completions/_* (see dot_zshrc.tmpl); all surfaces are kept
+# ~/.config/zsh/completions/_* (see zshrc.tera); all surfaces are kept
 # in lockstep with the scripts by check-invariants.sh's flag-parity check.
 [[ -f "$HOME/.config/bash/completions.bash" ]] && source "$HOME/.config/bash/completions.bash"
 
 # PARITY NOTE (cht.sh): cht.sh ships completions for zsh/fish/emacs but NOT bash
 # (upstream has no :bash endpoint), so there is deliberately no cht.sh
 # tab-completion here. zsh gets it via ~/.config/zsh/completions/_cht.sh (see
-# dot_zshrc.tmpl). Same shape as the Shift+Arrow asymmetry below.
+# zshrc.tera). Same shape as the Shift+Arrow asymmetry below.
 
 # PARITY NOTE (zsh plugins): zsh additionally loads three interactive prompt
 # plugins — fzf-tab (fzf-driven Tab completion menu), zsh-autosuggestions
 # (fish-style inline history hints) and zsh-syntax-highlighting (live command
-# coloring); see dot_zshrc.tmpl. All three require zsh's ZLE; bash's readline has
+# coloring); see zshrc.tera. All three require zsh's ZLE; bash's readline has
 # no equivalent without a heavy third-party layer (ble.sh), so there is
 # deliberately no bash counterpart. Same shape as the cht.sh asymmetry above and
 # the Shift+Arrow asymmetry below. bash keeps colored completion via the
@@ -151,7 +151,7 @@ bind 'set colored-stats on'
 bind 'set colored-completion-prefix on'
 
 # Case- and `-`/`_`-insensitive Tab completion (readline). Parity with the zsh
-# `matcher-list` in dot_zshrc.tmpl, though readline only offers case folding plus
+# `matcher-list` in zshrc.tera, though readline only offers case folding plus
 # `-`↔`_` equivalence (completion-map-case), not zsh's general partial-word
 # matching. completion-map-case requires completion-ignore-case to take effect.
 bind 'set completion-ignore-case on'
@@ -161,7 +161,7 @@ bind 'set completion-map-case on'
 # Terminals send ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
 # so the tail (";2D") leaks into the line. Bind them to plain movement so the
 # leak is gone and navigation is sane. PARITY NOTE: zsh gets a real, visible
-# shift-SELECT highlight (see dot_zshrc.tmpl); readline has no "active selection
+# shift-SELECT highlight (see zshrc.tera); readline has no "active selection
 # you can type over", so bash deliberately gets movement-only. (Shift+Up/Down
 # map to history and Shift+Ctrl+Home/End to line ends — readline has no
 # multiline buffer / up-line widgets that the zsh side uses.) Keep both files
@@ -180,7 +180,7 @@ bind '"\e[1;6F": end-of-line'        # Shift + Ctrl + End
 # PARITY NOTE (history search / you-should-use): zsh loads
 # zsh-history-substring-search (↑/↓ walk history entries matching the typed text)
 # and zsh-you-should-use (alias-usage nudge) — both zsh-only (ZLE / preexec; see
-# dot_zshrc.tmpl). readline has a built-in near-equivalent of the first: bind ↑/↓
+# zshrc.tera). readline has a built-in near-equivalent of the first: bind ↑/↓
 # to history-search-backward/forward so a typed prefix filters history (an empty
 # line falls back to plain previous/next — a strict superset of the default;
 # bash does PREFIX search vs zsh's SUBSTRING). you-should-use has no bash analog.
@@ -205,7 +205,7 @@ export FZF_DEFAULT_OPTS="
 # fzf shell integration. Skipped under Warp: Warp owns the input editor and
 # documents shell-level fzf bindings as incompatible (the standalone `fzf`
 # command still works there). Runtime-only guard — Windows Terminal / SSH / WSL
-# sessions are unaffected. PARITY NOTE: mirrors the zsh guard in dot_zshrc.tmpl.
+# sessions are unaffected. PARITY NOTE: mirrors the zsh guard in zshrc.tera.
 if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v fzf &>/dev/null; then
   eval "$(fzf --bash)"
 fi
@@ -218,7 +218,7 @@ else
 fi
 
 # PARITY NOTE (atuin): atuin's searchable Ctrl-R history is wired for zsh only
-# (see dot_zshrc.tmpl). atuin's bash integration needs bash-preexec or ble.sh to
+# (see zshrc.tera). atuin's bash integration needs bash-preexec or ble.sh to
 # record commands reliably (its preexec backend reports "none" without one), so
 # it's deliberately left out of this fallback shell rather than vendoring that
 # dependency. To opt in per-host: install bash-preexec, then add
@@ -232,7 +232,7 @@ fi
 
 # --- broot (fuzzy directory tree → cd) ---------------------------------------
 # `br` opens broot; filter/navigate the tree and Enter cd's to the chosen dir.
-# First run creates ~/.config/broot. (Parity with dot_zshrc.tmpl.)
+# First run creates ~/.config/broot. (Parity with zshrc.tera.)
 if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function bash)"
 fi
@@ -253,7 +253,7 @@ if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; t
 fi
 
 # --- Windows Terminal shell integration (WSL tabs) ---------------------------
-# Prompt-side half of the zsh block (see dot_zshrc.tmpl): OSC 133 A/D marks
+# Prompt-side half of the zsh block (see zshrc.tera): OSC 133 A/D marks
 # (scrollbar marks + ctrl+up/down jumps, exit-code colored), OSC 9;9 cwd
 # (duplicate-tab reopens here — Windows path via wslpath -w), OSC 9;4;0
 # progress clear. Runs FIRST in PROMPT_COMMAND and returns the original $? so
@@ -284,7 +284,7 @@ fi
 # changes. bash has no chpwd, so it hooks PROMPT_COMMAND and guards on $PWD
 # itself — otherwise it would re-issue the rename on every single prompt.
 # Behaviour and opt-out (WORKSTATION_ZELLIJ_TAB_NAMES=0) are identical; see the
-# fuller comment in dot_zshrc.tmpl.
+# fuller comment in zshrc.tera.
 if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
   _zj_tab_name() {
     [[ "$PWD" == "$_ZJ_LAST_PWD" ]] && return
@@ -353,7 +353,7 @@ alias wsr='mise -C "$HOME" dot add --changed'
 # inside the repo, so pinning changes nothing for a normal invocation.
 alias wsu='mise -C "$HOME" run update'
 # wsa is a function (below, near wsh) — it checks for un-recorded drift
-# before applying, since copy mode has no chezmoi-style prompt of its own.
+# before applying, since copy mode has no built-in prompt.
 
 # --- Functions ---------------------------------------------------------------
 
@@ -407,8 +407,8 @@ hide() {
 # `template`) now — no symlink pointed back into this checkout any more, so a
 # live edit under $HOME no longer round-trips implicitly, and copy-mode apply
 # otherwise overwrites an un-recorded live edit with zero diff and zero
-# warning (chezmoi prompted here; plain `mise bootstrap --only dotfiles
-# --yes` does not). This checks for any entry in `differs` state (NOT
+# warning (mise has no built-in prompt; plain `mise bootstrap --only dotfiles
+# --yes` does not ask either). This checks for any entry in `differs` state (NOT
 # `missing` — a host's first-ever apply is expected to be all-missing, not a
 # drift warning) and shows its diff before doing anything. Interactive: asks.
 # Non-interactive (no tty): refuses rather than guessing — run
@@ -599,7 +599,7 @@ nn() {
 # (no `uv run`/`uv python install` in the hot path). Give it a newer target once
 # with `uv python install 3.14` (or `sudo dnf install python3.14`) and python-cli
 # picks it up automatically. Falls back to system python3 if uv/jq are absent.
-# PARITY: identical body in dot_zshrc.tmpl.
+# PARITY: identical body in zshrc.tera.
 python-cli() {
   local py=''
   if command -v uv >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then

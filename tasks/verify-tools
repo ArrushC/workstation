@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Capability-check every mise-installed Linux binary (ELF arch, loader, glibc floor)"
-# The install-time gate the Make macros used to &&-chain onto every install.
+# The install-time gate that runs after every tool install.
 # Walks every active bin dir mise exposes, runs scripts/lib/verify-binary.sh on
 # each ELF (scripts pass through), and fails loudly on the first host that
 # cannot run an asset — the fix is an explicit github: asset_pattern for that

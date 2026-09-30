@@ -1,11 +1,11 @@
 ---
 name: project-mise-runtimes-shipped
-description: mise owns node/Go/uv/LSP on Linux (#153, 2026-09-16) and Windows (#154, 2026-09-16); the three interop/PowerShell gotchas that bit the Windows execution gate and are NOT in the repo docs. Superseded by PR1 of the mise-everything migration (config*.toml at the repo root) — see [[project-mise-everything]]; the interop gotchas below still apply verbatim.
+description: "Windows mise-via-interop gotchas: Set-Location before mise, winget long-path uninstall, Sort-Object order differs 5.1 vs 7"
 metadata:
   type: project
 ---
 
-Both halves of the mise consolidation are merged: PR #153 (Linux `mise-runtimes`, `lib/mise.sh`, generated conf.d) and PR #154 (Windows portable mise + `Invoke-MiseRuntimes`). Spec: `docs/superpowers/specs/2026-09-13-mise-runtimes-design.md`. Nothing is pending. Three things learned on the Windows execution gate that the docs don't carry:
+Three Windows gotchas the repo docs don't carry:
 
 - **Windows `mise` commands run through interop must `Set-Location` to a Windows dir first.** The interop process inherits the WSL cwd as a `\\wsl.localhost\...` UNC path; mise walks UP from cwd looking for `.config/mise/conf.d/*.toml` and finds the LINUX home's files over the share, then fails to parse them — `mise ls` prints nothing, `mise where` returns empty, `mise doctor` shows "failed to load config". Shims/versions still work, so the failure looks partial and confusing.
 - **`winget uninstall` of a portable package (e.g. `OpenJS.NodeJS.LTS`) fails with "directory is not empty" even with `--purge` when a nested `node_modules` path exceeds 260 chars.** Nothing holds the files; winget's deleter can't reach them. Fix: `pwsh` (long-path aware) `Remove-Item -LiteralPath <pkg dir> -Recurse -Force`, then `winget uninstall` again to clear the record + PATH entry.

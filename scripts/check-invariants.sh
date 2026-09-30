@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-invariants.sh — mechanically enforce the load-bearing repo invariants
-# documented in CLAUDE.md + docs/claude/file-care.md.
+# documented in CLAUDE.md.
 #
 # Single source of truth for the checks; invoked three ways:
 #   - mise run lint               (tasks/lint -> $REPO_ROOT/scripts/check-invariants.sh)
@@ -187,14 +187,11 @@ check_version_pins() {
 # pin, not a dual one. All three must carry the byte-identical Tera
 # conditional or a host can end up with a DIFFERENT MISE_ENV in an
 # interactive shell than in a systemd user unit (exactly the pueued-startup
-# class of bug docs/claude/invariants.md documents). PR3 converted all three
-# sources from chezmoi Go templates to Tera.
+# class of bug CLAUDE.md documents).
 #
-# 2026-09-19 fix: a text-only three-way comparison passes when all three
-# expressions are IDENTICALLY WRONG (which they were — see the fix report:
-# every {% if vars.group is defined ... %} guard was always false because
-# nothing ever wrote vars.group, so all three silently baked "linux" on
-# every host). Kept below as a cheap first pass, but the check that actually
+# A text-only three-way comparison passes when all three expressions are
+# IDENTICALLY WRONG (e.g. a guard on a variable nothing ever writes is always
+# false, so all three silently bake "linux" on every host). Kept below as a cheap first pass, but the check that actually
 # catches that class of bug is the render comparison that follows it: each
 # template is rendered for real, twice (vars.mode="owned" and "shared"),
 # into a scratch $HOME, and the baked MISE_ENV is asserted against
@@ -518,12 +515,9 @@ check_sentinels() {
   # Anchor to a whole marker line — prose that merely mentions the token
   # must not count.
   #
-  # The chezmoi-era half of this check (# CCSTATUSLINE:START/END in
-  # chezmoi/.chezmoiignore.tmpl) has no successor to repoint at: PR3 Task 3
-  # moved the per-host ccstatusline opt-out to a # CCSTATUSLINE-OPTOUT:START/
-  # END block that scripts/setup-ccstatusline.sh writes into config.local.toml
-  # — per-host and git-ignored (ruling 2), so there is no longer a tracked,
-  # committed file for a repo-level invariant to assert against.
+  # The per-host ccstatusline opt-out (# CCSTATUSLINE-OPTOUT:START/END) is
+  # written by scripts/setup-ccstatusline.sh into config.local.toml, which is
+  # per-host and git-ignored, so there is no tracked file to assert against.
   s=$(grep -cE '<!-- TOOLS:START' dotfiles/claude/CLAUDE.md)
   e=$(grep -cE '<!-- TOOLS:END -->' dotfiles/claude/CLAUDE.md)
   if [ "$s" = "1" ] && [ "$e" = "1" ]; then
@@ -676,7 +670,7 @@ PY
   # sidecars at locks/<lockfile-stem>/<backend>-<tool>/<version>/ under the
   # config root. A stale .mise/locks/** ref (the pre-move layout) silently
   # dirties every host's checkout on its next `mise install`, which rewrites
-  # it to locks/ in place (see docs/claude/file-care.md).
+  # it to locks/ in place (see CLAUDE.md).
   local lock_ok=1 pathref hint
   hint="run: mise lock --global (from OUTSIDE the checkout with XDG_CONFIG_HOME pointing at a dir whose mise/ is a symlink to it — see scripts/bump-versions.sh)"
   while IFS= read -r pathref; do
@@ -768,11 +762,9 @@ PY
   fi
 }
 
-# Bootstrap-config invariants over the four [bootstrap.*] TOML files (PR2
-# Task 3): parse, hook shape + task existence + name uniqueness, file source
+# Bootstrap-config invariants over the four [bootstrap.*] TOML files: parse, hook shape + task existence + name uniqueness, file source
 # existence + phase, package key shape + uniqueness + dropped names, the two
-# no-sudo rulings (docs/superpowers/plans/2026-09-17-mise-host.md Rulings
-# 1-2), and shared/Windows safety (config.toml/config.owned.toml never gain a
+# no-sudo rules (no [bootstrap.linux.firewall], no [bootstrap.user]), and shared/Windows safety (config.toml/config.owned.toml never gain a
 # [bootstrap] table). (h) is a live `mise bootstrap plan` — soft-skipped
 # unless both mise and dnf are on PATH (CI has no dnf).
 check_bootstrap_config() {
@@ -800,7 +792,7 @@ for f in files:
 hook_re = re.compile(r"^mise run [a-z-]+$")
 # post-dotfiles (config.linux.toml) is not a "mise run <task>" hook — it's the
 # raw compound chmod restoring ~/.ssh and ~/.claude modes that copy/template
-# mode can't express (PR3 Task 2 carry-forward: the ONLY guarantee of the SSH
+# mode can't express (the ONLY guarantee of the SSH
 # security posture). It must land byte-for-byte, so pin it to the exact
 # verified-safe literal here rather than just exempting the shape check: a
 # bare `chmod ... ; chmod ... ; true` LOOKS unconditional but is not — mise
@@ -876,19 +868,19 @@ if bad_pkg or pkg_dupes:
 else:
     print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) across host+native, unique, no dropped names")
 
-# (f): no [bootstrap.linux.firewall] and no [bootstrap.user] anywhere (rulings 1-2).
+# (f): no [bootstrap.linux.firewall] and no [bootstrap.user] anywhere (plan/status would need sudo; login_shell needs chsh).
 ruling_hits = []
 for f, d in loaded.items():
     bs = d.get("bootstrap", {})
     if "user" in bs:
-        ruling_hits.append(f"{f} has [bootstrap.user] (ruling 2: chsh needs util-linux-user + prompts for a password)")
+        ruling_hits.append(f"{f} has [bootstrap.user] (chsh needs util-linux-user + prompts for a password)")
     linux = bs.get("linux", {})
     if isinstance(linux, dict) and "firewall" in linux:
-        ruling_hits.append(f"{f} has [bootstrap.linux.firewall] (ruling 1: aborts unprivileged mise bootstrap plan/status)")
+        ruling_hits.append(f"{f} has [bootstrap.linux.firewall] (aborts unprivileged mise bootstrap plan/status)")
 if ruling_hits:
     print("FAIL|rulings|" + "; ".join(ruling_hits))
 else:
-    print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (rulings 1-2)")
+    print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (plan/status would need sudo; login_shell needs chsh)")
 
 # (g): config.toml / config.owned.toml carry no [bootstrap] table (shared hosts / Windows never load one).
 prod_hits = []
@@ -944,9 +936,9 @@ import glob, os, tomllib
 # exists precisely to REPEAT a key from one of these five files (the
 # { mode = ..., enabled = false } override pattern — findings.md §9), so a
 # "no entry in two files" check would misfire against its own documented use.
-# config.host.toml joined this list in PR3 Task 3 (gdbinit/gdb/herdr config
-# moved there from config.owned.toml so they stop deploying dead files on a
-# Windows host — see config.host.toml's own [dotfiles] comment).
+# config.host.toml is on this list because its gdbinit/gdb/herdr entries live
+# there so they never deploy dead files on a Windows host (see its own
+# [dotfiles] comment).
 files = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
@@ -991,30 +983,19 @@ if bad_mode:
 else:
     print(f"PASS|mode-valid|every entry's mode is one of {sorted(VALID_MODES)}")
 
-# (c) ruling 7, broadened by the 2026-09-22 copy-migration (user decision:
-# chezmoi's copy semantics survive applications on either OS that don't
-# respect symlinks): no `[dotfiles]` entry, in ANY of the five files, on ANY
-# platform, is `symlink` or `symlink-each` any more — every entry is `copy`
-# or `template`. This used to iterate only the entries that actually LOAD on
-# a Windows host (config.toml + config.owned.toml + config.windows.toml —
-# config.linux.toml and config.host.toml never load there), because before
-# this migration a `symlink`/`symlink-each` entry was fine as long as it was
-# Linux-only; a bare `symlink` on Windows needs Developer Mode and silently
-# falls back to copy (functional but undeclared) and a directory `symlink`
-# becomes a junction instead of a copy. Now the rule is unconditional, so
-# checking "every entry" and "every Windows-loaded entry" catch the same
-# thing — this checks everything directly rather than re-deriving the
-# Windows-load gate. check-invariants I4 (final-fix-brief.md) is the reason
-# this iterates all 5 files rather than just config.windows.toml (a
-# `windows,owned` scratch apply proved config.toml/config.owned.toml entries
-# land on a Windows host too).
+# (c) no `[dotfiles]` entry, in ANY of the five files, on ANY platform, is
+# `symlink` or `symlink-each` — every entry is `copy` or `template`, because
+# some applications on either OS don't respect symlinks (a bare `symlink` on
+# Windows needs Developer Mode and silently falls back to copy; a directory
+# `symlink` becomes a junction). All 5 files are checked because
+# config.toml/config.owned.toml entries land on a Windows host too.
 bad_symlink = []
 n_total = 0
 for f, target, spec in entries:
     n_total += 1
     mode = spec.get("mode", "symlink")
     if mode in ("symlink", "symlink-each"):
-        bad_symlink.append(f"{f}:{target} mode={mode!r} (want copy or template — symlink/symlink-each are retired everywhere, ruling 7)")
+        bad_symlink.append(f"{f}:{target} mode={mode!r} (want copy or template — symlink/symlink-each are retired everywhere)")
 if bad_symlink:
     print("FAIL|no-symlink-anywhere|" + "; ".join(bad_symlink))
 else:
@@ -1097,9 +1078,9 @@ check_lsp_plugin() {
   # Both leading dots are load-bearing: Claude Code's own plugin-manifest
   # convention needs .claude-plugin/plugin.json, and the LSP registry needs
   # .lsp.json. dotfiles/ keeps them literally, matching the real ~/.claude
-  # tree (PR3 Task 2: workstation-lsp/ nests inside the `~/.claude/skills`
-  # [dotfiles] entry in config.owned.toml — copy mode, 2026-09-22 migration —
-  # so nested names deploy exactly as spelled here).
+  # tree (workstation-lsp/ nests inside the `~/.claude/skills`
+  # [dotfiles] entry in config.owned.toml, copy mode, so nested names deploy
+  # exactly as spelled here).
   if [ ! -f "$src/.claude-plugin/plugin.json" ] || [ ! -f "$src/.lsp.json" ]; then
     bad "missing workstation-lsp plugin source ($src/.claude-plugin/plugin.json + .lsp.json)"
     return
@@ -1124,9 +1105,8 @@ check_lsp_plugin() {
 }
 
 # --- flag-parity: repo-script flags == completion-surface flags --------------
-# Spec: docs/superpowers/specs/2026-07-13-script-flag-completions-design.md.
 # Five pairs: the three .sh scripts -> zsh _<name> files + completions.bash;
-# the two .ps1 scripts -> the workstation_*_flags records in config.nu.tmpl.
+# the two .ps1 scripts -> the workstation_*_flags records in config.nu.tera.
 # Long-form flags only. Trailing args to _sh_script_flags are EXCLUSIONS —
 # flags the script accepts but completions deliberately omit
 # (bootstrap.sh: the --checkforupdates compat alias).
@@ -1163,7 +1143,7 @@ _bash_completion_flags() {
     grep -oE -- '--[a-z-]+' | sort -u
 }
 
-# Quoted "-Flag" values from one `let workstation_*_flags` list in config.nu.tmpl.
+# Quoted "-Flag" values from one `let workstation_*_flags` list in config.nu.tera.
 _nu_completion_flags() {
   awk -v v="$1" '$0 ~ "^let "v {f=1} f{print} f&&/^\]/{exit}' \
     dotfiles/windows/AppData/Roaming/nushell/config.nu.tera |
@@ -1194,11 +1174,6 @@ check_completion_parity() {
     "$(_nu_completion_flags workstation_bootstrap_flags)"
 }
 
-# --- python-env lib-list parity ----------------------------------------------
-# The blessed-env library list is defined twice (Make never runs on Windows):
-# PY_LIBS in scripts/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
-# are one-line arrays by contract (comments at each site) so single-line greps
-# can extract them. Order-insensitive compare (sort) — content is the contract.
 check_zjstatus_zellij_coupling() {
   hdr "zjstatus <-> zellij plugin-ABI floor"
   local zj zjs floor
@@ -1264,6 +1239,11 @@ check_bootstrap_mode() {
   fi
 }
 
+# --- python-env lib-list parity ----------------------------------------------
+# The blessed-env library list is defined twice: PY_LIBS in
+# scripts/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
+# are one-line arrays by contract (comments at each site) so single-line greps
+# can extract them. Order-insensitive compare (sort) — content is the contract.
 check_python_env_parity() {
   hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
   local sh_libs ps_libs
@@ -1444,8 +1424,8 @@ check_zellij_config() {
     printf '%s\n' "$hits" | sed 's/^/       /'
   fi
 
-  # 4. Web server pinned off. The installed build is web-CAPABLE: tools.mk
-  #    excludes the no-web asset, so these are not redundant with upstream.
+  # 4. Web server pinned off. The installed build is web-CAPABLE, so these
+  #    pins are not redundant with upstream defaults.
   if grep -qE '^[[:space:]]*web_server[[:space:]]+false' "$cfg" &&
     grep -qE '^[[:space:]]*web_sharing[[:space:]]+"disabled"' "$cfg"; then
     ok "web_server false + web_sharing \"disabled\" pinned"
@@ -1455,10 +1435,9 @@ check_zellij_config() {
 
   # 5. The tab-bar alias must point at the RELATIVE plugin path. zellij resolves
   #    `file:<name>.wasm` against its DATA dir, ~/.local/share/zellij/plugins/
-  #    (after /usr/share/zellij/plugins; NOT ~/.config/zellij/plugins — that
-  #    mistake shipped once, 2026-09-13) — where tools.mk's USER_TOOL zjstatus
-  #    installs it — and keeps that relative string as the
-  #    plugin's identity, including the ~/.cache/zellij/permissions.kdl key.
+  #    (after /usr/share/zellij/plugins; NOT ~/.config/zellij/plugins) — where
+  #    tasks/bootstrap installs zjstatus's wasm — and keeps that relative
+  #    string as the plugin's identity, including the ~/.cache/zellij/permissions.kdl key.
   #    An absolute or ~ path expands per host (verified on 0.45.1: "file:~/x"
   #    dumps as "file:/home/<user>/x"), so the one-time permission grant would
   #    stop matching across the fleet and every host would prompt again.

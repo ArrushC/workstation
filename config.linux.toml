@@ -1,6 +1,6 @@
-# config.linux.toml — the Linux toolbelt, BOTH modes (loads when MISE_ENV has `linux`).
-# User-level under ~/.local/share/mise; interactive shells see the real bin
-# dirs via `mise activate`, everything else via ~/.local/share/mise/shims.
+# config.linux.toml: the Linux toolbelt, both modes (loads when MISE_ENV has `linux`).
+# Installed user-level under ~/.local/share/mise; interactive shells get the real bin
+# dirs via `mise activate`, everything else the shims.
 [tools]
 # --- aqua registry (short names) ---
 fzf = "0.74.4"
@@ -67,19 +67,19 @@ taplo = "0.10.0"
 "github:YS-L/csvlens" = { version = "0.15.1", asset_pattern = "csvlens-x86_64-unknown-linux-musl.tar.xz" }
 "github:fujiapple852/trippy" = { version = "0.13.0", asset_pattern = "trippy-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # binary is `trip`
 "github:tummychow/git-absorb" = { version = "0.9.0", asset_pattern = "git-absorb-{{version}}-x86_64-unknown-linux-musl.tar.gz" }
-"github:ouch-org/ouch" = { version = "0.8.3", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }   # 0.8.3+ signs releases with cosign bundles, not GitHub attestations; mise reads that as a provenance downgrade and refuses the bump. Verified by hand 2026-09-23 (cosign verify-blob: signed by ouch-org's own release workflow)
+"github:ouch-org/ouch" = { version = "0.8.3", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }   # 0.8.3+ signs with cosign, not GitHub attestations, so mise reads bumps as a provenance downgrade; verified by hand with cosign verify-blob
 "github:boyter/scc" = { version = "4.1.0", asset_pattern = "scc_Linux_x86_64.tar.gz" }
 "github:multiprocessio/dsq" = { version = "0.23.0" }
 "github:unhappychoice/gitlogue" = { version = "0.11.0" }
 "github:PaulJuliusMartinez/jless" = { version = "0.9.0", asset_pattern = "jless-v{{version}}-x86_64-unknown-linux-gnu.zip" }
 "github:Canop/broot" = { version = "1.60.2", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
 "github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd" }
-"github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); FAIL in the verify-binary gate
-"github:sxyazi/yazi" = { version = "26.9.1", asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); the missing symbol only surfaces at exec time (`ldd`/actually running the binary), not from a static ELF/arch check alone — pin the musl asset; ships both yazi + ya
-"github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.39 > EL9's 2.34); pin the musl asset; binary is `tv`
-"github:atuinsh/atuin" = { version = "18.23.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua registry defaults to the gnu build (GLIBC_2.38 > EL9's 2.34); pin the musl asset
-"github:Wilfred/difftastic" = { version = "0.71.0" }   # aqua registry can't resolve 0.71.0+ (assets gained a version prefix: difft-<ver>-<triple>); github: autodetects both namings
-"github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua registry defaults to the gnu build (GLIBCXX_3.4.30 > EL9's floor); pin the musl asset; archive ships 6 binaries, bin= picks the full-feature one
+"github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl
+"github:sxyazi/yazi" = { version = "26.9.1", asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; ships yazi + ya
+"github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; binary is `tv`
+"github:atuinsh/atuin" = { version = "18.23.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.38 > EL9's 2.34); pin musl
+"github:Wilfred/difftastic" = { version = "0.71.0" }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); github: autodetects both
+"github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # copied into zellij's data dir by scripts/lib/zellij-plugin.sh (tasks/bootstrap)
 # --- http: (no GitHub release, bare assets, or scripts) ---
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
@@ -87,55 +87,26 @@ taplo = "0.10.0"
 "http:pueued" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueued-x86_64-unknown-linux-musl", bin = "pueued" }
 "http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }
 "http:sysz" = { version = "1.4.3", url = "https://raw.githubusercontent.com/joehillen/sysz/{{version}}/sysz", bin = "sysz" }
-# The OpenSSH tag (V_10_5_P1) is hard-coded in the URL below — it does not
-# derive from `version`, so bump it by hand together with `version` (e.g.
-# "10.6p1" -> V_10_6_P1) or the download stays pinned to the old script.
+# The OpenSSH tag in the URL is hard-coded: bump it with `version` (10.6p1 -> V_10_6_P1).
 "http:ssh-copy-id" = { version = "10.5p1", url = "https://raw.githubusercontent.com/openssh/openssh-portable/V_10_5_P1/contrib/ssh-copy-id", bin = "ssh-copy-id" }
-# cht.sh — client for the cheat.sh online service; a rolling raw script (no
-# release, no version in the URL), so "latest" is a bookkeeping label only.
-# version = "0": the http: backend rejects "latest" outright, and this URL
-# has no {{version}} template to substitute a real one into anyway — any
-# placeholder pin works, since the script itself is what's rolling.
+# Rolling raw script with no release or {{version}} in the URL; the http: backend
+# rejects "latest", so version = "0" is a placeholder.
 "http:cht.sh" = { version = "0", url = "https://cht.sh/:cht.sh", bin = "cht.sh" }
-# --- pypi: (latest at install time, pinned by mise.lock; was pip --user) ---
+# --- pypi: (latest at install time, pinned by mise.lock) ---
 "pypi:glances" = "latest"
 "pypi:asciinema" = "latest"
 "pypi:harlequin" = "latest"
 
 # ---------------------------------------------------------------------------
-# Dotfiles: everything Linux-only, not owned-gated (owned-only targets — the
-# ~/.claude tree, ccstatusline — live in config.owned.toml; Linux-owned-only
-# targets — gdbinit/gdb, herdr's config — in config.host.toml; Windows
-# targets in config.windows.toml; cross-platform targets in config.toml.
-# zed's settings.json is NOT here — I7 (2026-09-22 copy-migration review): it
-# was moved to config.host.toml, the Linux-owned-only `host` token, matching
-# the gdb/herdr precedent (config.linux.toml has no owned gate at all, so an
-# entry here deploys on Linux shared hosts too — neither mise nor chezmoi ever
-# did that for zed; chezmoi's own gate excluded ~/.config/zed there).
-#
-# Every entry below is `copy` (or `template`) — no `symlink`/`symlink-each`
-# anywhere any more (2026-09-22 copy-migration, user decision: chezmoi's copy
-# semantics survive applications on either OS that don't respect symlinks,
-# which a plain file `symlink` and a whole-directory `symlink` both fail at
-# in different ways). Directories that chezmoi managed as directories
-# (zellij, zsh/completions, the claude hooks/agents/commands/skills trees in
-# config.owned.toml) keep exclude = [".vendor", ".gitkeep"] on a directory
-# `copy` entry rather than a whole-directory symlink: mise's `symlink` on a
-# directory REPLACES it wholesale on apply, silently deleting any unmanaged
-# sibling file a user or another tool drops in there (reproduced against
-# this host's own ~/.claude/hooks, ~/.claude/skills and
-# ~/.config/zsh/completions — see final-fix-brief.md C2). `copy` on a
-# directory does NOT share that failure mode — re-verified against the real
-# entries for the copy migration: it copies in only the tracked files and
-# leaves every unmanaged sibling alone, including nested subdirectories
-# (zellij/{layouts,themes}/*, claude/skills/workstation-lsp/*) — but still
-# needs `exclude` so the `.vendor` provenance sidecar and `.gitkeep`
-# placeholders don't themselves land in $HOME.
+# Dotfiles for Linux, both modes (no owned gate: owned-only targets are in
+# config.owned.toml, Linux-owned-only in config.host.toml, Windows in
+# config.windows.toml, cross-platform in config.toml). Directory entries keep
+# exclude = [".vendor", ".gitkeep"] so provenance sidecars and placeholders never
+# land in $HOME; copy on a directory leaves unmanaged siblings alone.
 # ---------------------------------------------------------------------------
 [dotfiles]
-# Shell rc files. ~/.zshenv is sourced by every zsh invocation (including
-# before ~/.zshrc) and, like ~/.bashrc and 10-mise.conf below, must keep its
-# MISE_ENV expression in sync (dual/triple-edit, checked by check-invariants.sh).
+# Shell rc files. ~/.zshenv, ~/.bashrc and 10-mise.conf must render the same MISE_ENV
+# expression (three-way, checked by check-invariants.sh).
 "~/.bashrc" = { source = "dotfiles/bashrc.tera", mode = "template" }
 "~/.zshrc" = { source = "dotfiles/zshrc.tera", mode = "template" }
 "~/.zshenv" = { source = "dotfiles/zshenv.tera", mode = "template" }
@@ -145,20 +116,16 @@ taplo = "0.10.0"
 "~/.config/bash/completions.bash" = { source = "dotfiles/config/bash/completions.bash", mode = "copy" }
 "~/.config/cheat/conf.yml" = { source = "dotfiles/config/cheat/conf.yml.tera", mode = "template" }
 "~/.config/cheat/cheatsheets/personal/workstation" = { source = "dotfiles/config/cheat/cheatsheets/personal/workstation", mode = "copy" }
-# Read by systemd's user-manager before any login shell starts (environment.d
-# is evaluated at user-session start) — cannot depend on anything the shell rc
-# files set up; must independently render the same MISE_ENV value as them.
+# environment.d is read by systemd's user manager before any login shell, so it
+# renders MISE_ENV independently of the rc files.
 "~/.config/environment.d/10-mise.conf" = { source = "dotfiles/config/environment.d/10-mise.conf.tera", mode = "template" }
 "~/.config/tealdeer/config.toml" = { source = "dotfiles/config/tealdeer/config.toml", mode = "copy" }
-# Single source of truth for Helix config on both OSes: this entry, and
-# dotfiles/windows/AppData/Roaming/helix/config.toml.tera (config.windows.toml)
-# read_file()-inlines the same source on Windows. Moved here from config.toml
-# (PR3 Task 3 controller review): Windows reads %APPDATA%\helix\config.toml,
-# not ~/.config/helix/config.toml, so config.toml's cross-platform load
-# deployed a dead file there — `linux` scopes it to Linux (both modes).
+# Single Helix source for both OSes: the Windows template
+# (dotfiles/windows/AppData/Roaming/helix/config.toml.tera) read_file()-inlines it.
+# Linux-only here because Windows reads %APPDATA%\helix, not ~/.config/helix.
 "~/.config/helix/config.toml" = { source = "dotfiles/config/helix/config.toml", mode = "copy" }
-"~/.config/zellij" = { source = "dotfiles/config/zellij", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # layouts/, themes/ nested; copy on a directory leaves unmanaged files alone, same guarantee symlink-each used to give
-"~/.config/zsh/completions" = { source = "dotfiles/config/zsh/completions", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # copy so unmanaged completions (e.g. _workstation) survive
+"~/.config/zellij" = { source = "dotfiles/config/zellij", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # layouts/, themes/ nested
+"~/.config/zsh/completions" = { source = "dotfiles/config/zsh/completions", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # unmanaged completions (e.g. _workstation) survive
 
 # zsh plugin dirs — all vendored, all carry a .vendor provenance sidecar that
 # must never itself land under ~/.config/zsh/plugins/*.
@@ -180,28 +147,15 @@ taplo = "0.10.0"
 [bootstrap.hooks]
 # Capability gate over every mise-installed Linux binary (scripts/lib/verify-binary.sh).
 "post-tools" = "mise run verify-tools"
-# Restores the ~/.ssh and ~/.claude directory modes that copy/template mode
-# can't express (they propagate the SOURCE file's own on-disk bits, and git
-# tracks only the executable bit — a fresh clone yields a 0644
-# dotfiles/ssh/config.tera and default-mode dirs). This is the ONLY guarantee
-# of the SSH security posture: it must run unconditionally and must never be
-# able to fail the bootstrap. mise runs bootstrap hooks as `sh -o errexit -c
-# '<this>'` (confirmed against a real --dry-run render): a bare `; true` tail
-# is NOT enough on its own, because errexit aborts at the FIRST failing
-# command in a `;`-chain — on a shared host (MISE_ENV=linux, no config.owned.toml,
-# so ~/.claude never exists) the first chmod's failure on the missing
-# ~/.claude operand would abort before the second chmod ever runs. Each
-# command therefore gets its own `|| true` so no single command's failure is
-# ever "seen" by errexit (verified: `sh -o errexit -c` with a missing
-# ~/.claude exits 1 with a bare trailing `; true`, exits 0 with `|| true` on
-# each command, in both cases still landing ~/.ssh 700 / ~/.ssh/config 600).
-# The third chmod sets the SOURCE to 0600 as well. mise compares the target's
-# mode against the source's, so with a 0644 source every later status reported
-# ~/.ssh/config "differs (permissions differ)". Each wsu then rewrote it, each
-# wsa asked about it, and health warned permanently. git tracks only the exec
-# bit, so this doesn't dirty the checkout; the first run after a fresh clone
-# converges and later runs match. (mise 2026.9.9 has no per-entry mode key,
-# and `private = true` is silently ignored; both were tested.)
+# Restores the ~/.ssh and ~/.claude directory modes that copy/template can't express
+# (they propagate the source file's own bits, and git tracks only the executable
+# bit). This is the only guarantee of the SSH security posture, so it must never fail
+# the bootstrap. mise runs hooks under `sh -o errexit`, which aborts at the first
+# failing command in a `;` chain (e.g. ~/.claude missing on a shared host), so each
+# command carries its own `|| true`. The third chmod sets the SOURCE to 0600 too:
+# mise compares target mode to source mode, so a 0644 source leaves ~/.ssh/config
+# permanently "differs (permissions differ)". mise has no per-entry mode key, and
+# `private = true` is ignored.
 "post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true; chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables

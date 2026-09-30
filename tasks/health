@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Read-only health report: saved mode, bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, owned extras, leftovers"
 #MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
-# Replaces makefile/lib/doctor.sh + the Make `doctor` target. Ports its
-# hdr/row_ok/row_warn/row_bad/row_skip report shape. READ-ONLY: no installs,
-# no sudo, but (unlike doctor.sh) exits 1 if any row_bad fired — this is the
+# Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
+# no sudo, but exits 1 if any row_bad fired — this is the
 # gate CI / a human runs post-bootstrap, not just a report.
 # Deliberately no `-e`: one failing row (row_bad) must not abort the report —
 # every remaining check still has to run so the summary counts are complete.
@@ -183,7 +182,7 @@ echo ""
 # 3. MISE_ENV persisted — rc files for future logins/non-interactive shells,
 # plus the LIVE systemd user manager env (only a re-login or a manual
 # set-environment fixes that one, so it's a warn rather than a hard failure).
-# I1 (final-fix-brief.md): a bare presence grep for `export MISE_ENV=` passes
+# A bare presence grep for `export MISE_ENV=` passes
 # on ANY value, so a host that baked the wrong token set (e.g. plain "linux"
 # on an owned host) reported a false green. Compare the actual BAKED value in
 # each file against scripts/lib/mise-env.sh "$mode" — the canonical token
@@ -218,7 +217,7 @@ else
 fi
 echo ""
 
-# 4. pueued — the mise-managed user unit (Task 1), plus a warn for the
+# 4. pueued — the mise-managed user unit plus a warn for the
 # legacy (pre-mise) unit name if it's still lying around.
 hdr "pueued"
 if systemctl --user is-active --quiet dev.mise.pueued.service 2>/dev/null; then

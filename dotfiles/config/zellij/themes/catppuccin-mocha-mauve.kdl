@@ -3,7 +3,7 @@
 // Catppuccin Mocha, re-accented from GREEN to MAUVE (#cba6f7) so zellij's chrome
 // matches the mauve accent Warp and fzf already use: Warp's tracked
 // catppuccin-mocha.yaml (accent + cursor) and the FZF_DEFAULT_OPTS block in
-// dot_zshrc.tmpl (info + prompt).
+// zshrc.tera (info + prompt).
 //
 // NOT Windows Terminal — it has no mauve anywhere (`grep -c cba6f7` over its
 // settings.json returns 0). WT's scheme format carries only the 16 ANSI colours

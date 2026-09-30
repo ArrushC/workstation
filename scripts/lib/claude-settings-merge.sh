@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# claude-settings-merge.sh — the three-layer ~/.claude/settings.json merge
-# `modify_private_settings.json` (chezmoi) used to do, now in jq (ruling 5,
-# docs/superpowers/plans/2026-09-19-mise-dotfiles.md: mise has no
-# modify_-template equivalent, so ~/.claude/settings.json is not a
-# [dotfiles] entry at all).
+# claude-settings-merge.sh — the three-layer ~/.claude/settings.json merge,
+# in jq. mise has no modify_-template equivalent, so ~/.claude/settings.json
+# is not a [dotfiles] entry at all.
 #
 # Layers, lowest to highest precedence:
 #   1. dotfiles/claude/settings.seed.json — personal defaults, set only when
@@ -18,10 +16,10 @@
 #      agentPushNotifEnabled, inputNeededNotifEnabled).
 #
 # The merge is a recursive object merge (jq `.[0] * .[1] * .[2]`), matching
-# chezmoi's mergeOverwrite (Sprig -> mergo's recursive merge): a later
-# operand overwrites a matching LEAF, but siblings the later operand doesn't
-# mention survive untouched. Fix round 1: `+` (plain top-level union) was
-# wrong here — it replaces a whole key's value wholesale, so a live
+# a recursive overwrite: a later operand overwrites a matching LEAF, but
+# siblings the later operand doesn't mention survive untouched. A plain
+# top-level union (`+`) would be wrong here — it replaces a whole key's value
+# wholesale, so a live
 # `hooks.Stop` (a real Claude Code hook type the user added by hand, not one
 # of the enforced sub-keys) was silently wiped every run because
 # `enforced.hooks` replaced `live.hooks` in full. `*` merges objects

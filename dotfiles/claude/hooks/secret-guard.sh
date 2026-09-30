@@ -6,8 +6,7 @@
 #   - DENY editing OR reading the age identity, SSH private keys, and certs
 #   - ASK before any Bash command that names one of those secrets
 # The age identity path (~/.config/chezmoi/key.txt) is a leftover from this
-# repo's pre-mise chezmoi era — age/encryption was dropped, not ported (see
-# docs/superpowers/plans/2026-09-19-mise-dotfiles.md ruling 9) — so this guard
+# repo's pre-mise chezmoi era — age/encryption was dropped, not ported — so this guard
 # is now a defensive no-op kept in case a host still has one lying around.
 #
 # Contract: hook JSON on stdin -> PreToolUse JSON on stdout. Fails OPEN if it

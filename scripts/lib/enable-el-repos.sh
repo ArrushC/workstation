@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # enable-el-repos.sh — EPEL + CRB on RHEL-family owned hosts. Invoked by
 # tasks/enable-el-repos (config.host.toml's pre-packages hook), NOT directly.
-# Replaced the Make-era packages-epel target (was makefile/packages.mk).
 #
 # Detection sources /etc/os-release and matches on $ID / $ID_LIKE. Do NOT use a
 # loose `grep -i fedora /etc/os-release`: AlmaLinux's os-release carries
