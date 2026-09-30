@@ -1,11 +1,5 @@
-# ~/.config/mise/config.native.toml — non-WSL Linux OWNED extras (MISE_ENV token
-# `native`): the NFS client package group only (nfs-utils, nfs4-acl-tools,
-# autofs). WSL hosts skip all of it (Windows owns the NFS/SMB client role
-# there). Docker/Cockpit/rsyslog/Dozzle provisioning was removed from this
-# repo (user decision, 2026-09-22) — mise no longer installs or configures
-# them; hosts that already have them from an earlier `mise bootstrap` (or the
-# Make era) keep whatever is installed and running, unmanaged, and nothing
-# here updates it any more.
+# config.native.toml: non-WSL Linux owned extras (MISE_ENV token `native`): the NFS
+# client package group. WSL hosts skip it because Windows owns the NFS/SMB client role.
 
 [bootstrap.packages]
 "dnf:autofs" = "latest"                  # installed, NOT enabled — maps are per-host /etc config

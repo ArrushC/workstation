@@ -1,6 +1,6 @@
-# ~/.config/mise/config.wsl.toml — WSL owned host state (MISE_ENV token `wsl`).
-# /etc/wsl.conf is read by the Windows side on distro start: after a change run
-# `wsl --shutdown` from a Windows terminal (restarts every distro).
+# config.wsl.toml: WSL owned host state (MISE_ENV token `wsl`).
+# Windows reads /etc/wsl.conf on distro start; after a change run `wsl --shutdown`
+# from a Windows terminal (restarts every distro).
 [bootstrap.files."/etc/wsl.conf"]
 source = "configs/wsl/wsl.conf"
 owner = "root"
