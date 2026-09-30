@@ -308,7 +308,7 @@ mise bootstrap --only packages --yes   # narrow to one phase
 **Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built environment with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries track latest at build time; only the interpreter is pinned (`python_version` in `config.toml`). Rebuild to upgrade:
 
 ```bash
-REBUILD=1 mise run python-env   # runs on both modes; upgrades to latest libs
+mise run python-env --rebuild   # runs on both modes; upgrades to latest libs
 ```
 
 **Zellij.** Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
@@ -573,7 +573,7 @@ mise bootstrap --only packages --yes
 
 ### wpy not found, or import textual fails in it
 
-Provisioning builds the env in both modes. Rebuild it from scratch with `REBUILD=1 mise run python-env` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows delete `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-run `.\bootstrap.ps1`.
+Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows delete `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-run `.\bootstrap.ps1`.
 
 ### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
 

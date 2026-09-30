@@ -15,7 +15,7 @@
 # never run under sudo. The env is recreated from scratch every run
 # (deterministic; ad-hoc `uv pip install -p <env> <pkg>` additions are
 # deliberately disposable). Libs track LATEST at install time (glances
-# precedent) — upgrading is `REBUILD=1 mise run python-env`.
+# precedent) — upgrading is `mise run python-env --rebuild`.
 
 set -euo pipefail
 

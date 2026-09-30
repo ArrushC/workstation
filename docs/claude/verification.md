@@ -34,7 +34,7 @@
   `systemctl --user show-environment | grep MISE_ENV` and `~/.config/environment.d/10-mise.conf`
   carry it; the service is `active (running)`.
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
-  A second run prints "already up to date"; `REBUILD=1` forces an upgrade. Library-list parity with
+  A second run prints "already up to date"; `mise run python-env --rebuild` forces an upgrade. Library-list parity with
   `bootstrap.ps1` is checked by `check-invariants.sh`.
 - Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
   WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under

@@ -44,7 +44,7 @@ if [ ! -f "$claude_plugins_marker" ]; then
     echo "  claude not found on PATH — skipping plugin install (retries next run)" >&2
   fi
 fi
-# 3. ~/.claude/settings.json three-layer merge (
+# 3. ~/.claude/settings.json three-layer merge via
 # scripts/lib/claude-settings-merge.sh — mise has no
 # modify_-template equivalent). Runs every bootstrap, not marker-guarded:
 # ongoing enforcement, not a one-time script. The script itself is
