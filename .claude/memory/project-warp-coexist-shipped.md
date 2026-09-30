@@ -8,14 +8,13 @@ metadata:
 Warp returned as the **primary** Windows terminal on 2026-08-31 (PR #128, squash `23f6adc`),
 with Windows Terminal retained in full — WT keeps every capability, Nushell's `defaultProfile`,
 and Windows' default-terminal-application role (Warp cannot register for it). This reverses only
-the *primacy* decision of the 2026-07-26 WT migration, not its work. Design + open risks:
-`docs/superpowers/specs/2026-08-31-warp-coexist-design.md`.
+the *primacy* decision of the 2026-07-26 WT migration, not its work.
 
 **Still unrun — R1, the only thing gating whether a shipped feature actually works:** in a Warp
 WSL tab, `echo $TERM_PROGRAM`. If it prints `WarpTerminal` the restored rc guards are live; if
 it is EMPTY they are dead code in the primary session and need the fallback ladder in
 `docs/claude/verification.md` §Warp. Setting a user-scope `WSLENV` is explicitly NOT a valid
-fix (Warp overwrites `WSLENV`, warpdotdev/Warp#6241). Record the answer in the spec's R1 when run.
+fix (Warp overwrites `WSLENV`, warpdotdev/Warp#6241). Record the answer here when run.
 The paired regression check: in a *Windows Terminal* WSL tab, starship + atuin Ctrl-R + fzf-tab
 must all still work — the guards are `TERM_PROGRAM`-conditional, so WT must be untouched.
 
