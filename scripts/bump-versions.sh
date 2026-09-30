@@ -113,7 +113,7 @@ declare -A PS1_NAME=(
 
 # Run a mise subcommand against this checkout as mise's GLOBAL config dir,
 # from OUTSIDE the checkout, via a throwaway XDG_CONFIG_HOME symlink dir.
-# Verified on-host (Task 10 fix wave): this is the only invocation form that
+# Verified on-host: this is the only invocation form that
 # reliably merges all three MISE_ENV-suffixed config files under `--global`
 # — running with MISE_CONFIG_DIR pointing straight at the checkout (the old
 # form here), or from inside the checkout with neither override set, both
@@ -129,8 +129,7 @@ mise_global() {
   (cd /tmp && env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$MISE_GLOBAL_LINKDIR" MISE_ENV="$mise_env" "$@")
 }
 
-# mise 2026.9.9 quirk, verified on-host (Task 10 fix wave — repro + every
-# form tried is recorded in the fix report): `mise lock`, including via
+# mise 2026.9.9 quirk, verified on-host: `mise lock`, including via
 # --global in every invocation form tried (MISE_CONFIG_DIR, an
 # XDG_CONFIG_HOME symlink, or no override at all), always (re)serializes the
 # pypi:/npm: dependency-locked sidecar refs under the stale `.mise/locks/**`

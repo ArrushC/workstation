@@ -188,8 +188,8 @@ option_this_machine() {
     ;;
   *)
     # Reclaim it NOW, not "on the next apply": the TUI just materialized the
-    # symlink into a real file, and a later plain `mise dot apply` (or a
-    # bulk one, once Task 4 wires `mise bootstrap` into bootstrap.sh) refuses
+    # symlink into a real file, and a later `mise dot apply` (plain, or the
+    # bulk one `mise bootstrap` runs) refuses
     # to overwrite a pre-existing real file — a bulk apply would
     # abort every OTHER dotfile along with it. --force is safe here: a
     # single target the person running this menu just explicitly chose to

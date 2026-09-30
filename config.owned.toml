@@ -26,7 +26,7 @@ opencode = { version = "1.18.32", os = ["linux"] }              # Windows half s
 # Per-host opt-out: scripts/setup-ccstatusline.sh writes a CCSTATUSLINE-OPTOUT block
 # into config.local.toml's own [dotfiles] table. `enabled = false` alone is silently
 # ignored, so the written entry repeats `mode`. A live edit through ccstatusline's
-# setup menu is record-back with `wsr` (`mise dot add --changed`).
+# setup menu is recorded back with `wsr` (`mise dot add --changed`).
 "~/.config/ccstatusline/settings.json" = { source = "dotfiles/config/ccstatusline/settings.json", mode = "copy" }
 
 # ~/.claude tree. Directory mode 700 is restored by the post-dotfiles hook

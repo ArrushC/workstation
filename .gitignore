@@ -19,6 +19,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-
 # Per-host mise overrides (name/email vars from PR3 onward) — never committed
 config.local.toml

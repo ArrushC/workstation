@@ -217,7 +217,7 @@ else
 fi
 echo ""
 
-# 4. pueued — the mise-managed user unit (Task 1), plus a warn for the
+# 4. pueued — the mise-managed user unit plus a warn for the
 # legacy (pre-mise) unit name if it's still lying around.
 hdr "pueued"
 if systemctl --user is-active --quiet dev.mise.pueued.service 2>/dev/null; then

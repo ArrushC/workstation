@@ -792,7 +792,7 @@ for f in files:
 hook_re = re.compile(r"^mise run [a-z-]+$")
 # post-dotfiles (config.linux.toml) is not a "mise run <task>" hook — it's the
 # raw compound chmod restoring ~/.ssh and ~/.claude modes that copy/template
-# mode can't express (PR3 Task 2 carry-forward: the ONLY guarantee of the SSH
+# mode can't express (the ONLY guarantee of the SSH
 # security posture). It must land byte-for-byte, so pin it to the exact
 # verified-safe literal here rather than just exempting the shape check: a
 # bare `chmod ... ; chmod ... ; true` LOOKS unconditional but is not — mise
@@ -868,7 +868,7 @@ if bad_pkg or pkg_dupes:
 else:
     print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) across host+native, unique, no dropped names")
 
-# (f): no [bootstrap.linux.firewall] and no [bootstrap.user] anywhere (rulings 1-2).
+# (f): no [bootstrap.linux.firewall] and no [bootstrap.user] anywhere (plan/status would need sudo; login_shell needs chsh).
 ruling_hits = []
 for f, d in loaded.items():
     bs = d.get("bootstrap", {})
@@ -880,7 +880,7 @@ for f, d in loaded.items():
 if ruling_hits:
     print("FAIL|rulings|" + "; ".join(ruling_hits))
 else:
-    print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (rulings 1-2)")
+    print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (plan/status would need sudo; login_shell needs chsh)")
 
 # (g): config.toml / config.owned.toml carry no [bootstrap] table (shared hosts / Windows never load one).
 prod_hits = []
@@ -936,9 +936,9 @@ import glob, os, tomllib
 # exists precisely to REPEAT a key from one of these five files (the
 # { mode = ..., enabled = false } override pattern — findings.md §9), so a
 # "no entry in two files" check would misfire against its own documented use.
-# config.host.toml joined this list in PR3 Task 3 (gdbinit/gdb/herdr config
-# moved there from config.owned.toml so they stop deploying dead files on a
-# Windows host — see config.host.toml's own [dotfiles] comment).
+# config.host.toml is on this list because its gdbinit/gdb/herdr entries live
+# there so they never deploy dead files on a Windows host (see its own
+# [dotfiles] comment).
 files = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
@@ -1078,9 +1078,9 @@ check_lsp_plugin() {
   # Both leading dots are load-bearing: Claude Code's own plugin-manifest
   # convention needs .claude-plugin/plugin.json, and the LSP registry needs
   # .lsp.json. dotfiles/ keeps them literally, matching the real ~/.claude
-  # tree (PR3 Task 2: workstation-lsp/ nests inside the `~/.claude/skills`
-  # [dotfiles] entry in config.owned.toml — copy mode, 2026-09-22 migration —
-  # so nested names deploy exactly as spelled here).
+  # tree (workstation-lsp/ nests inside the `~/.claude/skills`
+  # [dotfiles] entry in config.owned.toml, copy mode, so nested names deploy
+  # exactly as spelled here).
   if [ ! -f "$src/.claude-plugin/plugin.json" ] || [ ! -f "$src/.lsp.json" ]; then
     bad "missing workstation-lsp plugin source ($src/.claude-plugin/plugin.json + .lsp.json)"
     return

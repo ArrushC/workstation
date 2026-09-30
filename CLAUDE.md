@@ -13,17 +13,19 @@
   (`memory-routing-guard.sh` denies it). Use a host-global location only when the user asks for
   cross-project scope, and say so in the reply.
 - **History first:** before changing a tricky area, run `git log --oneline -- <path>` and
-  `git log -p -S '<symbol>' -- <path>`. Most rules below exist because the opposite broke.
+  `git log -p -S '<symbol>' -- <path>`. Most rules here exist because the opposite broke.
 - **Docs travel with behaviour:** a user-facing change updates `README.md` in the same commit.
-  Claude-internal files (`CLAUDE.md`, `docs/claude/`, `.claude/`) and version bumps don't need
-  README changes.
+  Claude-internal files (`CLAUDE.md`, `docs/claude/`, `.claude/`) and version bumps don't.
 - **The checkout is live config:** `mise use -g`, `mise settings set`, `mise dot add`/`wsr`, `wse` and
-  `mise bootstrap` write tracked files here. Commit or revert before moving on, because `wsu`'s
-  `git pull --ff-only` fails on a dirty tree.
-- **Checks:** `mise run lint` (`scripts/check-invariants.sh`, also the pre-commit hook and CI) and
-  `bash scripts/check-templates.sh`. When a new rule can be checked mechanically, add a check.
+  `mise bootstrap` write tracked files here. Commit or revert first; `wsu`'s `git pull --ff-only`
+  fails on a dirty tree.
+- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; also pre-commit and CI) and
+  `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
 - **Task names** must not collide with mise built-ins (`mise fmt` is built in, so ours is
   `mise run fmt`).
+- **Real `$HOME`:** agents never run `mise dot apply`, `wsa` or a bulk `mise bootstrap` against the
+  real `$HOME` or host. Render into a scratch `$HOME` (`docs/claude/verification.md`) and hand real
+  applies and sudo steps to the user.
 
 ## Layout
 
@@ -50,8 +52,8 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
 ## Invariants
 
 **Provisioning**
-- `bootstrap.sh` is a thin seed. Its only pin is `MISE_VERSION`/`MISE_SHA256`. Tools are mise pins,
-  host state is `[bootstrap.*]` tables, and procedural steps are tasks in `tasks/`. Don't add install
+- `bootstrap.sh` is a thin seed; its only pin is `MISE_VERSION`/`MISE_SHA256`. Tools are mise pins,
+  host state is `[bootstrap.*]` tables, procedural steps are tasks in `tasks/`. Don't add install
   logic to `bootstrap.sh` or new provisioning scripts.
 - Shared hosts load no host state. Every sudo-needing table lives in `config.host.toml`,
   `config.native.toml` or `config.wsl.toml`, and those files declare no `[tools]`.
@@ -73,8 +75,8 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
 - `tasks/verify-tools` (the `post-tools` hook) checks that every mise-installed ELF can run on this
   host. Static binaries must pass. A failure means pinning an explicit `github:` `asset_pattern`.
 - vcpkg stays a task: `[bootstrap.repos]` can't shallow-clone or update. The C/C++ toolbelt
-  deliberately spans dnf, mise and vcpkg; don't unify it.
-- Reads from `/dev/tty` in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
+  spans dnf, mise and vcpkg on purpose; don't unify it.
+- `/dev/tty` reads in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
 - WSL detection is `is_wsl()` (in `bootstrap.sh` and `scripts/lib/mise-env.sh`, which must agree).
 
 **Mode and `MISE_ENV`**
@@ -84,14 +86,14 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
   shell: a stale value makes `mise prune` remove tools.
 - The `MISE_ENV` Tera conditional is byte-identical in `dotfiles/zshenv.tera`, `dotfiles/bashrc.tera`
   and `dotfiles/config/environment.d/10-mise.conf.tera` (checked).
-- The pueued unit gets `MISE_ENV` from the systemd user manager, not from the unit itself.
+- The pueued unit gets `MISE_ENV` from the systemd user manager, not itself.
 - Every `ws*` command pins `mise -C` to the home directory. mise finds its config by walking up from
   the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
-  `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (proceeds if unknown).
+  `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).
 
 **Dotfiles**
 - `template` for the `.tera` sources, `copy` for everything else, never `symlink`/`symlink-each`
-  (a directory symlink replaces the whole directory, deleting unmanaged files in it).
+  (a directory symlink replaces the whole directory, deleting unmanaged files).
 - One undefined variable or failing `exec()` in any template aborts the whole apply, so guard every
   `vars.*` with `is defined` or `default()`.
 - Directory `copy` entries keep `exclude = [".vendor", ".gitkeep"]`. `copy` on a directory leaves
@@ -107,17 +109,16 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
 - A host's first apply needs `--force-dotfiles`. `bootstrap.sh` and `bootstrap.ps1` pass it only while
   `~/.local/state/workstation/dotfiles-migrated` is absent.
 - The `post-dotfiles` hook is the only thing that sets these modes:
-  - `~/.ssh` and `~/.claude`: 700
+  - `~/.ssh`, `~/.claude`: 700
   - `~/.ssh/config`: 600
-  - the source `dotfiles/ssh/config.tera`: 600, so mise stops reporting a mode diff
+  - source `dotfiles/ssh/config.tera`: 600, so mise stops reporting a mode diff
 - `~/.claude/settings.json` isn't a dotfile. `scripts/lib/claude-settings-merge.sh` (on Windows,
   `Invoke-ClaudeSettingsMerge` with the same jq filter) merges three layers:
   `settings.seed.json` (only where a key is absent) → the live file → `settings.enforced.json`
   (always wins). Change cross-host keys in the enforced file.
 - `/etc` files come from `configs/` via `[bootstrap.files]`. Today that is only `/etc/wsl.conf`, which
   keeps `appendWindowsPath=false` and stays LF-only (CRLF corrupts it). `[dotfiles]` owns `$HOME` only.
-- `dotfiles/ssh/config.tera` gates SSH multiplexing (`ControlMaster`…) out on Windows, whose OpenSSH
-  can't multiplex.
+- `dotfiles/ssh/config.tera` gates SSH multiplexing out on Windows (its OpenSSH can't multiplex).
 - zsh plugin order in `dotfiles/zshrc.tera`: fzf-tab after `compinit` → autosuggestions →
   syntax-highlighting → history-substring-search last. `bashrc.tera` carries PARITY NOTEs for what
   bash can't do.
@@ -130,41 +131,40 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
 - `bootstrap.ps1` applies dotfiles with `mise bootstrap --only dotfiles,tools`.
 - Scripts never write Windows Terminal's tracked `settings.json`. SSH launchers go to a WT fragment,
   and Warp's `workstation-*.toml` tab configs are runtime artifacts.
-- Warp is the primary terminal. Windows Terminal is the compatibility one: it keeps the
-  default-terminal role and Nushell.
+- Warp is the primary terminal; Windows Terminal is the compatibility one (default-terminal role,
+  Nushell).
 - The rc files' `TERM_PROGRAM != WarpTerminal` guards must never wrap a plugin `source`
   (`check_warp_guards`).
 
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays
   off.
-- Don't add `zellij-autolock` or any unmaintained plugin without testing it against the pinned
-  zellij. Judge whether a plugin loaded from zellij's log, not `dump-layout`.
+- Test any new zellij plugin (never `zellij-autolock` or unmaintained ones) against the pinned
+  zellij; judge whether it loaded from zellij's log, not `dump-layout`.
 
 ## File care
 
 - **LF + git mode 100755:**
   - `scripts/*.sh`, `scripts/lib/*.sh`, every `tasks/*` file (mise silently skips a non-executable
     task), `.claude/hooks/*.sh`, `.githooks/pre-commit`
-  - the executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
+  - executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
     `dotfiles/local/bin/{batpipe,winterop}`
-  - Repair with `sed -i 's/\r$//' <f>` and `git update-index --chmod=+x <f>`.
+  - Repair: `sed -i 's/\r$//' <f>`; `git update-index --chmod=+x <f>`.
   - First-party shell must be `shfmt -i 2`-clean (`mise run fmt`) and gitleaks-clean.
   - Quote bash associative-array keys: shfmt rewrites an unquoted `[a-b]` as arithmetic.
 - **`dotfiles/claude/skills/workstation-lsp/.lsp.json` must be strict JSON.** A `//` comment silently fails
-  all 12 servers, and `claude plugin validate` (all `check_lsp_plugin` runs) tolerates it. Check with
+  all 12 servers, and `claude plugin validate` tolerates it (which is all `check_lsp_plugin` runs). Check with
   `python3 -m json.tool`; put notes in `SKILL.md`.
 - **Every other file under `dotfiles/` is 100644** (`check_dotfiles_mode`): `copy`/`template`
   propagate the source's exec bit into `$HOME`.
 - **UTF-8 with BOM:** `bootstrap.ps1` and `scripts/install-nerd-fonts.ps1` (PowerShell 5.1 needs it).
-  - Restore with `[IO.File]::WriteAllText($p, $text, [Text.UTF8Encoding]::new($true))`.
-  - Inside double-quoted strings write `${name}:`; a bare `$name:` is a drive-qualified parse error.
+  - Restore: `[IO.File]::WriteAllText($p, $text, [Text.UTF8Encoding]::new($true))`.
+  - In double-quoted strings write `${name}:`; a bare `$name:` is a drive-qualified parse error.
 - **Vendored (re-download at the pinned tag, never hand-edit):**
   - the five zsh plugin dirs and `zsh-shift-select.zsh`
   - `_cht.sh`, a rolling snapshot
   - `dotfiles/local/bin/batpipe`: re-apply the 2-line patch recorded in its `.vendor`
-  - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06 while the fleet is EL9, because newer GEF
-    needs Python ≥ 3.10
+  - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06 while the fleet is EL9 (newer needs Python 3.10)
   - Each `.vendor` sidecar records provenance.
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
@@ -184,7 +184,7 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
   - jq, gh, helix, opencode, omp and the DevToys CLI: `config*.toml` ↔ `$PortableTools`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5
-  - `scripts/bump-versions.sh` must cover each through `PS1_NAME`, `COUPLED_AUTO` or `EXCLUDE`.
+  - `scripts/bump-versions.sh` covers each via `PS1_NAME`, `COUPLED_AUTO` or `EXCLUDE`.
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`
   - `/etc` copies
@@ -198,13 +198,11 @@ Repo hooks (`.claude/settings.json`). After editing any of them, re-run
 - `parity-reminder.sh` names the other half of a parity pair.
 - `memory-routing-guard.sh` denies writes to the home-dir memory path.
 - `sync-tool-memory.sh` regenerates the TOOLS block after a `config*.toml` edit.
-- `session-context.sh` (SessionStart) reports dotfiles drift, host and mode, WSL interop, and whether
-  the check tools are ready.
-- `session-end-notify.sh` (SessionEnd) shows a desktop notification when the repo or dotfiles are left
-  dirty.
+- `session-context.sh` (SessionStart) reports dotfiles drift, host, mode, WSL interop, tool readiness.
+- `session-end-notify.sh` (SessionEnd) notifies when the repo or dotfiles are left dirty.
 
 Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, wired by `settings.enforced.json`):
 - `secret-guard.sh` denies reading or editing private keys, `*.pem` and `*.key`.
 - `dangerous-command-guard.sh` denies fork bombs, raw-device writes and `mkfs`. It asks before
   `rm -rf` of `/` or `~`, `curl | bash`, and force-push.
-- Both match command *text*, so a commit message that mentions a pattern gets screened too.
+- Both match command *text*, so a commit message mentioning a pattern is screened.

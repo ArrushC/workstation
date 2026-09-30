@@ -125,7 +125,7 @@ Running `--reinstall` from inside the repo is refused (the script would delete i
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
 ```
 
- `--doctor` and `--check-for-updates` cannot be combined with each other or with `--reinstall`, never prompt, and report "mode not set" on a host that was never bootstrapped.
+`--doctor` and `--check-for-updates` cannot be combined with each other or with `--reinstall`, never prompt, and report "mode not set" on a host that was never bootstrapped.
 
 `--check-for-updates` checks this repo first (commits behind), then runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
@@ -339,13 +339,12 @@ direnv = "2.34.0"
 Check it with `mise install direnv` and `mise where direnv`. `tasks/verify-tools` runs after every install and fails loudly if a binary cannot run on this host; that is the cue to pick an explicit `github:` asset. Multi-binary archives install every binary; restrict with `bin` or `bin_path` on the `github:` entry (see qsv, pwndbg). Refresh the lockfiles and commit the config, the three lockfiles and any new `locks/**` sidecar:
 
 ```bash
-MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64
-MISE_ENV=windows,owned mise lock --global --platform windows-x64
+mise run bump-versions
 ```
 
-(Skip the second for a tool marked `os = ["linux"]`.) Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
+This refreshes the lockfiles for every platform the verified way (from outside the checkout through an `XDG_CONFIG_HOME` symlink, then normalising the `.mise/locks` sidecar paths). A hand-run `mise lock` inside the checkout can write sidecar refs to the wrong layout. Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
 
-**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, updates the Windows `$PortableTools` entries in step (Version, Url, freshly computed Sha256), and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu, python and the `python_version` / `nerd_font_version` pins are bumped by hand. To do it manually, edit the version in `config*.toml`, refresh the lockfiles as above, commit.
+**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, updates the Windows `$PortableTools` entries in step (Version, Url, freshly computed Sha256), and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu, python and the `python_version` / `nerd_font_version` pins are bumped by hand. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
 
 **A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
 
@@ -362,7 +361,7 @@ mise dot status; mise dot diff       # confirm it lands as expected
 bash scripts/check-invariants.sh
 ```
 
-Add a new `.tera` file to `scripts/check-templates.sh`'s coverage. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while `~/.local/state/workstation/dotfiles-migrated` is absent. Commit the config edit and the new source.
+Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while `~/.local/state/workstation/dotfiles-migrated` is absent. Commit the config edit and the new source.
 
 **A dnf package.** One line in `config.host.toml` (owned toolchain and core packages) or `config.native.toml` (the NFS client group, non-WSL owned hosts). The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
 
@@ -413,7 +412,6 @@ The mode is the `mode` line in the host's `config.local.toml` `[vars]`. Edit or 
 
 The repo is public, so this is usually a stale `GITHUB_TOKEN` (expired or revoked, in the environment or persisted by an earlier run): GitHub rejects it instead of falling back to anonymous access. Refresh it, or clear the persisted copy with `git -C ~/.config/mise config --unset http.https://github.com/.extraheader`. A private fork needs a PAT with Contents:Read (fine-grained) or `repo` (classic).
 
-
 ### SSH keeps prompting for a password after ssh-copy-id
 
 The key landed but sshd is not using it. On the target, check `/etc/ssh/sshd_config` has `PubkeyAuthentication yes` and `AuthorizedKeysFile .ssh/authorized_keys`, that `~/.ssh` is 700 and `~/.ssh/authorized_keys` is 600, and on SELinux run `restorecon -R -v ~/.ssh`.
@@ -445,7 +443,6 @@ An edit in the repo needs `wsa` before Windows Terminal sees it; `settings.json`
 ### bootstrap.ps1 aborts with "Git is required but isn't on PATH"
 
 Git is a prerequisite the script does not install. Install Git for Windows (`winget install Git.Git`), reopen PowerShell and re-run. The GitHub CLI is not one (it is installed as a pinned portable tool); authenticate once afterwards with `gh auth login`.
-
 
 ### bootstrap.ps1 aborts with "<Tool> sha256 mismatch — refusing to install"
 
@@ -502,15 +499,11 @@ git add -A && git commit -m '...' && git push   # keep the edit (or: git stash)
 
 ### A copy-mode file (Warp / Windows Terminal / Zed / VS Code settings) reverts after wsa
 
-Expected: those apps rewrite their file in place from their UI, so the copy in `$HOME` and the tracked source drift apart, and the next `wsa` overwrites your UI edit with the stale source (`wsa` warns first if it notices). Record the live file back to source before the next `wsa`/`wsu`, then commit the updated source:
-
-`wsr` records every changed tracked file; `mise dot add --changed -- "<target>"` records just the one you edited.
+Expected: those apps rewrite their file in place from their UI, so the copy in `$HOME` and the tracked source drift apart, and the next `wsa` overwrites your UI edit with the stale source (`wsa` warns first if it notices). Record the live file back to source before the next `wsa`/`wsu` with `wsr` (every changed tracked file) or `mise dot add --changed -- "<target>"` (just the one you edited), then commit the updated source.
 
 ### I edited a file in $HOME directly (e.g. ~/.claude/CLAUDE.md) and wsa reverted it
 
-Deployed targets are independent copies, so a direct edit never reaches `dotfiles/`. `wsa` prints the diff and asks before overwriting; a silent overwrite means it went through the raw `mise bootstrap --only dotfiles --yes` form, which overwrites by design. Record the edit before re-running `wsa`, then commit:
-
-`wsr` records FILE entries; for a DIRECTORY entry name the directory's own target path, e.g. `mise dot add ~/.claude/agents`.
+Deployed targets are independent copies, so a direct edit never reaches `dotfiles/`. `wsa` prints the diff and asks before overwriting; a silent overwrite means it went through the raw `mise bootstrap --only dotfiles --yes` form, which overwrites by design. Record the edit before re-running `wsa`: `wsr` records FILE entries; for a DIRECTORY entry use `mise dot add <the directory>`, e.g. `mise dot add ~/.claude/agents`; then commit.
 
 ### mise bootstrap plan / status asks for a sudo password and hangs (no TTY)
 
@@ -520,11 +513,9 @@ Any `[bootstrap.linux.firewall]` table makes mise re-exec itself with sudo even 
 
 Check the unit, then its log: `systemctl --user is-active dev.mise.pueued.service` and `journalctl --user -u dev.mise.pueued -n 20`. The usual cause is the systemd user manager missing `MISE_ENV`, so the shim errors with something like "No version is set for shim: pueued". The unit deliberately has no `Environment=MISE_ENV`; it relies on `~/.config/environment.d/10-mise.conf` (read at the manager's next start, i.e. next login) and `systemctl --user set-environment` (fixes the live manager now). `./bootstrap.sh` does both on every run. Fix with `systemctl --user set-environment MISE_ENV=<your token set>`, then `systemctl --user restart dev.mise.pueued.service`.
 
-
 ### Colors look banded or 8-bit on a remote host
 
 The remote app only emits truecolor if `$COLORTERM=truecolor` is set, which the tracked `zshrc`/`bashrc` do. Run `wsu` on the affected host, open a new shell, and check that `echo "$COLORTERM"` prints `truecolor`.
-
 
 ### Tofu boxes / missing icons after install
 
@@ -538,7 +529,6 @@ Symptoms: starship shows boxes, eza rows show empty cells, lazygit/k9s/yazi look
 ### Shell startup / a PATH-scanning command feels slow on WSL
 
 With `appendWindowsPath=true`, WSL2 appends the whole Windows `%PATH%` (about 90 `/mnt/c` directories), and looking up a binary that does not exist stat-walks every one over the slow 9p mount (about 1.5 s per miss, compounding with every probe a shell rc runs). The tracked `/etc/wsl.conf` sets `appendWindowsPath=false` (deployed by `mise bootstrap` from `configs/wsl/wsl.conf`); run `wsl --shutdown` from a Windows terminal and reopen. The tracked `~/.zshrc` and `~/.bashrc` re-add only the two Windows dirs still needed (PowerShell for `~/.claude/notify.sh` toasts, and system32 for `clip.exe`). Verify in a fresh tab that `echo $PATH | tr ':' '\n' | grep -c /mnt/` drops from about 90 to about 2.
-
 
 Other Windows executables (explorer.exe, VS Code's `code`) leave the WSL `$PATH`; re-add any you want in `~/.zshrc.local`.
 
@@ -566,7 +556,6 @@ RAM is the separate, already-solved half: `autoMemoryReclaim=gradual` in the tra
 
 `mise bootstrap`'s tools phase installs the whole stack. rust-analyzer, marksman and taplo are aqua-registry tools in both modes. gopls, lua-language-server, basedpyright, typescript-language-server, bash-language-server, yaml-language-server and vscode-json-language-server come from `config.owned.toml`. `mise ls --missing` lists what did not install; `mise doctor` must report `activated: yes` and `shims_on_path: yes` (else `wsa` and open a new shell). A stale npm server after a pin bump means node's postinstall did not re-run: `mise install --force node`. TypeScript is held on 5.x on purpose (TypeScript 7 ships no `tsserver.js`). clangd comes from dnf (`clang-tools-extra` in `config.host.toml`); `mise run health` does not check it, so use `command -v clangd`. On Windows the same servers install via `bootstrap.ps1`; check with `mise ls --missing` and `.\bootstrap.ps1 -Doctor`, and open a new terminal after the first run. Re-run the stack with `mise bootstrap --only tools --yes`, or force one tool with `mise uninstall <name> && mise install <name>`.
 
-
 ### C / C++ toolchain — a tool is missing, or ninja / vcpkg behaves oddly
 
 The compilers, debuggers and analysis tools (gcc-c++, clang, clangd/clang-tidy/clang-format, lldb, valgrind, cppcheck, cmake, meson, ninja-build, heaptrack, sanitizer runtimes) install through dnf on owned hosts only. Several come from EPEL/CRB; the `config.host.toml` `pre-packages` hook (`mise run enable-el-repos`) enables both before the batch. If a package still does not resolve, enable them by hand and re-run:
@@ -583,7 +572,6 @@ mise bootstrap --only packages --yes
 
 Provisioning builds the env in both modes. Rebuild it from scratch with `REBUILD=1 mise run python-env` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows delete `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-run `.\bootstrap.ps1`.
 
-
 ### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
 
 The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is declared in `config.native.toml`, so it applies to native owned hosts only and is skipped on WSL by design. Re-run `mise bootstrap --only packages --yes`. `autofs` is installed but not enabled (no maps yet does nothing): write your maps, then `sudo systemctl enable --now autofs`.
@@ -595,6 +583,5 @@ That is the SSHFS-Win step, the one deliberate exception to the admin-free boots
 ### Zellij's top bar is plain, shows a "permission" request, or renders boxes instead of rounded pills
 
 The top bar is the zjstatus plugin. A permission request is the one-time first-run prompt on that host: click the bar (or CTRL+P then ↑) and press Y; the grant is cached in `~/.cache/zellij/permissions.kdl`. A plain built-in bar, or an "ERROR IN PLUGIN" bar, means `~/.local/share/zellij/plugins/zjstatus.wasm` is missing on that host: provisioning copies it (`tasks/bootstrap`), it is not a `[dotfiles]` entry, and `/tmp/zellij-<uid>/zellij-log/zellij.log` names the path zellij tried. Re-copy it with `mise run bootstrap` (user-level, no sudo), then `zellij kill-session main` (plugins load when a session is created).
-
 
 Boxes instead of pills mean the terminal you attach from is not using a Nerd Font (JetBrainsMono NFM on the client side).
