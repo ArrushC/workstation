@@ -86,7 +86,8 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
   and `dotfiles/config/environment.d/10-mise.conf.tera` (checked).
 - The pueued unit gets `MISE_ENV` from the systemd user manager, not from the unit itself.
 - Every `ws*` command pins `mise -C` to the home directory. mise finds its config by walking up from
-  the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout.
+  the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
+  `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (proceeds if unknown).
 
 **Dotfiles**
 - `template` for the `.tera` sources, `copy` for everything else, never `symlink`/`symlink-each`
@@ -150,6 +151,9 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
   - Repair with `sed -i 's/\r$//' <f>` and `git update-index --chmod=+x <f>`.
   - First-party shell must be `shfmt -i 2`-clean (`mise run fmt`) and gitleaks-clean.
   - Quote bash associative-array keys: shfmt rewrites an unquoted `[a-b]` as arithmetic.
+- **`dotfiles/claude/skills/workstation-lsp/.lsp.json` must be strict JSON.** A `//` comment silently fails
+  all 12 servers, and `claude plugin validate` (all `check_lsp_plugin` runs) tolerates it. Check with
+  `python3 -m json.tool`; put notes in `SKILL.md`.
 - **Every other file under `dotfiles/` is 100644** (`check_dotfiles_mode`): `copy`/`template`
   propagate the source's exec bit into `$HOME`.
 - **UTF-8 with BOM:** `bootstrap.ps1` and `scripts/install-nerd-fonts.ps1` (PowerShell 5.1 needs it).

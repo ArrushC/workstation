@@ -9,10 +9,22 @@
 # Windows Terminal rewrites this every launch (reorders keys, regenerates dynamic
 # profiles): re-add with `mise dot add --changed` after a Settings-UI edit. The
 # missing trailing newline is WT-native; leave it.
+# JSON can't carry comments, so the rules live here:
+#  - disabledProfileSources: ["Windows.Terminal.SSH"] is load-bearing; it stops WT
+#    injecting a zellij-less duplicate of every ssh host.
+#  - showSuggestions sources are `tasks` and `commandHistory`; `recentCommands` is
+#    invalid and makes WT reject the whole file.
+#  - a per-profile colorScheme overrides profiles.defaults.
 "~/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json" = { source = "dotfiles/windows/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json", mode = "copy" }
 
 # Warp rewrites this and hot-reloads external edits: re-add with
 # `mise dot add --changed` after a UI edit.
+# The theme `path` must be a relative filename (warp#9723). The privacy block pins
+# values even where they equal upstream defaults, because new sections arrive with
+# permissive defaults. Warp's Settings panel rewrites inline-table arrays as
+# multi-line with trailing commas (TOML v1.1), which Python tomllib (v1.0) rejects;
+# the tracked file keeps them single-line. Never wire it into a tomllib-based check
+# without accounting for a post-`wsr` reformat.
 "~/AppData/Local/warp/Warp/config/settings.toml" = { source = "dotfiles/windows/AppData/Local/warp/Warp/config/settings.toml", mode = "copy" }
 # Edit-in-repo-only; kept beside settings.toml so the config tree stays together.
 "~/AppData/Local/warp/Warp/config/keybindings.yaml" = { source = "dotfiles/windows/AppData/Local/warp/Warp/config/keybindings.yaml", mode = "copy" }
