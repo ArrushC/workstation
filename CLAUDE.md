@@ -139,8 +139,8 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays
   off.
-- Test any new zellij plugin (never `zellij-autolock` or unmaintained ones) against the pinned
-  zellij; judge whether it loaded from zellij's log, not `dump-layout`.
+- Never add `zellij-autolock` or an unmaintained plugin untested against the pinned zellij. Judge
+  whether a plugin loaded from zellij's log, not `dump-layout`.
 
 ## File care
 
