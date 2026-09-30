@@ -68,7 +68,7 @@ mise.lock, mise.linux.lock, mise.owned.lock, locks/
                               generated lockfiles; never hand-edit
 tasks/                        file tasks with real logic: bootstrap, health, update,
                               check-updates, python-env, fonts, vcpkg, claude,
-                              inventory, verify-tools
+                              verify-tools
                               (statusline, enable-el-repos: owned Linux, in config.host.toml)
                               (one-line wrappers — lint, fmt, secrets, ps-lint,
                               bump-versions, install-hooks — are [tasks] in config.toml)
@@ -118,8 +118,6 @@ Both modes are idempotent; re-run any time. Copy your SSH key from a client with
 |---|---|
 | `--reinstall` | Wipe the cloned repo (including `config.local.toml`, so name, email and mode are asked again), then re-bootstrap. Prompts first. Installed tools, deployed dotfiles, SSH keys and system packages are kept. |
 | `--yes`, `-y` | Skip the `--reinstall` confirmation. |
-| `--doctor` | Read-only health report (runs `mise run health`), then exit. |
-| `--check-for-updates` | Read-only update scan (runs `mise run check-updates`), then exit. |
 | `--help`, `-h` | Usage. |
 
 Running `--reinstall` from inside the repo is refused (the script would delete itself); run it from outside, with the script in memory:
@@ -128,9 +126,7 @@ Running `--reinstall` from inside the repo is refused (the script would delete i
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
 ```
 
-`--doctor` and `--check-for-updates` cannot be combined with each other or with `--reinstall`, never prompt, and report "mode not set" on a host that was never bootstrapped.
-
-`--check-for-updates` checks this repo first (commits behind), then runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
+`mise run check-updates` runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
 **Owned extras.** At the end of `bootstrap.sh` an owned host is offered the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) owned hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.host.toml`, so they run on owned Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
 
@@ -290,7 +286,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` (`--doctor`) prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `MISE_ENV` persistence, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `MISE_ENV` persistence, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 

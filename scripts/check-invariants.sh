@@ -1117,8 +1117,7 @@ check_lsp_plugin() {
 # Five pairs: the three .sh scripts -> zsh _<name> files + completions.bash;
 # the two .ps1 scripts -> the workstation_*_flags records in config.nu.tera.
 # Long-form flags only. Trailing args to _sh_script_flags are EXCLUSIONS —
-# flags the script accepts but completions deliberately omit
-# (bootstrap.sh: the --checkforupdates compat alias).
+# flags the script accepts but completions deliberately omit.
 
 # Long flags a bash script accepts: its case arms (any nesting depth),
 # alternatives split, short forms dropped. $2+ = exclusions.
@@ -1172,7 +1171,7 @@ check_completion_parity() {
   hdr "script-flag <-> completion parity"
   local want
 
-  want=$(_sh_script_flags bootstrap.sh --checkforupdates)
+  want=$(_sh_script_flags bootstrap.sh)
   _flags_eq "bootstrap.sh == _bootstrap.sh (zsh)" "$want" \
     "$(_zsh_completion_flags dotfiles/config/zsh/completions/_bootstrap.sh)"
   _flags_eq "bootstrap.sh == completions.bash" "$want" \

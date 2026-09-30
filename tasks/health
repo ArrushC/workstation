@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, owned extras, leftovers"
+#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, owned extras"
 #MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
 # Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
 # no sudo, but exits 1 if any row_bad fired — this is the
@@ -217,8 +217,7 @@ else
 fi
 echo ""
 
-# 4. pueued — the mise-managed user unit plus a warn for the
-# legacy (pre-mise) unit name if it's still lying around.
+# 4. pueued — the mise-managed user unit.
 hdr "pueued"
 if systemctl --user is-active --quiet dev.mise.pueued.service 2>/dev/null; then
   row_ok "pueued" "dev.mise.pueued.service active"
@@ -226,9 +225,6 @@ elif systemctl --user is-failed --quiet dev.mise.pueued.service 2>/dev/null; the
   row_bad "pueued" "unit failed — run: journalctl --user -u dev.mise.pueued -n 3"
 else
   row_warn "pueued" "dev.mise.pueued.service not active — mise bootstrap --only services"
-fi
-if [ -f "$HOME/.config/systemd/user/pueued.service" ]; then
-  row_warn "pueued (old unit)" "legacy pueued.service still present — remove it: systemctl --user disable --now pueued.service; rm ~/.config/systemd/user/pueued.service"
 fi
 echo ""
 
@@ -289,8 +285,8 @@ if [ "$mode" = owned ]; then
   echo ""
 fi
 
-# 8. shell, dotfiles, legacy leftovers
-hdr "shell, dotfiles, legacy leftovers"
+# 8. shell and dotfiles
+hdr "shell and dotfiles"
 login_shell=$(getent passwd "$USER" | cut -d: -f7)
 if [ "$(basename "$login_shell")" = zsh ]; then
   row_ok "login shell" "$login_shell"
@@ -309,17 +305,6 @@ if [ "$repo_dirty" -eq 0 ]; then
   row_ok "repo checkout" "clean ($root)"
 else
   row_warn "repo checkout" "$repo_dirty uncommitted change(s) in $root — commit or stash before the next wsu (its git pull --ff-only fails on local changes)"
-fi
-if [ "$mode" = owned ]; then
-  stale=()
-  for b in mise starship fzf; do
-    [ -e "/usr/local/bin/$b" ] && stale+=("$b")
-  done
-  if [ "${#stale[@]}" -eq 0 ]; then
-    row_ok "legacy /usr/local" "no stale binaries"
-  else
-    row_warn "legacy /usr/local" "pre-mise binaries left over (mise's shims come first on PATH) — remove by hand: sudo rm ${stale[*]/#//usr/local/bin/}"
-  fi
 fi
 echo ""
 

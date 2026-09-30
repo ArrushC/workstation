@@ -12,9 +12,7 @@
   because there is no firewall table. Both refuse a dotfiles conflict like a real apply unless
   `--force-dotfiles` is passed.
 - `mise run health` is the full report (saved mode, `MISE_ENV` persistence, pueued, python-env,
-  dotfiles drift, dirty checkout); exit 1 on a hard failure. `./bootstrap.sh --doctor` and
-  `--check-for-updates` print the repo section first, never provision, and exit 1 with "mode not set"
-  when no mode is saved. `mise tasks validate` catches malformed `#MISE` headers; `mise ls --missing`
+  dotfiles drift, dirty checkout); exit 1 on a hard failure. `mise tasks validate` catches malformed `#MISE` headers; `mise ls --missing`
   should be empty.
 - Sandbox install plus capability gate (no sudo):
   ```
