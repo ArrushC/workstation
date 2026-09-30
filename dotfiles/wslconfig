@@ -18,6 +18,6 @@ autoMemoryReclaim=gradual
 # upstream-disabled on WSL >= 2.5 over data-corruption reports
 # (microsoft/WSL#13075); forcing needs --allow-unsafe. Deliberately kept so it
 # takes effect if Microsoft re-enables it. To reclaim disk from an EXISTING
-# VHD, see README.html > Troubleshooting > "WSL disk keeps growing".
+# VHD, see README.md > Troubleshooting > "WSL disk (ext4.vhdx) keeps growing".
 sparseVhd=true
 hostAddressLoopback=true

@@ -17,7 +17,7 @@
 # 60-req/hr anonymous GitHub API rate limit; used for a private-fork clone.
 #
 # Bootstrap a fresh machine (no elevation needed) -- the checked curl.exe
-# download, same form as README.html's Windows quickstart:
+# download, same form as README.md's Windows setup:
 #   $bootstrapFile = [System.IO.Path]::GetTempFileName()
 #   try {
 #       $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -582,7 +582,7 @@ function Invoke-Reinstall {
 Refusing to reinstall — the running script is inside $RepoPath, which would
 be deleted, leaving this invocation orphaned. Either:
 
-  1. Use the checked curl.exe download from README.html with -Reinstall.
+  1. Use the checked curl.exe download from README.md with -Reinstall.
      It runs from memory after the complete download succeeds.
 
   2. Copy this script somewhere outside the repo first, then re-run:

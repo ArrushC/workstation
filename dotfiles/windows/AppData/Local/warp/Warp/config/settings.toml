@@ -76,7 +76,7 @@ show_changelog_after_update = false
 enabled = true
 
 [session]
-# AlmaLinux-9 WSL/zsh is the primary workflow (see README §setup-wsl) — make it
+# AlmaLinux-9 WSL/zsh is the primary workflow (see README.md, Setup > WSL) — make it
 # the startup shell for NEW sessions instead of the manual Settings-UI step.
 # The { custom = ... } shape bypasses the executable-path validation that
 # rejects wsl.exe paths (warpdotdev/warp#7576); same launch command as the
