@@ -45,7 +45,7 @@ case "$norm" in
 # never LF/+x) while covering every real script there (batpipe, winterop) —
 # mirrors check-invariants.sh's check_line_endings_and_mode target list
 # exactly, so this hook never "fixes" something that check isn't enforcing.
-*/scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */.githooks/* | */dotfiles/local/bin/[!.]*)
+*/scripts/*.sh | */tasks/* | */.claude/hooks/*.sh | */dotfiles/local/bin/[!.]*)
   is_lf_exec=1
   ;;
 esac

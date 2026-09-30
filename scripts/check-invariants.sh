@@ -4,7 +4,7 @@
 #
 # Single source of truth for the checks; invoked three ways:
 #   - mise run lint               (tasks/lint -> $REPO_ROOT/scripts/check-invariants.sh)
-#   - .githooks/pre-commit       (installed via `mise run install-hooks`)
+#   - the pre-commit hook (mise generate git-pre-commit, via `mise run install-hooks`)
 #   - .github/workflows/lint.yml (CI backstop)
 #
 # Runs from anywhere — it cd's to the repo root. Exits 0 if all checks pass,
@@ -407,7 +407,6 @@ check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
   local -a files=(scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh dotfiles/local/bin/*)
-  [ -e .githooks/pre-commit ] && files+=(.githooks/pre-commit)
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then
       bad "missing: $f"

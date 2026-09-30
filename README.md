@@ -68,9 +68,9 @@ mise.lock, mise.linux.lock, mise.owned.lock, locks/
                               generated lockfiles; never hand-edit
 tasks/                        file tasks with real logic: bootstrap, health, update,
                               check-updates, python-env, fonts, vcpkg, statusline,
-                              install-hooks, inventory, verify-tools, enable-el-repos
+                              inventory, verify-tools, enable-el-repos
                               (one-line wrappers — lint, fmt, secrets, ps-lint,
-                              bump-versions — are [tasks] in config.toml)
+                              bump-versions, install-hooks — are [tasks] in config.toml)
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
 dotfiles/                     every deployed source under its real name
   *.tera                      templates (zshrc, bashrc, zshenv, gitconfig, ssh/config, ...)
@@ -398,7 +398,7 @@ on_change = "restart"
 
 Verify with `mise bootstrap plan`, then `mise bootstrap status --missing` after a real run. Never add a `[bootstrap.linux.firewall]` table (see Troubleshooting).
 
-Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-pin dual edits, LF and executable bits, PowerShell BOMs, sentinel blocks, `[dotfiles]` tables), shellcheck, `shfmt -i 2` and gitleaks; `mise run install-hooks` installs it as a pre-commit hook (`.githooks`), and CI (`.github/workflows/lint.yml`) runs the same checks.
+Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-pin dual edits, LF and executable bits, PowerShell BOMs, sentinel blocks, `[dotfiles]` tables), shellcheck, `shfmt -i 2` and gitleaks; `mise run install-hooks` installs mise's generated pre-commit hook (`.git/hooks/pre-commit`, runs `mise run lint`; run it once per clone, it also clears an old `core.hooksPath`), and CI (`.github/workflows/lint.yml`) runs the same checks.
 
 ## Troubleshooting
 

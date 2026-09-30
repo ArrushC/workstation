@@ -19,7 +19,7 @@
 - **The checkout is live config:** `mise use -g`, `mise settings set`, `mise dot add`/`wsr`, `wse` and
   `mise bootstrap` write tracked files here. Commit or revert first; `wsu`'s `git pull --ff-only`
   fails on a dirty tree.
-- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; also pre-commit and CI) and
+- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; also CI and the pre-commit hook `mise run install-hooks` generates) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
 - **Task names** must not collide with mise built-ins (`mise fmt` is built in, so ours is
   `mise run fmt`).
@@ -146,7 +146,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 
 - **LF + git mode 100755:**
   - `scripts/*.sh`, `scripts/lib/*.sh`, every `tasks/*` file (mise silently skips a non-executable
-    task), `.claude/hooks/*.sh`, `.githooks/pre-commit`
+    task), `.claude/hooks/*.sh`
   - executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
     `dotfiles/local/bin/{batpipe,winterop}`
   - Repair: `sed -i 's/\r$//' <f>`; `git update-index --chmod=+x <f>`.

@@ -77,3 +77,11 @@ run = "if command -v pwsh >/dev/null 2>&1; then pwsh scripts/check-ps.ps1; else 
 description = "Bump tool pins and [vars] pins against upstream and refresh the lock files (--dry-run previews)"
 dir = "{{ xdg_config_home }}/mise"
 run = "scripts/bump-versions.sh"
+
+[tasks.install-hooks]
+description = "Install mise's generated git pre-commit hook (runs mise run lint); once per clone"
+dir = "{{ xdg_config_home }}/mise"
+run = [
+  "git config --unset core.hooksPath || true",
+  "mise generate git-pre-commit --task lint --write",
+]
