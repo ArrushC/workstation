@@ -33,6 +33,15 @@ bad() {
 }
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
 
+# First-party shell files: shellcheck, shfmt and `mise run fmt` all use this one
+# list. Vendored scripts (_cht.sh, batpipe, the zsh plugins) are excluded.
+shell_targets() {
+  printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
+    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
+    dotfiles/claude/notify.sh dotfiles/local/bin/winterop \
+    dotfiles/config/bash/completions.bash
+}
+
 # Python with tomllib: EL9's python3 is 3.9 (no tomllib) — prefer the python-env
 # wpy (3.14); CI's python3 is 3.11+. Empty when neither exists (callers soft-skip).
 PY=""
@@ -1284,11 +1293,8 @@ check_shellcheck() {
   fi
   # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
   # vendored (eth-p/bat-extras) and deliberately excluded.
-  local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
-    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh
-    dotfiles/claude/notify.sh
-    dotfiles/local/bin/winterop
-    dotfiles/config/bash/completions.bash)
+  local -a targets
+  mapfile -t targets < <(shell_targets)
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else
@@ -1303,11 +1309,8 @@ check_shfmt() {
     return 0
   fi
   # Same first-party set as shellcheck (vendored _cht.sh / batpipe excluded).
-  local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
-    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh
-    dotfiles/claude/notify.sh
-    dotfiles/local/bin/winterop
-    dotfiles/config/bash/completions.bash)
+  local -a targets
+  mapfile -t targets < <(shell_targets)
   local out
   if out=$(shfmt -d -i 2 "${targets[@]}" 2>&1); then
     ok "clean over ${#targets[@]} shell files (shfmt -i 2)"
@@ -1538,6 +1541,10 @@ check_tsls_typescript_coupling() {
   fi
 }
 
+if [ "${1:-}" = --shell-files ]; then
+  shell_targets
+  exit 0
+fi
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
 check_mise_env_three_way

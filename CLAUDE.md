@@ -46,8 +46,8 @@ Token sets come only from `scripts/lib/mise-env.sh`:
 - owned native: `linux,owned,host,native`
 - Windows: `windows,owned`
 
-Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sidecars. Global tasks live in
-`tasks/`. mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirect them.
+Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sidecars. Tasks: files in `tasks/` carry logic; one-line wrappers are `[tasks]` in `config.toml`.
+mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirect them.
 
 ## Invariants
 

@@ -66,9 +66,11 @@ config.windows.toml           Windows [dotfiles]
 config.local.toml             git-ignored: this host's name, email, mode
 mise.lock, mise.linux.lock, mise.owned.lock, locks/
                               generated lockfiles; never hand-edit
-tasks/                        global mise tasks: bootstrap, health, update, check-updates,
-                              python-env, fonts, vcpkg, statusline, lint, fmt, ps-lint,
-                              secrets, install-hooks, inventory, bump-versions
+tasks/                        file tasks with real logic: bootstrap, health, update,
+                              check-updates, python-env, fonts, vcpkg, statusline,
+                              install-hooks, inventory, verify-tools, enable-el-repos
+                              (one-line wrappers — lint, fmt, secrets, ps-lint,
+                              bump-versions — are [tasks] in config.toml)
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
 dotfiles/                     every deployed source under its real name
   *.tera                      templates (zshrc, bashrc, zshenv, gitconfig, ssh/config, ...)
