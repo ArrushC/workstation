@@ -1247,6 +1247,7 @@ function Invoke-CloneRepo {
     }
 }
 
+# First-apply marker; the name predates mise and stays so existing hosts don't re-force.
 $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 
 function Initialize-MiseEnv {
@@ -2118,7 +2119,7 @@ function Invoke-InstallClaudeCode {
     $tmp = Join-Path $env:TEMP "claude-install-$PID.ps1"
     try {
         # Download-then-run with checked curl.exe status — same posture as
-        # the Linux side's pipe.sh.
+        # the Linux side's `curl -fsSL … | bash`.
         Invoke-CurlRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp
         if ($LASTEXITCODE -ne 0) { throw "installer exited with code $LASTEXITCODE" }
@@ -2191,10 +2192,6 @@ function Invoke-PythonEnv {
         Set-Content -Path $wpyShim -Value "@echo off`r`n`"$envPy`" %*" -Encoding Ascii
         Set-Content -Path (Join-Path $WsBin "textual.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'textual.exe')`" %*" -Encoding Ascii
         Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
-
-        # Self-heal: remove the workstation.cmd shim from the removed
-        # workstation TUI (stale shim from earlier bootstraps).
-        Remove-Item -Path (Join-Path $WsBin "workstation.cmd") -ErrorAction SilentlyContinue
 
         if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
         Get-ChildItem -Path $WsStamps -Filter "python-env.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force

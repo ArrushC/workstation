@@ -144,7 +144,7 @@ mise_global() {
 # arrange. So compensate mechanically instead of chasing that: fold any
 # freshly written `.mise/locks/**` content into `locks/**` and repoint the
 # lock files' path refs. Pure filesystem ops, no extra mise invocation, no
-# dependence on checkout naming. See docs/claude/file-care.md and
+# dependence on checkout naming. See CLAUDE.md and
 # check-invariants.sh's check_mise_config_files.
 normalize_lock_sidecars() {
   [ -d "$ROOT/.mise/locks" ] || return 0

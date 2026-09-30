@@ -54,10 +54,5 @@ chmod 0755 "$bin_dir/wpy"
 ln -sf "$env_dir/bin/textual" "$bin_dir/textual"
 ln -sf "$env_dir/bin/typer" "$bin_dir/typer"
 
-# Self-heal: remove artifacts from the removed workstation TUI (stale
-# launcher from earlier provisions; TUI-only health/updates/history caches).
-rm -f "$bin_dir/workstation"
-rm -rf "$HOME/.cache/workstation-tui"
-
 printf 'python-env: CPython %s + %d libs at %s (launchers: wpy, textual, typer)\n' \
   "$version" "${#PY_LIBS[@]}" "$env_dir"

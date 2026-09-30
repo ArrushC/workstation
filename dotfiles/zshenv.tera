@@ -7,9 +7,8 @@
 # --- ~/.local/bin: user-level tools for NON-interactive shells ---------------
 # python-env's launchers (wpy/textual/typer), claude, and on a shared host every
 # eget-installed tool live here; ~/.zshrc only prepends it for interactive
-# shells. (This host's pre-chezmoi ~/.zshenv, written by another installer,
-# carried exactly this line — preserved on takeover.) Guarded: zsh re-reads
-# this file in every subshell.
+# shells. (Some hosts' stock ~/.zshenv carries this same line.) Guarded: zsh
+# re-reads this file in every subshell.
 case ":$PATH:" in
 *":$HOME/.local/bin:"*) ;;
 *) export PATH="$HOME/.local/bin:$PATH" ;;
@@ -18,10 +17,10 @@ esac
 # --- mise shims: tools for NON-interactive shells -----------------------------
 # node / go / uv / gopls / the LSP servers are mise-managed, declared in
 # ~/.config/mise/config*.toml (this checkout). Interactive shells get the
-# real bin dirs from `mise activate zsh` (~/.zshrc); everything else — Make
+# real bin dirs from `mise activate zsh` (~/.zshrc); everything else — `make`
 # via `ssh host cmd`, IDE/LSP spawns — only sees them
 # through mise's shims dir. Prepended AFTER ~/.local/bin so the shims sit in
-# front of it. PARITY: dot_bashrc.tmpl carries the bash twin above its
+# front of it. PARITY: bashrc.tera carries the bash twin above its
 # interactive guard.
 case ":$PATH:" in
 *":$HOME/.local/share/mise/shims:"*) ;;

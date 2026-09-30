@@ -76,7 +76,7 @@ alias wsd = mise -C $env.USERPROFILE dot diff
 alias wss = mise -C $env.USERPROFILE dot status
 alias wsr = mise -C $env.USERPROFILE dot add --changed
 # wsa is a def (below) — it checks for un-recorded drift before applying,
-# since copy mode has no chezmoi-style prompt of its own. Every [dotfiles]
+# since copy mode has no built-in prompt. Every [dotfiles]
 # entry is `copy` (or `template`) now — a live edit under $HOME no longer
 # round-trips implicitly, and copy-mode apply otherwise overwrites an
 # un-recorded live edit with zero diff and zero warning. `differs` (NOT
@@ -117,7 +117,7 @@ def wsa [...args] {
     }
     mise -C $env.USERPROFILE bootstrap --only dotfiles --yes ...$args
 }
-# I8 fix (final-fix-brief.md): `mise run update` is tasks/update, a
+# `mise run update` is tasks/update, a
 # #!/usr/bin/env bash script that calls `systemctl --user` and ends in an
 # unscoped `mise bootstrap --yes` -- none of that runs on Windows. Do the
 # Windows-safe equivalent directly: fast-forward pull, then the same
@@ -267,7 +267,7 @@ let workstation_bootstrap_flags = [
     { value: "-SkipNerdFonts", description: "skip the JetBrainsMono Nerd Font install" }
     { value: "-ForceInstaller", description: "re-install installer apps even if present" }
     { value: "-SkipElevated", description: "skip the UAC-prompting SSHFS-Win/WinFsp install" }
-    { value: "-Reinstall", description: "wipe the cloned repo + chezmoi config, bootstrap fresh" }
+    { value: "-Reinstall", description: "wipe the cloned repo (incl. config.local.toml), bootstrap fresh" }
     { value: "-Yes", description: "skip the reinstall confirmation prompt" }
     { value: "-Doctor", description: "read-only health report, then exit" }
     { value: "-CheckForUpdates", description: "read-only update scan, then exit" }

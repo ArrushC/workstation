@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # check-templates.sh — render every dotfiles/**/*.tera template into a
 # throwaway target $HOME, for each real MISE_ENV token set, and syntax-check
-# the rendered output. Replaces the chezmoi-based render pass PR3 Task 1
-# retired (chezmoi execute-template cannot parse Tera's {% %} syntax at all).
+# the rendered output. Tera's {% %} syntax needs mise itself to render.
 #
 # mise's global-config discovery has a FALLBACK. Measured on 2026-09-19
 # (mise 2026.9.9):
@@ -22,7 +21,7 @@
 # render check. The dotfiles TARGET side ("~/...") honors the per-call
 # `HOME=`, which keeps every render off the real $HOME.
 #
-# Design (docs/superpowers/plans/2026-09-19-mise-dotfiles.md ruling 3: ONE
+# Design (ONE
 # broken template aborts the WHOLE `mise dot apply`/`mise bootstrap`, and
 # writes nothing at all — so a bulk run alone can never name the culprit):
 #   1. For each of the four real MISE_ENV token sets, discover which
@@ -44,8 +43,7 @@
 # "uname -r") reports THIS host's kernel: Windows-target templates (helix
 # config.toml, config.nu, the PS profile) still get full template-parse +
 # syntax coverage, just with their Linux-rendered body (they barely branch on
-# OS — see CLAUDE.md). This mirrors the chezmoi-era script's own documented
-# limitation, not a new gap.
+# OS — see CLAUDE.md). This is a known limitation of the render check.
 #
 # Checkers soft-skip when their tool is absent (mirrors check-invariants.sh):
 # zsh, nu, pwsh, yq, and python-with-tomllib may be missing locally. CI's
@@ -220,7 +218,7 @@ apply_and_check() {
     # entry, the source file, `error: Variable ... is not defined`, the
     # caret line) and follows them with two generic "mise ERROR Version/Run
     # with --verbose" lines — a plain `tail` keeps only that boilerplate and
-    # throws the diagnosis away (ruling 3 wants the culprit named).
+    # throws the diagnosis away (the culprit must be named).
     bad "$label: mise dot apply failed: $(printf '%s' "$out" | grep -vE '^mise ERROR (Version|Run with)' | head -6 | tr '\n' ' ')"
     return 1
   fi
@@ -277,7 +275,7 @@ for env in "${ENVS[@]}"; do
 
   hdr "bulk apply — MISE_ENV=$env (mise bootstrap --only dotfiles --force-dotfiles --yes)"
   if [ "$env_ok" -eq 0 ]; then
-    note "skipped — an individual template failed above; fix it first (ruling 3: one bad template aborts the whole apply, so the bulk run would just fail opaquely)"
+    note "skipped — an individual template failed above; fix it first (one bad template aborts the whole apply, so the bulk run would just fail opaquely)"
     continue
   fi
 

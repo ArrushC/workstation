@@ -200,7 +200,7 @@ fi
 # the sequences would be swallowed there. _wt_precmd is PREPENDED to
 # precmd_functions so it reads the real $? before other hooks run, and it
 # returns that status so starship's exit-code module still sees it. bash gets
-# the prompt-side half only (see the PARITY NOTE in dot_bashrc.tmpl).
+# the prompt-side half only (see the PARITY NOTE in bashrc.tera).
 if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
   _wt_precmd() {
     local _wt_status=$?
@@ -270,7 +270,7 @@ fi
 # raw ESC[1;2D escape and applies its OWN binding — full override, no per-tool
 # config. Engine: vendored jirutka/zsh-shift-select (~/.config/zsh/plugins/).
 # bash gets movement-only parity (no highlight — readline limitation); the two
-# rc files are a parity pair, so the bash side lives in dot_bashrc.tmpl.
+# rc files are a parity pair, so the bash side lives in bashrc.tera.
 zmodload zsh/parameter zsh/zleparameter 2>/dev/null
 # Skipped under Warp — Warp's input editor handles shift-selection natively and
 # its ZLE is not ours to rebind.
@@ -502,7 +502,7 @@ alias wsr='mise -C "$HOME" dot add --changed'
 # inside the repo, so pinning changes nothing for a normal invocation.
 alias wsu='mise -C "$HOME" run update'
 # wsa is a function (below, near wsh) — it checks for un-recorded drift
-# before applying, since copy mode has no chezmoi-style prompt of its own.
+# before applying, since copy mode has no built-in prompt.
 
 # --- Functions ---------------------------------------------------------------
 
@@ -556,8 +556,8 @@ hide() {
 # `template`) now — no symlink pointed back into this checkout any more, so a
 # live edit under $HOME no longer round-trips implicitly, and copy-mode apply
 # otherwise overwrites an un-recorded live edit with zero diff and zero
-# warning (chezmoi prompted here; plain `mise bootstrap --only dotfiles
-# --yes` does not). This checks for any entry in `differs` state (NOT
+# warning (mise has no built-in prompt; plain `mise bootstrap --only dotfiles
+# --yes` does not ask either). This checks for any entry in `differs` state (NOT
 # `missing` — a host's first-ever apply is expected to be all-missing, not a
 # drift warning) and shows its diff before doing anything. Interactive: asks.
 # Non-interactive (no tty): refuses rather than guessing — run
@@ -750,7 +750,7 @@ nn() {
 # (no `uv run`/`uv python install` in the hot path). Give it a newer target once
 # with `uv python install 3.14` (or `sudo dnf install python3.14`) and python-cli
 # picks it up automatically. Falls back to system python3 if uv/jq are absent.
-# PARITY: identical body in dot_bashrc.tmpl.
+# PARITY: identical body in bashrc.tera.
 python-cli() {
   local py=''
   if command -v uv >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then

@@ -8,7 +8,7 @@ release 2024.06 — the LAST release supporting Python 3.6–3.9 (EL9 gdb embeds
 Python 3.9; GEF 2025.01+ needs 3.10 and would SyntaxError on load). Provenance +
 the don't-bump-past-2024.06 constraint live in its .vendor sidecar.
 
-This is a .tmpl ONLY to resolve the absolute home dir — gdb's `source` does not
+This is a template ONLY to resolve the absolute home dir — gdb's `source` does not
 shell-expand `~`, so we emit the full path. GEF is non-destructive: every native
 gdb command still works; it just adds the dashboard/context UI.
 

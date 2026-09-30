@@ -24,7 +24,7 @@ local-patch (2026-06-05) — NOT verbatim upstream:
 files:          executable_batpipe  (prebuilt standalone bin/batpipe from the release zip; bat-modules bundled inline; + local-patch above)
 note:           Leading-dot filename → excluded via the symlink-each entry's exclude list; provenance only, never deployed.
                 Deploys 0755 to ~/.local/bin/batpipe (executable_ prefix); wired as the less LESSOPEN
-                preprocessor via `eval "$(batpipe)"` in dot_zshrc.tmpl + dot_bashrc.tmpl.
+                preprocessor via `eval "$(batpipe)"` in zshrc.tera + bashrc.tera.
                 No config.toml [vars] entry — pinned only here (not coupled to BAT_VERSION).
                 Bump: re-download the release zip, replace executable_batpipe with bin/batpipe,
                 RE-APPLY the local-patch above, then refresh release + asset-sha256 + both file-sha256 here.

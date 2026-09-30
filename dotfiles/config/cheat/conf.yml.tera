@@ -11,7 +11,7 @@ cheatpaths:
     path: {{ env.HOME }}/.config/cheat/cheatsheets/personal
     tags: [ personal ]
     readonly: false
-  - name: community     # seeded by run_once_seed-cheat-community.sh.tmpl
+  - name: community     # seeded by tasks/bootstrap
     path: {{ env.HOME }}/.config/cheat/cheatsheets/community
     tags: [ community ]
     readonly: true

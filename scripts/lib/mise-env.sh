@@ -3,7 +3,7 @@
 #   shared → linux
 #   owned  → linux,owned,host,wsl   (WSL guest)  |  linux,owned,host,native (bare metal / VM)
 # Single source for bootstrap.sh and tasks/*; the rc
-# files persist the same value (chezmoi templates until PR3, Tera after).
+# files persist the same value (the rc templates render the same value).
 set -euo pipefail
 mode="${1:?usage: mise-env.sh <owned|shared>}"
 is_wsl() { [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; }

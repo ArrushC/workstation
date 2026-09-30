@@ -89,7 +89,7 @@ for title, fname in sections:
                 if pkg and ver:
                     print(f"- `{pkg}` {ver}")
 
-# 4. Host pins Make used to own directly, now in config.toml [vars]. Order:
+# 4. Host pins declared directly in config.toml [vars]. Order:
 # python-env, nerd-fonts, vcpkg (the [vars] declaration order), then
 # claude — a rolling `latest` pin with no [vars] entry, hard-coded.
 with open(f"{root}/config.toml", "rb") as fh:

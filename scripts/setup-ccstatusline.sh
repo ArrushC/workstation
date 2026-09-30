@@ -5,12 +5,11 @@
 # an owned host.
 #
 # The widget config is a mise [dotfiles] entry (config.owned.toml,
-# `~/.config/ccstatusline/settings.json`, mode = "copy" — like every
-# `[dotfiles]` entry now, 2026-09-22 copy-migration; this one was already
-# copy before that, I4/final-fix-brief.md, so nothing here changed behavior)
-# — the live file is an independent COPY of dotfiles/config/ccstatusline/
-# settings.json, not a symlink into the checkout, so editing it in place does
-# NOT dirty the repo (ruling 8 is retired) and does NOT round-trip on its own
+# `~/.config/ccstatusline/settings.json`, mode = "copy", like every
+# `[dotfiles]` entry) — the live file is an independent COPY of
+# dotfiles/config/ccstatusline/settings.json, not a symlink into the
+# checkout, so editing it in place does NOT dirty the repo and does NOT
+# round-trip on its own
 # — `mise dot add`/option 3 below is the only way back. A host that wants a
 # private, untracked config opts OUT of that entry entirely via
 # config.local.toml (mode = "copy", enabled = false — see the opt-out
@@ -82,13 +81,10 @@ preflight() {
 }
 
 # --- opt-out primitives ------------------------------------------------------
-# Per-host opt-out (ruling 2, docs/superpowers/plans/2026-09-19-mise-dotfiles.md):
-# there is no `state = "absent"` key, and `{ enabled = false }` alone is
+# Per-host opt-out: there is no `state = "absent"` key, and `{ enabled = false }` alone is
 # silently ignored — disabling an inherited [dotfiles] entry needs `enabled =
 # false` PLUS a repeated `mode`. config.local.toml is per-host and
-# git-ignored already (unlike the old shared .chezmoiignore.tmpl, which had
-# to embed the hostname inside sentinel-delimited lines because ONE file was
-# committed for every host) — so nothing here is hostname-conditional; the
+# git-ignored already — so nothing here is hostname-conditional; the
 # sentinel block just marks OUR entry as ours to add/remove idempotently
 # without disturbing anything else a human or another tool put in
 # config.local.toml.
@@ -155,7 +151,7 @@ option_use_tracked() {
   printf '%bApplying the tracked ccstatusline config...%b\n' "$GREEN" "$RESET"
   # --force: this host's live file may be a real, independent file left over
   # from a prior opt-out (option 2/3) rather than the managed symlink — mise
-  # refuses to overwrite a pre-existing real file otherwise (ruling 1). Safe
+  # refuses to overwrite a pre-existing real file otherwise. Safe
   # here: a single target, explicitly chosen by the person running this menu
   # — not the fleet-wide `--force-dotfiles` gate bootstrap.sh applies elsewhere.
   mise dot apply --yes --force "$WIDGET_TARGET"
@@ -167,14 +163,10 @@ option_this_machine() {
     optout_add
   fi
   # Once opted out, mise no longer manages the target — if it's still a
-  # symlink an OLD chezmoi-era deploy (or a pre-I4 host that never re-applied
-  # after `mode` flipped to copy) left behind, materialize it into a real,
-  # independent file before the TUI edits it in place. Dead on any host
-  # bootstrapped since I4/the 2026-09-22 copy-migration (this target — like
-  # every `[dotfiles]` entry now — is `copy`, never `symlink`, so a fresh
-  # apply never leaves a symlink here to begin with); kept as one-time
-  # migration safety for a host that hasn't re-applied yet, harmless
-  # (`[ -L ]` on a regular file or nothing is just false) once it has.
+  # symlink (a legacy deploy that never re-applied), materialize it into a
+  # real, independent file before the TUI edits it in place. Harmless
+  # (`[ -L ]` on a regular file or nothing is just false) on a host whose
+  # target is already a `copy`.
   if [ -L "$WIDGET_DEST" ]; then
     local content
     content="$(cat "$WIDGET_DEST")"
@@ -198,7 +190,7 @@ option_this_machine() {
     # Reclaim it NOW, not "on the next apply": the TUI just materialized the
     # symlink into a real file, and a later plain `mise dot apply` (or a
     # bulk one, once Task 4 wires `mise bootstrap` into bootstrap.sh) refuses
-    # to overwrite a pre-existing real file (ruling 1) — a bulk apply would
+    # to overwrite a pre-existing real file — a bulk apply would
     # abort every OTHER dotfile along with it. --force is safe here: a
     # single target the person running this menu just explicitly chose to
     # give up.

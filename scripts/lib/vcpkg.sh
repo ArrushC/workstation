@@ -8,7 +8,7 @@
 #   version-tag  Release tag to check out (e.g. 2026.06.01).
 #   root-dir     Where the vcpkg tree lives = $VCPKG_ROOT — ~/.local/share/vcpkg
 #                (user-level). The shell rc exports this SAME literal (owned-gated)
-#                — keep dot_zshrc.tmpl / dot_bashrc.tmpl in sync with tasks/vcpkg
+#                — keep dotfiles/zshrc.tera / dotfiles/bashrc.tera in sync with tasks/vcpkg
 #                (see CLAUDE.md's VCPKG_ROOT dual-edit invariant).
 #
 # Env:

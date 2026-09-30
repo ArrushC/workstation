@@ -2,11 +2,11 @@
 # Consumed by scripts/check-invariants.sh (check_gitleaks), `mise run secrets`, and
 # CI (.github/workflows/lint.yml). Extends gitleaks' bundled default ruleset,
 # then allowlists this repo's known-safe, secret-shaped-but-not-secret content
-# so the gate doesn't false-positive on a docs-heavy, age-encrypted repo.
+# so the gate doesn't false-positive on a docs-heavy repo.
 #
 # The gate still protects the code/config/dotfiles surface (where a real leak
-# would land — the age identity, SSH keys, tokens in scripts/templates); only
-# the prose/ciphertext paths below are exempt.
+# would land — SSH keys, tokens in scripts/templates); only the prose paths
+# below are exempt.
 
 title = "workstation gitleaks config"
 
@@ -16,23 +16,16 @@ useDefault = true
 [allowlist]
 description = "workstation false-positive allowlist (paths are regexes vs the file path)"
 paths = [
-  # age-encrypted blobs are ciphertext, not plaintext secrets.
-  '''\.age$''',
-  # Docs/specs/changelog describe credential & token PATTERNS conceptually
+  # Docs/specs describe credential & token PATTERNS conceptually
   # (curl|bash, $env:GITHUB_TOKEN, secret-guard rules) — not real secrets.
   '''(^|/)docs/''',
   '''\.md$''',
-  '''(^|/)README\.html$''',
   '''(^|/)CLAUDE\.md$''',
   # Brainstorming visual-companion session scratch (git-excluded via
   # .git/info/exclude, but `gitleaks dir` scans untracked files too). Its
   # server-info/server.log carry the companion's own localhost session key —
   # a per-session browser-access token, not a repo credential.
   '''(^|/)\.superpowers/''',
-  # CI-only jsdom install for scripts/check-readme.mjs (gitignored, never
-  # repo content) — `gitleaks dir` scans untracked files, and third-party
-  # test fixtures are exactly the secret-shaped noise this gate exists for.
-  '''(^|/)node_modules/''',
 ]
 
 # Windows Terminal keybinding chords ("keys": "alt+shift+down") trip the

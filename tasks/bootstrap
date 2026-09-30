@@ -17,10 +17,10 @@ if env_has owned; then
     curl -fsSL https://claude.ai/install.sh | bash
   fi
 fi
-# 2. cheat community cheatsheets (was config.linux.toml's [bootstrap.repos]
-# entry — moved here because a failed clone must not abort provisioning:
-# repos ran ahead of tools/services/the bootstrap task, so an unreachable
-# GitHub took down the whole run for a cosmetic cheat-sheet checkout).
+# 2. cheat community cheatsheets. Cloned here rather than via [bootstrap.repos]
+# because a failed clone must not abort provisioning: repos would run ahead of
+# tools/services/this task, so an unreachable GitHub would take down the whole
+# run for a cosmetic cheat-sheet checkout.
 if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
   [ ! -d "$HOME/.config/cheat/cheatsheets/community" ]; then
   echo "==> cheat community cheatsheets"
@@ -30,8 +30,8 @@ if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
 fi
 # 3. zjstatus.wasm → zellij's DATA plugin dir (mise installs the tool; zellij loads plugins from its data dir, never a bin dir)
 "$root/scripts/lib/zellij-plugin.sh" zjstatus "file://$(mise where github:dj95/zjstatus)/zjstatus.wasm"
-# 4. nb notebook init at ~/notes, once (was run_once_after_init.sh.tmpl).
-# Marker-guarded rather than a content-hashed run_once: a missing nb or a
+# 4. nb notebook init at ~/notes, once.
+# Marker-guarded: a missing nb or a
 # failed/incomplete init must not abort the bootstrap, and must retry on the
 # next run instead of giving up forever. nb's first-run wizard needs a real
 # answer — read from /dev/tty (under `curl … | bash`, plain stdin is the
@@ -59,8 +59,7 @@ if [ ! -f "$nb_marker" ]; then
     echo "  nb not found on PATH — skipping notebook init (retries next run)" >&2
   fi
 fi
-# 5. Claude plugin marketplace + the 8 user-scope plugins, once (owned only;
-# was run_once_install-claude-plugins.sh.tmpl). Idempotent even without the
+# 5. Claude plugin marketplace + the 8 user-scope plugins, once (owned only). Idempotent even without the
 # marker (marketplace add / plugin install both no-op when already present)
 # — the marker just skips the claude invocations entirely once they've all
 # succeeded.
@@ -95,7 +94,7 @@ if env_has owned && [ ! -f "$claude_plugins_marker" ]; then
   fi
 fi
 # 6. ~/.claude/settings.json three-layer merge (owned only;
-# scripts/lib/claude-settings-merge.sh — ruling 5, mise has no
+# scripts/lib/claude-settings-merge.sh — mise has no
 # modify_-template equivalent). Runs every bootstrap, not marker-guarded:
 # ongoing enforcement, not a one-time script. The script itself is
 # soft-failing; the `||` here is belt-and-braces.
@@ -103,9 +102,9 @@ if env_has owned; then
   "$root/scripts/lib/claude-settings-merge.sh" ||
     echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
 fi
-# 6b. ~/.claude/settings.local.json — seed-if-absent (I5, final-fix-brief.md;
-# owned only). Ruling 5 keeps this file out of [dotfiles] the same as
-# settings.json (Claude Code rewrites the live file), but unlike
+# 6b. ~/.claude/settings.local.json — seed-if-absent (owned only).
+# This file stays out of [dotfiles], like settings.json (Claude Code
+# rewrites the live file), but unlike
 # settings.json there is no enforced layer reapplied on every run here — a
 # plain seed, set ONLY when the live file doesn't exist yet, so a fresh host
 # gets the tracked default ({"spinnerTipsEnabled": false}) without a
@@ -124,10 +123,9 @@ if env_has owned; then
     fi
   fi
 fi
-# 7. herdr plugin at its pinned ref, once (owned only; was
-# run_once_install-herdr-plugins.sh.tmpl). PIN lives in the marker filename
+# 7. herdr plugin at its pinned ref, once (owned only). PIN lives in the marker filename
 # itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
-# re-fires the install the same way a content-hashed run_once used to.
+# re-fires the install.
 herdr_plugin_ref="v1.7.0"
 herdr_plugins_marker="$state/herdr-plugins-$herdr_plugin_ref"
 if env_has owned && [ ! -f "$herdr_plugins_marker" ]; then
@@ -142,7 +140,7 @@ if env_has owned && [ ! -f "$herdr_plugins_marker" ]; then
     echo "  herdr not found on PATH — skipping herdr plugin install (retries next run)" >&2
   fi
 fi
-# 8. tldr page cache seed, once (was run_once_seed-tldr-cache.sh.tmpl).
+# 8. tldr page cache seed, once.
 # Ongoing freshness after the first seed is auto_update in
 # ~/.config/tealdeer/config.toml, not this step.
 tldr_marker="$state/tldr-cache"

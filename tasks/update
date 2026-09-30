@@ -7,8 +7,8 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 
 git -C "$root" pull --ff-only
 
-# MISE_ENV comes from the saved mode, not the calling shell: a stale shell
-# value can load the wrong config set, and mise-install.sh's `mise prune`
+# The token set comes from the saved mode, not the calling shell: a stale
+# shell value can load the wrong config set, and mise-install.sh's `mise prune`
 # would then remove tools. Read after the pull, with bootstrap.sh's own
 # config_get in a child shell so its helpers and `set` options stay there.
 cfg="$root/config.local.toml"
