@@ -34,8 +34,8 @@
 | `config.toml` | always | uv, python, `[vars]` pins, dotfiles for both OSes |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
 | `config.owned.toml` | `owned` | owned-host tools on both OSes (node + LSP servers, go, …), `~/.claude` dotfiles, ccstatusline |
-| `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook; gdb, herdr, zed dotfiles |
-| `config.native.toml` | `native` | non-WSL owned: NFS client packages |
+| `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
+| `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
 | `config.windows.toml` | `windows` | Windows-only dotfiles |
 | `config.local.toml` | always, git-ignored | per-host `[vars] mode/name/email` and overrides |
@@ -59,9 +59,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `config.native.toml` or `config.wsl.toml`, and those files declare no `[tools]`.
 - `[bootstrap.*]` and `[dotfiles]` tables merge by union across loaded files. Declare each item once,
   in the file whose token gates it.
-- Hooks are `mise run <task>`, because mise treats hook strings as opaque shell. The one exception is
+- Hooks are `mise run <task>`, or `mise run a ::: b` for several, because mise treats hook strings as
+  opaque shell. A hook name may be declared in more than one loaded file, and all of them run. The one exception is
   the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
+- Owned-only steps hang off `final` hooks in `config.host.toml` (vcpkg, claude) and `config.native.toml`
+  (fonts). `final` runs only on a full `mise bootstrap`, never on `--only dotfiles`.
 - dnf installs everything in one batch, so a single unresolvable name fails the whole run. Only add
   EL9-verified names. `ShellCheck` is capitalised; `fswatch`, `entr` and `cockpit-networkmanager`
   don't resolve.

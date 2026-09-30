@@ -67,8 +67,9 @@ config.local.toml             git-ignored: this host's name, email, mode
 mise.lock, mise.linux.lock, mise.owned.lock, locks/
                               generated lockfiles; never hand-edit
 tasks/                        file tasks with real logic: bootstrap, health, update,
-                              check-updates, python-env, fonts, vcpkg, statusline,
-                              inventory, verify-tools, enable-el-repos
+                              check-updates, python-env, fonts, vcpkg, claude,
+                              inventory, verify-tools
+                              (statusline, enable-el-repos: owned Linux, in config.host.toml)
                               (one-line wrappers — lint, fmt, secrets, ps-lint,
                               bump-versions, install-hooks — are [tasks] in config.toml)
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
@@ -108,7 +109,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Resolve the mode (see above) and write it, with name and email, to `config.local.toml`.
-5. Compute `MISE_ENV`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+5. Compute `MISE_ENV`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
 6. Owned hosts only: set zsh as the login shell (`sudo usermod -s`).
 
 Both modes are idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -131,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 `--check-for-updates` checks this repo first (commits behind), then runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
-**Owned extras.** At the end of `bootstrap.sh` an owned host is offered the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) owned hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. Re-run with `mise run fonts`.
+**Owned extras.** At the end of `bootstrap.sh` an owned host is offered the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) owned hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.host.toml`, so they run on owned Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
 
 ### Windows
 

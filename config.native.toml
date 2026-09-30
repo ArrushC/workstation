@@ -5,3 +5,6 @@
 "dnf:autofs" = "latest"                  # installed, NOT enabled — maps are per-host /etc config
 "dnf:nfs-utils" = "latest"
 "dnf:nfs4-acl-tools" = "latest"
+
+[bootstrap.hooks]
+"final" = "mise run fonts"   # a second `final` alongside config.host.toml's; mise runs both

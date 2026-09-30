@@ -6,8 +6,12 @@
 # EPEL + CRB must exist before the dnf batch resolves (ripgrep/htop/cppcheck/
 # heaptrack/bear/ccache are EPEL, meson/ninja-build are CRB). mise has no repo-enabling
 # key, so this is a hook task. Hooks are always `mise run <task>` (opaque strings
-# get no verified cwd/PATH) and each hook name is defined in exactly one config file.
+# get no verified cwd/PATH).
 "pre-packages" = "mise run enable-el-repos"
+# Owned-only steps run from here, so shared hosts (which never load this file)
+# never see them. `final` runs only on a full `mise bootstrap`, never on
+# `--only dotfiles` (wsa).
+"final" = "mise run vcpkg ::: claude"
 
 [bootstrap.packages]
 # ONE `sudo dnf install -y <every missing name>` per run: a single unresolvable name
@@ -92,3 +96,13 @@
 # Zed rewrites this in place; record a live edit back with `wsr`. Windows sibling:
 # config.windows.toml.
 "~/.config/zed/settings.json" = { source = "dotfiles/config/zed/settings.json", mode = "copy" }
+
+[tasks.enable-el-repos]
+description = "pre-packages hook: enable EPEL + CRB on RHEL-family hosts"
+hide = true
+run = "{{ xdg_config_home }}/mise/scripts/lib/enable-el-repos.sh"
+
+[tasks.statusline]
+description = "Interactive Claude Code statusline (ccstatusline) setup"
+raw = true
+run = "{{ xdg_config_home }}/mise/scripts/setup-ccstatusline.sh"

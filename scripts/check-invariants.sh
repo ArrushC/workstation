@@ -3,7 +3,7 @@
 # documented in CLAUDE.md.
 #
 # Single source of truth for the checks; invoked three ways:
-#   - mise run lint               (tasks/lint -> $REPO_ROOT/scripts/check-invariants.sh)
+#   - mise run lint               (config.toml [tasks.lint] -> scripts/check-invariants.sh)
 #   - the pre-commit hook (mise generate git-pre-commit, via `mise run install-hooks`)
 #   - .github/workflows/lint.yml (CI backstop)
 #
@@ -795,9 +795,18 @@ for f in files:
     except Exception as e:
         print(f"FAIL|parse|{f} failed to parse: {e}")
 
-# (b)/(c): hooks — value shape ("mise run <task>"), task file exists, hook
-# NAME appears in exactly one config file.
-hook_re = re.compile(r"^mise run [a-z-]+$")
+# (b): hooks — value is `mise run <task>` or `mise run <a> ::: <b> …`, each task
+# exists (a file in tasks/ or a [tasks.<name>] table in a config*.toml). A hook
+# name may appear in several loaded files: mise runs every one (verified).
+hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
+toml_tasks = set()
+for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
+           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+    try:
+        with open(cf, "rb") as fh:
+            toml_tasks |= set(tomllib.load(fh).get("tasks", {}))
+    except FileNotFoundError:
+        pass
 # post-dotfiles (config.linux.toml) is not a "mise run <task>" hook — it's the
 # raw compound chmod restoring ~/.ssh and ~/.claude modes that copy/template
 # mode can't express (the ONLY guarantee of the SSH
@@ -814,7 +823,6 @@ EXPECTED_POST_DOTFILES_HOOK = (
     "chmod 600 ~/.ssh/config 2>/dev/null || true; "
     "chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 )
-seen = {}
 bad_hooks = []
 n_hooks = 0
 for f, d in loaded.items():
@@ -823,24 +831,17 @@ for f, d in loaded.items():
         if name == "post-dotfiles":
             if val != EXPECTED_POST_DOTFILES_HOOK:
                 bad_hooks.append(f"{f}:post-dotfiles != the verified-safe literal (got {val!r})")
-            seen.setdefault(name, []).append(f)
             continue
         if not hook_re.match(val):
             bad_hooks.append(f"{f}:{name}={val!r} (want 'mise run <task>')")
             continue
-        task = val.split("mise run ", 1)[1]
-        if not os.path.isfile(os.path.join("tasks", task)):
-            bad_hooks.append(f"{f}:{name} -> task file tasks/{task} missing")
-        seen.setdefault(name, []).append(f)
+        for task in val.split("mise run ", 1)[1].split(" ::: "):
+            if not (os.path.isfile(os.path.join("tasks", task)) or task in toml_tasks):
+                bad_hooks.append(f"{f}:{name} -> task {task} is neither tasks/{task} nor a [tasks.{task}] table")
 if bad_hooks:
     print("FAIL|hooks|" + "; ".join(bad_hooks))
 else:
-    print(f"PASS|hooks|{n_hooks} hook(s) are 'mise run <task>' (task file exists) or the pinned post-dotfiles literal")
-dupes = [f"{name} in {fs}" for name, fs in seen.items() if len(fs) > 1]
-if dupes:
-    print("FAIL|hook-unique|duplicated hook name(s) across config files: " + "; ".join(dupes))
-else:
-    print(f"PASS|hook-unique|{len(seen)} hook name(s) each appear in exactly one config file")
+    print(f"PASS|hooks|{n_hooks} hook(s) run existing tasks or are the pinned post-dotfiles literal")
 
 # (d): files — source exists relative to the repo root, phase valid when present.
 bad_files = []
