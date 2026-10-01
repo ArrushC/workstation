@@ -132,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 ### Windows
 
-The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: SSHFS-Win installs WinFsp, a kernel driver, so its first install pops a UAC prompt; decline it or pass `-SkipElevated` and everything else still completes.
+The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, mise's `%LOCALAPPDATA%\mise`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: SSHFS-Win depends on WinFsp, a kernel driver, so its first install raises UAC (two prompts on a host without WinFsp: one for WinFsp, one for SSHFS-Win); decline them or pass `-SkipElevated` and everything else still completes.
 
 Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`) and a working `curl.exe` (`curl.exe --version`). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
 
@@ -155,16 +155,18 @@ Or clone and run: `git clone https://github.com/ArrushC/workstation.git "$env:US
 
 What `bootstrap.ps1` does:
 
-1. Preflight: require git.
-2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`, and remove the pre-mise portable tools (their directories and User PATH entries).
-3. Install the missing GUI apps through winget (latest, sha256-checked against the winget manifest; each self-updates, so there is no pin): Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare and Zed (winget's Zed installer is machine scope but installs per-user, without admin), then SSHFS-Win (UAC). An app counts as present when an Uninstall-registry DisplayName matches (Windows Terminal: its Appx package, or `wt.exe` on PATH), so copies installed before winget, such as "DevToys Preview", are kept. An "already installed" answer from winget counts as present. Without winget (App Installer) the step warns and skips.
-4. Clone this repo to `%USERPROFILE%\.config\mise`, write `miserc.toml` (`windows,owned`; the old User `MISE_ENV` is removed) and run `mise bootstrap --only dotfiles,tools`: dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). mise's shims dir joins the User PATH; then the `wpy` Python env is built (a uv venv on mise's python with the libraries in `scripts/python-env.txt`).
-5. Generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment, Nushell's starship and mise autoload files, Start Menu shortcuts, BurntToast, Claude Code (native installer, self-updating), and the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
-6. Prompt for an SSH key.
-7. Merge `~/.claude/settings.json` and print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
-8. Persist `GITHUB_TOKEN`, if set, into `.git/config` so `git push`/`git pull`/`wsu` authenticate.
+1. Preflight: require `curl.exe` and git (it never installs Git).
+2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
+3. Install the missing GUI apps through winget (latest, checked against the winget manifest's sha256; each self-updates, so there is no pin): Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare and Zed (winget's Zed installer is machine scope but installs per-user, without admin), then SSHFS-Win (UAC). An app counts as present when an Uninstall-registry DisplayName matches (Windows Terminal: its Appx package, or `wt.exe` on PATH), so copies winget did not install are kept: an installed "DevToys Preview" counts as DevToys, and winget does not add the stable build next to it. An "already installed" answer from winget also counts. Without winget (App Installer) the step warns and skips.
+4. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it). A set `GITHUB_TOKEN` is persisted into `.git/config` so `git pull` and `wsu` authenticate.
+5. Write `miserc.toml` (`windows,owned`; a User `MISE_ENV` variable is removed), ask once for your git name and email, check that mise loads `config.owned.toml` (it stops otherwise, before anything can prune the owned tools), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
+6. After a successful tools phase: remove the portable tools mise replaced (their directories and User PATH entries), add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder.
+7. Add Start Menu shortcuts for dnGrep and LogExpert, generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment and Nushell's starship and mise autoload files, seed dnGrep's settings, and install the PowerShell profile loader when Documents is redirected.
+8. Install BurntToast and Claude Code (native installer, self-updating), merge `~/.claude/settings.json` and seed `settings.local.json`.
+9. Build the `wpy` Python env (a uv venv on mise's python with the libraries in `scripts/python-env.txt`) and install the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
+10. Prompt for an SSH key, then print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
 
-Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed); PowerShell stays for .NET/COM/registry tasks. Nushell completes `bootstrap.ps1` flags via an external completer; PowerShell does it natively.
+Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Nushell completes `bootstrap.ps1` flags via an external completer; PowerShell does it natively.
 
 | Flag | Meaning |
 |---|---|
@@ -180,7 +182,9 @@ Restart the shell afterwards so the new profile loads. Nushell is the default lo
 
 `-Reinstall` from inside the repo is refused. Use the curl.exe download above and append `-Reinstall` to the `& ([scriptblock]::Create($bootstrap))` line.
 
-**Health and updates.** There is no report mode in `bootstrap.ps1`. Use `mise doctor`, `mise bootstrap status` and `mise dot status` for the tools, host state and dotfiles. Update the GUI apps with `winget upgrade --all`, or one with `winget upgrade --id <Id>` (the ids are in the `$WingetApps` table in `bootstrap.ps1`).
+**Health and updates.** There is no report mode in `bootstrap.ps1`. Use `mise doctor`, `mise bootstrap status` and `mise dot status` for the tools, host state and dotfiles. `wsu` updates the dotfiles and every CLI tool. Update the GUI apps with `winget upgrade --all`, or one with `winget upgrade --id <Id>` (the ids are in the `$WingetApps` table in `bootstrap.ps1`).
+
+A mise version bump reaches Windows through `wsu`'s pull, but the installed mise is then older than `config.toml`'s `min_version` and refuses the new config, and so does every mise shim, including Windows Terminal's Nushell. Re-run `.\bootstrap.ps1` from a Windows PowerShell window to install the new mise.
 
 Windows Terminal's `settings.json` (Catppuccin Mocha, Nushell default profile) is a tracked `copy` dotfile deployed straight to the Store package's `LocalState`. Warp's `settings.toml` and `keybindings.yaml` (`%LOCALAPPDATA%\warp\Warp\config\`) and theme (`%APPDATA%\warp\Warp\data\themes\`) are tracked too. Both apps rewrite their own files, so record changes made in their UIs with `wsr`. The generated parts are separate: Warp `workstation-*.toml` Tab Configs in `%APPDATA%\warp\Warp\data\tab_configs\`, and the Windows Terminal fragment under `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\`. Your own Tab Configs and profiles are never touched.
 
@@ -341,7 +345,7 @@ mise run bump-versions
 
 It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` previews without writing), so expect unrelated bumps in the diff. It refreshes the lockfiles for every platform the verified way (from outside the checkout through an `XDG_CONFIG_HOME` symlink, then normalising the `.mise/locks` sidecar paths). A hand-run `mise lock` inside the checkout can write sidecar refs to the wrong layout. Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
 
-**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
+**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is mise itself: `MISE_VERSION`/`MISE_SHA256` in `bootstrap.sh`, `$MiseVersion`/`$MiseSha256` in `bootstrap.ps1` and `min_version` in `config.toml` (lint checks the versions agree). To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
 
 **A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
 
@@ -441,13 +445,17 @@ An edit in the repo needs `wsa` before Windows Terminal sees it; `settings.json`
 
 Git is a prerequisite the script does not install. Install Git for Windows (`winget install Git.Git`), reopen PowerShell and re-run. The GitHub CLI is not one (mise installs it); authenticate once afterwards with `gh auth login`.
 
-### bootstrap.ps1 aborts with "<Tool> sha256 mismatch — refusing to install"
+### bootstrap.ps1 says the mise download "did not match the pinned checksum"
 
-mise is the one tool `bootstrap.ps1` pins itself: `$MiseVersion` and `$MiseSha256` (with `MISE_VERSION` in `bootstrap.sh` and `min_version` in `config.toml`). Every other CLI tool is checked by mise against the sha256 in `mise*.lock`. A mismatch means the pinned hash is stale (upstream re-published the asset) or the download was corrupted or tampered with, and the script refuses to install an unverified binary. The GUI apps come from winget, which checks each installer against the sha256 in its manifest. For mise, re-download the pinned zip, recompute its hash, and update `$MiseSha256`:
+Only mise is checksum-pinned by `bootstrap.ps1` (`$MiseSha256` for `$MiseVersion`). Every other CLI tool is verified by mise against the sha256 in `mise*.lock`, and winget checks each GUI app's installer against its manifest. The script never installs an unverified mise: with an older mise installed it warns and carries on with that one, and with none it stops. A one-off mismatch is usually a corrupted download, so re-run `.\bootstrap.ps1`. If it persists, the pin is stale (upstream re-published the asset) or the download is being tampered with: re-download the pinned zip, recompute its hash, and update `$MiseSha256`:
 
 ```powershell
 (Get-FileHash -Algorithm SHA256 .\<asset>.zip).Hash.ToLower()
 ```
+
+### bootstrap.ps1 stops with "mise did not load config.owned.toml" or "'mise config ls' failed"
+
+Both stop the run before `mise bootstrap` and `mise prune` (a prune without `config.owned.toml` would remove the owned tools). "Did not load config.owned.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there) or a `MISE_ENV` is exported; `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
 
 ### PowerShell aliases / adminpw / ws* don't load (the profile seems ignored)
 
@@ -551,7 +559,7 @@ RAM is the separate, already-solved half: `autoMemoryReclaim=gradual` in the tra
 
 ### LSP servers — a language server is missing after mise bootstrap
 
-`mise bootstrap`'s tools phase installs the whole stack. rust-analyzer, marksman and taplo are aqua-registry tools in both modes. gopls, lua-language-server, basedpyright, typescript-language-server, bash-language-server, yaml-language-server and vscode-json-language-server come from `config.owned.toml`. `mise ls --missing` lists what did not install; `mise doctor` must report `activated: yes` and `shims_on_path: yes` (else `wsa` and open a new shell). A stale npm server after a pin bump means node's postinstall did not re-run: `mise install --force node`. TypeScript is held on 5.x on purpose (TypeScript 7 ships no `tsserver.js`). clangd comes from dnf (`clang-tools-extra` in `config.host.toml`); `mise run health` does not check it, so use `command -v clangd`. On Windows the same servers install via `bootstrap.ps1`; check with `mise ls --missing` and `mise doctor`, and open a new terminal after the first run. Re-run the stack with `mise bootstrap --only tools --yes`, or force one tool with `mise uninstall <name> && mise install <name>`.
+`mise bootstrap`'s tools phase installs the whole stack. rust-analyzer, marksman and taplo are aqua-registry tools in both modes. gopls, lua-language-server, basedpyright, typescript-language-server, bash-language-server, yaml-language-server and vscode-json-language-server come from `config.owned.toml`. `mise ls --missing` lists what did not install; `mise doctor` must report `activated: yes` and `shims_on_path: yes` (else `wsa` and open a new shell). A stale npm server after a pin bump means node's postinstall did not re-run: `mise install --force node`. TypeScript is held on 5.x on purpose (TypeScript 7 ships no `tsserver.js`). clangd comes from dnf (`clang-tools-extra` in `config.host.toml`); `mise run health` does not check it, so use `command -v clangd`. On Windows the same servers install through `mise bootstrap` (run by `bootstrap.ps1` and `wsu`); check with `mise ls --missing` and `mise doctor`, and open a new terminal after the first run. Re-run the stack with `mise bootstrap --only tools --yes`, or force one tool with `mise uninstall <name> && mise install <name>`.
 
 ### C / C++ toolchain — a tool is missing, or ninja / vcpkg behaves oddly
 
@@ -575,7 +583,7 @@ The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is declared in `c
 
 ### bootstrap.ps1 popped a UAC prompt (or SSHFS-Win reports "winget exited")
 
-That is the SSHFS-Win install, the one deliberate exception to the admin-free bootstrap: it depends on WinFsp, a kernel-mode driver, so elevation is unavoidable. It needs winget (App Installer); without it the GUI-app step is skipped. It is best-effort: declining or being offline skips it with a warning, and an already-installed machine never sees the prompt. Install it later with `winget install --id SSHFS-Win.SSHFS-Win` (pulls WinFsp) or re-run `.\bootstrap.ps1` and accept; suppress the attempt with `-SkipElevated`. A prompt while Warp installs is winget adding the VC++ runtime Warp depends on (`-SkipElevated` does not cover it). Once installed, mount with `net use X: \\sshfs\user@host` or browse `\\sshfs\user@host` in Explorer.
+That is the SSHFS-Win install, the one deliberate exception to the admin-free bootstrap: it depends on WinFsp, a kernel-mode driver, so elevation is unavoidable. A host without WinFsp sees two prompts, one for WinFsp and one for SSHFS-Win. It needs winget (App Installer); without it the GUI-app step is skipped. It is best-effort: declining or being offline skips it with a warning, and an already-installed machine never sees the prompt. Install it later with `winget install --id SSHFS-Win.SSHFS-Win` (pulls WinFsp) or re-run `.\bootstrap.ps1` and accept; suppress the attempt with `-SkipElevated`. A prompt while Warp installs is winget adding the VC++ runtime Warp depends on (`-SkipElevated` does not cover it). Once installed, mount with `net use X: \\sshfs\user@host` or browse `\\sshfs\user@host` in Explorer.
 
 ### Zellij's top bar is plain, shows a "permission" request, or renders boxes instead of rounded pills
 

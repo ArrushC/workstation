@@ -1,42 +1,14 @@
 ﻿# =============================================================================
-# bootstrap.ps1 -- workstation setup (Windows client side)
-#
-# No admin rights needed: installs the pinned mise per-user
-# (%LOCALAPPDATA%\workstation) and the GUI apps through winget ($WingetApps),
-# then runs `mise bootstrap --only dotfiles,tools` to deploy the tracked
-# dotfiles and install every CLI tool those files declare. Windows is
-# always the `owned` mode (miserc.toml: windows,owned). Git is a
-# hard prerequisite (install it yourself); VSCode is hand-installed --
-# its dotfiles still deploy without it.
-#
-# ONE exception to "no admin": SSHFS-Win (with its WinFsp kernel driver)
-# pops a UAC prompt on first install. Declining it (or -SkipElevated)
-# soft-fails only that app.
-#
-# Public repo, no token needed. $env:GITHUB_TOKEN is optional: used for a
-# private-fork clone; mise also uses it to lift the 60-req/hr GitHub API limit.
-#
-# Bootstrap a fresh machine (no elevation needed) -- the checked curl.exe
-# download, same form as README.md's Windows setup:
-#   $bootstrapFile = [System.IO.Path]::GetTempFileName()
-#   try {
-#       $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
-#       & $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
-#         --output $bootstrapFile `
-#         https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
-#       if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
-#       $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
-#       & ([scriptblock]::Create($bootstrap))
-#   } finally {
-#       Remove-Item -LiteralPath $bootstrapFile -Force
-#   }
-#
-# Or clone + run:
-#   git clone https://github.com/ArrushC/workstation.git "$env:USERPROFILE\.config\mise"
-#   cd "$env:USERPROFILE\.config\mise"; .\bootstrap.ps1
-#
-# Flags (see param() below): -RepoPath -SkipKeyGen -SkipToolInstall
-#   -SkipDotfiles -SkipBurntToast -SkipNerdFonts -SkipElevated -Reinstall -Yes
+# bootstrap.ps1 -- workstation setup (Windows), per-user, no admin. It checks
+# for git and curl.exe (it never installs Git), installs the sha256-pinned mise
+# and the missing $WingetApps GUI apps (winget), clones this repo, writes
+# miserc.toml (windows,owned) and runs `mise bootstrap --only dotfiles,tools`
+# (the dotfiles and every CLI tool), then the steps under RUN SEQUENCE.
+# The one admin step: SSHFS-Win raises UAC (two prompts on a host without
+# WinFsp); declining it, or -SkipElevated, skips only that app.
+# Run it as README.md's Windows setup shows. $env:GITHUB_TOKEN is optional (a
+# private-fork clone; mise's GitHub API limit). Health: mise doctor, mise
+# bootstrap status, mise dot status, winget upgrade.
 # =============================================================================
 
 [CmdletBinding()]
@@ -56,46 +28,34 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # =============================================================================
-# CONSTANTS & TOOL TABLES -- repo/install paths, the mise pin and the
-# winget app table everything below reads from.
+# CONSTANTS
 # =============================================================================
 
 $DotfilesRepo = "https://github.com/ArrushC/workstation.git"
 $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 
-# Token persisted into .git/config under this key — scoped to github.com so
-# it never leaks to other remotes.
+# Scoped to github.com, so the token persisted in .git/config never reaches another remote.
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
-# Per-user install root for what this script provisions itself. Admin-free:
-#   workstation\mise    — the pinned mise (bin\mise.exe + mise-shim.exe) → bin\ on User PATH
-#   workstation\bin     — the python-env launchers (wpy/textual/typer)    → on User PATH
-#   workstation\stamps  — idempotency markers
-# Every CLI tool comes from config*.toml through mise (%LOCALAPPDATA%\mise).
+# mise\bin (the pinned mise) and bin (python-env launchers) go on the User PATH.
 $WsRoot   = Join-Path $env:LOCALAPPDATA "workstation"
 $WsBin    = Join-Path $WsRoot "bin"
 $WsMise   = Join-Path $WsRoot "mise"
 $WsStamps = Join-Path $WsRoot "stamps"
 
-# mise is the one tool this script pins itself: everything else comes from
-# config*.toml through mise. Triple-edit with MISE_VERSION in bootstrap.sh and
-# min_version in config.toml (scripts/check-invariants.sh checks it).
+# The one pin here: triple-edit with MISE_VERSION (bootstrap.sh) and min_version (config.toml).
 $MiseVersion = "2026.9.9"
 $MiseSha256  = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
 $MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise-v$MiseVersion-windows-x64.zip"
 $MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
 $MiseEnvTokens = @("windows", "owned")
 
-# Blessed Python scripting env (Invoke-PythonEnv): mise's python + scripts\python-env.txt.
 $WsPythonEnv = Join-Path $WsRoot "python-env"
 
-# GUI apps, installed through winget and then self-updating (or `winget upgrade`).
-# Presence = Uninstall-registry DisplayName glob (Test-InstallerPresent): it also
-# sees copies installed before winget managed them (e.g. "DevToys Preview"),
-# which `winget list` misses. Windows Terminal has no Detect: it is an Appx
-# package (Test-WindowsTerminalPresent). Zed's Detect is exact, so "Zed
-# Preview"/"Zed Nightly" don't count. Warp's manifest depends on the VC++
-# runtime: on a host without it, winget may show UAC for that (not -SkipElevated's).
+# winget installs these, then they self-update. Presence is an Uninstall-registry
+# DisplayName glob, so copies winget didn't install count ("DevToys Preview",
+# which `winget list` misses); Zed's is exact, so "Zed Preview" doesn't. Windows
+# Terminal is Appx. Warp's VC++ runtime dependency can raise UAC (not -SkipElevated's).
 $WingetApps = @(
     @{ Id = "Microsoft.WindowsTerminal";       Name = "Windows Terminal";                                 Scope = "user" },
     @{ Id = "Warp.Warp";                       Name = "Warp";             Detect = "Warp*";            Scope = "user" },
@@ -104,19 +64,17 @@ $WingetApps = @(
     @{ Id = "DBeaver.DBeaver.Community";       Name = "DBeaver";          Detect = "DBeaver*";         Scope = "user" },
     @{ Id = "WinSCP.WinSCP";                   Name = "WinSCP";           Detect = "WinSCP*";          Scope = "user" },
     @{ Id = "ScooterSoftware.BeyondCompare.5"; Name = "Beyond Compare";   Detect = "Beyond Compare*";  Scope = "user" },
-    # winget's only Zed installer says machine scope, but it is PrivilegesRequired=lowest:
-    # it installs per-user, with no UAC.
+    # winget's only Zed installer claims machine scope but is PrivilegesRequired=lowest: per-user, no UAC.
     @{ Id = "ZedIndustries.Zed";               Name = "Zed";              Detect = "Zed";              Scope = "machine" },
-    # The one UAC install (WinFsp, its winget dependency, is a kernel driver; without
-    # WinFsp it is two prompts). Uac: no --silent, and -SkipElevated skips it.
+    # The one UAC install (its WinFsp dependency is a kernel driver: a second prompt
+    # when missing). Uac: no --silent, and -SkipElevated skips it.
     @{ Id = "SSHFS-Win.SSHFS-Win";             Name = "SSHFS-Win";        Detect = "SSHFS-Win*";       Scope = "machine"; Uac = $true }
 )
 
 # =============================================================================
-# OUTPUT HELPERS
+# HELPERS: output, HTTP, PATH
 # =============================================================================
 
-# --- ANSI escape codes -------------------------------------------------------
 $Esc    = [char]27
 $Bold   = "$Esc" + "[1m"
 $Reset  = "$Esc" + "[0m"
@@ -130,12 +88,7 @@ function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
 
-# =============================================================================
-# HTTP HELPER
-# =============================================================================
-
-# Kept self-contained: bootstrap also runs from memory before the repo exists.
-# The font script carries the same helper for its independent execution context.
+# Self-contained: bootstrap also runs from memory, before the repo exists.
 function Invoke-CurlRequest {
     [CmdletBinding()]
     param(
@@ -144,8 +97,7 @@ function Invoke-CurlRequest {
         [string]$OutFile
     )
 
-    # Get-Command lists EVERY curl.exe on PATH (System32 + Git's mingw64\bin is
-    # the everyday case) - take the first, i.e. the one a bare `curl.exe` runs.
+    # PATH can hold several (System32, Git's mingw64\bin): take the one a bare `curl.exe` runs.
     $curl = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $curl) {
         throw 'curl.exe is required on PATH. Restore the Windows system curl or install it from https://curl.se/windows/ and reopen your shell.'
@@ -154,31 +106,26 @@ function Invoke-CurlRequest {
     $tempFile = [System.IO.Path]::GetTempFileName()
     $headerFile = $null
     try {
-        # --speed-limit/--speed-time: a connected-but-stalled transfer aborts
-        # (exit 28, which --retry treats as transient) instead of hanging forever.
+        # --speed-limit/--speed-time: a stalled transfer aborts (exit 28, retried) instead of hanging.
         $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location',
             '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30',
             '--speed-limit', '1', '--speed-time', '60',
             '--output', $tempFile)
         if ($Headers.Count -gt 0) {
-            # Headers travel via a file, never argv: a PAT on a command line is
-            # visible to process auditing. One header per line; no BOM, or curl
-            # would send it as part of the first header name.
+            # A file, never argv (process auditing shows a PAT); no BOM, or curl sends it in the first header.
             $headerFile = [System.IO.Path]::GetTempFileName()
             $headerLines = @(foreach ($key in $Headers.Keys) { '{0}: {1}' -f $key, $Headers[$key] })
             [System.IO.File]::WriteAllLines($headerFile, [string[]]$headerLines, [System.Text.UTF8Encoding]::new($false))
             $curlArgs += @('--header', "@$headerFile")
         }
         $curlArgs += @('--url', $Uri)
-        # PS 5.1 can turn redirected native stderr into PowerShell errors;
-        # PS 7 can optionally throw on native exit codes. Handle both ourselves.
+        # PS 5.1 can turn native stderr into errors and PS 7 can throw on exit codes: handle both here.
         $ErrorActionPreference = 'Continue'
         $PSNativeCommandUseErrorActionPreference = $false
         $curlOutput = & $curl.Source @curlArgs 2>&1
         $curlExitCode = $LASTEXITCODE
         if ($curlExitCode -ne 0) {
-            # --silent --show-error leaves only curl's own diagnostic on stderr
-            # (e.g. "curl: (22) The requested URL returned error: 404"); surface it.
+            # --silent --show-error leaves only curl's own diagnostic on stderr.
             $detail = ((@($curlOutput) | ForEach-Object { "$_".Trim() }) -join ' ').Trim()
             throw "curl.exe request failed (exit $curlExitCode): $Uri [$detail]"
         }
@@ -193,19 +140,12 @@ function Invoke-CurlRequest {
     }
 }
 
-# =============================================================================
-# PATH HELPERS
-# =============================================================================
-
-# User-scope environment variables. One seam, so scripts/test-mise-env.ps1 can
-# stub them (a static .NET method can't be); $null as the value deletes.
+# A seam scripts/test-mise-env.ps1 can stub (a static .NET method can't be); $null deletes.
 function Get-UserEnv { param([string]$Name) [Environment]::GetEnvironmentVariable($Name, "User") }
 function Set-UserEnv { param([string]$Name, $Value) [Environment]::SetEnvironmentVariable($Name, $Value, "User") }
 
 function Update-SessionPath {
-    # New PATH entries are written to the User registry scope; the current
-    # session keeps its own copy. Rebuild $env:PATH from Machine + User so
-    # freshly-installed tools resolve right away.
+    # The session keeps its own PATH copy; rebuild it so new User PATH entries resolve now.
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                 [System.Environment]::GetEnvironmentVariable("PATH", "User")
 }
@@ -216,8 +156,6 @@ function Add-ToUserPath {
     $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
     if (-not $userPath) { $userPath = "" }
 
-    # Idempotent: append to the User PATH only if not already present
-    # (case-insensitive, trailing-slash-insensitive).
     $present = $userPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries) |
         Where-Object { $_.TrimEnd('\') -ieq $Dir.TrimEnd('\') }
     if (-not $present) {
@@ -236,11 +174,9 @@ function Add-ToUserPath {
 }
 
 # =============================================================================
-# INSTALL FUNCTIONS
+# PREFLIGHT, MISE, GUI APPS
 # =============================================================================
 
-# Invoke-Reinstall -- wipe the cloned repo, then let the rest of the script
-# re-bootstrap fresh. Installed tools + deployed dotfiles are left alone.
 function Invoke-Reinstall {
     Write-Log "Reinstall mode — wipe + re-bootstrap"
     Write-Host ""
@@ -256,10 +192,7 @@ function Invoke-Reinstall {
     Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # mise re-downloads next run"
     Write-Host ""
 
-    # Self-deletion guard: if this script is being run from inside the path we're
-    # about to delete, refuse. Use the checked curl.exe download form instead, which runs
-    # from memory and isn't backed by a file on disk. $PSCommandPath is $null
-    # when the script is executed from a string (a scriptblock).
+    # A script inside $RepoPath would delete itself; the curl.exe form runs from memory ($PSCommandPath $null).
     if ($PSCommandPath -and $PSCommandPath.StartsWith($RepoPath, [StringComparison]::OrdinalIgnoreCase)) {
         Write-Fail @"
 Refusing to reinstall — the running script is inside $RepoPath, which would
@@ -295,9 +228,6 @@ be deleted, leaving this invocation orphaned. Either:
     Write-Host ""
 }
 
-# Git is a hard prerequisite; mise presence only matters when
-# -SkipToolInstall is set and the dotfiles+tools step will run;
-# ssh-keygen soft-warns. No admin check needed.
 function Invoke-Preflight {
     Write-Log "Checking prerequisites..."
     $curlCmd = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -306,9 +236,6 @@ function Invoke-Preflight {
     }
     Write-Ok "curl.exe found ($($curlCmd.Source))"
 
-    # Git is a hard prerequisite — you install it yourself. Needed for the
-    # clone and for git operations mise performs against this same checkout
-    # (mise tracks dotfiles history in it). This script does NOT install Git.
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         Write-Fail @"
 Git is required but isn't on PATH.
@@ -323,9 +250,6 @@ This script does NOT install Git for you.
     }
     Write-Ok "git found ($((Get-Command git).Source))"
 
-    # mise is installed by the tool step unless skipped. If -SkipToolInstall
-    # is set and the dotfiles+tools bootstrap step will run, mise must already
-    # be present.
     if ($SkipToolInstall -and -not $SkipDotfiles -and -not (Get-Command mise -ErrorAction SilentlyContinue)) {
         Write-Fail @"
 -SkipToolInstall was passed but mise isn't on PATH and the dotfiles+tools
@@ -343,10 +267,8 @@ yourself first.
     Write-Ok "Prerequisites OK"
 }
 
-# An update renames the old bin\mise.exe and mise-shim.exe to *.old instead
-# of deleting them: every shim (WT's Nushell too, via mise\shims\nu.exe) runs
-# mise.exe, and Windows can rename a running image but not delete or
-# overwrite it. Leftover *.old files go on a later run, once nothing runs them.
+# An update renames bin\mise.exe and mise-shim.exe to *.old (a later run removes them): every shim
+# (WT's Nushell too) runs mise.exe, and Windows can rename a running image but not delete or overwrite it.
 function Install-Mise {
     $binDir  = Join-Path $WsMise "bin"
     $miseExe = Join-Path $binDir "mise.exe"
@@ -409,11 +331,9 @@ function Install-Mise {
     }
 }
 
-# One-time cleanup of the pre-mise portable installs (remove once every
-# Windows host has run it): their PATH entries sat ahead of mise's shims.
-# Only the old tools' own stamps go; wslconfig.*, node-postinstall.* and
-# python-env.* stamps are live markers. Runs after a successful tools phase
-# (Invoke-MiseBootstrap), so a failed bootstrap keeps the old tools.
+# Removes the portable installs mise replaced (their User PATH entries would shadow
+# the shims) and only their stamps. It runs after a good tools phase, so a failed
+# bootstrap keeps them. Remove this function once every Windows host has run it.
 function Invoke-LegacyToolCleanup {
     $old = @("helix", "nu", "devtoys-cli", "dngrep", "logexpert") | ForEach-Object { Join-Path $WsRoot $_ }
     $oldExes = @("starship", "gh", "jq", "omp", "opencode", "chezmoi") | ForEach-Object { Join-Path $WsBin "$_.exe" }
@@ -437,9 +357,7 @@ function Invoke-LegacyToolCleanup {
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-# True if an app with a matching Uninstall-registry DisplayName is installed —
-# per-user (HKCU) or machine-wide (HKLM / WOW6432Node). Path-independent presence
-# check; a Control-Panel uninstall removes the key, so the next bootstrap reinstalls.
+# Path-independent, and a Control-Panel uninstall removes the key, so the next run reinstalls.
 function Test-InstallerPresent {
     param([string]$DisplayName)
     $roots = @(
@@ -455,17 +373,15 @@ function Test-InstallerPresent {
     return $false
 }
 
-# Windows Terminal is an Appx package (no Uninstall-registry entry); wt.exe on
-# PATH also counts (a non-Store install, or a pwsh whose Appx module won't load).
+# Appx (no Uninstall key); wt.exe on PATH also counts (a non-Store install, or no Appx module).
 function Test-WindowsTerminalPresent {
     $pkg = $null
     try { $pkg = Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue } catch { $pkg = $null }
     return ([bool]$pkg -or [bool](Get-Command wt.exe -ErrorAction SilentlyContinue))
 }
 
-# Install each missing $WingetApps entry with winget (its manifest pins the
-# installer's sha256). Best-effort: a failed or unstartable winget warns and
-# the loop goes on. A Uac entry gets no --silent: winget would then run its
+# winget checks each installer against its manifest sha256. Best-effort: a failure
+# warns and the loop goes on. A Uac entry gets no --silent, which would run its
 # MSI in-process at UI level None, where UAC can't appear (MSI error 1925).
 function Install-WingetApps {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -518,9 +434,6 @@ function Invoke-ToolInstall {
 
     Update-SessionPath
 
-    # Soft-warn for the hand-installed editor (VSCode). Zed is installed from
-    # $WingetApps above; VSCode's dotfiles config deploys regardless, and the
-    # script never installs or fails on it.
     foreach ($app in @(@{ Cmd = 'code'; Name = 'VSCode' })) {
         if (-not (Get-Command $app.Cmd -ErrorAction SilentlyContinue)) {
             Write-Warn "$($app.Name) not on PATH — install it yourself when you want it; its dotfiles still deploy."
@@ -529,16 +442,13 @@ function Invoke-ToolInstall {
 }
 
 # =============================================================================
-# REPO & MISE FUNCTIONS
+# REPO & MISE
 # =============================================================================
 
-# Clone the workstation repo (public; optional $env:GITHUB_TOKEN for a private fork).
 function Invoke-CloneRepo {
-    # HTTP Basic with base64-encoded "x-access-token:<PAT>" — same scheme
-    # actions/checkout uses. "Authorization: bearer" works for the REST/raw API
-    # (how curl.exe fetches bootstrap.ps1) but is NOT accepted by git's smart-HTTP
-    # endpoint on github.com — git silently falls through to credential
-    # prompting, breaking any non-interactive clone.
+    # HTTP Basic "x-access-token:<PAT>", as actions/checkout does: git's smart-HTTP
+    # endpoint on github.com refuses "Authorization: bearer" and silently falls
+    # back to a credential prompt, which breaks a non-interactive clone.
     $headerVal = ""
     if ($env:GITHUB_TOKEN) {
         $b64 = [Convert]::ToBase64String(
@@ -583,9 +493,8 @@ function Invoke-CloneRepo {
 # First-apply marker; the name predates mise and stays so existing hosts don't re-force.
 $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 
-# The token set lives in miserc.toml (git-ignored), like on Linux; nothing
-# exports MISE_ENV. An exported value would override miserc, so the old User
-# variable is removed here and in this session.
+# miserc.toml (git-ignored) holds the token set, as on Linux. An exported MISE_ENV
+# would override it, so a User MISE_ENV is removed, and this session's too.
 function Initialize-MiseEnv {
     $rc = Join-Path $RepoPath "miserc.toml"
     $envList = ($MiseEnvTokens | ForEach-Object { '"' + $_ + '"' }) -join ', '
@@ -632,8 +541,7 @@ function Set-ConfigLocalVar {
     [System.IO.File]::WriteAllText($Path, (($out -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# Windows is always an owned host (no shared mode here). Name/email are asked
-# once, interactively; a non-interactive run leaves them for the user to add.
+# Windows is always owned. Name/email are asked once; a non-interactive run leaves them to the user.
 function Invoke-EnsureConfigLocal {
     $target = Join-Path $RepoPath "config.local.toml"
     Set-ConfigLocalVar -Path $target -Key 'mode' -Value 'owned'
@@ -660,12 +568,8 @@ function Invoke-EnsureConfigLocal {
 }
 
 function Invoke-WslConfigReminder {
-    # mise has no run_onchange_* equivalent, and .wslconfig only takes effect
-    # after `wsl --shutdown` restarts every distro -- so remind the user only
-    # when the deployed content actually changed. Hashes the REPO source
-    # (dotfiles/wslconfig): a matching stamp file means "unchanged"; no
-    # match means the hash moved, so the reminder fires and a fresh stamp
-    # is written.
+    # .wslconfig takes effect only after `wsl --shutdown`, so remind only when the
+    # repo source changed: the stamp is named by its hash (mise has no run_onchange_).
     $source = Join-Path $RepoPath "dotfiles\wslconfig"
     if (-not (Test-Path -LiteralPath $source)) { return }
 
@@ -682,26 +586,12 @@ function Invoke-WslConfigReminder {
     Write-Warn "for the new WSL2 settings to take effect (restarts all distros)."
 }
 
-# Invoke-MiseBootstrap -- `mise bootstrap --only dotfiles,tools` applies the
-# [dotfiles] entries (config.toml/config.owned.toml/config.windows.toml) to
-# %USERPROFILE% AND installs every tool those same files declare, in one
-# call; `--only` skips [bootstrap.files] entirely, so no sudo-only /etc
-# entry can ever fire here. -SkipDotfiles drops the dotfiles phase and
-# -SkipToolInstall the tools phase (and the post-tools steps below).
-#
-# The first dotfiles apply on this host can find targets already on disk as
-# real files, and template/copy modes refuse to overwrite one that differs
-# -- so that FIRST apply passes --force-dotfiles (mirrors bootstrap.sh's own
-# apply()). Passed only until $MigratedMarker exists, so a later real
-# conflict still surfaces loudly.
-#
-# Before it, a guard: config.owned.toml must be loaded (miserc.toml honoured).
-# After a successful tools phase: the pre-mise portable installs are removed
-# (Invoke-LegacyToolCleanup), then, as scripts/lib/mise-install.sh does on
-# Linux: the shims dir joins the User PATH and this session (jq, starship,
-# nu and uv resolve for the steps after this); node is force-reinstalled
-# once when its declaration changed, because mise re-runs node's npm
-# postinstall (the language servers) only on a (re)install; prune + reshim.
+# `mise bootstrap --only dotfiles,tools`: the [dotfiles] entries and every tool;
+# `--only` keeps the sudo-only [bootstrap.files] out. A host's first apply passes
+# --force-dotfiles (a target can already be a differing real file); $MigratedMarker
+# then stops it, so a later real conflict surfaces. After a good tools phase, as
+# scripts/lib/mise-install.sh does on Linux: shims on PATH (later steps need jq,
+# starship, nu, uv), node reinstalled when its declaration changed, prune, reshim.
 function Invoke-MiseBootstrap {
     $phases = @()
     if (-not $SkipDotfiles) { $phases += 'dotfiles' }
@@ -720,9 +610,7 @@ function Invoke-MiseBootstrap {
 
     $forceFlags = @()
     if (-not $SkipDotfiles) {
-        # config.local.toml must exist BEFORE the dotfiles apply below -- the
-        # Tera templates guard every vars.* reference, but a real value still
-        # shapes the rendered git identity.
+        # Before the apply: templates guard vars.*, but real values shape the git identity.
         Invoke-EnsureConfigLocal
         if (-not (Test-Path -LiteralPath $MigratedMarker)) {
             $forceFlags = @('--force-dotfiles')
@@ -735,10 +623,9 @@ function Invoke-MiseBootstrap {
     # Native stderr must not trip EAP=Stop (PS 5.1 wraps it as errors).
     $miseCd = @('-C', $env:USERPROFILE)
 
-    # miserc.toml must have selected the owned set: without config.owned.toml
-    # the tools phase would skip the owned tools and `mise prune` would
-    # delete them. A failing `config ls` (min_version, a TOML error) stops too.
-    # (--json: the table output truncates to the console width.)
+    # Without config.owned.toml loaded (miserc.toml ignored), the tools phase would skip
+    # the owned tools and `mise prune` delete them; a failing `config ls` (min_version,
+    # a TOML error) stops too. --json: the table output truncates to the console width.
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     $lsOut = @(& mise @miseCd config ls --json 2>&1 | ForEach-Object { "$_" })
     $lsCode = $LASTEXITCODE
@@ -787,7 +674,6 @@ reported above and re-run.
     }
 
     if (-not $SkipToolInstall) {
-        # The old portable installs go only now that mise's tools are in.
         Invoke-LegacyToolCleanup
         Add-ToUserPath $MiseShims
         Update-SessionPath
@@ -795,10 +681,8 @@ reported above and re-run.
         try {
             & mise @miseCd where node *> $null
             if ($LASTEXITCODE -eq 0) {
-                # Marker = node's declaration hashed (-f: a bare `mise config get`
-                # reads only the highest-precedence file, config.windows.toml).
-                # An unreadable declaration forces the reinstall and writes no
-                # marker, so the next run retries.
+                # Marker = node's declaration hashed (-f: a bare `config get` reads only
+                # config.windows.toml). Unreadable: reinstall, no marker, the next run retries.
                 $decl = (@(& mise @miseCd config get -f (Join-Path $RepoPath "config.owned.toml") tools.node 2>$null) -join "`n").Trim()
                 $marker = $null
                 if (($LASTEXITCODE -eq 0) -and $decl) {
@@ -845,14 +729,12 @@ reported above and re-run.
 }
 
 # =============================================================================
-# SHELL / TERMINAL INTEGRATION
+# AFTER MISE: shell, terminals, Claude, python-env, font, SSH key
 # =============================================================================
 
-# Bridges Documents redirection (OneDrive): $PROFILE then resolves to the
-# redirected dir, but the dotfiles apply writes the canonical profile to
-# the LITERAL %USERPROFILE%\Documents\PowerShell, so PowerShell would never
-# load it. Drops a tiny loader at the real $PROFILE dir(s) that dot-sources
-# the canonical one. No-op when Documents isn't redirected.
+# With Documents redirected (OneDrive), $PROFILE is in the redirected dir but the
+# dotfiles deploy to the literal %USERPROFILE%\Documents\PowerShell, so a loader
+# at each real $PROFILE dot-sources it. No-op when Documents isn't redirected.
 function Invoke-ProfileShim {
     $canonical = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
     if (-not (Test-Path $canonical)) {
@@ -878,8 +760,7 @@ if (Test-Path $canonical) { . $canonical }
         $dir    = Join-Path $realDocs $sub
         $target = Join-Path $dir "Microsoft.PowerShell_profile.ps1"
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-        # Back up a pre-existing non-loader profile once, so we never silently
-        # clobber a hand-written one.
+        # Back up a hand-written profile once, never clobber it silently.
         if ((Test-Path $target) -and -not (Select-String -Path $target -Pattern "managed by bootstrap.ps1" -Quiet)) {
             $bak = "$target.pre-dotfiles.bak"
             if (-not (Test-Path $bak)) { Copy-Item $target $bak -Force; Write-Warn "Backed up existing $sub profile to $bak" }
@@ -890,8 +771,7 @@ if (Test-Path $canonical) { . $canonical }
     Write-Warn "Restart PowerShell to pick up the managed profile."
 }
 
-# Full path of <Exe> in a mise tool's install dir (`mise where <Tool>`), or
-# $null when mise, the tool or the exe is missing. The dir is versioned.
+# <Exe> in `mise where <Tool>` (a versioned dir), or $null when mise, the tool or the exe is missing.
 function Get-MiseToolExe {
     param([string]$Tool, [string]$Exe)
     if (-not (Get-Command mise -ErrorAction SilentlyContinue)) { return $null }
@@ -903,11 +783,8 @@ function Get-MiseToolExe {
     return $null
 }
 
-# The GUI zips mise installs (dnGrep, LogExpert) ship no Start Menu
-# shortcut, so each gets a per-user "<Name>.lnk" to the exe in its mise
-# install dir. Fixed filename per app -> idempotent + duplicate-proof; runs
-# every bootstrap (self-heals a deleted shortcut, follows a version bump's
-# new install dir). Soft-fails per app.
+# mise's GUI zips ship no Start Menu shortcut: a fixed per-user <Name>.lnk (.Save()
+# overwrites, so no duplicates), re-pointed when a version bump moves the exe.
 $MiseShortcuts = @(
     @{ Name = "dnGrep"; Tool = "github:dnGrep/dnGrep"; Exe = "dnGREP.exe"; Description = "dnGrep — search and replace in files (grep GUI)" },
     @{ Name = "LogExpert"; Tool = "github:LogExperts/LogExpert"; Exe = "LogExpert.exe"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
@@ -920,16 +797,13 @@ function Invoke-StartMenuShortcuts {
             continue
         }
 
-        # Fixed filename in the per-user Start Menu Programs folder (no admin). The
-        # deterministic path is what makes this duplicate-proof: .Save() overwrites.
         $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
 
         try {
             $existed = Test-Path $lnk
             $wsh = New-Object -ComObject WScript.Shell
             try {
-                # CreateShortcut loads the existing .lnk when present, so its current
-                # TargetPath is readable — skip the rewrite when it already matches.
+                # CreateShortcut loads an existing .lnk, so a matching target skips the rewrite.
                 $sc = $wsh.CreateShortcut($lnk)
                 if ($existed -and ($sc.TargetPath -eq $exe)) {
                     Write-Ok "$($tool.Name) Start Menu shortcut already present"
@@ -953,12 +827,9 @@ function Invoke-StartMenuShortcuts {
     }
 }
 
-# SSH host launchers: every concrete Host alias in the untracked
-# ~\.ssh\config.local becomes an "SSH: <alias>" entry in Windows Terminal's
-# new-tab menu and Warp's + menu, running `ssh -t <alias> zellij attach
-# --create main`. The hosts stay on this machine; the public repo has none.
-# Patterns (* ?), negations (!) and aliases that would need quoting on a
-# command line are skipped; Include lines inside config.local aren't followed.
+# Each concrete Host alias in the untracked ~\.ssh\config.local (the public repo has
+# no hosts) becomes an "SSH: <alias>" WT profile and Warp Tab Config. Patterns,
+# negations and aliases that need quoting are skipped; Include isn't followed.
 function Get-SshLauncherHosts {
     param([string]$Path = (Join-Path $env:USERPROFILE ".ssh\config.local"))
     $aliases = New-Object System.Collections.Generic.List[string]
@@ -977,8 +848,7 @@ function Get-SshLauncherHosts {
     $aliases.ToArray()
 }
 
-# RFC 4122 v5 GUID, Windows Terminal's fragment convention: name bytes are
-# UTF-16LE (namespace {f65ddb7e-706b-4499-8a50-40313caf510a} -> app ->
+# RFC 4122 v5 GUID over UTF-16LE names (WT's fragment convention: namespace -> app ->
 # profile name), so a profile keeps its identity across regenerations.
 function New-Uuid5 {
     param([Parameter(Mandatory)][Guid]$Namespace, [Parameter(Mandatory)][string]$Name)
@@ -994,10 +864,8 @@ function New-Uuid5 {
     return [Guid]::new([byte[]]$b)
 }
 
-# Windows Terminal reads profile fragments from Fragments\<app>\*.json at
-# launch. The "workstation" app dir is owned here: its *.json are rewritten
-# every run, so a host removed from config.local disappears. Nothing else is
-# touched -- not other apps' fragments, not the tracked settings.json.
+# Only Fragments\workstation is owned here, rewritten every run so a removed host
+# disappears; other apps' fragments and the tracked settings.json are never touched.
 function Invoke-WindowsTerminalFragments {
     if (-not (Test-WindowsTerminalPresent)) {
         Write-Warn "Windows Terminal not detected — skipping its SSH host profiles."
@@ -1032,16 +900,10 @@ function Invoke-WindowsTerminalFragments {
     }
 }
 
-# Deterministic Warp launch entries. Warp's + menu is its launch surface
-# (no profile list), so unlike Windows Terminal the local shells need
-# generated entries, plus one "SSH: <alias>" entry per Get-SshLauncherHosts
-# host. Files prefixed workstation- are owned by this
-# function; every run wipes and rewrites them; user-created configs are
-# never touched. Warp supports pwsh/PowerShell 5/WSL2/Git Bash only, NOT
-# Nushell -- the Nushell entry is a compatibility shim (pwsh launches
-# mise's nu.exe shim as a child; mise's install dir is versioned, the shim
-# path isn't); Nushell's first-class home stays Windows Terminal's
-# defaultProfile.
+# Warp's + menu has no profile list, so the local shells and each SSH host get a
+# Tab Config; workstation-* files are rewritten every run, others never touched.
+# Warp can't run Nushell, so pwsh launches mise's nu.exe shim (a stable path; the
+# install dir is versioned); Nushell's real home is Windows Terminal.
 function Invoke-WarpTabConfigs {
     if (-not (Test-InstallerPresent "Warp*")) {
         Write-Warn "Skipping Warp Tab Config generation — Warp is not installed."
@@ -1051,7 +913,6 @@ function Invoke-WarpTabConfigs {
     $dir = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
     try {
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-        # The workstation- prefix IS the managed namespace: wipe only those.
         Get-ChildItem -Path $dir -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue |
             Remove-Item -Force
 
@@ -1124,11 +985,8 @@ is_focused = true
     }
 }
 
-# Nushell can't `eval`, so the Starship prompt is a GENERATED file written
-# to %APPDATA%\nushell\vendor\autoload\starship.nu (auto-sourced on every
-# nu startup). config.nu owns the hand-written config; this owns only the
-# generated prompt. Runs every bootstrap, no stamp -- self-heals a deleted
-# file or a Starship pin-bump.
+# Nushell can't `eval`, so starship's init goes to a generated, auto-sourced
+# vendor\autoload\starship.nu, rewritten every run (no stamp: it self-heals).
 function Invoke-NushellStarship {
     if (-not (Get-Command starship -ErrorAction SilentlyContinue)) {
         Write-Warn "Skipping Nushell starship prompt — starship not on PATH (install step skipped?)."
@@ -1143,8 +1001,7 @@ function Invoke-NushellStarship {
     $target   = Join-Path $autoload "starship.nu"
     try {
         if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
-        # starship emits the nu prompt wiring on stdout. Write UTF-8 WITHOUT a
-        # BOM — nu chokes on a leading BOM in sourced scripts.
+        # No BOM: nu chokes on one in sourced scripts.
         $init = (& starship init nu) -join "`n"
         [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
         Write-Ok "Nushell starship prompt generated ($target)"
@@ -1153,13 +1010,9 @@ function Invoke-NushellStarship {
     }
 }
 
-# dnGrep stores settings NEXT TO THE EXE, and mise's install dir is
-# versioned, so a version bump would start from scratch. Seeds
-# dnGrep.config.xml beside dnGREP.exe redirecting DataDirectory/
-# LogDirectory to %APPDATA%\dnGREP instead (values must be EXPANDED paths
-# -- dnGrep doesn't expand %ENV% vars); a new install dir has none, so it
-# is re-seeded. Seed-if-absent ONLY: dnGrep's Options dialog rewrites this
-# same file, so overwriting every run would clobber a user's choice.
+# dnGrep keeps settings next to the exe, in mise's versioned dir, so a seeded
+# dnGrep.config.xml points them at %APPDATA%\dnGREP (expanded: dnGrep doesn't expand
+# %ENV%). Seed-if-absent: dnGrep's Options dialog rewrites it; a new dir is reseeded.
 function Invoke-DnGrepConfig {
     $exe = Get-MiseToolExe -Tool "github:dnGrep/dnGrep" -Exe "dnGREP.exe"
     if (-not $exe) {
@@ -1169,12 +1022,9 @@ function Invoke-DnGrepConfig {
 
     $cfg = Join-Path (Split-Path $exe -Parent) "dnGrep.config.xml"
 
-    # The redirect TARGETS must exist, not just the config file: dnGrep
-    # enumerates DataDirectory at startup (AppTheme.LoadExternalThemes does
-    # Directory.GetFiles over it) and CRASHES with DirectoryNotFoundException
-    # if it's missing — it auto-creates only its DEFAULT data folder, never a
-    # config-file value. On the already-present path, read the dirs from the
-    # file itself so a user-customized location is healed too.
+    # The target dirs must exist: dnGrep enumerates DataDirectory at startup and
+    # crashes (DirectoryNotFoundException) on a missing one it didn't default to.
+    # Read them from the file, so a user-customised location is healed too.
     if (Test-Path $cfg) {
         try {
             $existing = [xml](Get-Content -Raw $cfg)
@@ -1199,11 +1049,9 @@ function Invoke-DnGrepConfig {
 </DirectoryConfiguration>
 "@
     try {
-        # Dirs first, config second — if creation fails, no config is written
-        # and dnGrep falls back to its built-in (exe-dir) behavior instead of
-        # crashing on a dangling redirect. -Force creates $dataDir with it.
+        # Dirs first (-Force creates $dataDir too): if that fails, no config is
+        # written and dnGrep keeps its exe-dir default instead of crashing.
         New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-        # UTF-8 without BOM (matches the XML declaration; dnGrep reads it fine).
         [System.IO.File]::WriteAllText($cfg, $xml, (New-Object System.Text.UTF8Encoding($false)))
         Write-Ok "dnGrep config seeded (settings dir -> $dataDir)"
     } catch {
@@ -1211,11 +1059,8 @@ function Invoke-DnGrepConfig {
     }
 }
 
-# `mise activate nu` output saved as a GENERATED file under vendor\autoload
-# (auto-sourced on startup, exactly like starship.nu), regenerated every
-# run so it tracks the installed mise. Never hand-edited, never in
-# config.nu; its export-env hook puts mise's real bin dirs on PATH ahead of
-# the shims dir Invoke-MiseBootstrap added.
+# Like starship.nu, rewritten every run to track the installed mise; its hook puts
+# mise's real bin dirs on PATH ahead of the shims.
 function Invoke-NushellMise {
     if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
         Write-Warn "Skipping Nushell mise activation — mise not on PATH (install step skipped?)."
@@ -1230,7 +1075,7 @@ function Invoke-NushellMise {
     $target   = Join-Path $autoload "mise.nu"
     try {
         if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
-        # UTF-8 WITHOUT a BOM — nu chokes on a leading BOM in sourced scripts.
+        # No BOM: nu chokes on one in sourced scripts.
         $init = (& mise activate nu) -join "`n"
         [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
         Write-Ok "Nushell mise activation generated ($target)"
@@ -1239,14 +1084,8 @@ function Invoke-NushellMise {
     }
 }
 
-# =============================================================================
-# CLAUDE / PYTHON / FONTS / SSH
-# =============================================================================
-
-# BurntToast -- lets `New-BurntToastNotification` surface native Windows
-# toasts. Used by the WSL2 branch of dotfiles/claude/notify.sh (deployed to
-# ~/.claude/notify.sh on owned Linux hosts) to ping Windows when Claude
-# Code needs attention; falls back to a MessageBox if the module is absent.
+# BurntToast gives dotfiles/claude/notify.sh's WSL2 branch native Windows toasts
+# when Claude Code needs attention (without it, a MessageBox).
 function Invoke-InstallBurntToast {
     if ($SkipBurntToast) {
         Write-Log "BurntToast install skipped (-SkipBurntToast)"
@@ -1261,10 +1100,8 @@ function Invoke-InstallBurntToast {
     Write-Log "Installing BurntToast PowerShell module (CurrentUser scope)..."
 
     try {
-        # PSGallery defaults to Untrusted — Install-Module would prompt
-        # interactively. Flip to Trusted (process-wide, idempotent) so the
-        # install runs unattended. -ErrorAction SilentlyContinue covers the
-        # case where PSGallery isn't registered at all (very old PS).
+        # PSGallery is Untrusted by default, so Install-Module would prompt; trust
+        # it so the install runs unattended (a missing PSGallery is skipped).
         $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
         if ($repo -and $repo.InstallationPolicy -ne 'Trusted') {
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
@@ -1279,13 +1116,8 @@ function Invoke-InstallBurntToast {
 }
 
 function Invoke-ClaudeSettingsMerge {
-    # ~/.claude/settings.json three-layer merge: seed (personal defaults,
-    # set-if-absent) -> live file -> enforced (infra keys that always win).
-    # Ports the SAME jq filter (`.[0] * .[1] * .[2]`) scripts/lib/
-    # claude-settings-merge.sh uses on Linux -- one source of truth for the
-    # merge semantics, two callers. Soft-failing by design: every expected
-    # failure (no jq, missing source, invalid JSON, a write failure) warns
-    # and returns, never aborts bootstrap.
+    # seed (set-if-absent) -> live -> enforced (always wins), the jq filter of
+    # scripts/lib/claude-settings-merge.sh. A failure warns; it never aborts the bootstrap.
     $seed     = Join-Path $RepoPath "dotfiles\claude\settings.seed.json"
     $enforced = Join-Path $RepoPath "dotfiles\claude\settings.enforced.json"
     $dest     = Join-Path $env:USERPROFILE ".claude\settings.json"
@@ -1306,9 +1138,7 @@ function Invoke-ClaudeSettingsMerge {
     $destDir = Split-Path $dest -Parent
     if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
 
-    # jq.exe writes UTF-8; force the same on the read side regardless of the
-    # console's default code page (mirrors $PROFILE's own
-    # [Console]::OutputEncoding override) so a non-ASCII value round-trips.
+    # jq.exe writes UTF-8: read it as UTF-8 whatever the console code page.
     $prevOutputEncoding = $OutputEncoding
     $OutputEncoding = [System.Text.Encoding]::UTF8
     $currentTmp = Join-Path $destDir ".settings.json.current.$PID.tmp"
@@ -1344,11 +1174,7 @@ function Invoke-ClaudeSettingsMerge {
 }
 
 function Invoke-ClaudeSettingsLocalSeed {
-    # ~/.claude/settings.local.json -- seed-if-absent (Windows half of Linux
-    # tasks/bootstrap step 6b). Unlike settings.json there's no enforced
-    # layer reapplied every run: a plain seed, written ONLY when the live
-    # file doesn't exist yet, so a fresh host gets the tracked default
-    # ({"spinnerTipsEnabled": false}) without ever clobbering a later edit.
+    # Seed-if-absent, as on Linux: no enforced layer, so a later edit is never clobbered.
     $seedSrc = Join-Path $RepoPath "dotfiles\claude\settings.local.json"
     $dest    = Join-Path $env:USERPROFILE ".claude\settings.local.json"
 
@@ -1369,14 +1195,9 @@ function Invoke-ClaudeSettingsLocalSeed {
     }
 }
 
-# Native Windows install via Anthropic's official installer script (verifies
-# claude.exe's sha256 against the signed release manifest, then wires up the
-# launcher/PATH/shell integration itself). NOT a mise tool -- it
-# self-updates in the background (mirrors the rolling Linux install). NOT
-# a $WingetApps entry -- no Uninstall-registry entry to detect it by.
-# Detect-by-command, skip when present. Runs in a CHILD powershell.exe: the
-# installer script calls `exit` on its error paths, which would kill this
-# bootstrap if dot-run in-process.
+# The official installer verifies claude.exe against the signed manifest and it
+# self-updates: not a mise tool, nor a $WingetApps entry (no Uninstall key). A child
+# powershell.exe runs it because it calls `exit` on its error paths.
 function Invoke-InstallClaudeCode {
     if ($SkipToolInstall) {
         Write-Log "Claude Code install skipped (-SkipToolInstall)"
@@ -1390,8 +1211,6 @@ function Invoke-InstallClaudeCode {
     Write-Log "Installing Claude Code (official installer, manifest-verified)..."
     $tmp = Join-Path $env:TEMP "claude-install-$PID.ps1"
     try {
-        # Download-then-run with checked curl.exe status — same posture as
-        # the Linux side's `curl -fsSL … | bash`.
         Invoke-CurlRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp
         if ($LASTEXITCODE -ne 0) { throw "installer exited with code $LASTEXITCODE" }
@@ -1404,13 +1223,9 @@ function Invoke-InstallClaudeCode {
     }
 }
 
-# The blessed uv-built venv (Windows half of the Linux `python-env` mise
-# task): uv (`mise which uv`) builds it from scratch on mise's python
-# (`mise where python`, tools.python in config.toml) with the libraries in
-# scripts\python-env.txt; wpy/textual/typer .cmd launchers land in $WsBin.
-# The stamp holds the interpreter path + the parsed list, so a python bump or
-# a list change rebuilds on the next bootstrap, and a comment or line-ending
-# edit doesn't (a library upgrade alone is "delete the stamp, re-run").
+# The `python-env` task's Windows half: a uv venv on mise's python with python-env.txt's
+# libraries. The stamp is the interpreter path + the parsed list, so a python bump or
+# a list change rebuilds and a comment edit doesn't (to upgrade, delete the stamp).
 function Invoke-PythonEnv {
     if ($SkipToolInstall) {
         Write-Log "Python env skipped (-SkipToolInstall)"
@@ -1447,15 +1262,13 @@ function Invoke-PythonEnv {
         & $uvExe pip install --python $envPy --upgrade @libs
         if ($LASTEXITCODE -ne 0) { throw "uv pip install exited $LASTEXITCODE" }
 
-        # Launcher shims — wpy calls the env python; textual/typer call the
-        # env's entry-point exes. $WsBin is already on the User PATH.
         $scripts = Join-Path $WsPythonEnv "Scripts"
         Set-Content -Path $wpyShim -Value "@echo off`r`n`"$envPy`" %*" -Encoding Ascii
         Set-Content -Path (Join-Path $WsBin "textual.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'textual.exe')`" %*" -Encoding Ascii
         Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
 
         if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
-        # Also the pre-mise python-env.<pin>.<hash>.stamp names.
+        # python-env*: also the older python-env.<pin>.<hash>.stamp names.
         Get-ChildItem -Path $WsStamps -Filter "python-env*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
         [System.IO.File]::WriteAllText($stamp, $want)
         Write-Ok "Python env built ($WsPythonEnv on $python; launchers: wpy, textual, typer)"
@@ -1465,13 +1278,9 @@ function Invoke-PythonEnv {
     }
 }
 
-# JetBrainsMono Nerd Font Mono, per-user. Required by dotfiles-tracked
-# configs that assume Nerd Font glyphs (starship, eza, lazygit, k9s, yazi,
-# broot, helix, ccstatusline, Claude Code TUI). mise installs the font
-# (github:ryanoasis/nerd-fonts in config.owned.toml, as tasks/fonts uses on
-# Linux); scripts/install-nerd-fonts.ps1 copies its six Mono TTFs and
-# registers them, plus a per-user at-logon scheduled task -- HKCU per-user
-# fonts don't reliably load at logon alone.
+# mise installs JetBrainsMono Nerd Font (config.owned.toml, as tasks/fonts uses on
+# Linux); scripts/install-nerd-fonts.ps1 copies the six Mono TTFs and registers
+# them per-user, plus an at-logon task, since HKCU fonts don't reliably load alone.
 function Invoke-InstallNerdFonts {
     if ($SkipNerdFonts) {
         Write-Log "Nerd Fonts install skipped (-SkipNerdFonts)"
@@ -1483,7 +1292,6 @@ function Invoke-InstallNerdFonts {
         Write-Warn "Nerd Fonts installer not found at $InstallScript — skipping"
         return
     }
-    # `mise where github:ryanoasis/nerd-fonts`, checked to hold the Regular TTF.
     $ttf = Get-MiseToolExe -Tool "github:ryanoasis/nerd-fonts" -Exe "JetBrainsMonoNerdFontMono-Regular.ttf"
     if (-not $ttf) {
         Write-Warn "Nerd Fonts skipped — 'mise where github:ryanoasis/nerd-fonts' has no JetBrainsMono Nerd Font Mono TTFs (did the tools phase fail?)"
@@ -1499,7 +1307,6 @@ function Invoke-InstallNerdFonts {
     }
 }
 
-# SSH key (optional, prompt-driven).
 function Invoke-EnsureSshKey {
     if ($SkipKeyGen) {
         Write-Log "SSH-key check skipped (-SkipKeyGen)"
@@ -1577,14 +1384,11 @@ Write-Host "Not installed by this script (install yourself if you want it):"
 Write-Host "  VSCode  — its dotfiles are already deployed."
 Write-Host ""
 
-# Print the curated hand-install shopping list (docs/windows/application_list.md).
-# Personal preference order — terminals, file managers, search, editors, etc.
-# Soft-skip if the file is missing (partial clone, older repo snapshot).
+# Skipped when the list is missing (a partial clone or an older snapshot).
 $appList = Join-Path $RepoPath "docs\windows\application_list.md"
 if (Test-Path $appList) {
     Write-Host "${Bold}Hand-install shopping list${Reset} (docs\windows\application_list.md):"
-    # -Encoding UTF8: the list is UTF-8 without a BOM, so PowerShell 5.1's
-    # default (the ANSI codepage) printed every em dash as "â€”".
+    # -Encoding UTF8: the list has no BOM, and 5.1's default (the ANSI code page) mangles its em dashes.
     Get-Content -Encoding UTF8 $appList | ForEach-Object { Write-Host "  $_" }
     Write-Host ""
 }
