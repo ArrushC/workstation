@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Get-SshLauncherHosts', 'New-Uuid5', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs'
+$wanted = 'Get-SshLauncherHosts', 'New-Uuid5', 'Test-WindowsTerminalPresent', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs'
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     . ([scriptblock]::Create($f.Extent.Text))
 }

@@ -132,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 ### Windows
 
-The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: winget has only machine-wide installers for Zed and SSHFS-Win (which installs WinFsp, a kernel driver), so their first install pops a UAC prompt; decline it or pass `-SkipElevated` and everything else still completes.
+The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: SSHFS-Win installs WinFsp, a kernel driver, so its first install pops a UAC prompt; decline it or pass `-SkipElevated` and everything else still completes.
 
 Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`) and a working `curl.exe` (`curl.exe --version`). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
 
@@ -157,13 +157,12 @@ What `bootstrap.ps1` does:
 
 1. Preflight: require git.
 2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`, and remove the pre-mise portable tools (their directories and User PATH entries).
-3. Install the missing GUI apps through winget (latest, sha256-checked against the winget manifest; each self-updates, so there is no pin): Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP and Beyond Compare at user scope, then Zed and SSHFS-Win at machine scope (UAC). An app counts as present when an Uninstall-registry DisplayName matches (Windows Terminal: its Appx package), so copies installed before winget, such as "DevToys Preview", are kept. Without winget (App Installer) the step warns and skips.
-4. Install Claude Code (native installer, self-updating).
-5. Clone this repo to `%USERPROFILE%\.config\mise`, write `miserc.toml` (`windows,owned`; the old User `MISE_ENV` is removed) and run `mise bootstrap --only dotfiles,tools`: dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). mise's shims dir joins the User PATH; then the `wpy` Python env is built.
-6. Generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment, Nushell's starship and mise autoload files, Start Menu shortcuts, BurntToast, and the Nerd Font (`scripts/install-nerd-fonts.ps1`, with a logon task that re-activates the per-user font).
-7. Prompt for an SSH key.
-8. Merge `~/.claude/settings.json` and print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
-9. Persist `GITHUB_TOKEN`, if set, into `.git/config` so `git push`/`git pull`/`wsu` authenticate.
+3. Install the missing GUI apps through winget (latest, sha256-checked against the winget manifest; each self-updates, so there is no pin): Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare and Zed (winget's Zed installer is machine scope but installs per-user, without admin), then SSHFS-Win (UAC). An app counts as present when an Uninstall-registry DisplayName matches (Windows Terminal: its Appx package, or `wt.exe` on PATH), so copies installed before winget, such as "DevToys Preview", are kept. An "already installed" answer from winget counts as present. Without winget (App Installer) the step warns and skips.
+4. Clone this repo to `%USERPROFILE%\.config\mise`, write `miserc.toml` (`windows,owned`; the old User `MISE_ENV` is removed) and run `mise bootstrap --only dotfiles,tools`: dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). mise's shims dir joins the User PATH; then the `wpy` Python env is built.
+5. Generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment, Nushell's starship and mise autoload files, Start Menu shortcuts, BurntToast, Claude Code (native installer, self-updating), and the Nerd Font (`scripts/install-nerd-fonts.ps1`, with a logon task that re-activates the per-user font).
+6. Prompt for an SSH key.
+7. Merge `~/.claude/settings.json` and print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
+8. Persist `GITHUB_TOKEN`, if set, into `.git/config` so `git push`/`git pull`/`wsu` authenticate.
 
 Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed); PowerShell stays for .NET/COM/registry tasks. Nushell completes `bootstrap.ps1` flags via an external completer; PowerShell does it natively.
 
@@ -175,13 +174,13 @@ Restart the shell afterwards so the new profile loads. Nushell is the default lo
 | `-SkipDotfiles` | Clone and install tools but do not apply dotfiles. |
 | `-SkipBurntToast` | Skip the BurntToast PowerShell module install. |
 | `-SkipNerdFonts` | Skip the Nerd Font install. |
-| `-SkipElevated` | Skip the machine-scope apps (Zed, SSHFS-Win/WinFsp), the only ones that can show UAC. |
+| `-SkipElevated` | Skip SSHFS-Win/WinFsp, the one UAC prompt. Warp's VC++ runtime dependency can also raise UAC on a host without that runtime; this flag does not cover it. |
 | `-Reinstall` | Wipe the cloned repo, then re-bootstrap. Prompts unless `-Yes`. |
 | `-Yes` | Skip confirmation prompts (`-Reinstall`). |
 
 `-Reinstall` from inside the repo is refused. Use the curl.exe download above and append `-Reinstall` to the `& ([scriptblock]::Create($bootstrap))` line.
 
-**Health and updates.** There is no report mode in `bootstrap.ps1`. Use `mise doctor`, `mise bootstrap status` and `mise dot status` for the tools, host state and dotfiles. Update the GUI apps with `winget upgrade --all`, or one with `winget upgrade --id <Id>` (the ids are in `$WingetApps`).
+**Health and updates.** There is no report mode in `bootstrap.ps1`. Use `mise doctor`, `mise bootstrap status` and `mise dot status` for the tools, host state and dotfiles. Update the GUI apps with `winget upgrade --all`, or one with `winget upgrade --id <Id>` (the ids are in the `$WingetApps` table in `bootstrap.ps1`).
 
 Windows Terminal's `settings.json` (Catppuccin Mocha, Nushell default profile) is a tracked `copy` dotfile deployed straight to the Store package's `LocalState`. Warp's `settings.toml` and `keybindings.yaml` (`%LOCALAPPDATA%\warp\Warp\config\`) and theme (`%APPDATA%\warp\Warp\data\themes\`) are tracked too. Both apps rewrite their own files, so record changes made in their UIs with `wsr`. The generated parts are separate: Warp `workstation-*.toml` Tab Configs in `%APPDATA%\warp\Warp\data\tab_configs\`, and the Windows Terminal fragment under `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\`. Your own Tab Configs and profiles are never touched.
 
@@ -574,9 +573,9 @@ Provisioning builds the env in both modes. Rebuild it from scratch with `mise ru
 
 The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is declared in `config.native.toml`, so it applies to native owned hosts only and is skipped on WSL by design. Re-run `mise bootstrap --only packages --yes`. `autofs` is installed but not enabled (no maps yet does nothing): write your maps, then `sudo systemctl enable --now autofs`.
 
-### bootstrap.ps1 popped a UAC prompt (or Zed / SSHFS-Win reports "winget exited")
+### bootstrap.ps1 popped a UAC prompt (or SSHFS-Win reports "winget exited")
 
-That is a machine-scope winget install, the one deliberate exception to the admin-free bootstrap: winget has only machine-wide installers for Zed and for SSHFS-Win (which depends on WinFsp, a kernel-mode driver). Both need winget (App Installer); without it the GUI-app step is skipped. It is best-effort: declining or being offline skips that app with a warning, and a machine that already has the app (a per-user Zed counts) never sees the prompt. Install later with `winget install --id ZedIndustries.Zed` or `winget install --id SSHFS-Win.SSHFS-Win` (pulls WinFsp), or re-run `.\bootstrap.ps1` and accept; suppress both with `-SkipElevated`. Once SSHFS-Win is installed, mount with `net use X: \\sshfs\user@host` or browse `\\sshfs\user@host` in Explorer.
+That is the SSHFS-Win install, the one deliberate exception to the admin-free bootstrap: it depends on WinFsp, a kernel-mode driver, so elevation is unavoidable. It needs winget (App Installer); without it the GUI-app step is skipped. It is best-effort: declining or being offline skips it with a warning, and an already-installed machine never sees the prompt. Install it later with `winget install --id SSHFS-Win.SSHFS-Win` (pulls WinFsp) or re-run `.\bootstrap.ps1` and accept; suppress the attempt with `-SkipElevated`. A prompt while Warp installs is winget adding the VC++ runtime Warp depends on (`-SkipElevated` does not cover it). Once installed, mount with `net use X: \\sshfs\user@host` or browse `\\sshfs\user@host` in Explorer.
 
 ### Zellij's top bar is plain, shows a "permission" request, or renders boxes instead of rounded pills
 

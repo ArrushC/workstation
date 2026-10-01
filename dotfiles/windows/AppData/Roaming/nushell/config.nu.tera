@@ -265,7 +265,7 @@ let workstation_bootstrap_flags = [
     { value: "-SkipDotfiles", description: "clone + install but don't deploy dotfiles" }
     { value: "-SkipBurntToast", description: "skip the BurntToast notification module" }
     { value: "-SkipNerdFonts", description: "skip the JetBrainsMono Nerd Font install" }
-    { value: "-SkipElevated", description: "skip the UAC-prompting machine-scope apps (Zed, SSHFS-Win)" }
+    { value: "-SkipElevated", description: "skip the UAC-prompting SSHFS-Win/WinFsp install" }
     { value: "-Reinstall", description: "wipe the cloned repo (incl. config.local.toml), bootstrap fresh" }
     { value: "-Yes", description: "skip the reinstall confirmation prompt" }
 ]

@@ -9,9 +9,9 @@
 # hard prerequisite (install it yourself); VSCode is hand-installed --
 # its dotfiles still deploy without it.
 #
-# ONE exception to "no admin": the machine-scope $WingetApps (Zed, and
-# SSHFS-Win with its WinFsp kernel driver) can pop a UAC prompt on first
-# install. Declining it (or -SkipElevated) soft-fails only those apps.
+# ONE exception to "no admin": SSHFS-Win (with its WinFsp kernel driver)
+# pops a UAC prompt on first install. Declining it (or -SkipElevated)
+# soft-fails only that app.
 #
 # Public repo, no token needed. $env:GITHUB_TOKEN is optional: used for a
 # private-fork clone; mise also uses it to lift the 60-req/hr GitHub API limit.
@@ -47,7 +47,7 @@ param(
     [switch]$SkipDotfiles,     # clone + install tools but don't apply dotfiles yet
     [switch]$SkipBurntToast,   # skip the BurntToast PSGallery module install
     [switch]$SkipNerdFonts,    # skip the Nerd Font install
-    [switch]$SkipElevated,     # skip the machine-scope winget apps, Zed + SSHFS-Win (the only UAC prompts)
+    [switch]$SkipElevated,     # skip SSHFS-Win/WinFsp (the one UAC prompt)
     [switch]$Reinstall,        # wipe the cloned repo, then re-bootstrap (prompts unless -Yes)
     [switch]$Yes               # skip confirmation prompts (-Reinstall)
 )
@@ -97,19 +97,23 @@ $WsPythonEnv = Join-Path $WsRoot "python-env"
 # GUI apps, installed through winget and then self-updating (or `winget upgrade`).
 # Presence = Uninstall-registry DisplayName glob (Test-InstallerPresent): it also
 # sees copies installed before winget managed them (e.g. "DevToys Preview"),
-# which `winget list` misses. Windows Terminal is an Appx package. Zed's Detect
-# is exact, so "Zed Preview"/"Zed Nightly" don't count.
+# which `winget list` misses. Windows Terminal has no Detect: it is an Appx
+# package (Test-WindowsTerminalPresent). Zed's Detect is exact, so "Zed
+# Preview"/"Zed Nightly" don't count. Warp's manifest depends on the VC++
+# runtime: on a host without it, winget may show UAC for that (not -SkipElevated's).
 $WingetApps = @(
-    @{ Id = "Microsoft.WindowsTerminal";       Name = "Windows Terminal"; Appx = "Microsoft.WindowsTerminal"; Scope = "user" },
+    @{ Id = "Microsoft.WindowsTerminal";       Name = "Windows Terminal";                                 Scope = "user" },
     @{ Id = "Warp.Warp";                       Name = "Warp";             Detect = "Warp*";            Scope = "user" },
     @{ Id = "Obsidian.Obsidian";               Name = "Obsidian";         Detect = "Obsidian*";        Scope = "user" },
     @{ Id = "DevToys-app.DevToys";             Name = "DevToys";          Detect = "DevToys*";         Scope = "user" },
     @{ Id = "DBeaver.DBeaver.Community";       Name = "DBeaver";          Detect = "DBeaver*";         Scope = "user" },
     @{ Id = "WinSCP.WinSCP";                   Name = "WinSCP";           Detect = "WinSCP*";          Scope = "user" },
     @{ Id = "ScooterSoftware.BeyondCompare.5"; Name = "Beyond Compare";   Detect = "Beyond Compare*";  Scope = "user" },
-    # Machine scope (UAC): winget has no per-user installer for these. -SkipElevated skips them.
+    # winget's only Zed installer says machine scope, but it is PrivilegesRequired=lowest:
+    # it installs per-user, with no UAC.
     @{ Id = "ZedIndustries.Zed";               Name = "Zed";              Detect = "Zed";              Scope = "machine" },
-    @{ Id = "SSHFS-Win.SSHFS-Win";             Name = "SSHFS-Win";        Detect = "SSHFS-Win*";       Scope = "machine" }
+    # The one UAC prompt (WinFsp is a kernel driver). Uac: no --silent, and -SkipElevated skips it.
+    @{ Id = "SSHFS-Win.SSHFS-Win";             Name = "SSHFS-Win";        Detect = "SSHFS-Win*";       Scope = "machine"; Uac = $true }
 )
 
 # =============================================================================
@@ -453,25 +457,50 @@ function Test-InstallerPresent {
     return $false
 }
 
+# Windows Terminal is an Appx package (no Uninstall-registry entry); wt.exe on
+# PATH also counts (a non-Store install, or a pwsh whose Appx module won't load).
+function Test-WindowsTerminalPresent {
+    $pkg = $null
+    try { $pkg = Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue } catch { $pkg = $null }
+    return ([bool]$pkg -or [bool](Get-Command wt.exe -ErrorAction SilentlyContinue))
+}
+
 # Install each missing $WingetApps entry with winget (its manifest pins the
-# installer's sha256). Best-effort: a failed install warns and the loop goes
-# on. -SkipElevated skips the machine-scope apps, the only UAC prompts.
+# installer's sha256). Best-effort: a failed or unstartable winget warns and
+# the loop goes on. A Uac entry gets no --silent: winget would then run its
+# MSI in-process at UI level None, where UAC can't appear (MSI error 1925).
 function Install-WingetApps {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Warn "winget not found — GUI apps skipped (install App Installer from the Microsoft Store, then re-run)"
         return
     }
+    # UPDATE_NOT_APPLICABLE, PACKAGE_ALREADY_INSTALLED, INSTALL_ALREADY_INSTALLED:
+    # winget already has the app, under a DisplayName the glob missed.
+    $alreadyInstalled = @("0x8A15002B", "0x8A150061", "0x8A15010D")
     foreach ($app in $WingetApps) {
-        if ($app.Scope -eq "machine" -and $SkipElevated) { Write-Log "$($app.Name) skipped (-SkipElevated)"; continue }
-        $present = if ($app.ContainsKey('Appx')) { [bool](Get-AppxPackage -Name $app.Appx -ErrorAction SilentlyContinue) } else { Test-InstallerPresent $app.Detect }
+        $uac = $app.ContainsKey('Uac') -and $app.Uac
+        if ($uac -and $SkipElevated) { Write-Log "$($app.Name) skipped (-SkipElevated)"; continue }
+        $present = if ($app.Id -eq "Microsoft.WindowsTerminal") { Test-WindowsTerminalPresent } else { Test-InstallerPresent $app.Detect }
         if ($present) { Write-Ok "$($app.Name) present"; continue }
         Write-Log "Installing $($app.Name) (winget, $($app.Scope) scope)..."
-        # PS 5.1 can turn a native command's stderr into a terminating error under "Stop".
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        & winget install --id $app.Id --exact --scope $app.Scope --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
-        $code = $LASTEXITCODE
-        $ErrorActionPreference = $oldEap
-        if ($code -eq 0) { Write-Ok "$($app.Name) installed" } else { Write-Warn "$($app.Name): winget exited $code — install it later with: winget install --id $($app.Id)" }
+        $wingetArgs = @("install", "--id", $app.Id, "--exact", "--scope", $app.Scope, "--disable-interactivity",
+                        "--accept-package-agreements", "--accept-source-agreements")
+        if ($uac) { Write-Warn "$($app.Name) installs machine-wide — expect a UAC prompt (skip with -SkipElevated)" } else { $wingetArgs += "--silent" }
+        $oldEap = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'   # PS 5.1 can turn native stderr into a terminating error under "Stop"
+            & winget @wingetArgs
+            $code = $LASTEXITCODE
+            $why = "winget exited " + ('0x{0:X8}' -f [int]$code)
+        } catch {
+            $why = "winget could not start ($($_.Exception.Message))"
+            $code = -1
+        } finally {
+            $ErrorActionPreference = $oldEap
+        }
+        if ($code -eq 0) { Write-Ok "$($app.Name) installed" }
+        elseif ($alreadyInstalled -contains ('0x{0:X8}' -f [int]$code)) { Write-Ok "$($app.Name) present (winget)" }
+        else { Write-Warn "$($app.Name): $why — install it later with: winget install --id $($app.Id)" }
     }
 }
 
@@ -487,7 +516,7 @@ function Invoke-ToolInstall {
 
     Install-Mise
     Add-ToUserPath $WsBin   # python-env's wpy/textual/typer launchers
-    Install-WingetApps      # machine-scope (UAC) entries come last in the table
+    Install-WingetApps      # the UAC entry (SSHFS-Win) comes last in the table
 
     Update-SessionPath
 
@@ -966,9 +995,7 @@ function New-Uuid5 {
 # every run, so a host removed from config.local disappears. Nothing else is
 # touched -- not other apps' fragments, not the tracked settings.json.
 function Invoke-WindowsTerminalFragments {
-    $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
-               (Get-Command wt.exe -ErrorAction SilentlyContinue)
-    if (-not $present) {
+    if (-not (Test-WindowsTerminalPresent)) {
         Write-Warn "Windows Terminal not detected — skipping its SSH host profiles."
         return
     }
