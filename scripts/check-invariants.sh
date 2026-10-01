@@ -51,6 +51,7 @@ for _p in wpy python3; do
     break
   fi
 done
+[ -n "${CHECK_INVARIANTS_NO_PY:-}" ] && PY="" # test-check-pins.sh
 # tomlval <file> <dotted.key> — print a TOML value (string, or a table's `version`).
 # Keys with dots/colons inside quotes are supported: tomlval config.owned.toml 'tools."github:DevToys-app/DevToys"'
 tomlval() {
@@ -78,86 +79,99 @@ _ps1_drive_ref_hits() {
     grep -vE '^[0-9]+:[[:space:]]*#'
 }
 
-check_version_pins() {
-  hdr "version-pin dual/triple-edits"
-  local v v2 ref
+# --- pins recorded in more than one place ------------------------------------
+# One row per value kept in several files, or per floor a pin must respect.
+# An empty value is drift: a pattern that stops matching must fail, not pass.
 
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
-  else
-    v=$(grep -oE '^MISE_VERSION="[0-9][0-9.]+"' bootstrap.sh | grep -oE '[0-9][0-9.]+')
-    ref=$(grep -oE '^\$MiseVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 | grep -oE '[0-9][0-9.]+' | head -1)
-    v2=$(tomlval config.toml min_version)
-    if [ -n "$v" ] && [ "$v" = "$ref" ] && [ "$v" = "$v2" ]; then
-      ok "mise @ $v  (bootstrap.sh == bootstrap.ps1 \$MiseVersion == config.toml min_version)"
-    else
-      bad "mise drift: bootstrap.sh='$v' bootstrap.ps1-\$MiseVersion='$ref' config.toml-min_version='$v2'"
-    fi
-  fi
+# pin_equal <label> <where=value>... — every value non-empty and identical.
+pin_equal() {
+  local label="$1" kv first names="" shown="" sep="" drift=""
+  shift
+  first="${1#*=}"
+  for kv in "$@"; do
+    names="$names$sep${kv%%=*}"
+    sep=" == "
+    shown="$shown ${kv%%=*}='${kv#*=}'"
+    if [ -z "${kv#*=}" ] || [ "${kv#*=}" != "$first" ]; then drift=1; fi
+  done
+  if [ -z "$drift" ]; then ok "$label @ $first ($names)"; else bad "$label drift:$shown"; fi
+}
 
-  # VCPKG_ROOT — both rc files must export the SAME literal, and tasks/vcpkg's
-  # vroot= literal is the one that actually decides where vcpkg lands. The rc
-  # literal is asserted equal to that same $HOME/.local/share/vcpkg.
-  local rc_z rc_b vroot_task want='$HOME/.local/share/vcpkg'
-  rc_z=$(grep -oE 'VCPKG_ROOT="[^"]*"' dotfiles/zshrc.tera | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  rc_b=$(grep -oE 'VCPKG_ROOT="[^"]*"' dotfiles/bashrc.tera | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  vroot_task=$(grep -oE 'vroot="[^"]*"' tasks/vcpkg | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  if [ -n "$rc_z" ] && [ "$rc_z" = "$rc_b" ] && [ "$rc_z" = "$want" ] && [ "$vroot_task" = "$want" ]; then
-    ok "vcpkg-root @ zshrc == bashrc == $want; tasks/vcpkg vroot == $want"
+# pin_at_least <label> <version> <floor> <fix> — version >= floor.
+pin_at_least() {
+  if [ -z "$2" ] || [ -z "$3" ]; then
+    bad "$1: could not read the version ('$2') or its floor ('$3')"
+  elif [ "$(printf '%s\n%s\n' "$3" "$2" | sort -V | tail -1)" = "$2" ]; then
+    ok "$1: $2 >= $3"
   else
-    bad "vcpkg-root drift: zshrc='$rc_z' bashrc='$rc_b' tasks/vcpkg-vroot='$vroot_task' (want $want)"
+    bad "$1: $2 is below $3 — $4"
   fi
 }
 
-# Every dual-edit version pin verified by check_version_pins must also sit in
-# scripts/bump-versions.sh's EXCLUDE list — otherwise the weekly bumper would
-# rewrite config*.toml alone and fail the pin check (version-bumps run #9: gh
-# 2.97.0, added as a dual-edit in #94 without the exclusion, is the same class
-# of bug one layer down). The pin set is derived from check_version_pins' own
-# source (its `tomlval … tools.<name>` calls), so a new dual-edit pin check
-# added there is asserted here automatically — no second list to drift. The
-# coupled tools (gopls/typescript/zjstatus/node/ncdu pins with a version
-# floor or postinstall string elsewhere) are NOT read from check_version_pins
-# (they live in their own coupling-check functions) so are named explicitly.
-# One-directional: extra EXCLUDE entries are fine.
-check_bumper_exclude() {
-  hdr "bump-versions.sh handles every dual-edit/coupled pin"
-  local exclude handled pins var missing="" n=0
-  local -a coupled=(github:dj95/zjstatus go go:golang.org/x/tools/gopls http:ncdu node)
-  exclude=$(grep -m1 -E '^EXCLUDE=' scripts/bump-versions.sh |
-    sed -E 's/^EXCLUDE="//; s/"[[:space:]]*$//')
-  # A dual-edit/coupled pin is safe when the bumper either skips it (EXCLUDE)
-  # or bumps it with dedicated code that keeps its pair in step: go+gopls /
-  # node via COUPLED_AUTO. Anything else would get a blind one-sided edit and
-  # fail check_version_pins.
-  handled="$exclude $(grep -m1 -E '^COUPLED_AUTO=' scripts/bump-versions.sh |
-    sed -E 's/^COUPLED_AUTO="//; s/"[[:space:]]*$//')"
-  if [ -z "$exclude" ]; then
-    bad "scripts/bump-versions.sh: EXCLUDE= line not found"
-  else
-    pins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
-      grep -oE "tomlval config[a-z.]*toml '?tools\.[^ ']+'?" |
-      sed -E "s/.*tools\.//; s/^\"//; s/\"'?\$//; s/\)\$//" | sort -u)
-    pins="$pins
-$(printf '%s\n' "${coupled[@]}")"
-    while read -r var; do
-      [ -n "$var" ] || continue
-      n=$((n + 1))
-      case " $handled " in
-      *" $var "*) ;;
-      *) missing="$missing $var" ;;
-      esac
-    done <<<"$pins"
-    if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-      ok "all $n dual-edit/coupled tool pins excluded or paired-bumped (bump-versions.sh EXCLUDE / COUPLED_AUTO)"
-    else
-      bad "dual-edit/coupled tool pin(s) the bumper doesn't handle:${missing:- <none derived>} — add each to bump-versions.sh's COUPLED_AUTO or EXCLUDE, or the weekly bumper rewrites one side alone and fails the pin check"
-    fi
-  fi
+# pin_major_at_most <label> <version> <max> <fix>
+pin_major_at_most() {
+  local major="${2%%.*}"
+  case "$major" in
+  '' | *[!0-9]*) bad "$1: could not read a version ('$2')" ;;
+  *) if [ "$major" -le "$3" ]; then ok "$1: $2 (major <= $3)"; else bad "$1: $2 (major $major > $3) — $4"; fi ;;
+  esac
+}
 
-  # config.toml [vars] holds only vcpkg_version (single-edit) and
-  # zjstatus_zellij_floor (a coupling floor), so no dual-edit [vars] pin
-  # needs bumper coverage; a new one must come back with its own check.
+# pin_bumper_handles <tool>... — each sits in bump-versions.sh's EXCLUDE or
+# COUPLED_AUTO; otherwise the weekly bumper rewrites one side of a pair alone.
+pin_bumper_handles() {
+  local handled t missing=""
+  handled=" $(sed -nE 's/^(EXCLUDE|COUPLED_AUTO)="([^"]*)".*/\2/p' scripts/bump-versions.sh | tr '\n' ' ') "
+  for t in "$@"; do
+    case "$handled" in *" $t "*) ;; *) missing="$missing $t" ;; esac
+  done
+  if [ -z "$missing" ]; then
+    ok "bump-versions.sh skips or pair-bumps all $# coupled pins"
+  else
+    bad "bump-versions.sh would bump$missing alone — add each to EXCLUDE or COUPLED_AUTO"
+  fi
+}
+
+# pin_vars_reachable — every config.toml [vars] *_version pin is reported by
+# tasks/check-updates (as UPPER_CASE) and listed by scripts/gen-tool-memory.sh.
+pin_vars_reachable() {
+  local key missing="" n=0
+  while read -r key; do
+    [ -n "$key" ] || continue
+    n=$((n + 1))
+    grep -q "$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')" tasks/check-updates || missing="$missing $key(tasks/check-updates)"
+    grep -q "$key" scripts/gen-tool-memory.sh || missing="$missing $key(gen-tool-memory.sh)"
+  done < <("$PY" -c 'import tomllib
+for k in tomllib.load(open("config.toml","rb")).get("vars",{}):
+    print(k) if k.endswith("_version") else None')
+  if [ -z "$missing" ]; then ok "all $n [vars] *_version pin(s) reach check-updates and gen-tool-memory"; else bad "[vars] pin(s) not covered:$missing"; fi
+}
+
+check_pins() {
+  hdr "pins recorded in more than one place"
+  local want='$HOME/.local/share/vcpkg'
+  pin_equal "VCPKG_ROOT" "want=$want" \
+    "zshrc.tera=$(sed -nE 's/.*VCPKG_ROOT="([^"]*)".*/\1/p' dotfiles/zshrc.tera | head -1)" \
+    "bashrc.tera=$(sed -nE 's/.*VCPKG_ROOT="([^"]*)".*/\1/p' dotfiles/bashrc.tera | head -1)" \
+    "tasks/vcpkg=$(sed -nE 's/.*vroot="([^"]*)".*/\1/p' tasks/vcpkg | head -1)"
+  # TypeScript 7 ships only bin/tsc, no lib/tsserver.js, so typescript-language-server can't start.
+  pin_major_at_most "typescript (tsserver for typescript-language-server)" \
+    "$(grep -E '^node = ' config.owned.toml | grep -oE 'typescript@[0-9.]+' | cut -d@ -f2)" 5 \
+    "keep the 5.x line"
+  pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node
+  if [ -z "$PY" ]; then
+    note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
+    return
+  fi
+  pin_equal "mise" \
+    "bootstrap.sh=$(sed -nE 's/^MISE_VERSION="([0-9.]+)".*/\1/p' bootstrap.sh)" \
+    "bootstrap.ps1=$(sed -nE 's/^\$MiseVersion *= *"([0-9.]+)".*/\1/p' bootstrap.ps1 | head -1)" \
+    "config.toml min_version=$(tomlval config.toml min_version 2>/dev/null)"
+  # zjstatus states the zellij it needs in prose release notes; the floor sits next to the pin.
+  pin_at_least "zellij for zjstatus" "$(tomlval config.linux.toml tools.zellij 2>/dev/null)" \
+    "$(tomlval config.toml vars.zjstatus_zellij_floor 2>/dev/null)" \
+    "bump zellij, or pin the zjstatus release built for it (and its floor)"
+  pin_vars_reachable
 }
 
 check_line_endings_and_mode() {
@@ -488,42 +502,6 @@ PYEOF
     fi
   else
     note "no python with tomllib — pypi:/npm: sidecar presence check skipped locally (CI enforces)"
-  fi
-}
-
-# Every config.toml [vars] *_version pin must be reachable two ways, or a
-# bump nobody sees: tasks/check-updates (the upstream-drift report) and
-# scripts/gen-tool-memory.sh (the machine-memory inventory). zjstatus_zellij_
-# floor is deliberately excluded (it's a coupling floor, not a pin — see
-# check_zjstatus_zellij_coupling).
-check_vars_pin_coverage() {
-  hdr "config.toml [vars] *_version pins reachable by check-updates + gen-tool-memory"
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — vars-pin coverage skipped locally (CI enforces)"
-    return
-  fi
-  local keys key env_name missing="" n=0
-  keys=$(
-    "$PY" - <<'PY'
-import tomllib
-with open("config.toml", "rb") as fh:
-    d = tomllib.load(fh)
-for k in d.get("vars", {}):
-    if k.endswith("_version"):
-        print(k)
-PY
-  )
-  while read -r key; do
-    [ -n "$key" ] || continue
-    n=$((n + 1))
-    env_name=$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')
-    grep -q "$env_name" tasks/check-updates || missing="$missing $key(tasks/check-updates)"
-    grep -q "$key" scripts/gen-tool-memory.sh || missing="$missing $key(gen-tool-memory.sh)"
-  done <<<"$keys"
-  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-    ok "all $n [vars] *_version pin(s) covered by tasks/check-updates + gen-tool-memory.sh"
-  else
-    bad "config.toml [vars] *_version pin(s) not fully covered:${missing:- <none derived>} — check-updates emits no line for these, or gen-tool-memory.sh doesn't read them"
   fi
 }
 
@@ -939,33 +917,6 @@ check_completion_parity() {
     "$(_nu_completion_flags workstation_bootstrap_flags)"
 }
 
-check_zjstatus_zellij_coupling() {
-  hdr "zjstatus <-> zellij plugin-ABI floor"
-  local zj zjs floor
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — zjstatus/zellij coupling skipped locally (CI enforces)"
-    return
-  fi
-  zj=$(tomlval config.linux.toml tools.zellij)
-  zjs=$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"')
-  floor=$(tomlval config.toml vars.zjstatus_zellij_floor)
-  if [ -z "$zj" ] || [ -z "$zjs" ] || [ -z "$floor" ]; then
-    bad "could not read tools.zellij / tools.\"github:dj95/zjstatus\" from config.linux.toml, or vars.zjstatus_zellij_floor from config.toml"
-    return
-  fi
-  # zjstatus is compiled against zellij-tile, and each release states the
-  # zellij floor it needs (v0.25.0: ">= 0.45.0 required" — it fixed frame
-  # flicker that 0.45.0 introduced). The floor is recorded next to the pin
-  # rather than fetched: the release notes are prose, and this check must
-  # pass offline. A mismatch is silent at runtime — the bar pane just fails
-  # to render — and `zellij setup --check` still reports Well defined.
-  if [ "$(printf '%s\n%s\n' "$floor" "$zj" | sort -V | tail -1)" = "$zj" ]; then
-    ok "zjstatus $zjs needs zellij >= $floor; pinned zellij is $zj"
-  else
-    bad "zjstatus $zjs needs zellij >= $floor but ZELLIJ_VERSION is $zj — bump zellij, or pin the zjstatus release built for $zj (and its floor)"
-  fi
-}
-
 check_mise_install_lib() {
   hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/verify-tools)"
   local out
@@ -1181,72 +1132,34 @@ check_zellij_config() {
   fi
 }
 
-check_go_gopls_coupling() {
-  hdr "gopls <-> Go toolchain floor"
-  local gov goplsv floor
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — go/gopls coupling skipped locally (CI enforces)"
-    return
-  fi
-  gov=$(tomlval config.owned.toml tools.go)
-  goplsv=$(tomlval config.owned.toml 'tools."go:golang.org/x/tools/gopls"')
-  if [ -z "$gov" ] || [ -z "$goplsv" ]; then
-    bad "could not read tools.go / tools.\"go:golang.org/x/tools/gopls\" from config.owned.toml"
-    return
-  fi
-
-  # gopls declares its minimum toolchain in its OWN go.mod, and mise's go: backend builds
-  # it with `go install` using the PINNED Go (mise-runtimes). A mismatch fails
-  # that one tool; the others still install and the stamp stays unwritten, so
-  # the host keeps a stale gopls (or none) until the pins agree.
-  # Verified both directions on 2026-08-31: gopls 0.23.0 + go 1.24.4 fails with
-  # "requires go >= 1.26.0", and gopls 0.23.0 + go 1.27.0 builds under
-  # GOTOOLCHAIN=local (i.e. without silently fetching a second toolchain).
-  floor=$(curl -fsSL --max-time 15 \
-    "https://raw.githubusercontent.com/golang/tools/gopls/v${goplsv}/gopls/go.mod" 2>/dev/null |
-    awk '/^go /{print $2; exit}')
-  if [ -z "$floor" ]; then
-    note "offline or tag missing — skipped the gopls go.mod floor check"
-    return
-  fi
-  if [ "$(printf '%s\n%s\n' "$floor" "$gov" | sort -V | tail -1)" = "$gov" ]; then
-    ok "gopls $goplsv needs go >= $floor; pinned go is $gov"
-  else
-    bad "gopls $goplsv requires go >= $floor but tools.go (config.owned.toml) is $gov — \`mise install\` would fail on gopls, leaving it stale or absent; bump both together"
-  fi
-}
-
-check_tsls_typescript_coupling() {
-  hdr "typescript-language-server <-> typescript major"
-  local post tsv tslsv major
-  post=$(grep -E '^node = ' config.owned.toml)
-  tslsv=$(grep -oE 'typescript-language-server@[0-9.]+' <<<"$post" | cut -d@ -f2)
-  tsv=$(grep -oE 'typescript@[0-9.]+' <<<"$post" | cut -d@ -f2)
-  if [ -z "$tsv" ] || [ -z "$tslsv" ]; then
-    bad "could not read typescript / typescript-language-server versions from config.owned.toml's node postinstall"
-    return
-  fi
-  # typescript-language-server (every release through 6.0.0) drives
-  # typescript/lib/tsserver.js; TypeScript 7.x (the native Go compiler) ships
-  # only bin/tsc, so ts-ls fails `initialize` with "Could not find a valid
-  # TypeScript installation" (verified 2026-09-13 against 7.0.2). Until a
-  # ts-ls release targets TS 7, the pin must stay on the 5.x line — the weekly
-  # bumper would otherwise walk it back to 7.x (hence the EXCLUDE entry).
-  major=${tsv%%.*}
-  if [ "$major" -le 5 ] 2>/dev/null; then
-    ok "typescript $tsv (major $major) is tsserver-capable for typescript-language-server $tslsv"
-  else
-    bad "typescript $tsv has no lib/tsserver.js — typescript-language-server $tslsv cannot initialize; keep the 5.x line until ts-ls supports TS 7"
-  fi
-}
-
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
 fi
+if [ "${1:-}" = --only ]; then
+  shift
+  [ "$#" -gt 0 ] || {
+    echo "usage: $0 --only <check_name>..." >&2
+    exit 2
+  }
+  for c in "$@"; do
+    case "$c" in
+    check_*) declare -F "$c" >/dev/null || {
+      echo "unknown check: $c" >&2
+      exit 2
+    } ;;
+    *)
+      echo "unknown check: $c" >&2
+      exit 2
+      ;;
+    esac
+  done
+  for c in "$@"; do "$c"; done
+  [ "$fails" -eq 0 ]
+  exit
+fi
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
-check_version_pins
-check_bumper_exclude
+check_pins
 check_line_endings_and_mode
 check_dotfiles_mode
 check_bom
@@ -1254,16 +1167,12 @@ check_ps_variable_drive_refs
 check_sentinels
 check_tools_block
 check_mise_config_files
-check_vars_pin_coverage
 check_bootstrap_config
 check_dotfiles_config
 check_lsp_plugin
 check_completion_parity
 check_warp_guards
 check_zellij_config
-check_go_gopls_coupling
-check_tsls_typescript_coupling
-check_zjstatus_zellij_coupling
 check_mise_install_lib
 check_bootstrap_mode
 check_shellcheck

@@ -65,7 +65,7 @@ exit_code=0
 #    reported as manual: an LSP server's major can change which TypeScript
 #    or node it needs. typescript is also held on 5.x, because ts-ls needs
 #    typescript/lib/tsserver.js, which TS 7 removed
-#    (check_tsls_typescript_coupling). A changed postinstall string makes
+#    (check_pins). A changed postinstall string makes
 #    scripts/lib/mise-install.sh reinstall node on each host, so the
 #    servers are actually refreshed.
 # Still EXCLUDED (reported, never auto-edited):
@@ -83,7 +83,7 @@ exit_code=0
 #    harlequin) and python-env's libraries (built on it on both OSes) can lag
 #    a brand-new CPython release (duckdb/pydantic-core wheels in particular).
 EXCLUDE="github:dj95/zjstatus http:ncdu python"
-# Coupled pins bumped by dedicated code instead of EXCLUDE. check_bumper_exclude
+# Coupled pins bumped by dedicated code instead of EXCLUDE. check_pins
 # requires every dual-edit/coupled pin to be in EXCLUDE or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here
 COUPLED_AUTO="go go:golang.org/x/tools/gopls node"

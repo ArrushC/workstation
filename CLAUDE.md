@@ -180,7 +180,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - the Nushell `config.nu.tera` ↔ PowerShell profile `ws*`/`g*` aliases
   - script flags ↔ their completions (`_bootstrap.sh`, `completions.bash`, `config.nu.tera`'s flag
     record)
-- **Values recorded in several places (checked by `check_version_pins` and friends):**
+- **Values recorded in several places (checked by `check_pins`):**
   - mise: `bootstrap.sh`, `bootstrap.ps1` `$MiseVersion`, `min_version`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5
