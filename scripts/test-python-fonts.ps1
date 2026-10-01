@@ -8,10 +8,11 @@
 #    (functions win over mise.exe/uv.exe on PATH); the script stops unless
 #    both resolve to them
 #  - $RepoPath, the workstation dirs and $env:LOCALAPPDATA point at a temp dir
-#  - install-nerd-fonts.ps1 runs with -NoRegister: no HKCU Fonts key, no
-#    session activation, no logon task. In case it didn't, Get-/New-/
-#    Remove-ItemProperty, Add-Type and Register-ScheduledTask are stubs here,
-#    and a call to any of them fails the run
+#  - install-nerd-fonts.ps1 mostly runs with -NoRegister: no HKCU Fonts key,
+#    no session activation, no logon task. Get-/New-/Remove-ItemProperty,
+#    Add-Type and the ScheduledTask cmdlets are stubs here that record their
+#    calls: a -NoRegister run that reaches one fails the last case, and the
+#    two cases without -NoRegister observe the HKCU pass through them
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -48,16 +49,31 @@ function mise {
 $script:uvCalls = New-Object System.Collections.Generic.List[object]
 $script:uvExit = 0
 function uv { $script:uvCalls.Add(@($args)); $global:LASTEXITCODE = $script:uvExit }
-# install-nerd-fonts.ps1 -NoRegister must call none of these.
-$script:touched = New-Object System.Collections.Generic.List[string]
-function Get-ItemProperty { $script:touched.Add('Get-ItemProperty') }
-function New-ItemProperty { $script:touched.Add('New-ItemProperty') }
-function Remove-ItemProperty { $script:touched.Add('Remove-ItemProperty') }
-function Add-Type { $script:touched.Add('Add-Type') }
-function Register-ScheduledTask { $script:touched.Add('Register-ScheduledTask') }
-foreach ($c in 'mise', 'uv', 'Get-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Add-Type', 'Register-ScheduledTask') {
+# The font script's registry and Task Scheduler calls, recorded in $fontCalls.
+# Get-ItemProperty answers with $fontReg; New-ItemProperty notes whether the
+# file it registers exists yet. Unqualified on purpose: called from inside
+# install-nerd-fonts.ps1, `$script:` would mean that script's scope.
+$fontCalls = New-Object System.Collections.Generic.List[string]
+$fontReg = $null
+$script:noRegisterLeaks = New-Object System.Collections.Generic.List[string]
+function Get-ItemProperty { [CmdletBinding()] param($Path) $fontCalls.Add('Get-ItemProperty'); if ($fontReg) { $fontReg } }
+function New-ItemProperty {
+    [CmdletBinding()] param($Path, $Name, $Value, $PropertyType, [switch]$Force)
+    $fontCalls.Add("New-ItemProperty $Name=$Value exists=$(Test-Path -LiteralPath $Value)")
+}
+function Remove-ItemProperty { [CmdletBinding()] param($Path, $Name) $fontCalls.Add("Remove-ItemProperty $Name") }
+function Add-Type { $fontCalls.Add('Add-Type') }
+function Register-ScheduledTask { $fontCalls.Add('Register-ScheduledTask') }
+function New-ScheduledTaskAction { 'action' }
+function New-ScheduledTaskTrigger { 'trigger' }
+function New-ScheduledTaskSettingsSet { 'settings' }
+function New-ScheduledTaskPrincipal { 'principal' }
+foreach ($c in 'mise', 'uv', 'Get-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Add-Type', 'Register-ScheduledTask',
+    'New-ScheduledTaskAction', 'New-ScheduledTaskTrigger', 'New-ScheduledTaskSettingsSet', 'New-ScheduledTaskPrincipal') {
     if ((Get-Command $c).CommandType -ne 'Function') { throw "refusing to run: $c does not resolve to the test stub" }
 }
+# A real activation type in this process would let the font script call GDI.
+if (([System.Management.Automation.PSTypeName]'Workstation.FontActivator').Type) { throw 'refusing to run: Workstation.FontActivator is loaded' }
 function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
 $failures = New-Object System.Collections.Generic.List[string]
@@ -125,13 +141,13 @@ try {
     }
     # python-env.txt's entries, read the way scripts/lib/python-env.sh does.
     function Get-Lib { @(Get-Content -LiteralPath $txt | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
-    function Assert-Built([string]$PyDir) {
+    function Assert-Built([string]$PyDir, [string[]]$Libs = @(Get-Lib)) {
         $venv = Get-UvCall 'venv'
         Assert ($null -ne $venv) "no uv venv call: $(Format-UvCalls)"
         Assert (Test-Args $venv @('venv', '--python', (Join-Path $PyDir 'python.exe'), $script:WsPythonEnv)) "uv venv: $(Format-UvCalls)"
         $pip = Get-UvCall 'pip'
         Assert ($null -ne $pip) "no uv pip call: $(Format-UvCalls)"
-        $want = @('pip', 'install', '--python', $envPy, '--upgrade') + @(Get-Lib)
+        $want = @('pip', 'install', '--python', $envPy, '--upgrade') + $Libs
         Assert (Test-Args $pip $want) "uv pip: $(Format-UvCalls) -- want: uv $($want -join ' ')"
     }
     $py1 = New-Python 'mise\python\3.14.7'
@@ -177,6 +193,21 @@ try {
         Invoke-Py
         Assert-Built $py1
         Assert ($script:warnings.Count -eq 0) "unexpected warning: $($script:warnings -join ' | ')"
+    }
+
+    Test-Case 'python-env: inline comments, CRLF and padding parse to the same list, so such an edit does not rebuild' {
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt -Force
+        $canon = @(Get-Lib)
+        Use-Python $py1
+        Invoke-Py
+        Assert-Built $py1 $canon
+        $noisy = @('# a new header line', '') + @($canon | ForEach-Object { "  $_   # why it is here" })
+        [System.IO.File]::WriteAllText($txt, (($noisy -join "`r`n") + "`r`n"))
+        Invoke-Py
+        Assert ($script:uvCalls.Count -eq 0) "rebuilt after a comment/CRLF edit: $(Format-UvCalls)"
+        Remove-Item -LiteralPath (Join-Path $script:WsStamps 'python-env.stamp') -Force
+        Invoke-Py
+        Assert-Built $py1 $canon
     }
 
     Test-Case 'python-env: no python from mise -> a warning; uv never runs' {
@@ -247,11 +278,19 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
     # The real install-nerd-fonts.ps1, on $fontSrc, into a temp %LOCALAPPDATA%.
     $lad = Join-Path $tmp 'LocalAppData'
     $fontDir = Join-Path $lad 'Microsoft\Windows\Fonts'
-    function Invoke-FontScript {
+    $stampFile = Join-Path $lad 'workstation\nerd-fonts.stamp'
+    # -Register drops -NoRegister: the HKCU pass then runs against the stubs.
+    function Invoke-FontScript([switch]$Register) {
         $env:LOCALAPPDATA = $lad
+        $fontCalls.Clear()
+        $fontArgs = @{ SourceDir = $fontSrc }
+        if (-not $Register) { $fontArgs['NoRegister'] = $true }
         try {
-            (@(& $fontScript -SourceDir $fontSrc -NoRegister 6>&1) | ForEach-Object { "$_" }) -join "`n"
-        } finally { $env:LOCALAPPDATA = $savedLocalAppData }
+            (@(& $fontScript @fontArgs 3>&1 6>&1) | ForEach-Object { "$_" }) -join "`n"
+        } finally {
+            $env:LOCALAPPDATA = $savedLocalAppData
+            if (-not $Register) { foreach ($t in $fontCalls) { $script:noRegisterLeaks.Add($t) } }
+        }
     }
 
     Test-Case 'install-nerd-fonts.ps1: the six Mono TTFs from -SourceDir land in %LOCALAPPDATA%\Microsoft\Windows\Fonts' {
@@ -270,13 +309,47 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
         Assert ($out -like '*already installed*') "output: $out"
     }
 
-    Test-Case 'install-nerd-fonts.ps1: a changed source TTF is re-copied; an unchanged one in use (as GDI holds loaded fonts) is left alone' {
+    Test-Case 'install-nerd-fonts.ps1: a bump replaces a changed TTF held open like a loaded font (Read, Delete share); an unchanged one held without Delete is left alone' {
         New-TestFile (Join-Path $fontSrc $six[2]) 'ttf bold v2'
+        $held = [System.IO.File]::Open((Join-Path $fontDir $six[2]), 'Open', 'Read', [System.IO.FileShare]'Read, Delete')
         $h = [System.IO.File]::Open((Join-Path $fontDir $six[0]), 'Open', 'Read', 'Read')   # no Write/Delete share
-        try { $out = Invoke-FontScript } finally { $h.Dispose() }
+        try { $out = Invoke-FontScript } finally { $h.Dispose(); $held.Dispose() }
         Assert ($out -notlike '*already installed*') "output: $out"
-        Assert ((Read-Text (Join-Path $fontDir $six[2])) -ceq 'ttf bold v2') 'changed TTF not re-copied'
+        Assert ((Read-Text (Join-Path $fontDir $six[2])) -ceq 'ttf bold v2') 'changed TTF not replaced'
         Assert ((Read-Text (Join-Path $fontDir $six[0])) -ceq "ttf $($six[0])") 'unchanged TTF rewritten'
+        $out = Invoke-FontScript
+        Assert ($out -like '*already installed*') "stamp not rewritten after the bump: $out"
+    }
+
+    Test-Case 'install-nerd-fonts.ps1: a TTF that cannot be replaced throws a clear message before HKCU and the stamp; the next run retries' {
+        $stampBefore = Read-Text $stampFile
+        New-TestFile (Join-Path $fontSrc $six[4]) 'ttf medium v2'
+        $h = [System.IO.File]::Open((Join-Path $fontDir $six[4]), 'Open', 'Read', 'Read')   # no Delete share: undeletable
+        $msg = ''
+        try { $null = Invoke-FontScript -Register } catch { $msg = $_.Exception.Message } finally { $h.Dispose() }
+        Assert ($msg -like "*could not replace*$($six[4])*next*retries*") "got: '$msg'"
+        $writes = @($fontCalls | Where-Object { $_ -like 'New-ItemProperty*' -or $_ -like 'Remove-ItemProperty*' -or $_ -eq 'Register-ScheduledTask' })
+        Assert ($writes.Count -eq 0) "HKCU/task calls after a failed replace: $($writes -join ' | ')"
+        Assert ((Read-Text $stampFile) -ceq $stampBefore) 'stamp rewritten after a failed replace'
+        Assert ((Read-Text (Join-Path $fontDir $six[4])) -ceq "ttf $($six[4])") 'held TTF changed'
+        $null = Invoke-FontScript
+        Assert ((Read-Text (Join-Path $fontDir $six[4])) -ceq 'ttf medium v2') 'the next run did not replace it'
+    }
+
+    Test-Case 'install-nerd-fonts.ps1: after the copy, HKCU drops only stale names of the family and registers the six by full path' {
+        $props = [ordered]@{ 'Consolas (TrueType)' = 'consola.ttf'; 'JetBrainsMonoNerdFontMono-Old (TrueType)' = 'old.ttf' }
+        foreach ($f in $six) { $props["$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"] = Join-Path $fontDir $f }
+        $script:fontReg = [pscustomobject]$props
+        New-TestFile (Join-Path $fontSrc $six[5]) 'ttf mediumitalic v2'
+        try { $null = Invoke-FontScript -Register } finally { $script:fontReg = $null }
+        $removed = @($fontCalls | Where-Object { $_ -like 'Remove-ItemProperty*' })
+        Assert ($removed.Count -eq 1 -and $removed[0] -ceq 'Remove-ItemProperty JetBrainsMonoNerdFontMono-Old (TrueType)') "removed: $($removed -join ' | ')"
+        foreach ($f in $six) {
+            $want = "New-ItemProperty $([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)=$(Join-Path $fontDir $f) exists=True"
+            Assert ($fontCalls -ccontains $want) "missing: $want -- calls: $($fontCalls -join ' | ')"
+        }
+        Assert ((Read-Text (Join-Path $fontDir $six[5])) -ceq 'ttf mediumitalic v2') 'changed TTF not replaced'
+        Assert ($fontCalls -ccontains 'Register-ScheduledTask') 'logon task not re-registered'
     }
 
     Test-Case 'install-nerd-fonts.ps1: a missing source TTF throws before the installed fonts are touched' {
@@ -288,7 +361,7 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
     }
 
     Test-Case 'install-nerd-fonts.ps1 -NoRegister: no HKCU read or write, no activation, no logon task' {
-        Assert ($script:touched.Count -eq 0) "called: $($script:touched -join ', ')"
+        Assert ($script:noRegisterLeaks.Count -eq 0) "called: $($script:noRegisterLeaks -join ', ')"
     }
 } finally {
     $env:LOCALAPPDATA = $savedLocalAppData

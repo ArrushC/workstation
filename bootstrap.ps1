@@ -1399,9 +1399,9 @@ function Invoke-InstallClaudeCode {
 # task): uv (`mise which uv`) builds it from scratch on mise's python
 # (`mise where python`, tools.python in config.toml) with the libraries in
 # scripts\python-env.txt; wpy/textual/typer .cmd launchers land in $WsBin.
-# The stamp holds the interpreter path + the list's SHA256, so a python bump
-# or a list edit rebuilds on the next bootstrap (a library upgrade alone is
-# "delete the stamp, re-run").
+# The stamp holds the interpreter path + the parsed list, so a python bump or
+# a list change rebuilds on the next bootstrap, and a comment or line-ending
+# edit doesn't (a library upgrade alone is "delete the stamp, re-run").
 function Invoke-PythonEnv {
     if ($SkipToolInstall) {
         Write-Log "Python env skipped (-SkipToolInstall)"
@@ -1419,8 +1419,9 @@ function Invoke-PythonEnv {
         Write-Warn "Python env skipped — needs mise's python + uv ('mise where python', 'mise which uv': did the tools phase fail?) and $libsFile"
         return
     }
-    $libs = @(Get-Content -Encoding UTF8 -LiteralPath $libsFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
-    $want = "$python $((Get-FileHash -Algorithm SHA256 -LiteralPath $libsFile).Hash.ToLower())"
+    # One name per line; `#` starts a comment (whole line, or after whitespace).
+    $libs = @(Get-Content -Encoding UTF8 -LiteralPath $libsFile | ForEach-Object { ($_ -replace '(^|\s+)#.*$', '').Trim() } | Where-Object { $_ })
+    $want = (@($python) + $libs) -join "`n"
     $stamp = Join-Path $WsStamps "python-env.stamp"
     $wpyShim = Join-Path $WsBin "wpy.cmd"
     if ((Test-Path $stamp) -and ([System.IO.File]::ReadAllText($stamp).Trim() -eq $want) -and (Test-Path $wpyShim)) {
@@ -1485,8 +1486,7 @@ function Invoke-InstallNerdFonts {
         & $InstallScript -SourceDir $src
     } catch {
         Write-Warn "Nerd Fonts install failed: $_"
-        Write-Warn "  Glyphs in starship / eza / lazygit / etc. will render as tofu."
-        Write-Warn "  Retry manually:  & '$InstallScript' -SourceDir '$src'"
+        Write-Warn "  Retry: re-run .\bootstrap.ps1, or  & '$InstallScript' -SourceDir '$src'"
     }
 }
 

@@ -23,8 +23,11 @@ python="${1:?usage: python-env.sh <python-interpreter>}"
 env_dir="$HOME/.local/share/workstation-python"
 bin_dir="$HOME/.local/bin"
 
-# The lib list: scripts/python-env.txt (bootstrap.ps1 reads it too).
-mapfile -t PY_LIBS < <(grep -vE '^[[:space:]]*(#|$)' "$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)/scripts/python-env.txt")
+# The lib list: scripts/python-env.txt (bootstrap.ps1 reads it too), one name
+# per line; `#` starts a comment (whole line, or after whitespace); surrounding
+# whitespace and a CR are dropped.
+mapfile -t PY_LIBS < <(sed -E 's/(^|[[:space:]]+)#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+  "$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)/scripts/python-env.txt" | grep -v '^$')
 
 if ! command -v uv >/dev/null 2>&1; then
   printf 'python-env.sh: uv not on PATH — run ./bootstrap.sh (uv is mise-managed)\n' >&2

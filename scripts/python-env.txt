@@ -1,5 +1,5 @@
-# Libraries in the blessed python-env (latest at build time). Read by
-# scripts/lib/python-env.sh, and by bootstrap.ps1 (Invoke-PythonEnv) on Windows.
+# Libraries in the blessed python-env (latest at build time), one per line; `#` starts a
+# comment. Read by scripts/lib/python-env.sh, and by bootstrap.ps1 (Invoke-PythonEnv) on Windows.
 textual
 textual-dev
 click

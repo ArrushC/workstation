@@ -61,6 +61,12 @@
   and dotfiles sync; a second `.\bootstrap.ps1` reports "already installed"/stamp hits. Parse
   check: `powershell -NoProfile -Command "[void][System.Management.Automation.Language.Parser]::ParseFile('bootstrap.ps1',[ref]$null,[ref]$null);'ok'"`.
   `scripts/test-curl.ps1` (HTTP helper) runs in both shells in the `windows-http` CI job.
+  Running the `scripts/test-*.ps1` from WSL interop: copy them under `%TEMP%`, `cd` to
+  `%USERPROFILE%` and use `-NoProfile -ExecutionPolicy Bypass -File`. powershell.exe 5.1 needs the
+  Machine PSModulePath (`PSModulePath="$(powershell.exe -NoProfile -Command
+  "[Environment]::GetEnvironmentVariable('PSModulePath','Machine')" | tr -d '\r')"
+  WSLENV=PSModulePath/w powershell.exe ...`): the inherited pwsh 7 path makes 5.1 report
+  "Get-FileHash is not recognized" (a false failure; CI is unaffected).
 
 ## zellij
 

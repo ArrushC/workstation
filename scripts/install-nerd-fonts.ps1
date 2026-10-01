@@ -6,8 +6,7 @@
 # -SourceDir = `mise where github:ryanoasis/nerd-fonts`: mise downloads and
 # checks the font, whose pin lives only in config.owned.toml (tasks/fonts
 # uses the same tool on Linux). This script copies the six Mono variants from
-# there to %LOCALAPPDATA%\Microsoft\Windows\Fonts\ (only the ones that differ, so
-# an unchanged font already loaded in the session is never rewritten),
+# there to %LOCALAPPDATA%\Microsoft\Windows\Fonts\ (only the ones that differ),
 # and registers them (by FULL PATH — bare filenames resolve only against
 # C:\Windows\Fonts, so an HKCU bare-name entry never loads at logon) in
 # HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts
@@ -26,10 +25,12 @@
 # session activation + re-registers the per-logon task first, so a host
 # provisioned by an older build — registered but never activated, or registered
 # by bare filename — goes live without a logout). Otherwise TTFs of this family
-# with other names are swept, and the HKCU entries rewritten, which also turns
-# the bare-filename registrations left by older builds into full paths.
+# with other names are swept, each changed TTF is deleted and copied anew, and
+# only then are the HKCU entries rewritten (which also turns the bare-filename
+# registrations left by older builds into full paths).
 #
-# Hard-fails when a source TTF is missing (bootstrap.ps1 warns and goes on).
+# Hard-fails when a source TTF is missing or a changed TTF can't be replaced,
+# before HKCU or the stamp change (bootstrap.ps1 warns and goes on).
 # Soft-fails on registry-write failure (Windows Terminal/Zed/VS Code may not see
 # the font until manual registration via Settings → Personalization → Fonts).
 #
@@ -191,36 +192,46 @@ New-Item -ItemType Directory -Path $FontDir  -Force | Out-Null
 New-Item -ItemType Directory -Path $StampDir -Force | Out-Null
 
 # Sweep TTFs of this family that are not the six (upstream renamed one between
-# releases), and the HKCU entries, which are all rewritten below.
+# releases).
 Get-ChildItem -Path $FontDir -Filter "$FontFamily-*.ttf" -ErrorAction SilentlyContinue |
     Where-Object { $FontFiles -notcontains $_.Name } |
     ForEach-Object { Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue }
-if (-not $NoRegister) {
-    $reg = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
-    if ($reg) {
-        $reg.PSObject.Properties |
-            Where-Object { $_.Name -like "$FontFamily-*" } |
-            ForEach-Object {
-                Remove-ItemProperty -Path $RegPath -Name $_.Name -ErrorAction SilentlyContinue
-            }
-    }
-}
 
-# Copy each variant that differs. An identical one stays untouched: a font
-# loaded in the session (AddFontResourceW) can't be overwritten.
+# Replace each variant that differs: delete, then copy. A loaded font (GDI via
+# the logon task, Windows Terminal, Zed) shares Delete, so the delete frees the
+# name, but its mapping blocks an in-place overwrite. An identical variant stays
+# untouched. A failure stops here, before HKCU and the stamp, so the installed
+# registrations stay and the next run retries.
 $Copied = 0
 foreach ($f in $FontFiles) {
     $dest = Join-Path $FontDir $f
     if ((Test-Path -LiteralPath $dest) -and
         ((Get-FileHash -Algorithm SHA256 -LiteralPath $dest).Hash.ToLower() -eq $SrcHash[$f])) { continue }
-    Copy-Item -LiteralPath (Join-Path $SourceDir $f) -Destination $dest -Force
+    try {
+        if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force }
+        Copy-Item -LiteralPath (Join-Path $SourceDir $f) -Destination $dest -Force
+    } catch {
+        throw ("could not replace $dest ($($_.Exception.Message)). The HKCU registrations " +
+            "are untouched and no stamp was written: the next .\bootstrap.ps1 run retries " +
+            "(close Windows Terminal/Zed/VS Code first if this repeats).")
+    }
     $Copied++
 }
 
-# Register in HKCU (per-user). Soft-fail per-file: if any one registration is
-# blocked, continue with the rest and flag at the end.
+# Register in HKCU (per-user), only now that the files are in place: entries of
+# this family with other names go, the six are (re)written. Soft-fail per-file:
+# if any one registration is blocked, continue with the rest and flag at the end.
 $RegistrationFailed = $false
 if (-not $NoRegister) {
+    $RegNames = $FontFiles | ForEach-Object { "$([System.IO.Path]::GetFileNameWithoutExtension($_)) (TrueType)" }
+    $reg = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
+    if ($reg) {
+        $reg.PSObject.Properties |
+            Where-Object { $_.Name -like "$FontFamily-*" -and $RegNames -notcontains $_.Name } |
+            ForEach-Object {
+                Remove-ItemProperty -Path $RegPath -Name $_.Name -ErrorAction SilentlyContinue
+            }
+    }
     foreach ($f in $FontFiles) {
         $regName = "$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"
         try {
