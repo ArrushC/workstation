@@ -51,7 +51,7 @@ fi
 
 "$scripts/gen-tool-memory.sh" >/dev/null 2>&1 || exit 0
 
-msg="Regenerated the TOOLS block in dotfiles/claude/CLAUDE.md from your config*.toml edit — commit it with this change (it's symlinked to ~/.claude/CLAUDE.md, so the update is already live). If you changed a pin: \`mise lock --global\` refreshes the lockfiles (commit those too)."
+msg="Regenerated the TOOLS block in dotfiles/claude/CLAUDE.md from your config*.toml edit; commit it with this change (\`wsa\` deploys it to ~/.claude/CLAUDE.md). A changed [tools] pin needs its lock entries regenerated (never hand-edit; recipe: docs/claude/verification.md, Locks), and a min_version change must match MISE_VERSION in bootstrap.sh and \$MiseVersion in bootstrap.ps1. \`mise run lint\` checks both."
 
 hook_context PostToolUse "$msg"
 exit 0

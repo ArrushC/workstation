@@ -131,13 +131,15 @@ echo "== parity-reminder (R3) =="
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.toml -> mise triple-edit" has 'MiseVersion'
-ok "config.toml -> no python/font pairs (single-source since PR 4)" lacks 'PythonEnvVersion'
-ok "config.toml -> no tools.python pair" lacks 'tools.python'
-ok "config.toml -> no install-nerd-fonts pair" lacks 'install-nerd-fonts'
+ok "config.toml -> silent (sync-tool-memory covers config edits)" empty
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.owned.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.owned.toml -> lock refresh" has 'mise lock'
-ok "config.owned.toml -> no install-nerd-fonts pair" lacks 'install-nerd-fonts'
+ok "config.owned.toml -> silent" empty
+run "$RH/parity-reminder.sh" "$(j --arg f 'C:\Users\u\.config\mise\dotfiles\zshrc.tera' '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "backslash path -> bashrc reminder" has 'bashrc'
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/windows/AppData/Roaming/nushell/config.nu.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "nushell config -> PowerShell profile reminder" has 'PowerShell'
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "PowerShell profile -> nushell reminder" has 'nushell'
 run "$RH/parity-reminder.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated -> silent" empty
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/bootstrap.ps1" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
@@ -151,15 +153,17 @@ echo "== secret-guard (G1) =="
 run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.ssh/id_rsa" '{tool_name:"Read",tool_input:{file_path:$f}}')"
 ok "deny read SSH private key" has '"permissionDecision":"deny"'
 run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/chezmoi/key.txt" '{tool_name:"Write",tool_input:{file_path:$f}}')"
-ok "deny write age identity" has '"permissionDecision":"deny"'
+ok "chezmoi key.txt is no longer special" empty
 run "$GH/secret-guard.sh" "$(j --arg f "/tmp/server.pem" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "deny edit cert (.pem)" has '"permissionDecision":"deny"'
 run "$GH/secret-guard.sh" "$(j --arg f "/tmp/app.js" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "allow normal edit" empty
 run "$GH/secret-guard.sh" "$(j --arg f "/tmp/README.md" '{tool_name:"Read",tool_input:{file_path:$f}}')"
 ok "allow normal read" empty
-run "$GH/secret-guard.sh" "$(j --arg c "cat ~/.config/chezmoi/key.txt" '{tool_name:"Bash",tool_input:{command:$c}}')"
-ok "ask bash naming key.txt" has '"permissionDecision":"ask"'
+run "$GH/secret-guard.sh" "$(j --arg c "cat ~/.ssh/id_ed25519" '{tool_name:"Bash",tool_input:{command:$c}}')"
+ok "ask bash naming an SSH private key" has '"permissionDecision":"ask"'
+run "$GH/secret-guard.sh" "$(j --arg c "cat notes/key.txt" '{tool_name:"Bash",tool_input:{command:$c}}')"
+ok "bash naming key.txt -> silent" empty
 run "$GH/secret-guard.sh" "$(j --arg c "ls -la" '{tool_name:"Bash",tool_input:{command:$c}}')"
 ok "allow normal bash" empty
 
@@ -197,6 +201,9 @@ ST="$(mktemp -d)"
 printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$ST/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | MEMFILE="$ST/CLAUDE.md" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "config.toml -> commit nudge" has 'commit'
+ok "nudge says wsa deploys it" has 'wsa'
+ok "nudge no longer claims a symlink" lacks 'symlink'
+ok "nudge points at the lock recipe" has 'verification.md'
 ok "block regenerated (stale gone)" bash -c '! grep -q stale "'"$ST"'/CLAUDE.md"'
 run "$RH/sync-tool-memory.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated path -> silent" empty
@@ -219,7 +226,7 @@ rm -rf "$WT"
 rm -rf "$ST"
 
 echo "== session-context (R6) =="
-run_env() { OUT="$(printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR bash "$1" 2>/dev/null)"; }
+run_env() { OUT="$(printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR -u MISE_ENV "${@:3}" bash "$1" 2>/dev/null)"; }
 oneline() { [ "$(printf '%s' "$OUT" | grep -c .)" -eq 1 ]; }
 run_env "$RH/session-context.sh" "$(j --arg c "$ROOT" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
 ok "emits SessionStart event" has '"hookEventName":"SessionStart"'
@@ -228,6 +235,21 @@ ok "reports guard readiness" has 'guards:'
 ok "is one JSON object (single line)" oneline
 run_env "$RH/session-context.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
+SC="$(mktemp -d)"
+printf 'env = ["linux", "owned", "host", "wsl"]\nauto_env = false\n' >"$SC/miserc.toml"
+run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
+ok "owned miserc -> mode=owned" has 'mode=owned'
+ok "reports the miserc tokens" has 'env=linux,owned,host,wsl'
+ok "no exported MISE_ENV -> no warning" lacks 'overrides miserc'
+run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')" MISE_ENV=linux
+ok "exported MISE_ENV -> warned" has 'MISE_ENV=linux (exported; overrides miserc)'
+printf 'env = ["linux"]\n' >"$SC/miserc.toml"
+run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
+ok "linux-only miserc -> mode=shared" has 'mode=shared'
+rm -f "$SC/miserc.toml"
+run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
+ok "no miserc -> miserc=missing" has 'miserc=missing'
+rm -rf "$SC"
 
 echo "== session-end-notify (R7) =="
 SE="$(mktemp -d)"

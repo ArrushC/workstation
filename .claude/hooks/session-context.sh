@@ -6,7 +6,7 @@
 # repo:
 #   - dotfiles deploy state (does $HOME match the source you're editing? —
 #     `mise dot status`)
-#   - host identity & scope (hostname, owned/shared mode, distro / EL family)
+#   - host identity & scope (hostname, owned/shared mode and miserc tokens, an exported MISE_ENV, distro / EL family)
 #   - WSL & interop capability (interop enabled?, powershell.exe reachable?)
 #   - guardrail readiness (jq/shfmt/gitleaks/shellcheck + pre-commit hook)
 #
@@ -62,19 +62,26 @@ print(len(d.get("files",[])))' 2>/dev/null)"
 
 # --- bucket: host identity & scope -------------------------------------------
 seg_host() {
-  local host mode osr id ver plat el osseg
+  local host mode envseg tokens osr id ver plat el osseg
   host="$(uname -n 2>/dev/null)"
   # owned/shared is the `owned` token in miserc.toml's `env = [...]` (written by
   # scripts/lib/mise-env.sh) — not config.local.toml's vars.mode, which may not
   # exist yet on a fresh clone. Missing/unreadable miserc leaves mode unset.
-  mode=""
-  tokens="$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')"
-  if [ -n "$tokens" ]; then
-    case ",${tokens}," in
-    *,owned,*) mode="owned" ;;
-    *) mode="shared" ;;
-    esac
+  mode="" envseg=""
+  if [ -r "$root/miserc.toml" ]; then
+    tokens="$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')"
+    if [ -n "$tokens" ]; then
+      case ",${tokens}," in
+      *,owned,*) mode="owned" ;;
+      *) mode="shared" ;;
+      esac
+      envseg="env=$tokens"
+    fi
+  else
+    envseg="miserc=missing"
   fi
+  # An exported MISE_ENV overrides miserc for every mise call in this session.
+  [ -n "${MISE_ENV:-}" ] && envseg="$envseg MISE_ENV=$MISE_ENV (exported; overrides miserc)"
   osr=/etc/os-release
   id="$(sed -nE 's/^ID=("?)([^"]*)\1.*/\2/p' "$osr" 2>/dev/null | head -1)"
   ver="$(sed -nE 's/^VERSION_ID=("?)([^"]*)\1.*/\2/p' "$osr" 2>/dev/null | head -1)"
@@ -85,6 +92,7 @@ seg_host() {
   [ -n "$osseg" ] && [ -n "$el" ] && [ "$el" != "$plat" ] && osseg="$osseg ($el)"
   printf 'host=%s' "${host:-?}"
   [ -n "$mode" ] && printf ' mode=%s' "$mode"
+  [ -n "$envseg" ] && printf ' %s' "${envseg# }"
   [ -n "$osseg" ] && printf ' %s' "$osseg"
 }
 
