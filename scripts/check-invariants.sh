@@ -144,7 +144,8 @@ pin_vars_reachable() {
   done < <("$PY" -c 'import tomllib
 for k in tomllib.load(open("config.toml","rb")).get("vars",{}):
     print(k) if k.endswith("_version") else None')
-  if [ -z "$missing" ]; then ok "all $n [vars] *_version pin(s) reach check-updates and gen-tool-memory"; else bad "[vars] pin(s) not covered:$missing"; fi
+  if [ "$n" -eq 0 ]; then missing=" <none found>"; fi
+  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then ok "all $n [vars] *_version pin(s) reach check-updates and gen-tool-memory"; else bad "[vars] pin(s) not covered:$missing"; fi
 }
 
 check_pins() {
@@ -158,6 +159,12 @@ check_pins() {
   pin_major_at_most "typescript (tsserver for typescript-language-server)" \
     "$(grep -E '^node = ' config.owned.toml | grep -oE 'typescript@[0-9.]+' | cut -d@ -f2)" 5 \
     "keep the 5.x line"
+  if grep -E '^node = ' config.owned.toml | grep -q 'typescript-language-server@'; then
+    ok "typescript-language-server is in node's postinstall"
+  else
+    bad "typescript-language-server@ missing from node's postinstall in config.owned.toml"
+  fi
+  # A new pin_equal row over a tools.X pin must add X to this list.
   pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node
   if [ -z "$PY" ]; then
     note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
@@ -168,6 +175,13 @@ check_pins() {
     "bootstrap.ps1=$(sed -nE 's/^\$MiseVersion *= *"([0-9.]+)".*/\1/p' bootstrap.ps1 | head -1)" \
     "config.toml min_version=$(tomlval config.toml min_version 2>/dev/null)"
   # zjstatus states the zellij it needs in prose release notes; the floor sits next to the pin.
+  # A mismatch fails silently at runtime (the bar pane doesn't render) and
+  # `zellij setup --check` still reports "Well defined".
+  if [ -n "$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"' 2>/dev/null)" ]; then
+    ok "zjstatus pin readable"
+  else
+    bad "zjstatus pin unreadable in config.linux.toml (tools.\"github:dj95/zjstatus\")"
+  fi
   pin_at_least "zellij for zjstatus" "$(tomlval config.linux.toml tools.zellij 2>/dev/null)" \
     "$(tomlval config.toml vars.zjstatus_zellij_floor 2>/dev/null)" \
     "bump zellij, or pin the zjstatus release built for it (and its floor)"
@@ -940,6 +954,26 @@ check_bootstrap_mode() {
   fi
 }
 
+# The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
+# GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
+check_self_tests() {
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh)"
+  local out t
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self"; do
+    if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
+      note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
+      continue
+    fi
+    # shellcheck disable=SC2086  # $t carries the script and its flag
+    if out="$(env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE bash $t 2>&1)"; then
+      ok "$(printf '%s\n' "$out" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^[^[:alnum:]]+//')"
+    else
+      bad "${t%% *} failed:"
+      printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/      /'
+    fi
+  done
+}
+
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -1175,6 +1209,7 @@ check_warp_guards
 check_zellij_config
 check_mise_install_lib
 check_bootstrap_mode
+check_self_tests
 check_shellcheck
 check_shfmt
 check_gitleaks
