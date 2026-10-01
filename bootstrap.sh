@@ -12,7 +12,7 @@
 #   owned   your machine  — sudo, full toolbelt, zsh login shell
 #   shared  someone else's — no sudo, user-level toolbelt only
 #
-# See ./bootstrap.sh --help for flags (--reinstall, --doctor, --check-for-updates).
+# See ./bootstrap.sh --help for flags (--reinstall, --yes).
 # =============================================================================
 
 set -euo pipefail
@@ -73,32 +73,20 @@ Flags:
   --reinstall   Wipe the cloned repo (incl. config.local.toml), then bootstrap
                 fresh. Installed tools and deployed dotfiles stay.
   --yes, -y     Skip the --reinstall confirmation prompt.
-  --doctor      Read-only health report, then exit.
-  --check-for-updates
-                Read-only update scan, then exit (--checkforupdates alias).
   -h, --help    Show this message.
+
+Health report: mise run health. Update scan: mise run check-updates.
 EOF
 }
 
 # --- Argument parsing ---------------------------------------------------------
-# Accepts in any order: --reinstall, --yes/-y, --doctor | --check-for-updates
-# (read-only report modes). No mode flag — see resolve_host_config.
+# Accepts in any order: --reinstall, --yes/-y. No mode flag — see
+# resolve_host_config.
 parse_args() {
   REINSTALL=false
   YES=false
-  ACTION=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --doctor)
-      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
-      ACTION="doctor"
-      shift
-      ;;
-    --check-for-updates | --checkforupdates)
-      [[ -n "$ACTION" ]] && fail "--doctor and --check-for-updates are mutually exclusive"
-      ACTION="check-updates"
-      shift
-      ;;
     --reinstall)
       REINSTALL=true
       shift
@@ -114,12 +102,6 @@ parse_args() {
     *) fail "Unknown argument: $1 (try --help)" ;;
     esac
   done
-
-  # The report modes are read-only — combining them with the wipe flag is
-  # almost certainly a mistake, so refuse rather than surprise.
-  if [[ -n "$ACTION" && "$REINSTALL" == true ]]; then
-    fail "--reinstall can't be combined with --doctor/--check-for-updates (they are read-only and exit early)"
-  fi
 }
 
 # --- Config helpers + mode functions ------------------------------------------
@@ -598,146 +580,6 @@ Or copy this script out of the repo first:
 }
 
 # =============================================================================
-# REQUIRE REPO — doctor/check-updates need a bootstrapped repo to inspect.
-# =============================================================================
-require_repo() {
-  if [[ ! -d "$REPO_DIR/.git" ]]; then
-    fail "No workstation repo at $REPO_DIR — bootstrap this host first:
-  ./bootstrap.sh"
-  fi
-}
-
-# Shared by both modes: fetch (best-effort), then report branch, ahead/behind
-# the upstream, and working-tree cleanliness. Never aborts — report-only.
-report_repo_state() {
-  cd "$REPO_DIR"
-  log "Workstation repo ($REPO_DIR)"
-  if git fetch --quiet 2>/dev/null; then
-    ok "fetched origin"
-  else
-    warn "git fetch failed (offline or stale credentials) — using last-known remote state"
-  fi
-
-  local branch dirty upstream
-  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
-  dirty=$(git status --porcelain 2>/dev/null | wc -l)
-
-  if upstream=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null); then
-    local behind ahead
-    behind=$(git rev-list --count "HEAD..@{upstream}" 2>/dev/null || echo 0)
-    ahead=$(git rev-list --count "@{upstream}..HEAD" 2>/dev/null || echo 0)
-    if ((behind > 0)); then
-      warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $REPO_DIR pull --ff-only"
-    else
-      ok "branch $branch is up to date with $upstream"
-    fi
-    if ((ahead > 0)); then
-      warn "$ahead local commit(s) not pushed — push with: git -C $REPO_DIR push"
-    fi
-  else
-    warn "branch $branch has no upstream — behind/ahead unknown"
-  fi
-
-  if ((dirty > 0)); then
-    warn "$dirty uncommitted change(s) — review with: git -C $REPO_DIR status"
-  else
-    ok "working tree clean"
-  fi
-}
-
-# =============================================================================
-# DO DOCTOR / DO CHECK UPDATES — read-only report modes (--doctor /
-# --check-for-updates). Both exit before the provisioning flow starts:
-# nothing is cloned, installed, or changed. This script owns only the
-# repo-level checks (prereqs, git state, dotfiles drift, login shell) and
-# delegates ALL per-tool and host-state knowledge to `mise run health` /
-# `mise run check-updates`.
-# =============================================================================
-do_doctor() {
-  require_repo
-  log "Doctor — read-only health report; nothing is installed or changed"
-  echo ""
-
-  # Same prereq list as preflight, but report-all instead of hard-fail.
-  log "Prerequisites"
-  local cmd
-  for cmd in curl git tar; do
-    if command -v "$cmd" &>/dev/null; then
-      ok "$cmd"
-    else
-      warn "$cmd missing — install via your distro's package manager (see ./bootstrap.sh --help)"
-    fi
-  done
-  echo ""
-
-  report_repo_state
-  echo ""
-
-  MODE=$(config_get "$REPO_DIR/config.local.toml" mode)
-  if ! valid_mode "$MODE"; then
-    # report_repo_state already ran above — don't fetch/report twice.
-    warn "mode not set — run ./bootstrap.sh once to choose owned or shared"
-    exit 1
-  fi
-  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
-  export MISE_ENV
-  ok "mode: $MODE"
-
-  log "dotfiles"
-  if ! command -v mise >/dev/null 2>&1; then
-    warn "mise not on PATH — can't check dotfiles status"
-  elif mise dot status --missing >/dev/null 2>&1; then
-    ok "deployed dotfiles in sync with the source (mise dot status)"
-  else
-    warn "drift — inspect: mise dot status · apply: mise dot apply"
-  fi
-  echo ""
-
-  log "Login shell"
-  local login_shell zsh_path
-  login_shell=$(getent passwd "$USER" | cut -d: -f7)
-  zsh_path=$(command -v zsh || true)
-  if [[ -n "$zsh_path" && "$login_shell" == "$zsh_path" ]]; then
-    ok "login shell is zsh ($zsh_path)"
-  elif [[ -z "$zsh_path" ]]; then
-    warn "zsh not installed — login shell is $login_shell"
-  else
-    warn "login shell is $login_shell, not zsh — fix: sudo usermod -s $zsh_path $USER (owned) / chsh -s $zsh_path (shared)"
-  fi
-  echo ""
-
-  log "mise"
-  if command -v mise >/dev/null 2>&1; then ok "mise $(mise --version 2>/dev/null | awk '{print $1}') on PATH ($(command -v mise)) — pinned $MISE_VERSION"; else warn "mise not on PATH — re-run ./bootstrap.sh"; fi
-  echo ""
-
-  log "Tools, host state, services — mise run health"
-  mise run health
-  exit $?
-}
-
-do_check_updates() {
-  require_repo
-  MODE=$(config_get "$REPO_DIR/config.local.toml" mode)
-  if ! valid_mode "$MODE"; then
-    warn "mode not set — run ./bootstrap.sh once to choose owned or shared"
-    report_repo_state
-    exit 1
-  fi
-  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
-  export MISE_ENV
-  log "Check for updates (mode=${MODE}) — workstation repo first, then tool pins vs upstream"
-  echo ""
-
-  report_repo_state
-  echo "    (tool pins live in config*.toml + config.toml [vars] of THIS clone — if the repo"
-  echo "     is behind, pull first so the pins you're comparing are current)"
-  echo ""
-
-  mise run check-updates
-  exit $?
-}
-
-# =============================================================================
 # MAIN
 # =============================================================================
 main() {
@@ -746,17 +588,6 @@ main() {
   # open" close never leaks or clobbers stderr.
   { exec 3<&-; } 2>/dev/null || true
   parse_args "$@"
-
-  case "$ACTION" in
-  doctor) do_doctor ;;
-  check-updates) do_check_updates ;;
-  esac
-  # do_doctor/do_check_updates always exit internally — this is a backstop
-  # so a report mode can never fall through into provisioning, even if a
-  # future do_* forgets to exit.
-  if [[ -n "$ACTION" ]]; then
-    fail "internal error: $ACTION did not exit"
-  fi
 
   if [[ "$REINSTALL" == true ]]; then
     do_reinstall

@@ -19,7 +19,7 @@
 - **The checkout is live config:** `mise use -g`, `mise settings set`, `mise dot add`/`wsr`, `wse` and
   `mise bootstrap` write tracked files here. Commit or revert first; `wsu`'s `git pull --ff-only`
   fails on a dirty tree.
-- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; also pre-commit and CI) and
+- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; also CI and the pre-commit hook `mise run install-hooks` generates) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
 - **Task names** must not collide with mise built-ins (`mise fmt` is built in, so ours is
   `mise run fmt`).
@@ -34,8 +34,8 @@
 | `config.toml` | always | uv, python, `[vars]` pins, dotfiles for both OSes |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
 | `config.owned.toml` | `owned` | owned-host tools on both OSes (node + LSP servers, go, …), `~/.claude` dotfiles, ccstatusline |
-| `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook; gdb, herdr, zed dotfiles |
-| `config.native.toml` | `native` | non-WSL owned: NFS client packages |
+| `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
+| `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
 | `config.windows.toml` | `windows` | Windows-only dotfiles |
 | `config.local.toml` | always, git-ignored | per-host `[vars] mode/name/email` and overrides |
@@ -46,8 +46,8 @@ Token sets come only from `scripts/lib/mise-env.sh`:
 - owned native: `linux,owned,host,native`
 - Windows: `windows,owned`
 
-Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sidecars. Global tasks live in
-`tasks/`. mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirect them.
+Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sidecars. Tasks: files in `tasks/` carry logic; one-line wrappers are `[tasks]` in `config.toml`.
+mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirect them.
 
 ## Invariants
 
@@ -59,9 +59,12 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
   `config.native.toml` or `config.wsl.toml`, and those files declare no `[tools]`.
 - `[bootstrap.*]` and `[dotfiles]` tables merge by union across loaded files. Declare each item once,
   in the file whose token gates it.
-- Hooks are `mise run <task>`, because mise treats hook strings as opaque shell. The one exception is
+- Hooks are `mise run <task>`, or `mise run a ::: b` for several, because mise treats hook strings as
+  opaque shell. A hook name may be declared in more than one loaded file, and all of them run. The one exception is
   the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
+- Owned-only steps hang off `final` hooks in `config.host.toml` (vcpkg, claude) and `config.native.toml`
+  (fonts). `final` runs only on a full `mise bootstrap`, never on `--only dotfiles`.
 - dnf installs everything in one batch, so a single unresolvable name fails the whole run. Only add
   EL9-verified names. `ShellCheck` is capitalised; `fswatch`, `entr` and `cockpit-networkmanager`
   don't resolve.
@@ -146,7 +149,7 @@ Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sideca
 
 - **LF + git mode 100755:**
   - `scripts/*.sh`, `scripts/lib/*.sh`, every `tasks/*` file (mise silently skips a non-executable
-    task), `.claude/hooks/*.sh`, `.githooks/pre-commit`
+    task), `.claude/hooks/*.sh`
   - executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
     `dotfiles/local/bin/{batpipe,winterop}`
   - Repair: `sed -i 's/\r$//' <f>`; `git update-index --chmod=+x <f>`.

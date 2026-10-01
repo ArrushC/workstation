@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#MISE description="Owned Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin (config.host.toml's final hook runs it)"
+set -euo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
+# 1. Claude Code — official installer, skip-if-present, self-updates (rolling, no pin)
+if command -v claude >/dev/null 2>&1; then
+  echo "  claude present ($(command -v claude))"
+else
+  echo "==> claude (official installer)"
+  curl -fsSL https://claude.ai/install.sh | bash
+fi
+# 2. Claude plugin marketplace + the 8 user-scope plugins, once. Idempotent even without the
+# marker (marketplace add / plugin install both no-op when already present)
+# — the marker just skips the claude invocations entirely once they've all
+# succeeded.
+claude_plugins_marker="$state/claude-plugins"
+if [ ! -f "$claude_plugins_marker" ]; then
+  if command -v claude >/dev/null 2>&1; then
+    echo "==> claude plugin marketplace + plugins"
+    claude_marketplace="claude-plugins-official"
+    claude_plugins_ok=true
+    if ! claude plugin marketplace list 2>/dev/null | grep -qF "$claude_marketplace"; then
+      claude plugin marketplace add "anthropics/claude-plugins-official" --scope user ||
+        {
+          claude_plugins_ok=false
+          echo "  ! claude plugin marketplace add failed" >&2
+        }
+    fi
+    claude_plugins=(superpowers claude-md-management claude-code-setup microsoft-docs hookify context7 github frontend-design)
+    for plugin in "${claude_plugins[@]}"; do
+      claude plugin install "${plugin}@${claude_marketplace}" --scope user ||
+        {
+          claude_plugins_ok=false
+          echo "  ! claude plugin install failed: $plugin" >&2
+        }
+    done
+    if $claude_plugins_ok; then
+      mkdir -p "$state" && : >"$claude_plugins_marker" || true
+    else
+      echo "  ! claude plugin setup incomplete — retries on the next run" >&2
+    fi
+  else
+    echo "  claude not found on PATH — skipping plugin install (retries next run)" >&2
+  fi
+fi
+# 3. ~/.claude/settings.json three-layer merge via
+# scripts/lib/claude-settings-merge.sh — mise has no
+# modify_-template equivalent). Runs every bootstrap, not marker-guarded:
+# ongoing enforcement, not a one-time script. The script itself is
+# soft-failing; the `||` here is belt-and-braces.
+"$root/scripts/lib/claude-settings-merge.sh" ||
+  echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
+# 4. ~/.claude/settings.local.json — seed-if-absent.
+# This file stays out of [dotfiles], like settings.json (Claude Code
+# rewrites the live file), but unlike
+# settings.json there is no enforced layer reapplied on every run here — a
+# plain seed, set ONLY when the live file doesn't exist yet, so a fresh host
+# gets the tracked default ({"spinnerTipsEnabled": false}) without a
+# `[dotfiles]` entry ever clobbering a live edit Claude Code (or the user)
+# makes afterward.
+claude_local_src="$root/dotfiles/claude/settings.local.json"
+claude_local_dest="$HOME/.claude/settings.local.json"
+if [ -f "$claude_local_src" ] && [ ! -e "$claude_local_dest" ]; then
+  if mkdir -p "$(dirname "$claude_local_dest")" &&
+    cp "$claude_local_src" "$claude_local_dest" &&
+    chmod 600 "$claude_local_dest"; then
+    echo "  seeded $claude_local_dest"
+  else
+    echo "  ! failed to seed $claude_local_dest — inspect by hand" >&2
+  fi
+fi
+# 5. herdr plugin at its pinned ref, once. PIN lives in the marker filename
+# itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
+# re-fires the install.
+herdr_plugin_ref="v1.7.0"
+herdr_plugins_marker="$state/herdr-plugins-$herdr_plugin_ref"
+if [ ! -f "$herdr_plugins_marker" ]; then
+  if command -v herdr >/dev/null 2>&1; then
+    echo "==> herdr plugin (smarzban/herdr-file-viewer@$herdr_plugin_ref)"
+    if herdr plugin install smarzban/herdr-file-viewer --ref "$herdr_plugin_ref" --yes; then
+      mkdir -p "$state" && : >"$herdr_plugins_marker" || true
+    else
+      echo "  ! herdr plugin install failed — retries next run" >&2
+    fi
+  else
+    echo "  herdr not found on PATH — skipping herdr plugin install (retries next run)" >&2
+  fi
+fi

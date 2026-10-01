@@ -2,8 +2,6 @@
 #MISE description="git pull --ff-only, then mise install + mise bootstrap for this host's saved mode"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
-state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 
 git -C "$root" pull --ff-only
 

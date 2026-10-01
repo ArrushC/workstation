@@ -6,8 +6,8 @@
 #       via `mise outdated --bump --json` + set_pin + `mise lock`.
 #   (2) the handful of host pins config.toml [vars] owns directly (vcpkg —
 #       python/nerd-fonts are dual/triple-edit, reported not
-#       auto-edited), via scripts/lib/check-updates.sh worker mode (the same
-#       specs tasks/check-updates registers) + set_pin.
+#       auto-edited), via git ls-remote (the same three pins
+#       tasks/check-updates reports) + set_pin.
 #
 # Dual-edit and coupled tool pins (the Windows halves in bootstrap.ps1,
 # go+gopls, node's postinstall LSP servers) are bumped by dedicated code that
@@ -476,8 +476,8 @@ fi
 # Layer 2: config.toml [vars] host pins — vcpkg_version bumps
 # automatically; python_version + nerd_font_version (EXCLUDE_VARS) are
 # dual/triple-edit pins, reported only, never auto-edited. Drift is checked
-# via scripts/lib/check-updates.sh worker mode against the SAME specs
-# tasks/check-updates registers; claude-cli is a rolling `latest` pin outside
+# via git ls-remote against the SAME pins
+# tasks/check-updates reports; claude-cli is a rolling `latest` pin outside
 # [vars] (no bump path), so isn't checked here. ZJSTATUS_ZELLIJ_FLOOR is a
 # coupling floor, not a pin, so it never reaches this path either.
 # -----------------------------------------------------------------------------
@@ -503,13 +503,30 @@ declare -A VARS_KEY=(
   ["vcpkg"]=vcpkg_version
 )
 
-vars_specs="python-env|$(varval python_version)|python/cpython|v$(varval python_version)
-nerd-fonts|$(varval nerd_font_version)|ryanoasis/nerd-fonts|v$(varval nerd_font_version)
-vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|$(varval vcpkg_version)"
+# vars_latest <github owner/repo> <tag prefix>: newest clean numeric upstream
+# tag (git ls-remote: no API, no rate limit), prefix stripped. Empty if none.
+vars_latest() {
+  GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --refs "https://github.com/$1.git" "refs/tags/$2*" 2>/dev/null |
+    sed "s#.*refs/tags/$2##" | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -1
+}
 
-updates=$(printf '%s\n' "$vars_specs" |
-  CHECK_UPDATES_PORCELAIN=1 scripts/lib/check-updates.sh |
-  grep '^update|' || true)
+# Emits `update|<name>|<old> → <new>` for each [vars] pin behind upstream.
+vars_updates() {
+  local name old repo prefix latest
+  while IFS='|' read -r name old repo prefix; do
+    latest=$(vars_latest "$repo" "$prefix")
+    if [ -n "$latest" ] && [ "$latest" != "$old" ] &&
+      [ "$(printf '%s\n%s\n' "$old" "$latest" | sort -V | tail -1)" = "$latest" ]; then
+      printf 'update|%s|%s → %s\n' "$name" "$old" "$latest"
+    fi
+  done <<EOF2
+python-env|$(varval python_version)|python/cpython|v
+nerd-fonts|$(varval nerd_font_version)|ryanoasis/nerd-fonts|v
+vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|
+EOF2
+}
+
+updates=$(vars_updates)
 
 while IFS='|' read -r _ name detail; do
   [ -n "${name:-}" ] || continue

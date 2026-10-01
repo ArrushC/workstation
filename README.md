@@ -66,9 +66,12 @@ config.windows.toml           Windows [dotfiles]
 config.local.toml             git-ignored: this host's name, email, mode
 mise.lock, mise.linux.lock, mise.owned.lock, locks/
                               generated lockfiles; never hand-edit
-tasks/                        global mise tasks: bootstrap, health, update, check-updates,
-                              python-env, fonts, vcpkg, statusline, lint, fmt, ps-lint,
-                              secrets, install-hooks, inventory, bump-versions
+tasks/                        file tasks with real logic: bootstrap, health, update,
+                              check-updates, python-env, fonts, vcpkg, claude,
+                              verify-tools
+                              (statusline, enable-el-repos: owned Linux, in config.host.toml)
+                              (one-line wrappers — lint, fmt, secrets, ps-lint,
+                              bump-versions, install-hooks — are [tasks] in config.toml)
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
 dotfiles/                     every deployed source under its real name
   *.tera                      templates (zshrc, bashrc, zshenv, gitconfig, ssh/config, ...)
@@ -106,7 +109,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Resolve the mode (see above) and write it, with name and email, to `config.local.toml`.
-5. Compute `MISE_ENV`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+5. Compute `MISE_ENV`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
 6. Owned hosts only: set zsh as the login shell (`sudo usermod -s`).
 
 Both modes are idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -115,8 +118,6 @@ Both modes are idempotent; re-run any time. Copy your SSH key from a client with
 |---|---|
 | `--reinstall` | Wipe the cloned repo (including `config.local.toml`, so name, email and mode are asked again), then re-bootstrap. Prompts first. Installed tools, deployed dotfiles, SSH keys and system packages are kept. |
 | `--yes`, `-y` | Skip the `--reinstall` confirmation. |
-| `--doctor` | Read-only health report (runs `mise run health`), then exit. |
-| `--check-for-updates` | Read-only update scan (runs `mise run check-updates`), then exit. |
 | `--help`, `-h` | Usage. |
 
 Running `--reinstall` from inside the repo is refused (the script would delete itself); run it from outside, with the script in memory:
@@ -125,11 +126,9 @@ Running `--reinstall` from inside the repo is refused (the script would delete i
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
 ```
 
-`--doctor` and `--check-for-updates` cannot be combined with each other or with `--reinstall`, never prompt, and report "mode not set" on a host that was never bootstrapped.
+`mise run check-updates` runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
-`--check-for-updates` checks this repo first (commits behind), then runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
-
-**Owned extras.** At the end of `bootstrap.sh` an owned host is offered the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) owned hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. Re-run with `mise run fonts`.
+**Owned extras.** At the end of `bootstrap.sh` an owned host is offered the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) owned hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.host.toml`, so they run on owned Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
 
 ### Windows
 
@@ -287,7 +286,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` (`--doctor`) prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `MISE_ENV` persistence, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `MISE_ENV` persistence, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
@@ -305,7 +304,7 @@ mise bootstrap --only packages --yes   # narrow to one phase
 **Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built environment with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries track latest at build time; only the interpreter is pinned (`python_version` in `config.toml`). Rebuild to upgrade:
 
 ```bash
-REBUILD=1 mise run python-env   # runs on both modes; upgrades to latest libs
+mise run python-env --rebuild   # runs on both modes; upgrades to latest libs
 ```
 
 **Zellij.** Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
@@ -396,7 +395,7 @@ on_change = "restart"
 
 Verify with `mise bootstrap plan`, then `mise bootstrap status --missing` after a real run. Never add a `[bootstrap.linux.firewall]` table (see Troubleshooting).
 
-Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-pin dual edits, LF and executable bits, PowerShell BOMs, sentinel blocks, `[dotfiles]` tables), shellcheck, `shfmt -i 2` and gitleaks; `mise run install-hooks` installs it as a pre-commit hook (`.githooks`), and CI (`.github/workflows/lint.yml`) runs the same checks.
+Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-pin dual edits, LF and executable bits, PowerShell BOMs, sentinel blocks, `[dotfiles]` tables), shellcheck, `shfmt -i 2` and gitleaks; `mise run install-hooks` installs mise's generated pre-commit hook (`.git/hooks/pre-commit`, runs `mise run lint`; run it once per clone, it also clears an old `core.hooksPath`), and CI (`.github/workflows/lint.yml`) runs the same checks.
 
 ## Troubleshooting
 
@@ -570,7 +569,7 @@ mise bootstrap --only packages --yes
 
 ### wpy not found, or import textual fails in it
 
-Provisioning builds the env in both modes. Rebuild it from scratch with `REBUILD=1 mise run python-env` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows delete `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-run `.\bootstrap.ps1`.
+Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows delete `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-run `.\bootstrap.ps1`.
 
 ### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
 

@@ -50,3 +50,38 @@ python = "3.14.7"
 "~/.ssh/config" = { source = "dotfiles/ssh/config.tera", mode = "template" }
 # Same path on both OSes.
 "~/.config/starship.toml" = { source = "dotfiles/config/starship.toml", mode = "copy" }
+
+# Repo-maintenance tasks, run from this checkout. Tasks with real logic are
+# files in tasks/.
+[tasks.lint]
+description = "Run the repo's invariant checks (pins, LF/exec bits, BOMs, sentinels, shellcheck, shfmt, gitleaks)"
+dir = "{{ xdg_config_home }}/mise"
+run = "scripts/check-invariants.sh"
+
+[tasks.fmt]
+description = "shfmt -w -i 2 over the first-party shell scripts (the list lint checks)"
+dir = "{{ xdg_config_home }}/mise"
+run = "shfmt -w -i 2 $(scripts/check-invariants.sh --shell-files)"
+
+[tasks.secrets]
+description = "Scan the working tree for committed secrets (gitleaks)"
+dir = "{{ xdg_config_home }}/mise"
+run = "gitleaks dir --no-banner --redact -c .gitleaks.toml ."
+
+[tasks.ps-lint]
+description = "PSScriptAnalyzer over the .ps1 scripts (skipped without pwsh; CI always runs it)"
+dir = "{{ xdg_config_home }}/mise"
+run = "if command -v pwsh >/dev/null 2>&1; then pwsh scripts/check-ps.ps1; else echo 'pwsh not installed: skipped (CI runs PowerShell lint)'; fi"
+
+[tasks.bump-versions]
+description = "Bump tool pins and [vars] pins against upstream and refresh the lock files (--dry-run previews)"
+dir = "{{ xdg_config_home }}/mise"
+run = "scripts/bump-versions.sh"
+
+[tasks.install-hooks]
+description = "Install mise's generated git pre-commit hook (runs mise run lint); once per clone"
+dir = "{{ xdg_config_home }}/mise"
+run = [
+  "git config --unset core.hooksPath || true",
+  "mise generate git-pre-commit --task lint --write",
+]

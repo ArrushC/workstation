@@ -3,8 +3,8 @@
 # documented in CLAUDE.md.
 #
 # Single source of truth for the checks; invoked three ways:
-#   - mise run lint               (tasks/lint -> $REPO_ROOT/scripts/check-invariants.sh)
-#   - .githooks/pre-commit       (installed via `mise run install-hooks`)
+#   - mise run lint               (config.toml [tasks.lint] -> scripts/check-invariants.sh)
+#   - the pre-commit hook (mise generate git-pre-commit, via `mise run install-hooks`)
 #   - .github/workflows/lint.yml (CI backstop)
 #
 # Runs from anywhere — it cd's to the repo root. Exits 0 if all checks pass,
@@ -32,6 +32,15 @@ bad() {
   fails=$((fails + 1))
 }
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
+
+# First-party shell files: shellcheck, shfmt and `mise run fmt` all use this one
+# list. Vendored scripts (_cht.sh, batpipe, the zsh plugins) are excluded.
+shell_targets() {
+  printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
+    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
+    dotfiles/claude/notify.sh dotfiles/local/bin/winterop \
+    dotfiles/config/bash/completions.bash
+}
 
 # Python with tomllib: EL9's python3 is 3.9 (no tomllib) — prefer the python-env
 # wpy (3.14); CI's python3 is 3.11+. Empty when neither exists (callers soft-skip).
@@ -398,7 +407,6 @@ check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
   local -a files=(scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh dotfiles/local/bin/*)
-  [ -e .githooks/pre-commit ] && files+=(.githooks/pre-commit)
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then
       bad "missing: $f"
@@ -787,9 +795,18 @@ for f in files:
     except Exception as e:
         print(f"FAIL|parse|{f} failed to parse: {e}")
 
-# (b)/(c): hooks — value shape ("mise run <task>"), task file exists, hook
-# NAME appears in exactly one config file.
-hook_re = re.compile(r"^mise run [a-z-]+$")
+# (b): hooks — value is `mise run <task>` or `mise run <a> ::: <b> …`, each task
+# exists (a file in tasks/ or a [tasks.<name>] table in a config*.toml). A hook
+# name may appear in several loaded files: mise runs every one (verified).
+hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
+toml_tasks = set()
+for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
+           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+    try:
+        with open(cf, "rb") as fh:
+            toml_tasks |= set(tomllib.load(fh).get("tasks", {}))
+    except FileNotFoundError:
+        pass
 # post-dotfiles (config.linux.toml) is not a "mise run <task>" hook — it's the
 # raw compound chmod restoring ~/.ssh and ~/.claude modes that copy/template
 # mode can't express (the ONLY guarantee of the SSH
@@ -806,7 +823,6 @@ EXPECTED_POST_DOTFILES_HOOK = (
     "chmod 600 ~/.ssh/config 2>/dev/null || true; "
     "chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 )
-seen = {}
 bad_hooks = []
 n_hooks = 0
 for f, d in loaded.items():
@@ -815,24 +831,17 @@ for f, d in loaded.items():
         if name == "post-dotfiles":
             if val != EXPECTED_POST_DOTFILES_HOOK:
                 bad_hooks.append(f"{f}:post-dotfiles != the verified-safe literal (got {val!r})")
-            seen.setdefault(name, []).append(f)
             continue
         if not hook_re.match(val):
             bad_hooks.append(f"{f}:{name}={val!r} (want 'mise run <task>')")
             continue
-        task = val.split("mise run ", 1)[1]
-        if not os.path.isfile(os.path.join("tasks", task)):
-            bad_hooks.append(f"{f}:{name} -> task file tasks/{task} missing")
-        seen.setdefault(name, []).append(f)
+        for task in val.split("mise run ", 1)[1].split(" ::: "):
+            if not (os.path.isfile(os.path.join("tasks", task)) or task in toml_tasks):
+                bad_hooks.append(f"{f}:{name} -> task {task} is neither tasks/{task} nor a [tasks.{task}] table")
 if bad_hooks:
     print("FAIL|hooks|" + "; ".join(bad_hooks))
 else:
-    print(f"PASS|hooks|{n_hooks} hook(s) are 'mise run <task>' (task file exists) or the pinned post-dotfiles literal")
-dupes = [f"{name} in {fs}" for name, fs in seen.items() if len(fs) > 1]
-if dupes:
-    print("FAIL|hook-unique|duplicated hook name(s) across config files: " + "; ".join(dupes))
-else:
-    print(f"PASS|hook-unique|{len(seen)} hook name(s) each appear in exactly one config file")
+    print(f"PASS|hooks|{n_hooks} hook(s) run existing tasks or are the pinned post-dotfiles literal")
 
 # (d): files — source exists relative to the repo root, phase valid when present.
 bad_files = []
@@ -1108,8 +1117,7 @@ check_lsp_plugin() {
 # Five pairs: the three .sh scripts -> zsh _<name> files + completions.bash;
 # the two .ps1 scripts -> the workstation_*_flags records in config.nu.tera.
 # Long-form flags only. Trailing args to _sh_script_flags are EXCLUSIONS —
-# flags the script accepts but completions deliberately omit
-# (bootstrap.sh: the --checkforupdates compat alias).
+# flags the script accepts but completions deliberately omit.
 
 # Long flags a bash script accepts: its case arms (any nesting depth),
 # alternatives split, short forms dropped. $2+ = exclusions.
@@ -1163,7 +1171,7 @@ check_completion_parity() {
   hdr "script-flag <-> completion parity"
   local want
 
-  want=$(_sh_script_flags bootstrap.sh --checkforupdates)
+  want=$(_sh_script_flags bootstrap.sh)
   _flags_eq "bootstrap.sh == _bootstrap.sh (zsh)" "$want" \
     "$(_zsh_completion_flags dotfiles/config/zsh/completions/_bootstrap.sh)"
   _flags_eq "bootstrap.sh == completions.bash" "$want" \
@@ -1284,11 +1292,8 @@ check_shellcheck() {
   fi
   # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
   # vendored (eth-p/bat-extras) and deliberately excluded.
-  local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
-    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh
-    dotfiles/claude/notify.sh
-    dotfiles/local/bin/winterop
-    dotfiles/config/bash/completions.bash)
+  local -a targets
+  mapfile -t targets < <(shell_targets)
   if shellcheck -x -S warning "${targets[@]}"; then
     ok "clean at warning+ over ${#targets[@]} shell files"
   else
@@ -1303,11 +1308,8 @@ check_shfmt() {
     return 0
   fi
   # Same first-party set as shellcheck (vendored _cht.sh / batpipe excluded).
-  local -a targets=(bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/*
-    .claude/hooks/*.sh dotfiles/claude/hooks/*.sh
-    dotfiles/claude/notify.sh
-    dotfiles/local/bin/winterop
-    dotfiles/config/bash/completions.bash)
+  local -a targets
+  mapfile -t targets < <(shell_targets)
   local out
   if out=$(shfmt -d -i 2 "${targets[@]}" 2>&1); then
     ok "clean over ${#targets[@]} shell files (shfmt -i 2)"
@@ -1538,6 +1540,10 @@ check_tsls_typescript_coupling() {
   fi
 }
 
+if [ "${1:-}" = --shell-files ]; then
+  shell_targets
+  exit 0
+fi
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
 check_mise_env_three_way

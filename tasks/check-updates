@@ -1,27 +1,33 @@
 #!/usr/bin/env bash
-#MISE description="mise outdated --bump, dnf check-update (owned hosts), and config.toml [vars] pins vs upstream release tags"
+#MISE description="Report available updates: mise tool pins, dnf (owned Linux hosts), and the config.toml [vars] pins vs upstream tags"
 #MISE env={PYTHON_VERSION="{{ vars.python_version }}", NERD_FONT_VERSION="{{ vars.nerd_font_version }}", VCPKG_VERSION="{{ vars.vcpkg_version }}"}
-set -euo pipefail
-root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-# shellcheck disable=SC2034  # part of the common task preamble; unused by this task
-state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
-env_has() {
-  case ",${MISE_ENV:-}," in *,"$1",*) return 0 ;; esac
-  return 1
-}
+set -uo pipefail
 
 printf '==> mise tools\n'
 mise outdated --bump || true
 
-if env_has host && command -v dnf >/dev/null 2>&1; then
+case ",${MISE_ENV:-}," in
+*,host,*)
   printf '\n==> dnf\n'
-  dnf -q check-update | head -40 || true # exit 100 = updates exist; never fail this task
-fi
+  dnf -q check-update | head -40 || true # exit 100 means updates exist; never fail
+  ;;
+esac
 
-printf '\n==> host pins (config.toml [vars])\n'
-printf '%s\n' \
-  "nerd-fonts|$NERD_FONT_VERSION|ryanoasis/nerd-fonts|v$NERD_FONT_VERSION" \
-  "vcpkg|$VCPKG_VERSION|microsoft/vcpkg|$VCPKG_VERSION" \
-  "python-env|$PYTHON_VERSION|python/cpython|v$PYTHON_VERSION" \
-  "claude-cli|latest|-|-" |
-  "$root/scripts/lib/check-updates.sh"
+# report <name> <pinned> <github owner/repo> <tag prefix>: the newest clean
+# numeric tag upstream vs the pin (git ls-remote: no API, no rate limit).
+report() {
+  local latest
+  latest=$(GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --refs "https://github.com/$3.git" "refs/tags/$4*" 2>/dev/null |
+    sed "s#.*refs/tags/$4##" | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -1)
+  if [ -z "$latest" ]; then
+    printf '  ? %-12s %s (no tags found; offline?)\n' "$1" "$2"
+  elif [ "$latest" = "$2" ]; then
+    printf '  ✓ %-12s %s\n' "$1" "$2"
+  else
+    printf '  ↑ %-12s %s → %s\n' "$1" "$2" "$latest"
+  fi
+}
+printf '\n==> config.toml [vars] pins\n'
+report nerd-fonts "$NERD_FONT_VERSION" ryanoasis/nerd-fonts v
+report vcpkg "$VCPKG_VERSION" microsoft/vcpkg ""
+report python "$PYTHON_VERSION" python/cpython v
