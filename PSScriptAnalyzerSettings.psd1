@@ -9,7 +9,7 @@
         # The scripts use Write-Host extensively for colored, interactive UX.
         'PSAvoidUsingWriteHost'
         # False positive on script-level CLI flags: every flagged param
-        # (SkipToolInstall, ForceInstaller, Yes, ...) is referenced 4-10x — the
+        # (SkipToolInstall, SkipElevated, Yes, ...) is used, inside functions — the
         # rule misses usage inside nested functions / scriptblocks.
         'PSReviewUnusedParameter'
         # Write-Log/Write-Ok/... are intentional local logging helpers, not the
@@ -19,7 +19,7 @@
         # are not user-facing cmdlets; -WhatIf/-Confirm is not part of the design.
         'PSUseShouldProcessForStateChangingFunctions'
         # Internal functions named after inherently-plural domains (Get-SshLauncherHosts,
-        # Invoke-CheckForUpdates, ...).
+        # Install-WingetApps, ...).
         'PSUseSingularNouns'
     )
 }

@@ -81,6 +81,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-mise-env.ps1
+      - name: Test winget GUI apps (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-winget-apps.ps1
+      - name: Test winget GUI apps (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-winget-apps.ps1
   templates:
     runs-on: ubuntu-latest
     steps:

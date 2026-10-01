@@ -15,8 +15,7 @@ function Write-Ok { param($m) }
 function Write-Warn { param($m) $script:warnings.Add([string]$m) }
 # Stand-ins for "Windows Terminal / Warp are installed".
 function Get-AppxPackage { [CmdletBinding()] param([string]$Name) [pscustomobject]@{ Name = $Name } }
-function Test-InstallerPresent { param($DisplayName) $true }
-$script:WarpTool = @{ DetectName = 'Warp' }
+function Test-InstallerPresent { param($DisplayName) $DisplayName -ceq 'Warp*' }
 function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
 $failures = New-Object System.Collections.Generic.List[string]

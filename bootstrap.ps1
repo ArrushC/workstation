@@ -2,19 +2,19 @@
 # bootstrap.ps1 -- workstation setup (Windows client side)
 #
 # No admin rights needed: installs the pinned mise per-user
-# (%LOCALAPPDATA%\workstation), seeds Warp + Windows Terminal via WinGet,
+# (%LOCALAPPDATA%\workstation) and the GUI apps through winget ($WingetApps),
 # then runs `mise bootstrap --only dotfiles,tools` to deploy the tracked
 # dotfiles and install every CLI tool those files declare. Windows is
 # always the `owned` mode (miserc.toml: windows,owned). Git is a
 # hard prerequisite (install it yourself); VSCode is hand-installed --
 # its dotfiles still deploy without it.
 #
-# ONE exception to "no admin": $ElevatedTools (SSHFS-Win + its WinFsp
-# kernel-driver dependency) can pop a UAC prompt on first install. Declining
-# it (or -SkipElevated) soft-fails only that step.
+# ONE exception to "no admin": the machine-scope $WingetApps (Zed, and
+# SSHFS-Win with its WinFsp kernel driver) can pop a UAC prompt on first
+# install. Declining it (or -SkipElevated) soft-fails only those apps.
 #
-# Public repo, no token needed. $env:GITHUB_TOKEN is optional: lifts the
-# 60-req/hr anonymous GitHub API rate limit; used for a private-fork clone.
+# Public repo, no token needed. $env:GITHUB_TOKEN is optional: used for a
+# private-fork clone; mise also uses it to lift the 60-req/hr GitHub API limit.
 #
 # Bootstrap a fresh machine (no elevation needed) -- the checked curl.exe
 # download, same form as README.md's Windows setup:
@@ -36,20 +36,18 @@
 #   cd "$env:USERPROFILE\.config\mise"; .\bootstrap.ps1
 #
 # Flags (see param() below): -RepoPath -SkipKeyGen -SkipToolInstall
-#   -SkipDotfiles -SkipBurntToast -SkipNerdFonts -ForceInstaller
-#   -SkipElevated -Reinstall -Yes
+#   -SkipDotfiles -SkipBurntToast -SkipNerdFonts -SkipElevated -Reinstall -Yes
 # =============================================================================
 
 [CmdletBinding()]
 param(
     [string]$RepoPath = (Join-Path $env:USERPROFILE ".config\mise"),
     [switch]$SkipKeyGen,       # skip the SSH-key generation prompt
-    [switch]$SkipToolInstall,  # skip mise, the mise tools, the installer apps + Claude Code
+    [switch]$SkipToolInstall,  # skip mise, the mise tools, the winget GUI apps, the Python env + Claude Code
     [switch]$SkipDotfiles,     # clone + install tools but don't apply dotfiles yet
     [switch]$SkipBurntToast,   # skip the BurntToast PSGallery module install
     [switch]$SkipNerdFonts,    # skip the Nerd Font install
-    [switch]$ForceInstaller,   # re-seed installer-class + Warp/Windows Terminal installs even if present
-    [switch]$SkipElevated,     # skip SSHFS-Win/WinFsp (the only step that can pop UAC)
+    [switch]$SkipElevated,     # skip the machine-scope winget apps, Zed + SSHFS-Win (the only UAC prompts)
     [switch]$Reinstall,        # wipe the cloned repo, then re-bootstrap (prompts unless -Yes)
     [switch]$Yes               # skip confirmation prompts (-Reinstall)
 )
@@ -58,8 +56,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # =============================================================================
-# CONSTANTS & TOOL TABLES -- repo/install paths and the pinned or
-# latest-release tool manifests everything below reads from.
+# CONSTANTS & TOOL TABLES -- repo/install paths, the mise pin and the
+# winget app table everything below reads from.
 # =============================================================================
 
 $DotfilesRepo = "https://github.com/ArrushC/workstation.git"
@@ -96,132 +94,22 @@ $PythonEnvVersion = "3.14.7"
 $PythonLibs = @("textual", "textual-dev", "click", "rich", "httpx", "pydantic", "typer", "polars", "duckdb")
 $WsPythonEnv = Join-Path $WsRoot "python-env"
 
-# Installer-layout tools: apps that publish a silent, admin-free .exe
-# installer instead of a portable zip. NOT version-pinned -- resolves the
-# LATEST release at run time (the app self-updates after), via the GitHub
-# releases API + per-asset sha256 digest, via git tags + a vendor URL
-# template (UrlTemplate, for apps with no GitHub release assets), or via a
-# winget-pkgs version listing (WingetVersions, for apps with no GitHub
-# presence at all). Runs the installer silently PER-USER, adds nothing to
-# PATH. Presence = Uninstall-registry DisplayName; -ForceInstaller reinstalls.
-#
-# Opt-in per-tool fields (absent = old behavior):
-#   IncludePrerelease  newest non-draft /releases entry instead of
-#                      /releases/latest (DevToys flags every 2.x prerelease)
-#   TagPrefix          tag prefix for UrlTemplate
-#                      (default "v"; DBeaver/WinSCP tags are bare)
-#   UrlTemplate        {VERSION}-templated download URL for apps with no
-#                      GitHub release assets (version via Get-LatestGitTag)
-#   HashManifest       {VERSION}-templated winget manifest URL -- the
-#                      sha256 source when UrlTemplate has no GitHub digest
-#   WingetVersions     winget-pkgs directory path whose subdir names ARE
-#                      the versions -- for upstreams with no GitHub
-#                      presence at all (version + sha256 from the same
-#                      winget authority, so a lagging winget just seeds an
-#                      older but still hash-verified install)
-$InstallerTools = @(
-    @{
-        Name       = "Obsidian"
-        Repo       = "obsidianmd/obsidian-releases"  # GitHub owner/repo for LATEST
-        AssetMatch = "Obsidian-*.exe"                # selects the Windows installer asset
-        SilentArgs = "/S"                            # NSIS per-user silent (NO /allusers -> no admin)
-        DetectName = "Obsidian*"                      # HKCU/HKLM Uninstall DisplayName glob
-    },
-    @{
-        Name       = "Zed"
-        Repo       = "zed-industries/zed"             # GitHub owner/repo for LATEST (stable; /releases/latest skips -pre)
-        AssetMatch = "Zed-x86_64.exe"                 # x64 Windows installer asset (NOT Zed-aarch64.exe)
-        SilentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno Setup silent; PrivilegesRequired=lowest -> per-user, no admin (NOT NSIS /S)
-        DetectName = "Zed"                            # exact HKCU Uninstall DisplayName (avoids "Zed Preview"/"Zed Nightly")
-    },
-    @{
-        Name              = "DevToys"
-        Repo              = "DevToys-app/DevToys"
-        AssetMatch        = "devtoys_win_x64.exe"     # Inno Setup installer (x64 only; NOT arm64/x86, NOT the *_portable.zip)
-        SilentArgs        = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno; PrivilegesRequired=lowest -> per-user, no admin
-        DetectName        = "DevToys*"                # HKCU ...\Uninstall\DevToys_is1 -> DisplayName "DevToys <ver>" (version-suffixed; glob also matches a user's "DevToys Preview" — intended: don't force a stable seed alongside)
-        IncludePrerelease = $true                     # see banner: /releases/latest lies for this repo
-    },
-    @{
-        Name       = "DBeaver"
-        Repo       = "dbeaver/dbeaver"                 # CE; /releases/latest is honest here (unlike DevToys)
-        AssetMatch = "dbeaver-ce-*-windows-x86_64.exe" # NSIS installer (NOT -aarch64.exe, NOT the .zip archives)
-        SilentArgs = "/S /currentuser"                 # NSIS silent + MultiUser per-user pin -> no admin/UAC
-        DetectName = "DBeaver*"                        # HKCU ...\Uninstall\"DBeaver (current user)"; glob also matches commercial editions (intended: never force CE alongside a licensed install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys)
-        TagPrefix  = ""                                # tags are bare (26.1.2, no v)
-    },
-    @{
-        Name         = "WinSCP"
-        Repo         = "winscp/winscp"                 # tags only — NO release assets; version source for UrlTemplate
-        TagPrefix    = ""                              # bare tags (6.5.6); Get-LatestGitTag's default filter drops 6.6-beta et al.
-        UrlTemplate  = "https://winscp.net/download/WinSCP-{VERSION}-Setup.exe/download"  # first-party; redirects to a SourceForge mirror
-        HashManifest = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/w/WinSCP/WinSCP/{VERSION}/WinSCP.WinSCP.installer.yaml"
-        SilentArgs   = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
-        DetectName   = "WinSCP*"                       # HKCU ...\Uninstall\winscp3_is1, DisplayName version-suffixed ("WinSCP 6.5.6"); glob also matches a machine-wide HKLM install (intended: never double-install alongside an admin install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys/DBeaver)
-    },
-    @{
-        Name           = "Beyond Compare"                                       # commercial trialware: seed = 30-day trial; the user's license key unlocks it (Standard vs Pro by key)
-        WingetVersions = "manifests/s/ScooterSoftware/BeyondCompare/5"          # version source: subdir names ARE the 4-part versions (Scooter has NO GitHub presence; the URL needs the build number)
-        UrlTemplate    = "https://www.scootersoftware.com/files/BCompare-{VERSION}.exe"  # first-party, direct (no redirect); English installer deliberate — localized siblings (BCompare-de-…) never match the hash lookup
-        HashManifest   = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/s/ScooterSoftware/BeyondCompare/5/{VERSION}/ScooterSoftware.BeyondCompare.5.installer.yaml"
-        SilentArgs     = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
-        DetectName     = "Beyond Compare*"                                      # HKCU ...\Uninstall\BeyondCompare5_is1; glob also matches BC4 or a machine-wide HKLM install (intended: never seed a trial alongside a licensed copy)
-    }
-)
-
-# Warp -- the PRIMARY terminal. Its Windows distribution is a WinGet
-# package (no GitHub release assets to hash), so this is a bespoke
-# best-effort seed rather than an $InstallerTools entry -- WinGet's
-# manifest enforces the hash and Warp self-updates after, evergreen like
-# the Windows Terminal seed. Windows Terminal stays the compatibility path
-# (keeps the OS default-terminal role Warp can't register for). Warp does
-# NOT support Nushell -- see Invoke-WarpTabConfigs.
-$WarpTool = @{
-    Name       = "Warp"
-    WingetId   = "Warp.Warp"
-    DetectName = "Warp*"     # HKCU ...\Uninstall\warp-terminal-stable_is1 (Inno, per-user). GLOB, not an exact
-                             # match: Test-InstallerPresent uses -like, and an exact "Warp" would
-                             # silently double-fail if the DisplayName is "Warp Terminal" — winget
-                             # would reinstall every run AND Invoke-WarpTabConfigs would skip.
-}
-
-# Elevated tools -- the ONE sanctioned exception to the no-admin rule.
-# SSHFS-Win mounts remote Unix filesystems over SSH; it depends on WinFsp
-# (a kernel-mode driver), so both MSIs are machine-scope and UAC is
-# unavoidable. BEST-EFFORT: Uninstall-registry detect first (no UAC once
-# provisioned), then winget (pulls WinFsp as a dependency), then a
-# digest/pin-verified direct-MSI fallback when winget is absent. Every
-# failure (declined UAC, offline, hash mismatch) warns and continues --
-# this class never aborts the bootstrap. -SkipElevated skips it.
-$ElevatedTools = @(
-    @{
-        Name       = "SSHFS-Win"
-        WingetId   = "SSHFS-Win.SSHFS-Win"   # manifest declares WinFsp.WinFsp as a dependency
-        DetectName = "SSHFS-Win*"            # HKLM Uninstall DisplayName glob (machine-scope MSI)
-        Repo       = "winfsp/sshfs-win"
-        # MSI fallback chain (winget absent) — installed IN ORDER; each entry is
-        # skipped when its own DetectName is already registered:
-        Msi        = @(
-            @{
-                Name       = "WinFsp"
-                WingetId   = "WinFsp.WinFsp"
-                Repo       = "winfsp/winfsp"
-                AssetMatch = "winfsp-*.msi"
-                DetectName = "WinFsp*"
-            },
-            @{
-                Name       = "SSHFS-Win"
-                WingetId   = "SSHFS-Win.SSHFS-Win"
-                Repo       = "winfsp/sshfs-win"
-                AssetMatch = "sshfs-win-*-x64.msi"
-                DetectName = "SSHFS-Win*"
-                # v3.5.20357 (2020) predates GitHub's per-asset digests (the API
-                # reports digest: null); official x64 sha256 from the winget
-                # manifest (microsoft/winget-pkgs manifests/s/SSHFS-Win) instead:
-                Sha256Pin  = "1657e397f8dce1c2d2e3220007f9c9f882631882b9bec4608f7835e87dcd096c"
-            }
-        )
-    }
+# GUI apps, installed through winget and then self-updating (or `winget upgrade`).
+# Presence = Uninstall-registry DisplayName glob (Test-InstallerPresent): it also
+# sees copies installed before winget managed them (e.g. "DevToys Preview"),
+# which `winget list` misses. Windows Terminal is an Appx package. Zed's Detect
+# is exact, so "Zed Preview"/"Zed Nightly" don't count.
+$WingetApps = @(
+    @{ Id = "Microsoft.WindowsTerminal";       Name = "Windows Terminal"; Appx = "Microsoft.WindowsTerminal"; Scope = "user" },
+    @{ Id = "Warp.Warp";                       Name = "Warp";             Detect = "Warp*";            Scope = "user" },
+    @{ Id = "Obsidian.Obsidian";               Name = "Obsidian";         Detect = "Obsidian*";        Scope = "user" },
+    @{ Id = "DevToys-app.DevToys";             Name = "DevToys";          Detect = "DevToys*";         Scope = "user" },
+    @{ Id = "DBeaver.DBeaver.Community";       Name = "DBeaver";          Detect = "DBeaver*";         Scope = "user" },
+    @{ Id = "WinSCP.WinSCP";                   Name = "WinSCP";           Detect = "WinSCP*";          Scope = "user" },
+    @{ Id = "ScooterSoftware.BeyondCompare.5"; Name = "Beyond Compare";   Detect = "Beyond Compare*";  Scope = "user" },
+    # Machine scope (UAC): winget has no per-user installer for these. -SkipElevated skips them.
+    @{ Id = "ZedIndustries.Zed";               Name = "Zed";              Detect = "Zed";              Scope = "machine" },
+    @{ Id = "SSHFS-Win.SSHFS-Win";             Name = "SSHFS-Win";        Detect = "SSHFS-Win*";       Scope = "machine" }
 )
 
 # =============================================================================
@@ -241,10 +129,9 @@ function Write-Log    { param($msg) Write-Host "${Blue}==>${Reset} ${Bold}$msg${
 function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
-function Write-Bad    { param($msg) Write-Host "${Red} ✗${Reset} $msg" }  # Write-Fail minus the exit
 
 # =============================================================================
-# HTTP / GITHUB HELPERS
+# HTTP HELPER
 # =============================================================================
 
 # Kept self-contained: bootstrap also runs from memory before the repo exists.
@@ -304,14 +191,6 @@ function Invoke-CurlRequest {
         Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
         if ($headerFile) { Remove-Item -LiteralPath $headerFile -Force -ErrorAction SilentlyContinue }
     }
-}
-
-# GitHub API headers: a User-Agent is required; $env:GITHUB_TOKEN (optional)
-# lifts the 60-requests/hour anonymous limit.
-function Get-GitHubApiHeaders {
-    $headers = @{ "User-Agent" = "workstation-bootstrap" }
-    if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
-    return $headers
 }
 
 # =============================================================================
@@ -574,391 +453,31 @@ function Test-InstallerPresent {
     return $false
 }
 
-# Install a silent, admin-free .exe installer at its LATEST release. NOT
-# version-pinned (app self-updates after); sha256-verified (API digest or
-# winget manifest — see the $InstallerTools banner for the resolver paths).
-function Install-InstallerTool {
-    param([hashtable]$Tool)
-
-    # Idempotency: skip if already installed, unless -ForceInstaller. Detection is by
-    # Uninstall-registry DisplayName (not a version stamp) — these are LATEST/
-    # self-updating, so there is no version to stamp.
-    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $Tool.DetectName)) {
-        Write-Ok "$($Tool.Name) already installed (use -ForceInstaller to reinstall)"
+# Install each missing $WingetApps entry with winget (its manifest pins the
+# installer's sha256). Best-effort: a failed install warns and the loop goes
+# on. -SkipElevated skips the machine-scope apps, the only UAC prompts.
+function Install-WingetApps {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Warn "winget not found — GUI apps skipped (install App Installer from the Microsoft Store, then re-run)"
         return
     }
-
-    Write-Log "Installing $($Tool.Name) (latest, installer)..."
-
-    # Two resolver paths produce the same four facts for the shared
-    # download/verify/install tail below:
-    #   $downloadUrl    where the installer .exe comes from
-    #   $expectedSha    lowercase sha256 to enforce, or $null (warn+proceed)
-    #   $noHashWarning  warn text used when $expectedSha is $null
-    #   $versionLabel   what the success line reports
-    #   $hashSource     names the hash authority in the mismatch hard-fail
-    if ($Tool.ContainsKey('UrlTemplate')) {
-        # --- Direct-URL path (WinSCP, Beyond Compare) — no GitHub release ---
-        # assets upstream. Version source is one of two:
-        #   WingetVersions — winget-pkgs directory listing (Beyond Compare:
-        #     no GitHub presence at all; dir names ARE the 4-part versions
-        #     its download URL needs).
-        #   git tags — Get-LatestGitTag (WinSCP: tags only; TagPrefix-aware;
-        #     its default filter drops -beta tags).
-        # URL = {VERSION}-substituted vendor template. sha256 = the official
-        # winget manifest for that version (the SSHFS-Win Sha256Pin precedent,
-        # resolved at run time so the latest-release model keeps working).
-        if ($Tool.ContainsKey('WingetVersions')) {
-            $version   = Get-LatestWingetVersion -Path $Tool.WingetVersions
-            $verSource = "the winget-pkgs listing $($Tool.WingetVersions)"
-        } else {
-            $tagPrefix = if ($Tool.ContainsKey('TagPrefix')) { $Tool.TagPrefix } else { 'v' }
-            $version   = Get-LatestGitTag -Repo $Tool.Repo -TagPrefix $tagPrefix
-            $verSource = "$($Tool.Repo) tags"
-        }
-        if (-not $version) {
-            Write-Warn "$($Tool.Name): couldn't resolve the latest version from $verSource (offline? scheme changed?)"
-            Write-Warn "  Skipping — install it manually or re-run later."
-            return
-        }
-        $downloadUrl  = $Tool.UrlTemplate.Replace('{VERSION}', $version)
-        $versionLabel = $version
-        $hashSource   = "winget-manifest InstallerSha256"
-        # The installer's basename picks the right InstallerSha256 out of the
-        # manifest (which also hashes sibling assets — WinSCP's .msi). Vendor
-        # URLs end in a /download action segment (winscp.net, SourceForge) —
-        # strip it before taking the basename.
-        $baseName      = ($downloadUrl -replace '/download/?$', '').Split('/')[-1]
-        $expectedSha   = $null
-        $noHashWarning = "$($Tool.Name): no HashManifest configured — skipping hash verification."
-        if ($Tool.ContainsKey('HashManifest')) {
-            $manifestUrl   = $Tool.HashManifest.Replace('{VERSION}', $version)
-            $noHashWarning = "$($Tool.Name): winget manifest fetch failed for $version (not published there yet?) — skipping hash verification."
-            try {
-                $manifest = (Invoke-CurlRequest -Uri $manifestUrl)
-                # komac-emitted manifests put InstallerUrl before its
-                # InstallerSha256 within each installer entry; the lazy match
-                # pairs each URL with the nearest FOLLOWING hash.
-                $pairs = [regex]::Matches($manifest, '(?ms)InstallerUrl:\s*(\S+).*?InstallerSha256:\s*([0-9A-Fa-f]{64})')
-                foreach ($m in $pairs) {
-                    if ($m.Groups[1].Value -like "*$baseName*") {
-                        $expectedSha = $m.Groups[2].Value.ToLower()
-                        break
-                    }
-                }
-                if (-not $expectedSha) {
-                    $noHashWarning = "$($Tool.Name): winget manifest has no entry matching $baseName — skipping hash verification."
-                }
-            } catch {
-                # 404 = winget lags this brand-new release -> $noHashWarning
-                # fires in the warn+proceed branch below. (The assignment also
-                # keeps the catch non-empty for PSAvoidUsingEmptyCatchBlock —
-                # the repo's PSSA gate runs at Warning+.)
-                $expectedSha = $null
-            }
-        }
-    } else {
-        # --- GitHub-release path (Obsidian/Zed/DevToys/DBeaver) ---
-        $headers = Get-GitHubApiHeaders
-
-        try {
-            if ($Tool.ContainsKey('IncludePrerelease') -and $Tool.IncludePrerelease) {
-                # /releases/latest excludes prereleases, and some repos (DevToys)
-                # flag EVERY release prerelease:true — take the newest non-draft
-                # entry of /releases instead (the list is newest-first).
-                # Parse the complete JSON string; bare assignment avoids nesting
-                # JSON arrays on PS 5.1. Do not wrap this assignment in @(...).
-                $releases = Invoke-CurlRequest `
-                    -Uri "https://api.github.com/repos/$($Tool.Repo)/releases?per_page=10" `
-                    -Headers $headers | ConvertFrom-Json -ErrorAction Stop
-                $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
-                if (-not $release) { throw "no non-draft release among the newest $(@($releases).Count)" }
-            } else {
-                $release = Invoke-CurlRequest `
-                    -Uri "https://api.github.com/repos/$($Tool.Repo)/releases/latest" `
-                    -Headers $headers | ConvertFrom-Json -ErrorAction Stop
-            }
-        } catch {
-            Write-Warn "$($Tool.Name): GitHub API lookup failed: $($_.Exception.Message)"
-            Write-Warn "  Skipping — install it manually or re-run later."
-            return
-        }
-
-        $assets = @($release.assets | Where-Object { $_.name -like $Tool.AssetMatch })
-        if ($assets.Count -eq 0) {
-            Write-Warn "$($Tool.Name): no asset matching '$($Tool.AssetMatch)' in $($release.tag_name) — skipping"
-            return
-        }
-        if ($assets.Count -gt 1) {
-            Write-Warn "$($Tool.Name): $($assets.Count) assets match '$($Tool.AssetMatch)' — using $($assets[0].name)"
-        }
-        $asset        = $assets[0]
-        $downloadUrl  = $asset.browser_download_url
-        $versionLabel = $release.tag_name
-        $hashSource   = "GitHub-reported digest"
-        # Under Set-StrictMode -Version Latest an absent 'digest' property
-        # THROWS on access, so probe it via PSObject.Properties (not
-        # $asset.digest directly) to keep the warn-and-proceed path working.
-        $digest      = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
-        $expectedSha = $null
-        if ($digest -and $digest.StartsWith("sha256:")) {
-            $expectedSha = $digest.Substring(7).ToLower()
-        }
-        $noHashWarning = "$($Tool.Name): GitHub published no sha256 digest for $($asset.name) — skipping hash verification."
-    }
-
-    $tmpExe = Join-Path $env:TEMP "ws-$($Tool.Name)-installer.exe"
-
-    try {
-        Invoke-CurlRequest -Uri $downloadUrl -OutFile $tmpExe
-    } catch {
-        Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
-        Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
-        Write-Warn "  Skipping — install it manually or re-run later."
-        return
-    }
-
-    try {
-        # Verify against the published sha256. Mismatch is a HARD fail
-        # (corruption/tamper); an unavailable hash warns but proceeds (HTTPS +
-        # a trusted host). NOTE: Write-Fail calls exit 1; remove the temp file
-        # BEFORE it so cleanup is guaranteed regardless of whether finally
-        # runs on exit.
-        if ($expectedSha) {
-            $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpExe).Hash.ToLower()
-            if ($actual -ne $expectedSha) {
-                Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
-                Write-Fail @"
-$($Tool.Name) sha256 mismatch — refusing to install.
-  expected: $expectedSha
-  actual:   $actual
-The $hashSource doesn't match the download (corrupted or tampered).
-"@
-            }
-        } else {
-            Write-Warn $noHashWarning
-        }
-
-        # Silent, per-user install. No Add-ToUserPath — GUI apps make their own
-        # Start-menu shortcut and self-update from here.
-        $proc = Start-Process -FilePath $tmpExe -ArgumentList $Tool.SilentArgs -Wait -PassThru
-        if ($proc.ExitCode -ne 0) {
-            Write-Warn "$($Tool.Name) installer exited with code $($proc.ExitCode) — verify it installed."
-        } else {
-            Write-Ok "$($Tool.Name) installed ($versionLabel)"
-        }
-    } finally {
-        Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# One MSI of an elevated tool's fallback chain: resolve the LATEST GitHub
-# release, download, verify (API digest -> Sha256Pin -> warn+proceed), install
-# via msiexec -Verb RunAs. A silent machine-scope msiexec from a non-elevated
-# shell does NOT trigger UAC — it fails with MSI error 1925; -Verb RunAs is
-# what pops the prompt, and a DECLINED prompt THROWS (caught into a soft-fail).
-# A hash mismatch refuses this MSI (Write-Bad, never Write-Fail — this class
-# must not abort the bootstrap; refusing to run an elevated binary is the safe
-# side). Returns $true when the MSI is (already) installed, $false otherwise.
-function Install-ElevatedMsi {
-    param([hashtable]$Msi)
-
-    if (Test-InstallerPresent -DisplayName $Msi.DetectName) {
-        Write-Ok "$($Msi.Name) already installed"
-        return $true
-    }
-
-    $headers = Get-GitHubApiHeaders
-
-    try {
-        $release = Invoke-CurlRequest `
-            -Uri "https://api.github.com/repos/$($Msi.Repo)/releases/latest" `
-            -Headers $headers | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        Write-Warn "$($Msi.Name): GitHub API lookup failed: $($_.Exception.Message)"
-        return $false
-    }
-
-    $assets = @($release.assets | Where-Object { $_.name -like $Msi.AssetMatch })
-    if ($assets.Count -eq 0) {
-        Write-Warn "$($Msi.Name): no asset matching '$($Msi.AssetMatch)' in $($release.tag_name)"
-        return $false
-    }
-    if ($assets.Count -gt 1) {
-        Write-Warn "$($Msi.Name): $($assets.Count) assets match '$($Msi.AssetMatch)' — using $($assets[0].name)"
-    }
-    $asset  = $assets[0]
-    $tmpMsi = Join-Path $env:TEMP "ws-$($Msi.Name).msi"
-
-    try {
-        Invoke-CurlRequest -Uri $asset.browser_download_url -OutFile $tmpMsi
-    } catch {
-        Remove-Item $tmpMsi -Force -ErrorAction SilentlyContinue
-        Write-Warn "$($Msi.Name) download failed: $($_.Exception.Message)"
-        return $false
-    }
-
-    try {
-        # Verify: GitHub API digest -> Sha256Pin fallback -> warn+proceed (same
-        # escalation as Install-InstallerTool; the pin covers digest-less
-        # pre-2025 releases like sshfs-win v3.5.20357). Probe 'digest' via
-        # PSObject.Properties — StrictMode throws on bare access when absent.
-        $digest   = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
-        $expected = $null
-        if ($digest -and $digest.StartsWith("sha256:")) {
-            $expected = $digest.Substring(7).ToLower()
-        } elseif ($Msi.ContainsKey('Sha256Pin')) {
-            $expected = $Msi.Sha256Pin.ToLower()
-        }
-        if ($expected) {
-            $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpMsi).Hash.ToLower()
-            if ($actual -ne $expected) {
-                Write-Bad "$($Msi.Name) sha256 mismatch — refusing to install (corrupted or tampered download)."
-                Write-Bad "  expected: $expected"
-                Write-Bad "  actual:   $actual"
-                return $false
-            }
-        } else {
-            Write-Warn "$($Msi.Name): no sha256 available for $($asset.name) — skipping hash verification."
-        }
-
-        try {
-            $proc = Start-Process msiexec -ArgumentList "/i `"$tmpMsi`" /qn /norestart" `
-                -Verb RunAs -Wait -PassThru
-        } catch {
-            Write-Warn "$($Msi.Name): elevation declined or unavailable ($($_.Exception.Message))"
-            return $false
-        }
-        if ($proc.ExitCode -eq 3010) {
-            Write-Ok "$($Msi.Name) installed ($($release.tag_name)) — reboot may be required"
-            return $true
-        }
-        if ($proc.ExitCode -ne 0) {
-            Write-Warn "$($Msi.Name): msiexec exited with code $($proc.ExitCode) — verify it installed"
-            return $false
-        }
-        Write-Ok "$($Msi.Name) installed ($($release.tag_name))"
-        return $true
-    } finally {
-        Remove-Item $tmpMsi -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Install an elevated (machine-scope) tool — the ONE exception to the no-admin
-# rule; see $ElevatedTools. BEST-EFFORT: every failure path warns and returns.
-# Chain: Uninstall-registry detect (no UAC when present) -> winget (manifest
-# dependencies pull WinFsp; UAC pops) -> direct-MSI fallback ONLY when winget
-# is ABSENT (a winget FAILURE is deliberately not retried via MSI — the cause,
-# a declined UAC or no network, would recur and just pop a second prompt) ->
-# manual instructions.
-function Install-ElevatedTool {
-    param([hashtable]$Tool)
-
-    # Idempotency first — an already-provisioned machine must never see UAC.
-    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $Tool.DetectName)) {
-        Write-Ok "$($Tool.Name) already installed (use -ForceInstaller to reinstall)"
-        return
-    }
-
-    Write-Log "Installing $($Tool.Name) (machine-scope)..."
-    Write-Warn "$($Tool.Name) needs a machine-wide install (WinFsp kernel driver) — the ONE elevated step; expect a UAC prompt (skip with -SkipElevated)"
-
-    $manualHint = "install manually later:  winget install $($Tool.WingetId)"
-
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        $wingetArgs = @(
-            "install", "--id", $Tool.WingetId, "--exact",
-            "--accept-source-agreements", "--accept-package-agreements"
-        )
-        if ($ForceInstaller) { $wingetArgs += "--force" }
+    foreach ($app in $WingetApps) {
+        if ($app.Scope -eq "machine" -and $SkipElevated) { Write-Log "$($app.Name) skipped (-SkipElevated)"; continue }
+        $present = if ($app.ContainsKey('Appx')) { [bool](Get-AppxPackage -Name $app.Appx -ErrorAction SilentlyContinue) } else { Test-InstallerPresent $app.Detect }
+        if ($present) { Write-Ok "$($app.Name) present"; continue }
+        Write-Log "Installing $($app.Name) (winget, $($app.Scope) scope)..."
+        # PS 5.1 can turn a native command's stderr into a terminating error under "Stop".
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        & winget @wingetArgs
+        & winget install --id $app.Id --exact --scope $app.Scope --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
         $code = $LASTEXITCODE
         $ErrorActionPreference = $oldEap
-        if ($code -eq 0) {
-            Write-Ok "$($Tool.Name) installed (winget $($Tool.WingetId))"
-        } else {
-            Write-Warn "$($Tool.Name): winget exited with code $code (declined UAC? offline?) — skipping; $manualHint"
-        }
-        return
-    }
-
-    Write-Warn "winget not found — falling back to direct MSI downloads"
-    foreach ($msi in $Tool.Msi) {
-        if (-not (Install-ElevatedMsi -Msi $msi)) {
-            Write-Warn "$($Tool.Name): MSI chain stopped at $($msi.Name) — $manualHint"
-            return
-        }
-    }
-    Write-Ok "$($Tool.Name) installed (MSI fallback)"
-}
-
-# Best-effort, per-user Warp seed. A missing WinGet or failed install must not
-# block the portable toolbelt or the dotfiles+tools bootstrap; Warp's official installer self-updates.
-# --scope user maps to the Inno /CURRENTUSER switch, so Warp itself never needs
-# admin. One asterisk on that, and it is NOT a new exception to the no-admin rule
-# ($ElevatedTools remains the only sanctioned one): Warp's winget manifest
-# declares a Microsoft.VCRedist.2015+ dependency, so on a box that has no VC++
-# runtime at all, WINGET (not us) may try to install that dependency machine-wide.
-# Nothing here elevates, and declining is survivable — Warp just doesn't install
-# and the warning below says where to get it.
-function Install-Warp {
-    if ((-not $ForceInstaller) -and (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
-        Write-Ok "Warp already installed (use -ForceInstaller to reinstall)"
-        return
-    }
-
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Warn "Warp not installed — winget is unavailable; install manually from https://www.warp.dev/download"
-        return
-    }
-
-    Write-Log "Installing Warp (official WinGet package, per-user)..."
-    $wingetArgs = @(
-        "install", "--id", $WarpTool.WingetId, "--exact", "--scope", "user",
-        "--silent", "--accept-source-agreements", "--accept-package-agreements"
-    )
-    if ($ForceInstaller) { $wingetArgs += "--force" }
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    & winget @wingetArgs
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $oldEap
-    if ($code -eq 0) {
-        Write-Ok "Warp installed (winget $($WarpTool.WingetId))"
-    } else {
-        Write-Warn "Warp: winget exited with code $code — install manually from https://www.warp.dev/download or re-run later"
-    }
-}
-
-function Install-WindowsTerminal {
-    # Evergreen MSIX seed: per-user by design (no admin), Store-serviced thereafter.
-    # No config.toml [vars] pin — same latest-release model as the installer-class apps.
-    $present = (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue) -or
-               (Get-Command wt.exe -ErrorAction SilentlyContinue)
-    if ($present -and -not $ForceInstaller) {
-        Write-Ok "Windows Terminal already installed (self-updates via Microsoft Store)"
-        return
-    }
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Warn "winget not available — install Windows Terminal from the Microsoft Store: https://aka.ms/terminal"
-        return
-    }
-    $wingetArgs = @("install", "--id", "Microsoft.WindowsTerminal", "--exact", "--silent",
-                    "--accept-source-agreements", "--accept-package-agreements")
-    if ($ForceInstaller) { $wingetArgs += "--force" }
-    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    & winget @wingetArgs
-    $ErrorActionPreference = $prevEap
-    if ($LASTEXITCODE -eq 0) {
-        Write-Ok "Windows Terminal installed (self-updates via Microsoft Store)"
-    } else {
-        Write-Warn "winget could not install Windows Terminal (exit $LASTEXITCODE) — install from the Microsoft Store: https://aka.ms/terminal"
+        if ($code -eq 0) { Write-Ok "$($app.Name) installed" } else { Write-Warn "$($app.Name): winget exited $code — install it later with: winget install --id $($app.Id)" }
     }
 }
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming mise/Warp/Windows Terminal on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise tools not installed, Python env not built"
+        Write-Log "Tool install skipped (-SkipToolInstall) — no mise install, GUI apps ($(@($WingetApps | ForEach-Object { $_.Name }) -join ', ')), mise tools, Python env or Claude Code"
         return
     }
 
@@ -968,22 +487,12 @@ function Invoke-ToolInstall {
 
     Install-Mise
     Add-ToUserPath $WsBin   # python-env's wpy/textual/typer launchers
-    Install-WindowsTerminal
-    Install-Warp
-    foreach ($tool in $InstallerTools) { Install-InstallerTool -Tool $tool }
-
-    # Elevated class last, so a declined UAC can't interrupt the admin-free
-    # installs above. Best-effort; -SkipElevated opts out entirely.
-    if ($SkipElevated) {
-        Write-Log "Elevated tool install skipped (-SkipElevated) — SSHFS-Win/WinFsp not installed"
-    } else {
-        foreach ($tool in $ElevatedTools) { Install-ElevatedTool -Tool $tool }
-    }
+    Install-WingetApps      # machine-scope (UAC) entries come last in the table
 
     Update-SessionPath
 
-    # Soft-warn for the hand-installed editor (VSCode). Zed is auto-installed via
-    # $InstallerTools above; VSCode's dotfiles config deploys regardless, and the
+    # Soft-warn for the hand-installed editor (VSCode). Zed is installed from
+    # $WingetApps above; VSCode's dotfiles config deploys regardless, and the
     # script never installs or fails on it.
     foreach ($app in @(@{ Cmd = 'code'; Name = 'VSCode' })) {
         if (-not (Get-Command $app.Cmd -ErrorAction SilentlyContinue)) {
@@ -1503,7 +1012,7 @@ function Invoke-WindowsTerminalFragments {
 # path isn't); Nushell's first-class home stays Windows Terminal's
 # defaultProfile.
 function Invoke-WarpTabConfigs {
-    if (-not (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
+    if (-not (Test-InstallerPresent "Warp*")) {
         Write-Warn "Skipping Warp Tab Config generation — Warp is not installed."
         return
     }
@@ -1833,7 +1342,7 @@ function Invoke-ClaudeSettingsLocalSeed {
 # claude.exe's sha256 against the signed release manifest, then wires up the
 # launcher/PATH/shell integration itself). NOT a mise tool -- it
 # self-updates in the background (mirrors the rolling Linux install). NOT
-# $InstallerTools -- no Uninstall-registry entry, no GitHub release.
+# a $WingetApps entry -- no Uninstall-registry entry to detect it by.
 # Detect-by-command, skip when present. Runs in a CHILD powershell.exe: the
 # installer script calls `exit` on its error paths, which would kill this
 # bootstrap if dot-run in-process.
@@ -1995,71 +1504,6 @@ function Invoke-EnsureSshKey {
         Write-Fail "ssh-keygen failed"
     }
     Write-Ok "Generated $SshKey"
-}
-
-# =============================================================================
-# UPSTREAM VERSION LOOKUPS -- used by the vendor-installer resolvers
-# =============================================================================
-
-# Newest upstream tag via `git ls-remote --tags` — plain git, no GitHub API,
-# no rate limits. $Repo is owner/repo or a full git URL; $TagPrefix is what
-# precedes the version in the tag name; $Filter accepts version shapes after
-# the prefix strip (default: clean dotted numerics — drops -rc/-pre tags);
-# -StringSort for date-style tags [version] can't parse.
-# Returns $null when nothing matches (offline, renamed tag scheme).
-function Get-LatestGitTag {
-    param(
-        [string]$Repo,
-        [string]$TagPrefix = "v",
-        [string]$Filter = '^\d+(\.\d+)*$',
-        [switch]$StringSort
-    )
-    $url = if ($Repo -match '://') { $Repo } else { "https://github.com/$Repo.git" }
-
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $env:GIT_TERMINAL_PROMPT = '0'
-    $refs = git ls-remote --tags --refs $url "refs/tags/$TagPrefix*" 2>$null
-    $ErrorActionPreference = $oldEap
-    if ($LASTEXITCODE -ne 0 -or -not $refs) { return $null }
-
-    $vers = @(foreach ($line in @($refs)) {
-        $tag = ($line -split "`t")[-1] -replace '^refs/tags/', ''
-        if ($TagPrefix -and -not $tag.StartsWith($TagPrefix)) { continue }
-        $v = $tag.Substring($TagPrefix.Length)
-        if ($v -match $Filter) { $v }
-    })
-    if ($vers.Count -eq 0) { return $null }
-    if ($StringSort) { return ($vers | Sort-Object -Descending | Select-Object -First 1) }
-    return ($vers | Sort-Object { [version]$_ } -Descending | Select-Object -First 1)
-}
-
-# Newest published version of a winget package, from the microsoft/winget-pkgs
-# manifest tree: the given directory holds one subdirectory per published
-# version and the names ARE the versions (Beyond Compare's are 4-part —
-# 5.2.3.32296 — matching its download URLs, which embed the build number).
-# The version source for $InstallerTools entries whose upstream has NO GitHub
-# presence at all (no releases AND no tags). Anonymous API works (60 req/hr);
-# Get-GitHubApiHeaders lifts the limit when $env:GITHUB_TOKEN is set.
-# Returns the raw directory name of the highest [version], or $null on ANY
-# failure (offline, rate-limited, tree moved, nothing parses) — callers
-# warn + skip.
-function Get-LatestWingetVersion {
-    param([string]$Path)
-    $headers = Get-GitHubApiHeaders
-    try {
-        $entries = Invoke-CurlRequest `
-            -Uri "https://api.github.com/repos/microsoft/winget-pkgs/contents/$Path" `
-            -Headers $headers | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        return $null
-    }
-    $vers = @(foreach ($e in $entries) {
-        if ($e.type -ne 'dir') { continue }   # skip stray files (.validation etc.)
-        $v = $null
-        if ([System.Version]::TryParse($e.name, [ref]$v)) { $e.name }
-    })
-    if ($vers.Count -eq 0) { return $null }
-    return ($vers | Sort-Object { [version]$_ } -Descending | Select-Object -First 1)
 }
 
 # =============================================================================

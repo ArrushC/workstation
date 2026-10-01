@@ -31,8 +31,6 @@ $helper = Get-TestFunction $bootstrapPath 'Invoke-CurlRequest'
 $fontHelper = Get-TestFunction (Join-Path $repoRoot 'scripts/install-nerd-fonts.ps1') 'Invoke-CurlRequest'
 Assert-Test ($helper -ceq $fontHelper) 'Bootstrap/font HTTP helpers drifted'
 . ([scriptblock]::Create($helper))
-. ([scriptblock]::Create((Get-TestFunction $bootstrapPath 'Get-GitHubApiHeaders')))
-. ([scriptblock]::Create((Get-TestFunction $bootstrapPath 'Get-LatestWingetVersion')))
 
 # Bind an ephemeral loopback port without HttpListener URL ACL requirements.
 $server = Start-Job {
@@ -158,12 +156,6 @@ try {
     } catch { $failed = $true }
     Assert-Test ($failed -and -not $script:downloadExecuted) 'Failed script download reached execution'
 
-    # Exercise the real winget resolver with fixture JSON and no network.
-    function Invoke-CurlRequest {
-        '[{"type":"dir","name":"1.2.3"},{"type":"file","name":"9.9.9"},{"type":"dir","name":"2.0.0"},{"type":"dir","name":"invalid"}]'
-    }
-    Assert-Test ((Get-LatestWingetVersion 'fixture') -eq '2.0.0') 'Winget version selection regressed'
-    . ([scriptblock]::Create($helper))
     Stop-Job $server
     $failed = $false
     try { $null = Invoke-CurlRequest "$base/text" } catch { $failed = $true }
