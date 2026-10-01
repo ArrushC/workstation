@@ -73,7 +73,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - No `[bootstrap.linux.firewall]` table: it makes `mise bootstrap plan`/`status` re-exec with sudo,
   which breaks `mise run health`. No `[bootstrap.user] login_shell` either: it needs `chsh`.
   `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`.
-- `[vars]` pins (`python_version`, `vcpkg_version`, `zjstatus_zellij_floor`) reach
+- `[vars]` pins (`vcpkg_version`, `zjstatus_zellij_floor`) reach
   tasks through `#MISE env={X="{{ vars.x }}"}`.
 - Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe in
   `scripts/bump-versions.sh` and `docs/claude/verification.md`).
@@ -177,13 +177,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `zshrc.tera` ↔ `bashrc.tera`
   - `zshenv.tera` ↔ the shims block in `bashrc.tera`
   - the Nushell `config.nu.tera` ↔ PowerShell profile `ws*`/`g*` aliases
-  - `PY_LIBS` in `scripts/lib/python-env.sh` ↔ `$PythonLibs` in `bootstrap.ps1`
+  - `scripts/python-env.txt` ↔ `$PythonLibs` in `bootstrap.ps1`
   - `Invoke-CurlRequest` in `bootstrap.ps1` ↔ `scripts/install-nerd-fonts.ps1`
   - script flags ↔ their completions (`_bootstrap.sh`, `completions.bash`, `config.nu.tera`'s flag
     record)
 - **Values recorded in several places (checked by `check_version_pins` and friends):**
   - mise: `bootstrap.sh`, `bootstrap.ps1`, `min_version`
-  - python: `vars`, `tools.python`, `$PythonEnvVersion`
+  - python: `tools.python`, `$PythonEnvVersion`
   - Nerd Font: `config.owned.toml` tool ↔ `install-nerd-fonts.ps1`
   - jq, gh, helix, opencode, omp and the DevToys CLI: `config*.toml` ↔ `$PortableTools`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`

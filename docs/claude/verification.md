@@ -12,8 +12,8 @@
   because there is no firewall table. Both refuse a dotfiles conflict like a real apply unless
   `--force-dotfiles` is passed.
 - `mise run health` is the full report (saved mode, `miserc.toml`, pueued, python-env,
-  dotfiles drift, dirty checkout); exit 1 on a hard failure. `mise tasks validate` catches malformed `#MISE` headers; `mise ls --missing`
-  should be empty.
+  dotfiles drift, dirty checkout); exit 1 on a hard failure. `mise tasks validate`
+  catches malformed `#MISE` headers; `mise ls --missing` should be empty.
 - Sandbox install plus capability gate (no sudo):
   ```
   MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox MISE_STATE_DIR=/tmp/mise-sandbox-state \
@@ -32,8 +32,8 @@
   `~/.config/mise/miserc.toml` has the right `env = [...]`; `systemctl --user is-active dev.mise.pueued`
   prints `active`.
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
-  A second run prints "already up to date"; `mise run python-env --rebuild` forces an upgrade. Library-list parity with
-  `bootstrap.ps1` is checked by `check-invariants.sh`.
+  A second run prints "up to date"; `mise run python-env --rebuild` forces an upgrade. The env is built on
+  `mise where python`; library-list parity of `scripts/python-env.txt` with `bootstrap.ps1` is checked by `check-invariants.sh`.
 - Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
   WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
   `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.

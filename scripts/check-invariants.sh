@@ -151,14 +151,13 @@ check_version_pins() {
       bad "mise drift: bootstrap.sh='$v' bootstrap.ps1='$ref' config.toml-min_version='$v2'"
     fi
 
-    v=$(tomlval config.toml vars.python_version)
-    v2=$(tomlval config.toml tools.python)
+    v=$(tomlval config.toml tools.python)
     ref=$(grep -oE '^\$PythonEnvVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 |
       grep -oE '[0-9][0-9.]+' | head -1)
-    if [ -n "$v" ] && [ "$v" = "$v2" ] && [ "$v" = "$ref" ]; then
-      ok "python-env @ $v  (config.toml [vars] == config.toml tools.python == bootstrap.ps1)"
+    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+      ok "python @ $v  (config.toml tools.python == bootstrap.ps1 \$PythonEnvVersion)"
     else
-      bad "python-env drift: config.toml-vars.python_version='$v' config.toml-tools.python='$v2' bootstrap.ps1='$ref'"
+      bad "python drift: config.toml-tools.python='$v' bootstrap.ps1='$ref'"
     fi
 
     v=$(tomlval config.owned.toml 'tools."github:ryanoasis/nerd-fonts"')
@@ -232,37 +231,9 @@ $(printf '%s\n' "${coupled[@]}")"
     fi
   fi
 
-  # Same coverage for config.toml [vars] pins: any vars.<name> read by
-  # check_version_pins is a dual/triple-edit host pin and must sit in the
-  # bumper's EXCLUDE_VARS (Layer 2) — otherwise a blind bump rewrites
-  # config.toml [vars] alone and immediately fails check_version_pins.
-  # vcpkg_version is a single-edit pin (never referenced via
-  # `tomlval config.toml vars.*` in check_version_pins) so is correctly NOT
-  # derived here, and zjstatus_zellij_floor is a coupling floor, not a pin
-  # (read only by check_zjstatus_zellij_coupling) so is correctly absent too.
-  local exclude_vars vpins vmissing="" vn=0
-  exclude_vars=$(grep -m1 -E '^EXCLUDE_VARS=' scripts/bump-versions.sh |
-    sed -E 's/^EXCLUDE_VARS="//; s/"[[:space:]]*$//')
-  if [ -z "$exclude_vars" ]; then
-    bad "scripts/bump-versions.sh: EXCLUDE_VARS= line not found"
-    return
-  fi
-  vpins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
-    grep -oE 'tomlval config\.toml vars\.[a-z_]+' |
-    sed -E 's/.*vars\.//' | sort -u)
-  while read -r var; do
-    [ -n "$var" ] || continue
-    vn=$((vn + 1))
-    case " $exclude_vars " in
-    *" $var "*) ;;
-    *) vmissing="$vmissing $var" ;;
-    esac
-  done <<<"$vpins"
-  if [ "$vn" -gt 0 ] && [ -z "$vmissing" ]; then
-    ok "all $vn dual-edit [vars] pin(s) in bumper EXCLUDE_VARS (bump-versions.sh)"
-  else
-    bad "dual-edit [vars] pin(s) missing from bump-versions.sh EXCLUDE_VARS:${vmissing:- <none derived>} — the weekly bumper would rewrite config.toml [vars] alone and fail the pin check"
-  fi
+  # config.toml [vars] holds only vcpkg_version (single-edit) and
+  # zjstatus_zellij_floor (a coupling floor), so no dual-edit [vars] pin
+  # needs bumper coverage; a new one must come back with its own check.
 }
 
 check_line_endings_and_mode() {
@@ -506,7 +477,7 @@ PY
       fi
     done
     local vk vars_bad=0
-    for vk in python_version vcpkg_version zjstatus_zellij_floor; do
+    for vk in vcpkg_version zjstatus_zellij_floor; do
       if "$PY" - "$vk" <<'PY'
 import sys, tomllib
 with open("config.toml", "rb") as fh:
@@ -520,7 +491,7 @@ PY
         vars_bad=1
       fi
     done
-    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has all four host pins"
+    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has both host pins"
   fi
   if command -v mise >/dev/null 2>&1; then
     local tmp
@@ -1110,21 +1081,19 @@ check_bootstrap_mode() {
 }
 
 # --- python-env lib-list parity ----------------------------------------------
-# The blessed-env library list is defined twice: PY_LIBS in
-# scripts/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
-# are one-line arrays by contract (comments at each site) so single-line greps
-# can extract them. Order-insensitive compare (sort) — content is the contract.
+# The blessed-env library list is defined twice: scripts/python-env.txt (one
+# lib per line, # comments) and $PythonLibs in bootstrap.ps1 (a one-line array
+# by contract). Order-insensitive compare (sort) — content is the contract.
 check_python_env_parity() {
-  hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
+  hdr "python-env lib-list parity (python-env.txt == bootstrap.ps1)"
   local sh_libs ps_libs
-  sh_libs=$(grep -oE '^PY_LIBS=\([^)]*\)' scripts/lib/python-env.sh |
-    sed 's/^PY_LIBS=(//; s/)$//' | tr ' ' '\n' | grep -v '^$' | sort)
+  sh_libs=$(grep -vE '^[[:space:]]*(#|$)' scripts/python-env.txt | sort)
   ps_libs=$(grep -oE '^\$PythonLibs *= *@\([^)]*\)' bootstrap.ps1 |
     sed 's/.*@(//; s/)$//' | tr -d '",' | tr ' ' '\n' | grep -v '^$' | sort)
   if [ -n "$sh_libs" ] && [ "$sh_libs" = "$ps_libs" ]; then
     ok "$(printf '%s\n' "$sh_libs" | wc -l) libs match"
   else
-    bad "lib-list drift (<:python-env.sh  >:bootstrap.ps1):"
+    bad "lib-list drift (<:python-env.txt  >:bootstrap.ps1):"
     diff <(printf '%s\n' "$sh_libs") <(printf '%s\n' "$ps_libs") | sed 's/^/       /'
   fi
 }

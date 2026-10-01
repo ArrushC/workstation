@@ -4,10 +4,9 @@
 #
 #   (1) mise tool pins in config.toml / config.linux.toml / config.owned.toml,
 #       via `mise outdated --bump --json` + set_pin + `mise lock`.
-#   (2) the handful of host pins config.toml [vars] owns directly (vcpkg —
-#       python/nerd-fonts are dual/triple-edit, reported not
-#       auto-edited), via git ls-remote (the same three pins
-#       tasks/check-updates reports) + set_pin.
+#   (2) the one host pin config.toml [vars] bumps (vcpkg_version), via git
+#       ls-remote (the same pin tasks/check-updates reports) + set_pin.
+#       zjstatus_zellij_floor is a coupling floor, never bumped.
 #
 # Dual-edit and coupled tool pins (the Windows halves in bootstrap.ps1,
 # go+gopls, node's postinstall LSP servers) are bumped by dedicated code that
@@ -41,7 +40,7 @@ DRY=false
 [ "${1:-}" = "--dry-run" ] && DRY=true
 
 bumped=""        # mise tool pins bumped this run (config*.toml)
-manual=""        # pins in either EXCLUDE list — reported, never auto-edited
+manual=""        # pins in the EXCLUDE list — reported, never auto-edited
 skipped=""       # a pin check-updates found but couldn't map safely
 vars_bumped=""   # config.toml [vars] pins bumped this run
 failed=""        # pin rewrites / mise lock calls that failed this run
@@ -87,14 +86,12 @@ exit_code=0
 #    only SOME releases (2.9.1 has one; 2.9.2 returns 404), so a bump must
 #    be verified by hand against the download URL before landing or it
 #    404s the install.
-#  - python is a three-way pin (config.toml vars.python_version ==
-#    config.toml tools.python == bootstrap.ps1 $PythonEnvVersion, all
-#    asserted by check-invariants.sh) that ALSO needs a wheel-coverage check
-#    before bumping — uv-managed pypi: dependency locks (basedpyright,
-#    glances, asciinema, harlequin) can lag a brand-new CPython release
-#    (duckdb/pydantic-core wheels in particular), and it's coupled to
-#    UV_VERSION the same way (uv resolves interpreters from its own bundled
-#    metadata, so a new CPython patch can need a newer uv first).
+#  - python is a two-way pin (config.toml tools.python == bootstrap.ps1
+#    $PythonEnvVersion, asserted by check-invariants.sh) that ALSO needs a
+#    wheel-coverage check before bumping — the dependency-locked pypi: tools
+#    (basedpyright, glances, asciinema, harlequin) and python-env's libraries
+#    can lag a brand-new CPython release (duckdb/pydantic-core wheels in
+#    particular).
 # github:ryanoasis/nerd-fonts: the Windows half is still pinned in
 #    install-nerd-fonts.ps1 until PR 4, so it is a dual-edit pin: bumped by hand.
 EXCLUDE="github:dj95/zjstatus http:ncdu python github:ryanoasis/nerd-fonts"
@@ -475,19 +472,12 @@ if [ -z "$outdated_fail" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Layer 2: config.toml [vars] host pins — vcpkg_version bumps
-# automatically; python_version (EXCLUDE_VARS) is a
-# dual/triple-edit pin, reported only, never auto-edited. Drift is checked
-# via git ls-remote against the SAME pins
-# tasks/check-updates reports; claude-cli is a rolling `latest` pin outside
-# [vars] (no bump path), so isn't checked here. ZJSTATUS_ZELLIJ_FLOOR is a
-# coupling floor, not a pin, so it never reaches this path either.
+# Layer 2: config.toml [vars] — vcpkg_version bumps automatically. Drift is
+# checked via git ls-remote against the SAME pin tasks/check-updates reports;
+# claude-cli is a rolling `latest` pin outside [vars] (no bump path), so isn't
+# checked here. zjstatus_zellij_floor is a coupling floor, not a pin, so it
+# never reaches this path either.
 # -----------------------------------------------------------------------------
-#
-# python_version is the three-way pin described in the mise EXCLUDE comment above
-# (config.toml [vars] is one of its three edit points) and needs the same
-# wheel-coverage check before bumping.
-EXCLUDE_VARS="python_version"
 
 # config.toml [vars] key -> its current string value (a plain `key = "value"`
 # line — the same shape check-invariants.sh's tomlval reads via tomllib; grep
@@ -496,9 +486,8 @@ varval() {
   grep -E "^$1 = " config.toml | head -1 | sed -E 's/^[^"]*"([^"]*)".*/\1/'
 }
 
-# check-updates spec name -> its config.toml [vars] key.
+# update-spec name -> its config.toml [vars] key.
 declare -A VARS_KEY=(
-  ["python-env"]=python_version
   ["vcpkg"]=vcpkg_version
 )
 
@@ -519,7 +508,6 @@ vars_updates() {
       printf 'update|%s|%s → %s\n' "$name" "$old" "$latest"
     fi
   done <<EOF2
-python-env|$(varval python_version)|python/cpython|v
 vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|
 EOF2
 }
@@ -532,13 +520,6 @@ while IFS='|' read -r _ name detail; do
   new="${detail##* }" # "old → new" -> "new"
   key="${VARS_KEY[$name]:-}"
   [ -n "$key" ] || continue
-
-  case " $EXCLUDE_VARS " in
-  *" $key "*)
-    manual="${manual}- \`$key\` ($name): $old → $new — needs SHA/multi-file edit (manual)\n"
-    continue
-    ;;
-  esac
 
   if $DRY; then
     vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"

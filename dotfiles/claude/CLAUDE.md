@@ -163,7 +163,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `DevToys` 2.0.9.0
 
 ### Host pins (config.toml [vars])
-- `python-env` 3.14.7
 - `vcpkg` 2026.07.29
 - `claude` latest
 

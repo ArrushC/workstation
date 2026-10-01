@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Read-only health report: saved mode, bootstrap state, mise tools, miserc wiring, pueued, python-env, owned extras"
-#MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
 # Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
 # no sudo, but exits 1 if any row_bad fired — this is the
 # gate CI / a human runs post-bootstrap, not just a report.
@@ -201,14 +200,15 @@ else
 fi
 echo ""
 
-# 5. python-env — wpy's own reported version must match the current pin.
+# 5. python-env — wpy's own reported version must match mise's python.
 hdr "python-env"
 if [ -x "$HOME/.local/bin/wpy" ]; then
+  want_v=$(mise current python 2>/dev/null || true)
   wpy_v=$("$HOME/.local/bin/wpy" -c 'import sys;print(sys.version.split()[0])' 2>/dev/null || true)
-  if [ "$wpy_v" = "$PYTHON_VERSION" ]; then
+  if [ "$wpy_v" = "$want_v" ]; then
     row_ok "python-env" "wpy -> CPython $wpy_v"
   else
-    row_bad "python-env" "wpy reports '${wpy_v:-?}', want $PYTHON_VERSION — mise run python-env"
+    row_bad "python-env" "wpy reports '${wpy_v:-?}', want ${want_v:-?} — mise run python-env"
   fi
 else
   row_bad "python-env" "missing: ~/.local/bin/wpy — mise run python-env"

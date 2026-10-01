@@ -90,13 +90,12 @@ for title, fname in sections:
                     print(f"- `{pkg}` {ver}")
 
 # 4. Host pins declared directly in config.toml [vars]. Order:
-# python-env, vcpkg (the [vars] declaration order), then
+# vcpkg (the [vars] declaration order), then
 # claude — a rolling `latest` pin with no [vars] entry, hard-coded.
 with open(f"{root}/config.toml", "rb") as fh:
     cfg = tomllib.load(fh)
 pin_vars = cfg.get("vars", {})
 pins = [
-    ("python-env", pin_vars.get("python_version", "?")),
     ("vcpkg", pin_vars.get("vcpkg_version", "?")),
     ("claude", "latest"),
 ]
