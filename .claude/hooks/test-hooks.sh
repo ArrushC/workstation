@@ -261,6 +261,11 @@ cat >"$SE/stub.sh" <<STUB
 printf '%s\n' "\$*" >>"$SE/notified.log"
 STUB
 chmod +x "$SE/stub.sh"
+# `mise dot status` would report this checkout's dotfiles as pending under the
+# stub HOME, so a "clean" repo would toast; a mise that prints nothing keeps these cases about git state.
+mkdir -p "$SE/bin"
+printf '#!/bin/sh\nexit 1\n' >"$SE/bin/mise"
+chmod +x "$SE/bin/mise"
 # slow stub: records immediately, then lingers — proves the hook does NOT wait
 # on the notifier (the toast is fired detached so SessionEnd can't cancel it).
 # It logs to its own file: detached, its write can land after the next case
@@ -273,7 +278,7 @@ STUB
 chmod +x "$SE/slowstub.sh"
 se_run() {
   : >"$SE/notified.log"
-  printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$JQ_DIR:$PATH" \
+  printf '%s' "$2" | env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$SE/bin:$JQ_DIR:$PATH" \
     WORKSTATION_NOTIFY="$SE/stub.sh" bash "$1" >/dev/null 2>&1
 }
 # The notifier is fired detached/backgrounded, so poll briefly for the async write.
@@ -298,7 +303,7 @@ ok "dirty repo -> toast mentions uncommitted" notified 'uncommitted'
 : >"$SE/notified.log"
 _t0=$(date +%s)
 printf '%s' "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')" |
-  env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$JQ_DIR:$PATH" WORKSTATION_NOTIFY="$SE/slowstub.sh" \
+  env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$SE/bin:$JQ_DIR:$PATH" WORKSTATION_NOTIFY="$SE/slowstub.sh" \
     bash "$RH/session-end-notify.sh" >/dev/null 2>&1
 _t1=$(date +%s)
 ok "does not block on a slow notifier (<2s)" test "$((_t1 - _t0))" -lt 2
