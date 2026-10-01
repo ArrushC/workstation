@@ -86,7 +86,7 @@ fi
 legacy=""
 grep -qs 'export MISE_ENV=' "$HOME/.zshenv" "$HOME/.bashrc" && legacy="$legacy rc-files"
 [ -e "$HOME/.config/environment.d/10-mise.conf" ] && legacy="$legacy environment.d"
-systemctl --user show-environment 2>/dev/null | grep -q '^MISE_ENV=' && legacy="$legacy systemd-user-manager"
+systemctl --user show-environment 2>/dev/null | grep '^MISE_ENV=' >/dev/null && legacy="$legacy systemd-user-manager"
 if [ -z "$legacy" ]; then
   row_ok "MISE_ENV export" "nothing exports it (miserc.toml rules)"
 else

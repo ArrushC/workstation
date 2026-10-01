@@ -29,7 +29,7 @@ if [ "${2:-}" = --write ]; then
   if [ -f "$envd" ] && ! grep -qvE '^(#.*|MISE_ENV=[a-z,]*|)$' "$envd"; then
     rm -f "$envd"
   fi
-  if systemctl --user show-environment 2>/dev/null | grep -q '^MISE_ENV='; then
+  if systemctl --user show-environment 2>/dev/null | grep '^MISE_ENV=' >/dev/null; then
     systemctl --user unset-environment MISE_ENV || true
   fi
 fi

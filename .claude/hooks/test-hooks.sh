@@ -74,7 +74,7 @@ echo "== parity-reminder (R3) =="
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.toml -> vars pins" has 'python_version'
+ok "config.toml -> vars pins" has 'tools.python'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.owned.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "config.owned.toml -> pins" has 'PortableTools'
 run "$RH/parity-reminder.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"

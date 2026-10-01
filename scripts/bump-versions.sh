@@ -10,7 +10,7 @@
 #
 # Dual-edit and coupled tool pins (the Windows halves in bootstrap.ps1,
 # go+gopls, node's postinstall LSP servers) are bumped by dedicated code that
-# keeps every paired edit in step. Only the pins in the EXCLUDE lists below
+# keeps every paired edit in step. Only the pins in the EXCLUDE list below
 # are reported and never edited: those need a coupling floor read from release
 # notes, a download check, or a wheel-coverage check the bumper can't do.
 #
