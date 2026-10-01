@@ -21,6 +21,11 @@ vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by ta
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
 [tools]
+# Both OSes (Windows installs them through mise too)
+starship = "1.26.0"
+helix = "25.07.1"          # archive carries runtime/ beside hx — no HELIX_RUNTIME needed
+jq = "1.8.2"
+gh = "2.101.0"
 # uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
 uv = "0.12.19"

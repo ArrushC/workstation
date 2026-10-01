@@ -15,10 +15,36 @@ checksum = "sha256:08ea1db86f0e9bfd8e591cbeb2102a16e7213b4512de378ba1c06449cbd22
 url = "https://github.com/DevToys-app/DevToys/releases/download/v2.0.9.0/devtoys.cli_linux_x64_portable.zip"
 url_api = "https://api.github.com/repos/DevToys-app/DevToys/releases/assets/338070567"
 
+[[tools."github:DevToys-app/DevToys"]]
+version = "2.0.9.0"
+backend = "github:DevToys-app/DevToys"
+specifiers = ["2.0.9.0"]
+
+[tools."github:DevToys-app/DevToys".options]
+asset_pattern = "devtoys.cli_win_x64_portable.zip"
+
 [tools."github:DevToys-app/DevToys"."platforms.windows-x64"]
-checksum = "sha256:08ea1db86f0e9bfd8e591cbeb2102a16e7213b4512de378ba1c06449cbd225af"
-url = "https://github.com/DevToys-app/DevToys/releases/download/v2.0.9.0/devtoys.cli_linux_x64_portable.zip"
-url_api = "https://api.github.com/repos/DevToys-app/DevToys/releases/assets/338070567"
+checksum = "sha256:27327ad18c06d5bba4356f039c76203b0099f864d10f6de0d833225077dd310a"
+url = "https://github.com/DevToys-app/DevToys/releases/download/v2.0.9.0/devtoys.cli_win_x64_portable.zip"
+url_api = "https://api.github.com/repos/DevToys-app/DevToys/releases/assets/338071884"
+
+[[tools."github:LogExperts/LogExpert"]]
+version = "1.41.0"
+backend = "github:LogExperts/LogExpert"
+specifiers = ["1.41.0"]
+
+[tools."github:LogExperts/LogExpert".options]
+asset_pattern = "LogExpert.{version}.zip"
+
+[tools."github:LogExperts/LogExpert"."platforms.linux-x64"]
+checksum = "sha256:74524db34332aed480c5c631ca9023118140bc120075c1365ae6713620673c89"
+url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpert.1.41.0.zip"
+url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
+
+[tools."github:LogExperts/LogExpert"."platforms.windows-x64"]
+checksum = "sha256:74524db34332aed480c5c631ca9023118140bc120075c1365ae6713620673c89"
+url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpert.1.41.0.zip"
+url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
 
 [[tools."github:can1357/oh-my-pi"]]
 version = "18.3.4"
@@ -34,6 +60,24 @@ url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/5921585
 checksum = "sha256:7abb9e215412e7cd457b527365cf5700d8cdd383d162d1ca0d9e7f0610ddbab1"
 url = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-windows-x64.exe"
 url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/592158578"
+
+[[tools."github:dnGrep/dnGrep"]]
+version = "5.0.30.0"
+backend = "github:dnGrep/dnGrep"
+specifiers = ["5.0.30.0"]
+
+[tools."github:dnGrep/dnGrep".options]
+asset_pattern = "dnGrep.{version}.x64.zip"
+
+[tools."github:dnGrep/dnGrep"."platforms.linux-x64"]
+checksum = "sha256:27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45bd32"
+url = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
+url_api = "https://api.github.com/repos/dnGrep/dnGrep/releases/assets/477232224"
+
+[tools."github:dnGrep/dnGrep"."platforms.windows-x64"]
+checksum = "sha256:27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45bd32"
+url = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
+url_api = "https://api.github.com/repos/dnGrep/dnGrep/releases/assets/477232224"
 
 [[tools."github:pwndbg/pwndbg"]]
 version = "2026.09.15"
@@ -140,6 +184,21 @@ version = "2.2.30"
 aube = { path = "locks/mise.owned/npm-ccstatusline/2.2.30", digest = "sha256:df2c07c76c465a27faaae3a947d2eeb3ac2ecf3638f2ee82b878c3676638b79c" }
 backend = "npm:ccstatusline"
 specifiers = ["2.2.30"]
+
+[[tools.nushell]]
+version = "0.113.1"
+backend = "aqua:nushell/nushell"
+specifiers = ["0.113.1"]
+
+[tools.nushell."platforms.linux-x64"]
+checksum = "sha256:9008d309aaa35e29ed5d5985306a83e2bf5093e31677d4cd969914552d12b8fb"
+url = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/nushell/nushell/releases/assets/433380313"
+
+[tools.nushell."platforms.windows-x64"]
+checksum = "sha256:fd3e56dac9f866d2d3fe2fabd6580c14371afdcec9ddda54624a50986d36b3d2"
+url = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/nushell/nushell/releases/assets/433389998"
 
 [[tools.opencode]]
 version = "1.18.32"

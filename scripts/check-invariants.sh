@@ -94,28 +94,28 @@ check_version_pins() {
   if [ -z "$PY" ]; then
     note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
   else
-    v=$(tomlval config.linux.toml tools.jq)
+    v=$(tomlval config.toml tools.jq)
     ref=$(ps1_tool_version jq)
     if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "jq @ $v  (config.linux.toml == bootstrap.ps1)"
+      ok "jq @ $v  (config.toml == bootstrap.ps1)"
     else
-      bad "jq drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
+      bad "jq drift: config.toml='$v' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.linux.toml tools.gh)
+    v=$(tomlval config.toml tools.gh)
     ref=$(ps1_tool_version "GitHub CLI")
     if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "gh @ $v  (config.linux.toml == bootstrap.ps1)"
+      ok "gh @ $v  (config.toml == bootstrap.ps1)"
     else
-      bad "gh drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
+      bad "gh drift: config.toml='$v' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.linux.toml tools.helix)
+    v=$(tomlval config.toml tools.helix)
     ref=$(ps1_tool_version Helix)
     if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "helix @ $v  (config.linux.toml == bootstrap.ps1)"
+      ok "helix @ $v  (config.toml == bootstrap.ps1)"
     else
-      bad "helix drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
+      bad "helix drift: config.toml='$v' bootstrap.ps1='$ref'"
     fi
 
     v=$(tomlval config.owned.toml tools.opencode)

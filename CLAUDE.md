@@ -33,9 +33,9 @@ Token sets: `mise-env.sh`, saved in `miserc.toml`.
 
 | File | Loads when the token set has | Holds |
 |---|---|---|
-| `config.toml` | always | uv, python, `[vars]` pins, dotfiles for both OSes |
+| `config.toml` | always | uv, python, starship/gh/jq/helix (both OSes), `[vars]`, both-OS dotfiles |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
-| `config.owned.toml` | `owned` | owned-host tools on both OSes (node + LSP servers, go, …), `~/.claude` dotfiles, ccstatusline |
+| `config.owned.toml` | `owned` | owned-host tools (node, LSP servers, go), Windows-only nushell/dnGrep/LogExpert, `~/.claude` dotfiles |
 | `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
 | `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
@@ -192,7 +192,6 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`
   - `/etc` copies
-  - lock files
 
 ## Hooks
 

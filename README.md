@@ -326,7 +326,7 @@ Tabs rename themselves to the current directory's basename on `cd`; set `WORKSTA
 
 ## Adding things
 
-**A tool.** One line in the right file; every tool is a mise pin. `config.linux.toml` is the Linux toolbelt (both modes), `config.owned.toml` is owned-only (add `os = ["linux"]` when it is also Linux-only), `config.toml` is everything else. Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset (for example a glibc floor EL9 cannot meet). See the gping, yazi, television, atuin and qsv entries for worked examples.
+**A tool.** One line in the right file; every tool is a mise pin. `config.linux.toml` is the Linux toolbelt (both modes), `config.owned.toml` is owned-only (add `os = ["linux"]` or `os = ["windows"]` when it is also single-OS), `config.toml` is everything else, including tools both OSes install (starship, gh, jq, helix). Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset (for example a glibc floor EL9 cannot meet). See the gping, yazi, television, atuin and qsv entries for worked examples.
 
 ```toml
 # config.linux.toml — [tools] (both modes; aqua registry short name)
