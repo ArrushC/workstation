@@ -13,6 +13,9 @@ $targets = @(
     'scripts/test-curl.ps1',
     'scripts/test-config-local.ps1',
     'scripts/test-ssh-launchers.ps1',
+    'scripts/test-mise-env.ps1',
+    'scripts/test-winget-apps.ps1',
+    'scripts/test-python-fonts.ps1',
     'scripts/check-ps.ps1'
 ) | ForEach-Object { Join-Path $repoRoot $_ }
 

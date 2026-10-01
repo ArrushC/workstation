@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Get-SshLauncherHosts', 'New-Uuid5', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs'
+$wanted = 'Get-SshLauncherHosts', 'New-Uuid5', 'Test-WindowsTerminalPresent', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs'
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     . ([scriptblock]::Create($f.Extent.Text))
 }
@@ -15,8 +15,7 @@ function Write-Ok { param($m) }
 function Write-Warn { param($m) $script:warnings.Add([string]$m) }
 # Stand-ins for "Windows Terminal / Warp are installed".
 function Get-AppxPackage { [CmdletBinding()] param([string]$Name) [pscustomobject]@{ Name = $Name } }
-function Test-InstallerPresent { param($DisplayName) $true }
-$script:WarpTool = @{ DetectName = 'Warp' }
+function Test-InstallerPresent { param($DisplayName) $DisplayName -ceq 'Warp*' }
 function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
 $failures = New-Object System.Collections.Generic.List[string]

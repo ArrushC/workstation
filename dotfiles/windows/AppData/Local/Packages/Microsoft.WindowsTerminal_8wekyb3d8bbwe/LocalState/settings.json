@@ -305,7 +305,7 @@
             {
                 "altGrAliasing": true,
                 "closeOnExit": "automatic",
-                "commandline": "%LOCALAPPDATA%\\workstation\\nu\\nu.exe",
+                "commandline": "%LOCALAPPDATA%\\mise\\shims\\nu.exe",
                 "guid": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
                 "hidden": false,
                 "name": "Nushell",

@@ -64,15 +64,6 @@ print(d["version"] if isinstance(d, dict) else d)
 PY
 }
 
-# Version="..." value from the $PortableTools block whose Name = "<name>" in
-# bootstrap.ps1 (one generic extractor for every jq/gh/Helix/OpenCode/... pin).
-ps1_tool_version() {
-  awk -v pat="Name[[:space:]]*=[[:space:]]*\"$1\"[[:space:]]*\$" '
-    $0 ~ pat { f = 1 }
-    f && /Version[[:space:]]*=/ { print; exit }
-  ' bootstrap.ps1 | grep -oE '[0-9][0-9.]+' | head -1
-}
-
 # _ps1_drive_ref_hits <file> — print "LINE:CONTENT" for any non-comment line
 # carrying an unbraced $name: reference. Inside a double-quoted string/
 # here-string PowerShell's parser reads "$name:" as a drive-qualified
@@ -89,84 +80,18 @@ _ps1_drive_ref_hits() {
 
 check_version_pins() {
   hdr "version-pin dual/triple-edits"
-  local v v2 ref ps_v
+  local v v2 ref
 
   if [ -z "$PY" ]; then
     note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
   else
-    v=$(tomlval config.linux.toml tools.jq)
-    ref=$(ps1_tool_version jq)
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "jq @ $v  (config.linux.toml == bootstrap.ps1)"
-    else
-      bad "jq drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.linux.toml tools.gh)
-    ref=$(ps1_tool_version "GitHub CLI")
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "gh @ $v  (config.linux.toml == bootstrap.ps1)"
-    else
-      bad "gh drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.linux.toml tools.helix)
-    ref=$(ps1_tool_version Helix)
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "helix @ $v  (config.linux.toml == bootstrap.ps1)"
-    else
-      bad "helix drift: config.linux.toml='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.owned.toml tools.opencode)
-    ref=$(ps1_tool_version OpenCode)
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "opencode @ $v  (config.owned.toml == bootstrap.ps1)"
-    else
-      bad "opencode drift: config.owned.toml='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.owned.toml 'tools."github:can1357/oh-my-pi"')
-    ref=$(ps1_tool_version "Oh My Pi")
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "omp @ $v  (config.owned.toml == bootstrap.ps1)"
-    else
-      bad "omp drift: config.owned.toml='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.owned.toml 'tools."github:DevToys-app/DevToys"')
-    ref=$(ps1_tool_version "DevToys CLI")
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "devtoys-cli @ $v  (config.owned.toml == bootstrap.ps1)"
-    else
-      bad "devtoys-cli drift: config.owned.toml='$v' bootstrap.ps1='$ref'"
-    fi
-
     v=$(grep -oE '^MISE_VERSION="[0-9][0-9.]+"' bootstrap.sh | grep -oE '[0-9][0-9.]+')
-    ref=$(ps1_tool_version mise)
+    ref=$(grep -oE '^\$MiseVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 | grep -oE '[0-9][0-9.]+' | head -1)
     v2=$(tomlval config.toml min_version)
     if [ -n "$v" ] && [ "$v" = "$ref" ] && [ "$v" = "$v2" ]; then
-      ok "mise @ $v  (bootstrap.sh == bootstrap.ps1 == config.toml min_version)"
+      ok "mise @ $v  (bootstrap.sh == bootstrap.ps1 \$MiseVersion == config.toml min_version)"
     else
-      bad "mise drift: bootstrap.sh='$v' bootstrap.ps1='$ref' config.toml-min_version='$v2'"
-    fi
-
-    v=$(tomlval config.toml tools.python)
-    ref=$(grep -oE '^\$PythonEnvVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 |
-      grep -oE '[0-9][0-9.]+' | head -1)
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "python @ $v  (config.toml tools.python == bootstrap.ps1 \$PythonEnvVersion)"
-    else
-      bad "python drift: config.toml-tools.python='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.owned.toml 'tools."github:ryanoasis/nerd-fonts"')
-    ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
-      grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    if [ -n "$v" ] && [ "$v" = "$ps_v" ]; then
-      ok "jetbrains-mono nerd @ $v  (config.owned.toml == install-nerd-fonts.ps1)"
-    else
-      bad "jetbrains-mono nerd drift: config.owned.toml='$v' install-nerd-fonts.ps1='$ps_v'"
+      bad "mise drift: bootstrap.sh='$v' bootstrap.ps1-\$MiseVersion='$ref' config.toml-min_version='$v2'"
     fi
   fi
 
@@ -202,12 +127,11 @@ check_bumper_exclude() {
   exclude=$(grep -m1 -E '^EXCLUDE=' scripts/bump-versions.sh |
     sed -E 's/^EXCLUDE="//; s/"[[:space:]]*$//')
   # A dual-edit/coupled pin is safe when the bumper either skips it (EXCLUDE)
-  # or bumps it with dedicated code that keeps its pair in step: the Windows
-  # half via the PS1_NAME map, go+gopls / node via COUPLED_AUTO. Anything else
-  # would get a blind one-sided edit and fail check_version_pins.
+  # or bumps it with dedicated code that keeps its pair in step: go+gopls /
+  # node via COUPLED_AUTO. Anything else would get a blind one-sided edit and
+  # fail check_version_pins.
   handled="$exclude $(grep -m1 -E '^COUPLED_AUTO=' scripts/bump-versions.sh |
-    sed -E 's/^COUPLED_AUTO="//; s/"[[:space:]]*$//') $(awk '/^declare -A PS1_NAME=\(/,/^\)/' scripts/bump-versions.sh |
-      sed -nE 's/^[[:space:]]*\["([^"]+)"\]=.*/\1/p' | tr '\n' ' ')"
+    sed -E 's/^COUPLED_AUTO="//; s/"[[:space:]]*$//')"
   if [ -z "$exclude" ]; then
     bad "scripts/bump-versions.sh: EXCLUDE= line not found"
   else
@@ -225,9 +149,9 @@ $(printf '%s\n' "${coupled[@]}")"
       esac
     done <<<"$pins"
     if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-      ok "all $n dual-edit/coupled tool pins excluded or paired-bumped (bump-versions.sh EXCLUDE / PS1_NAME / COUPLED_AUTO)"
+      ok "all $n dual-edit/coupled tool pins excluded or paired-bumped (bump-versions.sh EXCLUDE / COUPLED_AUTO)"
     else
-      bad "dual-edit/coupled tool pin(s) the bumper doesn't handle:${missing:- <none derived>} — add each to bump-versions.sh's PS1_NAME map (Windows half), COUPLED_AUTO, or EXCLUDE, or the weekly bumper rewrites one side alone and fails the pin check"
+      bad "dual-edit/coupled tool pin(s) the bumper doesn't handle:${missing:- <none derived>} — add each to bump-versions.sh's COUPLED_AUTO or EXCLUDE, or the weekly bumper rewrites one side alone and fails the pin check"
     fi
   fi
 
@@ -1065,41 +989,6 @@ check_bootstrap_mode() {
   fi
 }
 
-# --- python-env lib-list parity ----------------------------------------------
-# The blessed-env library list is defined twice: scripts/python-env.txt (one
-# lib per line, # comments) and $PythonLibs in bootstrap.ps1 (a one-line array
-# by contract). Order-insensitive compare (sort) — content is the contract.
-check_python_env_parity() {
-  hdr "python-env lib-list parity (python-env.txt == bootstrap.ps1)"
-  local sh_libs ps_libs
-  sh_libs=$(grep -vE '^[[:space:]]*(#|$)' scripts/python-env.txt | sort)
-  ps_libs=$(grep -oE '^\$PythonLibs *= *@\([^)]*\)' bootstrap.ps1 |
-    sed 's/.*@(//; s/)$//' | tr -d '",' | tr ' ' '\n' | grep -v '^$' | sort)
-  if [ -n "$sh_libs" ] && [ "$sh_libs" = "$ps_libs" ]; then
-    ok "$(printf '%s\n' "$sh_libs" | wc -l) libs match"
-  else
-    bad "lib-list drift (<:python-env.txt  >:bootstrap.ps1):"
-    diff <(printf '%s\n' "$sh_libs") <(printf '%s\n' "$ps_libs") | sed 's/^/       /'
-  fi
-}
-
-check_curl_helper_parity() {
-  hdr "curl helper parity (Invoke-CurlRequest: bootstrap.ps1 == install-nerd-fonts.ps1)"
-  local a b
-  a=$(awk '/^function Invoke-CurlRequest \{/,/^\}/' bootstrap.ps1)
-  b=$(awk '/^function Invoke-CurlRequest \{/,/^\}/' scripts/install-nerd-fonts.ps1)
-  if [ -z "$a" ]; then
-    bad "Invoke-CurlRequest not found in bootstrap.ps1"
-  elif [ -z "$b" ]; then
-    bad "Invoke-CurlRequest not found in scripts/install-nerd-fonts.ps1"
-  elif [ "$a" = "$b" ]; then
-    ok "$(printf '%s\n' "$a" | wc -l)-line helper is byte-identical in both scripts"
-  else
-    bad "Invoke-CurlRequest drift (<:bootstrap.ps1  >:install-nerd-fonts.ps1):"
-    diff <(printf '%s\n' "$a") <(printf '%s\n' "$b") | sed 's/^/       /'
-  fi
-}
-
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -1377,8 +1266,6 @@ check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling
 check_mise_install_lib
 check_bootstrap_mode
-check_python_env_parity
-check_curl_helper_parity
 check_shellcheck
 check_shfmt
 check_gitleaks

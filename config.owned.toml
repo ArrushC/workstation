@@ -12,12 +12,15 @@ go = "1.27.1"
 lua-language-server = "3.19.1"
 "pypi:basedpyright" = "1.40.1"
 "npm:ccstatusline" = "2.2.30"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
-"github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font: tasks/fonts (Linux) copies its TTFs; Windows still pins it in scripts/install-nerd-fonts.ps1 until PR 4
+"github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font, the only pin: tasks/fonts (Linux) and bootstrap.ps1 (Windows, via scripts/install-nerd-fonts.ps1) install its TTFs
 herdr = { version = "0.9.1", os = ["linux"] }
-opencode = { version = "1.18.32", os = ["linux"] }              # Windows half stays in bootstrap.ps1 $PortableTools
-"github:can1357/oh-my-pi" = { version = "18.3.4", os = ["linux"], bin = "omp" }   # bare per-platform binary asset (omp-linux-x64); bin= names the installed command
+opencode = "1.18.32"
+"github:can1357/oh-my-pi" = "18.3.4"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
 "github:pwndbg/pwndbg" = { version = "2026.09.15", os = ["linux"], version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir
-"github:DevToys-app/DevToys" = { version = "2.0.9.0", os = ["linux"], asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }
+"github:DevToys-app/DevToys" = { version = "2.0.9.0", platforms = { linux-x64 = { asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }, windows-x64 = { asset_pattern = "devtoys.cli_win_x64_portable.zip" } } }   # CLI only; per-platform assets
+nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (WT); launched via %LOCALAPPDATA%\mise\shims\nu.exe
+"github:dnGrep/dnGrep" = { version = "5.0.30.0", os = ["windows"], asset_pattern = "dnGrep.{{version}}.x64.zip" }   # GUI grep; Start Menu shortcut + settings seed by bootstrap.ps1
+"github:LogExperts/LogExpert" = { version = "1.41.0", os = ["windows"], asset_pattern = "LogExpert.{{version}}.zip" }   # GUI log viewer (needs the .NET 10 Desktop Runtime); Start Menu shortcut by bootstrap.ps1
 
 # ---------------------------------------------------------------------------
 # Dotfiles gated on `owned` regardless of OS (Linux-only ones live in

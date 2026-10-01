@@ -36,6 +36,7 @@ ok() {
   fi
 }
 has() { printf '%s' "$OUT" | grep -qF "$1"; }
+lacks() { ! has "$1"; }
 no_cr() { ! LC_ALL=C grep -q $'\r' "$1"; }
 bom() { [ "$(head -c3 "$1" | od -An -tx1 | tr -d ' \n')" = efbbbf ]; }
 empty() { [ -z "$OUT" ]; }
@@ -74,11 +75,19 @@ echo "== parity-reminder (R3) =="
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.toml -> vars pins" has 'tools.python'
+ok "config.toml -> mise triple-edit" has 'MiseVersion'
+ok "config.toml -> no python/font pairs (single-source since PR 4)" lacks 'PythonEnvVersion'
+ok "config.toml -> no tools.python pair" lacks 'tools.python'
+ok "config.toml -> no install-nerd-fonts pair" lacks 'install-nerd-fonts'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.owned.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.owned.toml -> pins" has 'PortableTools'
+ok "config.owned.toml -> lock refresh" has 'mise lock'
+ok "config.owned.toml -> no install-nerd-fonts pair" lacks 'install-nerd-fonts'
 run "$RH/parity-reminder.sh" "$(j --arg f "/tmp/unrelated.go" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "unrelated -> silent" empty
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/bootstrap.ps1" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "bootstrap.ps1 -> silent (python-env.txt is read, not mirrored)" empty
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/scripts/lib/python-env.sh" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "python-env.sh -> silent" empty
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/config/helix/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "dotfiles-tree config.toml (helix) -> silent, not mise config" empty
 

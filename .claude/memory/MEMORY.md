@@ -3,7 +3,7 @@
 - [Use PR-review workflow](feedback-use-pr-review-workflow.md) — land changes via feature branch + PR; merge only on the user's go-ahead that names the merge. Never push or merge to main unprompted.
 - [Always push after commit](feedback-always-push-after-commit.md) — standing instruction: push every commit immediately, without asking.
 - [Commit .claude/ changes routinely](feedback-commit-claude-dir-routinely.md) — settings.json, settings.local.json and memory/* are regular tracked content, not session drift to defer.
-- ["Application list" = the manual list](feedback-app-list-means-manual-list.md) — means one row in docs/windows/application_list.md, not a bootstrap.ps1 installer entry; no README update.
+- ["Application list" = the manual list](feedback-app-list-means-manual-list.md) — means one row in docs/windows/application_list.md, not a bootstrap.ps1 `$WingetApps` entry; no README update.
 - [Skip redundant final review](feedback-skip-redundant-final-review.md) — after per-task reviews pass, go straight to finishing the branch; skip the quality stage for doc-only tasks.
 - [SDD subagent calibration](project-sdd-subagent-calibration.md) — haiku implementers copy briefs byte-exactly but their report narratives lie; verify from the diff, keep sonnet reviewers.
 - [Windows commands: user runs them](feedback-windows-commands-user-runs-them.md) — hand interactive or long Windows commands (bootstrap.ps1, wsa) to the user; read-only interop probes are fine.

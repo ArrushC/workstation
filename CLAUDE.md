@@ -33,9 +33,9 @@ Token sets: `mise-env.sh`, saved in `miserc.toml`.
 
 | File | Loads when the token set has | Holds |
 |---|---|---|
-| `config.toml` | always | uv, python, `[vars]` pins, dotfiles for both OSes |
+| `config.toml` | always | uv, python, starship/gh/jq/helix (both OSes), `[vars]`, both-OS dotfiles |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
-| `config.owned.toml` | `owned` | owned-host tools on both OSes (node + LSP servers, go, …), `~/.claude` dotfiles, ccstatusline |
+| `config.owned.toml` | `owned` | owned-host tools on both OSes (node, LSP servers, go, ccstatusline), Windows-only nushell/dnGrep/LogExpert, `~/.claude` dotfiles |
 | `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
 | `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
@@ -89,9 +89,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   saved value, then `WORKSTATION_MODE`, then a prompt. Windows is always owned.
 - `scripts/lib/mise-env.sh <mode> --write` writes the git-ignored `miserc.toml` (`env = [...]`,
   `auto_env = false`) from the saved mode. Every mise process reads it, shims under systemd
-  included; nothing exports `MISE_ENV`. An exported value overrides it, so `bootstrap.sh` and
-  `tasks/update` unset it, while CI and `check-templates.sh` may pin one.
-- Every `ws*` command pins `mise -C` to the home directory. mise finds its config by walking up from
+  included; nothing exports `MISE_ENV`. An exported value overrides it, so `bootstrap.sh`,
+  `bootstrap.ps1` and `tasks/update` unset it, while CI and `check-templates.sh` may pin one.
+- Every `ws*` command and `bootstrap.ps1` pin `mise -C` to the home directory. mise finds its config by walking up from
   the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
   `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).
 
@@ -111,7 +111,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     `mise dot status` for drift and asks first.
 - Disabling an inherited entry needs `enabled = false` **and** a repeated `mode`.
 - A host's first apply needs `--force-dotfiles`. `bootstrap.sh` and `bootstrap.ps1` pass it only while
-  `~/.local/state/workstation/dotfiles-migrated` is absent.
+  `dotfiles-migrated` is absent (`~/.local/state/workstation/`; Windows `%LOCALAPPDATA%\workstation\`).
 - The `post-dotfiles` hook is the only thing that sets these modes:
   - `~/.ssh`, `~/.claude`: 700
   - `~/.ssh/config`: 600
@@ -130,9 +130,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `~/.claude/CLAUDE.md` is deployed from `dotfiles/claude/CLAUDE.md`. Its TOOLS block is generated.
 
 **Windows**
-- Never render Windows targets with the Linux mise: `os()` reflects the OS of the binary that is
-  running.
-- `bootstrap.ps1` applies dotfiles with `mise bootstrap --only dotfiles,tools`.
+- Never render Windows targets with the Linux mise: `os()` is the running binary's OS.
+- `bootstrap.ps1` pins only mise and installs the `$WingetApps` GUI apps (winget); every CLI tool is a
+  mise tool. No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
+- Nushell runs via mise's `nu.exe` shim, so `Install-Mise` renames a running `mise.exe` aside.
+- `scripts/test-*.ps1` test Windows behaviour (CI `windows-http`, 5.1 and pwsh).
 - Scripts never write Windows Terminal's tracked `settings.json`. SSH launchers go to a WT fragment,
   and Warp's `workstation-*.toml` tab configs are runtime artifacts.
 - Warp is the primary terminal; Windows Terminal is the compatibility one (default-terminal role,
@@ -169,7 +171,6 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `_cht.sh`, a rolling snapshot
   - `dotfiles/local/bin/batpipe`: re-apply the 2-line patch recorded in its `.vendor`
   - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06 while the fleet is EL9 (newer needs Python 3.10)
-  - Each `.vendor` sidecar records provenance.
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
@@ -177,22 +178,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `zshrc.tera` ↔ `bashrc.tera`
   - `zshenv.tera` ↔ the shims block in `bashrc.tera`
   - the Nushell `config.nu.tera` ↔ PowerShell profile `ws*`/`g*` aliases
-  - `scripts/python-env.txt` ↔ `$PythonLibs` in `bootstrap.ps1`
-  - `Invoke-CurlRequest` in `bootstrap.ps1` ↔ `scripts/install-nerd-fonts.ps1`
   - script flags ↔ their completions (`_bootstrap.sh`, `completions.bash`, `config.nu.tera`'s flag
     record)
 - **Values recorded in several places (checked by `check_version_pins` and friends):**
-  - mise: `bootstrap.sh`, `bootstrap.ps1`, `min_version`
-  - python: `tools.python`, `$PythonEnvVersion`
-  - Nerd Font: `config.owned.toml` tool ↔ `install-nerd-fonts.ps1`
-  - jq, gh, helix, opencode, omp and the DevToys CLI: `config*.toml` ↔ `$PortableTools`
+  - mise: `bootstrap.sh`, `bootstrap.ps1` `$MiseVersion`, `min_version`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5
-  - `scripts/bump-versions.sh` covers each via `PS1_NAME`, `COUPLED_AUTO` or `EXCLUDE`.
+  - `scripts/bump-versions.sh` covers each via `COUPLED_AUTO` or `EXCLUDE`.
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`
   - `/etc` copies
-  - lock files
 
 ## Hooks
 

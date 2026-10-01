@@ -151,8 +151,8 @@ command pins `mise -C $env.USERPROFILE`):
        directory>` instead; --changed skips directory copies)
   wss  mise dot status          list managed files and their state
   wsu  git pull + mise bootstrap --only dotfiles,tools
-       (portable tools such as gh, opencode and omp come from
-       bootstrap.ps1: run .\bootstrap.ps1 when their pins change)
+       (every CLI tool -- gh, opencode, omp, nu, ... -- is a mise tool,
+       so wsu updates it; .\bootstrap.ps1 updates mise and the GUI apps)
   wsh  this help
 
 Common flow:
@@ -261,16 +261,13 @@ def adminpw [] {
 let workstation_bootstrap_flags = [
     { value: "-RepoPath", description: "alternate clone path (default %USERPROFILE%\\.config\\mise)" }
     { value: "-SkipKeyGen", description: "skip the SSH-key prompt" }
-    { value: "-SkipToolInstall", description: "skip portable tools, installer apps and Claude Code" }
+    { value: "-SkipToolInstall", description: "skip mise, the mise tools, the winget GUI apps, the Python env and Claude Code" }
     { value: "-SkipDotfiles", description: "clone + install but don't deploy dotfiles" }
     { value: "-SkipBurntToast", description: "skip the BurntToast notification module" }
     { value: "-SkipNerdFonts", description: "skip the JetBrainsMono Nerd Font install" }
-    { value: "-ForceInstaller", description: "re-install installer apps even if present" }
     { value: "-SkipElevated", description: "skip the UAC-prompting SSHFS-Win/WinFsp install" }
     { value: "-Reinstall", description: "wipe the cloned repo (incl. config.local.toml), bootstrap fresh" }
     { value: "-Yes", description: "skip the reinstall confirmation prompt" }
-    { value: "-Doctor", description: "read-only health report, then exit" }
-    { value: "-CheckForUpdates", description: "read-only update scan, then exit" }
 ]
 
 $env.config.completions.external = {

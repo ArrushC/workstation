@@ -51,20 +51,21 @@ The full, always-current inventory of what's installed (with versions) is below.
 <!-- regenerated on config*.toml edits by .claude/hooks/sync-tool-memory.sh; run `wsa` to deploy -->
 
 ### Cross-platform tools (config.toml)
+- `starship` 1.26.0
+- `helix` 25.07.1
+- `jq` 1.8.2
+- `gh` 2.101.0
 - `uv` 0.12.19
 - `python` 3.14.7
 
 ### Linux toolbelt, both modes (config.linux.toml)
 - `fzf` 0.74.4
 - `zoxide` 0.10.0
-- `starship` 1.26.0
 - `zellij` 0.45.1
 - `glow` 3.0.0
-- `helix` 25.07.1
 - `fd` 10.5.0
 - `bat` 0.26.1
 - `btop` 1.4.7
-- `jq` 1.8.2
 - `yq` 4.53.6
 - `witr` 0.3.3
 - `lazydocker` 0.25.2
@@ -86,7 +87,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `rclone` 1.75.1
 - `croc` 11.5.4
 - `hyperfine` 1.20.0
-- `gh` 2.101.0
 - `sops` 3.13.3
 - `htmlq` 0.4.0
 - `watchexec` 2.7.3
@@ -161,6 +161,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `oh-my-pi` 18.3.4
 - `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
+- `nushell` 0.113.1
+- `dnGrep` 5.0.30.0
+- `LogExpert` 1.41.0
 
 ### Host pins (config.toml [vars])
 - `vcpkg` 2026.07.29

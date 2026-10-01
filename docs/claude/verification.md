@@ -33,7 +33,7 @@
   prints `active`.
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
   A second run prints "up to date"; `mise run python-env --rebuild` forces an upgrade. The env is built on
-  `mise where python`; library-list parity of `scripts/python-env.txt` with `bootstrap.ps1` is checked by `check-invariants.sh`.
+  `mise where python`. Windows' `Invoke-PythonEnv` reads the same `scripts/python-env.txt` (`scripts/test-python-fonts.ps1`).
 - Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
   WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
   `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.
@@ -57,10 +57,48 @@
   checkout; `scripts/check-templates.sh` (`make_home`/`in_home`) shows the working pattern, or just
   run it. It renders every template individually for all four token sets, syntax-checks, then
   bulk-applies; clean output ends `all rendered templates pass, across all four MISE_ENV sets`.
-- Windows: `.\bootstrap.ps1 -Doctor` shows mise, runtimes, PATH shims, Nushell activation, Python
-  env and dotfiles sync; a second `.\bootstrap.ps1` reports "already installed"/stamp hits. Parse
-  check: `powershell -NoProfile -Command "[void][System.Management.Automation.Language.Parser]::ParseFile('bootstrap.ps1',[ref]$null,[ref]$null);'ok'"`.
-  `scripts/test-curl.ps1` (HTTP helper) runs in both shells in the `windows-http` CI job.
+## Windows (`bootstrap.ps1`)
+
+- Parse check under 5.1, the floor (no ternary, `??` or `&&`): copy the file to `%TEMP%\bs.ps1`, then
+  `powershell.exe -NoProfile -Command 'Set-Location $env:USERPROFILE; $e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("$env:TEMP\bs.ps1",[ref]$null,[ref]$e); if($e){$e|%{$_.ToString()}; exit 1}else{"parse OK"}'`.
+  A bare `ParseFile(...,[ref]$null)` prints ok even on errors. `mise run lint` checks the BOM and
+  `${name}:` braces.
+- Offline tests: each `scripts/test-*.ps1` runs under 5.1 and pwsh in the `windows-http` CI job, and
+  PSScriptAnalyzer covers them in the `powershell` job. They load functions from the script's AST;
+  those that reach `mise`, `winget`, the registry or the User environment stub them and refuse to run
+  unless the stub is what would be called.
+
+  | Test | Covers |
+  |---|---|
+  | `test-curl.ps1` | `Invoke-CurlRequest` |
+  | `test-config-local.ps1` | `Set-ConfigLocalVar`, `Invoke-EnsureConfigLocal` |
+  | `test-ssh-launchers.ps1` | SSH host parsing, the WT fragment, the Warp Tab Configs |
+  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); legacy cleanup; the `config.owned.toml` guard; `-C` pinning; the node marker |
+  | `test-winget-apps.ps1` | `$WingetApps` + `Install-WingetApps` (presence, scope, `Uac` without `--silent`, exit codes); `-HostCheck` adds a read-only presence table for this host |
+  | `test-python-fonts.ps1` | `Invoke-PythonEnv`, `Invoke-InstallNerdFonts`, and `install-nerd-fonts.ps1` on fake TTFs |
+- From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `scripts/python-env.txt` under
+  `%TEMP%` (keep the `scripts\` layout: tests find the repo as their parent dir), `cd` to
+  `%USERPROFILE%` and run each with `-NoProfile -ExecutionPolicy Bypass -File` under `powershell.exe`
+  and `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`. powershell.exe 5.1 needs the Machine
+  PSModulePath (`PSModulePath="$(powershell.exe -NoProfile -Command
+  "[Environment]::GetEnvironmentVariable('PSModulePath','Machine')" | tr -d '\r')"
+  WSLENV=PSModulePath/w powershell.exe ...`): the inherited pwsh 7 path makes 5.1 report
+  "Get-FileHash is not recognized" (a false failure; CI is unaffected).
+- Live checks (the user runs `.\bootstrap.ps1`; then, in a new PowerShell window):
+  - `$env:MISE_ENV` is empty and `miserc.toml` holds `env = ["windows", "owned"]`.
+  - `Get-Command starship, jq, hx, nu, omp, opencode, DevToys.CLI, gh` resolve under
+    `%LOCALAPPDATA%\mise\shims` (gh may be a machine-wide install); the User PATH has no
+    `%LOCALAPPDATA%\workstation\{helix,nu,devtoys-cli,dngrep,logexpert}`.
+  - `mise doctor` says `activated: yes` and `shims_on_path: yes`; `mise dot status` lists nothing
+    unapplied; `mise bootstrap status` is clean.
+  - `wpy -c "import sys, textual; print(sys.version)"` prints the `tools.python` version; there are six
+    `JetBrainsMonoNerdFontMono-*.ttf` under `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
+  - Windows Terminal opens Nushell, and so does Warp's `Nushell (compatibility)` tab.
+  - The run installed no app that was present (no second DevToys or Zed); a second run reports
+    "already installed"/"present" throughout.
+  - Only a live host shows: a `$MiseVersion` bump with a Nushell tab open (`mise.exe` renamed to
+    `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user under
+    `--scope machine`, and a font bump replacing a loaded TTF.
 
 ## zellij
 
@@ -106,8 +144,7 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
 - alt+shift+d / alt+shift+r split, alt+shift+arrows move focus, ctrl+shift+z zooms.
 - A hand-made profile in `settings.json` and a foreign fragment (`Fragments\other-app\x.json`) both
   survive a bootstrap re-run; `Fragments\workstation\hosts.json` is rewritten (removed when
-  config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`. Doctor shows an "SSH host
-  launcher(s)" row.
+  config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`.
 - In a WSL tab, starship renders, atuin Ctrl-R works and fzf-tab completes. This is the regression
   check for the Warp guards: WT must behave as before Warp returned. A remote zellij pane shows
   exactly one OSC 133 prompt-zone set.
