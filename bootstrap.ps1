@@ -471,10 +471,17 @@ yourself first.
     Write-Ok "Prerequisites OK"
 }
 
+# An update renames the old bin\mise.exe and mise-shim.exe to *.old instead
+# of deleting them: every shim (WT's Nushell too, via mise\shims\nu.exe) runs
+# mise.exe, and Windows can rename a running image but not delete or
+# overwrite it. Leftover *.old files go on a later run, once nothing runs them.
 function Install-Mise {
-    $binDir = Join-Path $WsMise "bin"
-    $stamp  = Join-Path $WsStamps "mise.$MiseVersion.stamp"
-    if ((Test-Path $stamp) -and (Test-Path (Join-Path $binDir "mise.exe"))) {
+    $binDir  = Join-Path $WsMise "bin"
+    $miseExe = Join-Path $binDir "mise.exe"
+    $stamp   = Join-Path $WsStamps "mise.$MiseVersion.stamp"
+    Get-ChildItem -Path $binDir -Filter "*.old" -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    if ((Test-Path $stamp) -and (Test-Path $miseExe)) {
         Add-ToUserPath $binDir
         Write-Ok "mise $MiseVersion already installed"
         return
@@ -482,17 +489,43 @@ function Install-Mise {
     Write-Log "Installing mise $MiseVersion..."
     $zip = Join-Path $env:TEMP "ws-mise-$MiseVersion.zip"
     $tmp = Join-Path $env:TEMP "ws-mise-$MiseVersion"
+    $moved = New-Object System.Collections.Generic.List[object]
     try {
-        Invoke-CurlRequest -Uri $MiseUrl -OutFile $zip
-        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLower()
-        if ($actual -ne $MiseSha256) { Write-Fail "mise $MiseVersion sha256 mismatch (got $actual) — refusing to install" }
+        try {
+            Invoke-CurlRequest -Uri $MiseUrl -OutFile $zip
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLower()
+            if ($actual -ne $MiseSha256) { throw "sha256 mismatch: got $actual, pinned $MiseSha256" }
+        } catch {
+            # An older mise keeps the host working; only a host with none stops.
+            if (Test-Path $miseExe) {
+                Add-ToUserPath $binDir
+                Write-Warn "mise $MiseVersion not installed ($($_.Exception.Message)) -- continuing on the installed mise; re-run .\bootstrap.ps1 to retry"
+                return
+            }
+            Write-Fail "mise $MiseVersion download failed ($($_.Exception.Message)) and no mise is installed -- check network access to github.com, then re-run .\bootstrap.ps1"
+        }
         if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
         Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
         $top = @(Get-ChildItem -Path $tmp)
         $src = if (($top.Count -eq 1) -and $top[0].PSIsContainer) { $top[0].FullName } else { $tmp }
-        if (Test-Path $WsMise) { Remove-Item -Recurse -Force $WsMise }
-        New-Item -ItemType Directory -Force -Path $WsMise | Out-Null
-        Copy-Item -Path (Join-Path $src '*') -Destination $WsMise -Recurse -Force
+        try {
+            foreach ($name in @("mise.exe", "mise-shim.exe")) {
+                $exe = Join-Path $binDir $name
+                if (Test-Path -LiteralPath $exe) {
+                    $old = Join-Path $binDir "$name.$([guid]::NewGuid().ToString('N')).old"
+                    Move-Item -LiteralPath $exe -Destination $old
+                    $moved.Add(@{ From = $exe; To = $old })
+                }
+            }
+            New-Item -ItemType Directory -Force -Path $WsMise | Out-Null
+            Copy-Item -Path (Join-Path $src '*') -Destination $WsMise -Recurse -Force
+        } catch {
+            # Put the old exes back so the host keeps a working mise.
+            foreach ($m in $moved) {
+                if (-not (Test-Path -LiteralPath $m.From)) { Move-Item -LiteralPath $m.To -Destination $m.From -ErrorAction SilentlyContinue }
+            }
+            Write-Fail "Could not update mise in $WsMise ($($_.Exception.Message)) -- close Nushell tabs and editors started through mise shims, then re-run .\bootstrap.ps1 from a Windows PowerShell window"
+        }
         Add-ToUserPath $binDir
         New-Item -ItemType File -Force -Path $stamp | Out-Null
         Write-Ok "mise $MiseVersion installed to $WsMise"
@@ -505,9 +538,11 @@ function Install-Mise {
 # One-time cleanup of the pre-mise portable installs (remove once every
 # Windows host has run it): their PATH entries sat ahead of mise's shims.
 # Only the old tools' own stamps go; wslconfig.*, node-postinstall.* and
-# python-env.* stamps are live markers.
+# python-env.* stamps are live markers. Runs after a successful tools phase
+# (Invoke-MiseBootstrap), so a failed bootstrap keeps the old tools.
 function Invoke-LegacyToolCleanup {
     $old = @("helix", "nu", "devtoys-cli", "dngrep", "logexpert") | ForEach-Object { Join-Path $WsRoot $_ }
+    $oldExes = @("starship", "gh", "jq", "omp", "opencode", "chezmoi") | ForEach-Object { Join-Path $WsBin "$_.exe" }
     $userPath = Get-UserEnv "Path"
     if ($userPath) {
         $kept = @($userPath -split ';' | Where-Object { $_ -and ($old -notcontains $_.TrimEnd('\')) })
@@ -517,9 +552,11 @@ function Invoke-LegacyToolCleanup {
             Write-Ok "removed old portable-tool directories from the User PATH"
         }
     }
-    foreach ($d in $old) { if (Test-Path $d) { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue } }
-    foreach ($exe in @("starship", "gh", "jq", "omp", "opencode", "chezmoi")) {
-        Remove-Item (Join-Path $WsBin "$exe.exe") -Force -ErrorAction SilentlyContinue
+    foreach ($d in $old) { if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
+    foreach ($exe in $oldExes) { Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue }
+    $left = @(@($old) + @($oldExes) | Where-Object { Test-Path -LiteralPath $_ })
+    if ($left.Count -gt 0) {
+        Write-Warn "old portable tools still present (in use?): $($left -join ', ') -- close it and re-run .\bootstrap.ps1"
     }
     Get-ChildItem -Path $WsStamps -Filter "*.stamp" -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match '^(starship|gh|hx|nu|jq|opencode|omp|DevToys\.CLI|dnGREP|LogExpert|uv|chezmoi|mise-runtimes)\.' } |
@@ -937,7 +974,6 @@ function Invoke-ToolInstall {
     }
 
     Install-Mise
-    Invoke-LegacyToolCleanup
     Add-ToUserPath $WsBin   # python-env's wpy/textual/typer launchers
     Install-WindowsTerminal
     Install-Warp
@@ -1130,11 +1166,13 @@ function Invoke-WslConfigReminder {
 # apply()). Passed only until $MigratedMarker exists, so a later real
 # conflict still surfaces loudly.
 #
-# After the tools phase, as scripts/lib/mise-install.sh does on Linux: the
-# shims dir joins the User PATH and this session (jq, starship, nu and uv
-# resolve for the steps after this); node is force-reinstalled once when
-# its declaration changed, because mise re-runs node's npm postinstall (the
-# language servers) only on a (re)install; then prune + reshim.
+# Before it, a guard: config.owned.toml must be loaded (miserc.toml honoured).
+# After a successful tools phase: the pre-mise portable installs are removed
+# (Invoke-LegacyToolCleanup), then, as scripts/lib/mise-install.sh does on
+# Linux: the shims dir joins the User PATH and this session (jq, starship,
+# nu and uv resolve for the steps after this); node is force-reinstalled
+# once when its declaration changed, because mise re-runs node's npm
+# postinstall (the language servers) only on a (re)install; prune + reshim.
 function Invoke-MiseBootstrap {
     $phases = @()
     if (-not $SkipDotfiles) { $phases += 'dotfiles' }
@@ -1163,19 +1201,33 @@ function Invoke-MiseBootstrap {
         }
     }
 
-    # `mise where node` succeeds only when the DECLARED node is installed.
+    # Every mise call runs from %USERPROFILE% (-C), as the ws* commands do,
+    # so a project mise.toml in the caller's cwd can't change what resolves.
     # Native stderr must not trip EAP=Stop (PS 5.1 wraps it as errors).
+    $miseCd = @('-C', $env:USERPROFILE)
+
+    # miserc.toml must have selected the owned set: without config.owned.toml
+    # the tools phase would skip the owned tools and `mise prune` would
+    # delete them. (--json: the table output truncates to the console width.)
+    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $loaded = (@(& mise @miseCd config ls --json 2>&1) | ForEach-Object { "$_" }) -join "`n"
+    $ErrorActionPreference = $oldEap
+    if ($loaded -notmatch 'config\.owned\.toml') {
+        Write-Fail "mise did not load config.owned.toml, so miserc.toml (windows,owned) was not honoured -- an exported MISE_ENV, or -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune could remove the owned tools; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
+    }
+
+    # `mise where node` succeeds only when the DECLARED node is installed.
     $hadNode = $false
     if (-not $SkipToolInstall) {
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        & mise where node *> $null
+        & mise @miseCd where node *> $null
         $hadNode = ($LASTEXITCODE -eq 0)
         $ErrorActionPreference = $oldEap
     }
 
     $onlyPhases = $phases -join ','
     Write-Log "Running mise bootstrap --only $onlyPhases (source: $RepoPath)..."
-    $bootstrapArgs = @('bootstrap', '--only', $onlyPhases, '--yes') + $forceFlags
+    $bootstrapArgs = $miseCd + @('bootstrap', '--only', $onlyPhases, '--yes') + $forceFlags
     & mise @bootstrapArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Fail @"
@@ -1200,17 +1252,19 @@ reported above and re-run.
     }
 
     if (-not $SkipToolInstall) {
+        # The old portable installs go only now that mise's tools are in.
+        Invoke-LegacyToolCleanup
         Add-ToUserPath $MiseShims
         Update-SessionPath
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
         try {
-            & mise where node *> $null
+            & mise @miseCd where node *> $null
             if ($LASTEXITCODE -eq 0) {
                 # Marker = node's declaration hashed (-f: a bare `mise config get`
                 # reads only the highest-precedence file, config.windows.toml).
                 # An unreadable declaration forces the reinstall and writes no
                 # marker, so the next run retries.
-                $decl = (@(& mise config get -f (Join-Path $RepoPath "config.owned.toml") tools.node 2>$null) -join "`n").Trim()
+                $decl = (@(& mise @miseCd config get -f (Join-Path $RepoPath "config.owned.toml") tools.node 2>$null) -join "`n").Trim()
                 $marker = $null
                 if (($LASTEXITCODE -eq 0) -and $decl) {
                     $bytes = [System.Text.Encoding]::UTF8.GetBytes($decl)
@@ -1223,14 +1277,16 @@ reported above and re-run.
                 $nodeOk = $true
                 if ($hadNode -and -not ($marker -and (Test-Path -LiteralPath $marker))) {
                     Write-Log "node already installed but its declaration changed -- reinstalling so its npm postinstall (the language servers) re-runs"
-                    $forceOut = @(& mise install --yes --force node 2>&1)
-                    if ($LASTEXITCODE -ne 0) {
+                    # Streamed, and kept in $forceOut to spot Windows' file-lock error.
+                    $forceOut = @()
+                    & mise @miseCd install --yes --force node 2>&1 | ForEach-Object { "$_" } | Tee-Object -Variable forceOut | Out-Host
+                    $forceExit = $LASTEXITCODE
+                    if ($forceExit -ne 0) {
                         $nodeOk = $false
-                        $forceText = ($forceOut | ForEach-Object { "$_" }) -join "`n"
-                        if ($forceText -match 'os error 32|being used by another process') {
+                        if ((@($forceOut) -join "`n") -match 'os error 32|being used by another process') {
                             Write-Warn "node is in use (an editor's language server, a dev server, an agent) -- close running node processes and re-run .\bootstrap.ps1"
                         } else {
-                            Write-Warn "mise install --force node failed -- re-run .\bootstrap.ps1 to retry:`n$forceText"
+                            Write-Warn "mise install --force node exited $forceExit (output above) -- re-run .\bootstrap.ps1 to retry"
                         }
                     } else {
                         Write-Ok "node reinstalled (language servers refreshed)"
@@ -1241,9 +1297,9 @@ reported above and re-run.
                     New-Item -ItemType File -Force -Path $marker | Out-Null
                 }
             }
-            & mise prune --yes
+            & mise @miseCd prune --yes
             if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
-            & mise reshim
+            & mise @miseCd reshim
             if ($LASTEXITCODE -ne 0) { Write-Warn "mise reshim exited $LASTEXITCODE (non-fatal)" }
         } finally {
             $ErrorActionPreference = $oldEap
@@ -1305,7 +1361,7 @@ function Get-MiseToolExe {
     param([string]$Tool, [string]$Exe)
     if (-not (Get-Command mise -ErrorAction SilentlyContinue)) { return $null }
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $out = @(& mise where $Tool 2>$null); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $oldEap }
+    try { $out = @(& mise -C $env:USERPROFILE where $Tool 2>$null); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $oldEap }
     if (($code -ne 0) -or ($out.Count -eq 0) -or -not "$($out[0])".Trim()) { return $null }
     $path = Join-Path "$($out[0])".Trim() $Exe
     if (Test-Path -LiteralPath $path) { return $path }
@@ -2462,9 +2518,9 @@ if ($CheckForUpdates) { Invoke-CheckForUpdates; exit 0 }
 
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
-Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation, the old portable tools cleaned up, then the GUI apps
+Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation, then the GUI apps
 Invoke-CloneRepo
-Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; shims on PATH, node marker, prune; .wslconfig reminder
+Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; old portable tools removed, shims on PATH, node marker, prune; .wslconfig reminder
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals

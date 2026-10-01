@@ -128,8 +128,8 @@ command pins `mise -C $env:USERPROFILE`):
        directory>` instead; --changed skips directory copies)
   wss  mise dot status          list managed files and their state
   wsu  git pull + mise bootstrap --only dotfiles,tools
-       (portable tools such as gh, opencode and omp come from
-       bootstrap.ps1: run .\bootstrap.ps1 when their pins change)
+       (every CLI tool -- gh, opencode, omp, nu, ... -- is a mise tool,
+       so wsu updates it; .\bootstrap.ps1 updates mise and the GUI apps)
   wsh  this help
 
 Common flow:
