@@ -73,12 +73,12 @@ case_ "no [vars] *_version key found fails" 1 "<none found>"
 fresh
 sed -i -E 's/^("github:dj95\/zjstatus" = \{ )version = "[0-9.]+"/\1version = ""/' "$T/config.linux.toml"
 pins
-case_ "unreadable zjstatus pin fails" 1 "zjstatus"
+case_ "unreadable zjstatus pin fails" 1 "zjstatus pin unreadable"
 
 fresh
 sed -i -E 's/typescript-language-server@[0-9.]+ //' "$T/config.owned.toml"
 pins
-case_ "typescript-language-server missing from postinstall fails" 1 "typescript-language-server"
+case_ "typescript-language-server missing from postinstall fails" 1 "missing from node's postinstall"
 
 fresh
 sed -i -E 's/^(COUPLED_AUTO=".*) node"/\1"/' "$T/scripts/bump-versions.sh"

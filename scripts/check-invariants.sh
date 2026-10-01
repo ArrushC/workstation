@@ -470,7 +470,7 @@ PYEOF
   fi
 }
 
-# Bootstrap-config invariants over the [bootstrap.*] files; (h) is a live `mise bootstrap
+# Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
 # plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
   hdr "bootstrap-config invariants (config.host/native/wsl/linux.toml)"
@@ -492,7 +492,7 @@ for f in files:
     except Exception as e:
         print(f"FAIL|parse|{f} failed to parse: {e}")
 
-# (b): hooks — `mise run <task>[ ::: <task>]`, each task existing; mise runs a name from every loaded file.
+# Hooks: `mise run <task>[ ::: <task>]`, each task existing; mise runs a name from every loaded file.
 hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
 toml_tasks = set()
 for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
@@ -667,7 +667,7 @@ if bad_mode:
 else:
     print(f"PASS|mode-valid|every entry's mode is one of {sorted(VALID_MODES)}")
 
-# (c) no entry is `symlink` or `symlink-each`: every entry is `copy` or `template`
+# No entry is `symlink` or `symlink-each`: every entry is `copy` or `template`
 # (Windows symlinks need Developer Mode; a directory symlink becomes a junction).
 bad_symlink = []
 n_total = 0
@@ -681,7 +681,7 @@ if bad_symlink:
 else:
     print(f"PASS|no-symlink-anywhere|{n_total} entries across all 5 config files are copy or template, none symlink/symlink-each")
 
-# (d) every directory entry that declares `exclude` covers each .vendor/.gitkeep
+# Every directory entry that declares `exclude` covers each .vendor/.gitkeep
 # sidecar actually present there.
 bad_exclude = []
 n_each = 0
@@ -871,7 +871,7 @@ check_self_tests() {
       ok "$(printf '%s\n' "$out" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^[^[:alnum:]]+//')"
     else
       bad "${t%% *} failed:"
-      printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/      /'
+      { printf '%s\n' "$out" | grep -E 'FAIL' || printf '%s\n' "$out" | tail -5; } | sed 's/^/      /'
     fi
   done
 }

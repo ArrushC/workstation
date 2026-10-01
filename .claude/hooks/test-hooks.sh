@@ -262,10 +262,14 @@ printf '%s\n' "\$*" >>"$SE/notified.log"
 STUB
 chmod +x "$SE/stub.sh"
 # `mise dot status` would report this checkout's dotfiles as pending under the
-# stub HOME, so a "clean" repo would toast; a mise that prints nothing keeps these cases about git state.
+# stub HOME, so a "clean" repo would toast; a mise that fails (no JSON) keeps these cases about git state.
 mkdir -p "$SE/bin"
 printf '#!/bin/sh\nexit 1\n' >"$SE/bin/mise"
 chmod +x "$SE/bin/mise"
+# a second mise reporting a drifted dotfile, for the pending-dotfiles toast
+mkdir -p "$SE/bin-pending"
+printf '#!/bin/sh\necho '"'"'{"files":[{"state":"drifted"}]}'"'"'\n' >"$SE/bin-pending/mise"
+chmod +x "$SE/bin-pending/mise"
 # slow stub: records immediately, then lingers — proves the hook does NOT wait
 # on the notifier (the toast is fired detached so SessionEnd can't cancel it).
 # It logs to its own file: detached, its write can land after the next case
@@ -320,6 +324,13 @@ ok "reason=resume -> silent" silent
 rm -f "$SE/repo/dirty.txt"
 se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')"
 ok "clean repo -> silent" silent
+
+# clean repo but dotfiles pending (mise reports a drifted file) -> toast says so
+: >"$SE/notified.log"
+printf '%s' "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')" |
+  env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$SE/bin-pending:$JQ_DIR:$PATH" \
+    WORKSTATION_NOTIFY="$SE/stub.sh" bash "$RH/session-end-notify.sh" >/dev/null 2>&1
+ok "clean repo, dotfiles drifted -> toast mentions pending apply" notified 'dotfiles apply pending (1)'
 
 # malformed input -> silent
 se_run "$RH/session-end-notify.sh" 'not json at all'
