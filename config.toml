@@ -18,7 +18,6 @@ min_version = "2026.9.9"
 # Host pins that tasks read via `#MISE env={X="{{ vars.x }}"}`;
 # scripts/check-invariants.sh asserts the dual-edits.
 python_version = "3.14.7"        # == tools.python below == $PythonEnvVersion in bootstrap.ps1 (three-way pin)
-nerd_font_version = "3.5.1"      # == SHA arm in scripts/lib/font.sh == $Version in scripts/install-nerd-fonts.ps1 (triple)
 vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by tasks/vcpkg
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 

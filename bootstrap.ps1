@@ -2745,7 +2745,7 @@ function Invoke-CheckForUpdates {
     if ($fontStamps.Count -gt 0) {
         $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
         $latest  = Get-LatestGitTag -Repo 'ryanoasis/nerd-fonts'
-        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'triple-edit: config.toml [vars] nerd_font_version + scripts/lib/font.sh + install-nerd-fonts.ps1 (see CLAUDE.md)'
+        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'dual-edit: config.owned.toml github:ryanoasis/nerd-fonts + install-nerd-fonts.ps1 (see CLAUDE.md)'
     } else {
         Write-Warn "Nerd Fonts not stamped — re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
     }

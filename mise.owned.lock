@@ -56,6 +56,24 @@ url = "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026
 url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/566633367"
 provenance = "github-attestations"
 
+[[tools."github:ryanoasis/nerd-fonts"]]
+version = "3.5.1"
+backend = "github:ryanoasis/nerd-fonts"
+specifiers = ["3.5.1"]
+
+[tools."github:ryanoasis/nerd-fonts".options]
+asset_pattern = "JetBrainsMono.tar.xz"
+
+[tools."github:ryanoasis/nerd-fonts"."platforms.linux-x64"]
+checksum = "sha256:04d5e8f903693f9dd13e16f867e994834e681eb3c72c0d337a770dcda09010cf"
+url = "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.tar.xz"
+url_api = "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/assets/523475208"
+
+[tools."github:ryanoasis/nerd-fonts"."platforms.windows-x64"]
+checksum = "sha256:04d5e8f903693f9dd13e16f867e994834e681eb3c72c0d337a770dcda09010cf"
+url = "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.tar.xz"
+url_api = "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/assets/523475208"
+
 [[tools.go]]
 version = "1.27.1"
 backend = "core:go"

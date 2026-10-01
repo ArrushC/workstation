@@ -89,7 +89,7 @@ _ps1_drive_ref_hits() {
 
 check_version_pins() {
   hdr "version-pin dual/triple-edits"
-  local v v2 ref ps_v font_re font_has
+  local v v2 ref ps_v
 
   if [ -z "$PY" ]; then
     note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
@@ -161,18 +161,13 @@ check_version_pins() {
       bad "python-env drift: config.toml-vars.python_version='$v' config.toml-tools.python='$v2' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.toml vars.nerd_font_version)
+    v=$(tomlval config.owned.toml 'tools."github:ryanoasis/nerd-fonts"')
     ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
       grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    # font.sh pins the SHA per version in a `case "$VERSION"` block; the runtime
-    # looks it up BY VALUE, so verify an arm for $v EXISTS (position-independent)
-    # — appending a new arm on a bump (as font.sh instructs) must still pass.
-    font_re="^[[:space:]]*${v//./\\.}\\)[[:space:]]*EXPECT_SHA"
-    if grep -qE "$font_re" scripts/lib/font.sh; then font_has=yes; else font_has=no; fi
-    if [ -n "$v" ] && [ "$v" = "$ps_v" ] && [ "$font_has" = yes ]; then
-      ok "jetbrains-mono nerd @ $v  (config.toml [vars] == install-nerd-fonts.ps1; scripts/lib/font.sh SHA arm present)"
+    if [ -n "$v" ] && [ "$v" = "$ps_v" ]; then
+      ok "jetbrains-mono nerd @ $v  (config.owned.toml == install-nerd-fonts.ps1)"
     else
-      bad "jetbrains-mono nerd drift: config.toml-vars.nerd_font_version='$v' install-nerd-fonts.ps1='$ps_v' font.sh-SHA-arm=$font_has"
+      bad "jetbrains-mono nerd drift: config.owned.toml='$v' install-nerd-fonts.ps1='$ps_v'"
     fi
   fi
 
@@ -511,7 +506,7 @@ PY
       fi
     done
     local vk vars_bad=0
-    for vk in python_version nerd_font_version vcpkg_version zjstatus_zellij_floor; do
+    for vk in python_version vcpkg_version zjstatus_zellij_floor; do
       if "$PY" - "$vk" <<'PY'
 import sys, tomllib
 with open("config.toml", "rb") as fh:

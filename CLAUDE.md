@@ -73,7 +73,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - No `[bootstrap.linux.firewall]` table: it makes `mise bootstrap plan`/`status` re-exec with sudo,
   which breaks `mise run health`. No `[bootstrap.user] login_shell` either: it needs `chsh`.
   `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`.
-- `[vars]` pins (`python_version`, `nerd_font_version`, `vcpkg_version`, `zjstatus_zellij_floor`) reach
+- `[vars]` pins (`python_version`, `vcpkg_version`, `zjstatus_zellij_floor`) reach
   tasks through `#MISE env={X="{{ vars.x }}"}`.
 - Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe in
   `scripts/bump-versions.sh` and `docs/claude/verification.md`).
@@ -184,7 +184,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - **Values recorded in several places (checked by `check_version_pins` and friends):**
   - mise: `bootstrap.sh`, `bootstrap.ps1`, `min_version`
   - python: `vars`, `tools.python`, `$PythonEnvVersion`
-  - Nerd Font: `vars`, the `font.sh` checksum case, `install-nerd-fonts.ps1`
+  - Nerd Font: `config.owned.toml` tool ↔ `install-nerd-fonts.ps1`
   - jq, gh, helix, opencode, omp and the DevToys CLI: `config*.toml` ↔ `$PortableTools`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5

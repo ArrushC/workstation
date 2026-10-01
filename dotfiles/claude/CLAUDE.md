@@ -155,6 +155,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lua-language-server` 3.19.1
 - `basedpyright` 1.40.1
 - `ccstatusline` 2.2.30
+- `nerd-fonts` 3.5.1
 - `herdr` 0.9.1
 - `opencode` 1.18.32
 - `oh-my-pi` 18.3.4
@@ -163,7 +164,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Host pins (config.toml [vars])
 - `python-env` 3.14.7
-- `nerd-fonts` 3.5.1
 - `vcpkg` 2026.07.29
 - `claude` latest
 

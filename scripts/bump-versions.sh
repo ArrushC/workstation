@@ -95,7 +95,9 @@ exit_code=0
 #    (duckdb/pydantic-core wheels in particular), and it's coupled to
 #    UV_VERSION the same way (uv resolves interpreters from its own bundled
 #    metadata, so a new CPython patch can need a newer uv first).
-EXCLUDE="github:dj95/zjstatus http:ncdu python"
+# github:ryanoasis/nerd-fonts: the Windows half is still pinned in
+#    install-nerd-fonts.ps1 until PR 4, so it is a dual-edit pin: bumped by hand.
+EXCLUDE="github:dj95/zjstatus http:ncdu python github:ryanoasis/nerd-fonts"
 # Coupled pins bumped by dedicated code instead of EXCLUDE. check_bumper_exclude
 # requires every dual-edit/coupled pin to be in EXCLUDE, PS1_NAME, or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here
@@ -474,20 +476,18 @@ fi
 
 # -----------------------------------------------------------------------------
 # Layer 2: config.toml [vars] host pins — vcpkg_version bumps
-# automatically; python_version + nerd_font_version (EXCLUDE_VARS) are
-# dual/triple-edit pins, reported only, never auto-edited. Drift is checked
+# automatically; python_version (EXCLUDE_VARS) is a
+# dual/triple-edit pin, reported only, never auto-edited. Drift is checked
 # via git ls-remote against the SAME pins
 # tasks/check-updates reports; claude-cli is a rolling `latest` pin outside
 # [vars] (no bump path), so isn't checked here. ZJSTATUS_ZELLIJ_FLOOR is a
 # coupling floor, not a pin, so it never reaches this path either.
 # -----------------------------------------------------------------------------
 #
-# nerd_font_version dual/triple-edits scripts/install-nerd-fonts.ps1 + the SHA
-# case arm in scripts/lib/font.sh (a bump needs a SHA recompute). python_version
-# is the same three-way pin described in the mise EXCLUDE comment above
+# python_version is the three-way pin described in the mise EXCLUDE comment above
 # (config.toml [vars] is one of its three edit points) and needs the same
 # wheel-coverage check before bumping.
-EXCLUDE_VARS="nerd_font_version python_version"
+EXCLUDE_VARS="python_version"
 
 # config.toml [vars] key -> its current string value (a plain `key = "value"`
 # line — the same shape check-invariants.sh's tomlval reads via tomllib; grep
@@ -499,7 +499,6 @@ varval() {
 # check-updates spec name -> its config.toml [vars] key.
 declare -A VARS_KEY=(
   ["python-env"]=python_version
-  ["nerd-fonts"]=nerd_font_version
   ["vcpkg"]=vcpkg_version
 )
 
@@ -521,7 +520,6 @@ vars_updates() {
     fi
   done <<EOF2
 python-env|$(varval python_version)|python/cpython|v
-nerd-fonts|$(varval nerd_font_version)|ryanoasis/nerd-fonts|v
 vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|
 EOF2
 }
