@@ -31,7 +31,7 @@ gh = "2.101.0"
 uv = "0.12.19"
 # python: interpreter for the dependency-locked pypi: tools (without it mise
 # falls back to the system 3.9 and glances/harlequin refuse to install) and
-# for python-env's venv. Same pin as $PythonEnvVersion in bootstrap.ps1. It shadows
+# for python-env's venv (tasks/python-env; bootstrap.ps1 on Windows). It shadows
 # `python3` in mise-activated shells; the system interpreter stays /usr/bin/python3.
 python = "3.14.7"
 

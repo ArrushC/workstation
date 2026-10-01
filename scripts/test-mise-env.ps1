@@ -155,7 +155,7 @@ try {
             (Join-Path $script:WsBin 'textual.cmd'),
             (Join-Path $script:WsRoot 'mise\bin\mise.exe'),
             (Join-Path $script:WsStamps 'mise.2026.9.9.stamp'),
-            (Join-Path $script:WsStamps 'python-env.3.14.7.abcd1234.stamp'),
+            (Join-Path $script:WsStamps 'python-env.stamp'),
             (Join-Path $script:WsStamps 'wslconfig.abcd1234.stamp'),
             (Join-Path $script:WsStamps 'node-postinstall.0123456789abcdef.stamp')
         )

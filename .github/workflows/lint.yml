@@ -89,6 +89,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-winget-apps.ps1
+      - name: Test python-env + Nerd Font steps (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-python-fonts.ps1
+      - name: Test python-env + Nerd Font steps (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-python-fonts.ps1
   templates:
     runs-on: ubuntu-latest
     steps:

@@ -28,7 +28,6 @@ print(v if isinstance(v,str) else "")' 2>/dev/null
 f="$(hookfield '.tool_input.file_path')"
 [ -n "$f" ] || exit 0
 norm="${f//\\//}"
-base="${norm##*/}"
 
 msg=""
 case "$norm" in
@@ -50,22 +49,12 @@ case "$norm" in
 # etc. (both end in "/config.toml").
 */dotfiles/*) ;;
 */config.toml)
-  msg="config.toml pins: min_version triple-edits MISE_VERSION in bootstrap.sh and \$MiseVersion in bootstrap.ps1; tools.python pairs with \$PythonEnvVersion in bootstrap.ps1; the github:ryanoasis/nerd-fonts pin pairs with \$Version in scripts/install-nerd-fonts.ps1 (both two-way until PR 4)."
+  msg="config.toml pins: min_version triple-edits MISE_VERSION in bootstrap.sh and \$MiseVersion in bootstrap.ps1."
   ;;
 */config.linux.toml | */config.owned.toml)
   msg="Tool pins changed. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
   ;;
 esac
-if [ -z "$msg" ]; then
-  case "$base" in
-  python-env.sh)
-    msg="Parity pair: python-env.sh (PY_LIBS list) mirrors Invoke-PythonEnv in bootstrap.ps1 (\$PythonLibs). Change both in the same commit. See CLAUDE.md."
-    ;;
-  bootstrap.ps1)
-    msg="If you touched Invoke-PythonEnv (the \$PythonLibs list), mirror it in scripts/lib/python-env.sh (PY_LIBS). Change both in the same commit. See CLAUDE.md."
-    ;;
-  esac
-fi
 [ -n "$msg" ] || exit 0
 
 if command -v jq >/dev/null 2>&1; then

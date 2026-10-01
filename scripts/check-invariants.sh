@@ -80,7 +80,7 @@ _ps1_drive_ref_hits() {
 
 check_version_pins() {
   hdr "version-pin dual/triple-edits"
-  local v v2 ref ps_v
+  local v v2 ref
 
   if [ -z "$PY" ]; then
     note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
@@ -92,24 +92,6 @@ check_version_pins() {
       ok "mise @ $v  (bootstrap.sh == bootstrap.ps1 \$MiseVersion == config.toml min_version)"
     else
       bad "mise drift: bootstrap.sh='$v' bootstrap.ps1-\$MiseVersion='$ref' config.toml-min_version='$v2'"
-    fi
-
-    v=$(tomlval config.toml tools.python)
-    ref=$(grep -oE '^\$PythonEnvVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 |
-      grep -oE '[0-9][0-9.]+' | head -1)
-    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
-      ok "python @ $v  (config.toml tools.python == bootstrap.ps1 \$PythonEnvVersion)"
-    else
-      bad "python drift: config.toml-tools.python='$v' bootstrap.ps1='$ref'"
-    fi
-
-    v=$(tomlval config.owned.toml 'tools."github:ryanoasis/nerd-fonts"')
-    ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
-      grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    if [ -n "$v" ] && [ "$v" = "$ps_v" ]; then
-      ok "jetbrains-mono nerd @ $v  (config.owned.toml == install-nerd-fonts.ps1)"
-    else
-      bad "jetbrains-mono nerd drift: config.owned.toml='$v' install-nerd-fonts.ps1='$ps_v'"
     fi
   fi
 
@@ -1007,41 +989,6 @@ check_bootstrap_mode() {
   fi
 }
 
-# --- python-env lib-list parity ----------------------------------------------
-# The blessed-env library list is defined twice: scripts/python-env.txt (one
-# lib per line, # comments) and $PythonLibs in bootstrap.ps1 (a one-line array
-# by contract). Order-insensitive compare (sort) — content is the contract.
-check_python_env_parity() {
-  hdr "python-env lib-list parity (python-env.txt == bootstrap.ps1)"
-  local sh_libs ps_libs
-  sh_libs=$(grep -vE '^[[:space:]]*(#|$)' scripts/python-env.txt | sort)
-  ps_libs=$(grep -oE '^\$PythonLibs *= *@\([^)]*\)' bootstrap.ps1 |
-    sed 's/.*@(//; s/)$//' | tr -d '",' | tr ' ' '\n' | grep -v '^$' | sort)
-  if [ -n "$sh_libs" ] && [ "$sh_libs" = "$ps_libs" ]; then
-    ok "$(printf '%s\n' "$sh_libs" | wc -l) libs match"
-  else
-    bad "lib-list drift (<:python-env.txt  >:bootstrap.ps1):"
-    diff <(printf '%s\n' "$sh_libs") <(printf '%s\n' "$ps_libs") | sed 's/^/       /'
-  fi
-}
-
-check_curl_helper_parity() {
-  hdr "curl helper parity (Invoke-CurlRequest: bootstrap.ps1 == install-nerd-fonts.ps1)"
-  local a b
-  a=$(awk '/^function Invoke-CurlRequest \{/,/^\}/' bootstrap.ps1)
-  b=$(awk '/^function Invoke-CurlRequest \{/,/^\}/' scripts/install-nerd-fonts.ps1)
-  if [ -z "$a" ]; then
-    bad "Invoke-CurlRequest not found in bootstrap.ps1"
-  elif [ -z "$b" ]; then
-    bad "Invoke-CurlRequest not found in scripts/install-nerd-fonts.ps1"
-  elif [ "$a" = "$b" ]; then
-    ok "$(printf '%s\n' "$a" | wc -l)-line helper is byte-identical in both scripts"
-  else
-    bad "Invoke-CurlRequest drift (<:bootstrap.ps1  >:install-nerd-fonts.ps1):"
-    diff <(printf '%s\n' "$a") <(printf '%s\n' "$b") | sed 's/^/       /'
-  fi
-}
-
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
@@ -1319,8 +1266,6 @@ check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling
 check_mise_install_lib
 check_bootstrap_mode
-check_python_env_parity
-check_curl_helper_parity
 check_shellcheck
 check_shfmt
 check_gitleaks

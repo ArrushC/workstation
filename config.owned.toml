@@ -12,7 +12,7 @@ go = "1.27.1"
 lua-language-server = "3.19.1"
 "pypi:basedpyright" = "1.40.1"
 "npm:ccstatusline" = "2.2.30"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
-"github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font: tasks/fonts (Linux) copies its TTFs; Windows still pins it in scripts/install-nerd-fonts.ps1 until PR 4
+"github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font, the only pin: tasks/fonts (Linux) and bootstrap.ps1 (Windows, via scripts/install-nerd-fonts.ps1) install its TTFs
 herdr = { version = "0.9.1", os = ["linux"] }
 opencode = "1.18.32"
 "github:can1357/oh-my-pi" = "18.3.4"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)

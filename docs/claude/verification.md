@@ -33,7 +33,7 @@
   prints `active`.
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
   A second run prints "up to date"; `mise run python-env --rebuild` forces an upgrade. The env is built on
-  `mise where python`; library-list parity of `scripts/python-env.txt` with `bootstrap.ps1` is checked by `check-invariants.sh`.
+  `mise where python`. Windows' `Invoke-PythonEnv` reads the same `scripts/python-env.txt` (`scripts/test-python-fonts.ps1`).
 - Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
   WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
   `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.

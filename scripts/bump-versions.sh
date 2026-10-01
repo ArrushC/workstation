@@ -78,15 +78,11 @@ exit_code=0
 #    only SOME releases (2.9.1 has one; 2.9.2 returns 404), so a bump must
 #    be verified by hand against the download URL before landing or it
 #    404s the install.
-#  - python is a two-way pin (config.toml tools.python == bootstrap.ps1
-#    $PythonEnvVersion, asserted by check-invariants.sh) that ALSO needs a
-#    wheel-coverage check before bumping — the dependency-locked pypi: tools
-#    (basedpyright, glances, asciinema, harlequin) and python-env's libraries
-#    can lag a brand-new CPython release (duckdb/pydantic-core wheels in
-#    particular).
-# github:ryanoasis/nerd-fonts: the Windows half is still pinned in
-#    install-nerd-fonts.ps1 until PR 4, so it is a dual-edit pin: bumped by hand.
-EXCLUDE="github:dj95/zjstatus http:ncdu python github:ryanoasis/nerd-fonts"
+#  - python needs a wheel-coverage check before bumping — the
+#    dependency-locked pypi: tools (basedpyright, glances, asciinema,
+#    harlequin) and python-env's libraries (built on it on both OSes) can lag
+#    a brand-new CPython release (duckdb/pydantic-core wheels in particular).
+EXCLUDE="github:dj95/zjstatus http:ncdu python"
 # Coupled pins bumped by dedicated code instead of EXCLUDE. check_bumper_exclude
 # requires every dual-edit/coupled pin to be in EXCLUDE or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here

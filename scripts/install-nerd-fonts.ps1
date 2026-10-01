@@ -1,10 +1,13 @@
 ﻿#Requires -Version 5.1
 # =============================================================================
-# install-nerd-fonts.ps1 — install JetBrainsMono Nerd Font Mono per-user.
+# install-nerd-fonts.ps1 — register JetBrainsMono Nerd Font Mono for this user.
 #
-# Invoked by bootstrap.ps1 (NOT directly). Downloads JetBrainsMono.zip from
-# ryanoasis/nerd-fonts, verifies its SHA256 against the hard-coded pin below,
-# extracts the six Mono variants, copies them to %LOCALAPPDATA%\Microsoft\Windows\Fonts\,
+# Invoked by bootstrap.ps1 (Invoke-InstallNerdFonts), NOT directly, with
+# -SourceDir = `mise where github:ryanoasis/nerd-fonts`: mise downloads and
+# checks the font, whose pin lives only in config.owned.toml (tasks/fonts
+# uses the same tool on Linux). This script copies the six Mono variants from
+# there to %LOCALAPPDATA%\Microsoft\Windows\Fonts\ (only the ones that differ, so
+# an unchanged font already loaded in the session is never rewritten),
 # and registers them (by FULL PATH — bare filenames resolve only against
 # C:\Windows\Fonts, so an HKCU bare-name entry never loads at logon) in
 # HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts
@@ -14,110 +17,62 @@
 # immediately. Because Windows does NOT reliably load HKCU per-user fonts into the
 # system font collection at logon (so the font can vanish after a reboot), it also
 # registers a per-logon scheduled task (Register-FontLogonTask) that re-runs that
-# activation at every sign-in — the durable, admin-free guarantee. Honours
-# $env:GITHUB_TOKEN (Authorization: Bearer header) to avoid the 60-req/hour
-# unauthenticated GitHub rate limit.
+# activation at every sign-in — the durable, admin-free guarantee.
 #
-# Idempotency: a no-op fast path returns early if a stamp file exists at
-#   %LOCALAPPDATA%\workstation\nerd-fonts.<VERSION>.stamp
-# AND all six TTFs are present AND all six HKCU registrations exist with
-# full-path values (it still re-runs the cheap session activation + re-registers
-# the per-logon task first, so a host provisioned by an older build — registered
-# but never activated, or registered by bare filename — goes live without a
-# logout). Otherwise stale installs are swept
-# (file + registry) before depositing the new set, which also rewrites the
-# bare-filename registrations left by older builds of this script as full paths.
+# Idempotency: a no-op fast path returns early if the stamp file
+#   %LOCALAPPDATA%\workstation\nerd-fonts.stamp
+# holds the SHA256s of the six source TTFs AND all six TTFs are present AND all
+# six HKCU registrations exist with full-path values (it still re-runs the cheap
+# session activation + re-registers the per-logon task first, so a host
+# provisioned by an older build — registered but never activated, or registered
+# by bare filename — goes live without a logout). Otherwise TTFs of this family
+# with other names are swept, and the HKCU entries rewritten, which also turns
+# the bare-filename registrations left by older builds into full paths.
 #
-# Hard-fails on download or SHA256 issues (bootstrap.ps1 aborts). Soft-fails
-# on registry-write failure (Windows Terminal/Zed/VS Code may not see the font until
-# manual registration via Settings → Personalization → Fonts).
+# Hard-fails when a source TTF is missing (bootstrap.ps1 warns and goes on).
+# Soft-fails on registry-write failure (Windows Terminal/Zed/VS Code may not see
+# the font until manual registration via Settings → Personalization → Fonts).
 #
-# Version + SHA256 are pinned in the script body — must mirror
-# the github:ryanoasis/nerd-fonts pin in config.owned.toml (see CLAUDE.md
-# dual-edit invariant).
+# -NoRegister is for scripts/test-python-fonts.ps1 only: copy and stamp, with no
+# HKCU read or write, no session activation and no logon task.
 # =============================================================================
 
 [CmdletBinding()]
-param()
+param(
+    [Parameter(Mandatory)][string]$SourceDir,
+    [switch]$NoRegister
+)
 
 $ErrorActionPreference = 'Stop'
-
-$Version = '3.5.1'
-$Sha256  = 'fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e'
 
 $FontFamily = 'JetBrainsMonoNerdFontMono'
 $FontDir    = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
 $StampDir   = Join-Path $env:LOCALAPPDATA 'workstation'
-$StampFile  = Join-Path $StampDir "nerd-fonts.$Version.stamp"
+$StampFile  = Join-Path $StampDir 'nerd-fonts.stamp'
 $RegPath    = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts'
 
 $Variants  = @('Regular', 'Italic', 'Bold', 'BoldItalic', 'Medium', 'MediumItalic')
 $FontFiles = $Variants | ForEach-Object { "$FontFamily-$_.ttf" }
 
-# Kept self-contained: bootstrap also runs from memory before the repo exists.
-# The font script carries the same helper for its independent execution context.
-function Invoke-CurlRequest {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)][string]$Uri,
-        [hashtable]$Headers = @{},
-        [string]$OutFile
-    )
-
-    # Get-Command lists EVERY curl.exe on PATH (System32 + Git's mingw64\bin is
-    # the everyday case) - take the first, i.e. the one a bare `curl.exe` runs.
-    $curl = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $curl) {
-        throw 'curl.exe is required on PATH. Restore the Windows system curl or install it from https://curl.se/windows/ and reopen your shell.'
+# The stamp key: the six source TTFs' SHA256s. A missing one fails here,
+# before anything installed is touched.
+$SrcHash = @{}
+foreach ($f in $FontFiles) {
+    $p = Join-Path $SourceDir $f
+    if (-not (Test-Path -LiteralPath $p)) {
+        throw "$f not found in $SourceDir (mise's github:ryanoasis/nerd-fonts install; try: mise install github:ryanoasis/nerd-fonts)"
     }
-
-    $tempFile = [System.IO.Path]::GetTempFileName()
-    $headerFile = $null
-    try {
-        # --speed-limit/--speed-time: a connected-but-stalled transfer aborts
-        # (exit 28, which --retry treats as transient) instead of hanging forever.
-        $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location',
-            '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30',
-            '--speed-limit', '1', '--speed-time', '60',
-            '--output', $tempFile)
-        if ($Headers.Count -gt 0) {
-            # Headers travel via a file, never argv: a PAT on a command line is
-            # visible to process auditing. One header per line; no BOM, or curl
-            # would send it as part of the first header name.
-            $headerFile = [System.IO.Path]::GetTempFileName()
-            $headerLines = @(foreach ($key in $Headers.Keys) { '{0}: {1}' -f $key, $Headers[$key] })
-            [System.IO.File]::WriteAllLines($headerFile, [string[]]$headerLines, [System.Text.UTF8Encoding]::new($false))
-            $curlArgs += @('--header', "@$headerFile")
-        }
-        $curlArgs += @('--url', $Uri)
-        # PS 5.1 can turn redirected native stderr into PowerShell errors;
-        # PS 7 can optionally throw on native exit codes. Handle both ourselves.
-        $ErrorActionPreference = 'Continue'
-        $PSNativeCommandUseErrorActionPreference = $false
-        $curlOutput = & $curl.Source @curlArgs 2>&1
-        $curlExitCode = $LASTEXITCODE
-        if ($curlExitCode -ne 0) {
-            # --silent --show-error leaves only curl's own diagnostic on stderr
-            # (e.g. "curl: (22) The requested URL returned error: 404"); surface it.
-            $detail = ((@($curlOutput) | ForEach-Object { "$_".Trim() }) -join ' ').Trim()
-            throw "curl.exe request failed (exit $curlExitCode): $Uri [$detail]"
-        }
-        if ($OutFile) {
-            Move-Item -LiteralPath $tempFile -Destination $OutFile -Force -ErrorAction Stop
-        } else {
-            [System.IO.File]::ReadAllText($tempFile, [System.Text.Encoding]::UTF8)
-        }
-    } finally {
-        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
-        if ($headerFile) { Remove-Item -LiteralPath $headerFile -Force -ErrorAction SilentlyContinue }
-    }
+    $SrcHash[$f] = (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLower()
 }
+$Key = ($FontFiles | ForEach-Object { $SrcHash[$_] }) -join ' '
 
 function Test-Installed {
     if (-not (Test-Path $StampFile)) { return $false }
+    if ([System.IO.File]::ReadAllText($StampFile).Trim() -ne $Key) { return $false }
     foreach ($f in $FontFiles) {
         if (-not (Test-Path (Join-Path $FontDir $f))) { return $false }
     }
+    if ($NoRegister) { return $true }
     $reg = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
     if (-not $reg) { return $false }
     foreach ($f in $FontFiles) {
@@ -223,101 +178,79 @@ $res = [IntPtr]::Zero
 }
 
 if (Test-Installed) {
-    Invoke-FontActivation
-    Register-FontLogonTask
-    Write-Host "  nerd-fonts already installed (v$Version)"
+    if (-not $NoRegister) {
+        Invoke-FontActivation
+        Register-FontLogonTask
+    }
+    Write-Host "  JetBrainsMono Nerd Font Mono already installed"
     return
 }
 
-Write-Host "==> Installing JetBrainsMono Nerd Font Mono v$Version"
-
-# Sweep stale install (files + HKCU entries) before depositing the new set.
-# Guards against upstream renaming TTF files between releases.
-if (Test-Path $FontDir) {
-    Get-ChildItem -Path $FontDir -Filter "$FontFamily-*.ttf" -ErrorAction SilentlyContinue |
-        ForEach-Object { Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue }
-}
-$reg = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
-if ($reg) {
-    $reg.PSObject.Properties |
-        Where-Object { $_.Name -like "$FontFamily-*" } |
-        ForEach-Object {
-            Remove-ItemProperty -Path $RegPath -Name $_.Name -ErrorAction SilentlyContinue
-        }
-}
-
-# Download with optional GitHub auth.
-$Url     = "https://github.com/ryanoasis/nerd-fonts/releases/download/v$Version/JetBrainsMono.zip"
-$Headers = @{}
-if ($env:GITHUB_TOKEN) {
-    $Headers['Authorization'] = "Bearer $env:GITHUB_TOKEN"
-}
-
-$TmpDir = Join-Path $env:TEMP "nerd-fonts-$Version"
-if (Test-Path $TmpDir) { Remove-Item -Recurse -Force $TmpDir }
-New-Item -ItemType Directory -Path $TmpDir | Out-Null
-
-$Archive = Join-Path $TmpDir 'JetBrainsMono.zip'
-Write-Host "  downloading $Url"
-Invoke-CurlRequest -Uri $Url -OutFile $Archive -Headers $Headers
-
-# Verify SHA256.
-$Actual = (Get-FileHash -Algorithm SHA256 -Path $Archive).Hash.ToLower()
-if ($Actual -ne $Sha256.ToLower()) {
-    throw "SHA256 mismatch for v${Version}: expected $Sha256, got $Actual"
-}
-
-# Extract.
-$Extract = Join-Path $TmpDir 'extract'
-Expand-Archive -Path $Archive -DestinationPath $Extract -Force
-
-# Ensure font + stamp dirs exist.
+Write-Host "==> Installing JetBrainsMono Nerd Font Mono from $SourceDir"
 New-Item -ItemType Directory -Path $FontDir  -Force | Out-Null
 New-Item -ItemType Directory -Path $StampDir -Force | Out-Null
 
-# Copy the six Mono variants.
+# Sweep TTFs of this family that are not the six (upstream renamed one between
+# releases), and the HKCU entries, which are all rewritten below.
+Get-ChildItem -Path $FontDir -Filter "$FontFamily-*.ttf" -ErrorAction SilentlyContinue |
+    Where-Object { $FontFiles -notcontains $_.Name } |
+    ForEach-Object { Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue }
+if (-not $NoRegister) {
+    $reg = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
+    if ($reg) {
+        $reg.PSObject.Properties |
+            Where-Object { $_.Name -like "$FontFamily-*" } |
+            ForEach-Object {
+                Remove-ItemProperty -Path $RegPath -Name $_.Name -ErrorAction SilentlyContinue
+            }
+    }
+}
+
+# Copy each variant that differs. An identical one stays untouched: a font
+# loaded in the session (AddFontResourceW) can't be overwritten.
 $Copied = 0
 foreach ($f in $FontFiles) {
-    $src = Get-ChildItem -Path $Extract -Filter $f -Recurse -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if (-not $src) { throw "Expected $f not found in extracted archive" }
-    Copy-Item -Path $src.FullName -Destination (Join-Path $FontDir $f) -Force
+    $dest = Join-Path $FontDir $f
+    if ((Test-Path -LiteralPath $dest) -and
+        ((Get-FileHash -Algorithm SHA256 -LiteralPath $dest).Hash.ToLower() -eq $SrcHash[$f])) { continue }
+    Copy-Item -LiteralPath (Join-Path $SourceDir $f) -Destination $dest -Force
     $Copied++
 }
-if ($Copied -ne 6) { throw "Copied $Copied of 6 expected TTF files" }
 
 # Register in HKCU (per-user). Soft-fail per-file: if any one registration is
 # blocked, continue with the rest and flag at the end.
 $RegistrationFailed = $false
-foreach ($f in $FontFiles) {
-    $regName = "$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"
-    try {
-        # FULL PATH, not the bare filename — see Test-Installed for why HKCU
-        # per-user fonts won't load at logon when registered by bare name.
-        New-ItemProperty -Path $RegPath -Name $regName -Value (Join-Path $FontDir $f) `
-            -PropertyType String -Force | Out-Null
-    } catch {
-        Write-Warning "Failed to register $regName in HKCU: $_"
-        $RegistrationFailed = $true
+if (-not $NoRegister) {
+    foreach ($f in $FontFiles) {
+        $regName = "$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"
+        try {
+            # FULL PATH, not the bare filename — see Test-Installed for why HKCU
+            # per-user fonts won't load at logon when registered by bare name.
+            New-ItemProperty -Path $RegPath -Name $regName -Value (Join-Path $FontDir $f) `
+                -PropertyType String -Force | Out-Null
+        } catch {
+            Write-Warning "Failed to register $regName in HKCU: $_"
+            $RegistrationFailed = $true
+        }
     }
 }
 
-# Cleanup temp.
-Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
-
-# Stamp.
-Set-Content -Path $StampFile -Value $Version -Encoding ASCII
+# Stamp (the older builds' nerd-fonts.<version>.stamp files go too).
+Get-ChildItem -Path $StampDir -Filter 'nerd-fonts*.stamp' -ErrorAction SilentlyContinue | Remove-Item -Force
+[System.IO.File]::WriteAllText($StampFile, $Key)
 
 # Activate the new faces in the current session (no logout needed — see the
 # Invoke-FontActivation definition above) and register the per-logon re-activation
 # task so the font survives reboots.
-Invoke-FontActivation
-Register-FontLogonTask
+if (-not $NoRegister) {
+    Invoke-FontActivation
+    Register-FontLogonTask
+}
 
 if ($RegistrationFailed) {
     Write-Warning ("Some HKCU registrations failed — Windows Terminal/Zed/VS Code may not " +
         "see the font until manual registration (Settings → Personalization " +
         "→ Fonts).")
 } else {
-    Write-Host "  installed + activated 6 Mono variants ($FontDir + HKCU)"
+    Write-Host "  installed + activated 6 Mono variants ($Copied copied; $FontDir + HKCU)"
 }

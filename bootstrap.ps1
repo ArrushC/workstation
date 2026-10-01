@@ -86,12 +86,7 @@ $MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise
 $MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
 $MiseEnvTokens = @("windows", "owned")
 
-# --- Blessed Python scripting env (Invoke-PythonEnv) -------------------------
-# DUAL-EDIT: $PythonEnvVersion pairs with tools.python in config.toml;
-# $PythonLibs pairs with PY_LIBS in scripts/lib/python-env.sh. KEEP EACH ON ONE
-# LINE — scripts/check-invariants.sh parses both with single-line greps.
-$PythonEnvVersion = "3.14.7"
-$PythonLibs = @("textual", "textual-dev", "click", "rich", "httpx", "pydantic", "typer", "polars", "duckdb")
+# Blessed Python scripting env (Invoke-PythonEnv): mise's python + scripts\python-env.txt.
 $WsPythonEnv = Join-Path $WsRoot "python-env"
 
 # GUI apps, installed through winget and then self-updating (or `winget upgrade`).
@@ -1400,57 +1395,46 @@ function Invoke-InstallClaudeCode {
     }
 }
 
-# Get-PythonEnvStamp — the exact stamp path Invoke-PythonEnv writes on
-# success (pin + a hash of the lib list). One helper owns the path so the check
-# can never drift onto a stale stamp left behind
-# by an older pin.
-function Get-PythonEnvStamp {
-    $libBytes = [System.Text.Encoding]::UTF8.GetBytes(($PythonLibs -join ' '))
-    $libStream = New-Object System.IO.MemoryStream (,$libBytes)
-    $libHash = (Get-FileHash -InputStream $libStream -Algorithm SHA256).Hash.Substring(0, 8).ToLower()
-    return Join-Path $WsStamps "python-env.$PythonEnvVersion.$libHash.stamp"
-}
-
 # The blessed uv-built venv (Windows half of the Linux `python-env` mise
-# task). uv (mise-managed, via `mise which uv`) installs the pinned CPython
-# and rebuilds the env from scratch; wpy/textual/typer .cmd shims land in
-# $WsBin. Stamp bakes the pin + lib list, so a bump rebuilds on the next
-# bootstrap (a lib upgrade alone is "delete the stamp, re-run").
+# task): uv (`mise which uv`) builds it from scratch on mise's python
+# (`mise where python`, tools.python in config.toml) with the libraries in
+# scripts\python-env.txt; wpy/textual/typer .cmd launchers land in $WsBin.
+# The stamp holds the interpreter path + the list's SHA256, so a python bump
+# or a list edit rebuilds on the next bootstrap (a library upgrade alone is
+# "delete the stamp, re-run").
 function Invoke-PythonEnv {
     if ($SkipToolInstall) {
         Write-Log "Python env skipped (-SkipToolInstall)"
         return
     }
-    # uv is a mise runtime now: ask mise for the binary config.toml declares
-    # (no fixed path — mise's data dir owns the install).
+    $python = Get-MiseToolExe -Tool python -Exe python.exe
     $uvExe = $null
-    if (Get-Command mise -ErrorAction SilentlyContinue) {
+    if ($python) {
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $uvExe = (& mise which uv 2>$null | Select-Object -First 1)
-        $ErrorActionPreference = $oldEap
+        try { $out = @(& mise -C $env:USERPROFILE which uv 2>$null); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $oldEap }
+        if (($code -eq 0) -and ($out.Count -gt 0)) { $uvExe = "$($out[0])".Trim() }
     }
-    if (-not $uvExe -or -not (Test-Path $uvExe)) {
-        Write-Warn "Python env skipped — uv not resolvable via 'mise which uv' (mise runtimes step failed?)"
+    $libsFile = Join-Path $RepoPath "scripts\python-env.txt"
+    if (-not $python -or -not $uvExe -or -not (Test-Path -LiteralPath $libsFile)) {
+        Write-Warn "Python env skipped — needs mise's python + uv ('mise where python', 'mise which uv': did the tools phase fail?) and $libsFile"
         return
     }
-
-    # Stamp bakes pin + lib list (the Linux stamp's cksum analog).
-    $stamp = Get-PythonEnvStamp
+    $libs = @(Get-Content -Encoding UTF8 -LiteralPath $libsFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+    $want = "$python $((Get-FileHash -Algorithm SHA256 -LiteralPath $libsFile).Hash.ToLower())"
+    $stamp = Join-Path $WsStamps "python-env.stamp"
     $wpyShim = Join-Path $WsBin "wpy.cmd"
-    if ((Test-Path $stamp) -and (Test-Path $wpyShim)) {
-        Write-Ok "Python env $PythonEnvVersion already built ($WsPythonEnv)"
+    if ((Test-Path $stamp) -and ([System.IO.File]::ReadAllText($stamp).Trim() -eq $want) -and (Test-Path $wpyShim)) {
+        Write-Ok "Python env already built ($WsPythonEnv on $python)"
         return
     }
 
-    Write-Log "Building Python scripting env $PythonEnvVersion ($($PythonLibs.Count) libs)..."
+    Write-Log "Building Python scripting env on $python ($($libs.Count) libs)..."
     try {
-        & $uvExe python install $PythonEnvVersion
-        if ($LASTEXITCODE -ne 0) { throw "uv python install exited $LASTEXITCODE" }
         if (Test-Path $WsPythonEnv) { Remove-Item -Recurse -Force $WsPythonEnv }
-        & $uvExe venv --python $PythonEnvVersion $WsPythonEnv
+        & $uvExe venv --python $python $WsPythonEnv
         if ($LASTEXITCODE -ne 0) { throw "uv venv exited $LASTEXITCODE" }
         $envPy = Join-Path $WsPythonEnv "Scripts\python.exe"
-        & $uvExe pip install --python $envPy --upgrade $PythonLibs
+        & $uvExe pip install --python $envPy --upgrade @libs
         if ($LASTEXITCODE -ne 0) { throw "uv pip install exited $LASTEXITCODE" }
 
         # Launcher shims — wpy calls the env python; textual/typer call the
@@ -1461,9 +1445,10 @@ function Invoke-PythonEnv {
         Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
 
         if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
-        Get-ChildItem -Path $WsStamps -Filter "python-env.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
-        New-Item -ItemType File -Force -Path $stamp | Out-Null
-        Write-Ok "Python env $PythonEnvVersion built ($WsPythonEnv; launchers: wpy, textual, typer)"
+        # Also the pre-mise python-env.<pin>.<hash>.stamp names.
+        Get-ChildItem -Path $WsStamps -Filter "python-env*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
+        [System.IO.File]::WriteAllText($stamp, $want)
+        Write-Ok "Python env built ($WsPythonEnv on $python; launchers: wpy, textual, typer)"
     } catch {
         Write-Warn "Python env build failed: $($_.Exception.Message)"
         Write-Warn "  Re-run .\bootstrap.ps1 to retry (no stamp was written)."
@@ -1472,9 +1457,11 @@ function Invoke-PythonEnv {
 
 # JetBrainsMono Nerd Font Mono, per-user. Required by dotfiles-tracked
 # configs that assume Nerd Font glyphs (starship, eza, lazygit, k9s, yazi,
-# broot, helix, ccstatusline, Claude Code TUI). Delegates to
-# scripts/install-nerd-fonts.ps1, which also registers a per-user at-logon
-# scheduled task -- HKCU per-user fonts don't reliably load at logon alone.
+# broot, helix, ccstatusline, Claude Code TUI). mise installs the font
+# (github:ryanoasis/nerd-fonts in config.owned.toml, as tasks/fonts uses on
+# Linux); scripts/install-nerd-fonts.ps1 copies its six Mono TTFs and
+# registers them, plus a per-user at-logon scheduled task -- HKCU per-user
+# fonts don't reliably load at logon alone.
 function Invoke-InstallNerdFonts {
     if ($SkipNerdFonts) {
         Write-Log "Nerd Fonts install skipped (-SkipNerdFonts)"
@@ -1486,13 +1473,20 @@ function Invoke-InstallNerdFonts {
         Write-Warn "Nerd Fonts installer not found at $InstallScript — skipping"
         return
     }
+    # `mise where github:ryanoasis/nerd-fonts`, checked to hold the Regular TTF.
+    $ttf = Get-MiseToolExe -Tool "github:ryanoasis/nerd-fonts" -Exe "JetBrainsMonoNerdFontMono-Regular.ttf"
+    if (-not $ttf) {
+        Write-Warn "Nerd Fonts skipped — 'mise where github:ryanoasis/nerd-fonts' has no JetBrainsMono Nerd Font Mono TTFs (did the tools phase fail?)"
+        return
+    }
+    $src = Split-Path -Parent $ttf
 
     try {
-        & $InstallScript
+        & $InstallScript -SourceDir $src
     } catch {
         Write-Warn "Nerd Fonts install failed: $_"
         Write-Warn "  Glyphs in starship / eza / lazygit / etc. will render as tofu."
-        Write-Warn "  Retry manually:  & '$InstallScript'"
+        Write-Warn "  Retry manually:  & '$InstallScript' -SourceDir '$src'"
     }
 }
 
@@ -1553,8 +1547,8 @@ Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notif
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
 Invoke-ClaudeSettingsMerge     # ~/.claude/settings.json seed+live+enforced jq merge
 Invoke-ClaudeSettingsLocalSeed # ~/.claude/settings.local.json seed-if-absent
-Invoke-PythonEnv          # blessed uv-built Python scripting env (wpy/textual/typer shims)
-Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono — per-user font install
+Invoke-PythonEnv          # blessed uv venv on mise's python + scripts\python-env.txt (wpy/textual/typer shims)
+Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono from mise — per-user registration + logon task
 Invoke-EnsureSshKey
 
 Write-Host ""

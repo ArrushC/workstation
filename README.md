@@ -158,8 +158,8 @@ What `bootstrap.ps1` does:
 1. Preflight: require git.
 2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`, and remove the pre-mise portable tools (their directories and User PATH entries).
 3. Install the missing GUI apps through winget (latest, sha256-checked against the winget manifest; each self-updates, so there is no pin): Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare and Zed (winget's Zed installer is machine scope but installs per-user, without admin), then SSHFS-Win (UAC). An app counts as present when an Uninstall-registry DisplayName matches (Windows Terminal: its Appx package, or `wt.exe` on PATH), so copies installed before winget, such as "DevToys Preview", are kept. An "already installed" answer from winget counts as present. Without winget (App Installer) the step warns and skips.
-4. Clone this repo to `%USERPROFILE%\.config\mise`, write `miserc.toml` (`windows,owned`; the old User `MISE_ENV` is removed) and run `mise bootstrap --only dotfiles,tools`: dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). mise's shims dir joins the User PATH; then the `wpy` Python env is built.
-5. Generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment, Nushell's starship and mise autoload files, Start Menu shortcuts, BurntToast, Claude Code (native installer, self-updating), and the Nerd Font (`scripts/install-nerd-fonts.ps1`, with a logon task that re-activates the per-user font).
+4. Clone this repo to `%USERPROFILE%\.config\mise`, write `miserc.toml` (`windows,owned`; the old User `MISE_ENV` is removed) and run `mise bootstrap --only dotfiles,tools`: dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). mise's shims dir joins the User PATH; then the `wpy` Python env is built (a uv venv on mise's python with the libraries in `scripts/python-env.txt`).
+5. Generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment, Nushell's starship and mise autoload files, Start Menu shortcuts, BurntToast, Claude Code (native installer, self-updating), and the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
 6. Prompt for an SSH key.
 7. Merge `~/.claude/settings.json` and print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
 8. Persist `GITHUB_TOKEN`, if set, into `.git/config` so `git push`/`git pull`/`wsu` authenticate.
@@ -299,7 +299,7 @@ mise bootstrap --only packages --yes   # narrow to one phase
 
 **Runtimes.** Node, Go, uv, Python, the language servers and everything else come from mise. Interactive shells see them via `mise activate`; non-interactive ones (`ssh host cmd`, IDEs) via the shims exported from `~/.zshenv` and `~/.bashrc`. `mise install <tool>` installs one, `mise uninstall <tool>` removes one.
 
-**Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built venv on mise's Python (`tools.python` in `config.toml`) with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries (listed in `scripts/python-env.txt`) track latest at build time. A `tools.python` bump rebuilds the env on the next `mise run python-env`. Rebuild to upgrade the libraries:
+**Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built venv on mise's Python (`tools.python` in `config.toml`) with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries (listed in `scripts/python-env.txt`) track latest at build time. A `tools.python` bump rebuilds the env on the next `mise run python-env`. On Windows `bootstrap.ps1` builds the same env (`%LOCALAPPDATA%\workstation\python-env`, `.cmd` launchers) and rebuilds it after a `tools.python` bump or a `python-env.txt` edit. Rebuild to upgrade the libraries:
 
 ```bash
 mise run python-env --rebuild   # runs on both modes; upgrades to latest libs
@@ -341,7 +341,7 @@ mise run bump-versions
 
 It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` previews without writing), so expect unrelated bumps in the diff. It refreshes the lockfiles for every platform the verified way (from outside the checkout through an `XDG_CONFIG_HOME` symlink, then normalising the `.mise/locks` sidecar paths). A hand-run `mise lock` inside the checkout can write sidecar refs to the wrong layout. Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
 
-**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is the Nerd Font tool until PR 4, because its Windows half is still in `install-nerd-fonts.ps1`. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
+**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
 
 **A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
 
@@ -521,7 +521,7 @@ Symptoms: starship shows boxes, eza rows show empty cells, lazygit/k9s/yazi look
 - **Linux:** `fc-list | grep -i 'jetbrainsmono nerd font mono'` should list 6 entries; if empty, `mise run fonts`, then restart shells. A WSL host says fonts are skipped: intentional, run `bootstrap.ps1` on the Windows side.
 - **Windows:** `Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts\JetBrainsMonoNerdFontMono-Regular.ttf"` should be `True`; if not, re-run `bootstrap.ps1` (idempotent). If the file exists but apps cannot find the font after a reboot, Windows did not load the HKCU per-user font at logon; re-run `bootstrap.ps1` to re-create the `WorkstationNerdFontActivate` logon task and re-activate the current session.
 - VS Code and Zed cache font lists at launch: quit and relaunch. On Windows the family name must be `JetBrainsMono NFM`, not `JetBrainsMono Nerd Font Mono` (Nerd Fonts shortens the GDI name to fit 31 characters). Restart Windows Terminal to re-enumerate fonts.
-- The `github:ryanoasis/nerd-fonts` pin in `config.owned.toml` must match `$Version` in `scripts/install-nerd-fonts.ps1`, or Linux and Windows end up on different font versions.
+- Both OSes install the font from the one `github:ryanoasis/nerd-fonts` pin in `config.owned.toml`. `mise where github:ryanoasis/nerd-fonts` must list the six `JetBrainsMonoNerdFontMono-*.ttf` files; if not, run `mise install github:ryanoasis/nerd-fonts` (on Windows from `%USERPROFILE%`), then `mise run fonts` (Linux) or `bootstrap.ps1` (Windows).
 
 ### Shell startup / a PATH-scanning command feels slow on WSL
 
@@ -567,7 +567,7 @@ mise bootstrap --only packages --yes
 
 ### wpy not found, or import textual fails in it
 
-Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows delete `%LOCALAPPDATA%\workstation\stamps\python-env.*.stamp` and re-run `.\bootstrap.ps1`.
+Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows the env is built on `mise where python` (run from `%USERPROFILE%`; it must print an install dir), so a missing `wpy` usually means the mise tools phase failed. To rebuild, delete `%LOCALAPPDATA%\workstation\stamps\python-env.stamp` and re-run `.\bootstrap.ps1`.
 
 ### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
 

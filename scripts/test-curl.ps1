@@ -28,8 +28,6 @@ function Assert-Test {
 
 $bootstrapPath = Join-Path $repoRoot 'bootstrap.ps1'
 $helper = Get-TestFunction $bootstrapPath 'Invoke-CurlRequest'
-$fontHelper = Get-TestFunction (Join-Path $repoRoot 'scripts/install-nerd-fonts.ps1') 'Invoke-CurlRequest'
-Assert-Test ($helper -ceq $fontHelper) 'Bootstrap/font HTTP helpers drifted'
 . ([scriptblock]::Create($helper))
 
 # Bind an ephemeral loopback port without HttpListener URL ACL requirements.

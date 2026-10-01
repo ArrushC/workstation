@@ -23,8 +23,7 @@ python="${1:?usage: python-env.sh <python-interpreter>}"
 env_dir="$HOME/.local/share/workstation-python"
 bin_dir="$HOME/.local/bin"
 
-# Canonical lib list: scripts/python-env.txt (bootstrap.ps1's $PythonLibs
-# mirrors it until PR 4; check-invariants.sh verifies parity).
+# The lib list: scripts/python-env.txt (bootstrap.ps1 reads it too).
 mapfile -t PY_LIBS < <(grep -vE '^[[:space:]]*(#|$)' "$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)/scripts/python-env.txt")
 
 if ! command -v uv >/dev/null 2>&1; then
