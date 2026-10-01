@@ -24,9 +24,9 @@ env_dir="$HOME/.local/share/workstation-python"
 bin_dir="$HOME/.local/bin"
 
 # The lib list: scripts/python-env.txt (bootstrap.ps1 reads it too), one name
-# per line; `#` starts a comment (whole line, or after whitespace); surrounding
-# whitespace and a CR are dropped.
-mapfile -t PY_LIBS < <(sed -E 's/(^|[[:space:]]+)#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+# per line; `#` starts a comment (whole line, or after whitespace); a UTF-8
+# BOM, surrounding whitespace and a CR are dropped.
+mapfile -t PY_LIBS < <(sed -E '1s/^\xEF\xBB\xBF//; s/(^|[[:space:]]+)#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
   "$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)/scripts/python-env.txt" | grep -v '^$')
 
 if ! command -v uv >/dev/null 2>&1; then

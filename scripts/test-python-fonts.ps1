@@ -50,18 +50,26 @@ $script:uvCalls = New-Object System.Collections.Generic.List[object]
 $script:uvExit = 0
 function uv { $script:uvCalls.Add(@($args)); $global:LASTEXITCODE = $script:uvExit }
 # The font script's registry and Task Scheduler calls, recorded in $fontCalls.
-# Get-ItemProperty answers with $fontReg; New-ItemProperty notes whether the
-# file it registers exists yet. Unqualified on purpose: called from inside
-# install-nerd-fonts.ps1, `$script:` would mean that script's scope.
+# $fontReg is the fake HKCU Fonts key (an ordered name -> value table, or
+# $null): Get-ItemProperty answers with it, New-/Remove-ItemProperty change
+# it, and New-ItemProperty notes whether the file it registers exists yet.
+# Unqualified on purpose: called from inside install-nerd-fonts.ps1,
+# `$script:` would mean that script's scope.
 $fontCalls = New-Object System.Collections.Generic.List[string]
 $fontReg = $null
 $script:noRegisterLeaks = New-Object System.Collections.Generic.List[string]
-function Get-ItemProperty { [CmdletBinding()] param($Path) $fontCalls.Add('Get-ItemProperty'); if ($fontReg) { $fontReg } }
+function Get-ItemProperty { [CmdletBinding()] param($Path) $fontCalls.Add('Get-ItemProperty'); if ($null -ne $fontReg) { [pscustomobject]$fontReg } }
 function New-ItemProperty {
     [CmdletBinding()] param($Path, $Name, $Value, $PropertyType, [switch]$Force)
     $fontCalls.Add("New-ItemProperty $Name=$Value exists=$(Test-Path -LiteralPath $Value)")
+    if ($null -ne $fontReg) { $fontReg[$Name] = $Value }
 }
-function Remove-ItemProperty { [CmdletBinding()] param($Path, $Name) $fontCalls.Add("Remove-ItemProperty $Name") }
+function Remove-ItemProperty {
+    [CmdletBinding()] param($Path, $Name)
+    $fontCalls.Add("Remove-ItemProperty $Name")
+    if ($null -ne $fontReg) { $fontReg.Remove($Name) }
+}
+function Format-Reg($Table) { (@($Table.Keys | ForEach-Object { "$_=$($Table[$_])" })) -join ' | ' }
 function Add-Type { $fontCalls.Add('Add-Type') }
 function Register-ScheduledTask { $fontCalls.Add('Register-ScheduledTask') }
 function New-ScheduledTaskAction { 'action' }
@@ -210,6 +218,17 @@ try {
         Assert-Built $py1 $canon
     }
 
+    Test-Case 'python-env: a UTF-8 BOM on python-env.txt parses to the same list, so it does not rebuild' {
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt -Force
+        Use-Python $py1
+        Invoke-Py
+        [System.IO.File]::WriteAllText($txt, (Read-Text $txt), (New-Object System.Text.UTF8Encoding $true))
+        $head = [System.IO.File]::ReadAllBytes($txt)
+        try { Invoke-Py } finally { Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt -Force }
+        Assert (($head[0] -eq 0xEF) -and ($head[1] -eq 0xBB) -and ($head[2] -eq 0xBF)) 'no BOM written'
+        Assert ($script:uvCalls.Count -eq 0) "rebuilt after adding a BOM: $(Format-UvCalls)"
+    }
+
     Test-Case 'python-env: no python from mise -> a warning; uv never runs' {
         $script:miseReply = @{ 'where python' = @{ Exit = 1 }; 'which uv' = @{ Out = 'uv'; Exit = 0 } }
         Get-ChildItem -LiteralPath $script:WsStamps | Remove-Item -Force
@@ -321,15 +340,24 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
         Assert ($out -like '*already installed*') "stamp not rewritten after the bump: $out"
     }
 
-    Test-Case 'install-nerd-fonts.ps1: a TTF that cannot be replaced throws a clear message before HKCU and the stamp; the next run retries' {
+    # The installed family's HKCU entries (a stale name included) plus another font.
+    function New-FontReg {
+        $t = [ordered]@{ 'Consolas (TrueType)' = 'consola.ttf'; 'JetBrainsMonoNerdFontMono-Old (TrueType)' = 'old.ttf' }
+        foreach ($f in $six) { $t["$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"] = Join-Path $fontDir $f }
+        return $t
+    }
+
+    Test-Case 'install-nerd-fonts.ps1: a TTF that cannot be replaced throws a clear message before HKCU and the stamp; the registrations stay unchanged; the next run retries' {
         $stampBefore = Read-Text $stampFile
         New-TestFile (Join-Path $fontSrc $six[4]) 'ttf medium v2'
+        $script:fontReg = New-FontReg
         $h = [System.IO.File]::Open((Join-Path $fontDir $six[4]), 'Open', 'Read', 'Read')   # no Delete share: undeletable
         $msg = ''
-        try { $null = Invoke-FontScript -Register } catch { $msg = $_.Exception.Message } finally { $h.Dispose() }
+        try { $null = Invoke-FontScript -Register } catch { $msg = $_.Exception.Message } finally { $h.Dispose(); $reg = $script:fontReg; $script:fontReg = $null }
         Assert ($msg -like "*could not replace*$($six[4])*next*retries*") "got: '$msg'"
         $writes = @($fontCalls | Where-Object { $_ -like 'New-ItemProperty*' -or $_ -like 'Remove-ItemProperty*' -or $_ -eq 'Register-ScheduledTask' })
         Assert ($writes.Count -eq 0) "HKCU/task calls after a failed replace: $($writes -join ' | ')"
+        Assert ((Format-Reg $reg) -ceq (Format-Reg (New-FontReg))) "HKCU after a failed replace: $(Format-Reg $reg)"
         Assert ((Read-Text $stampFile) -ceq $stampBefore) 'stamp rewritten after a failed replace'
         Assert ((Read-Text (Join-Path $fontDir $six[4])) -ceq "ttf $($six[4])") 'held TTF changed'
         $null = Invoke-FontScript
@@ -337,9 +365,7 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
     }
 
     Test-Case 'install-nerd-fonts.ps1: after the copy, HKCU drops only stale names of the family and registers the six by full path' {
-        $props = [ordered]@{ 'Consolas (TrueType)' = 'consola.ttf'; 'JetBrainsMonoNerdFontMono-Old (TrueType)' = 'old.ttf' }
-        foreach ($f in $six) { $props["$([System.IO.Path]::GetFileNameWithoutExtension($f)) (TrueType)"] = Join-Path $fontDir $f }
-        $script:fontReg = [pscustomobject]$props
+        $script:fontReg = New-FontReg
         New-TestFile (Join-Path $fontSrc $six[5]) 'ttf mediumitalic v2'
         try { $null = Invoke-FontScript -Register } finally { $script:fontReg = $null }
         $removed = @($fontCalls | Where-Object { $_ -like 'Remove-ItemProperty*' })

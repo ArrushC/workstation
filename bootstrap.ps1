@@ -107,7 +107,8 @@ $WingetApps = @(
     # winget's only Zed installer says machine scope, but it is PrivilegesRequired=lowest:
     # it installs per-user, with no UAC.
     @{ Id = "ZedIndustries.Zed";               Name = "Zed";              Detect = "Zed";              Scope = "machine" },
-    # The one UAC prompt (WinFsp is a kernel driver). Uac: no --silent, and -SkipElevated skips it.
+    # The one UAC install (WinFsp, its winget dependency, is a kernel driver; without
+    # WinFsp it is two prompts). Uac: no --silent, and -SkipElevated skips it.
     @{ Id = "SSHFS-Win.SSHFS-Win";             Name = "SSHFS-Win";        Detect = "SSHFS-Win*";       Scope = "machine"; Uac = $true }
 )
 
@@ -361,18 +362,20 @@ function Install-Mise {
     $zip = Join-Path $env:TEMP "ws-mise-$MiseVersion.zip"
     $tmp = Join-Path $env:TEMP "ws-mise-$MiseVersion"
     $moved = New-Object System.Collections.Generic.List[object]
+    $shaMismatch = $false
     try {
         try {
             Invoke-CurlRequest -Uri $MiseUrl -OutFile $zip
             $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLower()
-            if ($actual -ne $MiseSha256) { throw "sha256 mismatch: got $actual, pinned $MiseSha256" }
+            if ($actual -ne $MiseSha256) { $shaMismatch = $true; throw "sha256 mismatch: got $actual, pinned $MiseSha256" }
         } catch {
             # An older mise keeps the host working; only a host with none stops.
             if (Test-Path $miseExe) {
                 Add-ToUserPath $binDir
-                Write-Warn "mise $MiseVersion not installed ($($_.Exception.Message)) -- continuing on the installed mise; re-run .\bootstrap.ps1 to retry"
+                Write-Warn "mise $MiseVersion not installed ($($_.Exception.Message)) -- continuing on the installed mise, but config.toml's min_version may need $MiseVersion, so the mise steps below may refuse until a re-run of .\bootstrap.ps1 installs it"
                 return
             }
+            if ($shaMismatch) { Write-Fail "mise $MiseVersion download did not match the pinned checksum ($($_.Exception.Message)) and no mise is installed -- re-run .\bootstrap.ps1; if it persists, `$MiseSha256 in bootstrap.ps1 is wrong for `$MiseVersion" }
             Write-Fail "mise $MiseVersion download failed ($($_.Exception.Message)) and no mise is installed -- check network access to github.com, then re-run .\bootstrap.ps1"
         }
         if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
@@ -480,7 +483,7 @@ function Install-WingetApps {
         Write-Log "Installing $($app.Name) (winget, $($app.Scope) scope)..."
         $wingetArgs = @("install", "--id", $app.Id, "--exact", "--scope", $app.Scope, "--disable-interactivity",
                         "--accept-package-agreements", "--accept-source-agreements")
-        if ($uac) { Write-Warn "$($app.Name) installs machine-wide — expect a UAC prompt (skip with -SkipElevated)" } else { $wingetArgs += "--silent" }
+        if ($uac) { Write-Warn "$($app.Name) installs machine-wide — expect a UAC prompt; a host without WinFsp sees two, one for WinFsp and one for SSHFS-Win (skip with -SkipElevated)" } else { $wingetArgs += "--silent" }
         $oldEap = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'   # PS 5.1 can turn native stderr into a terminating error under "Stop"
@@ -734,11 +737,17 @@ function Invoke-MiseBootstrap {
 
     # miserc.toml must have selected the owned set: without config.owned.toml
     # the tools phase would skip the owned tools and `mise prune` would
-    # delete them. (--json: the table output truncates to the console width.)
+    # delete them. A failing `config ls` (min_version, a TOML error) stops too.
+    # (--json: the table output truncates to the console width.)
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $loaded = (@(& mise @miseCd config ls --json 2>&1) | ForEach-Object { "$_" }) -join "`n"
+    $lsOut = @(& mise @miseCd config ls --json 2>&1 | ForEach-Object { "$_" })
+    $lsCode = $LASTEXITCODE
     $ErrorActionPreference = $oldEap
-    if ($loaded -notmatch 'config\.owned\.toml') {
+    if ($lsCode -ne 0) {
+        $head = @($lsOut | Where-Object { $_.Trim() } | Select-Object -First 5) -join "`n  "
+        Write-Fail "'mise config ls' failed (exit $lsCode) -- an older mise than config.toml's min_version? re-run .\bootstrap.ps1 after a download succeeds:`n  $head"
+    }
+    if (($lsOut -join "`n") -notmatch 'config\.owned\.toml') {
         Write-Fail "mise did not load config.owned.toml, so miserc.toml (windows,owned) was not honoured -- an exported MISE_ENV, or -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune could remove the owned tools; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
     }
 

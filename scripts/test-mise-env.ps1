@@ -86,12 +86,14 @@ function New-TestFile([string]$Path, [string]$Content = 'x') {
     New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
     [System.IO.File]::WriteAllText($Path, $Content)
 }
-# A zip laid out like mise's release: mise\bin\{mise,mise-shim}.exe + mise\extra.txt.
-function New-MiseZip([string]$Name) {
+# A zip laid out like mise's release: mise\bin\{mise,mise-shim}.exe + mise\extra.txt,
+# plus mise\<$Extra> when given.
+function New-MiseZip([string]$Name, [string]$Extra) {
     $src = Join-Path $tmp "zipsrc-$Name\mise"
     New-TestFile (Join-Path $src 'bin\mise.exe') "mise-$Name"
     New-TestFile (Join-Path $src 'bin\mise-shim.exe') "shim-$Name"
     New-TestFile (Join-Path $src 'extra.txt') "extra-$Name"
+    if ($Extra) { New-TestFile (Join-Path $src $Extra) "extra-$Name" }
     $zip = Join-Path $tmp "$Name.zip"
     Compress-Archive -Path $src -DestinationPath $zip
     return $zip
@@ -234,7 +236,7 @@ try {
     Test-Case 'Install-Mise: download fails with a mise installed -> warn, keep it' {
         Use-MiseZip 't3' $null
         Install-Mise
-        Assert (($script:warnings -join ' ') -like '*continuing on the installed mise*') "warnings: $($script:warnings -join ' | ')"
+        Assert (($script:warnings -join ' ') -like '*continuing on the installed mise*min_version*refuse until a re-run*') "warnings: $($script:warnings -join ' | ')"
         Assert ((Read-Text $miseExe) -ceq 'mise-t2') 'mise.exe changed'
         Assert (-not (Test-Path (Join-Path $script:WsStamps 'mise.t3.stamp'))) 'stamp written without an install'
     }
@@ -243,7 +245,7 @@ try {
         Use-MiseZip 't4' (New-MiseZip 't4')
         $script:MiseSha256 = '0' * 64
         Install-Mise
-        Assert (($script:warnings -join ' ') -like '*sha256 mismatch*') "warnings: $($script:warnings -join ' | ')"
+        Assert (($script:warnings -join ' ') -like '*sha256 mismatch*min_version*') "warnings: $($script:warnings -join ' | ')"
         Assert ((Read-Text $miseExe) -ceq 'mise-t2') 'unverified mise installed'
     }
 
@@ -256,6 +258,18 @@ try {
         Assert ($msg -like 'WRITE-FAIL:*no mise is installed*network*') "got: $msg"
     }
 
+    Test-Case 'Install-Mise: sha256 mismatch with no mise -> Write-Fail names the pinned checksum, not the network' {
+        $saved = $script:WsMise
+        $script:WsMise = Join-Path $tmp 'ws-empty-sha\mise'
+        Use-MiseZip 't5s' (New-MiseZip 't5s')
+        $script:MiseSha256 = '0' * 64
+        $msg = ''
+        try { Install-Mise } catch { $msg = $_.Exception.Message } finally { $script:WsMise = $saved }
+        Assert ($msg -like 'WRITE-FAIL:*did not match the pinned checksum*re-run*$MiseSha256 in bootstrap.ps1 is wrong for $MiseVersion*') "got: $msg"
+        Assert ($msg -notlike '*network*') "network advice for a checksum mismatch: $msg"
+        Assert (-not (Test-Path (Join-Path $tmp 'ws-empty-sha\mise\bin\mise.exe'))) 'unverified mise installed'
+    }
+
     Test-Case 'Install-Mise: copy fails -> Write-Fail names the fix; a mise.exe stays' {
         Use-MiseZip 't6' (New-MiseZip 't6')
         $extra = Join-Path $script:WsMise 'extra.txt'
@@ -265,6 +279,27 @@ try {
         Assert ($msg -like 'WRITE-FAIL:*close Nushell tabs and editors started through mise shims*Windows PowerShell window*') "got: $msg"
         Assert (Test-Path $miseExe) 'no mise.exe left'
         Assert (-not (Test-Path (Join-Path $script:WsStamps 'mise.t6.stamp'))) 'stamp written for a failed update'
+    }
+
+    Test-Case 'Install-Mise: a copy that fails before bin\ puts the renamed mise.exe and mise-shim.exe back' {
+        $saved = $script:WsMise
+        $script:WsMise = Join-Path $tmp 'ws-restore\mise'
+        $bin = Join-Path $script:WsMise 'bin'
+        New-TestFile (Join-Path $bin 'mise.exe') 'mise-orig'
+        New-TestFile (Join-Path $bin 'mise-shim.exe') 'shim-orig'
+        # A held file under a directory that sorts before bin\: the copy fails after the renames.
+        $heldPath = Join-Path $script:WsMise 'aa-held\held.txt'
+        New-TestFile $heldPath 'held'
+        Use-MiseZip 't7' (New-MiseZip 't7' 'aa-held\held.txt')
+        $h = [System.IO.File]::Open($heldPath, 'Open', 'Read', 'Read')   # blocks the overwrite
+        $msg = ''
+        try { Install-Mise } catch { $msg = $_.Exception.Message } finally { $h.Dispose(); $script:WsMise = $saved }
+        Assert ($msg -like 'WRITE-FAIL:*Could not update mise*') "got: $msg"
+        $names = @(Get-ChildItem -LiteralPath $bin | ForEach-Object { $_.Name })
+        Assert (($names.Count -eq 2) -and ($names -contains 'mise.exe') -and ($names -contains 'mise-shim.exe')) "bin holds: $($names -join ', ')"
+        Assert ((Read-Text (Join-Path $bin 'mise.exe')) -ceq 'mise-orig') "mise.exe: $(Read-Text (Join-Path $bin 'mise.exe'))"
+        Assert ((Read-Text (Join-Path $bin 'mise-shim.exe')) -ceq 'shim-orig') "mise-shim.exe: $(Read-Text (Join-Path $bin 'mise-shim.exe'))"
+        Assert (-not (Test-Path (Join-Path $script:WsStamps 'mise.t7.stamp'))) 'stamp written for a failed update'
     }
 
     # Invoke-MiseBootstrap with the stubbed mise.
@@ -291,8 +326,30 @@ try {
         $script:miseReply = @{ 'config ls' = @{ Out = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}]'; Exit = 0 } }
         $msg = Invoke-Bootstrap
         Assert ($msg -like 'WRITE-FAIL:*config.owned.toml*miserc.toml*') "got: $msg"
+        Assert ($msg -notlike '*min_version*') "min_version hint for an exit-0 config ls: $msg"
         Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
         Assert (@(Get-MiseCall 'prune').Count -eq 0) 'mise prune ran'
+        Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran'
+    }
+
+    Test-Case 'mise bootstrap: a failing `mise config ls` stops with its first lines and the min_version hint, not the miserc message' {
+        $lsErr = @('mise ERROR mise version 2026.9.1 is below min_version 2026.9.9 in C:\Users\u\.config\mise\config.toml') +
+            @(2..8 | ForEach-Object { "mise ERROR detail line $_" })
+        $script:miseReply = @{ 'config ls' = @{ Out = $lsErr; Exit = 1 } }
+        $msg = Invoke-Bootstrap
+        Assert ($msg -like "WRITE-FAIL:*exit 1*$($lsErr[0])*") "got: $msg"
+        Assert ($msg -like "*an older mise than config.toml's min_version? re-run .\bootstrap.ps1 after a download succeeds*") "no hint: $msg"
+        Assert ($msg -notlike '*detail line 8*') "output not trimmed: $msg"
+        Assert ($msg -notlike '*was not honoured*') "miserc message for a failing config ls: $msg"
+        Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
+        Assert (@(Get-MiseCall 'prune').Count -eq 0) 'mise prune ran'
+    }
+
+    Test-Case 'mise bootstrap: a failing `mise config ls` stops even when its error names config.owned.toml' {
+        $script:miseReply = @{ 'config ls' = @{ Out = @('mise ERROR failed to parse C:\Users\u\.config\mise\config.owned.toml', 'TOML parse error at line 3, column 1'); Exit = 1 } }
+        $msg = Invoke-Bootstrap
+        Assert ($msg -like 'WRITE-FAIL:*min_version*failed to parse*config.owned.toml*TOML parse error*') "got: $msg"
+        Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
         Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran'
     }
 

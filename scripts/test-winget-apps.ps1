@@ -90,8 +90,13 @@ function Get-AppxPackage {
 $script:calls = New-Object System.Collections.Generic.List[string]
 $script:wingetExit = 0
 $script:wingetThrows = $false
+# The ErrorActionPreference Install-WingetApps runs winget under, and the one
+# its warnings run under afterwards (its own local copy, set and restored).
+$script:wingetEap = New-Object System.Collections.Generic.List[string]
+$script:warnEap = New-Object System.Collections.Generic.List[string]
 function winget {
     $script:calls.Add($args -join ' ')
+    $script:wingetEap.Add("$ErrorActionPreference")
     if ($script:wingetThrows) { throw [System.Management.Automation.ApplicationFailedException]::new('The file cannot be accessed by the system.') }
     $global:LASTEXITCODE = $script:wingetExit
 }
@@ -99,7 +104,7 @@ if ((Get-Command winget).CommandType -ne 'Function') { throw 'refusing to run: w
 $script:log = New-Object System.Collections.Generic.List[string]
 function Write-Log { param($m) $script:log.Add("log: $m") }
 function Write-Ok { param($m) $script:log.Add("ok: $m") }
-function Write-Warn { param($m) $script:log.Add("warn: $m") }
+function Write-Warn { param($m) $script:log.Add("warn: $m"); $script:warnEap.Add("$ErrorActionPreference") }
 function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
 # PATH for the cases: a temp dir with an empty wt.exe, or one without it.
@@ -120,6 +125,8 @@ function Invoke-Apps([string[]]$Arp, [string[]]$Appx, [bool]$Skip, [int]$ExitCod
     $env:PATH = if ($WtOnPath) { $wtBin } else { $noWt }
     $script:calls.Clear()
     $script:log.Clear()
+    $script:wingetEap.Clear()
+    $script:warnEap.Clear()
     Install-WingetApps
     foreach ($c in $script:calls) {
         $words = $c -split ' '
@@ -200,7 +207,7 @@ try {
         Assert (@(Get-Log '*UAC*').Count -eq 0) "UAC warning without a UAC install: $($script:log -join ' | ')"
     }
 
-    Test-Case 'SSHFS-Win (Uac): --scope machine, no --silent, a UAC warning first; every other call keeps --silent' {
+    Test-Case 'SSHFS-Win (Uac): --scope machine, no --silent, a UAC warning first (two prompts without WinFsp); every other call keeps --silent' {
         $ids = @(Invoke-Apps -Arp @() -Appx @() -Skip $false)
         Assert ($ids[-1] -ceq 'SSHFS-Win.SSHFS-Win') "order: $($ids -join ', ')"
         $c = @(Get-Call 'SSHFS-Win.SSHFS-Win')
@@ -213,6 +220,7 @@ try {
         foreach ($id in $noUacIds) { Assert ((@(Get-Call $id)[0] -split ' ') -contains '--silent') "no --silent for $id" }
         $warn = @(Get-Log 'warn: *expect a UAC prompt*')
         Assert ($warn.Count -eq 1 -and $warn[0] -like 'warn: SSHFS-Win *') "UAC warnings: $($warn -join ' | ')"
+        Assert ($warn[0] -like '*without WinFsp*two*one for WinFsp*one for SSHFS-Win*') "no two-prompt note: $($warn[0])"
     }
 
     Test-Case 'Zed: "Zed Preview" / "Zed Nightly" do not count as Zed' {
@@ -240,11 +248,12 @@ try {
         }
     }
 
-    Test-Case 'a winget that cannot start warns for each app, and the run goes on' {
+    Test-Case 'a winget that cannot start warns for each app, and the run goes on; winget runs under Continue, the rest under Stop again' {
         $ids = @(Invoke-Apps -Arp @() -Appx @() -Skip $true -Throws)
         Assert ($ids.Count -eq $noUacIds.Count) "attempted: $($ids -join ', ')"
         Assert (@(Get-Log 'warn: *: winget could not start (The file cannot be accessed by the system.) * winget install --id *').Count -eq $ids.Count) "log: $($script:log -join ' | ')"
-        Assert ($ErrorActionPreference -eq 'Stop') "ErrorActionPreference left at $ErrorActionPreference"
+        Assert ((@($script:wingetEap | Where-Object { $_ -ne 'Continue' }).Count -eq 0) -and ($script:wingetEap.Count -eq $ids.Count)) "EAP inside winget: $($script:wingetEap -join ', ')"
+        Assert ((@($script:warnEap | Where-Object { $_ -ne 'Stop' }).Count -eq 0) -and ($script:warnEap.Count -eq $ids.Count)) "EAP after winget (not restored by the finally?): $($script:warnEap -join ', ')"
     }
 } finally {
     $env:PATH = $savedPath
