@@ -575,7 +575,7 @@ mise bootstrap --only packages --yes
 
 ### wpy not found, or import textual fails in it
 
-Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows the env is built on `mise where python` (run from `%USERPROFILE%`; it must print an install dir), so a missing `wpy` usually means the mise tools phase failed. To rebuild, delete `%LOCALAPPDATA%\workstation\stamps\python-env.stamp` and re-run `.\bootstrap.ps1`. `uv python uninstall 3.14.7` reclaims the interpreter the pre-mise env used (not automated).
+Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows the env is built on `mise where python` (run from `%USERPROFILE%`; it must print an install dir), so a missing `wpy` usually means the mise tools phase failed. To rebuild, delete `%LOCALAPPDATA%\workstation\stamps\python-env.stamp` and re-run `.\bootstrap.ps1`. On a host set up before mise managed Python, `uv python uninstall --all` and `uv cache clean` reclaim uv's old interpreters and cache (not automated; mise keeps using uv to install `pypi:` tools).
 
 ### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
 
