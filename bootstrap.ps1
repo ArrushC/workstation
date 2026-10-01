@@ -331,9 +331,9 @@ function Install-Mise {
     }
 }
 
-# Removes the portable installs mise replaced (their User PATH entries would shadow
-# the shims) and only their stamps. It runs after a good tools phase, so a failed
-# bootstrap keeps them. Remove this function once every Windows host has run it.
+# Removes the portable installs mise replaced (their User PATH entries shadow the
+# shims) and only their own stamps: wslconfig/node-postinstall/python-env stamps are
+# live. Runs after a good tools phase. Remove once every Windows host has run it.
 function Invoke-LegacyToolCleanup {
     $old = @("helix", "nu", "devtoys-cli", "dngrep", "logexpert") | ForEach-Object { Join-Path $WsRoot $_ }
     $oldExes = @("starship", "gh", "jq", "omp", "opencode", "chezmoi") | ForEach-Object { Join-Path $WsBin "$_.exe" }
@@ -635,7 +635,7 @@ function Invoke-MiseBootstrap {
         Write-Fail "'mise config ls' failed (exit $lsCode) -- an older mise than config.toml's min_version? re-run .\bootstrap.ps1 after a download succeeds:`n  $head"
     }
     if (($lsOut -join "`n") -notmatch 'config\.owned\.toml') {
-        Write-Fail "mise did not load config.owned.toml, so miserc.toml (windows,owned) was not honoured -- an exported MISE_ENV, or -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune could remove the owned tools; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
+        Write-Fail "mise did not load config.owned.toml, so miserc.toml (windows,owned) was not honoured -- -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune could remove the owned tools; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
     }
 
     # `mise where node` succeeds only when the DECLARED node is installed.
@@ -1076,7 +1076,7 @@ function Invoke-NushellMise {
     try {
         if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
         # No BOM: nu chokes on one in sourced scripts.
-        $init = (& mise activate nu) -join "`n"
+        $init = (& mise -C $env:USERPROFILE activate nu) -join "`n"
         [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
         Write-Ok "Nushell mise activation generated ($target)"
     } catch {

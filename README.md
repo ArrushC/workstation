@@ -362,7 +362,7 @@ mise dot status; mise dot diff       # confirm it lands as expected
 bash scripts/check-invariants.sh
 ```
 
-Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while `~/.local/state/workstation/dotfiles-migrated` is absent. Commit the config edit and the new source.
+Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while the `dotfiles-migrated` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Commit the config edit and the new source.
 
 **A dnf package.** One line in `config.host.toml` (owned toolchain and core packages) or `config.native.toml` (the NFS client group, non-WSL owned hosts). The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
 
@@ -455,7 +455,7 @@ Only mise is checksum-pinned by `bootstrap.ps1` (`$MiseSha256` for `$MiseVersion
 
 ### bootstrap.ps1 stops with "mise did not load config.owned.toml" or "'mise config ls' failed"
 
-Both stop the run before `mise bootstrap` and `mise prune` (a prune without `config.owned.toml` would remove the owned tools). "Did not load config.owned.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there) or a `MISE_ENV` is exported; `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
+Both stop the run before `mise bootstrap` and `mise prune` (a prune without `config.owned.toml` would remove the owned tools). "Did not load config.owned.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there); `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
 
 ### PowerShell aliases / adminpw / ws* don't load (the profile seems ignored)
 
@@ -491,7 +491,7 @@ bash scripts/check-templates.sh                    # does exactly this for every
 
 ### mise dot apply / mise bootstrap refuses with "refusing to overwrite existing files (use --force)"
 
-`copy` and `template` targets refuse to replace a pre-existing file that already differs (even `--dry-run` exits 1). That is expected on a fresh host's first apply (for example `/etc/skel`'s `~/.bashrc`), and the bootstrap scripts pass `--force-dotfiles` automatically while `~/.local/state/workstation/dotfiles-migrated` is absent. Once it is written, the message means a real conflict: a file you or another tool created at that exact path. Inspect it, then either let the dotfiles win with `mise dot apply --force --yes -- "<target>"` or move the file aside. Do not use `--force-dotfiles` or `--force` as a reflex; it discards whatever was there.
+`copy` and `template` targets refuse to replace a pre-existing file that already differs (even `--dry-run` exits 1). That is expected on a fresh host's first apply (for example `/etc/skel`'s `~/.bashrc`), and the bootstrap scripts pass `--force-dotfiles` automatically while the `dotfiles-migrated` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Once it is written, the message means a real conflict: a file you or another tool created at that exact path. Inspect it, then either let the dotfiles win with `mise dot apply --force --yes -- "<target>"` or move the file aside. Do not use `--force-dotfiles` or `--force` as a reflex; it discards whatever was there.
 
 ### wsu fails with "fatal: Not possible to fast-forward, aborting"
 

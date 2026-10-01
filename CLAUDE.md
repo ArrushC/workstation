@@ -111,7 +111,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     `mise dot status` for drift and asks first.
 - Disabling an inherited entry needs `enabled = false` **and** a repeated `mode`.
 - A host's first apply needs `--force-dotfiles`. `bootstrap.sh` and `bootstrap.ps1` pass it only while
-  `~/.local/state/workstation/dotfiles-migrated` is absent.
+  `dotfiles-migrated` is absent (`~/.local/state/workstation/`; Windows `%LOCALAPPDATA%\workstation\`).
 - The `post-dotfiles` hook is the only thing that sets these modes:
   - `~/.ssh`, `~/.claude`: 700
   - `~/.ssh/config`: 600
@@ -171,7 +171,6 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `_cht.sh`, a rolling snapshot
   - `dotfiles/local/bin/batpipe`: re-apply the 2-line patch recorded in its `.vendor`
   - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06 while the fleet is EL9 (newer needs Python 3.10)
-  - Each `.vendor` sidecar records provenance.
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
