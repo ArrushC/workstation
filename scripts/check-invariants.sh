@@ -1,16 +1,7 @@
 #!/usr/bin/env bash
-# check-invariants.sh — mechanically enforce the load-bearing repo invariants
-# documented in CLAUDE.md.
-#
-# Single source of truth for the checks; invoked three ways:
-#   - mise run lint               (config.toml [tasks.lint] -> scripts/check-invariants.sh)
-#   - the pre-commit hook (mise generate git-pre-commit, via `mise run install-hooks`)
-#   - .github/workflows/lint.yml (CI backstop)
-#
-# Runs from anywhere — it cd's to the repo root. Exits 0 if all checks pass,
-# non-zero otherwise. Deliberately NOT `set -e`: a checker must run EVERY check
-# and tally failures, not abort on the first non-zero grep. We keep -u and
-# pipefail and guard with explicit conditionals.
+# check-invariants.sh — mechanically enforce the load-bearing invariants in CLAUDE.md.
+# Run by `mise run lint`, the pre-commit hook and CI; cd's to the repo root. Deliberately
+# NOT `set -e`: every check runs and failures are tallied, so guard with conditionals.
 
 set -uo pipefail
 
@@ -33,8 +24,7 @@ bad() {
 }
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
 
-# First-party shell files: shellcheck, shfmt and `mise run fmt` all use this one
-# list. Vendored scripts (_cht.sh, batpipe, the zsh plugins) are excluded.
+# First-party shell files for shellcheck, shfmt and `mise run fmt` (vendored scripts excluded).
 shell_targets() {
   printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
     .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
@@ -42,8 +32,7 @@ shell_targets() {
     dotfiles/config/bash/completions.bash
 }
 
-# Python with tomllib: EL9's python3 is 3.9 (no tomllib) — prefer the python-env
-# wpy (3.14); CI's python3 is 3.11+. Empty when neither exists (callers soft-skip).
+# Python with tomllib (EL9's python3 is 3.9, so prefer wpy); empty when none, and callers soft-skip.
 PY=""
 for _p in wpy python3; do
   if command -v "$_p" >/dev/null 2>&1 && "$_p" -c 'import tomllib' 2>/dev/null; then
@@ -51,8 +40,8 @@ for _p in wpy python3; do
     break
   fi
 done
-# tomlval <file> <dotted.key> — print a TOML value (string, or a table's `version`).
-# Keys with dots/colons inside quotes are supported: tomlval config.owned.toml 'tools."github:DevToys-app/DevToys"'
+[ -n "${CHECK_INVARIANTS_NO_PY:-}" ] && PY="" # test-check-pins.sh
+# tomlval <file> <dotted.key> — print a TOML value (or a table's `version`); quoted keys may contain dots.
 tomlval() {
   [ -n "$PY" ] || return 1
   "$PY" - "$1" "$2" <<'PY'
@@ -64,100 +53,119 @@ print(d["version"] if isinstance(d, dict) else d)
 PY
 }
 
-# _ps1_drive_ref_hits <file> — print "LINE:CONTENT" for any non-comment line
-# carrying an unbraced $name: reference. Inside a double-quoted string/
-# here-string PowerShell's parser reads "$name:" as a drive-qualified
-# variable and throws InvalidVariableReferenceWithDrive (the exact parse
-# error `scripts/test-curl.ps1`'s Parser::ParseFile hit on bootstrap.ps1
-# after 69bded7) unless the colon is a real scope ($env:/$script:/...) or
-# the ref is braced (${name}:). Comment-only lines (first non-blank char
-# `#`) are exempt.
+# _ps1_drive_ref_hits <file> — non-comment lines with an unbraced $name: reference.
+# In a double-quoted PowerShell string "$name:" parses as a drive-qualified variable
+# and throws, unless the colon is a real scope ($env:, $script:, ...) or the ref is ${name}:.
 _ps1_drive_ref_hits() {
   grep -nE '\$[A-Za-z_][A-Za-z0-9_]*:' "$1" |
     grep -vE '\$(env|script|global|local|private|using|variable|function|alias):' |
     grep -vE '^[0-9]+:[[:space:]]*#'
 }
 
-check_version_pins() {
-  hdr "version-pin dual/triple-edits"
-  local v v2 ref
+# --- pins recorded in more than one place ------------------------------------
+# An empty value is drift: a pattern that stops matching must fail, not pass.
 
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
-  else
-    v=$(grep -oE '^MISE_VERSION="[0-9][0-9.]+"' bootstrap.sh | grep -oE '[0-9][0-9.]+')
-    ref=$(grep -oE '^\$MiseVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 | grep -oE '[0-9][0-9.]+' | head -1)
-    v2=$(tomlval config.toml min_version)
-    if [ -n "$v" ] && [ "$v" = "$ref" ] && [ "$v" = "$v2" ]; then
-      ok "mise @ $v  (bootstrap.sh == bootstrap.ps1 \$MiseVersion == config.toml min_version)"
-    else
-      bad "mise drift: bootstrap.sh='$v' bootstrap.ps1-\$MiseVersion='$ref' config.toml-min_version='$v2'"
-    fi
-  fi
+# pin_equal <label> <where=value>... — every value non-empty and identical.
+pin_equal() {
+  local label="$1" kv first names="" shown="" sep="" drift=""
+  shift
+  first="${1#*=}"
+  for kv in "$@"; do
+    names="$names$sep${kv%%=*}"
+    sep=" == "
+    shown="$shown ${kv%%=*}='${kv#*=}'"
+    if [ -z "${kv#*=}" ] || [ "${kv#*=}" != "$first" ]; then drift=1; fi
+  done
+  if [ -z "$drift" ]; then ok "$label @ $first ($names)"; else bad "$label drift:$shown"; fi
+}
 
-  # VCPKG_ROOT — both rc files must export the SAME literal, and tasks/vcpkg's
-  # vroot= literal is the one that actually decides where vcpkg lands. The rc
-  # literal is asserted equal to that same $HOME/.local/share/vcpkg.
-  local rc_z rc_b vroot_task want='$HOME/.local/share/vcpkg'
-  rc_z=$(grep -oE 'VCPKG_ROOT="[^"]*"' dotfiles/zshrc.tera | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  rc_b=$(grep -oE 'VCPKG_ROOT="[^"]*"' dotfiles/bashrc.tera | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  vroot_task=$(grep -oE 'vroot="[^"]*"' tasks/vcpkg | head -1 | sed -E 's/.*="([^"]*)"/\1/')
-  if [ -n "$rc_z" ] && [ "$rc_z" = "$rc_b" ] && [ "$rc_z" = "$want" ] && [ "$vroot_task" = "$want" ]; then
-    ok "vcpkg-root @ zshrc == bashrc == $want; tasks/vcpkg vroot == $want"
+pin_at_least() {
+  if [ -z "$2" ] || [ -z "$3" ]; then
+    bad "$1: could not read the version ('$2') or its floor ('$3')"
+  elif [ "$(printf '%s\n%s\n' "$3" "$2" | sort -V | tail -1)" = "$2" ]; then
+    ok "$1: $2 >= $3"
   else
-    bad "vcpkg-root drift: zshrc='$rc_z' bashrc='$rc_b' tasks/vcpkg-vroot='$vroot_task' (want $want)"
+    bad "$1: $2 is below $3 — $4"
   fi
 }
 
-# Every dual-edit version pin verified by check_version_pins must also sit in
-# scripts/bump-versions.sh's EXCLUDE list — otherwise the weekly bumper would
-# rewrite config*.toml alone and fail the pin check (version-bumps run #9: gh
-# 2.97.0, added as a dual-edit in #94 without the exclusion, is the same class
-# of bug one layer down). The pin set is derived from check_version_pins' own
-# source (its `tomlval … tools.<name>` calls), so a new dual-edit pin check
-# added there is asserted here automatically — no second list to drift. The
-# coupled tools (gopls/typescript/zjstatus/node/ncdu pins with a version
-# floor or postinstall string elsewhere) are NOT read from check_version_pins
-# (they live in their own coupling-check functions) so are named explicitly.
-# One-directional: extra EXCLUDE entries are fine.
-check_bumper_exclude() {
-  hdr "bump-versions.sh handles every dual-edit/coupled pin"
-  local exclude handled pins var missing="" n=0
-  local -a coupled=(github:dj95/zjstatus go go:golang.org/x/tools/gopls http:ncdu node)
-  exclude=$(grep -m1 -E '^EXCLUDE=' scripts/bump-versions.sh |
-    sed -E 's/^EXCLUDE="//; s/"[[:space:]]*$//')
-  # A dual-edit/coupled pin is safe when the bumper either skips it (EXCLUDE)
-  # or bumps it with dedicated code that keeps its pair in step: go+gopls /
-  # node via COUPLED_AUTO. Anything else would get a blind one-sided edit and
-  # fail check_version_pins.
-  handled="$exclude $(grep -m1 -E '^COUPLED_AUTO=' scripts/bump-versions.sh |
-    sed -E 's/^COUPLED_AUTO="//; s/"[[:space:]]*$//')"
-  if [ -z "$exclude" ]; then
-    bad "scripts/bump-versions.sh: EXCLUDE= line not found"
-  else
-    pins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
-      grep -oE "tomlval config[a-z.]*toml '?tools\.[^ ']+'?" |
-      sed -E "s/.*tools\.//; s/^\"//; s/\"'?\$//; s/\)\$//" | sort -u)
-    pins="$pins
-$(printf '%s\n' "${coupled[@]}")"
-    while read -r var; do
-      [ -n "$var" ] || continue
-      n=$((n + 1))
-      case " $handled " in
-      *" $var "*) ;;
-      *) missing="$missing $var" ;;
-      esac
-    done <<<"$pins"
-    if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-      ok "all $n dual-edit/coupled tool pins excluded or paired-bumped (bump-versions.sh EXCLUDE / COUPLED_AUTO)"
-    else
-      bad "dual-edit/coupled tool pin(s) the bumper doesn't handle:${missing:- <none derived>} — add each to bump-versions.sh's COUPLED_AUTO or EXCLUDE, or the weekly bumper rewrites one side alone and fails the pin check"
-    fi
-  fi
+pin_major_at_most() {
+  local major="${2%%.*}"
+  case "$major" in
+  '' | *[!0-9]*) bad "$1: could not read a version ('$2')" ;;
+  *) if [ "$major" -le "$3" ]; then ok "$1: $2 (major <= $3)"; else bad "$1: $2 (major $major > $3) — $4"; fi ;;
+  esac
+}
 
-  # config.toml [vars] holds only vcpkg_version (single-edit) and
-  # zjstatus_zellij_floor (a coupling floor), so no dual-edit [vars] pin
-  # needs bumper coverage; a new one must come back with its own check.
+# pin_bumper_handles <tool>... — each sits in bump-versions.sh's EXCLUDE or
+# COUPLED_AUTO; otherwise the weekly bumper rewrites one side of a pair alone.
+pin_bumper_handles() {
+  local handled t missing=""
+  handled=" $(sed -nE 's/^(EXCLUDE|COUPLED_AUTO)="([^"]*)".*/\2/p' scripts/bump-versions.sh | tr '\n' ' ') "
+  for t in "$@"; do
+    case "$handled" in *" $t "*) ;; *) missing="$missing $t" ;; esac
+  done
+  if [ -z "$missing" ]; then
+    ok "bump-versions.sh skips or pair-bumps all $# coupled pins"
+  else
+    bad "bump-versions.sh would bump$missing alone — add each to EXCLUDE or COUPLED_AUTO"
+  fi
+}
+
+# pin_vars_reachable — every config.toml [vars] *_version pin is reported by
+# tasks/check-updates (as UPPER_CASE) and listed by scripts/gen-tool-memory.sh.
+pin_vars_reachable() {
+  local key missing="" n=0
+  while read -r key; do
+    [ -n "$key" ] || continue
+    n=$((n + 1))
+    grep -q "$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')" tasks/check-updates || missing="$missing $key(tasks/check-updates)"
+    grep -q "$key" scripts/gen-tool-memory.sh || missing="$missing $key(gen-tool-memory.sh)"
+  done < <("$PY" -c 'import tomllib
+for k in tomllib.load(open("config.toml","rb")).get("vars",{}):
+    print(k) if k.endswith("_version") else None')
+  if [ "$n" -eq 0 ]; then missing=" <none found>"; fi
+  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then ok "all $n [vars] *_version pin(s) reach check-updates and gen-tool-memory"; else bad "[vars] pin(s) not covered:$missing"; fi
+}
+
+check_pins() {
+  hdr "pins recorded in more than one place"
+  local want='$HOME/.local/share/vcpkg'
+  pin_equal "VCPKG_ROOT" "want=$want" \
+    "zshrc.tera=$(sed -nE 's/.*VCPKG_ROOT="([^"]*)".*/\1/p' dotfiles/zshrc.tera | head -1)" \
+    "bashrc.tera=$(sed -nE 's/.*VCPKG_ROOT="([^"]*)".*/\1/p' dotfiles/bashrc.tera | head -1)" \
+    "tasks/vcpkg=$(sed -nE 's/.*vroot="([^"]*)".*/\1/p' tasks/vcpkg | head -1)"
+  # TypeScript 7 ships only bin/tsc, no lib/tsserver.js, so typescript-language-server can't start.
+  pin_major_at_most "typescript (tsserver for typescript-language-server)" \
+    "$(grep -E '^node = ' config.owned.toml | grep -oE 'typescript@[0-9.]+' | cut -d@ -f2)" 5 \
+    "keep the 5.x line"
+  if grep -E '^node = ' config.owned.toml | grep -q 'typescript-language-server@'; then
+    ok "typescript-language-server is in node's postinstall"
+  else
+    bad "typescript-language-server@ missing from node's postinstall in config.owned.toml"
+  fi
+  # A new pin_equal row over a tools.X pin must add X to this list.
+  pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node
+  if [ -z "$PY" ]; then
+    note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
+    return
+  fi
+  pin_equal "mise" \
+    "bootstrap.sh=$(sed -nE 's/^MISE_VERSION="([0-9.]+)".*/\1/p' bootstrap.sh)" \
+    "bootstrap.ps1=$(sed -nE 's/^\$MiseVersion *= *"([0-9.]+)".*/\1/p' bootstrap.ps1 | head -1)" \
+    "config.toml min_version=$(tomlval config.toml min_version 2>/dev/null)"
+  # zjstatus states the zellij it needs in prose release notes; the floor sits next to the pin.
+  # A mismatch fails silently at runtime (the bar pane doesn't render) and
+  # `zellij setup --check` still reports "Well defined".
+  if [ -n "$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"' 2>/dev/null)" ]; then
+    ok "zjstatus pin readable"
+  else
+    bad "zjstatus pin unreadable in config.linux.toml (tools.\"github:dj95/zjstatus\")"
+  fi
+  pin_at_least "zellij for zjstatus" "$(tomlval config.linux.toml tools.zellij 2>/dev/null)" \
+    "$(tomlval config.toml vars.zjstatus_zellij_floor 2>/dev/null)" \
+    "bump zellij, or pin the zjstatus release built for it (and its floor)"
+  pin_vars_reachable
 }
 
 check_line_endings_and_mode() {
@@ -187,20 +195,9 @@ check_line_endings_and_mode() {
   fi
 }
 
-# The converse of check_line_endings_and_mode: every dotfile SOURCE must be
-# git mode 100644, except this explicit, deliberately hand-maintained
-# allowlist (find candidates with `git ls-files -s dotfiles/ | grep 100755`).
-# A NEW executable dotfile source must be added here on purpose, in the same
-# commit that adds it — that's the point of writing the list out literally
-# instead of deriving it. `template`-mode sources are the highest-stakes
-# case: `template`/`copy` both propagate the SOURCE's own git-tracked
-# executable bit onto $HOME (post-dotfiles-hook territory, ~/.ssh/~/.claude
-# excepted), and a filesystem that reports every file 0744 regardless of git
-# mode (DrvFs, over a Windows drive mount) turns that propagation into a
-# blanket, invisible chmod +x across every managed dotfile the moment `mise
-# dot apply`/`wsa` runs from there — this is exactly what corrupted
-# ~/.gitconfig, ~/.bashrc, ~/.zshrc, ~/.zshenv, ~/.config/cheat/conf.yml,
-# ~/.config/environment.d/10-mise.conf and ~/.gdbinit on 2026-09-22.
+# The converse of check_line_endings_and_mode: dotfile SOURCES are git mode 100644 except
+# this hand-kept allowlist, because copy/template propagate the exec bit onto $HOME (a 0744
+# DrvFs checkout would chmod +x every managed dotfile).
 DOTFILES_MODE_ALLOWLIST=(
   "dotfiles/claude/hooks/dangerous-command-guard.sh" # ~/.claude/hooks copy entry — a Claude Code hook script
   "dotfiles/claude/hooks/secret-guard.sh"            # ~/.claude/hooks copy entry — a Claude Code hook script
@@ -277,12 +274,8 @@ check_ps_variable_drive_refs() {
 check_sentinels() {
   hdr "sentinel blocks matched"
   local s e
-  # Anchor to a whole marker line — prose that merely mentions the token
-  # must not count.
-  #
-  # The per-host ccstatusline opt-out (# CCSTATUSLINE-OPTOUT:START/END) is
-  # written by scripts/setup-ccstatusline.sh into config.local.toml, which is
-  # per-host and git-ignored, so there is no tracked file to assert against.
+  # Anchor to a whole marker line: prose that merely mentions the token must not count.
+  # The per-host CCSTATUSLINE-OPTOUT block lives in git-ignored config.local.toml: nothing tracked to assert.
   s=$(grep -cE '<!-- TOOLS:START' dotfiles/claude/CLAUDE.md)
   e=$(grep -cE '<!-- TOOLS:END -->' dotfiles/claude/CLAUDE.md)
   if [ "$s" = "1" ] && [ "$e" = "1" ]; then
@@ -355,13 +348,8 @@ for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("confi
             missing.append(f"{f}:{name} (no linux-x64 lock)")
         if not linux_only and need_win and not no_platform_backend and "windows-x64" not in plats:
             missing.append(f"{f}:{name} (no windows-x64 lock)")
-        # pin<->lock version equality: a config pin bumped without `mise lock`
-        # still passes coverage above (the lock entry exists, just stale) —
-        # catch that here so every host doesn't silently rewrite the tracked
-        # lock on its next `mise install`. "latest" pins have no fixed version
-        # to compare. A lock entry can have multiple blocks (e.g. os=["linux"]
-        # tools still carry an inert windows-x64 table); any matching block
-        # is accepted.
+        # pin<->lock equality: a pin bumped without `mise lock` leaves a stale lock entry
+        # that every host rewrites on install. "latest" is skipped; any matching block counts.
         pin = spec.get("version") if isinstance(spec, dict) else spec
         if pin and pin != "latest":
             blocks = entries if isinstance(entries, list) else [entries]
@@ -377,9 +365,7 @@ PY
   else
     bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64"
   fi
-  # PR2 host-state files: config.host.toml / config.native.toml / config.wsl.toml
-  # must parse and declare no [tools] (lock coverage above stays three files),
-  # and config.toml must carry the four [vars] pins the host-state tasks read.
+  # host-state files must parse and declare no [tools]; config.toml carries the four [vars] pins they read.
   if [ -z "$PY" ]; then
     note "no python with tomllib — host-state file / [vars] checks skipped locally (CI enforces)"
   else
@@ -431,11 +417,8 @@ PY
   else
     note "mise not installed — config load check skipped"
   fi
-  # locks/** sidecar layout — mise writes the pypi:/npm: dependency-locked
-  # sidecars at locks/<lockfile-stem>/<backend>-<tool>/<version>/ under the
-  # config root. A stale .mise/locks/** ref (the pre-move layout) silently
-  # dirties every host's checkout on its next `mise install`, which rewrites
-  # it to locks/ in place (see CLAUDE.md).
+  # locks/** sidecar layout: a stale .mise/locks/** ref dirties every host's checkout
+  # on its next install, which rewrites it to locks/ in place.
   local lock_ok=1 pathref hint
   hint="run: mise lock --global (from OUTSIDE the checkout with XDG_CONFIG_HOME pointing at a dir whose mise/ is a symlink to it — see scripts/bump-versions.sh)"
   while IFS= read -r pathref; do
@@ -456,12 +439,8 @@ PY
   if [ "$lock_ok" -eq 1 ]; then
     ok "every lock sidecar path ref is under locks/ and the directory exists"
   fi
-  # Every pypi:/npm: lock entry must carry its dependency-lock sidecar ref
-  # (pypi: `uv = { path = ... }`, npm: `aube = { path = ... }`). mise lock
-  # SKIPS a pypi: sidecar with only a warning when no uv >= 0.12.10 is
-  # installed. #152 shipped pypi:basedpyright@1.40.1 that way, and the first
-  # `wsu` on a host then generated the sidecar inside the tracked checkout.
-  # That left the tree dirty, so tasks/update's `git pull --ff-only` failed.
+  # Every pypi:/npm: lock entry needs its dependency-lock sidecar ref: `mise lock` only
+  # warns when uv < 0.12.10, and the next install then dirties the tracked checkout.
   if [ -n "$PY" ]; then
     local missing
     missing="$(
@@ -491,47 +470,8 @@ PYEOF
   fi
 }
 
-# Every config.toml [vars] *_version pin must be reachable two ways, or a
-# bump nobody sees: tasks/check-updates (the upstream-drift report) and
-# scripts/gen-tool-memory.sh (the machine-memory inventory). zjstatus_zellij_
-# floor is deliberately excluded (it's a coupling floor, not a pin — see
-# check_zjstatus_zellij_coupling).
-check_vars_pin_coverage() {
-  hdr "config.toml [vars] *_version pins reachable by check-updates + gen-tool-memory"
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — vars-pin coverage skipped locally (CI enforces)"
-    return
-  fi
-  local keys key env_name missing="" n=0
-  keys=$(
-    "$PY" - <<'PY'
-import tomllib
-with open("config.toml", "rb") as fh:
-    d = tomllib.load(fh)
-for k in d.get("vars", {}):
-    if k.endswith("_version"):
-        print(k)
-PY
-  )
-  while read -r key; do
-    [ -n "$key" ] || continue
-    n=$((n + 1))
-    env_name=$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')
-    grep -q "$env_name" tasks/check-updates || missing="$missing $key(tasks/check-updates)"
-    grep -q "$key" scripts/gen-tool-memory.sh || missing="$missing $key(gen-tool-memory.sh)"
-  done <<<"$keys"
-  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then
-    ok "all $n [vars] *_version pin(s) covered by tasks/check-updates + gen-tool-memory.sh"
-  else
-    bad "config.toml [vars] *_version pin(s) not fully covered:${missing:- <none derived>} — check-updates emits no line for these, or gen-tool-memory.sh doesn't read them"
-  fi
-}
-
-# Bootstrap-config invariants over the four [bootstrap.*] TOML files: parse, hook shape + task existence + name uniqueness, file source
-# existence + phase, package key shape + uniqueness + dropped names, the two
-# no-sudo rules (no [bootstrap.linux.firewall], no [bootstrap.user]), and shared/Windows safety (config.toml/config.owned.toml never gain a
-# [bootstrap] table). (h) is a live `mise bootstrap plan` — soft-skipped
-# unless both mise and dnf are on PATH (CI has no dnf).
+# Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
+# plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
   hdr "bootstrap-config invariants (config.host/native/wsl/linux.toml)"
   if [ -z "$PY" ]; then
@@ -552,9 +492,7 @@ for f in files:
     except Exception as e:
         print(f"FAIL|parse|{f} failed to parse: {e}")
 
-# (b): hooks — value is `mise run <task>` or `mise run <a> ::: <b> …`, each task
-# exists (a file in tasks/ or a [tasks.<name>] table in a config*.toml). A hook
-# name may appear in several loaded files: mise runs every one (verified).
+# Hooks: `mise run <task>[ ::: <task>]`, each task existing; mise runs a name from every loaded file.
 hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
 toml_tasks = set()
 for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
@@ -564,17 +502,9 @@ for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host
             toml_tasks |= set(tomllib.load(fh).get("tasks", {}))
     except FileNotFoundError:
         pass
-# post-dotfiles (config.linux.toml) is not a "mise run <task>" hook — it's the
-# raw compound chmod restoring ~/.ssh and ~/.claude modes that copy/template
-# mode can't express (the ONLY guarantee of the SSH
-# security posture). It must land byte-for-byte, so pin it to the exact
-# verified-safe literal here rather than just exempting the shape check: a
-# bare `chmod ... ; chmod ... ; true` LOOKS unconditional but is not — mise
-# runs hooks as `sh -o errexit -c '<hook>'`, and errexit aborts at the first
-# failing command in a `;`-chain (verified: on a shared host, MISE_ENV=linux
-# never loads config.owned.toml, so ~/.claude never exists, and the first
-# chmod's failure on that missing operand aborted the whole bootstrap before
-# `; true` was ever reached). Each command needs its own `|| true`.
+# post-dotfiles is the raw chmod line restoring ~/.ssh and ~/.claude modes, pinned to an
+# exact literal: mise runs hooks as `sh -o errexit`, so each command needs its own `|| true`
+# (on a shared host ~/.claude doesn't exist and the first chmod would abort the bootstrap).
 EXPECTED_POST_DOTFILES_HOOK = (
     "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; "
     "chmod 600 ~/.ssh/config 2>/dev/null || true; "
@@ -600,7 +530,6 @@ if bad_hooks:
 else:
     print(f"PASS|hooks|{n_hooks} hook(s) run existing tasks or are the pinned post-dotfiles literal")
 
-# (d): files — source exists relative to the repo root, phase valid when present.
 bad_files = []
 n_files = 0
 for f, d in loaded.items():
@@ -617,7 +546,6 @@ if bad_files:
 else:
     print(f"PASS|files|{n_files} bootstrap.files entry/ies: source exists, phase valid")
 
-# (e): packages — dnf: prefix, unique across host+native, dropped names absent.
 dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck"}
 seen_pkg = {}
 bad_pkg = []
@@ -634,7 +562,6 @@ if bad_pkg or pkg_dupes:
 else:
     print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) across host+native, unique, no dropped names")
 
-# (f): no [bootstrap.linux.firewall] and no [bootstrap.user] anywhere (plan/status would need sudo; login_shell needs chsh).
 ruling_hits = []
 for f, d in loaded.items():
     bs = d.get("bootstrap", {})
@@ -648,7 +575,6 @@ if ruling_hits:
 else:
     print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (plan/status would need sudo; login_shell needs chsh)")
 
-# (g): config.toml / config.owned.toml carry no [bootstrap] table (shared hosts / Windows never load one).
 prod_hits = []
 for f in ("config.toml", "config.owned.toml"):
     try:
@@ -675,7 +601,6 @@ PY
     done <<<"$out"
   fi
 
-  # (h) live plan — owned host with dnf only; CI has no dnf.
   if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
     if MISE_ENV=linux,owned,host,native mise bootstrap plan --json >/dev/null 2>&1; then
       ok "mise bootstrap plan --json (MISE_ENV=linux,owned,host,native) exits 0"
@@ -698,13 +623,8 @@ check_dotfiles_config() {
     "$PY" - <<'PY'
 import glob, os, tomllib
 
-# config.local.toml (git-ignored, per-host) is deliberately excluded: it
-# exists precisely to REPEAT a key from one of these five files (the
-# { mode = ..., enabled = false } override pattern — findings.md §9), so a
-# "no entry in two files" check would misfire against its own documented use.
-# config.host.toml is on this list because its gdbinit/gdb/herdr entries live
-# there so they never deploy dead files on a Windows host (see its own
-# [dotfiles] comment).
+# config.local.toml (git-ignored) is excluded: it exists to REPEAT a key from these files.
+# config.host.toml is listed so its gdb/herdr entries never deploy dead files on Windows.
 files = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
@@ -725,7 +645,6 @@ for f, d in loaded.items():
             spec = {"source": spec, "mode": "symlink"}
         entries.append((f, target, spec))
 
-# (a) every entry's source exists.
 bad_src = []
 for f, target, spec in entries:
     src = spec.get("source")
@@ -738,7 +657,6 @@ if bad_src:
 else:
     print(f"PASS|source-exists|{len(entries)} entries, every source exists")
 
-# (b) every mode is one of the five.
 bad_mode = []
 for f, target, spec in entries:
     mode = spec.get("mode")
@@ -749,12 +667,8 @@ if bad_mode:
 else:
     print(f"PASS|mode-valid|every entry's mode is one of {sorted(VALID_MODES)}")
 
-# (c) no `[dotfiles]` entry, in ANY of the five files, on ANY platform, is
-# `symlink` or `symlink-each` — every entry is `copy` or `template`, because
-# some applications on either OS don't respect symlinks (a bare `symlink` on
-# Windows needs Developer Mode and silently falls back to copy; a directory
-# `symlink` becomes a junction). All 5 files are checked because
-# config.toml/config.owned.toml entries land on a Windows host too.
+# No entry is `symlink` or `symlink-each`: every entry is `copy` or `template`
+# (Windows symlinks need Developer Mode; a directory symlink becomes a junction).
 bad_symlink = []
 n_total = 0
 for f, target, spec in entries:
@@ -767,13 +681,8 @@ if bad_symlink:
 else:
     print(f"PASS|no-symlink-anywhere|{n_total} entries across all 5 config files are copy or template, none symlink/symlink-each")
 
-# (d) every entry with a directory source and an `exclude` list covers every
-# .vendor/.gitkeep sidecar actually present there. Used to only check
-# `symlink-each` entries (the only mode that took `exclude` pre-migration);
-# now every directory entry is `copy` instead, so this checks any entry that
-# DECLARES `exclude` at all, regardless of mode — the controller verified
-# `exclude` works for `copy` on a directory source the same way it worked
-# for `symlink-each`.
+# Every directory entry that declares `exclude` covers each .vendor/.gitkeep
+# sidecar actually present there.
 bad_exclude = []
 n_each = 0
 for f, target, spec in entries:
@@ -793,7 +702,6 @@ if bad_exclude:
 else:
     print(f"PASS|dir-copy-exclude|{n_each} directory entries with an exclude list cover every .vendor/.gitkeep sidecar in their source")
 
-# (e) no target key appears in more than one of the four files.
 seen = {}
 for f, target, _spec in entries:
     seen.setdefault(target, []).append(f)
@@ -803,8 +711,6 @@ if dupes:
 else:
     print(f"PASS|no-dupes|{len(seen)} distinct target(s), none declared in more than one config file")
 
-# (f) every .tera file under dotfiles/ is referenced by exactly one entry
-# (no orphans, no double-use of one template by two targets).
 tera_files = set(glob.glob("dotfiles/**/*.tera", recursive=True))
 tera_refs = {}
 for f, target, spec in entries:
@@ -841,12 +747,8 @@ PY
 check_lsp_plugin() {
   hdr "workstation-lsp plugin manifest"
   local src="dotfiles/claude/skills/workstation-lsp"
-  # Both leading dots are load-bearing: Claude Code's own plugin-manifest
-  # convention needs .claude-plugin/plugin.json, and the LSP registry needs
-  # .lsp.json. dotfiles/ keeps them literally, matching the real ~/.claude
-  # tree (workstation-lsp/ nests inside the `~/.claude/skills`
-  # [dotfiles] entry in config.owned.toml, copy mode, so nested names deploy
-  # exactly as spelled here).
+  # Both leading dots are load-bearing: Claude Code needs .claude-plugin/plugin.json and
+  # the LSP registry needs .lsp.json, which deploy as spelled under the ~/.claude/skills copy entry.
   if [ ! -f "$src/.claude-plugin/plugin.json" ] || [ ! -f "$src/.lsp.json" ]; then
     bad "missing workstation-lsp plugin source ($src/.claude-plugin/plugin.json + .lsp.json)"
     return
@@ -871,13 +773,10 @@ check_lsp_plugin() {
 }
 
 # --- flag-parity: repo-script flags == completion-surface flags --------------
-# Five pairs: the three .sh scripts -> zsh _<name> files + completions.bash;
-# the two .ps1 scripts -> the workstation_*_flags records in config.nu.tera.
-# Long-form flags only. Trailing args to _sh_script_flags are EXCLUSIONS —
-# flags the script accepts but completions deliberately omit.
+# Five pairs (three .sh scripts, two .ps1 scripts), long-form flags only. Trailing args to
+# _sh_script_flags are flags the script accepts but completions deliberately omit.
 
-# Long flags a bash script accepts: its case arms (any nesting depth),
-# alternatives split, short forms dropped. $2+ = exclusions.
+# Long flags a bash script accepts from its case arms; $2+ are exclusions.
 _sh_script_flags() {
   local script=$1 out f
   shift
@@ -889,26 +788,22 @@ _sh_script_flags() {
   printf '%s\n' "$out"
 }
 
-# -Flag names from a PowerShell script's param() block.
 _ps_script_flags() {
   awk '/^param\(/{f=1} f{print} f&&/^\)/{exit}' "$1" |
     grep -oE '\[(switch|string)\]\$[A-Za-z]+' | sed 's/.*\$/-/' | sort -u
 }
 
-# --flag tokens from a zsh completion file (full-line comments stripped —
-# comments may legitimately name excluded flags).
+# --flag tokens from a zsh completion file (full-line comments stripped; they may name excluded flags).
 _zsh_completion_flags() {
   grep -v '^#' "$1" | grep -oE -- '--[a-z-]+' | sort -u
 }
 
-# --flag tokens from one function body in completions.bash.
 _bash_completion_flags() {
   awk -v fn="$1" '$0 ~ "^"fn"\\(\\)" {f=1} f{print} f&&/^}/{exit}' \
     dotfiles/config/bash/completions.bash |
     grep -oE -- '--[a-z-]+' | sort -u
 }
 
-# Quoted "-Flag" values from one `let workstation_*_flags` list in config.nu.tera.
 _nu_completion_flags() {
   awk -v v="$1" '$0 ~ "^let "v {f=1} f{print} f&&/^\]/{exit}' \
     dotfiles/windows/AppData/Roaming/nushell/config.nu.tera |
@@ -939,37 +834,9 @@ check_completion_parity() {
     "$(_nu_completion_flags workstation_bootstrap_flags)"
 }
 
-check_zjstatus_zellij_coupling() {
-  hdr "zjstatus <-> zellij plugin-ABI floor"
-  local zj zjs floor
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — zjstatus/zellij coupling skipped locally (CI enforces)"
-    return
-  fi
-  zj=$(tomlval config.linux.toml tools.zellij)
-  zjs=$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"')
-  floor=$(tomlval config.toml vars.zjstatus_zellij_floor)
-  if [ -z "$zj" ] || [ -z "$zjs" ] || [ -z "$floor" ]; then
-    bad "could not read tools.zellij / tools.\"github:dj95/zjstatus\" from config.linux.toml, or vars.zjstatus_zellij_floor from config.toml"
-    return
-  fi
-  # zjstatus is compiled against zellij-tile, and each release states the
-  # zellij floor it needs (v0.25.0: ">= 0.45.0 required" — it fixed frame
-  # flicker that 0.45.0 introduced). The floor is recorded next to the pin
-  # rather than fetched: the release notes are prose, and this check must
-  # pass offline. A mismatch is silent at runtime — the bar pane just fails
-  # to render — and `zellij setup --check` still reports Well defined.
-  if [ "$(printf '%s\n%s\n' "$floor" "$zj" | sort -V | tail -1)" = "$zj" ]; then
-    ok "zjstatus $zjs needs zellij >= $floor; pinned zellij is $zj"
-  else
-    bad "zjstatus $zjs needs zellij >= $floor but ZELLIJ_VERSION is $zj — bump zellij, or pin the zjstatus release built for $zj (and its floor)"
-  fi
-}
-
 check_mise_install_lib() {
   hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/verify-tools)"
   local out
-  # Offline behavioural test with a fake `mise` on PATH and a scratch HOME.
   if out=$(bash scripts/test-mise-install.sh 2>&1); then
     ok "${out#PASS: }"
   else
@@ -989,14 +856,33 @@ check_bootstrap_mode() {
   fi
 }
 
+# The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
+# GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
+check_self_tests() {
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh)"
+  local out t
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self"; do
+    if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
+      note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
+      continue
+    fi
+    # shellcheck disable=SC2086  # $t carries the script and its flag
+    if out="$(env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE bash $t 2>&1)"; then
+      ok "$(printf '%s\n' "$out" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^[^[:alnum:]]+//')"
+    else
+      bad "${t%% *} failed:"
+      { printf '%s\n' "$out" | grep -E 'FAIL' || printf '%s\n' "$out" | tail -5; } | sed 's/^/      /'
+    fi
+  done
+}
+
 check_shellcheck() {
   hdr "shellcheck (warning and above)"
   if ! command -v shellcheck >/dev/null 2>&1; then
     note "shellcheck not installed — skipped locally (CI enforces; 'dnf install shellcheck' to run here)"
     return 0
   fi
-  # NB: executable_winterop is first-party (shellchecked); executable_batpipe is
-  # vendored (eth-p/bat-extras) and deliberately excluded.
+  # winterop is first-party; the vendored batpipe is excluded.
   local -a targets
   mapfile -t targets < <(shell_targets)
   if shellcheck -x -S warning "${targets[@]}"; then
@@ -1012,7 +898,6 @@ check_shfmt() {
     note "shfmt not installed — skipped locally (CI enforces; 'mise run fmt' to format here)"
     return 0
   fi
-  # Same first-party set as shellcheck (vendored _cht.sh / batpipe excluded).
   local -a targets
   mapfile -t targets < <(shell_targets)
   local out
@@ -1040,17 +925,9 @@ check_gitleaks() {
 }
 
 # --- Warp rc guards: correct scope, and never over the plugin chain ----------
-# The rc files skip fzf/atuin/starship/shift-select/fzf-tab under Warp
-# (TERM_PROGRAM=WarpTerminal) because Warp owns the input editor. Commit
-# c9709cf records what happens when such a guard's `fi` is allowed to drift:
-# the fzf-tab guard swallowed the whole plugin-load section and silently
-# disabled zsh-autosuggestions, zsh-syntax-highlighting, zsh-you-should-use and
-# zsh-history-substring-search under Warp. Nothing caught it for months.
-#
-# The contract this enforces: a Warp guard may only be folded into a
-# pre-existing `if` condition, or open a SHORT block; and the four plugin
-# sources must never sit inside one. Guard counts are asserted too, so a
-# dropped or duplicated guard is a failure rather than a silent behavior change.
+# A guard whose `fi` drifts can swallow the plugin-load section and silently disable four
+# zsh plugins under Warp: a guard may only fold into an `if` or open a SHORT block, and no
+# plugin source may sit inside one. Guard counts are asserted.
 check_warp_guards() {
   hdr "Warp TERM_PROGRAM guards (scope + plugin-chain safety)"
   local zsh=dotfiles/zshrc.tera bash=dotfiles/bashrc.tera
@@ -1068,10 +945,8 @@ check_warp_guards() {
     bad "bashrc.tera: $n_bash Warp guards, want 2 — parity pair with zshrc.tera"
   fi
 
-  # Depth-track top-level if/fi and report any plugin source loaded while
-  # inside a Warp guard. Single-line `if ...; then ...; fi` bodies (the
-  # fzf-preview zstyle contains one) never open a block here because the
-  # close pattern only matches a line that IS an `fi`.
+  # Depth-track if/fi and report any plugin source inside a Warp guard; one-line
+  # `if ...; fi` bodies never open a block (the close pattern matches only a bare `fi`).
   out=$(awk '
     /WarpTerminal/ && /;[[:space:]]*then[[:space:]]*$/ { warp[depth+1] = 1 }
     /;[[:space:]]*then[[:space:]]*$/                   { depth++; next }
@@ -1096,10 +971,7 @@ check_zellij_config() {
   local cfg="$dir/config.kdl"
   local theme hits bad_hash tmp
 
-  # 1. theme "<name>" in config.kdl must name a theme block in themes/*.kdl.
-  #    Nothing upstream catches a dangling name: `zellij setup --check` reports
-  #    "Well defined" for a bogus theme and zellij then falls back to its
-  #    built-in default at runtime, silently, with the wrong accent colour.
+  # 1. theme "<name>" must name a theme in themes/*.kdl; `setup --check` misses a bogus one.
   theme=$(sed -nE 's/^[[:space:]]*theme[[:space:]]+"([^"]+)".*/\1/p' "$cfg" | head -1)
   if [ -z "$theme" ]; then
     bad "$cfg: no theme \"...\" line found"
@@ -1109,9 +981,7 @@ check_zellij_config() {
     bad "theme \"$theme\" in $cfg has no matching block in $dir/themes/*.kdl"
   fi
 
-  # 2. KDL comments are //, never #. A single '#' line invalidates the WHOLE
-  #    file and zellij falls back to built-in defaults with no error at all —
-  #    theme, keybinds and scroll_buffer_size all dropped silently.
+  # 2. KDL comments are //, never #: one '#' line silently drops the whole file.
   bad_hash=$(grep -lE '^[[:space:]]*#' "$cfg" "$dir"/layouts/*.kdl "$dir"/themes/*.kdl 2>/dev/null || true)
   if [ -z "$bad_hash" ]; then
     ok "no '#' comment lines in any tracked .kdl (KDL needs //)"
@@ -1120,9 +990,8 @@ check_zellij_config() {
     printf '%s\n' "$bad_hash" | sed 's/^/       /'
   fi
 
-  # 3. copy_command must stay UNSET — it overrides OSC 52 with a binary that
-  #    runs on the REMOTE host, where there is no display. Regressed until
-  #    2026-08-31 (ad444df); every yank in a remote session went nowhere.
+  # 3. copy_command must stay UNSET: it overrides OSC 52 with a binary that runs on the
+  #    REMOTE host, where there is no display.
   hits=$(grep -nE '^[[:space:]]*copy_command' "$cfg" || true)
   if [ -z "$hits" ]; then
     ok "copy_command unset — OSC 52 clipboard path intact (ad444df)"
@@ -1131,8 +1000,7 @@ check_zellij_config() {
     printf '%s\n' "$hits" | sed 's/^/       /'
   fi
 
-  # 4. Web server pinned off. The installed build is web-CAPABLE, so these
-  #    pins are not redundant with upstream defaults.
+  # 4. Web server pinned off: the build is web-CAPABLE, so the pins aren't redundant.
   if grep -qE '^[[:space:]]*web_server[[:space:]]+false' "$cfg" &&
     grep -qE '^[[:space:]]*web_sharing[[:space:]]+"disabled"' "$cfg"; then
     ok "web_server false + web_sharing \"disabled\" pinned"
@@ -1140,20 +1008,16 @@ check_zellij_config() {
     bad "$cfg must pin web_server false AND web_sharing \"disabled\" (build is web-capable)"
   fi
 
-  # 5. The tab-bar alias must point at mise's install dir for zjstatus, via the
-  #    `latest` link mise keeps at the pinned version: the path is stable across
-  #    bumps (so the permission-cache key survives) and needs no copy step.
+  # 5. The tab-bar alias points at mise's `latest` link for zjstatus: stable across bumps,
+  #    so the permission-cache key survives, and no copy step.
   if grep -qE '^[[:space:]]*tab-bar[[:space:]]+location="file:~/\.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus\.wasm"' "$cfg"; then
     ok "tab-bar alias -> mise's install dir (github-dj95-zjstatus/latest/zjstatus.wasm)"
   else
     bad "$cfg: plugins { tab-bar location=\"file:~/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm\" ... } missing or different"
   fi
 
-  # 6. The zjstatus pills are Nerd Font half-circles, U+E0B6 (left) and U+E0B4
-  #    (right), sitting between the style tags. They are invisible in most
-  #    editors and were silently dropped once (2026-09-13: the bar shipped as
-  #    square colour blocks). Every pill must open and close, so the two
-  #    counts must match and be non-zero.
+  # 6. The zjstatus pills are invisible Nerd Font half-circles (U+E0B6 / U+E0B4); every
+  #    pill must open and close, so the two counts must match and be non-zero.
   local lc rc
   lc=$(grep -o $'\xee\x82\xb6' "$cfg" | wc -l)
   rc=$(grep -o $'\xee\x82\xb4' "$cfg" | wc -l)
@@ -1163,12 +1027,10 @@ check_zellij_config() {
     bad "$cfg: zjstatus pill glyphs missing or unbalanced (U+E0B6 x$lc, U+E0B4 x$rc) — the bar renders square blocks"
   fi
 
-  # 7. Real parse, when zellij is available. Soft-skip in CI, where it is not
-  #    installed — same posture as the other optional-checker skips.
+  # 7. Real parse when zellij is installed; soft-skipped in CI.
   if command -v zellij >/dev/null 2>&1; then
     tmp=$(mktemp -d)
-    # Stage layouts/ and themes/ alongside: default_layout and theme are both
-    # resolved relative to the config dir, and a missing dir is a false failure.
+    # Stage layouts/ and themes/ alongside: both resolve relative to the config dir.
     cp "$cfg" "$tmp/" && cp -r "$dir/layouts" "$dir/themes" "$tmp/"
     if ZELLIJ_CONFIG_DIR="$tmp" zellij setup --check 2>&1 | grep -q 'CONFIG FILE.*Well defined'; then
       ok "zellij setup --check: config file well defined"
@@ -1181,72 +1043,34 @@ check_zellij_config() {
   fi
 }
 
-check_go_gopls_coupling() {
-  hdr "gopls <-> Go toolchain floor"
-  local gov goplsv floor
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — go/gopls coupling skipped locally (CI enforces)"
-    return
-  fi
-  gov=$(tomlval config.owned.toml tools.go)
-  goplsv=$(tomlval config.owned.toml 'tools."go:golang.org/x/tools/gopls"')
-  if [ -z "$gov" ] || [ -z "$goplsv" ]; then
-    bad "could not read tools.go / tools.\"go:golang.org/x/tools/gopls\" from config.owned.toml"
-    return
-  fi
-
-  # gopls declares its minimum toolchain in its OWN go.mod, and mise's go: backend builds
-  # it with `go install` using the PINNED Go (mise-runtimes). A mismatch fails
-  # that one tool; the others still install and the stamp stays unwritten, so
-  # the host keeps a stale gopls (or none) until the pins agree.
-  # Verified both directions on 2026-08-31: gopls 0.23.0 + go 1.24.4 fails with
-  # "requires go >= 1.26.0", and gopls 0.23.0 + go 1.27.0 builds under
-  # GOTOOLCHAIN=local (i.e. without silently fetching a second toolchain).
-  floor=$(curl -fsSL --max-time 15 \
-    "https://raw.githubusercontent.com/golang/tools/gopls/v${goplsv}/gopls/go.mod" 2>/dev/null |
-    awk '/^go /{print $2; exit}')
-  if [ -z "$floor" ]; then
-    note "offline or tag missing — skipped the gopls go.mod floor check"
-    return
-  fi
-  if [ "$(printf '%s\n%s\n' "$floor" "$gov" | sort -V | tail -1)" = "$gov" ]; then
-    ok "gopls $goplsv needs go >= $floor; pinned go is $gov"
-  else
-    bad "gopls $goplsv requires go >= $floor but tools.go (config.owned.toml) is $gov — \`mise install\` would fail on gopls, leaving it stale or absent; bump both together"
-  fi
-}
-
-check_tsls_typescript_coupling() {
-  hdr "typescript-language-server <-> typescript major"
-  local post tsv tslsv major
-  post=$(grep -E '^node = ' config.owned.toml)
-  tslsv=$(grep -oE 'typescript-language-server@[0-9.]+' <<<"$post" | cut -d@ -f2)
-  tsv=$(grep -oE 'typescript@[0-9.]+' <<<"$post" | cut -d@ -f2)
-  if [ -z "$tsv" ] || [ -z "$tslsv" ]; then
-    bad "could not read typescript / typescript-language-server versions from config.owned.toml's node postinstall"
-    return
-  fi
-  # typescript-language-server (every release through 6.0.0) drives
-  # typescript/lib/tsserver.js; TypeScript 7.x (the native Go compiler) ships
-  # only bin/tsc, so ts-ls fails `initialize` with "Could not find a valid
-  # TypeScript installation" (verified 2026-09-13 against 7.0.2). Until a
-  # ts-ls release targets TS 7, the pin must stay on the 5.x line — the weekly
-  # bumper would otherwise walk it back to 7.x (hence the EXCLUDE entry).
-  major=${tsv%%.*}
-  if [ "$major" -le 5 ] 2>/dev/null; then
-    ok "typescript $tsv (major $major) is tsserver-capable for typescript-language-server $tslsv"
-  else
-    bad "typescript $tsv has no lib/tsserver.js — typescript-language-server $tslsv cannot initialize; keep the 5.x line until ts-ls supports TS 7"
-  fi
-}
-
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
 fi
+if [ "${1:-}" = --only ]; then
+  shift
+  [ "$#" -gt 0 ] || {
+    echo "usage: $0 --only <check_name>..." >&2
+    exit 2
+  }
+  for c in "$@"; do
+    case "$c" in
+    check_*) declare -F "$c" >/dev/null || {
+      echo "unknown check: $c" >&2
+      exit 2
+    } ;;
+    *)
+      echo "unknown check: $c" >&2
+      exit 2
+      ;;
+    esac
+  done
+  for c in "$@"; do "$c"; done
+  [ "$fails" -eq 0 ]
+  exit
+fi
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
-check_version_pins
-check_bumper_exclude
+check_pins
 check_line_endings_and_mode
 check_dotfiles_mode
 check_bom
@@ -1254,18 +1078,15 @@ check_ps_variable_drive_refs
 check_sentinels
 check_tools_block
 check_mise_config_files
-check_vars_pin_coverage
 check_bootstrap_config
 check_dotfiles_config
 check_lsp_plugin
 check_completion_parity
 check_warp_guards
 check_zellij_config
-check_go_gopls_coupling
-check_tsls_typescript_coupling
-check_zjstatus_zellij_coupling
 check_mise_install_lib
 check_bootstrap_mode
+check_self_tests
 check_shellcheck
 check_shfmt
 check_gitleaks

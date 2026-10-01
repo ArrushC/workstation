@@ -12,24 +12,10 @@
 # hook test can target a throwaway file. See CLAUDE.md + docs/claude/.
 set -u
 
-INPUT="$(cat)"
-hookfield() {
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | HF="$1" python3 -c 'import os,sys,json
-p=os.environ["HF"].lstrip(".").split(".")
-try:
-    v=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for k in p:
-    v=v.get(k) if isinstance(v,dict) else None
-print(v if isinstance(v,str) else "")' 2>/dev/null
-  fi
-}
+# shellcheck source=.claude/hooks/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || exit 0
 
-f="$(hookfield '.tool_input.file_path')"
+f="$(hook_field '.tool_input.file_path')"
 [ -n "$f" ] || exit 0
 norm="${f//\\//}"
 
@@ -65,12 +51,7 @@ fi
 
 "$scripts/gen-tool-memory.sh" >/dev/null 2>&1 || exit 0
 
-msg="Regenerated the TOOLS block in dotfiles/claude/CLAUDE.md from your config*.toml edit — commit it with this change (it's symlinked to ~/.claude/CLAUDE.md, so the update is already live). If you changed a pin: \`mise lock --global\` refreshes the lockfiles (commit those too)."
+msg="Regenerated the TOOLS block in dotfiles/claude/CLAUDE.md from your config*.toml edit; commit it with this change (\`wsa\` deploys it to ~/.claude/CLAUDE.md). A changed [tools] pin needs its lock entries regenerated (never hand-edit; recipe: docs/claude/verification.md, Locks), and a min_version change must match MISE_VERSION in bootstrap.sh and \$MiseVersion in bootstrap.ps1. \`mise run lint\` checks both."
 
-if command -v jq >/dev/null 2>&1; then
-  jq -nc --arg c "$msg" \
-    '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c},suppressOutput:true}'
-else
-  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"},"suppressOutput":true}\n' "$msg"
-fi
+hook_context PostToolUse "$msg"
 exit 0

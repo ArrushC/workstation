@@ -9,4 +9,6 @@ When a Windows-side command is interactive or long-running (`bootstrap.ps1`, `ws
 
 **Why:** Piped interop sessions have no console — any hidden prompt blocks forever with zero output (bit PR #86 validation: the then-chezmoi apply inside a piped `bootstrap.ps1` hung >30 min on an overwrite prompt; had to Stop-Process the tree). The user also explicitly asked to be the one running such commands ("Ask me to run the command instead", 2026-07-15).
 
+Even when the user asks ("can you run it on windows", 2026-10-01), auto mode's classifier denied the first step, a Windows-side `git checkout` of the PR branch, as a production deploy. Hand the commands over straight away; only the read-only probes and small user-requested edits (e.g. removing a User PATH entry) went through.
+
 **How to apply:** Before invoking anything Windows-side that could prompt or take minutes, hand the exact command to the user and wait. Same pattern as [[feedback-sudo-not-passwordless]] (hand sudo prompts to the user via `!`). Diagnose stuck state read-only first (process tree via `Get-CimInstance Win32_Process`, config/file presence) before asking for a kill. More Windows-from-WSL gotchas in [[project-windows-apply-via-wsl-gotchas]].

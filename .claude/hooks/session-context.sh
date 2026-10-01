@@ -6,35 +6,21 @@
 # repo:
 #   - dotfiles deploy state (does $HOME match the source you're editing? —
 #     `mise dot status`)
-#   - host identity & scope (hostname, owned/shared mode, distro / EL family)
+#   - host identity & scope (hostname, owned/shared mode and miserc tokens, an exported MISE_ENV, distro / EL family)
 #   - WSL & interop capability (interop enabled?, powershell.exe reachable?)
 #   - guardrail readiness (jq/shfmt/gitleaks/shellcheck + pre-commit hook)
 #
-# Idiom matches the other repo hooks: jq -> python3 -> fail-open; always exit 0.
+# Reads input via lib.sh; fails open; always exit 0.
 # Every bucket fails OPEN independently (drops its segment on any error) and
 # every external probe is timeout-bounded. It NEVER spawns a Windows process —
 # interop is detected statically. See CLAUDE.md + docs/claude/.
 set -u
 
-INPUT="$(cat)"
-hookfield() {
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | HF="$1" python3 -c 'import os,sys,json
-p=os.environ["HF"].lstrip(".").split(".")
-try:
-    v=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for k in p:
-    v=v.get(k) if isinstance(v,dict) else None
-print(v if isinstance(v,str) else "")' 2>/dev/null
-  fi
-}
+# shellcheck source=.claude/hooks/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || exit 0
 
 # --- resolve repo root (prefer CLAUDE_PROJECT_DIR, else cwd, else git top) ----
-cwd="$(hookfield '.cwd')"
+cwd="$(hook_field '.cwd')"
 root=""
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
   root="$CLAUDE_PROJECT_DIR"
@@ -76,19 +62,26 @@ print(len(d.get("files",[])))' 2>/dev/null)"
 
 # --- bucket: host identity & scope -------------------------------------------
 seg_host() {
-  local host mode osr id ver plat el osseg
+  local host mode envseg tokens osr id ver plat el osseg
   host="$(uname -n 2>/dev/null)"
   # owned/shared is the `owned` token in miserc.toml's `env = [...]` (written by
   # scripts/lib/mise-env.sh) — not config.local.toml's vars.mode, which may not
   # exist yet on a fresh clone. Missing/unreadable miserc leaves mode unset.
-  mode=""
-  tokens="$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')"
-  if [ -n "$tokens" ]; then
-    case ",${tokens}," in
-    *,owned,*) mode="owned" ;;
-    *) mode="shared" ;;
-    esac
+  mode="" envseg=""
+  if [ -r "$root/miserc.toml" ]; then
+    tokens="$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')"
+    if [ -n "$tokens" ]; then
+      case ",${tokens}," in
+      *,owned,*) mode="owned" ;;
+      *) mode="shared" ;;
+      esac
+      envseg="env=$tokens"
+    fi
+  else
+    envseg="miserc=missing"
   fi
+  # An exported MISE_ENV overrides miserc for every mise call in this session.
+  [ -n "${MISE_ENV:-}" ] && envseg="$envseg MISE_ENV=$MISE_ENV (exported; overrides miserc)"
   osr=/etc/os-release
   id="$(sed -nE 's/^ID=("?)([^"]*)\1.*/\2/p' "$osr" 2>/dev/null | head -1)"
   ver="$(sed -nE 's/^VERSION_ID=("?)([^"]*)\1.*/\2/p' "$osr" 2>/dev/null | head -1)"
@@ -99,6 +92,7 @@ seg_host() {
   [ -n "$osseg" ] && [ -n "$el" ] && [ "$el" != "$plat" ] && osseg="$osseg ($el)"
   printf 'host=%s' "${host:-?}"
   [ -n "$mode" ] && printf ' mode=%s' "$mode"
+  [ -n "$envseg" ] && printf ' %s' "${envseg# }"
   [ -n "$osseg" ] && printf ' %s' "$osseg"
 }
 
@@ -160,12 +154,5 @@ for s in "${segs[@]}"; do
   sep=" | "
 done
 
-# Emit. jq escapes $block safely; the no-jq printf fallback relies on $block
-# carrying no " or \ (guaranteed: hostname/group/os/distro values don't).
-if command -v jq >/dev/null 2>&1; then
-  jq -nc --arg c "$block" \
-    '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c},suppressOutput:true}'
-else
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"},"suppressOutput":true}\n' "$block"
-fi
+hook_context SessionStart "$block"
 exit 0

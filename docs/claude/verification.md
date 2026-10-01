@@ -2,7 +2,7 @@
 
 > Recipes for verifying a change, grouped by subsystem. The rules they protect are in CLAUDE.md.
 > Automated checks (`mise run lint` = `scripts/check-invariants.sh`, `bash scripts/check-templates.sh`,
-> and the `lint.yml` CI jobs) cover most static invariants; the recipes below are what they don't.
+> and the `lint.yml` CI jobs; lint also runs the hook and pin self-tests) cover most static invariants; the recipes below are what they don't.
 
 ## Host state and tools (read-only, no sudo)
 
@@ -26,8 +26,12 @@
   block): `bash scripts/test-mise-install.sh` (PASS), then on a real host `mise doctor`
   (activated + shims_on_path yes) and `zsh -c 'command -v node'` resolving to the mise shim. A
   second `mise bootstrap --yes` is a fast no-op.
-- Locks: never hand-edit. Regeneration (from outside the checkout, then sidecar-path normalisation)
-  is implemented in `scripts/bump-versions.sh`; `check-invariants.sh` verifies lock coverage.
+- Locks: never hand-edit. Regenerate from outside the checkout for the changed tools, then fold any
+  `.mise/locks/` into `locks/` as `normalize_lock_sidecars` in `scripts/bump-versions.sh` does:
+  `L=$(mktemp -d); ln -s ~/.config/mise "$L/mise"`, then
+  `(cd /tmp && env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$L" MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 <tools>)`
+  and the same with `MISE_ENV=windows,owned … --platform windows-x64` for tools that install on Windows.
+  `check-invariants.sh` verifies coverage.
 - pueued: `systemctl --user cat dev.mise.pueued.service` has no `Environment=MISE_ENV=` line;
   `~/.config/mise/miserc.toml` has the right `env = [...]`; `systemctl --user is-active dev.mise.pueued`
   prints `active`.

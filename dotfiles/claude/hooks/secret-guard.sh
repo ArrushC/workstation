@@ -3,11 +3,8 @@
 #
 # GLOBAL (deployed to ~/.claude/hooks/ by mise dotfiles; active in every repo). Keeps
 # secrets out of Claude's reach:
-#   - DENY editing OR reading the age identity, SSH private keys, and certs
-#   - ASK before any Bash command that names one of those secrets
-# The age identity path (~/.config/chezmoi/key.txt) is a leftover from this
-# repo's pre-mise chezmoi era — age/encryption was dropped, not ported — so this guard
-# is now a defensive no-op kept in case a host still has one lying around.
+#   - DENY editing OR reading SSH private keys, *.pem and *.key
+#   - ASK before a Bash command that names an SSH private key
 #
 # Contract: hook JSON on stdin -> PreToolUse JSON on stdout. Fails OPEN if it
 # cannot parse the input (so it never wedges the session).
@@ -39,9 +36,8 @@ emit() { # emit <allow|deny|ask> <reason>
   exit 0
 }
 
-is_secret_path() { # 0 if $1 looks like a private key / age identity / cert
+is_secret_path() { # 0 if $1 looks like a private key / cert
   case "${1//\\//}" in
-  */chezmoi/key.txt) return 0 ;;
   */id_rsa | */id_ed25519 | */id_ecdsa | */id_dsa) return 0 ;;
   *.pem | *.key) return 0 ;;
   esac
@@ -56,14 +52,14 @@ Edit | Write | MultiEdit | Read)
   if is_secret_path "$f"; then
     verb="modify"
     [ "$tool" = "Read" ] && verb="read"
-    emit deny "Refusing to $verb $f — it looks like a private key, a legacy chezmoi age identity, or a cert. Claude must not load or change secrets. If this is intentional, the user can do it manually or temporarily disable the secret-guard hook."
+    emit deny "Refusing to $verb $f — it looks like a private key or a cert. Claude must not load or change secrets. If this is intentional, the user can do it manually or temporarily disable the secret-guard hook."
   fi
   ;;
 Bash)
   c="$(hookfield '.tool_input.command')"
   [ -n "$c" ] || exit 0
-  if printf '%s' "$c" | grep -Eq '\bkey\.txt\b|\bid_(rsa|ed25519|ecdsa|dsa)\b'; then
-    emit ask "This command references what looks like the age identity or an SSH private key. Confirm it will not read, copy, or commit the secret before allowing."
+  if printf '%s' "$c" | grep -Eq '\bid_(rsa|ed25519|ecdsa|dsa)\b'; then
+    emit ask "This command references what looks like an SSH private key. Confirm it will not read, copy, or commit the secret before allowing."
   fi
   ;;
 esac
