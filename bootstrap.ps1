@@ -37,7 +37,7 @@
 #
 # Flags (see param() below): -RepoPath -SkipKeyGen -SkipToolInstall
 #   -SkipDotfiles -SkipBurntToast -SkipNerdFonts -ForceInstaller
-#   -SkipElevated -Reinstall -Yes -Doctor -CheckForUpdates
+#   -SkipElevated -Reinstall -Yes
 # =============================================================================
 
 [CmdletBinding()]
@@ -51,9 +51,7 @@ param(
     [switch]$ForceInstaller,   # re-seed installer-class + Warp/Windows Terminal installs even if present
     [switch]$SkipElevated,     # skip SSHFS-Win/WinFsp (the only step that can pop UAC)
     [switch]$Reinstall,        # wipe the cloned repo, then re-bootstrap (prompts unless -Yes)
-    [switch]$Yes,              # skip confirmation prompts (-Reinstall)
-    [switch]$Doctor,           # read-only health report, then exit -- installs nothing
-    [switch]$CheckForUpdates   # read-only update scan vs upstream tags, then exit
+    [switch]$Yes               # skip confirmation prompts (-Reinstall)
 )
 
 Set-StrictMode -Version Latest
@@ -110,9 +108,7 @@ $WsPythonEnv = Join-Path $WsRoot "python-env"
 # Opt-in per-tool fields (absent = old behavior):
 #   IncludePrerelease  newest non-draft /releases entry instead of
 #                      /releases/latest (DevToys flags every 2.x prerelease)
-#   UpdateHint         -Doctor/-CheckForUpdates text when "self-updates"
-#                      is wrong (DevToys/WinSCP need a manual nudge)
-#   TagPrefix          tag prefix for -CheckForUpdates + UrlTemplate
+#   TagPrefix          tag prefix for UrlTemplate
 #                      (default "v"; DBeaver/WinSCP tags are bare)
 #   UrlTemplate        {VERSION}-templated download URL for apps with no
 #                      GitHub release assets (version via Get-LatestGitTag)
@@ -145,7 +141,6 @@ $InstallerTools = @(
         SilentArgs        = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"  # Inno; PrivilegesRequired=lowest -> per-user, no admin
         DetectName        = "DevToys*"                # HKCU ...\Uninstall\DevToys_is1 -> DisplayName "DevToys <ver>" (version-suffixed; glob also matches a user's "DevToys Preview" — intended: don't force a stable seed alongside)
         IncludePrerelease = $true                     # see banner: /releases/latest lies for this repo
-        UpdateHint        = "update-checks in-app only (no self-update); re-run bootstrap with -ForceInstaller to update"
     },
     @{
         Name       = "DBeaver"
@@ -153,17 +148,16 @@ $InstallerTools = @(
         AssetMatch = "dbeaver-ce-*-windows-x86_64.exe" # NSIS installer (NOT -aarch64.exe, NOT the .zip archives)
         SilentArgs = "/S /currentuser"                 # NSIS silent + MultiUser per-user pin -> no admin/UAC
         DetectName = "DBeaver*"                        # HKCU ...\Uninstall\"DBeaver (current user)"; glob also matches commercial editions (intended: never force CE alongside a licensed install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys)
-        TagPrefix  = ""                                # tags are bare (26.1.2, no v) — read by the -CheckForUpdates lookup only
+        TagPrefix  = ""                                # tags are bare (26.1.2, no v)
     },
     @{
         Name         = "WinSCP"
-        Repo         = "winscp/winscp"                 # tags only — NO release assets; version source for UrlTemplate + -CheckForUpdates
+        Repo         = "winscp/winscp"                 # tags only — NO release assets; version source for UrlTemplate
         TagPrefix    = ""                              # bare tags (6.5.6); Get-LatestGitTag's default filter drops 6.6-beta et al.
         UrlTemplate  = "https://winscp.net/download/WinSCP-{VERSION}-Setup.exe/download"  # first-party; redirects to a SourceForge mirror
         HashManifest = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/w/WinSCP/WinSCP/{VERSION}/WinSCP.WinSCP.installer.yaml"
         SilentArgs   = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
         DetectName   = "WinSCP*"                       # HKCU ...\Uninstall\winscp3_is1, DisplayName version-suffixed ("WinSCP 6.5.6"); glob also matches a machine-wide HKLM install (intended: never double-install alongside an admin install); MS-Store MSIX copies are invisible here and would double-install (known class caveat, same as DevToys/DBeaver)
-        UpdateHint   = "in-app update check prompts to install (not silent) — or re-run bootstrap with -ForceInstaller"
     },
     @{
         Name           = "Beyond Compare"                                       # commercial trialware: seed = 30-day trial; the user's license key unlocks it (Standard vs Pro by key)
@@ -172,7 +166,6 @@ $InstallerTools = @(
         HashManifest   = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/s/ScooterSoftware/BeyondCompare/5/{VERSION}/ScooterSoftware.BeyondCompare.5.installer.yaml"
         SilentArgs     = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER"  # Inno silent + documented per-user mode -> no admin/UAC (NEVER /ALLUSERS)
         DetectName     = "Beyond Compare*"                                      # HKCU ...\Uninstall\BeyondCompare5_is1; glob also matches BC4 or a machine-wide HKLM install (intended: never seed a trial alongside a licensed copy)
-        UpdateHint     = "in-app update check prompts to install (not silent) — or re-run bootstrap with -ForceInstaller"
     }
 )
 
@@ -205,7 +198,7 @@ $ElevatedTools = @(
         Name       = "SSHFS-Win"
         WingetId   = "SSHFS-Win.SSHFS-Win"   # manifest declares WinFsp.WinFsp as a dependency
         DetectName = "SSHFS-Win*"            # HKLM Uninstall DisplayName glob (machine-scope MSI)
-        Repo       = "winfsp/sshfs-win"      # for -CheckForUpdates tag lookups
+        Repo       = "winfsp/sshfs-win"
         # MSI fallback chain (winget absent) — installed IN ORDER; each entry is
         # skipped when its own DetectName is already registered:
         Msi        = @(
@@ -248,7 +241,7 @@ function Write-Log    { param($msg) Write-Host "${Blue}==>${Reset} ${Bold}$msg${
 function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
-function Write-Bad    { param($msg) Write-Host "${Red} ✗${Reset} $msg" }  # Write-Fail minus the exit — -Doctor reports, never aborts
+function Write-Bad    { param($msg) Write-Host "${Red} ✗${Reset} $msg" }  # Write-Fail minus the exit
 
 # =============================================================================
 # HTTP / GITHUB HELPERS
@@ -1872,8 +1865,8 @@ function Invoke-InstallClaudeCode {
 }
 
 # Get-PythonEnvStamp — the exact stamp path Invoke-PythonEnv writes on
-# success (pin + a hash of the lib list). Doctor calls this SAME helper so
-# its "already built" check can never drift onto a stale stamp left behind
+# success (pin + a hash of the lib list). One helper owns the path so the check
+# can never drift onto a stale stamp left behind
 # by an older pin.
 function Get-PythonEnvStamp {
     $libBytes = [System.Text.Encoding]::UTF8.GetBytes(($PythonLibs -join ' '))
@@ -1905,8 +1898,7 @@ function Invoke-PythonEnv {
         return
     }
 
-    # Stamp bakes pin + lib list (the Linux stamp's cksum analog); shared with
-    # Doctor via Get-PythonEnvStamp so the two checks can't drift apart.
+    # Stamp bakes pin + lib list (the Linux stamp's cksum analog).
     $stamp = Get-PythonEnvStamp
     $wpyShim = Join-Path $WsBin "wpy.cmd"
     if ((Test-Path $stamp) -and (Test-Path $wpyShim)) {
@@ -2006,59 +1998,8 @@ function Invoke-EnsureSshKey {
 }
 
 # =============================================================================
-# DOCTOR / CHECK-FOR-UPDATES -- read-only report modes (-Doctor /
-# -CheckForUpdates). Both exit before the provisioning flow starts: nothing
-# is installed, cloned, applied, or written. The Windows counterpart of
-# bootstrap.sh --doctor / --check-for-updates (whose tool knowledge lives in
-# config*.toml + tasks/; here the manifests in THIS script are the source of truth).
+# UPSTREAM VERSION LOOKUPS -- used by the vendor-installer resolvers
 # =============================================================================
-
-# Shared by both modes: fetch (best-effort), then report branch, ahead/behind
-# the upstream, and working-tree cleanliness. Returns $true when a repo exists.
-function Show-RepoState {
-    Write-Log "Workstation repo ($RepoPath)"
-    if (-not (Test-Path "$RepoPath\.git")) {
-        Write-Bad "no repo at $RepoPath — run .\bootstrap.ps1 first (or pass -RepoPath)"
-        return $false
-    }
-
-    # PS 5.1: native stderr + 2>$null under $ErrorActionPreference=Stop throws
-    # NativeCommandError — relax EAP around every git call in this function.
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try {
-        $null = git -C $RepoPath fetch --quiet 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "git fetch failed (offline or stale credentials) — using last-known remote state"
-        } else {
-            Write-Ok "fetched origin"
-        }
-
-        $branch   = git -C $RepoPath rev-parse --abbrev-ref HEAD 2>$null
-        $dirty    = @(git -C $RepoPath status --porcelain 2>$null).Count
-        $upstream = git -C $RepoPath rev-parse --abbrev-ref '@{upstream}' 2>$null
-        if ($LASTEXITCODE -eq 0 -and $upstream) {
-            $behind = [int](git -C $RepoPath rev-list --count "HEAD..@{upstream}" 2>$null)
-            $ahead  = [int](git -C $RepoPath rev-list --count "@{upstream}..HEAD" 2>$null)
-            if ($behind -gt 0) {
-                Write-Warn "branch $branch is $behind commit(s) behind $upstream — update with: git -C $RepoPath pull --ff-only"
-            } else {
-                Write-Ok "branch $branch is up to date with $upstream"
-            }
-            if ($ahead -gt 0) { Write-Warn "$ahead local commit(s) not pushed — push with: git -C $RepoPath push" }
-        } else {
-            Write-Warn "branch $branch has no upstream — behind/ahead unknown"
-        }
-
-        if ($dirty -gt 0) {
-            Write-Warn "$dirty uncommitted change(s) — review with: git -C $RepoPath status"
-        } else {
-            Write-Ok "working tree clean"
-        }
-    } finally {
-        $ErrorActionPreference = $oldEap
-    }
-    return $true
-}
 
 # Newest upstream tag via `git ls-remote --tags` — plain git, no GitHub API,
 # no rate limits. $Repo is owner/repo or a full git URL; $TagPrefix is what
@@ -2121,400 +2062,9 @@ function Get-LatestWingetVersion {
     return ($vers | Sort-Object { [version]$_ } -Descending | Select-Object -First 1)
 }
 
-# DisplayVersion from the Uninstall registry (same three roots as
-# Test-InstallerPresent). $null when not installed or no version recorded.
-function Get-InstalledAppVersion {
-    param([string]$DisplayName)
-    $roots = @(
-        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )
-    foreach ($root in $roots) {
-        $hit = Get-ItemProperty -Path $root -ErrorAction SilentlyContinue |
-               Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $DisplayName } |
-               Select-Object -First 1
-        if ($hit -and $hit.PSObject.Properties['DisplayVersion']) { return $hit.DisplayVersion }
-    }
-    return $null
-}
-
-# One report line comparing a pinned/installed version against the upstream
-# latest. -StringSort for date-style tags; otherwise [version] comparison with
-# a string-inequality fallback.
-function Write-UpdateStatus {
-    param([string]$Name, [string]$Pinned, [string]$Latest, [string]$Hint = "", [switch]$StringSort)
-    if (-not $Latest) {
-        Write-Warn "${Name}: couldn't resolve the latest release (offline? upstream tag scheme changed?)"
-        return
-    }
-    if ($Latest -eq $Pinned) {
-        Write-Ok "$Name $Pinned is up to date"
-        return
-    }
-    $newer = $false
-    if ($StringSort) {
-        $newer = ($Latest -gt $Pinned)
-    } else {
-        try   { $newer = ([version]$Latest -gt [version]$Pinned) }
-        catch { $newer = $true }   # unparseable mismatch — surface it as an update
-    }
-    if ($newer) {
-        $suffix = if ($Hint) { " — $Hint" } else { "" }
-        Write-Warn "$Name $Pinned -> $Latest available$suffix"
-    } else {
-        Write-Ok "$Name $Pinned (newest upstream tag: $Latest)"
-    }
-}
-
-function Invoke-Doctor {
-    Write-Log "Doctor — read-only health report; nothing is installed or changed"
-    Write-Host ""
-
-    Write-Log "Prerequisites"
-    $curlCmd = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($curlCmd) { Write-Ok "curl.exe ($($curlCmd.Source))" }
-    else { Write-Bad "curl.exe missing (hard prerequisite) — https://curl.se/windows/" }
-    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
-    if ($gitCmd) { Write-Ok "git ($($gitCmd.Source))" }
-    else         { Write-Bad "git missing (hard prerequisite) — https://git-scm.com/download/win or: winget install Git.Git" }
-    if (Get-Command ssh-keygen -ErrorAction SilentlyContinue) { Write-Ok "ssh-keygen" }
-    else { Write-Warn "ssh-keygen not on PATH — Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0" }
-    Write-Host ""
-
-    if ($gitCmd) { $null = Show-RepoState; Write-Host "" }
-
-    Write-Log "mise dotfiles"
-    $miseCmd = Get-Command mise -ErrorAction SilentlyContinue
-    if ($miseCmd) {
-        Write-Ok "mise on PATH ($($miseCmd.Source))"
-        # Process scope only: doctor is read-only, and its "MISE_ENV persisted"
-        # row below must report the User value as it was.
-        $env:MISE_ENV = $MiseEnv
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        & mise dot status --missing *> $null
-        $statusRc = $LASTEXITCODE
-        $ErrorActionPreference = $oldEap
-        if ($statusRc -eq 0) {
-            Write-Ok "deployed dotfiles in sync with the source (mise dot status)"
-        } else {
-            Write-Warn "drift, or not yet applied — inspect: mise dot status · apply: wsa (asks before overwriting a local edit)"
-        }
-    } else {
-        Write-Warn "mise not on PATH — re-run .\bootstrap.ps1 (or open a NEW shell if it just installed)"
-    }
-    Write-Host ""
-
-    Write-Log "Portable tools ($WsRoot)"
-    foreach ($tool in $PortableTools) {
-        $stamp = Join-Path $WsStamps "$($tool.Exe).$($tool.Version).stamp"
-        $cmd   = Get-Command $tool.Exe -ErrorAction SilentlyContinue
-        if ($cmd -and (Test-Path $stamp)) {
-            Write-Ok "$($tool.Name) $($tool.Version) installed ($($cmd.Source))"
-        } elseif ($cmd) {
-            Write-Warn "$($tool.Name) on PATH but no $($tool.Version) stamp — pin moved? next bootstrap reinstalls"
-        } elseif (Test-Path $stamp) {
-            Write-Bad "$($tool.Name) stamped but $($tool.Exe).exe doesn't resolve — open a NEW shell, or re-run .\bootstrap.ps1"
-        } else {
-            Write-Bad "$($tool.Name) missing — re-run .\bootstrap.ps1"
-        }
-    }
-    Write-Host ""
-
-    Write-Log "Installer apps + extras"
-    if (Test-InstallerPresent -DisplayName $WarpTool.DetectName) {
-        $warpVer  = Get-InstalledAppVersion -DisplayName $WarpTool.DetectName
-        $warpText = if ($warpVer) { " $warpVer" } else { "" }
-        Write-Ok "Warp$warpText installed (the primary terminal; self-updates; official WinGet package)"
-    } else {
-        Write-Bad "Warp not installed — re-run .\bootstrap.ps1 or: winget install Warp.Warp"
-    }
-    $wtPkg = Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue
-    if ($wtPkg) { Write-Ok "Windows Terminal $($wtPkg.Version) installed (self-updates via Microsoft Store)" }
-    elseif (Get-Command wt.exe -ErrorAction SilentlyContinue) { Write-Ok "Windows Terminal installed (wt.exe on PATH)" }
-    else { Write-Bad "Windows Terminal not installed — re-run .\bootstrap.ps1 or: winget install Microsoft.WindowsTerminal" }
-    foreach ($tool in $InstallerTools) {
-        if (Test-InstallerPresent -DisplayName $tool.DetectName) {
-            $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
-            $verText = if ($ver) { " $ver" } else { "" }
-            $hint = if ($tool.ContainsKey('UpdateHint')) { $tool.UpdateHint } else { "self-updates; -ForceInstaller to reseed" }
-            Write-Ok "$($tool.Name)$verText installed ($hint)"
-        } else {
-            Write-Bad "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
-        }
-    }
-
-    foreach ($tool in $ElevatedTools) {
-        if (Test-InstallerPresent -DisplayName $tool.DetectName) {
-            $ver = Get-InstalledAppVersion -DisplayName $tool.DetectName
-            $verText = if ($ver) { " $ver" } else { "" }
-            Write-Ok "$($tool.Name)$verText installed (elevated class; update via: winget upgrade $($tool.WingetId))"
-        } else {
-            Write-Warn "$($tool.Name) not installed (best-effort elevated tool) — re-run .\bootstrap.ps1 (UAC prompt) or: winget install $($tool.WingetId)"
-        }
-        # Report the tool's dependency MSIs (WinFsp kernel driver) separately so
-        # a half-install (driver without sshfs, or vice versa) is visible.
-        foreach ($msi in $tool.Msi) {
-            if ($msi.DetectName -eq $tool.DetectName) { continue }
-            if (Test-InstallerPresent -DisplayName $msi.DetectName) {
-                $depVer = Get-InstalledAppVersion -DisplayName $msi.DetectName
-                $depText = if ($depVer) { " $depVer" } else { "" }
-                Write-Ok "$($msi.Name)$depText installed ($($tool.Name)'s kernel-driver dependency)"
-            } else {
-                Write-Warn "$($msi.Name) not installed — $($tool.Name) can't mount without it (winget installs both)"
-            }
-        }
-    }
-    if (Get-Command code -ErrorAction SilentlyContinue) { Write-Ok "VSCode on PATH (hand-installed)" }
-    else { Write-Warn "VSCode not on PATH — hand-install when wanted; its dotfiles deploy regardless" }
-    $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
-    $claudeExe = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
-    if ($claudeCmd) {
-        Write-Ok "Claude Code installed ($($claudeCmd.Source); self-updates in the background)"
-    } elseif (Test-Path $claudeExe) {
-        Write-Warn "Claude Code installed at $claudeExe but not on PATH — open a NEW shell"
-    } else {
-        Write-Bad "Claude Code not installed — re-run .\bootstrap.ps1"
-    }
-    $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
-          Sort-Object Version -Descending | Select-Object -First 1
-    if ($bt) { Write-Ok "BurntToast $($bt.Version) module available (WSL2 toast notifications)" }
-    else { Write-Warn "BurntToast module missing — Claude Code WSL2 toasts fall back to a MessageBox; re-run .\bootstrap.ps1" }
-    $fontStamps = @(Get-ChildItem -Path $WsRoot -Filter "nerd-fonts.*.stamp" -ErrorAction SilentlyContinue)
-    if ($fontStamps.Count -gt 0) {
-        $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
-        Write-Ok "Nerd Fonts (JetBrainsMono) $fontVer installed (per-user)"
-    } else {
-        Write-Warn "Nerd Fonts not stamped — glyphs may render as tofu; re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
-    }
-    Write-Host ""
-
-    Write-Log "Environment"
-    foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
-        $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$($tool.Name).lnk"
-        if (Test-Path $lnk) { Write-Ok "$($tool.Name) Start Menu shortcut present" }
-        else { Write-Warn "$($tool.Name) Start Menu shortcut missing — re-run .\bootstrap.ps1 (self-heals it)" }
-    }
-
-    $nuStarship = Join-Path $env:APPDATA "nushell\vendor\autoload\starship.nu"
-    if (Test-Path $nuStarship) { Write-Ok "Nushell starship prompt generated ($nuStarship)" }
-    else { Write-Warn "Nushell starship prompt missing — re-run .\bootstrap.ps1 (regenerates it)" }
-
-    $nuMise = Join-Path $env:APPDATA "nushell\vendor\autoload\mise.nu"
-    if (Test-Path $nuMise) { Write-Ok "Nushell mise activation generated ($nuMise)" }
-    else { Write-Warn "Nushell mise activation missing — re-run .\bootstrap.ps1 (regenerates it)" }
-
-    $wpyShim = Join-Path $WsBin "wpy.cmd"
-    $pyStamp = Get-PythonEnvStamp
-    if ((Test-Path $wpyShim) -and (Test-Path $pyStamp)) {
-        Write-Ok "Python env $PythonEnvVersion built (wpy/textual/typer in $WsBin)"
-    } elseif (Test-Path $wpyShim) {
-        Write-Warn "Python env shims present but pin or lib list moved — next bootstrap rebuilds"
-    } else {
-        Write-Bad "Python env not built — re-run .\bootstrap.ps1"
-    }
-
-    $miseStamp = Get-MiseRuntimesStamp
-    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
-        Write-Bad "mise runtimes: mise not on PATH — re-run .\bootstrap.ps1"
-    } elseif ($null -eq $miseStamp) {
-        Write-Bad "mise runtimes: no config.toml under $RepoPath — re-run .\bootstrap.ps1 (clone step)"
-    } else {
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $missing = ((& mise ls --missing --global 2>$null) | Out-String).Trim()
-        $ErrorActionPreference = $oldEap
-        if ((Test-Path $miseStamp) -and -not $missing) {
-            Write-Ok "mise runtimes installed (nothing missing; $(Split-Path -Leaf $miseStamp))"
-        } elseif (-not $missing) {
-            Write-Warn "mise runtimes present but config*.toml moved (no $(Split-Path -Leaf $miseStamp)) — next bootstrap reinstalls"
-        } else {
-            Write-Bad "mise runtimes missing: $(($missing -split "`r?`n") -join ', ') — re-run .\bootstrap.ps1"
-        }
-        $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-        $shimsOnPath = @(($userPath -split ';') | Where-Object { $_.TrimEnd('\') -ieq $MiseShims.TrimEnd('\') }).Count -gt 0
-        if ($shimsOnPath) { Write-Ok "mise shims dir on the User PATH ($MiseShims)" }
-        else { Write-Warn "mise shims dir NOT on the User PATH — re-run .\bootstrap.ps1 (self-heals)" }
-    }
-
-    # MISE_ENV is set by Invoke-MiseRuntimes right after it finds mise on PATH;
-    # check it independently so Doctor still reports a missing/stale value even
-    # when the tool-install branches above never ran this session.
-    if ([Environment]::GetEnvironmentVariable("MISE_ENV", "User") -eq $MiseEnv) {
-        Write-Ok "MISE_ENV=$MiseEnv persisted (User)"
-    } else {
-        Write-Warn "MISE_ENV not persisted — re-run .\bootstrap.ps1"
-    }
-
-    $dnGrepCfg = Join-Path $WsDnGrep "dnGrep.config.xml"
-    if (Test-Path $dnGrepCfg) { Write-Ok "dnGrep config seeded ($dnGrepCfg)" }
-    else { Write-Warn "dnGrep config not seeded — settings would die with a pin bump; re-run .\bootstrap.ps1 (re-seeds it)" }
-
-    $warpTabDir  = Join-Path $env:APPDATA "warp\Warp\data\tab_configs"
-    $warpTabs    = @(Get-ChildItem -Path $warpTabDir -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue)
-    if ($warpTabs.Count -gt 0) {
-        Write-Ok "$($warpTabs.Count) managed Warp Tab Config(s) present"
-    } else {
-        Write-Warn "managed Warp Tab Configs missing — re-run .\bootstrap.ps1 (regenerates them)"
-    }
-
-    $sshHosts = @(Get-SshLauncherHosts)
-    $wtHostsFile = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\workstation\hosts.json"
-    if ($sshHosts.Count -eq 0) {
-        Write-Ok "no SSH host launchers (no Host entries in ~\.ssh\config.local)"
-    } elseif (Test-Path $wtHostsFile) {
-        Write-Ok "$($sshHosts.Count) SSH host launcher(s) from ~\.ssh\config.local (Windows Terminal + Warp)"
-    } else {
-        Write-Warn "~\.ssh\config.local has $($sshHosts.Count) host(s) but no Windows Terminal profiles — re-run .\bootstrap.ps1"
-    }
-
-    $realDocs    = [Environment]::GetFolderPath("MyDocuments")
-    $literalDocs = Join-Path $env:USERPROFILE "Documents"
-    if ([string]::IsNullOrEmpty($realDocs) -or ($realDocs -eq $literalDocs)) {
-        Write-Ok "Documents not redirected — PowerShell loads the managed profile directly"
-    } else {
-        $loaderOk = $true
-        foreach ($sub in @("WindowsPowerShell", "PowerShell")) {
-            if (-not (Test-Path (Join-Path (Join-Path $realDocs $sub) "Microsoft.PowerShell_profile.ps1"))) { $loaderOk = $false }
-        }
-        if ($loaderOk) { Write-Ok "Documents redirected ($realDocs) — profile loaders in place" }
-        else { Write-Warn "Documents redirected ($realDocs) but profile loader(s) missing — re-run .\bootstrap.ps1" }
-    }
-
-    if (Test-Path "$SshKey.pub") { Write-Ok "SSH key present ($SshKey)" }
-    else { Write-Warn "no SSH key at $SshKey — generate with: ssh-keygen -t ed25519 (or re-run .\bootstrap.ps1)" }
-}
-
-function Invoke-CheckForUpdates {
-    Write-Log "Check for updates — workstation repo first, then tool pins vs upstream (read-only)"
-    Write-Host ""
-
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-        Write-Fail "git is required for -CheckForUpdates (repo state + ls-remote tag lookups)."
-    }
-
-    $repoOk = Show-RepoState
-    if ($repoOk) {
-        Write-Host "    (tool pins live in `$PortableTools of THIS clone's bootstrap.ps1 — if the repo"
-        Write-Host "     is behind, pull first so the pins you're comparing are current)"
-    }
-    Write-Host ""
-
-    Write-Log "Pinned portable tools"
-    foreach ($tool in $PortableTools) {
-        $filter    = if ($tool.ContainsKey('TagFilter')) { $tool.TagFilter } else { '^\d+(\.\d+)*$' }
-        $useString = ($tool.ContainsKey('TagSort') -and $tool.TagSort -eq 'string')
-        $hint      = if ($tool.ContainsKey('UpdateHint')) { $tool.UpdateHint } else { "" }
-        $latest    = Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tool.TagPrefix -Filter $filter -StringSort:$useString
-        Write-UpdateStatus -Name $tool.Name -Pinned $tool.Version -Latest $latest -Hint $hint -StringSort:$useString
-    }
-    Write-Host ""
-
-    Write-Log "Installer apps (install LATEST — nothing to pin; most self-update)"
-    if (Test-InstallerPresent -DisplayName $WarpTool.DetectName) {
-        $warpVer  = Get-InstalledAppVersion -DisplayName $WarpTool.DetectName
-        $warpText = if ($warpVer) { " $warpVer" } else { "" }
-        Write-Ok "Warp$warpText installed (self-updates; check with: winget upgrade Warp.Warp)"
-    } else {
-        Write-Warn "Warp not installed — re-run .\bootstrap.ps1 or: winget install Warp.Warp"
-    }
-    $wtPkg = Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue
-    if ($wtPkg) {
-        Write-Ok "Windows Terminal $($wtPkg.Version) installed (self-updates via Store; check with: winget upgrade Microsoft.WindowsTerminal)"
-    } elseif (Get-Command wt.exe -ErrorAction SilentlyContinue) {
-        Write-Ok "Windows Terminal installed (self-updates via Store; check with: winget upgrade Microsoft.WindowsTerminal)"
-    } else {
-        Write-Warn "Windows Terminal not installed — re-run .\bootstrap.ps1 or: winget install Microsoft.WindowsTerminal"
-    }
-    foreach ($tool in $InstallerTools) {
-        $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
-        $latest    = if ($tool.ContainsKey('WingetVersions')) {
-            Get-LatestWingetVersion -Path $tool.WingetVersions
-        } else {
-            $tagPrefix = if ($tool.ContainsKey('TagPrefix')) { $tool.TagPrefix } else { 'v' }
-            Get-LatestGitTag -Repo $tool.Repo -TagPrefix $tagPrefix
-        }
-        $hasHint   = $tool.ContainsKey('UpdateHint')
-        if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
-            Write-Warn "$($tool.Name) not installed — re-run .\bootstrap.ps1 (installs the latest release)"
-        } elseif ($installed -and $latest) {
-            $hint = if ($hasHint) { $tool.UpdateHint } else { 'self-updates in-app; -ForceInstaller reseeds' }
-            Write-UpdateStatus -Name $tool.Name -Pinned $installed -Latest $latest -Hint $hint
-        } elseif ($latest) {
-            $hint = if ($hasHint) { $tool.UpdateHint } else { 'self-updates in-app' }
-            Write-Ok "$($tool.Name) installed (latest upstream: $latest; $hint)"
-        } else {
-            $hint = if ($hasHint) { $tool.UpdateHint } else { 'self-updates in-app' }
-            Write-Ok "$($tool.Name) installed ($hint)"
-        }
-    }
-    Write-Host ""
-
-    Write-Log "Elevated tools (best-effort; update via winget when flagged)"
-    foreach ($tool in $ElevatedTools) {
-        $installed = Get-InstalledAppVersion -DisplayName $tool.DetectName
-        $latest    = Get-LatestGitTag -Repo $tool.Repo
-        if (-not (Test-InstallerPresent -DisplayName $tool.DetectName)) {
-            Write-Warn "$($tool.Name) not installed (best-effort elevated tool) — re-run .\bootstrap.ps1 or: winget install $($tool.WingetId)"
-        } elseif ($installed -and $latest) {
-            Write-UpdateStatus -Name $tool.Name -Pinned $installed -Latest $latest -Hint "winget upgrade $($tool.WingetId)"
-        } elseif ($latest) {
-            Write-Ok "$($tool.Name) installed (latest upstream: $latest)"
-        } else {
-            Write-Ok "$($tool.Name) installed"
-        }
-        foreach ($msi in $tool.Msi) {
-            if ($msi.DetectName -eq $tool.DetectName) { continue }
-            $depInstalled = Get-InstalledAppVersion -DisplayName $msi.DetectName
-            $depLatest    = Get-LatestGitTag -Repo $msi.Repo
-            if (-not (Test-InstallerPresent -DisplayName $msi.DetectName)) {
-                Write-Warn "$($msi.Name) not installed — $($tool.Name)'s kernel-driver dependency"
-            } elseif ($depInstalled -and $depLatest) {
-                Write-UpdateStatus -Name $msi.Name -Pinned $depInstalled -Latest $depLatest -Hint "winget upgrade $($msi.WingetId)"
-            } elseif ($depLatest) {
-                Write-Ok "$($msi.Name) installed ($($tool.Name)'s kernel-driver dependency; latest upstream: $depLatest)"
-            } else {
-                Write-Ok "$($msi.Name) installed ($($tool.Name)'s kernel-driver dependency)"
-            }
-        }
-    }
-    Write-Host ""
-
-    Write-Log "Other components"
-    $fontStamps = @(Get-ChildItem -Path $WsRoot -Filter "nerd-fonts.*.stamp" -ErrorAction SilentlyContinue)
-    if ($fontStamps.Count -gt 0) {
-        $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
-        $latest  = Get-LatestGitTag -Repo 'ryanoasis/nerd-fonts'
-        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'dual-edit: config.owned.toml github:ryanoasis/nerd-fonts + install-nerd-fonts.ps1 (see CLAUDE.md)'
-    } else {
-        Write-Warn "Nerd Fonts not stamped — re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
-    }
-    $latestPy = Get-LatestGitTag -Repo 'python/cpython' -TagPrefix 'v'
-    Write-UpdateStatus -Name 'Python env (CPython)' -Pinned $PythonEnvVersion -Latest $latestPy -Hint 'dual-edit: $PythonEnvVersion here AND tools.python in config.toml; check cp-wheel coverage first'
-    $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
-          Sort-Object Version -Descending | Select-Object -First 1
-    if ($bt) { Write-Ok "BurntToast $($bt.Version) installed — update via: Update-Module BurntToast" }
-    else { Write-Warn "BurntToast module missing — re-run .\bootstrap.ps1" }
-    if ((Get-Command claude -ErrorAction SilentlyContinue) -or
-        (Test-Path (Join-Path $env:USERPROFILE ".local\bin\claude.exe"))) {
-        Write-Ok "Claude Code installed — self-updates in the background (no pin; rolling, like Linux CLAUDE_VERSION := latest)"
-    } else {
-        Write-Warn "Claude Code not installed — re-run .\bootstrap.ps1"
-    }
-}
-
 # =============================================================================
 # RUN SEQUENCE
 # =============================================================================
-
-# Read-only report modes exit here, before any provisioning state changes.
-if ($Doctor -and $CheckForUpdates) {
-    Write-Fail "-Doctor and -CheckForUpdates are mutually exclusive (run them one at a time)."
-}
-if (($Doctor -or $CheckForUpdates) -and $Reinstall) {
-    Write-Fail "-Reinstall can't be combined with -Doctor/-CheckForUpdates (they are read-only and exit early)."
-}
-if ($Doctor)          { Invoke-Doctor;          exit 0 }
-if ($CheckForUpdates) { Invoke-CheckForUpdates; exit 0 }
 
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight

@@ -269,8 +269,6 @@ let workstation_bootstrap_flags = [
     { value: "-SkipElevated", description: "skip the UAC-prompting SSHFS-Win/WinFsp install" }
     { value: "-Reinstall", description: "wipe the cloned repo (incl. config.local.toml), bootstrap fresh" }
     { value: "-Yes", description: "skip the reinstall confirmation prompt" }
-    { value: "-Doctor", description: "read-only health report, then exit" }
-    { value: "-CheckForUpdates", description: "read-only update scan, then exit" }
 ]
 
 $env.config.completions.external = {

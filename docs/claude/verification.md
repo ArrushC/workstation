@@ -57,8 +57,8 @@
   checkout; `scripts/check-templates.sh` (`make_home`/`in_home`) shows the working pattern, or just
   run it. It renders every template individually for all four token sets, syntax-checks, then
   bulk-applies; clean output ends `all rendered templates pass, across all four MISE_ENV sets`.
-- Windows: `.\bootstrap.ps1 -Doctor` shows mise, runtimes, PATH shims, Nushell activation, Python
-  env and dotfiles sync; a second `.\bootstrap.ps1` reports "already installed"/stamp hits. Parse
+- Windows: `mise doctor`, `mise bootstrap status` and `mise dot status` show tools, PATH shims
+  and dotfiles sync; a second `.\bootstrap.ps1` reports "already installed"/stamp hits. Parse
   check: `powershell -NoProfile -Command "[void][System.Management.Automation.Language.Parser]::ParseFile('bootstrap.ps1',[ref]$null,[ref]$null);'ok'"`.
   `scripts/test-curl.ps1` (HTTP helper) runs in both shells in the `windows-http` CI job.
 
@@ -106,8 +106,7 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
 - alt+shift+d / alt+shift+r split, alt+shift+arrows move focus, ctrl+shift+z zooms.
 - A hand-made profile in `settings.json` and a foreign fragment (`Fragments\other-app\x.json`) both
   survive a bootstrap re-run; `Fragments\workstation\hosts.json` is rewritten (removed when
-  config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`. Doctor shows an "SSH host
-  launcher(s)" row.
+  config.local has no hosts). Offline: `scripts/test-ssh-launchers.ps1`.
 - In a WSL tab, starship renders, atuin Ctrl-R works and fzf-tab completes. This is the regression
   check for the Warp guards: WT must behave as before Warp returned. A remote zellij pane shows
   exactly one OSC 133 prompt-zone set.
