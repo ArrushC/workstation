@@ -58,6 +58,12 @@ ctx_is() { # the additionalContext of $OUT decodes to exactly $1
 d=json.load(sys.stdin)
 sys.exit(d["hookSpecificOutput"]["additionalContext"]!=os.environ["EXPECT"])' 2>/dev/null
 }
+vis_is() { # systemMessage and additionalContext both equal $1; no suppressOutput
+  printf '%s' "$OUT" | EXPECT="$1" python3 -c 'import json,os,sys
+d=json.load(sys.stdin)
+e=os.environ["EXPECT"]
+sys.exit(not (d["systemMessage"]==e and d["hookSpecificOutput"]["additionalContext"]==e and "suppressOutput" not in d))' 2>/dev/null
+}
 deny_is() {
   printf '%s' "$OUT" | EXPECT="$1" python3 -c 'import json,os,sys
 d=json.load(sys.stdin)["hookSpecificOutput"]
@@ -75,6 +81,8 @@ for mode in "" HOOK_LIB_NO_JQ=1; do
   ok "malformed -> empty via $via" empty
   lib "$IN" 'hook_context PostToolUse "$MSG"' MSG="$MSG" ${mode:+"$mode"}
   ok "context JSON valid and exact via $via" ctx_is "$MSG"
+  lib "$IN" 'hook_context PostToolUse "$MSG" visible' MSG="$MSG" ${mode:+"$mode"}
+  ok "visible context has systemMessage, no suppressOutput via $via" vis_is "$MSG"
   lib "$IN" 'hook_deny "$MSG"' MSG="$MSG" ${mode:+"$mode"}
   ok "deny JSON valid and exact via $via" deny_is "$MSG"
 done
@@ -103,6 +111,7 @@ printf 'echo hi\r\necho bye\r\n' >"$T/scripts/a.sh"
 chmod 644 "$T/scripts/a.sh"
 run "$RH/post-edit-guard.sh" "$(j --arg f "$T/scripts/a.sh" '{tool_name:"Write",tool_input:{file_path:$f}}')"
 ok "report mentions repair" has 'auto-repaired'
+ok "repair notice is user-visible" has '"systemMessage"'
 ok "CRLF stripped" no_cr "$T/scripts/a.sh"
 ok "exec bit set" test -x "$T/scripts/a.sh"
 printf 'Write-Host hi\n' >"$T/scripts/install-nerd-fonts.ps1"

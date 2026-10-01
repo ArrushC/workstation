@@ -78,5 +78,5 @@ fi
 actions="${actions%; }"
 ctx="post-edit-guard auto-repaired ${norm##*/}: ${actions}. The file changed on disk — re-read it before your next edit (this keeps fresh clones working; see CLAUDE.md file-care)."
 
-hook_context PostToolUse "$ctx"
+hook_context PostToolUse "$ctx" visible
 exit 0

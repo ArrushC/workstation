@@ -38,11 +38,18 @@ _hook_str() {
   printf '"%s"' "$s"
 }
 
-# hook_context <EventName> <message> — additionalContext for the model.
+# hook_context <EventName> <message> [visible] — additionalContext for the model.
+# With "visible" the message is also a systemMessage shown to the user, and the
+# output is not suppressed.
 hook_context() {
   if _hook_jq; then
-    jq -nc --arg e "$1" --arg c "$2" \
-      '{hookSpecificOutput:{hookEventName:$e,additionalContext:$c},suppressOutput:true}'
+    jq -nc --arg e "$1" --arg c "$2" --arg v "${3:-}" \
+      'if $v == "visible"
+       then {hookSpecificOutput:{hookEventName:$e,additionalContext:$c},systemMessage:$c}
+       else {hookSpecificOutput:{hookEventName:$e,additionalContext:$c},suppressOutput:true} end'
+  elif [ "${3:-}" = visible ]; then
+    printf '{"hookSpecificOutput":{"hookEventName":%s,"additionalContext":%s},"systemMessage":%s}\n' \
+      "$(_hook_str "$1")" "$(_hook_str "$2")" "$(_hook_str "$2")"
   else
     printf '{"hookSpecificOutput":{"hookEventName":%s,"additionalContext":%s},"suppressOutput":true}\n' \
       "$(_hook_str "$1")" "$(_hook_str "$2")"
