@@ -8,7 +8,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 
 | Piece | Role |
 |---|---|
-| `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, pick the mode, run mise. Nothing is installed by hand in the scripts beyond mise (Linux) and the portable Windows tools. |
+| `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, pick the mode, run mise. Nothing is installed by hand in the scripts beyond mise (and, on Windows, the GUI apps). |
 | mise tools | Every tool is a pin in `config.toml` / `config.linux.toml` / `config.owned.toml`. `mise ls` is the tool list. |
 | `mise bootstrap` | Host state from `[bootstrap.*]` tables: dnf packages, `/etc` files, services, repos, then dotfiles and the `bootstrap` task. |
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
@@ -156,10 +156,10 @@ Or clone and run: `git clone https://github.com/ArrushC/workstation.git "$env:US
 What `bootstrap.ps1` does:
 
 1. Preflight: require git.
-2. Install Warp and Windows Terminal (winget, user scope, latest; both self-update, so there is no pin).
-3. Install the pinned, sha256-verified portable tools into `%LOCALAPPDATA%\workstation`: mise, gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert.
+2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`, and remove the pre-mise portable tools (their directories and User PATH entries).
+3. Install Warp and Windows Terminal (winget, user scope, latest; both self-update, so there is no pin).
 4. Install the latest per-user apps, verified against the GitHub API (or winget manifest) sha256: Obsidian, Zed, DevToys, DBeaver, WinSCP, Beyond Compare; the SSHFS-Win step (UAC); Claude Code (native installer, self-updating).
-5. Clone this repo to `%USERPROFILE%\.config\mise` and run `mise bootstrap --only dotfiles,tools` (dotfiles plus Node, Go, uv, gopls, language servers, ccstatusline, and the `wpy` Python env).
+5. Clone this repo to `%USERPROFILE%\.config\mise`, write `miserc.toml` (`windows,owned`; the old User `MISE_ENV` is removed) and run `mise bootstrap --only dotfiles,tools`: dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). mise's shims dir joins the User PATH; then the `wpy` Python env is built.
 6. Generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment, Nushell's starship and mise autoload files, Start Menu shortcuts, BurntToast, and the Nerd Font (`scripts/install-nerd-fonts.ps1`, with a logon task that re-activates the per-user font).
 7. Prompt for an SSH key.
 8. Merge `~/.claude/settings.json` and print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
@@ -171,7 +171,7 @@ Restart the shell afterwards so the new profile loads. Nushell is the default lo
 |---|---|
 | `-RepoPath <dir>` | Clone somewhere other than `%USERPROFILE%\.config\mise`. |
 | `-SkipKeyGen` | Skip the SSH-key prompt. |
-| `-SkipToolInstall` | Skip every portable and installer tool, the mise runtimes, the Python env and Claude Code (assume present). |
+| `-SkipToolInstall` | Skip mise, the mise tools phase, every installer app, the Python env and Claude Code (assume present). |
 | `-SkipDotfiles` | Clone and install tools but do not apply dotfiles. |
 | `-SkipBurntToast` | Skip the BurntToast PowerShell module install. |
 | `-SkipNerdFonts` | Skip the Nerd Font install. |
@@ -268,7 +268,7 @@ The same workflow commands exist in bash and zsh on Linux and in Nushell and Pow
 | `wsu` | `mise run update`: `git pull --ff-only`, then `mise install` and `mise bootstrap` for the saved mode |
 | `wsh` | Print the workstation cheatsheet |
 
-Every `ws*` command pins `mise -C` to the host's own home, so it acts on this host's checkout from any directory. (mise finds its config root by walking up from the current directory, and a stray `.config/mise` on that path, such as a Windows drive mount under WSL, would otherwise be managed instead.) `wsa` also refuses if mise resolves a different config root. The Windows versions cover what differs there: `wsu` is a pull plus a dotfiles-and-tools bootstrap, and portable tools are left to `bootstrap.ps1`.
+Every `ws*` command pins `mise -C` to the host's own home, so it acts on this host's checkout from any directory. (mise finds its config root by walking up from the current directory, and a stray `.config/mise` on that path, such as a Windows drive mount under WSL, would otherwise be managed instead.) `wsa` also refuses if mise resolves a different config root. The Windows versions cover what differs there: `wsu` is a pull plus a dotfiles-and-tools bootstrap, and mise itself and the GUI apps are left to `bootstrap.ps1`.
 
 **Editing dotfiles.** A deployed file is an independent copy. Editing `~/.claude/CLAUDE.md` (by hand or by an agent) does not touch `dotfiles/`, and the next `wsa` overwrites it unless you record it first. Either edit the source with `wse <path>`, or record a live edit: `wsr` for a file entry, and for a directory entry (`~/.claude/agents`, `~/.claude/commands`, `~/.claude/hooks`, `~/.claude/skills`, `~/.config/zellij`, `~/.config/zsh/completions`, `~/.config/gdb`, `~/.local/bin`) name the directory itself, because `--changed` does not look inside them:
 
@@ -343,7 +343,7 @@ mise run bump-versions
 
 It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` previews without writing), so expect unrelated bumps in the diff. It refreshes the lockfiles for every platform the verified way (from outside the checkout through an `XDG_CONFIG_HOME` symlink, then normalising the `.mise/locks` sidecar paths). A hand-run `mise lock` inside the checkout can write sidecar refs to the wrong layout. Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
 
-**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, updates the Windows `$PortableTools` entries in step (Version, Url, freshly computed Sha256), and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is the Nerd Font tool until PR 4, because its Windows half is still in `install-nerd-fonts.ps1`. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
+**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is the Nerd Font tool until PR 4, because its Windows half is still in `install-nerd-fonts.ps1`. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
 
 **A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
 
@@ -441,11 +441,11 @@ An edit in the repo needs `wsa` before Windows Terminal sees it; `settings.json`
 
 ### bootstrap.ps1 aborts with "Git is required but isn't on PATH"
 
-Git is a prerequisite the script does not install. Install Git for Windows (`winget install Git.Git`), reopen PowerShell and re-run. The GitHub CLI is not one (it is installed as a pinned portable tool); authenticate once afterwards with `gh auth login`.
+Git is a prerequisite the script does not install. Install Git for Windows (`winget install Git.Git`), reopen PowerShell and re-run. The GitHub CLI is not one (mise installs it); authenticate once afterwards with `gh auth login`.
 
 ### bootstrap.ps1 aborts with "<Tool> sha256 mismatch — refusing to install"
 
-Portable tools are pinned to a version and sha256 in `$PortableTools` inside `bootstrap.ps1`. A mismatch means the pinned hash is stale (upstream re-published the asset) or the download was corrupted or tampered with, and the script refuses to install an unverified binary. Installer-class apps verify against the GitHub API's sha256 digest (WinSCP and Beyond Compare against the winget manifest) with the same hard fail. Re-download the pinned asset, recompute its hash, and update the `Sha256` field for that tool:
+mise is the one tool `bootstrap.ps1` pins itself: `$MiseVersion` and `$MiseSha256` (with `MISE_VERSION` in `bootstrap.sh` and `min_version` in `config.toml`). Every other CLI tool is checked by mise against the sha256 in `mise*.lock`. A mismatch means the pinned hash is stale (upstream re-published the asset) or the download was corrupted or tampered with, and the script refuses to install an unverified binary. Installer-class apps verify against the GitHub API's sha256 digest (WinSCP and Beyond Compare against the winget manifest) with the same hard fail. For mise, re-download the pinned zip, recompute its hash, and update `$MiseSha256`:
 
 ```powershell
 (Get-FileHash -Algorithm SHA256 .\<asset>.zip).Hash.ToLower()

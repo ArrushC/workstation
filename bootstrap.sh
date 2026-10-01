@@ -47,7 +47,7 @@ DOTFILES_REPO="https://github.com/ArrushC/workstation.git"
 REPO_DIR="$HOME/.config/mise"
 BIN="$HOME/.local/bin"
 # The ONE pin bootstrap owns: mise itself (everything else is in config*.toml).
-# DUAL-EDIT with bootstrap.ps1 $PortableTools (mise) and min_version in config.toml —
+# DUAL-EDIT with bootstrap.ps1 $MiseVersion and min_version in config.toml —
 # scripts/check-invariants.sh asserts all three agree.
 MISE_VERSION="2026.9.9"
 MISE_SHA256="986f36c5efef4302f6252f1b1e58c32052f3696fcf19b1ed44a1976b3c2b4ffc" # mise-v${MISE_VERSION}-linux-x64-musl.tar.gz

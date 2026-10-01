@@ -8,9 +8,8 @@
 #       ls-remote (the same pin tasks/check-updates reports) + set_pin.
 #       zjstatus_zellij_floor is a coupling floor, never bumped.
 #
-# Dual-edit and coupled tool pins (the Windows halves in bootstrap.ps1,
-# go+gopls, node's postinstall LSP servers) are bumped by dedicated code that
-# keeps every paired edit in step. Only the pins in the EXCLUDE list below
+# Coupled tool pins (go+gopls, node's postinstall LSP servers) are bumped by
+# dedicated code that keeps every paired edit in step. Only the pins in the EXCLUDE list below
 # are reported and never edited: those need a coupling floor read from release
 # notes, a download check, or a wheel-coverage check the bumper can't do.
 #
@@ -53,13 +52,6 @@ exit_code=0
 #
 # Pins that need more than a one-line edit are bumped by dedicated code
 # below, not skipped (user decision 2026-09-23: "always bump those packages").
-#  - DUAL-EDIT (PS1_NAME below): jq, gh, helix, opencode, omp, DevToys each
-#    have a Windows half in bootstrap.ps1's $PortableTools (Version + Url +
-#    Sha256), and check_version_pins asserts both halves match. bump_ps1
-#    swaps the version inside the Windows Url, downloads that asset and
-#    hashes it, then rewrites all three fields together with the config
-#    pin. If the download fails, neither half changes, and the pin is
-#    reported under "Failed to edit".
 #  - go + go:golang.org/x/tools/gopls are a COUPLED PAIR: gopls declares a
 #    hard toolchain floor in its own go.mod (0.23.0 needs go 1.26.0), and
 #    mise's go: backend builds it with the PINNED go. go bumps freely. gopls
@@ -96,19 +88,9 @@ exit_code=0
 #    install-nerd-fonts.ps1 until PR 4, so it is a dual-edit pin: bumped by hand.
 EXCLUDE="github:dj95/zjstatus http:ncdu python github:ryanoasis/nerd-fonts"
 # Coupled pins bumped by dedicated code instead of EXCLUDE. check_bumper_exclude
-# requires every dual-edit/coupled pin to be in EXCLUDE, PS1_NAME, or this list.
+# requires every dual-edit/coupled pin to be in EXCLUDE or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here
 COUPLED_AUTO="go go:golang.org/x/tools/gopls node"
-
-# mise tool name -> its bootstrap.ps1 $PortableTools Name (the dual-edit pins).
-declare -A PS1_NAME=(
-  ["jq"]="jq"
-  ["gh"]="GitHub CLI"
-  ["helix"]="Helix"
-  ["opencode"]="OpenCode"
-  ["github:can1357/oh-my-pi"]="Oh My Pi"
-  ["github:DevToys-app/DevToys"]="DevToys CLI"
-)
 
 # Run a mise subcommand against this checkout as mise's GLOBAL config dir,
 # from OUTSIDE the checkout, via a throwaway XDG_CONFIG_HOME symlink dir.
@@ -194,54 +176,6 @@ version_gt() {
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
 }
 
-# ps1_field NAME FIELD — one field (Version/Url/Sha256) of the bootstrap.ps1
-# $PortableTools entry whose Name is NAME.
-ps1_field() {
-  PS1_ENTRY="$1" PS1_FIELD="$2" perl -0777 -ne '
-    print $1 if /Name\s*=\s*"\Q$ENV{PS1_ENTRY}\E"[^}]*?\b\Q$ENV{PS1_FIELD}\E\s*=\s*"([^"]*)"/s
-  ' bootstrap.ps1
-}
-
-# ps1_set NAME VERSION URL SHA256 — rewrite those three fields of one
-# $PortableTools entry, byte-for-byte elsewhere (the UTF-8 BOM PowerShell 5.1
-# needs survives, since perl only substitutes inside the match). Fails without
-# writing unless exactly one entry matched.
-ps1_set() {
-  local n
-  n="$(PS1_ENTRY="$1" PS1_V="$2" PS1_U="$3" PS1_S="$4" perl -0777 -e '
-    my $f = "bootstrap.ps1";
-    open(my $in, "<:raw", $f) or die "$f: $!";
-    local $/; my $s = <$in>; close $in;
-    my $n = ($s =~ s#(Name\s*=\s*"\Q$ENV{PS1_ENTRY}\E"[^}]*?\bVersion\s*=\s*")[^"]*("[^}]*?\bUrl\s*=\s*")[^"]*("[^}]*?\bSha256\s*=\s*")[0-9a-fA-F]*(")#$1$ENV{PS1_V}$2$ENV{PS1_U}$3$ENV{PS1_S}$4#gs);
-    if ($n == 1) { open(my $out, ">:raw", $f) or die "$f: $!"; print $out $s; close $out }
-    print $n + 0;
-  ')" || return 1
-  [ "$n" = 1 ]
-}
-
-# bump_ps1 NAME CUR NEW — move a dual-edit tool's Windows half from CUR to NEW:
-# swap the version inside its Url, download that asset, hash it, and write
-# Version + Url + Sha256. Old values are saved in ps1_old_* for a revert.
-declare -A ps1_old_url ps1_old_sha
-bump_ps1() {
-  local entry="$1" cur="$2" new="$3" url newurl tmp sha
-  url="$(ps1_field "$entry" Url)"
-  [ -n "$url" ] || return 1
-  case "$url" in *"$cur"*) ;; *) return 1 ;; esac
-  newurl="${url//"$cur"/"$new"}"
-  tmp="$(mktemp)"
-  if ! curl -fsSL --retry 2 --max-time 600 -o "$tmp" "$newurl"; then
-    printf '  ! %s: could not download %s\n' "$entry" "$newurl" >&2
-    rm -f "$tmp"
-    return 1
-  fi
-  sha="$(sha256sum "$tmp" | cut -d' ' -f1)"
-  rm -f "$tmp"
-  ps1_old_url["$entry"]="$url"
-  ps1_old_sha["$entry"]="$(ps1_field "$entry" Sha256)"
-  ps1_set "$entry" "$new" "$newurl" "$sha"
-}
-
 # gopls_floor VERSION — the go toolchain floor gopls VERSION declares in its
 # own go.mod (empty when offline or the tag is missing).
 gopls_floor() {
@@ -307,14 +241,6 @@ lock_platform() {
       rm -f "$err"
       return 1
     fi
-    # A dual-edit tool's Windows half moved with it; put that back too, or
-    # check_version_pins fails on the half-reverted pair.
-    if [ -n "${PS1_NAME["$tool"]+x}" ] &&
-      ! ps1_set "${PS1_NAME["$tool"]}" "${bump_cur["$tool"]}" \
-        "${ps1_old_url["${PS1_NAME["$tool"]}"]}" "${ps1_old_sha["${PS1_NAME["$tool"]}"]}"; then
-      rm -f "$err"
-      return 1
-    fi
     printf '  ! mise lock refused %s@%s on %s — reverted to %s, retrying\n' \
       "$tool" "${bump_new["$tool"]}" "$platform" "${bump_cur["$tool"]}" >&2
     bumped="${bumped/"- \`$tool\` (${bump_file["$tool"]}): ${bump_cur["$tool"]} → ${bump_new["$tool"]}\n"/}"
@@ -359,29 +285,14 @@ if [ -z "$outdated_fail" ]; then
       bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
       continue
     fi
-    # Dual-edit: the Windows half must land first (download + hash); if it
-    # can't, leave both halves alone.
-    if [ -n "${PS1_NAME["$name"]+x}" ] && ! bump_ps1 "${PS1_NAME["$name"]}" "$cur" "$new"; then
-      failed="${failed}- \`$name\`: $cur → $new — could not fetch/hash its Windows asset for bootstrap.ps1; both halves left at $cur (manual)\n"
-      continue
-    fi
     if set_pin "$file" "$name" "$cur" "$new"; then
-      if [ -n "${PS1_NAME["$name"]+x}" ]; then
-        bumped="${bumped}- \`$name\` ($file + bootstrap.ps1): $cur → $new\n"
-      else
-        bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
-      fi
+      bumped="${bumped}- \`$name\` ($file): $cur → $new\n"
       bump_file["$name"]="$file"
       bump_cur["$name"]="$cur"
       bump_new["$name"]="$new"
     else
       printf '  ! could not rewrite %s = "%s" in %s\n' "$name" "$cur" "$file" >&2
       failed="${failed}- \`$name\` ($file): could not rewrite its pin in place (manual)\n"
-      if [ -n "${PS1_NAME["$name"]+x}" ]; then
-        ps1_set "${PS1_NAME["$name"]}" "$cur" "${ps1_old_url["${PS1_NAME["$name"]}"]}" \
-          "${ps1_old_sha["${PS1_NAME["$name"]}"]}" ||
-          failed="${failed}- \`$name\`: bootstrap.ps1 was bumped but could not be reverted — fix by hand\n"
-      fi
     fi
   done < <(printf '%s' "$outdated" | jq -r 'to_entries[] | select(.value.bump != null and .value.bump != .value.requested) | [.key, .value.requested, .value.bump, .value.source.path] | @tsv')
 

@@ -1,11 +1,11 @@
 ﻿# =============================================================================
 # bootstrap.ps1 -- workstation setup (Windows client side)
 #
-# No admin rights needed: installs mise + a few first-party binaries
-# per-user (%LOCALAPPDATA%\workstation), seeds Warp + Windows Terminal via
-# WinGet, then runs `mise bootstrap --only dotfiles,tools` to deploy the
-# tracked dotfiles and install the runtime tools those files declare.
-# Windows is always the `owned` mode (MISE_ENV=windows,owned). Git is a
+# No admin rights needed: installs the pinned mise per-user
+# (%LOCALAPPDATA%\workstation), seeds Warp + Windows Terminal via WinGet,
+# then runs `mise bootstrap --only dotfiles,tools` to deploy the tracked
+# dotfiles and install every CLI tool those files declare. Windows is
+# always the `owned` mode (miserc.toml: windows,owned). Git is a
 # hard prerequisite (install it yourself); VSCode is hand-installed --
 # its dotfiles still deploy without it.
 #
@@ -44,7 +44,7 @@
 param(
     [string]$RepoPath = (Join-Path $env:USERPROFILE ".config\mise"),
     [switch]$SkipKeyGen,       # skip the SSH-key generation prompt
-    [switch]$SkipToolInstall,  # skip all portable/installer tool installs + Claude Code
+    [switch]$SkipToolInstall,  # skip mise, the mise tools, the installer apps + Claude Code
     [switch]$SkipDotfiles,     # clone + install tools but don't apply dotfiles yet
     [switch]$SkipBurntToast,   # skip the BurntToast PSGallery module install
     [switch]$SkipNerdFonts,    # skip the Nerd Font install
@@ -71,218 +71,24 @@ $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
 # it never leaks to other remotes.
 $GhHeaderKey = "http.https://github.com/.extraheader"
 
-# Per-user install root for every binary this script provisions. Admin-free:
-#   workstation\bin          — single-exe tools (starship, gh, jq)   → on User PATH
-#   workstation\helix        — the multi-file Helix portable tree    → on User PATH
-#   workstation\nu           — the multi-file Nushell portable tree  → on User PATH
-#   workstation\devtoys-cli  — the DevToys CLI portable tree         → on User PATH
-#   workstation\dngrep       — the dnGrep portable GUI tree          → on User PATH
-#   workstation\logexpert    — the LogExpert portable GUI tree       → on User PATH
-#   workstation\mise         — the mise portable tree (bin\mise.exe + mise-shim.exe) → bin\ on User PATH
-#   workstation\stamps       — "<exe>.<version>.stamp" idempotency markers
-$WsRoot       = Join-Path $env:LOCALAPPDATA "workstation"
-$WsBin        = Join-Path $WsRoot "bin"
-$WsHelix      = Join-Path $WsRoot "helix"
-$WsNu         = Join-Path $WsRoot "nu"
-$WsDevToysCli = Join-Path $WsRoot "devtoys-cli"
-$WsDnGrep     = Join-Path $WsRoot "dngrep"
-$WsLogExpert  = Join-Path $WsRoot "logexpert"
-$WsMise       = Join-Path $WsRoot "mise"
-$WsStamps     = Join-Path $WsRoot "stamps"
+# Per-user install root for what this script provisions itself. Admin-free:
+#   workstation\mise    — the pinned mise (bin\mise.exe + mise-shim.exe) → bin\ on User PATH
+#   workstation\bin     — the python-env launchers (wpy/textual/typer)    → on User PATH
+#   workstation\stamps  — idempotency markers
+# Every CLI tool comes from config*.toml through mise (%LOCALAPPDATA%\mise).
+$WsRoot   = Join-Path $env:LOCALAPPDATA "workstation"
+$WsBin    = Join-Path $WsRoot "bin"
+$WsMise   = Join-Path $WsRoot "mise"
+$WsStamps = Join-Path $WsRoot "stamps"
 
-# Pinned portable tools: version + sha256 live HERE (same pattern as
-# scripts\install-nerd-fonts.ps1), not in a Linux config*.toml -- mise's
-# Linux-side [bootstrap.*] tables never run on Windows. Bump = update
-# Version + refresh Sha256. Layout 'single' copies <Exe>.exe into Dest;
-# 'tree' extracts the whole archive into Dest.
-#
-# Repo/Tag* keys feed -CheckForUpdates only (latest tag via git ls-remote).
-# Opt-in Shortcut = @{ Target; Description } makes Invoke-StartMenuShortcuts
-# drop a per-user Start Menu .lnk for a GUI tool with none in its zip.
-# Opt-in BinSubdir points the User PATH at a nested bin dir instead of Dest
-# (only mise needs it: mise\bin\mise.exe + mise-shim.exe).
-$PortableTools = @(
-    @{
-        Name       = "Starship"
-        Exe        = "starship"
-        Version    = "1.25.1"
-        Url        = "https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-pc-windows-msvc.zip"
-        Sha256     = "a07cf3e428afab09324e510fb786041ebcc491a68b1ca6fba044c5a461f9b017"
-        Layout     = "single"
-        Dest       = $WsBin
-        Repo       = "starship/starship"
-        TagPrefix  = "v"
-        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
-    },
-    @{
-        Name       = "GitHub CLI"
-        Exe        = "gh"
-        Version    = "2.101.0"
-        Url        = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_windows_amd64.zip"
-        Sha256     = "bc6c814367b193cd8e713611d61e36013c0ef843b8f516458fe3eda039192794"
-        Layout     = "single"
-        Dest       = $WsBin
-        Repo       = "cli/cli"
-        TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND tools.gh in config.linux.toml"
-    },
-    @{
-        Name       = "Helix"
-        Exe        = "hx"
-        Version    = "25.07.1"
-        Url        = "https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-windows.zip"
-        Sha256     = "5c8325ced8bacd8418d62706f669e96d9c3578a9237526e34d546900cbc049b6"
-        Layout     = "tree"
-        Dest       = $WsHelix
-        Repo       = "helix-editor/helix"
-        TagPrefix  = ""
-        UpdateHint = "dual-edit: `$PortableTools here AND tools.helix in config.linux.toml"
-    },
-    @{
-        # Nushell — the default LOCAL Windows shell (the Windows Terminal
-        # "Nushell" profile points at this install).
-        # Pre-1.0 and churny: bump deliberately and upgrade INCREMENTALLY (the
-        # pin/stamp model here is exactly the "pin it, read the changelog" hygiene
-        # Nushell's 0.x cadence needs). Tags are bare "0.113.1" (no prefix).
-        Name       = "Nushell"
-        Exe        = "nu"
-        Version    = "0.113.1"
-        Url        = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x86_64-pc-windows-msvc.zip"
-        Sha256     = "fd3e56dac9f866d2d3fe2fabd6580c14371afdcec9ddda54624a50986d36b3d2"
-        Layout     = "tree"   # zip bundles nu.exe + nu_plugin_*.exe
-        Dest       = $WsNu
-        Repo       = "nushell/nushell"
-        TagPrefix  = ""
-        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools — pre-1.0: READ the release's Breaking-changes section and upgrade incrementally (skipping releases can break config.nu)"
-    },
-    @{
-        Name       = "jq"
-        Exe        = "jq"
-        Version    = "1.8.2"
-        Url        = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-windows-amd64.exe"
-        Sha256     = "a6fc67fedaf9128a3309a1e2ebb8b986aeccf70122ee46d2cb4849e423f0c627"
-        Layout     = "exe"
-        Dest       = $WsBin
-        Repo       = "jqlang/jq"
-        TagPrefix  = "jq-"
-        UpdateHint = "dual-edit: `$PortableTools here AND tools.jq in config.linux.toml (jq powers the Claude Code hooks' JSON parsing on Windows)"
-    },
-    @{
-        # mise — the runtime manager (node / Go / uv / gopls / the LSP
-        # servers): the Windows twin of the mise binary bootstrap.sh pins. The
-        # zip nests mise\bin\mise.exe + mise-shim.exe (the template mise
-        # copies for native .exe shims — without it shims degrade to .cmd
-        # wrappers), so 'tree' into its OWN dir with BinSubdir pointing the
-        # PATH at bin\. WHAT mise installs is declared by config.toml +
-        # config.owned.toml at the root of the checkout — %USERPROFILE%\.config\mise
-        # IS the checkout, read directly by Invoke-MiseRuntimes after the
-        # dotfiles+tools bootstrap. uv is one of those tools now.
-        Name       = "mise"
-        Exe        = "mise"
-        Version    = "2026.9.9"
-        Url        = "https://github.com/jdx/mise/releases/download/v2026.9.9/mise-v2026.9.9-windows-x64.zip"
-        Sha256     = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
-        Layout     = "tree"
-        BinSubdir  = "bin"
-        Dest       = $WsMise
-        Repo       = "jdx/mise"
-        TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND MISE_VERSION in bootstrap.sh AND min_version in config.toml"
-    },
-    @{
-        # OpenCode + Oh My Pi — AI coding agents; the Windows halves of the
-        # Linux owned-only mise tools (see config.owned.toml's opencode / omp
-        # entries). Bun-compiled x64 binaries: both REQUIRE AVX2
-        # (any CPU since ~2013).
-        Name       = "OpenCode"
-        Exe        = "opencode"
-        Version    = "1.18.32"
-        Url        = "https://github.com/anomalyco/opencode/releases/download/v1.18.32/opencode-windows-x64.zip"
-        Sha256     = "1483c72d5adced825590a0ecf8cc18b3e87e535960a125dbf539d33bce135d0f"
-        Layout     = "single"   # zip contains exactly one opencode.exe (starship precedent)
-        Dest       = $WsBin
-        Repo       = "anomalyco/opencode"
-        TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND opencode in config.owned.toml"
-    },
-    @{
-        Name       = "Oh My Pi"
-        Exe        = "omp"
-        Version    = "18.3.4"
-        Url        = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-windows-x64.exe"
-        Sha256     = "7abb9e215412e7cd457b527365cf5700d8cdd383d162d1ca0d9e7f0610ddbab1"
-        Layout     = "exe"      # bare single-.exe release asset (jq precedent)
-        Dest       = $WsBin
-        Repo       = "can1357/oh-my-pi"
-        TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND github:can1357/oh-my-pi in config.owned.toml"
-    },
-    @{
-        # DevToys CLI — scriptable command-line half of DevToys; the Windows
-        # half of the Linux owned-only devtoys-cli mise tool (config.owned.toml).
-        # The *_portable zip is self-contained .NET (the plain zip needs a
-        # system .NET 8 runtime — never use it). NOT Layout 'single': the
-        # single-file DevToys.CLI.exe REQUIRES its sibling Plugins\ tree.
-        # Invoked as `devtoys.cli` (Windows resolves DevToys.CLI.exe
-        # case-insensitively).
-        Name       = "DevToys CLI"
-        Exe        = "DevToys.CLI"
-        Version    = "2.0.9.0"
-        Url        = "https://github.com/DevToys-app/DevToys/releases/download/v2.0.9.0/devtoys.cli_win_x64_portable.zip"
-        Sha256     = "27327ad18c06d5bba4356f039c76203b0099f864d10f6de0d833225077dd310a"
-        Layout     = "tree"
-        Dest       = $WsDevToysCli
-        Repo       = "DevToys-app/DevToys"
-        TagPrefix  = "v"
-        UpdateHint = "dual-edit: `$PortableTools here AND the DevToys-app/DevToys tool in config.owned.toml (NOTE: this repo flags all releases prerelease — check the releases PAGE, not /latest)"
-    },
-    @{
-        # dnGrep — search/replace GUI (grep for Windows). Portable, NOT
-        # installer class: dnGrep publishes only machine-scope WiX .msi
-        # installers (Scope: machine per its winget manifest → UAC, and the
-        # installer class has no msiexec path anyway) plus these per-arch
-        # portable zips — flat root, self-contained .NET. dnGrep stores its
-        # settings NEXT TO THE EXE when that dir is writable (always true
-        # here), and the 'tree' wipe on a pin bump would destroy them — so
-        # Invoke-DnGrepConfig seeds a dnGrep.config.xml redirecting
-        # its data dir to %APPDATA%\dnGREP. Windows-only GUI tool: no
-        # config.toml [vars] pin, no dual-edit (Nushell precedent).
-        Name       = "dnGrep"
-        Exe        = "dnGREP"
-        Version    = "5.0.30.0"
-        Url        = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
-        Sha256     = "27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45bd32"
-        Layout     = "tree"
-        Dest       = $WsDnGrep
-        Repo       = "dnGrep/dnGrep"
-        TagPrefix  = "v"
-        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools (in-app updater targets the machine-scope MSI — don't use it)"
-        Shortcut   = @{ Target = "dnGREP"; Description = "dnGrep — search and replace in files (grep GUI)" }
-    },
-    @{
-        # LogExpert — tabbed log-file viewer (tail-follow, filters,
-        # columnizers). Portable, NOT installer class: its Setup .exe is Inno
-        # with DefaultDirName={commonpf} and no PrivilegesRequired override →
-        # admin-only; winget itself packages this same zip as a portable.
-        # FRAMEWORK-DEPENDENT: needs the .NET 10 Desktop Runtime (the Setup
-        # exe exists to chain-install it) — hand-installed, this script
-        # installs no runtimes; first launch prompts with a download link if
-        # it's missing. Settings live in %APPDATA%\LogExpert (safe across pin
-        # bumps); only its sessionFiles\ sit next to the exe — minor loss on
-        # a bump. Windows-only GUI tool: no config.toml [vars] pin, no dual-edit.
-        Name       = "LogExpert"
-        Exe        = "LogExpert"
-        Version    = "1.41.0"
-        Url        = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpert.1.41.0.zip"
-        Sha256     = "74524db34332aed480c5c631ca9023118140bc120075c1365ae6713620673c89"
-        Layout     = "tree"
-        Dest       = $WsLogExpert
-        Repo       = "LogExperts/LogExpert"
-        TagPrefix  = "v"
-        UpdateHint = "bump Version + refresh Sha256 in `$PortableTools"
-        Shortcut   = @{ Target = "LogExpert"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
-    }
-)
+# mise is the one tool this script pins itself: everything else comes from
+# config*.toml through mise. Triple-edit with MISE_VERSION in bootstrap.sh and
+# min_version in config.toml (scripts/check-invariants.sh checks it).
+$MiseVersion = "2026.9.9"
+$MiseSha256  = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
+$MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise-v$MiseVersion-windows-x64.zip"
+$MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
+$MiseEnvTokens = @("windows", "owned")
 
 # --- Blessed Python scripting env (Invoke-PythonEnv) -------------------------
 # DUAL-EDIT: $PythonEnvVersion pairs with tools.python in config.toml;
@@ -519,6 +325,11 @@ function Get-GitHubApiHeaders {
 # PATH HELPERS
 # =============================================================================
 
+# User-scope environment variables. One seam, so scripts/test-mise-env.ps1 can
+# stub them (a static .NET method can't be); $null as the value deletes.
+function Get-UserEnv { param([string]$Name) [Environment]::GetEnvironmentVariable($Name, "User") }
+function Set-UserEnv { param([string]$Name, $Value) [Environment]::SetEnvironmentVariable($Name, $Value, "User") }
+
 function Update-SessionPath {
     # New PATH entries are written to the User registry scope; the current
     # session keeps its own copy. Rebuild $env:PATH from Machine + User so
@@ -565,12 +376,12 @@ function Invoke-Reinstall {
     Write-Host "    - $RepoPath  (cloned workstation repo)"
     Write-Host ""
     Write-Host "  Will NOT remove (leaving for re-bootstrap to no-op over):"
-    Write-Host "    - Binary tools under $WsRoot (re-bootstrap detects + skips them)"
+    Write-Host "    - mise under $WsRoot and its tools (re-bootstrap detects + skips them)"
     Write-Host "    - Deployed dotfiles in `$HOME / `$env:APPDATA (the mise dotfiles+tools bootstrap will re-apply)"
     Write-Host "    - SSH keys"
     Write-Host ""
-    Write-Host "  For a deeper uninstall (remove the portable tools too), do that manually first:"
-    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # mise + every portable tool re-downloads next run"
+    Write-Host "  For a deeper uninstall (remove mise too), do that manually first:"
+    Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # mise re-downloads next run"
     Write-Host ""
 
     # Self-deletion guard: if this script is being run from inside the path we're
@@ -660,104 +471,59 @@ yourself first.
     Write-Ok "Prerequisites OK"
 }
 
-function Install-PortableTool {
-    param([hashtable]$Tool)
-
-    $stamp = Join-Path $WsStamps "$($Tool.Exe).$($Tool.Version).stamp"
-
-    # BinSubdir (opt-in): where <Exe>.exe lives under Dest and what joins the
-    # PATH — see the $PortableTools comment. Honoured in exactly two places
-    # (the stamp fast-path check below and the 'tree' branch's Add-ToUserPath).
-    $binDir = if ($Tool.ContainsKey('BinSubdir')) { Join-Path $Tool.Dest $Tool.BinSubdir } else { $Tool.Dest }
-
-    # Idempotency: stamp present AND the pinned exe exists on disk → already
-    # done. A version bump changes the stamp name, so the old stamp won't
-    # match → reinstall. Deliberately NOT Get-Command: PATH resolution depends
-    # on the CALLING session's environment, so a session started before the
-    # tool's dir joined the User PATH re-installed forever. The Add-ToUserPath
-    # below keeps the User PATH entry self-healing on the skip path (idempotent
-    # and silent when already present).
-    if ((Test-Path $stamp) -and (Test-Path (Join-Path $binDir "$($Tool.Exe).exe"))) {
+function Install-Mise {
+    $binDir = Join-Path $WsMise "bin"
+    $stamp  = Join-Path $WsStamps "mise.$MiseVersion.stamp"
+    if ((Test-Path $stamp) -and (Test-Path (Join-Path $binDir "mise.exe"))) {
         Add-ToUserPath $binDir
-        Write-Ok "$($Tool.Name) $($Tool.Version) already installed"
+        Write-Ok "mise $MiseVersion already installed"
         return
     }
-
-    if ($Tool.Sha256 -like "*PIN-ME*") {
-        Write-Fail "$($Tool.Name) has an unfilled sha256 pin ($($Tool.Sha256)). Fill it in `$PortableTools before running."
-    }
-
-    Write-Log "Installing $($Tool.Name) $($Tool.Version) (portable)..."
-
-    $tmpZip = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version).zip"
-    $tmpDir = Join-Path $env:TEMP "ws-$($Tool.Exe)-$($Tool.Version)"
-
+    Write-Log "Installing mise $MiseVersion..."
+    $zip = Join-Path $env:TEMP "ws-mise-$MiseVersion.zip"
+    $tmp = Join-Path $env:TEMP "ws-mise-$MiseVersion"
     try {
-        Invoke-CurlRequest -Uri $Tool.Url -OutFile $tmpZip
-    } catch {
-        Write-Warn "$($Tool.Name) download failed: $($_.Exception.Message)"
-        Write-Warn "  Skipping — install it manually or re-run later."
-        return
-    }
-
-    # sha256 verify — the ONE hard-fail inside this helper (tamper/corruption).
-    $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpZip).Hash.ToLower()
-    if ($actual -ne $Tool.Sha256.ToLower()) {
-        Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
-        Write-Fail @"
-$($Tool.Name) sha256 mismatch — refusing to install.
-  expected: $($Tool.Sha256.ToLower())
-  actual:   $actual
-The pinned hash in `$PortableTools is stale, or the download was corrupted/tampered.
-"@
-    }
-
-    try {
-        if ($Tool.Layout -eq "exe") {
-            # Bare single-binary release (jq ships jq-windows-amd64.exe, not a
-            # .zip) — the sha256-verified download IS the binary; place it under
-            # Dest as <Exe>.exe, no Expand-Archive. ($tmpZip holds the raw .exe.)
-            if (-not (Test-Path $Tool.Dest)) { New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null }
-            Copy-Item $tmpZip -Destination (Join-Path $Tool.Dest "$($Tool.Exe).exe") -Force
-            Add-ToUserPath $Tool.Dest
-            if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
-            New-Item -ItemType File -Force -Path $stamp | Out-Null
-            Write-Ok "$($Tool.Name) $($Tool.Version) installed to $($Tool.Dest)"
-            return
-        }
-        if (Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }
-        Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
-
-        if ($Tool.Layout -eq "single") {
-            if (-not (Test-Path $Tool.Dest)) { New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null }
-            $exe = Get-ChildItem -Path $tmpDir -Recurse -Filter "$($Tool.Exe).exe" | Select-Object -First 1
-            if (-not $exe) {
-                Write-Warn "$($Tool.Name): $($Tool.Exe).exe not found in archive — skipping"
-                return
-            }
-            Copy-Item $exe.FullName -Destination (Join-Path $Tool.Dest "$($Tool.Exe).exe") -Force
-            Add-ToUserPath $Tool.Dest
-        } else {
-            # 'tree' — the archive may wrap everything in a single top-level
-            # folder; flatten that so the exe lands directly in Dest.
-            $top = @(Get-ChildItem -Path $tmpDir)
-            $src = if (($top.Count -eq 1) -and $top[0].PSIsContainer) { $top[0].FullName } else { $tmpDir }
-            # NOTE: if the tool is running from $Dest its files are locked — this wipe then throws and the outer try/catch warn-not-fails. Close the app (Helix/dnGrep) before re-running to refresh it.
-            if (Test-Path $Tool.Dest) { Remove-Item -Recurse -Force $Tool.Dest }
-            New-Item -ItemType Directory -Force -Path $Tool.Dest | Out-Null
-            Copy-Item -Path (Join-Path $src '*') -Destination $Tool.Dest -Recurse -Force
-            Add-ToUserPath $binDir
-        }
-
-        if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
+        Invoke-CurlRequest -Uri $MiseUrl -OutFile $zip
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLower()
+        if ($actual -ne $MiseSha256) { Write-Fail "mise $MiseVersion sha256 mismatch (got $actual) — refusing to install" }
+        if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+        Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
+        $top = @(Get-ChildItem -Path $tmp)
+        $src = if (($top.Count -eq 1) -and $top[0].PSIsContainer) { $top[0].FullName } else { $tmp }
+        if (Test-Path $WsMise) { Remove-Item -Recurse -Force $WsMise }
+        New-Item -ItemType Directory -Force -Path $WsMise | Out-Null
+        Copy-Item -Path (Join-Path $src '*') -Destination $WsMise -Recurse -Force
+        Add-ToUserPath $binDir
         New-Item -ItemType File -Force -Path $stamp | Out-Null
-        Write-Ok "$($Tool.Name) $($Tool.Version) installed to $($Tool.Dest)"
-    } catch {
-        Write-Warn "$($Tool.Name) install failed during extract/place: $($_.Exception.Message)"
+        Write-Ok "mise $MiseVersion installed to $WsMise"
     } finally {
-        Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
-        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
+}
+
+# One-time cleanup of the pre-mise portable installs (remove once every
+# Windows host has run it): their PATH entries sat ahead of mise's shims.
+# Only the old tools' own stamps go; wslconfig.*, node-postinstall.* and
+# python-env.* stamps are live markers.
+function Invoke-LegacyToolCleanup {
+    $old = @("helix", "nu", "devtoys-cli", "dngrep", "logexpert") | ForEach-Object { Join-Path $WsRoot $_ }
+    $userPath = Get-UserEnv "Path"
+    if ($userPath) {
+        $kept = @($userPath -split ';' | Where-Object { $_ -and ($old -notcontains $_.TrimEnd('\')) })
+        $newPath = $kept -join ';'
+        if ($newPath -ne $userPath) {
+            Set-UserEnv "Path" $newPath
+            Write-Ok "removed old portable-tool directories from the User PATH"
+        }
+    }
+    foreach ($d in $old) { if (Test-Path $d) { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue } }
+    foreach ($exe in @("starship", "gh", "jq", "omp", "opencode", "chezmoi")) {
+        Remove-Item (Join-Path $WsBin "$exe.exe") -Force -ErrorAction SilentlyContinue
+    }
+    Get-ChildItem -Path $WsStamps -Filter "*.stamp" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^(starship|gh|hx|nu|jq|opencode|omp|DevToys\.CLI|dnGREP|LogExpert|uv|chezmoi|mise-runtimes)\.' } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
 # True if an app with a matching Uninstall-registry DisplayName is installed —
@@ -927,7 +693,7 @@ function Install-InstallerTool {
         # (corruption/tamper); an unavailable hash warns but proceeds (HTTPS +
         # a trusted host). NOTE: Write-Fail calls exit 1; remove the temp file
         # BEFORE it so cleanup is guaranteed regardless of whether finally
-        # runs on exit — mirrors Install-PortableTool.
+        # runs on exit.
         if ($expectedSha) {
             $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpExe).Hash.ToLower()
             if ($actual -ne $expectedSha) {
@@ -1162,15 +928,17 @@ function Install-WindowsTerminal {
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — assuming Warp/Windows Terminal/Starship/Helix/Nushell/jq/OpenCode/omp/mise/DevToys CLI/dnGrep/LogExpert on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise-installed tools not installed, Python env not built"
+        Write-Log "Tool install skipped (-SkipToolInstall) — assuming mise/Warp/Windows Terminal on PATH; Obsidian/Zed/DevToys/SSHFS-Win/Claude Code not installed; mise tools not installed, Python env not built"
         return
     }
 
-    foreach ($d in @($WsRoot, $WsBin, $WsHelix, $WsNu, $WsStamps)) {
+    foreach ($d in @($WsRoot, $WsBin, $WsStamps)) {
         if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
     }
 
-    foreach ($tool in $PortableTools) { Install-PortableTool -Tool $tool }
+    Install-Mise
+    Invoke-LegacyToolCleanup
+    Add-ToUserPath $WsBin   # python-env's wpy/textual/typer launchers
     Install-WindowsTerminal
     Install-Warp
     foreach ($tool in $InstallerTools) { Install-InstallerTool -Tool $tool }
@@ -1250,14 +1018,19 @@ function Invoke-CloneRepo {
 # First-apply marker; the name predates mise and stays so existing hosts don't re-force.
 $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 
+# The token set lives in miserc.toml (git-ignored), like on Linux; nothing
+# exports MISE_ENV. An exported value would override miserc, so the old User
+# variable is removed here and in this session.
 function Initialize-MiseEnv {
-    # Persist MISE_ENV to the User registry AND this session before any mise
-    # invocation that must see it. Invoke-MiseBootstrap and Invoke-MiseRuntimes
-    # can each run independently of the other (-SkipDotfiles / -SkipToolInstall
-    # are orthogonal), so both call this rather than relying on the other
-    # having already run. Idempotent.
-    [Environment]::SetEnvironmentVariable("MISE_ENV", $MiseEnv, "User")
-    $env:MISE_ENV = $MiseEnv
+    $rc = Join-Path $RepoPath "miserc.toml"
+    $envList = ($MiseEnvTokens | ForEach-Object { '"' + $_ + '"' }) -join ', '
+    $body = "# Written by bootstrap.ps1 (Windows is always owned).`nenv = [$envList]`nauto_env = false`n"
+    [System.IO.File]::WriteAllText($rc, $body, [System.Text.UTF8Encoding]::new($false))
+    if (Get-UserEnv "MISE_ENV") {
+        Set-UserEnv "MISE_ENV" $null
+        Write-Ok "removed the old User MISE_ENV variable (miserc.toml replaces it)"
+    }
+    Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue
 }
 
 function Set-ConfigLocalVar {
@@ -1346,22 +1119,28 @@ function Invoke-WslConfigReminder {
 
 # Invoke-MiseBootstrap -- `mise bootstrap --only dotfiles,tools` applies the
 # [dotfiles] entries (config.toml/config.owned.toml/config.windows.toml) to
-# %USERPROFILE% AND installs the tools those same files declare, in one
-# call; `--only dotfiles,tools` skips [bootstrap.files] entirely, so no
-# sudo-only /etc entry can ever fire here. -SkipToolInstall drops to `--only
-# dotfiles` so it doesn't silently install tools anyway (Invoke-MiseRuntimes
-# below has its own, separate -SkipToolInstall gate).
+# %USERPROFILE% AND installs every tool those same files declare, in one
+# call; `--only` skips [bootstrap.files] entirely, so no sudo-only /etc
+# entry can ever fire here. -SkipDotfiles drops the dotfiles phase and
+# -SkipToolInstall the tools phase (and the post-tools steps below).
 #
 # The first dotfiles apply on this host can find targets already on disk as
 # real files, and template/copy modes refuse to overwrite one that differs
 # -- so that FIRST apply passes --force-dotfiles (mirrors bootstrap.sh's own
-# apply()). Passed only until
-# $MigratedMarker exists, so a later real conflict still surfaces loudly.
-# Invoke-MiseRuntimes (below) runs afterward for a separate reason -- see
-# its own comment.
+# apply()). Passed only until $MigratedMarker exists, so a later real
+# conflict still surfaces loudly.
+#
+# After the tools phase, as scripts/lib/mise-install.sh does on Linux: the
+# shims dir joins the User PATH and this session (jq, starship, nu and uv
+# resolve for the steps after this); node is force-reinstalled once when
+# its declaration changed, because mise re-runs node's npm postinstall (the
+# language servers) only on a (re)install; then prune + reshim.
 function Invoke-MiseBootstrap {
-    if ($SkipDotfiles) {
-        Write-Log "mise dotfiles+tools bootstrap skipped (-SkipDotfiles)"
+    $phases = @()
+    if (-not $SkipDotfiles) { $phases += 'dotfiles' }
+    if (-not $SkipToolInstall) { $phases += 'tools' }
+    if ($phases.Count -eq 0) {
+        Write-Log "mise bootstrap skipped (-SkipDotfiles -SkipToolInstall)"
         return
     }
 
@@ -1372,35 +1151,35 @@ function Invoke-MiseBootstrap {
         return
     }
 
-    # config.local.toml must exist BEFORE the dotfiles apply below -- the
-    # Tera templates guard every vars.* reference, but a real value still
-    # shapes the rendered git identity.
-    Invoke-EnsureConfigLocal
-
-    # -SkipToolInstall must skip the tools phase HERE too, not just in
-    # Invoke-MiseRuntimes below -- otherwise "just reapply my dotfiles,
-    # don't touch my tools" silently installs/updates node/Go/uv/gopls/the
-    # LSP servers/ccstatusline anyway on any host where mise is already on
-    # PATH (Invoke-MiseRuntimes's own -SkipToolInstall gate only skips ITS
-    # later, separate pass -- by then this step has already done the work).
-    # PS 5.1 has no ternary, hence the if/else-as-expression form.
-    $onlyPhases = if ($SkipToolInstall) { 'dotfiles' } else { 'dotfiles,tools' }
-    if ($SkipToolInstall) {
-        Write-Log "-SkipToolInstall passed -- mise bootstrap will run --only dotfiles (tools phase skipped)"
-    }
-
     $forceFlags = @()
-    if (-not (Test-Path -LiteralPath $MigratedMarker)) {
-        $forceFlags = @('--force-dotfiles')
-        Write-Log "First dotfiles apply on this host -- passing --force-dotfiles (marker absent: $MigratedMarker)"
+    if (-not $SkipDotfiles) {
+        # config.local.toml must exist BEFORE the dotfiles apply below -- the
+        # Tera templates guard every vars.* reference, but a real value still
+        # shapes the rendered git identity.
+        Invoke-EnsureConfigLocal
+        if (-not (Test-Path -LiteralPath $MigratedMarker)) {
+            $forceFlags = @('--force-dotfiles')
+            Write-Log "First dotfiles apply on this host -- passing --force-dotfiles (marker absent: $MigratedMarker)"
+        }
     }
 
+    # `mise where node` succeeds only when the DECLARED node is installed.
+    # Native stderr must not trip EAP=Stop (PS 5.1 wraps it as errors).
+    $hadNode = $false
+    if (-not $SkipToolInstall) {
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        & mise where node *> $null
+        $hadNode = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $oldEap
+    }
+
+    $onlyPhases = $phases -join ','
     Write-Log "Running mise bootstrap --only $onlyPhases (source: $RepoPath)..."
     $bootstrapArgs = @('bootstrap', '--only', $onlyPhases, '--yes') + $forceFlags
     & mise @bootstrapArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Fail @"
-mise bootstrap (dotfiles + tools) failed -- see the failing phase above.
+mise bootstrap (--only $onlyPhases) failed -- see the failing phase above.
 
 A dotfiles conflict aborts the WHOLE dotfiles phase (one bad entry blocks
 every entry -- nothing gets applied). If the failure names a target that
@@ -1413,173 +1192,65 @@ reported above and re-run.
     }
     Write-Ok "mise bootstrap (--only $onlyPhases) complete"
 
-    if (-not (Test-Path -LiteralPath $MigratedMarker)) {
+    if (-not $SkipDotfiles -and -not (Test-Path -LiteralPath $MigratedMarker)) {
         $markerDir = Split-Path $MigratedMarker -Parent
         if (-not (Test-Path $markerDir)) { New-Item -ItemType Directory -Force -Path $markerDir | Out-Null }
         New-Item -ItemType File -Force -Path $MigratedMarker | Out-Null
         Write-Ok "dotfiles first-apply marker written ($MigratedMarker) -- future runs no longer force-reclaim dotfiles targets"
     }
 
-    Invoke-WslConfigReminder
-}
-
-$MiseConfigFiles = @("config.toml", "config.owned.toml", "config.windows.toml")
-$MiseShims       = Join-Path $env:LOCALAPPDATA "mise\shims"
-$MiseEnv         = "windows,owned"
-
-# Get-MiseRuntimesStamp — the exact stamp path Invoke-MiseRuntimes writes on
-# success: a hash of $MiseConfigFiles (config.toml + config.owned.toml +
-# config.windows.toml) under $RepoPath. Doctor calls this SAME helper so its
-# verdict can never drift onto a stale stamp. $null when config.toml is
-# missing (repo not cloned yet).
-function Get-MiseRuntimesStamp {
-    # FIXED order, not Sort-Object: the two names differ only by a middle
-    # token, and culture-aware sorting orders them differently under .NET
-    # Framework (5.1, NLS) and .NET Core (pwsh 7, ICU) — the stamp must not
-    # depend on which PowerShell ran the bootstrap.
-    $files = @($MiseConfigFiles | ForEach-Object { Join-Path $RepoPath $_ })
-    if (-not (Test-Path -LiteralPath $files[0])) { return $null }
-    $existing = @($files | Where-Object { Test-Path -LiteralPath $_ })
-    $text   = ($existing | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_ }) -join "`n"
-    $bytes  = [System.Text.Encoding]::UTF8.GetBytes($text)
-    $stream = New-Object System.IO.MemoryStream (,$bytes)
-    $hash   = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.Substring(0, 8).ToLower()
-    return Join-Path $WsStamps "mise-runtimes.$hash.stamp"
-}
-
-# node/Go/uv/gopls/the LSP servers/ccstatusline via mise -- the Windows
-# half of the Linux mise-driven install. Invoke-MiseBootstrap's own tools
-# phase already installed these; this is NOT redundant with that -- it's
-# the Windows-specific idempotency layer on the same `mise install`:
-# force-reinstalls node only when its npm postinstall (the LSP servers)
-# needs to re-run, and self-heals the shims PATH. Gated by its own
-# change-detection stamp, so a repeat run right after Invoke-MiseBootstrap
-# is a fast no-op. Reads config.toml + config.owned.toml +
-# config.windows.toml directly from the checkout root (config.linux.toml
-# never loads -- MISE_ENV carries no `linux` token on Windows). When
-# Windows can't replace a locked node install (a running editor LSP holds
-# it open), falls back to running node's declared postinstall directly
-# against the existing install so the language servers still refresh.
-# -SkipToolInstall skips this too, independently of -SkipDotfiles.
-function Invoke-MiseRuntimes {
-    if ($SkipToolInstall) {
-        Write-Log "mise runtimes skipped (-SkipToolInstall)"
-        return
-    }
-    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
-        Write-Warn "mise runtimes skipped — mise not on PATH (portable-tool step failed? open a NEW shell and re-run .\bootstrap.ps1)"
-        return
-    }
-
-    # Persist MISE_ENV as a User env var right after we know mise is present
-    # and before any `mise` invocation below — every process that resolves
-    # tools (shells, Claude Code hooks, this session) must see the same set.
-    # Idempotent; Invoke-MiseBootstrap also calls this (they're independently
-    # skippable — see its header comment).
-    Initialize-MiseEnv
-
-    $stamp = Get-MiseRuntimesStamp
-    if ($null -eq $stamp) {
-        Write-Warn "mise tools skipped — $RepoPath\config.toml missing (clone step failed?)"
-        return
-    }
-
-    # Shims on the User PATH every run (self-heals) and in-session, so later
-    # steps (Invoke-PythonEnv's `mise which uv`, Claude Code's npx) resolve.
-    if (-not (Test-Path $MiseShims)) { New-Item -ItemType Directory -Force -Path $MiseShims | Out-Null }
-    Add-ToUserPath $MiseShims
-
-    if (Test-Path $stamp) {
-        Write-Ok "mise runtimes already installed (config unchanged — $(Split-Path -Leaf $stamp))"
-        return
-    }
-
-    Write-Log "Installing mise tools from $RepoPath\config*.toml (node / Go / uv / gopls / LSP servers / ccstatusline — a few minutes on first run)..."
-    # Native commands chatter on stderr; keep that from tripping an EAP=Stop
-    # session (the git ls-remote precedent in Get-LatestGitTag).
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try {
-        # `mise where node` succeeds only when the DECLARED node version is
-        # already installed — a NODE_VERSION bump therefore installs once.
-        & mise where node *> $null
-        $hadNode = ($LASTEXITCODE -eq 0)
-        $nodeDeclared = [bool](Select-String -Path (Join-Path $RepoPath "config.owned.toml") -Pattern '^node\s*=' -Quiet)
-
-        & mise install --yes
-        if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
-        if ($hadNode -and $nodeDeclared) {
-            Write-Log "  node was already installed — forcing a reinstall so its npm postinstall re-runs"
-            # Captured (not streamed): the only way to inspect it for the
-            # Windows file-lock signature below.
-            $forceOutput = & mise install --yes --force node 2>&1
-            $forceExit = $LASTEXITCODE
-            if ($forceExit -ne 0) {
-                $forceText = $forceOutput -join "`n"
-                $isLocked = ($forceText -match 'os error 32') -or ($forceText -match 'being used by another process')
-                Write-Warn "  mise install --force node exited $forceExit — falling back to node's declared npm postinstall (existing node install untouched)"
-
-                # The force-reinstall exists ONLY to re-run node's declared npm
-                # postinstall (the language servers) — mise re-runs postinstall
-                # hooks solely on (re)install. When mise can't replace the install
-                # (most commonly Windows holding a file under it open), running
-                # that SAME postinstall command directly against the
-                # already-installed node/npm gets the identical result without
-                # replacing anything. Read it fresh from config.owned.toml every
-                # time (never hardcode it) with an explicit `-f`, the same way
-                # scripts/lib/mise-install.sh reads it on Linux — a bare
-                # `mise config get` resolves only the highest-precedence loaded
-                # file, which here is config.windows.toml (declares no tools).
-                $postinstallOk = $false
-                $nodeConfigPath = Join-Path $RepoPath "config.owned.toml"
-                $declOutput = & mise config get -f $nodeConfigPath "tools.node.postinstall" 2>&1
-                $declExit = $LASTEXITCODE
-                $postinstallCmd = $null
-                if ($declExit -eq 0) { $postinstallCmd = ($declOutput -join "`n").Trim() }
-
-                if ([string]::IsNullOrWhiteSpace($postinstallCmd)) {
-                    # Unreadable declaration: nothing safe to run (a hardcoded
-                    # guess could silently drift from config.owned.toml) — skip
-                    # straight to the warn below instead of half-fixing it.
-                    Write-Warn "  could not read tools.node.postinstall from $nodeConfigPath — skipping the postinstall fallback"
+    if (-not $SkipToolInstall) {
+        Add-ToUserPath $MiseShims
+        Update-SessionPath
+        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try {
+            & mise where node *> $null
+            if ($LASTEXITCODE -eq 0) {
+                # Marker = node's declaration hashed (-f: a bare `mise config get`
+                # reads only the highest-precedence file, config.windows.toml).
+                # An unreadable declaration forces the reinstall and writes no
+                # marker, so the next run retries.
+                $decl = (@(& mise config get -f (Join-Path $RepoPath "config.owned.toml") tools.node 2>$null) -join "`n").Trim()
+                $marker = $null
+                if (($LASTEXITCODE -eq 0) -and $decl) {
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($decl)
+                    $stream = New-Object System.IO.MemoryStream (,$bytes)
+                    $sum = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
+                    $marker = Join-Path $WsStamps "node-postinstall.$sum.stamp"
                 } else {
-                    Write-Log "  running node's declared postinstall directly: $postinstallCmd"
-                    $postinstallParts = $postinstallCmd -split '\s+'
-                    $postinstallArgs = @()
-                    if ($postinstallParts.Length -gt 1) { $postinstallArgs = $postinstallParts[1..($postinstallParts.Length - 1)] }
-                    & $postinstallParts[0] @postinstallArgs
-                    if ($LASTEXITCODE -eq 0) {
-                        $postinstallOk = $true
-                        Write-Ok "  postinstall re-run directly (language servers refreshed)"
+                    Write-Warn "could not read tools.node from config.owned.toml -- forcing the node reinstall so its npm postinstall can't be skipped"
+                }
+                $nodeOk = $true
+                if ($hadNode -and -not ($marker -and (Test-Path -LiteralPath $marker))) {
+                    Write-Log "node already installed but its declaration changed -- reinstalling so its npm postinstall (the language servers) re-runs"
+                    $forceOut = @(& mise install --yes --force node 2>&1)
+                    if ($LASTEXITCODE -ne 0) {
+                        $nodeOk = $false
+                        $forceText = ($forceOut | ForEach-Object { "$_" }) -join "`n"
+                        if ($forceText -match 'os error 32|being used by another process') {
+                            Write-Warn "node is in use (an editor's language server, a dev server, an agent) -- close running node processes and re-run .\bootstrap.ps1"
+                        } else {
+                            Write-Warn "mise install --force node failed -- re-run .\bootstrap.ps1 to retry:`n$forceText"
+                        }
                     } else {
-                        Write-Warn "  fallback postinstall command exited $LASTEXITCODE"
+                        Write-Ok "node reinstalled (language servers refreshed)"
                     }
                 }
-
-                if (-not $postinstallOk) {
-                    if ($isLocked) {
-                        Write-Warn "  a running program is holding the node install open — commonly an editor's language server, a dev server, or a running agent."
-                        Write-Warn "  the existing node install and its language servers are untouched; close that program and re-run .\bootstrap.ps1 to complete the refresh."
-                    }
-                    throw "mise install --force node exited $forceExit and the postinstall fallback also failed"
+                if ($nodeOk -and $marker) {
+                    Get-ChildItem -Path $WsStamps -Filter "node-postinstall.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
+                    New-Item -ItemType File -Force -Path $marker | Out-Null
                 }
-                # Fallback succeeded: the postinstall genuinely re-ran, so fall
-                # through and let the stamp be written below like any other
-                # successful run.
             }
+            & mise prune --yes
+            if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
+            & mise reshim
+            if ($LASTEXITCODE -ne 0) { Write-Warn "mise reshim exited $LASTEXITCODE (non-fatal)" }
+        } finally {
+            $ErrorActionPreference = $oldEap
         }
-        & mise prune --yes
-        if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
-
-        if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
-        Get-ChildItem -Path $WsStamps -Filter "mise-runtimes.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
-        New-Item -ItemType File -Force -Path $stamp | Out-Null
-        Write-Ok "mise runtimes installed ($MiseShims is on the User PATH)"
-    } catch {
-        Write-Warn "mise runtimes install failed: $($_.Exception.Message)"
-        Write-Warn "  Re-run .\bootstrap.ps1 to retry (no stamp was written); diagnose with: mise doctor ; mise ls --missing"
-    } finally {
-        $ErrorActionPreference = $oldEap
     }
+
+    if (-not $SkipDotfiles) { Invoke-WslConfigReminder }
 }
 
 # =============================================================================
@@ -1628,25 +1299,34 @@ if (Test-Path $canonical) { . $canonical }
     Write-Warn "Restart PowerShell to pick up the managed profile."
 }
 
-# The portable GUI .zips ship no Start Menu shortcut, so the GUI hides
-# behind the PATH'd exe. Data-driven: every $PortableTools entry with the
-# opt-in Shortcut key (dnGrep/LogExpert) gets a per-user "<Name>.lnk".
-# Fixed filename per tool -> idempotent + duplicate-proof; runs every
-# bootstrap (self-heals a deleted shortcut). Soft-fails per tool.
+# Full path of <Exe> in a mise tool's install dir (`mise where <Tool>`), or
+# $null when mise, the tool or the exe is missing. The dir is versioned.
+function Get-MiseToolExe {
+    param([string]$Tool, [string]$Exe)
+    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) { return $null }
+    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $out = @(& mise where $Tool 2>$null); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $oldEap }
+    if (($code -ne 0) -or ($out.Count -eq 0) -or -not "$($out[0])".Trim()) { return $null }
+    $path = Join-Path "$($out[0])".Trim() $Exe
+    if (Test-Path -LiteralPath $path) { return $path }
+    return $null
+}
+
+# The GUI zips mise installs (dnGrep, LogExpert) ship no Start Menu
+# shortcut, so each gets a per-user "<Name>.lnk" to the exe in its mise
+# install dir. Fixed filename per app -> idempotent + duplicate-proof; runs
+# every bootstrap (self-heals a deleted shortcut, follows a version bump's
+# new install dir). Soft-fails per app.
+$MiseShortcuts = @(
+    @{ Name = "dnGrep"; Tool = "github:dnGrep/dnGrep"; Exe = "dnGREP.exe"; Description = "dnGrep — search and replace in files (grep GUI)" },
+    @{ Name = "LogExpert"; Tool = "github:LogExperts/LogExpert"; Exe = "LogExpert.exe"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
+)
 function Invoke-StartMenuShortcuts {
-    foreach ($tool in ($PortableTools | Where-Object { $_.ContainsKey('Shortcut') })) {
-        # Resolve the GUI launcher. Prefer the portable install dir; fall back to
-        # PATH (e.g. -SkipToolInstall with the tool already installed elsewhere).
-        $target = $tool.Shortcut.Target
-        $exe = Join-Path $tool.Dest "$target.exe"
-        if (-not (Test-Path $exe)) {
-            $cmd = Get-Command $target -ErrorAction SilentlyContinue
-            if ($cmd) {
-                $exe = $cmd.Source
-            } else {
-                Write-Warn "Skipping $($tool.Name) Start Menu shortcut — $target.exe not found at $($tool.Dest) or on PATH."
-                continue
-            }
+    foreach ($tool in $MiseShortcuts) {
+        $exe = Get-MiseToolExe -Tool $tool.Tool -Exe $tool.Exe
+        if (-not $exe) {
+            Write-Warn "Skipping $($tool.Name) Start Menu shortcut — $($tool.Exe) not found via 'mise where $($tool.Tool)'."
+            continue
         }
 
         # Fixed filename in the per-user Start Menu Programs folder (no admin). The
@@ -1666,7 +1346,7 @@ function Invoke-StartMenuShortcuts {
                 }
                 $sc.TargetPath       = $exe
                 $sc.WorkingDirectory = $env:USERPROFILE
-                $sc.Description       = $tool.Shortcut.Description
+                $sc.Description       = $tool.Description
                 $sc.Save()
                 if ($existed) {
                     Write-Ok "$($tool.Name) Start Menu shortcut updated (target: $exe)"
@@ -1769,9 +1449,10 @@ function Invoke-WindowsTerminalFragments {
 # host. Files prefixed workstation- are owned by this
 # function; every run wipes and rewrites them; user-created configs are
 # never touched. Warp supports pwsh/PowerShell 5/WSL2/Git Bash only, NOT
-# Nushell -- the Nushell entry is a compatibility shim (pwsh launches the
-# portable nu.exe as a child); Nushell's first-class home stays Windows
-# Terminal's defaultProfile.
+# Nushell -- the Nushell entry is a compatibility shim (pwsh launches
+# mise's nu.exe shim as a child; mise's install dir is versioned, the shim
+# path isn't); Nushell's first-class home stays Windows Terminal's
+# defaultProfile.
 function Invoke-WarpTabConfigs {
     if (-not (Test-InstallerPresent -DisplayName $WarpTool.DetectName)) {
         Write-Warn "Skipping Warp Tab Config generation — Warp is not installed."
@@ -1820,7 +1501,7 @@ color = "magenta"
 id = "main"
 type = "terminal"
 shell = "pwsh"
-commands = ['& "$env:LOCALAPPDATA\workstation\nu\nu.exe" --login']
+commands = ['& "$env:LOCALAPPDATA\mise\shims\nu.exe" --login']
 is_focused = true
 '@
         }
@@ -1883,19 +1564,21 @@ function Invoke-NushellStarship {
     }
 }
 
-# dnGrep stores settings NEXT TO THE EXE, so a pin bump's 'tree' wipe would
-# destroy them. Seeds dnGrep.config.xml redirecting DataDirectory/
+# dnGrep stores settings NEXT TO THE EXE, and mise's install dir is
+# versioned, so a version bump would start from scratch. Seeds
+# dnGrep.config.xml beside dnGREP.exe redirecting DataDirectory/
 # LogDirectory to %APPDATA%\dnGREP instead (values must be EXPANDED paths
-# -- dnGrep doesn't expand %ENV% vars). Seed-if-absent ONLY: dnGrep's
-# Options dialog rewrites this same file, so overwriting every run would
-# clobber a user's choice.
+# -- dnGrep doesn't expand %ENV% vars); a new install dir has none, so it
+# is re-seeded. Seed-if-absent ONLY: dnGrep's Options dialog rewrites this
+# same file, so overwriting every run would clobber a user's choice.
 function Invoke-DnGrepConfig {
-    if (-not (Test-Path (Join-Path $WsDnGrep "dnGREP.exe"))) {
-        Write-Warn "Skipping dnGrep config seed — dnGREP.exe not found at $WsDnGrep (install step skipped?)."
+    $exe = Get-MiseToolExe -Tool "github:dnGrep/dnGrep" -Exe "dnGREP.exe"
+    if (-not $exe) {
+        Write-Warn "Skipping dnGrep config seed — dnGREP.exe not found via 'mise where github:dnGrep/dnGrep' (tools phase skipped?)."
         return
     }
 
-    $cfg = Join-Path $WsDnGrep "dnGrep.config.xml"
+    $cfg = Join-Path (Split-Path $exe -Parent) "dnGrep.config.xml"
 
     # The redirect TARGETS must exist, not just the config file: dnGrep
     # enumerates DataDirectory at startup (AppTheme.LoadExternalThemes does
@@ -1943,7 +1626,7 @@ function Invoke-DnGrepConfig {
 # (auto-sourced on startup, exactly like starship.nu), regenerated every
 # run so it tracks the installed mise. Never hand-edited, never in
 # config.nu; its export-env hook puts mise's real bin dirs on PATH ahead of
-# the shims dir Invoke-MiseRuntimes added.
+# the shims dir Invoke-MiseBootstrap added.
 function Invoke-NushellMise {
     if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
         Write-Warn "Skipping Nushell mise activation — mise not on PATH (install step skipped?)."
@@ -2099,7 +1782,7 @@ function Invoke-ClaudeSettingsLocalSeed {
 
 # Native Windows install via Anthropic's official installer script (verifies
 # claude.exe's sha256 against the signed release manifest, then wires up the
-# launcher/PATH/shell integration itself). NOT $PortableTools -- it
+# launcher/PATH/shell integration itself). NOT a mise tool -- it
 # self-updates in the background (mirrors the rolling Linux install). NOT
 # $InstallerTools -- no Uninstall-registry entry, no GitHub release.
 # Detect-by-command, skip when present. Runs in a CHILD powershell.exe: the
@@ -2779,15 +2462,14 @@ if ($CheckForUpdates) { Invoke-CheckForUpdates; exit 0 }
 
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
-Invoke-ToolInstall        # admin-free binary/portable installs under %LOCALAPPDATA%\workstation
+Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation, the old portable tools cleaned up, then the GUI apps
 Invoke-CloneRepo
-Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles apply + a tools pass, then the .wslconfig restart reminder
-Invoke-MiseRuntimes       # node/Go/uv/gopls/LSP servers/ccstatusline from config*.toml at the repo root (self-heals the shims PATH)
-Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the portable GUI tools (dnGrep/LogExpert)
+Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; shims on PATH, node marker, prune; .wslconfig reminder
+Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
 Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
-Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; survives pin-bump wipes)
+Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; re-seeded per mise install dir)
 Invoke-NushellMise        # generate the Nushell mise activation (vendor/autoload — self-heals)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
@@ -2801,9 +2483,8 @@ Invoke-EnsureSshKey
 Write-Host ""
 Write-Host "${Bold}Bootstrap complete.${Reset}"
 Write-Host ""
-Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsBin${Reset}, ${Bold}$WsHelix${Reset}, ${Bold}$WsNu${Reset},"
-Write-Host "${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset} — mise-installed tools) and the mise-applied dotfiles pick up — starship prompt,"
-Write-Host "git aliases, etc."
+Write-Host "Open a NEW shell so the updated User PATH (${Bold}$WsMise\bin${Reset}, ${Bold}$MiseShims${Reset} — mise and its tools)"
+Write-Host "and the mise-applied dotfiles pick up — starship prompt, git aliases, etc."
 Write-Host ""
 Write-Host "${Bold}Two terminals are managed.${Reset} Warp is the day-to-day one: it opens into"
 Write-Host "AlmaLinux-9 (WSL zsh), and its + menu carries the generated Tab Configs for"

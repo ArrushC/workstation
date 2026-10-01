@@ -182,13 +182,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - script flags ↔ their completions (`_bootstrap.sh`, `completions.bash`, `config.nu.tera`'s flag
     record)
 - **Values recorded in several places (checked by `check_version_pins` and friends):**
-  - mise: `bootstrap.sh`, `bootstrap.ps1`, `min_version`
+  - mise: `bootstrap.sh`, `bootstrap.ps1` `$MiseVersion`, `min_version`
   - python: `tools.python`, `$PythonEnvVersion`
   - Nerd Font: `config.owned.toml` tool ↔ `install-nerd-fonts.ps1`
-  - jq, gh, helix, opencode, omp and the DevToys CLI: `config*.toml` ↔ `$PortableTools`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5
-  - `scripts/bump-versions.sh` covers each via `PS1_NAME`, `COUPLED_AUTO` or `EXCLUDE`.
+  - `scripts/bump-versions.sh` covers each via `COUPLED_AUTO` or `EXCLUDE`.
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`
   - `/etc` copies

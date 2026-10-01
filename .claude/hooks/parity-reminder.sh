@@ -50,10 +50,10 @@ case "$norm" in
 # etc. (both end in "/config.toml").
 */dotfiles/*) ;;
 */config.toml)
-  msg="config.toml pins: tools.python pairs with \$PythonEnvVersion in bootstrap.ps1; the github:ryanoasis/nerd-fonts pin pairs with \$Version in scripts/install-nerd-fonts.ps1 (both two-way until PR 4)."
+  msg="config.toml pins: min_version triple-edits MISE_VERSION in bootstrap.sh and \$MiseVersion in bootstrap.ps1; tools.python pairs with \$PythonEnvVersion in bootstrap.ps1; the github:ryanoasis/nerd-fonts pin pairs with \$Version in scripts/install-nerd-fonts.ps1 (both two-way until PR 4)."
   ;;
 */config.linux.toml | */config.owned.toml)
-  msg="Tool pins changed. jq/gh/helix (config.linux.toml) and opencode/omp/DevToys (config.owned.toml) dual-edit bootstrap.ps1 \$PortableTools; min_version dual-edits MISE_VERSION in bootstrap.sh + bootstrap.ps1. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
+  msg="Tool pins changed. Refresh mise.lock: \`mise lock --global --platform linux-x64,windows-x64\`."
   ;;
 esac
 if [ -z "$msg" ]; then

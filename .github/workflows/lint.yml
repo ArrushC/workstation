@@ -73,6 +73,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-ssh-launchers.ps1
+      - name: Test miserc.toml writer + legacy tool cleanup (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-mise-env.ps1
+      - name: Test miserc.toml writer + legacy tool cleanup (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-mise-env.ps1
   templates:
     runs-on: ubuntu-latest
     steps:
@@ -89,8 +97,8 @@ jobs:
       - name: Install zsh
         run: sudo apt-get update && sudo apt-get install -y zsh
       # nushell here is a CI-ONLY syntax checker for config.nu.tera — NOT a
-      # fleet tool: no config.toml pin, deliberately NOT an enforced
-      # dual-edit with bootstrap.ps1's Nushell pin (drift is harmless; this
+      # Linux fleet tool, deliberately NOT an enforced dual-edit with the
+      # Windows-only nushell pin in config.owned.toml (drift is harmless; this
       # only parses). Bump ad-hoc when the check needs newer syntax.
       - name: Install nushell (pinned, CI-only)
         run: |
