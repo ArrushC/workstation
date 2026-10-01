@@ -11,9 +11,9 @@
   attention. Sets: `linux` (shared), `linux,owned,host,native`, `linux,owned,host,wsl`. Safe unprivileged
   because there is no firewall table. Both refuse a dotfiles conflict like a real apply unless
   `--force-dotfiles` is passed.
-- `mise run health` is the full report (saved mode, `MISE_ENV` persistence, pueued, python-env,
-  dotfiles drift, dirty checkout); exit 1 on a hard failure. `mise tasks validate` catches malformed `#MISE` headers; `mise ls --missing`
-  should be empty.
+- `mise run health` is the full report (saved mode, `miserc.toml`, pueued, python-env,
+  dotfiles drift, dirty checkout); exit 1 on a hard failure. `mise tasks validate`
+  catches malformed `#MISE` headers; `mise ls --missing` should be empty.
 - Sandbox install plus capability gate (no sudo):
   ```
   MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox MISE_STATE_DIR=/tmp/mise-sandbox-state \
@@ -29,11 +29,11 @@
 - Locks: never hand-edit. Regeneration (from outside the checkout, then sidecar-path normalisation)
   is implemented in `scripts/bump-versions.sh`; `check-invariants.sh` verifies lock coverage.
 - pueued: `systemctl --user cat dev.mise.pueued.service` has no `Environment=MISE_ENV=` line;
-  `systemctl --user show-environment | grep MISE_ENV` and `~/.config/environment.d/10-mise.conf`
-  carry it; the service is `active (running)`.
+  `~/.config/mise/miserc.toml` has the right `env = [...]`; `systemctl --user is-active dev.mise.pueued`
+  prints `active`.
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
-  A second run prints "already up to date"; `mise run python-env --rebuild` forces an upgrade. Library-list parity with
-  `bootstrap.ps1` is checked by `check-invariants.sh`.
+  A second run prints "up to date"; `mise run python-env --rebuild` forces an upgrade. The env is built on
+  `mise where python`; library-list parity of `scripts/python-env.txt` with `bootstrap.ps1` is checked by `check-invariants.sh`.
 - Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
   WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
   `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.
@@ -68,11 +68,12 @@
   remote pane and pasting locally; zellij reads config at session creation, so `zellij kill-session main`
   first. `check_zellij_config` covers the theme name, KDL comments, `web_server`, tab-bar alias and
   `zellij setup --check`.
-- zjstatus: `bash scripts/test-zellij-plugin.sh` (also in `check-invariants.sh`). To probe a live
-  session with the repo config, judge by zellij's log, not `dump-layout`:
-  `grep -E "Loaded plugin|No such file" /tmp/zellij-$UID/zellij-log/zellij.log` must show
-  `Loaded plugin 'zjstatus.wasm'`. On a host: `wsa`, `zellij kill-session main`, reattach, press `y`
-  at the permission prompt.
+- zjstatus: loads from mise's install dir. Headless check: start a throwaway background session with
+  the tracked config (`ZELLIJ_CONFIG_DIR=<temp copy of dotfiles/config/zellij> zellij attach
+  --create-background <name>`), judge by zellij's log, not `dump-layout`
+  (`grep -E "Loaded plugin|No such file" /tmp/zellij-$UID/zellij-log/zellij.log` must show
+  `Loaded plugin '…/github-dj95-zjstatus/latest/zjstatus.wasm'`), then `zellij kill-session <name>`.
+  On a host: `wsa`, `zellij kill-session main`, reattach, press `y` at the permission prompt.
 
 ## Warp (the primary Windows terminal)
 

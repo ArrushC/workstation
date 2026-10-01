@@ -78,14 +78,13 @@ print(len(d.get("files",[])))' 2>/dev/null)"
 seg_host() {
   local host mode osr id ver plat el osseg
   host="$(uname -n 2>/dev/null)"
-  # owned/shared is the `owned` token in the live MISE_ENV (rc-exported; see
-  # tasks/bootstrap's own env_has idiom) — not read from config.local.toml's
-  # own vars.mode directly: the live MISE_ENV reflects what THIS shell
-  # session actually has active, and the file may not exist yet (a fresh
-  # clone before the first bootstrap run).
+  # owned/shared is the `owned` token in miserc.toml's `env = [...]` (written by
+  # scripts/lib/mise-env.sh) — not config.local.toml's vars.mode, which may not
+  # exist yet on a fresh clone. Missing/unreadable miserc leaves mode unset.
   mode=""
-  if [ -n "${MISE_ENV:-}" ]; then
-    case ",${MISE_ENV}," in
+  tokens="$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')"
+  if [ -n "$tokens" ]; then
+    case ",${tokens}," in
     *,owned,*) mode="owned" ;;
     *) mode="shared" ;;
     esac

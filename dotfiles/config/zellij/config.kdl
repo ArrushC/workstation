@@ -138,22 +138,18 @@ theme "catppuccin-mocha-mauve"
 // 0.45.1: `zellij action dump-layout` shows the override in the tab-bar slot of
 // every tab, including the swap layouts (and the log confirms the load).
 //
-// The plugin file is installed by scripts/lib/zellij-plugin.sh (tasks/bootstrap,
-// after mise installs zjstatus) → ~/.local/share/zellij/plugins/zjstatus.wasm,
-// zellij's DATA dir; pin + zellij floor in config.linux.toml / config.toml
-// [vars] zjstatus_zellij_floor. The location MUST stay the RELATIVE
-// `file:zjstatus.wasm`: zellij resolves it against /usr/share/zellij/plugins,
-// then that data dir — never ~/.config/zellij/plugins — and keeps the relative
-// string as the plugin's identity, including the key in
-// ~/.cache/zellij/permissions.kdl. An absolute or ~ path expands per host, so
-// each host would prompt again. scripts/check-invariants.sh asserts the
-// relative form. A missing file shows as "ERROR IN PLUGIN" in the bar; the
-// truth is in /tmp/zellij-<uid>/zellij-log/zellij.log ("Loaded plugin" vs
-// "No such file") — `zellij action dump-layout` echoes the location either way.
+// The plugin loads straight from mise's install dir: mise keeps `latest`
+// pointing at the pinned zjstatus (config.linux.toml; zellij floor in
+// config.toml [vars] zjstatus_zellij_floor), zellij expands `~`, and the
+// expanded path is the key in ~/.cache/zellij/permissions.kdl — stable across
+// version bumps, and that cache is per host anyway. scripts/check-invariants.sh
+// asserts this exact location. A missing file shows as "ERROR IN PLUGIN" in the
+// bar; the truth is in /tmp/zellij-<uid>/zellij-log/zellij.log ("Loaded plugin"
+// vs "No such file") — `zellij action dump-layout` echoes the location either way.
 //
 // First load on a host asks once for permissions (ReadApplicationState): the
 // bar shows the request; click it (or CTRL+P then ↑ to focus it) and press y.
-// That grant is what the permission-cache key above protects.
+// That grant is cached under the plugin path above.
 //
 // The built-in status-bar stays in the bottom slot on purpose: it renders the
 // keybinding hints from THIS config (CTRL+S = Session, ALT+S = Scroll), whereas
@@ -165,7 +161,7 @@ theme "catppuccin-mocha-mauve"
 // rendered by the CLIENT terminal's font like the powerline arrows above
 // (simplified_ui). Tab numbers come first so they read as the ALT+<n> key.
 plugins {
-    tab-bar location="file:zjstatus.wasm" {
+    tab-bar location="file:~/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm" {
         format_left   "{mode}#[bg=#181825] {tabs}"
         format_center ""
         format_right  "{swap_layout}#[fg=#b4befe,bg=#181825]#[bg=#b4befe,fg=#11111b,bold] {session} #[fg=#b4befe,bg=#181825]"

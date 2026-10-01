@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Report available updates: mise tool pins, dnf (owned Linux hosts), and the config.toml [vars] pins vs upstream tags"
-#MISE env={PYTHON_VERSION="{{ vars.python_version }}", NERD_FONT_VERSION="{{ vars.nerd_font_version }}", VCPKG_VERSION="{{ vars.vcpkg_version }}"}
+#MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -uo pipefail
 
 printf '==> mise tools\n'
@@ -28,6 +28,4 @@ report() {
   fi
 }
 printf '\n==> config.toml [vars] pins\n'
-report nerd-fonts "$NERD_FONT_VERSION" ryanoasis/nerd-fonts v
 report vcpkg "$VCPKG_VERSION" microsoft/vcpkg ""
-report python "$PYTHON_VERSION" python/cpython v

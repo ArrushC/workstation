@@ -30,6 +30,6 @@ mise bootstrap status      # what mise bootstrap would still change
 mise run health             # tools, host state, services report
 mise run update             # = wsu: git pull, then mise install + mise bootstrap for the saved mode
 mise run check-updates      # mise outdated + dnf check-update (owned) + [vars] pins vs upstream
-mise run python-env         # rebuild the blessed uv-managed Python venv
+mise run python-env         # rebuild the blessed Python venv (on mise python)
 mise run fonts               # install the pinned Nerd Font
 mise run statusline         # (re)configure the Claude Code statusline

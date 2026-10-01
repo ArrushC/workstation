@@ -11,7 +11,7 @@ metadata:
 
 **Windows is always owned.** `bootstrap.ps1`'s `Invoke-EnsureConfigLocal` (built on the new `Set-ConfigLocalVar` helper) always writes `mode = "owned"` to `config.local.toml` and never prompts for it — there is no shared mode on Windows.
 
-**Token rename:** the `dev` `MISE_ENV` token is renamed `owned` throughout — `scripts/lib/mise-env.sh <owned|shared>` now prints `linux` (shared), `linux,owned,host,wsl` / `linux,owned,host,native` (owned Linux, WSL vs native), or is combined with `windows` as `windows,owned` for the one Windows host. `config.dev.toml` → `config.owned.toml`; `mise.dev.lock` → `mise.owned.lock`; `locks/mise.dev/` → `locks/mise.owned/`. The rc templates (`zshenv.tera`, `bashrc.tera`, `10-mise.conf.tera`) key on `vars.mode is defined and vars.mode == "owned"` (was `vars.group == "dev_machine"`).
+**Token rename:** the `dev` `MISE_ENV` token is renamed `owned` throughout — `scripts/lib/mise-env.sh <owned|shared>` now prints `linux` (shared), `linux,owned,host,wsl` / `linux,owned,host,native` (owned Linux, WSL vs native), or is combined with `windows` as `windows,owned` for the one Windows host. `config.dev.toml` → `config.owned.toml`; `mise.dev.lock` → `mise.owned.lock`; `locks/mise.dev/` → `locks/mise.owned/`. (Since PR 3 the token set is persisted in the git-ignored `miserc.toml` by `mise-env.sh --write`; the rc templates and `10-mise.conf.tera` no longer export `MISE_ENV`.)
 
 **Remaining `bootstrap.sh` flags:** `--reinstall` (now confirms on the terminal via `/dev/tty`, so `curl … | bash -s -- --reinstall` works interactively), `--yes`/`-y` (skips that confirmation), `-h`/`--help`. `--doctor`/`--check-for-updates` were removed on 2026-09-30 in favour of `mise run health`/`mise run check-updates`. `--reinstall` wipes the whole cloned repo, including `config.local.toml` — so the mode (and name/email) is asked again on the next run.
 
@@ -21,7 +21,7 @@ metadata:
 
 **New tests:** `scripts/test-bootstrap-mode.sh` (offline, wired into `check-invariants.sh`) covers the resolution order above; `scripts/test-config-local.ps1` covers the Windows side (CI's `windows-http` job, PS 5.1 + pwsh).
 
-**`wsu` / health guard:** `tasks/update` refuses without a valid `vars.mode` and exports `MISE_ENV` from it before `mise install`/`mise prune`, so a stale shell env can't prune the owned tools; `tasks/health` flags a missing mode and derives the expected `MISE_ENV` from it.
+**`wsu` / health guard:** `tasks/update` refuses without a valid `vars.mode` and rewrites `miserc.toml` from it (and unsets any exported `MISE_ENV`) before `mise install`/`mise prune`, so a stale shell env can't prune the owned tools; `tasks/health` flags a missing mode and compares `miserc.toml` against the expected token set derived from it.
 
 **Rollout (done 2026-09-27, PR #3 → `3c67f89`):** the WSL host and the Windows host both run `mode = "owned"`. On each, the `group = "dev_machine"` line was replaced by `mode = "owned"`, the checkout pulled, then the NEW bootstrap run (WSL needed no sudo: every package was already installed). WSL health: 15 ok, 0 problems; Windows `-Doctor`: no ✗. Any other existing host (e.g. the native dev host, prod hosts) is still unmigrated.
 

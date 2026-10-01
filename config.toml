@@ -1,6 +1,7 @@
 # ~/.config/mise/config.toml — this repository IS mise's global config dir.
 #
-# Which files load is picked by MISE_ENV (scripts/lib/mise-env.sh):
+# Which files load is picked by miserc.toml's `env` (written by
+# scripts/lib/mise-env.sh; an exported MISE_ENV overrides it):
 #   config.toml          always            (cross-platform: uv)
 #   config.linux.toml    linux             (the Linux toolbelt, both modes)
 #   config.owned.toml    owned             (owned-host tools on both OSes)
@@ -16,18 +17,16 @@ min_version = "2026.9.9"
 [vars]
 # Host pins that tasks read via `#MISE env={X="{{ vars.x }}"}`;
 # scripts/check-invariants.sh asserts the dual-edits.
-python_version = "3.14.7"        # == tools.python below == $PythonEnvVersion in bootstrap.ps1 (three-way pin)
-nerd_font_version = "3.5.1"      # == SHA arm in scripts/lib/font.sh == $Version in scripts/install-nerd-fonts.ps1 (triple)
 vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by tasks/vcpkg
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
 [tools]
-# uv: the Python installer behind python-env. Pinned >= 0.12.10 because
+# uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
 uv = "0.12.19"
 # python: interpreter for the dependency-locked pypi: tools (without it mise
-# falls back to the system 3.9 and glances/harlequin refuse to install). Same pin
-# as vars.python_version and $PythonEnvVersion in bootstrap.ps1. It shadows
+# falls back to the system 3.9 and glances/harlequin refuse to install) and
+# for python-env's venv. Same pin as $PythonEnvVersion in bootstrap.ps1. It shadows
 # `python3` in mise-activated shells; the system interpreter stays /usr/bin/python3.
 python = "3.14.7"
 

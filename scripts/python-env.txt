@@ -1,0 +1,11 @@
+# Libraries in the blessed python-env (latest at build time). Read by
+# scripts/lib/python-env.sh; bootstrap.ps1 reads it on Windows from PR 4.
+textual
+textual-dev
+click
+rich
+httpx
+pydantic
+typer
+polars
+duckdb

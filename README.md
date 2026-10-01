@@ -32,9 +32,9 @@ Every mise tool installs the same way in both modes: user-level under `~/.local/
 
 **How the mode is chosen**, in order: the saved `mode` in `config.local.toml`; else the `WORKSTATION_MODE` environment variable (`owned` or `shared`, for unattended runs); else an interactive prompt on `/dev/tty` (works under `curl | bash`). The answer is written back, so later runs do not ask. Windows is always owned: `bootstrap.ps1` writes `mode = "owned"` without asking.
 
-The mode maps to a `MISE_ENV` token set (`scripts/lib/mise-env.sh` is the single source), and each token loads one more config file:
+The mode maps to a token set (`scripts/lib/mise-env.sh` is the single source). `bootstrap.sh` and `mise run update` save it in the git-ignored `~/.config/mise/miserc.toml`, which every mise process reads (shells, shims, systemd units); nothing exports `MISE_ENV`. Each token loads one more config file:
 
-| Host | `MISE_ENV` |
+| Host | Token set |
 |---|---|
 | shared Linux | `linux` |
 | owned WSL | `linux,owned,host,wsl` |
@@ -109,7 +109,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Resolve the mode (see above) and write it, with name and email, to `config.local.toml`.
-5. Compute `MISE_ENV`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
 6. Owned hosts only: set zsh as the login shell (`sudo usermod -s`).
 
 Both modes are idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -286,7 +286,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `MISE_ENV` persistence, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
@@ -301,7 +301,7 @@ mise bootstrap --only packages --yes   # narrow to one phase
 
 **Runtimes.** Node, Go, uv, Python, the language servers and everything else come from mise. Interactive shells see them via `mise activate`; non-interactive ones (`ssh host cmd`, IDEs) via the shims exported from `~/.zshenv` and `~/.bashrc`. `mise install <tool>` installs one, `mise uninstall <tool>` removes one.
 
-**Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built environment with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries track latest at build time; only the interpreter is pinned (`python_version` in `config.toml`). Rebuild to upgrade:
+**Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built venv on mise's Python (`tools.python` in `config.toml`) with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries (listed in `scripts/python-env.txt`) track latest at build time. A `tools.python` bump rebuilds the env on the next `mise run python-env`. Rebuild to upgrade the libraries:
 
 ```bash
 mise run python-env --rebuild   # runs on both modes; upgrades to latest libs
@@ -343,7 +343,7 @@ mise run bump-versions
 
 It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` previews without writing), so expect unrelated bumps in the diff. It refreshes the lockfiles for every platform the verified way (from outside the checkout through an `XDG_CONFIG_HOME` symlink, then normalising the `.mise/locks` sidecar paths). A hand-run `mise lock` inside the checkout can write sidecar refs to the wrong layout. Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
 
-**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, updates the Windows `$PortableTools` entries in step (Version, Url, freshly computed Sha256), and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu, python and the `python_version` / `nerd_font_version` pins are bumped by hand. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
+**A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, updates the Windows `$PortableTools` entries in step (Version, Url, freshly computed Sha256), and opens a PR. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is the Nerd Font tool until PR 4, because its Windows half is still in `install-nerd-fonts.ps1`. To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
 
 **A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
 
@@ -510,7 +510,7 @@ Any `[bootstrap.linux.firewall]` table makes mise re-exec itself with sudo even 
 
 ### pueue status fails, or pueued isn't running
 
-Check the unit, then its log: `systemctl --user is-active dev.mise.pueued.service` and `journalctl --user -u dev.mise.pueued -n 20`. The usual cause is the systemd user manager missing `MISE_ENV`, so the shim errors with something like "No version is set for shim: pueued". The unit deliberately has no `Environment=MISE_ENV`; it relies on `~/.config/environment.d/10-mise.conf` (read at the manager's next start, i.e. next login) and `systemctl --user set-environment` (fixes the live manager now). `./bootstrap.sh` does both on every run. Fix with `systemctl --user set-environment MISE_ENV=<your token set>`, then `systemctl --user restart dev.mise.pueued.service`.
+Check the unit, then its log: `systemctl --user is-active dev.mise.pueued.service` and `journalctl --user -u dev.mise.pueued -n 20`. The usual cause is a missing or stale `~/.config/mise/miserc.toml`, so the shim errors with something like "No version is set for shim: pueued". The unit has no `Environment=MISE_ENV`; the shim reads `miserc.toml`. Fix with `mise run update` (it rewrites `miserc.toml` and clears any old `MISE_ENV` export), then `systemctl --user restart dev.mise.pueued.service`.
 
 ### Colors look banded or 8-bit on a remote host
 
@@ -523,7 +523,7 @@ Symptoms: starship shows boxes, eza rows show empty cells, lazygit/k9s/yazi look
 - **Linux:** `fc-list | grep -i 'jetbrainsmono nerd font mono'` should list 6 entries; if empty, `mise run fonts`, then restart shells. A WSL host says fonts are skipped: intentional, run `bootstrap.ps1` on the Windows side.
 - **Windows:** `Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts\JetBrainsMonoNerdFontMono-Regular.ttf"` should be `True`; if not, re-run `bootstrap.ps1` (idempotent). If the file exists but apps cannot find the font after a reboot, Windows did not load the HKCU per-user font at logon; re-run `bootstrap.ps1` to re-create the `WorkstationNerdFontActivate` logon task and re-activate the current session.
 - VS Code and Zed cache font lists at launch: quit and relaunch. On Windows the family name must be `JetBrainsMono NFM`, not `JetBrainsMono Nerd Font Mono` (Nerd Fonts shortens the GDI name to fit 31 characters). Restart Windows Terminal to re-enumerate fonts.
-- `nerd_font_version` in `config.toml` must match `$Version` in `scripts/install-nerd-fonts.ps1`, or Linux and Windows end up on different font versions.
+- The `github:ryanoasis/nerd-fonts` pin in `config.owned.toml` must match `$Version` in `scripts/install-nerd-fonts.ps1`, or Linux and Windows end up on different font versions.
 
 ### Shell startup / a PATH-scanning command feels slow on WSL
 
@@ -581,6 +581,6 @@ That is the SSHFS-Win step, the one deliberate exception to the admin-free boots
 
 ### Zellij's top bar is plain, shows a "permission" request, or renders boxes instead of rounded pills
 
-The top bar is the zjstatus plugin. A permission request is the one-time first-run prompt on that host: click the bar (or CTRL+P then ↑) and press Y; the grant is cached in `~/.cache/zellij/permissions.kdl`. A plain built-in bar, or an "ERROR IN PLUGIN" bar, means `~/.local/share/zellij/plugins/zjstatus.wasm` is missing on that host: provisioning copies it (`tasks/bootstrap`), it is not a `[dotfiles]` entry, and `/tmp/zellij-<uid>/zellij-log/zellij.log` names the path zellij tried. Re-copy it with `mise run bootstrap` (user-level, no sudo), then `zellij kill-session main` (plugins load when a session is created).
+The top bar is the zjstatus plugin. A permission request is the one-time first-run prompt on that host: click the bar (or CTRL+P then ↑) and press Y; the grant is cached in `~/.cache/zellij/permissions.kdl`. A plain built-in bar, or an "ERROR IN PLUGIN" bar, means `~/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm` is missing on that host: zellij loads the plugin straight from mise's install dir (no copy step, not a `[dotfiles]` entry), and `/tmp/zellij-<uid>/zellij-log/zellij.log` names the path zellij tried. Reinstall it with `mise install github:dj95/zjstatus` (user-level, no sudo), then `zellij kill-session main` (plugins load when a session is created).
 
 Boxes instead of pills mean the terminal you attach from is not using a Nerd Font (JetBrainsMono NFM on the client side).

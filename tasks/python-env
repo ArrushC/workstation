@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-#MISE description="Blessed Python scripting env: uv-built CPython + venv, launchers wpy/textual/typer (--rebuild forces a rebuild)"
-#MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
+#MISE description="Blessed Python scripting env: a venv on mise's python + launchers wpy/textual/typer (--rebuild forces a rebuild)"
 #USAGE flag "--rebuild" help="Rebuild the env even when it is up to date (also upgrades its libraries)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 mkdir -p "$state"
+python="$(mise where python)/bin/python3"
 stamp="$state/python-env.stamp"
-want="$PYTHON_VERSION $(cksum <"$root/scripts/lib/python-env.sh" | cut -d' ' -f1)"
+want="$python $(cat "$root/scripts/lib/python-env.sh" "$root/scripts/python-env.txt" | cksum | cut -d' ' -f1)"
 if [ "${usage_rebuild:-false}" != true ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] && [ -x "$HOME/.local/bin/wpy" ]; then
-  echo "  python-env $PYTHON_VERSION up to date (mise run python-env --rebuild to rebuild)"
+  echo "  python-env up to date ($python; mise run python-env --rebuild to rebuild)"
   exit 0
 fi
-"$root/scripts/lib/python-env.sh" "$PYTHON_VERSION"
+"$root/scripts/lib/python-env.sh" "$python"
 printf '%s\n' "$want" >"$stamp"

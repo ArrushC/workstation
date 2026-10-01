@@ -2,40 +2,38 @@
 # python-env.sh — build the blessed dev Python scripting env with uv.
 #
 # Usage:
-#   python-env.sh <python-version>
+#   python-env.sh <python-interpreter>
 #
-#   python-version   Pinned CPython, e.g. 3.14.6 (config.toml [vars]
-#                    python_version; three-way with tools.python and
-#                    $PythonEnvVersion in bootstrap.ps1 — check-invariants.sh
-#                    verifies).
+#   python-interpreter   Path to mise's python (tasks/python-env passes
+#                        "$(mise where python)/bin/python3"; its version is
+#                        tools.python in config.toml).
 #
-# uv (mise-managed — tasks/python-env runs under mise, so uv is on PATH) downloads the pinned CPython
-# (python-build-standalone, user-level under ~/.local/share/uv) and builds
-# the venv at ~/.local/share/workstation-python. USER-LEVEL like pip.sh —
-# never run under sudo. The env is recreated from scratch every run
-# (deterministic; ad-hoc `uv pip install -p <env> <pkg>` additions are
-# deliberately disposable). Libs track LATEST at install time (glances
-# precedent) — upgrading is `mise run python-env --rebuild`.
+# uv (mise-managed — tasks/python-env runs under mise, so uv is on PATH)
+# builds the venv at ~/.local/share/workstation-python on that interpreter;
+# it downloads no CPython of its own. USER-LEVEL like pip.sh — never run
+# under sudo. The env is recreated from scratch every run (deterministic;
+# ad-hoc `uv pip install -p <env> <pkg>` additions are deliberately
+# disposable). Libs (scripts/python-env.txt) track LATEST at install time
+# (glances precedent) — upgrading is `mise run python-env --rebuild`.
 
 set -euo pipefail
 
-version="${1:?usage: python-env.sh <python-version>}"
+python="${1:?usage: python-env.sh <python-interpreter>}"
 
 env_dir="$HOME/.local/share/workstation-python"
 bin_dir="$HOME/.local/bin"
 
-# Canonical lib list — KEEP ON ONE LINE (check-invariants.sh parses it and
-# compares against $PythonLibs in bootstrap.ps1; parity pair).
-PY_LIBS=(textual textual-dev click rich httpx pydantic typer polars duckdb)
+# Canonical lib list: scripts/python-env.txt (bootstrap.ps1's $PythonLibs
+# mirrors it until PR 4; check-invariants.sh verifies parity).
+mapfile -t PY_LIBS < <(grep -vE '^[[:space:]]*(#|$)' "$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)/scripts/python-env.txt")
 
 if ! command -v uv >/dev/null 2>&1; then
   printf 'python-env.sh: uv not on PATH — run ./bootstrap.sh (uv is mise-managed)\n' >&2
   exit 1
 fi
 
-uv python install "$version"
 rm -rf "$env_dir"
-uv venv --python "$version" "$env_dir"
+uv venv --python "$python" "$env_dir"
 uv pip install --python "$env_dir/bin/python" --upgrade "${PY_LIBS[@]}"
 
 # Launchers: wpy is a tiny WRAPPER SCRIPT, not a symlink — a symlink from
@@ -54,5 +52,5 @@ chmod 0755 "$bin_dir/wpy"
 ln -sf "$env_dir/bin/textual" "$bin_dir/textual"
 ln -sf "$env_dir/bin/typer" "$bin_dir/typer"
 
-printf 'python-env: CPython %s + %d libs at %s (launchers: wpy, textual, typer)\n' \
-  "$version" "${#PY_LIBS[@]}" "$env_dir"
+printf 'python-env: %s + %d libs at %s (launchers: wpy, textual, typer)\n' \
+  "$python" "${#PY_LIBS[@]}" "$env_dir"

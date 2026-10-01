@@ -198,7 +198,7 @@ select_checker() {
   "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1")
     if command -v pwsh >/dev/null 2>&1; then CHECK_CMD="pwsh_check"; else CHECK_NOTE="pwsh not installed"; fi
     ;;
-  "~/.ssh/config" | "~/.gdbinit" | "~/.config/environment.d/10-mise.conf")
+  "~/.ssh/config" | "~/.gdbinit")
     CHECK_NOTE="no dedicated syntax checker for this target (render-only, by design)"
     ;;
   *)

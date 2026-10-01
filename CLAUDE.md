@@ -29,7 +29,9 @@
 
 ## Layout
 
-| File | Loads when `MISE_ENV` has | Holds |
+Token sets: `mise-env.sh`, saved in `miserc.toml`.
+
+| File | Loads when the token set has | Holds |
 |---|---|---|
 | `config.toml` | always | uv, python, `[vars]` pins, dotfiles for both OSes |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
@@ -71,7 +73,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - No `[bootstrap.linux.firewall]` table: it makes `mise bootstrap plan`/`status` re-exec with sudo,
   which breaks `mise run health`. No `[bootstrap.user] login_shell` either: it needs `chsh`.
   `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`.
-- `[vars]` pins (`python_version`, `nerd_font_version`, `vcpkg_version`, `zjstatus_zellij_floor`) reach
+- `[vars]` pins (`vcpkg_version`, `zjstatus_zellij_floor`) reach
   tasks through `#MISE env={X="{{ vars.x }}"}`.
 - Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe in
   `scripts/bump-versions.sh` and `docs/claude/verification.md`).
@@ -85,11 +87,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **Mode and `MISE_ENV`**
 - The mode is `owned` or `shared`, saved as `vars.mode` in `config.local.toml`. It comes from the
   saved value, then `WORKSTATION_MODE`, then a prompt. Windows is always owned.
-- `tasks/update` and `tasks/health` derive `MISE_ENV` from the saved mode, never from the calling
-  shell: a stale value makes `mise prune` remove tools.
-- The `MISE_ENV` Tera conditional is byte-identical in `dotfiles/zshenv.tera`, `dotfiles/bashrc.tera`
-  and `dotfiles/config/environment.d/10-mise.conf.tera` (checked).
-- The pueued unit gets `MISE_ENV` from the systemd user manager, not itself.
+- `scripts/lib/mise-env.sh <mode> --write` writes the git-ignored `miserc.toml` (`env = [...]`,
+  `auto_env = false`) from the saved mode. Every mise process reads it, shims under systemd
+  included; nothing exports `MISE_ENV`. An exported value overrides it, so `bootstrap.sh` and
+  `tasks/update` unset it, while CI and `check-templates.sh` may pin one.
 - Every `ws*` command pins `mise -C` to the home directory. mise finds its config by walking up from
   the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
   `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).
@@ -141,7 +142,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays
-  off.
+  off. zjstatus loads from mise's install dir (`check_zellij_config`); no copy step.
 - Never add `zellij-autolock` or an unmaintained plugin untested against the pinned zellij. Judge
   whether a plugin loaded from zellij's log, not `dump-layout`.
 
@@ -176,14 +177,14 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `zshrc.tera` ↔ `bashrc.tera`
   - `zshenv.tera` ↔ the shims block in `bashrc.tera`
   - the Nushell `config.nu.tera` ↔ PowerShell profile `ws*`/`g*` aliases
-  - `PY_LIBS` in `scripts/lib/python-env.sh` ↔ `$PythonLibs` in `bootstrap.ps1`
+  - `scripts/python-env.txt` ↔ `$PythonLibs` in `bootstrap.ps1`
   - `Invoke-CurlRequest` in `bootstrap.ps1` ↔ `scripts/install-nerd-fonts.ps1`
   - script flags ↔ their completions (`_bootstrap.sh`, `completions.bash`, `config.nu.tera`'s flag
     record)
 - **Values recorded in several places (checked by `check_version_pins` and friends):**
   - mise: `bootstrap.sh`, `bootstrap.ps1`, `min_version`
-  - python: `vars`, `tools.python`, `$PythonEnvVersion`
-  - Nerd Font: `vars`, the `font.sh` checksum case, `install-nerd-fonts.ps1`
+  - python: `tools.python`, `$PythonEnvVersion`
+  - Nerd Font: `config.owned.toml` tool ↔ `install-nerd-fonts.ps1`
   - jq, gh, helix, opencode, omp and the DevToys CLI: `config*.toml` ↔ `$PortableTools`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5

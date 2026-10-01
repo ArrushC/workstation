@@ -285,7 +285,7 @@ $PortableTools = @(
 )
 
 # --- Blessed Python scripting env (Invoke-PythonEnv) -------------------------
-# DUAL-EDIT: $PythonEnvVersion pairs with vars.python_version in config.toml;
+# DUAL-EDIT: $PythonEnvVersion pairs with tools.python in config.toml;
 # $PythonLibs pairs with PY_LIBS in scripts/lib/python-env.sh. KEEP EACH ON ONE
 # LINE — scripts/check-invariants.sh parses both with single-line greps.
 $PythonEnvVersion = "3.14.7"
@@ -2745,12 +2745,12 @@ function Invoke-CheckForUpdates {
     if ($fontStamps.Count -gt 0) {
         $fontVer = $fontStamps[0].Name -replace '^nerd-fonts\.', '' -replace '\.stamp$', ''
         $latest  = Get-LatestGitTag -Repo 'ryanoasis/nerd-fonts'
-        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'triple-edit: config.toml [vars] nerd_font_version + scripts/lib/font.sh + install-nerd-fonts.ps1 (see CLAUDE.md)'
+        Write-UpdateStatus -Name 'Nerd Fonts (JetBrainsMono)' -Pinned $fontVer -Latest $latest -Hint 'dual-edit: config.owned.toml github:ryanoasis/nerd-fonts + install-nerd-fonts.ps1 (see CLAUDE.md)'
     } else {
         Write-Warn "Nerd Fonts not stamped — re-run .\bootstrap.ps1 (or scripts\install-nerd-fonts.ps1)"
     }
     $latestPy = Get-LatestGitTag -Repo 'python/cpython' -TagPrefix 'v'
-    Write-UpdateStatus -Name 'Python env (CPython)' -Pinned $PythonEnvVersion -Latest $latestPy -Hint 'dual-edit: $PythonEnvVersion here AND vars.python_version in config.toml; check cp-wheel coverage first (see config.toml [vars] comment)'
+    Write-UpdateStatus -Name 'Python env (CPython)' -Pinned $PythonEnvVersion -Latest $latestPy -Hint 'dual-edit: $PythonEnvVersion here AND tools.python in config.toml; check cp-wheel coverage first'
     $bt = Get-Module -ListAvailable -Name BurntToast -ErrorAction SilentlyContinue |
           Sort-Object Version -Descending | Select-Object -First 1
     if ($bt) { Write-Ok "BurntToast $($bt.Version) installed — update via: Update-Module BurntToast" }

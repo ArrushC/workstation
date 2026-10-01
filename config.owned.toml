@@ -12,6 +12,7 @@ go = "1.27.1"
 lua-language-server = "3.19.1"
 "pypi:basedpyright" = "1.40.1"
 "npm:ccstatusline" = "2.2.30"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
+"github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font: tasks/fonts (Linux) copies its TTFs; Windows still pins it in scripts/install-nerd-fonts.ps1 until PR 4
 herdr = { version = "0.9.1", os = ["linux"] }
 opencode = { version = "1.18.32", os = ["linux"] }              # Windows half stays in bootstrap.ps1 $PortableTools
 "github:can1357/oh-my-pi" = { version = "18.3.4", os = ["linux"], bin = "omp" }   # bare per-platform binary asset (omp-linux-x64); bin= names the installed command

@@ -89,7 +89,7 @@ _ps1_drive_ref_hits() {
 
 check_version_pins() {
   hdr "version-pin dual/triple-edits"
-  local v v2 ref ps_v font_re font_has
+  local v v2 ref ps_v
 
   if [ -z "$PY" ]; then
     note "no python with tomllib — TOML-sourced pin checks skipped locally (CI enforces)"
@@ -151,28 +151,22 @@ check_version_pins() {
       bad "mise drift: bootstrap.sh='$v' bootstrap.ps1='$ref' config.toml-min_version='$v2'"
     fi
 
-    v=$(tomlval config.toml vars.python_version)
-    v2=$(tomlval config.toml tools.python)
+    v=$(tomlval config.toml tools.python)
     ref=$(grep -oE '^\$PythonEnvVersion *= *"[0-9][0-9.]+"' bootstrap.ps1 |
       grep -oE '[0-9][0-9.]+' | head -1)
-    if [ -n "$v" ] && [ "$v" = "$v2" ] && [ "$v" = "$ref" ]; then
-      ok "python-env @ $v  (config.toml [vars] == config.toml tools.python == bootstrap.ps1)"
+    if [ -n "$v" ] && [ "$v" = "$ref" ]; then
+      ok "python @ $v  (config.toml tools.python == bootstrap.ps1 \$PythonEnvVersion)"
     else
-      bad "python-env drift: config.toml-vars.python_version='$v' config.toml-tools.python='$v2' bootstrap.ps1='$ref'"
+      bad "python drift: config.toml-tools.python='$v' bootstrap.ps1='$ref'"
     fi
 
-    v=$(tomlval config.toml vars.nerd_font_version)
+    v=$(tomlval config.owned.toml 'tools."github:ryanoasis/nerd-fonts"')
     ps_v=$(grep -E '^\$Version[[:space:]]*=' scripts/install-nerd-fonts.ps1 |
       grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    # font.sh pins the SHA per version in a `case "$VERSION"` block; the runtime
-    # looks it up BY VALUE, so verify an arm for $v EXISTS (position-independent)
-    # — appending a new arm on a bump (as font.sh instructs) must still pass.
-    font_re="^[[:space:]]*${v//./\\.}\\)[[:space:]]*EXPECT_SHA"
-    if grep -qE "$font_re" scripts/lib/font.sh; then font_has=yes; else font_has=no; fi
-    if [ -n "$v" ] && [ "$v" = "$ps_v" ] && [ "$font_has" = yes ]; then
-      ok "jetbrains-mono nerd @ $v  (config.toml [vars] == install-nerd-fonts.ps1; scripts/lib/font.sh SHA arm present)"
+    if [ -n "$v" ] && [ "$v" = "$ps_v" ]; then
+      ok "jetbrains-mono nerd @ $v  (config.owned.toml == install-nerd-fonts.ps1)"
     else
-      bad "jetbrains-mono nerd drift: config.toml-vars.nerd_font_version='$v' install-nerd-fonts.ps1='$ps_v' font.sh-SHA-arm=$font_has"
+      bad "jetbrains-mono nerd drift: config.owned.toml='$v' install-nerd-fonts.ps1='$ps_v'"
     fi
   fi
 
@@ -187,139 +181,6 @@ check_version_pins() {
     ok "vcpkg-root @ zshrc == bashrc == $want; tasks/vcpkg vroot == $want"
   else
     bad "vcpkg-root drift: zshrc='$rc_z' bashrc='$rc_b' tasks/vcpkg-vroot='$vroot_task' (want $want)"
-  fi
-}
-
-# MISE_ENV is computed identically in THREE places (a host's interactive rc
-# files plus the file systemd's user manager imports at login/re-exec — see
-# config/environment.d/10-mise.conf.tera's own header comment) — a triple-edit
-# pin, not a dual one. All three must carry the byte-identical Tera
-# conditional or a host can end up with a DIFFERENT MISE_ENV in an
-# interactive shell than in a systemd user unit (exactly the pueued-startup
-# class of bug CLAUDE.md documents).
-#
-# A text-only three-way comparison passes when all three expressions are
-# IDENTICALLY WRONG (e.g. a guard on a variable nothing ever writes is always
-# false, so all three silently bake "linux" on every host). Kept below as a cheap first pass, but the check that actually
-# catches that class of bug is the render comparison that follows it: each
-# template is rendered for real, twice (vars.mode="owned" and "shared"),
-# into a scratch $HOME, and the baked MISE_ENV is asserted against
-# scripts/lib/mise-env.sh — the canonical source of these token sets — run
-# on THIS machine (same `uname -r` branch the templates themselves take, so
-# it's apples-to-apples).
-#
-# Render setup mirrors scripts/check-templates.sh's measured discovery rule
-# (see that script's header): a scratch $HOME only isolates mise's config
-# READ side when it carries its own .config/mise — with none, mise falls
-# BACK to the real account home's config, which is precisely the trap here
-# (a fallback to the real, mode-less config.local.toml would render "linux"
-# for every mode and the check would never catch the original bug). So
-# each render below builds its scratch $HOME a genuine .config/mise of its
-# own: every entry of the repo symlinked in verbatim EXCEPT config.local.toml,
-# which is written fresh with vars.mode pinned to exactly the value under
-# test. Nothing under the real repo or the real $HOME is ever touched or
-# applied to — only a fresh /tmp scratch dir per render, removed right after.
-_render_baked_mise_env() {
-  local target=$1 mode=$2 env=$3 home out path baked entry base
-  home="$(mktemp -d)"
-  mkdir -p "$home/.config/mise"
-  for entry in "$ROOT"/*; do
-    base=$(basename "$entry")
-    [ "$base" = "config.local.toml" ] && continue
-    ln -s "$entry" "$home/.config/mise/$base"
-  done
-  cat >"$home/.config/mise/config.local.toml" <<EOF
-[vars]
-mode = "$mode"
-EOF
-  # Two independent overrides, deliberately redundant: CI's invariants job
-  # sets MISE_CONFIG_DIR=$GITHUB_WORKSPACE for the whole step (see
-  # .github/workflows/lint.yml — needed so mise doesn't rewrite lock files'
-  # sidecar refs), which otherwise wins over HOME-based discovery entirely —
-  # measured directly: with an ambient MISE_CONFIG_DIR pointed at this repo,
-  # HOME alone rendered the real (group-less) config every time, exactly
-  # reproducing the CI failure this fixes. cd-ing into $home makes any
-  # cwd-ancestor config walk land on the scratch config too. Passing
-  # MISE_CONFIG_DIR="$home/.config/mise" explicitly overrides whatever the
-  # ambient value is (set by CI, or unset locally) for this one subshell only.
-  if ! out=$(cd "$home" && HOME="$home" MISE_CONFIG_DIR="$home/.config/mise" MISE_ENV="$env" mise dot apply --force --yes -- "$target" 2>&1); then
-    note "render $target [mode=$mode]: mise dot apply failed: $(printf '%s' "$out" | grep -vE '^mise ERROR (Version|Run with)' | head -3 | tr '\n' ' ')"
-    rm -rf "$home"
-    return 1
-  fi
-  path="$home/${target#\~/}"
-  if [ ! -e "$path" ]; then
-    note "render $target [mode=$mode]: apply exited 0 but $path was not written"
-    rm -rf "$home"
-    return 1
-  fi
-  # Matches both the rc-file form (export MISE_ENV="linux,owned,host,wsl") and
-  # environment.d's unquoted systemd form (MISE_ENV=linux,owned,host,wsl).
-  baked=$(grep -oE '(export )?MISE_ENV="?[a-z,]+"?' "$path" | head -1 | sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//')
-  rm -rf "$home"
-  [ -n "$baked" ] || return 1
-  printf '%s' "$baked"
-}
-
-check_mise_env_three_way() {
-  hdr "MISE_ENV computed identically (zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera)"
-  local zshenv_expr bashrc_expr envd_expr
-  zshenv_expr=$(grep -oE 'export MISE_ENV=".*"$' dotfiles/zshenv.tera | head -1 | sed -E 's/^export MISE_ENV="//; s/"$//')
-  bashrc_expr=$(grep -oE 'export MISE_ENV=".*"$' dotfiles/bashrc.tera | head -1 | sed -E 's/^export MISE_ENV="//; s/"$//')
-  envd_expr=$(grep -E '^MISE_ENV=' dotfiles/config/environment.d/10-mise.conf.tera | head -1 | sed -E 's/^MISE_ENV=//')
-  if [ -n "$zshenv_expr" ] && [ "$zshenv_expr" = "$bashrc_expr" ] && [ "$zshenv_expr" = "$envd_expr" ]; then
-    ok "zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera (expression text)"
-  else
-    bad "MISE_ENV expression drift: zshenv.tera='$zshenv_expr' bashrc.tera='$bashrc_expr' environment.d/10-mise.conf.tera='$envd_expr'"
-  fi
-
-  hdr "MISE_ENV renders match scripts/lib/mise-env.sh (catches an expression that is text-identical but wrong)"
-  if ! command -v mise >/dev/null 2>&1; then
-    note "mise not installed — cannot render dotfiles templates to verify baked MISE_ENV (CI enforces)"
-    return
-  fi
-  if [ ! -x scripts/lib/mise-env.sh ]; then
-    bad "scripts/lib/mise-env.sh missing or not executable — cannot establish the canonical MISE_ENV token sets"
-    return
-  fi
-
-  local owned_env shared_env
-  owned_env=$(scripts/lib/mise-env.sh owned)
-  shared_env=$(scripts/lib/mise-env.sh shared)
-  if [ -z "$owned_env" ] || [ -z "$shared_env" ]; then
-    bad "scripts/lib/mise-env.sh owned/shared produced no output — cannot verify renders against it"
-    return
-  fi
-
-  # shellcheck disable=SC2088  # the ~/... literals below are mise TARGET
-  # strings (dotfiles table keys), not paths for the shell to expand — mirrors
-  # scripts/check-templates.sh's own select_checker (same reasoning there).
-  local -a targets=("~/.zshenv" "~/.bashrc" "~/.config/environment.d/10-mise.conf")
-  local t d p all_agree=1
-  local -a owneds=() shareds=()
-  for t in "${targets[@]}"; do
-    d=$(_render_baked_mise_env "$t" "owned" "$owned_env") || d=""
-    p=$(_render_baked_mise_env "$t" "shared" "$shared_env") || p=""
-    owneds+=("$d")
-    shareds+=("$p")
-    if [ "$d" = "$owned_env" ]; then
-      ok "$t [vars.mode=owned]: renders MISE_ENV=\"$d\" == scripts/lib/mise-env.sh owned"
-    else
-      bad "$t [vars.mode=owned]: renders MISE_ENV=\"$d\" != scripts/lib/mise-env.sh owned (\"$owned_env\")"
-    fi
-    if [ "$p" = "$shared_env" ]; then
-      ok "$t [vars.mode=shared]: renders MISE_ENV=\"$p\" == scripts/lib/mise-env.sh shared"
-    else
-      bad "$t [vars.mode=shared]: renders MISE_ENV=\"$p\" != scripts/lib/mise-env.sh shared (\"$shared_env\")"
-    fi
-  done
-
-  for t in "${owneds[@]}"; do [ "$t" = "${owneds[0]}" ] || all_agree=0; done
-  for t in "${shareds[@]}"; do [ "$t" = "${shareds[0]}" ] || all_agree=0; done
-  if [ "$all_agree" -eq 1 ]; then
-    ok "zshenv.tera == bashrc.tera == environment.d/10-mise.conf.tera (rendered output, both modes)"
-  else
-    bad "rendered MISE_ENV disagrees across the three templates: owned=(${owneds[*]}) shared=(${shareds[*]})"
   fi
 }
 
@@ -370,37 +231,9 @@ $(printf '%s\n' "${coupled[@]}")"
     fi
   fi
 
-  # Same coverage for config.toml [vars] pins: any vars.<name> read by
-  # check_version_pins is a dual/triple-edit host pin and must sit in the
-  # bumper's EXCLUDE_VARS (Layer 2) — otherwise a blind bump rewrites
-  # config.toml [vars] alone and immediately fails check_version_pins.
-  # vcpkg_version is a single-edit pin (never referenced via
-  # `tomlval config.toml vars.*` in check_version_pins) so is correctly NOT
-  # derived here, and zjstatus_zellij_floor is a coupling floor, not a pin
-  # (read only by check_zjstatus_zellij_coupling) so is correctly absent too.
-  local exclude_vars vpins vmissing="" vn=0
-  exclude_vars=$(grep -m1 -E '^EXCLUDE_VARS=' scripts/bump-versions.sh |
-    sed -E 's/^EXCLUDE_VARS="//; s/"[[:space:]]*$//')
-  if [ -z "$exclude_vars" ]; then
-    bad "scripts/bump-versions.sh: EXCLUDE_VARS= line not found"
-    return
-  fi
-  vpins=$(awk '/^check_version_pins\(\) \{/,/^\}/' scripts/check-invariants.sh |
-    grep -oE 'tomlval config\.toml vars\.[a-z_]+' |
-    sed -E 's/.*vars\.//' | sort -u)
-  while read -r var; do
-    [ -n "$var" ] || continue
-    vn=$((vn + 1))
-    case " $exclude_vars " in
-    *" $var "*) ;;
-    *) vmissing="$vmissing $var" ;;
-    esac
-  done <<<"$vpins"
-  if [ "$vn" -gt 0 ] && [ -z "$vmissing" ]; then
-    ok "all $vn dual-edit [vars] pin(s) in bumper EXCLUDE_VARS (bump-versions.sh)"
-  else
-    bad "dual-edit [vars] pin(s) missing from bump-versions.sh EXCLUDE_VARS:${vmissing:- <none derived>} — the weekly bumper would rewrite config.toml [vars] alone and fail the pin check"
-  fi
+  # config.toml [vars] holds only vcpkg_version (single-edit) and
+  # zjstatus_zellij_floor (a coupling floor), so no dual-edit [vars] pin
+  # needs bumper coverage; a new one must come back with its own check.
 }
 
 check_line_endings_and_mode() {
@@ -644,7 +477,7 @@ PY
       fi
     done
     local vk vars_bad=0
-    for vk in python_version nerd_font_version vcpkg_version zjstatus_zellij_floor; do
+    for vk in vcpkg_version zjstatus_zellij_floor; do
       if "$PY" - "$vk" <<'PY'
 import sys, tomllib
 with open("config.toml", "rb") as fh:
@@ -658,7 +491,7 @@ PY
         vars_bad=1
       fi
     done
-    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has all four host pins"
+    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has both host pins"
   fi
   if command -v mise >/dev/null 2>&1; then
     local tmp
@@ -1209,21 +1042,6 @@ check_zjstatus_zellij_coupling() {
   fi
 }
 
-check_zellij_plugin_installer() {
-  hdr "zellij plugin installer (lib/zellij-plugin.sh lands in zellij's data dir)"
-  local out
-  # Offline behavioural test: fake \0asm module over file://, scratch HOME.
-  # Guards the 2026-09-13 regression — plugin installed to ~/.config/zellij/
-  # plugins, which zellij never searches, so every session showed
-  # "ERROR IN PLUGIN" while dump-layout looked fine.
-  if out=$(bash scripts/test-zellij-plugin.sh 2>&1); then
-    ok "${out#PASS: }"
-  else
-    bad "scripts/test-zellij-plugin.sh failed:"
-    printf '%s\n' "$out" | sed 's/^/       /' | head -10
-  fi
-}
-
 check_mise_install_lib() {
   hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/verify-tools)"
   local out
@@ -1248,21 +1066,19 @@ check_bootstrap_mode() {
 }
 
 # --- python-env lib-list parity ----------------------------------------------
-# The blessed-env library list is defined twice: PY_LIBS in
-# scripts/lib/python-env.sh and $PythonLibs in bootstrap.ps1. Both
-# are one-line arrays by contract (comments at each site) so single-line greps
-# can extract them. Order-insensitive compare (sort) — content is the contract.
+# The blessed-env library list is defined twice: scripts/python-env.txt (one
+# lib per line, # comments) and $PythonLibs in bootstrap.ps1 (a one-line array
+# by contract). Order-insensitive compare (sort) — content is the contract.
 check_python_env_parity() {
-  hdr "python-env lib-list parity (python-env.sh == bootstrap.ps1)"
+  hdr "python-env lib-list parity (python-env.txt == bootstrap.ps1)"
   local sh_libs ps_libs
-  sh_libs=$(grep -oE '^PY_LIBS=\([^)]*\)' scripts/lib/python-env.sh |
-    sed 's/^PY_LIBS=(//; s/)$//' | tr ' ' '\n' | grep -v '^$' | sort)
+  sh_libs=$(grep -vE '^[[:space:]]*(#|$)' scripts/python-env.txt | sort)
   ps_libs=$(grep -oE '^\$PythonLibs *= *@\([^)]*\)' bootstrap.ps1 |
     sed 's/.*@(//; s/)$//' | tr -d '",' | tr ' ' '\n' | grep -v '^$' | sort)
   if [ -n "$sh_libs" ] && [ "$sh_libs" = "$ps_libs" ]; then
     ok "$(printf '%s\n' "$sh_libs" | wc -l) libs match"
   else
-    bad "lib-list drift (<:python-env.sh  >:bootstrap.ps1):"
+    bad "lib-list drift (<:python-env.txt  >:bootstrap.ps1):"
     diff <(printf '%s\n' "$sh_libs") <(printf '%s\n' "$ps_libs") | sed 's/^/       /'
   fi
 }
@@ -1435,18 +1251,13 @@ check_zellij_config() {
     bad "$cfg must pin web_server false AND web_sharing \"disabled\" (build is web-capable)"
   fi
 
-  # 5. The tab-bar alias must point at the RELATIVE plugin path. zellij resolves
-  #    `file:<name>.wasm` against its DATA dir, ~/.local/share/zellij/plugins/
-  #    (after /usr/share/zellij/plugins; NOT ~/.config/zellij/plugins) — where
-  #    tasks/bootstrap installs zjstatus's wasm — and keeps that relative
-  #    string as the plugin's identity, including the ~/.cache/zellij/permissions.kdl key.
-  #    An absolute or ~ path expands per host (verified on 0.45.1: "file:~/x"
-  #    dumps as "file:/home/<user>/x"), so the one-time permission grant would
-  #    stop matching across the fleet and every host would prompt again.
-  if grep -qE '^[[:space:]]*tab-bar[[:space:]]+location="file:zjstatus\.wasm"' "$cfg"; then
-    ok "tab-bar alias -> file:zjstatus.wasm (relative: host-independent permission key)"
+  # 5. The tab-bar alias must point at mise's install dir for zjstatus, via the
+  #    `latest` link mise keeps at the pinned version: the path is stable across
+  #    bumps (so the permission-cache key survives) and needs no copy step.
+  if grep -qE '^[[:space:]]*tab-bar[[:space:]]+location="file:~/\.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus\.wasm"' "$cfg"; then
+    ok "tab-bar alias -> mise's install dir (github-dj95-zjstatus/latest/zjstatus.wasm)"
   else
-    bad "$cfg: plugins { tab-bar location=\"file:zjstatus.wasm\" ... } missing, or the path is not the relative form"
+    bad "$cfg: plugins { tab-bar location=\"file:~/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm\" ... } missing or different"
   fi
 
   # 6. The zjstatus pills are Nerd Font half-circles, U+E0B6 (left) and U+E0B4
@@ -1546,7 +1357,6 @@ if [ "${1:-}" = --shell-files ]; then
 fi
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_version_pins
-check_mise_env_three_way
 check_bumper_exclude
 check_line_endings_and_mode
 check_dotfiles_mode
@@ -1565,7 +1375,6 @@ check_zellij_config
 check_go_gopls_coupling
 check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling
-check_zellij_plugin_installer
 check_mise_install_lib
 check_bootstrap_mode
 check_python_env_parity
