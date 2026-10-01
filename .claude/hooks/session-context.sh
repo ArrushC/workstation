@@ -10,31 +10,17 @@
 #   - WSL & interop capability (interop enabled?, powershell.exe reachable?)
 #   - guardrail readiness (jq/shfmt/gitleaks/shellcheck + pre-commit hook)
 #
-# Idiom matches the other repo hooks: jq -> python3 -> fail-open; always exit 0.
+# Reads input via lib.sh; fails open; always exit 0.
 # Every bucket fails OPEN independently (drops its segment on any error) and
 # every external probe is timeout-bounded. It NEVER spawns a Windows process —
 # interop is detected statically. See CLAUDE.md + docs/claude/.
 set -u
 
-INPUT="$(cat)"
-hookfield() {
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | HF="$1" python3 -c 'import os,sys,json
-p=os.environ["HF"].lstrip(".").split(".")
-try:
-    v=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for k in p:
-    v=v.get(k) if isinstance(v,dict) else None
-print(v if isinstance(v,str) else "")' 2>/dev/null
-  fi
-}
+# shellcheck source=.claude/hooks/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || exit 0
 
 # --- resolve repo root (prefer CLAUDE_PROJECT_DIR, else cwd, else git top) ----
-cwd="$(hookfield '.cwd')"
+cwd="$(hook_field '.cwd')"
 root=""
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
   root="$CLAUDE_PROJECT_DIR"
@@ -160,12 +146,5 @@ for s in "${segs[@]}"; do
   sep=" | "
 done
 
-# Emit. jq escapes $block safely; the no-jq printf fallback relies on $block
-# carrying no " or \ (guaranteed: hostname/group/os/distro values don't).
-if command -v jq >/dev/null 2>&1; then
-  jq -nc --arg c "$block" \
-    '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c},suppressOutput:true}'
-else
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"},"suppressOutput":true}\n' "$block"
-fi
+hook_context SessionStart "$block"
 exit 0

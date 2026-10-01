@@ -8,24 +8,10 @@
 # reminder is simply dropped — no harm.
 set -u
 
-INPUT="$(cat)"
-hookfield() {
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | HF="$1" python3 -c 'import os,sys,json
-p=os.environ["HF"].lstrip(".").split(".")
-try:
-    v=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for k in p:
-    v=v.get(k) if isinstance(v,dict) else None
-print(v if isinstance(v,str) else "")' 2>/dev/null
-  fi
-}
+# shellcheck source=.claude/hooks/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || exit 0
 
-f="$(hookfield '.tool_input.file_path')"
+f="$(hook_field '.tool_input.file_path')"
 [ -n "$f" ] || exit 0
 norm="${f//\\//}"
 
@@ -57,10 +43,5 @@ case "$norm" in
 esac
 [ -n "$msg" ] || exit 0
 
-if command -v jq >/dev/null 2>&1; then
-  jq -nc --arg c "$msg" \
-    '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c},suppressOutput:true}'
-else
-  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"},"suppressOutput":true}\n' "$msg"
-fi
+hook_context PostToolUse "$msg"
 exit 0

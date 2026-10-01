@@ -23,7 +23,11 @@ case "$jq_path" in
 esac
 JQ_DIR="$(dirname "$jq_path")"
 
-run() { OUT="$(printf '%s' "$2" | bash "$1" 2>/dev/null)"; }
+run() {
+  OUT="$(printf '%s' "$2" | bash "$1" 2>/dev/null)"
+  RC=$?
+}
+rc0() { [ "$RC" -eq 0 ]; }
 ok() {
   local n="$1"
   shift
@@ -40,6 +44,49 @@ lacks() { ! has "$1"; }
 no_cr() { ! LC_ALL=C grep -q $'\r' "$1"; }
 bom() { [ "$(head -c3 "$1" | od -An -tx1 | tr -d ' \n')" = efbbbf ]; }
 empty() { [ -z "$OUT" ]; }
+
+echo "== lib.sh (R0) =="
+L="$RH/lib.sh"
+# lib <input-json> <snippet> [VAR=value...] — run <snippet> with lib.sh sourced
+lib() {
+  local input="$1" snippet="$2"
+  shift 2
+  OUT="$(printf '%s' "$input" | env "$@" bash -c '. "$1" && eval "$2"' _ "$L" "$snippet" 2>/dev/null)"
+}
+ctx_is() { # the additionalContext of $OUT decodes to exactly $1
+  printf '%s' "$OUT" | EXPECT="$1" python3 -c 'import json,os,sys
+d=json.load(sys.stdin)
+sys.exit(d["hookSpecificOutput"]["additionalContext"]!=os.environ["EXPECT"])' 2>/dev/null
+}
+deny_is() {
+  printf '%s' "$OUT" | EXPECT="$1" python3 -c 'import json,os,sys
+d=json.load(sys.stdin)["hookSpecificOutput"]
+sys.exit(not (d["permissionDecision"]=="deny" and d["permissionDecisionReason"]==os.environ["EXPECT"]))' 2>/dev/null
+}
+IN="$(j '{tool_input:{file_path:"/a b/c.sh",n:3}}')"
+MSG=$'say "hi" \\ back\nnext\ttab'
+for mode in "" HOOK_LIB_NO_JQ=1; do
+  via="${mode:-jq}"
+  lib "$IN" 'hook_field .tool_input.file_path' ${mode:+"$mode"}
+  ok "field via $via" [ "$OUT" = "/a b/c.sh" ]
+  lib "$IN" 'hook_field .tool_input.n' ${mode:+"$mode"}
+  ok "non-string -> empty via $via" empty
+  lib 'not json' 'hook_field .tool_input.file_path' ${mode:+"$mode"}
+  ok "malformed -> empty via $via" empty
+  lib "$IN" 'hook_context PostToolUse "$MSG"' MSG="$MSG" ${mode:+"$mode"}
+  ok "context JSON valid and exact via $via" ctx_is "$MSG"
+  lib "$IN" 'hook_deny "$MSG"' MSG="$MSG" ${mode:+"$mode"}
+  ok "deny JSON valid and exact via $via" deny_is "$MSG"
+done
+lib "$IN" 'hook_field .tool_input.file_path' HOOK_LIB_NO_JQ=1 HOOK_LIB_NO_PY=1
+ok "no jq, no python3 -> empty (fail open)" empty
+T="$(mktemp -d)"
+cp "$RH/parity-reminder.sh" "$T/"
+run "$T/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "lib.sh missing -> silent" empty
+ok "lib.sh missing -> exit 0" rc0
+rm -rf "$T"
+ok "no repo hook keeps an inline hookfield()" bash -c '! grep -l "^hookfield()" "$1"/*.sh' _ "$RH"
 
 echo "== memory-routing-guard (R4) =="
 run "$RH/memory-routing-guard.sh" "$(j --arg f "/home/u/.claude/projects/foo/memory/bar.md" '{tool_name:"Write",tool_input:{file_path:$f}}')"
