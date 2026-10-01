@@ -191,17 +191,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 
 ## Hooks
 
-Repo hooks (`.claude/settings.json`). After editing any of them, re-run
-`bash .claude/hooks/test-hooks.sh`.
-- `post-edit-guard.sh` repairs CRLF, the exec bit and `.ps1` BOMs after an edit.
-- `parity-reminder.sh` names the other half of a parity pair.
-- `memory-routing-guard.sh` denies writes to the home-dir memory path.
+Repo hooks (`.claude/settings.json`) source `lib.sh` (JSON in/out; fail open). `mise run lint` runs `test-hooks.sh`.
+- `post-edit-guard.sh` repairs CRLF, exec bits and `.ps1` BOMs.
+- `parity-reminder.sh` names the other half of zshrc/bashrc or the Nushell/PowerShell profiles.
+- `memory-routing-guard.sh` denies home-dir memory writes.
 - `sync-tool-memory.sh` regenerates the TOOLS block after a `config*.toml` edit.
-- `session-context.sh` (SessionStart) reports dotfiles drift, host, mode, WSL interop, tool readiness.
-- `session-end-notify.sh` (SessionEnd) notifies when the repo or dotfiles are left dirty.
+- `session-context.sh` (SessionStart) reports dotfiles drift, host, mode and miserc tokens (and an exported `MISE_ENV`), WSL interop, tools.
+- `session-end-notify.sh` (SessionEnd) notifies when the repo or dotfiles are dirty.
 
-Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, wired by `settings.enforced.json`):
-- `secret-guard.sh` denies reading or editing private keys, `*.pem` and `*.key`.
-- `dangerous-command-guard.sh` denies fork bombs, raw-device writes and `mkfs`. It asks before
-  `rm -rf` of `/` or `~`, `curl | bash`, and force-push.
-- Both match command *text*, so a commit message mentioning a pattern is screened.
+Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enforced.json`):
+- `secret-guard.sh` denies reading or editing private keys, `*.pem`, `*.key`.
+- `dangerous-command-guard.sh` denies fork bombs, raw-device writes, `mkfs`. It asks before
+  `rm -rf` of `/` or `~`, `curl | bash`, force-push.
+- Both match command *text*, so a commit message naming a pattern is screened.

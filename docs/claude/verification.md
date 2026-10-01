@@ -2,7 +2,7 @@
 
 > Recipes for verifying a change, grouped by subsystem. The rules they protect are in CLAUDE.md.
 > Automated checks (`mise run lint` = `scripts/check-invariants.sh`, `bash scripts/check-templates.sh`,
-> and the `lint.yml` CI jobs) cover most static invariants; the recipes below are what they don't.
+> and the `lint.yml` CI jobs; lint also runs the hook and pin self-tests) cover most static invariants; the recipes below are what they don't.
 
 ## Host state and tools (read-only, no sudo)
 
