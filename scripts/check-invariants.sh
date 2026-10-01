@@ -1042,21 +1042,6 @@ check_zjstatus_zellij_coupling() {
   fi
 }
 
-check_zellij_plugin_installer() {
-  hdr "zellij plugin installer (lib/zellij-plugin.sh lands in zellij's data dir)"
-  local out
-  # Offline behavioural test: fake \0asm module over file://, scratch HOME.
-  # Guards the 2026-09-13 regression — plugin installed to ~/.config/zellij/
-  # plugins, which zellij never searches, so every session showed
-  # "ERROR IN PLUGIN" while dump-layout looked fine.
-  if out=$(bash scripts/test-zellij-plugin.sh 2>&1); then
-    ok "${out#PASS: }"
-  else
-    bad "scripts/test-zellij-plugin.sh failed:"
-    printf '%s\n' "$out" | sed 's/^/       /' | head -10
-  fi
-}
-
 check_mise_install_lib() {
   hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/verify-tools)"
   local out
@@ -1266,18 +1251,13 @@ check_zellij_config() {
     bad "$cfg must pin web_server false AND web_sharing \"disabled\" (build is web-capable)"
   fi
 
-  # 5. The tab-bar alias must point at the RELATIVE plugin path. zellij resolves
-  #    `file:<name>.wasm` against its DATA dir, ~/.local/share/zellij/plugins/
-  #    (after /usr/share/zellij/plugins; NOT ~/.config/zellij/plugins) — where
-  #    tasks/bootstrap installs zjstatus's wasm — and keeps that relative
-  #    string as the plugin's identity, including the ~/.cache/zellij/permissions.kdl key.
-  #    An absolute or ~ path expands per host (verified on 0.45.1: "file:~/x"
-  #    dumps as "file:/home/<user>/x"), so the one-time permission grant would
-  #    stop matching across the fleet and every host would prompt again.
-  if grep -qE '^[[:space:]]*tab-bar[[:space:]]+location="file:zjstatus\.wasm"' "$cfg"; then
-    ok "tab-bar alias -> file:zjstatus.wasm (relative: host-independent permission key)"
+  # 5. The tab-bar alias must point at mise's install dir for zjstatus, via the
+  #    `latest` link mise keeps at the pinned version: the path is stable across
+  #    bumps (so the permission-cache key survives) and needs no copy step.
+  if grep -qE '^[[:space:]]*tab-bar[[:space:]]+location="file:~/\.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus\.wasm"' "$cfg"; then
+    ok "tab-bar alias -> mise's install dir (github-dj95-zjstatus/latest/zjstatus.wasm)"
   else
-    bad "$cfg: plugins { tab-bar location=\"file:zjstatus.wasm\" ... } missing, or the path is not the relative form"
+    bad "$cfg: plugins { tab-bar location=\"file:~/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm\" ... } missing or different"
   fi
 
   # 6. The zjstatus pills are Nerd Font half-circles, U+E0B6 (left) and U+E0B4
@@ -1395,7 +1375,6 @@ check_zellij_config
 check_go_gopls_coupling
 check_tsls_typescript_coupling
 check_zjstatus_zellij_coupling
-check_zellij_plugin_installer
 check_mise_install_lib
 check_bootstrap_mode
 check_python_env_parity

@@ -80,7 +80,7 @@ taplo = "0.10.0"
 "github:atuinsh/atuin" = { version = "18.23.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.38 > EL9's 2.34); pin musl
 "github:Wilfred/difftastic" = { version = "0.71.0" }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); github: autodetects both
 "github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
-"github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # copied into zellij's data dir by scripts/lib/zellij-plugin.sh (tasks/bootstrap)
+"github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
 # --- http: (no GitHub release, bare assets, or scripts) ---
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
 "http:pueue" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueue-x86_64-unknown-linux-musl", bin = "pueue" }

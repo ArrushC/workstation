@@ -142,7 +142,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays
-  off.
+  off. zjstatus loads from mise's install dir (`check_zellij_config`); no copy step.
 - Never add `zellij-autolock` or an unmaintained plugin untested against the pinned zellij. Judge
   whether a plugin loaded from zellij's log, not `dump-layout`.
 

@@ -215,20 +215,15 @@ else
 fi
 echo ""
 
-# 6. zjstatus — both modes: tasks/bootstrap installs the plugin
-# unconditionally (config.linux.toml, the zellij + zjstatus tools, loads in
-# both modes), so this row must not be gated on owned.
+# 6. zjstatus — both modes: config.linux.toml's zjstatus tool loads in both
+# modes, and zellij loads it from mise's install dir (see config.kdl), so this
+# row must not be gated on owned.
 hdr "zjstatus"
-# Same [PLUGIN DIR] lookup as scripts/lib/zellij-plugin.sh.
-plugin_dir="${ZELLIJ_PLUGIN_DIR:-}"
-if [ -z "$plugin_dir" ] && command -v zellij >/dev/null 2>&1; then
-  plugin_dir=$(timeout 10 zellij setup --check 2>/dev/null | sed -n 's/^\[PLUGIN DIR\]: "\(.*\)"$/\1/p' | head -1 || true)
-fi
-: "${plugin_dir:=$HOME/.local/share/zellij/plugins}"
-if [ -f "$plugin_dir/zjstatus.wasm" ]; then
-  row_ok "zjstatus" "plugin in $plugin_dir"
+zjs="$HOME/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm"
+if [ -f "$zjs" ]; then
+  row_ok "zjstatus" "plugin at $zjs"
 else
-  row_bad "zjstatus" "zjstatus.wasm missing from $plugin_dir — mise run bootstrap"
+  row_bad "zjstatus" "zjstatus.wasm missing at $zjs — mise install github:dj95/zjstatus"
 fi
 echo ""
 

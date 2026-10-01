@@ -68,11 +68,12 @@
   remote pane and pasting locally; zellij reads config at session creation, so `zellij kill-session main`
   first. `check_zellij_config` covers the theme name, KDL comments, `web_server`, tab-bar alias and
   `zellij setup --check`.
-- zjstatus: `bash scripts/test-zellij-plugin.sh` (also in `check-invariants.sh`). To probe a live
-  session with the repo config, judge by zellij's log, not `dump-layout`:
-  `grep -E "Loaded plugin|No such file" /tmp/zellij-$UID/zellij-log/zellij.log` must show
-  `Loaded plugin 'zjstatus.wasm'`. On a host: `wsa`, `zellij kill-session main`, reattach, press `y`
-  at the permission prompt.
+- zjstatus: loads from mise's install dir. Headless check: start a throwaway background session with
+  the tracked config (`ZELLIJ_CONFIG_DIR=<temp copy of dotfiles/config/zellij> zellij attach
+  --create-background <name>`), judge by zellij's log, not `dump-layout`
+  (`grep -E "Loaded plugin|No such file" /tmp/zellij-$UID/zellij-log/zellij.log` must show
+  `Loaded plugin '…/github-dj95-zjstatus/latest/zjstatus.wasm'`), then `zellij kill-session <name>`.
+  On a host: `wsa`, `zellij kill-session main`, reattach, press `y` at the permission prompt.
 
 ## Warp (the primary Windows terminal)
 

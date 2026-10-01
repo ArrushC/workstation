@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="End-of-bootstrap steps on every host: cheat sheets, zjstatus plugin, nb notebook, tldr cache (after python-env)"
+#MISE description="End-of-bootstrap steps on every host: cheat sheets, nb notebook, tldr cache (after python-env)"
 #MISE depends=["python-env"]
 set -euo pipefail
-root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 # 1. cheat community cheatsheets. Cloned here rather than via [bootstrap.repos]
 # because a failed clone must not abort provisioning: repos would run ahead of
@@ -15,8 +14,10 @@ if command -v cheat >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
     "$HOME/.config/cheat/cheatsheets/community" ||
     { echo "  ! cheat community clone failed — run manually: git clone --depth 1 https://github.com/cheat/cheatsheets $HOME/.config/cheat/cheatsheets/community" >&2; }
 fi
-# 2. zjstatus.wasm → zellij's DATA plugin dir (mise installs the tool; zellij loads plugins from its data dir, never a bin dir)
-"$root/scripts/lib/zellij-plugin.sh" zjstatus "file://$(mise where github:dj95/zjstatus)/zjstatus.wasm"
+# 2. One-time cleanup (remove once every host has run it).
+# The zjstatus plugin now loads straight from mise's install dir (config.kdl);
+# drop the copy older provisioning left in zellij's data dir.
+rm -f "$HOME/.local/share/zellij/plugins/zjstatus.wasm"
 # 3. nb notebook init at ~/notes, once.
 # Marker-guarded: a missing nb or a
 # failed/incomplete init must not abort the bootstrap, and must retry on the
