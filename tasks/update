@@ -5,10 +5,9 @@ root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 git -C "$root" pull --ff-only
 
-# The token set comes from the saved mode, not the calling shell: a stale
-# shell value can load the wrong config set, and mise-install.sh's `mise prune`
-# would then remove tools. Read after the pull, with bootstrap.sh's own
-# config_get in a child shell so its helpers and `set` options stay there.
+# The config set comes from the saved mode, not the calling shell. Rewrite
+# miserc.toml from it, then drop any exported MISE_ENV (it would override
+# miserc and could make mise-install.sh's `mise prune` remove tools).
 cfg="$root/config.local.toml"
 mode=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" mode' _ "$root/bootstrap.sh" "$cfg")
 case "$mode" in
@@ -19,16 +18,9 @@ owned | shared) ;;
   exit 1
   ;;
 esac
-MISE_ENV="$("$root/scripts/lib/mise-env.sh" "$mode")"
-export MISE_ENV
-printf '==> mode: %s — MISE_ENV=%s\n' "$mode" "$MISE_ENV"
+tokens="$("$root/scripts/lib/mise-env.sh" "$mode" --write)"
+unset MISE_ENV
+printf '==> mode: %s — config set %s (miserc.toml)\n' "$mode" "$tokens"
 
 "$root/scripts/lib/mise-install.sh"
-# Same guard as bootstrap.sh's apply(): the generated pueued unit carries no
-# Environment= line, so the live user manager needs MISE_ENV before `mise
-# bootstrap` restarts the service, or the shim sees "No version is set for
-# shim: pueued".
-if systemctl --user show-environment >/dev/null 2>&1; then
-  systemctl --user set-environment "MISE_ENV=$MISE_ENV" || true
-fi
 mise bootstrap --yes

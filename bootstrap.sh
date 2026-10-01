@@ -363,24 +363,17 @@ resolve_host_config() {
 }
 
 # =============================================================================
-# APPLY — carry MISE_ENV onto the live systemd user manager, install tools,
-# then run `mise bootstrap` (packages, /etc files, services, compose, repos,
+# APPLY — install tools, then run `mise bootstrap` (packages, /etc files, services, compose, repos,
 # dotfiles, tools gate, then the `bootstrap` task itself). Sudo (owned hosts
 # only) is scoped to the dnf batch and /etc files inside mise's own
 # elevation — this script never runs sudo directly.
 # =============================================================================
 apply() {
-  # The user manager must carry MISE_ENV for the pueued shim; environment.d
-  # covers the next login, this covers the live manager.
-  if systemctl --user show-environment >/dev/null 2>&1; then
-    systemctl --user set-environment "MISE_ENV=$MISE_ENV" || warn "could not set MISE_ENV on the systemd user manager"
-  fi
-
   # config.local.toml (mode, and name/email if given) is already written by
   # resolve_host_config in main(), before this function runs — the Tera
   # templates guard every vars.* reference, but a real value still shapes
   # the rendered git identity.
-  log "mise install (tools) — MISE_ENV=$MISE_ENV"
+  log "mise install (tools) — $TOKENS"
   "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
 
   # Forces only on the first apply: a fresh host's pre-existing files (e.g.
@@ -607,9 +600,10 @@ main() {
   resolve_host_config
   { exec 3<&-; } 2>/dev/null || true
 
-  MISE_ENV="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE")"
-  export MISE_ENV
-  log "mise environment: MISE_ENV=$MISE_ENV"
+  TOKENS="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE" --write)"
+  # miserc.toml is the source from here on; an inherited export would override it.
+  unset MISE_ENV
+  log "mise config set: $TOKENS (saved in $REPO_DIR/miserc.toml)"
 
   apply
   if [[ "$MODE" == owned ]]; then

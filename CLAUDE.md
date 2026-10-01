@@ -29,7 +29,9 @@
 
 ## Layout
 
-| File | Loads when `MISE_ENV` has | Holds |
+Token sets: `mise-env.sh`, saved in `miserc.toml`.
+
+| File | Loads when the token set has | Holds |
 |---|---|---|
 | `config.toml` | always | uv, python, `[vars]` pins, dotfiles for both OSes |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
@@ -85,11 +87,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **Mode and `MISE_ENV`**
 - The mode is `owned` or `shared`, saved as `vars.mode` in `config.local.toml`. It comes from the
   saved value, then `WORKSTATION_MODE`, then a prompt. Windows is always owned.
-- `tasks/update` and `tasks/health` derive `MISE_ENV` from the saved mode, never from the calling
-  shell: a stale value makes `mise prune` remove tools.
-- The `MISE_ENV` Tera conditional is byte-identical in `dotfiles/zshenv.tera`, `dotfiles/bashrc.tera`
-  and `dotfiles/config/environment.d/10-mise.conf.tera` (checked).
-- The pueued unit gets `MISE_ENV` from the systemd user manager, not itself.
+- `scripts/lib/mise-env.sh <mode> --write` writes the git-ignored `miserc.toml` (`env = [...]`,
+  `auto_env = false`) from the saved mode. Every mise process reads it, shims under systemd
+  included; nothing exports `MISE_ENV`. An exported value overrides it, so `bootstrap.sh` and
+  `tasks/update` unset it, while CI and `check-templates.sh` may pin one.
 - Every `ws*` command pins `mise -C` to the home directory. mise finds its config by walking up from
   the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
   `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).

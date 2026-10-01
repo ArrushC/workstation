@@ -32,9 +32,9 @@ Every mise tool installs the same way in both modes: user-level under `~/.local/
 
 **How the mode is chosen**, in order: the saved `mode` in `config.local.toml`; else the `WORKSTATION_MODE` environment variable (`owned` or `shared`, for unattended runs); else an interactive prompt on `/dev/tty` (works under `curl | bash`). The answer is written back, so later runs do not ask. Windows is always owned: `bootstrap.ps1` writes `mode = "owned"` without asking.
 
-The mode maps to a `MISE_ENV` token set (`scripts/lib/mise-env.sh` is the single source), and each token loads one more config file:
+The mode maps to a token set (`scripts/lib/mise-env.sh` is the single source). `bootstrap.sh` and `mise run update` save it in the git-ignored `~/.config/mise/miserc.toml`, which every mise process reads (shells, shims, systemd units); nothing exports `MISE_ENV`. Each token loads one more config file:
 
-| Host | `MISE_ENV` |
+| Host | Token set |
 |---|---|
 | shared Linux | `linux` |
 | owned WSL | `linux,owned,host,wsl` |
@@ -109,7 +109,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Resolve the mode (see above) and write it, with name and email, to `config.local.toml`.
-5. Compute `MISE_ENV`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
 6. Owned hosts only: set zsh as the login shell (`sudo usermod -s`).
 
 Both modes are idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -286,7 +286,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `MISE_ENV` persistence, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
@@ -510,7 +510,7 @@ Any `[bootstrap.linux.firewall]` table makes mise re-exec itself with sudo even 
 
 ### pueue status fails, or pueued isn't running
 
-Check the unit, then its log: `systemctl --user is-active dev.mise.pueued.service` and `journalctl --user -u dev.mise.pueued -n 20`. The usual cause is the systemd user manager missing `MISE_ENV`, so the shim errors with something like "No version is set for shim: pueued". The unit deliberately has no `Environment=MISE_ENV`; it relies on `~/.config/environment.d/10-mise.conf` (read at the manager's next start, i.e. next login) and `systemctl --user set-environment` (fixes the live manager now). `./bootstrap.sh` does both on every run. Fix with `systemctl --user set-environment MISE_ENV=<your token set>`, then `systemctl --user restart dev.mise.pueued.service`.
+Check the unit, then its log: `systemctl --user is-active dev.mise.pueued.service` and `journalctl --user -u dev.mise.pueued -n 20`. The usual cause is a missing or stale `~/.config/mise/miserc.toml`, so the shim errors with something like "No version is set for shim: pueued". The unit has no `Environment=MISE_ENV`; the shim reads `miserc.toml`. Fix with `mise run update` (it rewrites `miserc.toml` and clears any old `MISE_ENV` export), then `systemctl --user restart dev.mise.pueued.service`.
 
 ### Colors look banded or 8-bit on a remote host
 

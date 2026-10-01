@@ -105,8 +105,7 @@ taplo = "0.10.0"
 # land in $HOME; copy on a directory leaves unmanaged siblings alone.
 # ---------------------------------------------------------------------------
 [dotfiles]
-# Shell rc files. ~/.zshenv, ~/.bashrc and 10-mise.conf must render the same MISE_ENV
-# expression (three-way, checked by check-invariants.sh).
+# Shell rc files.
 "~/.bashrc" = { source = "dotfiles/bashrc.tera", mode = "template" }
 "~/.zshrc" = { source = "dotfiles/zshrc.tera", mode = "template" }
 "~/.zshenv" = { source = "dotfiles/zshenv.tera", mode = "template" }
@@ -116,9 +115,6 @@ taplo = "0.10.0"
 "~/.config/bash/completions.bash" = { source = "dotfiles/config/bash/completions.bash", mode = "copy" }
 "~/.config/cheat/conf.yml" = { source = "dotfiles/config/cheat/conf.yml.tera", mode = "template" }
 "~/.config/cheat/cheatsheets/personal/workstation" = { source = "dotfiles/config/cheat/cheatsheets/personal/workstation", mode = "copy" }
-# environment.d is read by systemd's user manager before any login shell, so it
-# renders MISE_ENV independently of the rc files.
-"~/.config/environment.d/10-mise.conf" = { source = "dotfiles/config/environment.d/10-mise.conf.tera", mode = "template" }
 "~/.config/tealdeer/config.toml" = { source = "dotfiles/config/tealdeer/config.toml", mode = "copy" }
 # Single Helix source for both OSes: the Windows template
 # (dotfiles/windows/AppData/Roaming/helix/config.toml.tera) read_file()-inlines it.
@@ -159,10 +155,9 @@ taplo = "0.10.0"
 "post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true; chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
-# it. systemd expands %h in ExecStart; the shim needs MISE_ENV, which the user
-# manager gets from ~/.config/environment.d/10-mise.conf (next login) and from
-# bootstrap.sh's `systemctl --user set-environment MISE_ENV=…` (this login) —
-# never baked here, because the value differs per host (wsl vs native vs shared).
+# it. systemd expands %h in ExecStart; the shim picks its config set from
+# ~/.config/mise/miserc.toml (written by scripts/lib/mise-env.sh), so no
+# Environment= line is needed.
 [bootstrap.services.pueued]
 scope = "user"
 command = "%h/.local/share/mise/shims/pueued -v"

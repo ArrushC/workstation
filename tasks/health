@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, MISE_ENV wiring, pueued, python-env, owned extras"
+#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, miserc wiring, pueued, python-env, owned extras"
 #MISE env={PYTHON_VERSION="{{ vars.python_version }}"}
 # Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
 # no sudo, but exits 1 if any row_bad fired — this is the
@@ -65,24 +65,35 @@ canon_has() {
   case ",$canonical_env," in *,"$1",*) return 0 ;; esac
   return 1
 }
-shell_env="${MISE_ENV:-}"
+rc_tokens=$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')
 
-hdr "workstation health — mode=${mode:-unset} · MISE_ENV=${shell_env:-unset} · read-only"
+hdr "workstation health — mode=${mode:-unset} · config=${rc_tokens:-unset} · read-only"
 echo ""
 
 hdr "mode (config.local.toml)"
 if [ -n "$canonical_env" ]; then
-  row_ok "mode" "$mode (saved in config.local.toml) — MISE_ENV $canonical_env"
-  if [ "$shell_env" = "$canonical_env" ]; then
-    row_ok "MISE_ENV shell" "matches the saved mode"
-  else
-    row_warn "MISE_ENV shell" "this shell has \"${shell_env:-unset}\", the saved mode needs \"$canonical_env\" — log in again (or open a new shell)"
-  fi
-  # The mise checks below then see the saved mode's config set.
-  export MISE_ENV="$canonical_env"
+  row_ok "mode" "$mode (saved in config.local.toml) — config set $canonical_env"
 else
   row_bad "mode" "no valid mode in $cfg${mode:+ (found \"$mode\")} — run $root/bootstrap.sh (it asks) or set mode = \"owned\" or \"shared\" under [vars]"
 fi
+if [ -z "$canonical_env" ]; then
+  row_skip "miserc" "no valid mode — nothing to compare"
+elif [ "$rc_tokens" = "$canonical_env" ]; then
+  row_ok "miserc" "$root/miserc.toml selects $rc_tokens"
+else
+  row_bad "miserc" "$root/miserc.toml has \"${rc_tokens:-<missing>}\", the saved mode needs \"$canonical_env\" — mise run update"
+fi
+# Mise reads miserc unless MISE_ENV is exported; these were the old exporters.
+legacy=""
+grep -qs 'export MISE_ENV=' "$HOME/.zshenv" "$HOME/.bashrc" && legacy="$legacy rc-files"
+[ -e "$HOME/.config/environment.d/10-mise.conf" ] && legacy="$legacy environment.d"
+systemctl --user show-environment 2>/dev/null | grep -q '^MISE_ENV=' && legacy="$legacy systemd-user-manager"
+if [ -z "$legacy" ]; then
+  row_ok "MISE_ENV export" "nothing exports it (miserc.toml rules)"
+else
+  row_warn "MISE_ENV export" "still exported by:$legacy — mise run update, then open a new shell"
+fi
+unset MISE_ENV
 echo ""
 
 # 1. mise bootstrap status — packages/files/services/compose/repos per origin
@@ -176,44 +187,6 @@ if [ -z "$missing_tools" ]; then
 else
   n_missing=$(wc -w <<<"$missing_tools")
   row_bad "mise tools" "$n_missing missing ($missing_tools) — mise install"
-fi
-echo ""
-
-# 3. MISE_ENV persisted — rc files for future logins/non-interactive shells,
-# plus the LIVE systemd user manager env (only a re-login or a manual
-# set-environment fixes that one, so it's a warn rather than a hard failure).
-# A bare presence grep for `export MISE_ENV=` passes
-# on ANY value, so a host that baked the wrong token set (e.g. plain "linux"
-# on an owned host) reported a false green. Compare the actual BAKED value in
-# each file against scripts/lib/mise-env.sh "$mode" — the canonical token
-# set for THIS host's saved mode — mirroring the render comparison
-# check_mise_env_three_way makes in scripts/check-invariants.sh.
-hdr "MISE_ENV persisted"
-_baked_mise_env() {
-  # Matches both the rc-file form (export MISE_ENV="linux,owned,host,wsl") and
-  # environment.d's unquoted systemd form (MISE_ENV=linux,owned,host,wsl).
-  grep -oE '(export )?MISE_ENV="?[a-z,]+"?' "$1" 2>/dev/null | head -1 |
-    sed -E 's/^export //; s/^MISE_ENV="?//; s/"$//'
-}
-if [ -z "$canonical_env" ]; then
-  row_skip "MISE_ENV rc" "no valid mode (see the mode row) — nothing to compare the baked rc files against"
-else
-  zshenv_baked=$(_baked_mise_env "$HOME/.zshenv")
-  bashrc_baked=$(_baked_mise_env "$HOME/.bashrc")
-  envd_baked=$(_baked_mise_env "$HOME/.config/environment.d/10-mise.conf")
-  if [ "$zshenv_baked" = "$canonical_env" ] && [ "$bashrc_baked" = "$canonical_env" ] && [ "$envd_baked" = "$canonical_env" ]; then
-    row_ok "MISE_ENV rc" "all three bake \"$canonical_env\": ~/.zshenv, ~/.bashrc, environment.d/10-mise.conf"
-  else
-    row_bad "MISE_ENV rc" "want \"$canonical_env\" ($mode) — got zshenv=\"${zshenv_baked:-<missing>}\" bashrc=\"${bashrc_baked:-<missing>}\" environment.d=\"${envd_baked:-<missing>}\" — mise dot apply / bootstrap.sh writes all three"
-  fi
-fi
-live_env=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^MISE_ENV=//p' | head -1)
-if [ -z "$live_env" ]; then
-  row_warn "MISE_ENV live" "not set in the systemd user manager — re-login or: systemctl --user set-environment MISE_ENV=${canonical_env:-...}"
-elif [ -z "$canonical_env" ] || [ "$live_env" = "$canonical_env" ]; then
-  row_ok "MISE_ENV live" "set in the systemd user manager ($live_env)"
-else
-  row_warn "MISE_ENV live" "systemd user manager has \"$live_env\", want \"$canonical_env\" — re-login or: systemctl --user set-environment MISE_ENV=$canonical_env"
 fi
 echo ""
 

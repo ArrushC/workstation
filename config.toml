@@ -1,6 +1,7 @@
 # ~/.config/mise/config.toml — this repository IS mise's global config dir.
 #
-# Which files load is picked by MISE_ENV (scripts/lib/mise-env.sh):
+# Which files load is picked by miserc.toml's `env` (written by
+# scripts/lib/mise-env.sh; an exported MISE_ENV overrides it):
 #   config.toml          always            (cross-platform: uv)
 #   config.linux.toml    linux             (the Linux toolbelt, both modes)
 #   config.owned.toml    owned             (owned-host tools on both OSes)
