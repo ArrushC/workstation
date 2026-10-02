@@ -159,20 +159,28 @@ What `bootstrap.ps1` does:
 2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
 3. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it). A set `GITHUB_TOKEN` is persisted into `.git/config` so `git pull` and `wsu` authenticate.
 4. Write `miserc.toml` (`windows,owned`; a User `MISE_ENV` variable is removed), ask once for your git name and email, check that mise loads `config.owned.toml` (it stops otherwise, before anything can prune the owned tools), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
-5. After a successful tools phase: remove the portable tools mise replaced (their directories and User PATH entries), add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder.
+5. After a successful tools phase: remove the portable tools mise replaced (their directories and User PATH entries), add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder. `mise bootstrap`'s `post-tools` hook (`config.windows.toml`) runs `mise run nu-init`, which regenerates Nushell's init files (starship, mise, zoxide, atuin) in `%APPDATA%\nushell\vendor\autoload`, so `wsu` refreshes them too.
 6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
-7. Add Start Menu shortcuts for dnGrep and LogExpert, generate the Warp Tab Configs (local shells plus one per SSH host), the Windows Terminal SSH fragment and Nushell's starship and mise autoload files, seed dnGrep's settings, and install the PowerShell profile loader when Documents is redirected.
+7. Add Start Menu shortcuts for dnGrep and LogExpert, generate the Warp Tab Configs (local shells plus one per SSH host) and the Windows Terminal SSH fragment, seed dnGrep's settings, and install the PowerShell profile loader when Documents is redirected.
 8. Install BurntToast and Claude Code (native installer, self-updating), merge `~/.claude/settings.json` and seed `settings.local.json`.
 9. Build the `wpy` Python env (a uv venv on mise's python with the libraries in `scripts/python-env.txt`) and install the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
 10. Prompt for an SSH key, then print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
 
-Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Nushell completes `bootstrap.ps1` flags via an external completer; PowerShell does it natively.
+Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Nushell carries the zsh toolbelt:
+- `z`/`zi` (zoxide)
+- Ctrl-R history search (atuin, local only; Nushell's earlier history is imported once)
+- Ctrl-T to insert a file and Alt-C to cd into a directory (fzf, with bat/eza previews)
+- `l`/`la`/`ll`/`lt` (eza) and `y` (yazi)
+- Tab completion for about 1,000 CLIs through carapace, after `bootstrap.ps1`'s own flags
+- Ctrl-O to edit the command line in Helix
+
+`rm` goes to the Recycle Bin (`rm --permanent` skips it). The theme is Catppuccin Mocha, vendored into `%APPDATA%\nushell\autoload\`. PowerShell gets the same `l`/`la`/`ll`/`lt`/`y` and `z`; `wsh` lists them all.
 
 | Flag | Meaning |
 |---|---|
 | `-RepoPath <dir>` | Clone somewhere other than `%USERPROFILE%\.config\mise`. |
 | `-SkipKeyGen` | Skip the SSH-key prompt. |
-| `-SkipToolInstall` | Skip mise, the mise tools phase, the winget GUI apps, the Python env and Claude Code (assume present). |
+| `-SkipToolInstall` | Skip mise, the mise tools phase, the winget GUI apps, the Python env and Claude Code (assume present; the post-tools hook, nu-init, doesn't run either). |
 | `-SkipDotfiles` | Clone and install tools but do not apply dotfiles. On a host's first run this also skips winget's `settings.json` (the per-user preference), so the GUI apps install with winget's default scope. |
 | `-SkipBurntToast` | Skip the BurntToast PowerShell module install. |
 | `-SkipNerdFonts` | Skip the Nerd Font install. |

@@ -160,7 +160,17 @@ PY
 zsh_check() { zsh -n "$1"; }
 bash_check() { bash -n "$1"; }
 git_check() { git config --file "$1" --list >/dev/null; }
-nu_check() { nu --no-config-file --commands "if (nu-check '$1') { exit 0 } else { exit 1 }"; }
+# config.nu is evaluated, not only parsed: a $env.config key this Nushell doesn't
+# know fails only at evaluation. A bulk render also deploys the theme into the
+# sibling autoload dir; it's sourced after config.nu, as Nushell does.
+# USERPROFILE stands in for Windows'.
+nu_check() {
+  local src theme
+  src="source '$1'"
+  theme="$(dirname "$1")/autoload/catppuccin_mocha.nu"
+  [ -f "$theme" ] && src="$src; source '$theme'"
+  USERPROFILE="${TMPDIR:-/tmp}" nu --no-config-file --commands "$src"
+}
 pwsh_check() {
   pwsh -NoProfile -Command \
     "\$e=\$null; [void][System.Management.Automation.Language.Parser]::ParseFile('$1',[ref]\$null,[ref]\$e); if (\$e) { \$e | ForEach-Object { \$_.Message }; exit 1 }"

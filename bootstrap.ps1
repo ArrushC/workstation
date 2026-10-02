@@ -607,7 +607,7 @@ function Invoke-WslConfigReminder {
 # --force-dotfiles (a target can already be a differing real file); $MigratedMarker
 # then stops it, so a later real conflict surfaces. After a good tools phase, as
 # scripts/lib/mise-install.sh does on Linux: shims on PATH (later steps need jq,
-# starship, nu, uv), node reinstalled when its declaration changed, prune, reshim.
+# uv), node reinstalled when its declaration changed, prune, reshim.
 function Invoke-MiseBootstrap {
     $phases = @()
     if (-not $SkipDotfiles) { $phases += 'dotfiles' }
@@ -1001,31 +1001,6 @@ is_focused = true
     }
 }
 
-# Nushell can't `eval`, so starship's init goes to a generated, auto-sourced
-# vendor\autoload\starship.nu, rewritten every run (no stamp: it self-heals).
-function Invoke-NushellStarship {
-    if (-not (Get-Command starship -ErrorAction SilentlyContinue)) {
-        Write-Warn "Skipping Nushell starship prompt — starship not on PATH (install step skipped?)."
-        return
-    }
-    if (-not (Get-Command nu -ErrorAction SilentlyContinue)) {
-        Write-Warn "Skipping Nushell starship prompt — nu not on PATH (install step skipped?)."
-        return
-    }
-
-    $autoload = Join-Path $env:APPDATA "nushell\vendor\autoload"
-    $target   = Join-Path $autoload "starship.nu"
-    try {
-        if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
-        # No BOM: nu chokes on one in sourced scripts.
-        $init = (& starship init nu) -join "`n"
-        [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
-        Write-Ok "Nushell starship prompt generated ($target)"
-    } catch {
-        Write-Warn "Could not generate the Nushell starship prompt: $($_.Exception.Message)"
-    }
-}
-
 # dnGrep keeps settings next to the exe, in mise's versioned dir, so a seeded
 # dnGrep.config.xml points them at %APPDATA%\dnGREP (expanded: dnGrep doesn't expand
 # %ENV%). Seed-if-absent: dnGrep's Options dialog rewrites it; a new dir is reseeded.
@@ -1072,31 +1047,6 @@ function Invoke-DnGrepConfig {
         Write-Ok "dnGrep config seeded (settings dir -> $dataDir)"
     } catch {
         Write-Warn "Could not seed the dnGrep config: $($_.Exception.Message)"
-    }
-}
-
-# Like starship.nu, rewritten every run to track the installed mise; its hook puts
-# mise's real bin dirs on PATH ahead of the shims.
-function Invoke-NushellMise {
-    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
-        Write-Warn "Skipping Nushell mise activation — mise not on PATH (install step skipped?)."
-        return
-    }
-    if (-not (Get-Command nu -ErrorAction SilentlyContinue)) {
-        Write-Warn "Skipping Nushell mise activation — nu not on PATH (install step skipped?)."
-        return
-    }
-
-    $autoload = Join-Path $env:APPDATA "nushell\vendor\autoload"
-    $target   = Join-Path $autoload "mise.nu"
-    try {
-        if (-not (Test-Path $autoload)) { New-Item -ItemType Directory -Force -Path $autoload | Out-Null }
-        # No BOM: nu chokes on one in sourced scripts.
-        $init = (& mise -C $env:USERPROFILE activate nu) -join "`n"
-        [System.IO.File]::WriteAllText($target, $init, (New-Object System.Text.UTF8Encoding($false)))
-        Write-Ok "Nushell mise activation generated ($target)"
-    } catch {
-        Write-Warn "Could not generate the Nushell mise activation: $($_.Exception.Message)"
     }
 }
 
@@ -1367,14 +1317,12 @@ if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
 Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
-Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; old portable tools removed, shims on PATH, node marker, prune; .wslconfig reminder
+Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; old portable tools removed, shims on PATH, node marker, prune; .wslconfig reminder; its post-tools hook regenerates Nushell's init files (mise run nu-init)
 Install-WingetApps        # GUI apps: mise bootstrap --only packages (config.windows.toml's winget list), then SSHFS-Win (UAC)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
-Invoke-NushellStarship    # generate the Nushell starship prompt (vendor/autoload — self-heals)
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; re-seeded per mise install dir)
-Invoke-NushellMise        # generate the Nushell mise activation (vendor/autoload — self-heals)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
 Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)

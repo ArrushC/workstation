@@ -1,0 +1,14 @@
+theme:          catppuccin_mocha.nu (Catppuccin Mocha for Nushell)
+upstream:       https://github.com/catppuccin/nushell
+license:        MIT
+pin-kind:       commit (the repo has no release tags)
+commit:         815dfc6ea61f2746ff27b54ef425cfeb7b51dda8 (2025-12-24, "date -> datetime" color key fix)
+asset:          https://raw.githubusercontent.com/catppuccin/nushell/815dfc6ea61f2746ff27b54ef425cfeb7b51dda8/themes/catppuccin_mocha.nu
+file-sha256:    8ba6876bc110418578c77b846d97af9b0b5e5d78f7fb81e25bc5b00db7324603  (verbatim upstream)
+vendored:       2026-10-02
+note:           Deploys as a single-file `copy` entry to %APPDATA%\nushell\autoload\ (Nushell's user
+                autoload dir: sourced after config.nu, so its color_config wins); this sidecar is
+                never deployed. check-templates.sh sources it with the rendered config.nu, so a
+                Nushell bump that drops a top-level key it sets, or changes its type, fails CI
+                (unknown nested keys under color_config/explore are not caught).
+                Bump: re-download at a newer commit, refresh commit + asset + file-sha256 + vendored.

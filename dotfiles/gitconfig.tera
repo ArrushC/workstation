@@ -6,13 +6,9 @@
 [core]
     editor     = hx
     autocrlf   = input
-    # `delta` is a Linux-only tool (a mise tool, config.linux.toml); it is NOT
-    # present on Windows, so spawning it as the pager aborts every paging git
-    # command (log/diff/show/blame). Fall back to Git-for-Windows' bundled
-    # `less` there (git finds it in its own libexec even when it's not on the
-    # PowerShell PATH). The [delta] sections below stay — git ignores unknown
-    # sections, so they're harmless/inert on Windows.
-    pager      = {% if os() == "windows" %}less{% else %}delta{% endif %}
+    # delta is a mise tool on both OSes. On Windows, git runs the pager through its
+    # own sh, so delta finds Git-for-Windows' bundled less there.
+    pager      = delta
 
 [init]
     defaultBranch = main
@@ -67,8 +63,8 @@
 # writes these per-machine with gh's absolute path + an empty "reset" line, so
 # ~/.gitconfig always drifted from this source. Track them here in PATH-relative
 # form so `mise dot status` stays clean while gh auth keeps working. gh is on
-# every Linux/WSL host (a mise tool, config.linux.toml); on Windows git uses its bundled Git
-# Credential Manager, so this block is Linux-only (matches the OS-gated pager).
+# every Linux/WSL host (a mise tool, config.toml); on Windows git uses its bundled Git
+# Credential Manager, so this block is Linux-only.
 [credential "https://github.com"]
     helper = !gh auth git-credential
 [credential "https://gist.github.com"]

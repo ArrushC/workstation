@@ -3,12 +3,8 @@
 # dirs via `mise activate`, everything else the shims.
 [tools]
 # --- aqua registry (short names) ---
-fzf = "0.74.4"
-zoxide = "0.10.0"
 zellij = "0.45.1"
 glow = "3.0.0"
-fd = "10.5.0"
-bat = "0.26.1"
 btop = "1.4.7"
 yq = "4.53.6"
 witr = "0.3.3"
@@ -22,9 +18,7 @@ lazygit = "0.65.1"
 jj = "0.45.1"
 ast-grep = "0.45.3"
 xh = "0.26.2"
-delta = "0.19.2"
 micro = "2.0.15"
-eza = "0.23.5"
 sd = "1.1.0"
 ctop = "0.7.7"
 k9s = "0.51.0"
@@ -39,7 +33,6 @@ systemctl-tui = "0.8.0"
 lazyjournal = "0.8.6"
 cheat = "5.1.0"
 fx = "39.2.0"
-ripgrep = "15.2.0"
 miller = "6.22.0"
 doggo = "1.4.0"
 miniserve = "0.35.0"
@@ -71,9 +64,7 @@ taplo = "0.10.0"
 "github:Canop/broot" = { version = "1.60.2", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
 "github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd" }
 "github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl
-"github:sxyazi/yazi" = { version = "26.9.1", asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; ships yazi + ya
 "github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; binary is `tv`
-"github:atuinsh/atuin" = { version = "18.23.0", asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.38 > EL9's 2.34); pin musl
 "github:Wilfred/difftastic" = { version = "0.71.0" }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); github: autodetects both
 "github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)

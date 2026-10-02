@@ -130,14 +130,14 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `~/.claude/CLAUDE.md` is deployed from `dotfiles/claude/CLAUDE.md`. Its TOOLS block is generated.
 
 **Windows**
-- Never render Windows targets with Linux mise: `os()` is the binary's OS.
+- Never render Windows targets with Linux mise (`os()` is the binary's).
 - `bootstrap.ps1` pins only mise; CLI tools are mise tools, GUI apps `config.windows.toml`'s winget
   `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
-- Nushell runs via mise's `nu.exe` shim; `Install-Mise` renames a running `mise.exe`.
+- Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); post-tools `nu-init` writes its vendor/autoload files.
 - `scripts/test-*.ps1` test Windows (CI `windows-http`: 5.1, pwsh).
-- Scripts never write Windows Terminal's tracked `settings.json`: SSH launchers go to a WT fragment;
-  Warp's `workstation-*.toml` tab configs are runtime artifacts.
-- Warp is primary; Windows Terminal is the compat one (default-terminal role, Nushell).
+- Scripts never write WT's tracked `settings.json`: SSH launchers go to a WT fragment;
+  Warp's `workstation-*.toml` are runtime artifacts.
+- Warp is primary; WT is compat (default terminal, Nushell).
 - `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
 
 **zellij**

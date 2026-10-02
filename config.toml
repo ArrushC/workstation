@@ -26,6 +26,17 @@ starship = "1.26.0"
 helix = "25.07.1"          # archive carries runtime/ beside hx — no HELIX_RUNTIME needed
 jq = "1.8.2"
 gh = "2.101.0"
+# The zsh toolbelt Nushell on Windows shares (pickers, z/zi, Ctrl-R history, eza listings, delta pager).
+fzf = "0.74.4"
+zoxide = "0.10.0"
+fd = "10.5.0"
+bat = "0.26.1"
+delta = "0.19.2"
+eza = "0.23.5"
+ripgrep = "15.2.0"
+# aqua's Linux builds are gnu (GLIBC_2.39/2.38 > EL9's 2.34), so Linux pins musl; Windows takes the msvc zip.
+"github:sxyazi/yazi" = { version = "26.9.1", platforms = { linux-x64 = { asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }, windows-x64 = { asset_pattern = "yazi-x86_64-pc-windows-msvc.zip" } } }
+"github:atuinsh/atuin" = { version = "18.23.0", platforms = { linux-x64 = { asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "atuin-x86_64-pc-windows-msvc.zip" } } }
 # uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
 uv = "0.12.19"

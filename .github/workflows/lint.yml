@@ -129,3 +129,5 @@ jobs:
       # PowerShell-profile template's syntax check either.
       - name: Render + syntax-check dotfiles templates
         run: bash scripts/check-templates.sh
+      - name: Test nu-init (generated Nushell init files)
+        run: bash scripts/test-nu-init.sh

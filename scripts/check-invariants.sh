@@ -482,7 +482,7 @@ check_bootstrap_config() {
       "$PY" - <<'PY'
 import os, re, tomllib
 
-files = ["config.host.toml", "config.native.toml", "config.wsl.toml", "config.linux.toml"]
+files = ["config.host.toml", "config.native.toml", "config.wsl.toml", "config.linux.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
     try:

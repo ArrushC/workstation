@@ -7,25 +7,64 @@
 # shell (the Windows Terminal "Nushell" profile); PowerShell stays installed
 # for .NET/COM tasks and the WSL2 notify hook.
 #
-# This file owns the HAND-WRITTEN config (aliases, env, helpers). Two things are
-# wired separately by GENERATED files under %APPDATA%\nushell\vendor\autoload\
-# (everything there is auto-sourced on startup, so no `source` lines here):
-# starship.nu (the prompt — bootstrap.ps1's Invoke-NushellStarship) and mise.nu
-# (`mise activate nu` — Invoke-NushellMise; puts the mise-managed node/Go/uv/
-# LSP servers on PATH ahead of the shims dir).
+# This file owns the HAND-WRITTEN config (aliases, env, keys, helpers). The tool init
+# code is GENERATED into %APPDATA%\nushell\vendor\autoload\ (auto-sourced at startup,
+# so no `source` lines here) by scripts/nu-init.nu: starship.nu, mise.nu, zoxide.nu
+# and atuin.nu. The `nu-init` mise task reruns it after every tools phase (the
+# Windows post-tools hook), so a tool update reaches the next Nushell tab.
 #
 # PARITY NOTE: the ws*/g* aliases below mirror the PowerShell profile
 # (Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera). Keep the two in
 # sync when adding or renaming an alias so both Windows shells behave the same.
+# The eza listings and `y` mirror the PowerShell profile too; keybindings, hooks and the external completer are Nushell-only.
 #
 # Per-machine overrides (untracked): drop a `*.nu` file into
-# %APPDATA%\nushell\vendor\autoload\ — it is auto-sourced after this file.
+# %APPDATA%\nushell\autoload\ (the user autoload dir; vendor\autoload is nu-init's).
 # =============================================================================
 
 # --- Shell behaviour --------------------------------------------------------
 # Mutate fields on the pre-populated default $env.config (never reassign the
 # whole record — that would wipe Nushell's defaults).
 $env.config.show_banner = false
+
+# Ctrl-O opens the command line in Helix; EDITOR serves everything else.
+$env.EDITOR = "hx"
+$env.config.buffer_editor = "hx"
+$env.config.cursor_shape.emacs = "line"
+# Deletes go to the Recycle Bin; `rm --permanent` skips it.
+$env.config.rm.always_trash = true
+# Fuzzy, case-insensitive matching in the completion menu (gco -> git checkout).
+$env.config.completions.algorithm = "fuzzy"
+
+# --- fzf: the zsh side's look and file list ---------------------------------
+$env.FZF_DEFAULT_OPTS = "--height 40% --layout=reverse --border --info=inline --bind=ctrl-/:toggle-preview --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8 --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4"
+$env.FZF_DEFAULT_COMMAND = 'rg --files --hidden --follow --glob "!.git"'
+
+# Ctrl-T inserts a picked file at the cursor; Alt-C cds into a picked directory
+# (fzf's own shell integration has no Nushell mode). Esc in the picker changes
+# nothing. Ctrl-R (atuin) and z/zi (zoxide) come from vendor/autoload.
+$env.config.keybindings = ($env.config.keybindings | append [
+    {
+        name: fzf_file
+        modifier: control
+        keycode: char_t
+        mode: [emacs vi_insert vi_normal]
+        event: {
+            send: executehostcommand
+            cmd: r#'let f = (fd --type f --hidden --exclude .git | fzf --preview "bat --color=always --style=numbers --line-range=:200 {}" | str trim); if ($f | is-not-empty) { commandline edit --insert ($f | to nuon) }'#
+        }
+    }
+    {
+        name: fzf_cd
+        modifier: alt
+        keycode: char_c
+        mode: [emacs vi_insert vi_normal]
+        event: {
+            send: executehostcommand
+            cmd: r#'let d = (fd --type d --hidden --exclude .git | fzf --preview "eza --tree --level=1 --icons=always --color=always {}" | str trim); if ($d | is-not-empty) { cd $d }'#
+        }
+    }
+])
 
 # --- Windows Terminal shell integration --------------------------------------
 # Nushell already emits the OSC 133 prompt marks WT renders on the scrollbar
@@ -157,6 +196,13 @@ command pins `mise -C $env.USERPROFILE`):
        updates the GUI apps)
   wsh  this help
 
+Shell shortcuts:
+  l / la / ll / lt   eza listings (ll: long + git; lt: tree)
+  y                  yazi; on quit, cd to where you ended up
+  z <dir> / zi       zoxide: jump to / pick a visited directory
+  Nushell only: Ctrl-R history (atuin), Ctrl-T insert a file,
+  Alt-C cd into a directory (fzf), Ctrl-O edit the line in hx
+
 Common flow:
   wse ~/.config/starship.toml   (edit the source)
   wsd                           (preview the change)
@@ -187,6 +233,22 @@ alias gd  = git diff
 alias gco = git checkout
 alias gbr = git branch
 
+# --- eza listings + yazi (mirror the zsh aliases and the PowerShell profile) --
+# Plain `ls` stays Nushell's structured table (filter it: ls | where size > 1mb).
+alias l = eza --group-directories-first --icons=auto --hyperlink
+alias la = eza -a --group-directories-first --icons=auto --hyperlink
+alias ll = eza -lah --group-directories-first --icons=auto --git --time-style=long-iso --hyperlink
+alias lt = eza --tree --level=2 --group-directories-first --icons=auto --hyperlink
+
+# yazi: `y` opens it; on quit, cd to wherever you ended up.
+def --env y [...args] {
+    let tmp = (mktemp -t "yazi-cwd.XXXXXX")
+    yazi ...$args --cwd-file $tmp
+    let cwd = (open --raw $tmp | str trim)
+    if $cwd != "" and $cwd != $env.PWD { cd $cwd }
+    rm --permanent --force $tmp
+}
+
 # --- Screen clearing --------------------------------------------------------
 # Nushell's built-in `clear` already wipes the scrollback. `hide` is the soft
 # variant — clear the screen but KEEP the scrollback history (scroll up to see
@@ -200,7 +262,7 @@ alias hide = clear --keep-scrollback
 
 # --- workstation helpers ----------------------------------------------------
 # Quick path to the workstation repo. Defaults to bootstrap.ps1's clone path;
-# override in a vendor/autoload/*.nu file if you cloned elsewhere.
+# override in a %APPDATA%\nushell\autoload\*.nu file if you cloned elsewhere.
 $env.WORKSTATION_REPO = ($env.USERPROFILE | path join ".config" "mise")
 
 # ssh-copy-id — Windows OpenSSH has none; port of the PowerShell profile helper.
@@ -245,20 +307,14 @@ def adminpw [] {
     powershell -Command "Get-AdminPassword"
 }
 
-# --- Repo-script flag completion (external completer) ------------------------
-# Nushell only completes flags for commands with declared signatures; external
-# commands (the repo's .ps1 scripts) otherwise fall back to file completion —
-# the "NO RECORDS FOUND" menu. This external completer recognises the
-# flag-bearing repo script BY BASENAME — `.\bootstrap.ps1` and a full path
-# both match — and returns its flags with descriptions; anything else
-# returns null -> Nushell's default file completion (behavior everywhere
-# else is unchanged). The flag list mirrors the script's param() block and
-# is kept in lockstep by check-invariants.sh's flag-parity check (which
-# parses `let workstation_bootstrap_flags` — keep its `let`/closing-bracket
-# lines at column 0). Classic PowerShell
-# needs none of this: it tab-completes param() flags natively.
-# PRE-1.0 CHURN: the external-completer API is a known churn surface —
-# re-check this block on every Nushell pin bump (see CLAUDE.md).
+# --- External completions -----------------------------------------------------
+# Tab on an external command: bootstrap.ps1's flags first (Nushell can't read a
+# .ps1 param() block), then carapace (git, mise, winget, gh, ssh and ~1000 more),
+# then Nushell's own file completion when both return null. The flag record mirrors
+# bootstrap.ps1's param() block; check-invariants.sh's flag-parity check parses its
+# `let`/closing-bracket lines, so keep them at column 0. carapace runs only on Tab.
+# PRE-1.0 CHURN: the external-completer API is a churn surface; CI evaluates this
+# file with the pinned nu (check-templates.sh), so a bump that breaks it fails CI.
 
 let workstation_bootstrap_flags = [
     { value: "-RepoPath", description: "alternate clone path (default %USERPROFILE%\\.config\\mise)" }
@@ -272,22 +328,30 @@ let workstation_bootstrap_flags = [
     { value: "-Yes", description: "skip the reinstall confirmation prompt" }
 ]
 
+# carapace's own completer (its `_carapace nushell` snippet): an alias completes as
+# its first word (gs -> git), as carapace's own snippet does, and Windows' .exe suffix is dropped.
+let carapace_completer = {|spans|
+    if (which carapace | is-empty) { return null }
+    let expanded_alias = (scope aliases | where name == $spans.0 | $in.0?.expansion?)
+    let spans = (if $expanded_alias != null {
+        $spans | skip 1 | prepend ($expanded_alias | split row " " | take 1 | str replace --regex '\.exe$' '')
+    } else {
+        $spans | skip 1 | prepend ($spans.0 | str replace --regex '\.exe$' '')
+    })
+    if ($spans | length) == 1 { return null }
+    with-env { CARAPACE_SHELL: "nushell" } { carapace $spans.0 nushell ...$spans | from json }
+}
+
 $env.config.completions.external = {
     enable: true
     max_results: 100
     completer: {|spans|
-        let cmd = ($spans | first | path basename | str downcase)
-        let flags = if $cmd == "bootstrap.ps1" {
-            $workstation_bootstrap_flags
-        } else {
-            null
-        }
-        if $flags == null {
-            null
-        } else {
+        if ($spans | first | path basename | str downcase) == "bootstrap.ps1" {
             let word = ($spans | last | str downcase)
-            let matches = ($flags | where {|f| $f.value | str downcase | str starts-with $word })
+            let matches = ($workstation_bootstrap_flags | where {|f| $f.value | str downcase | str starts-with $word })
             if ($matches | is-empty) { null } else { $matches }
+        } else {
+            do $carapace_completer $spans
         }
     }
 }
