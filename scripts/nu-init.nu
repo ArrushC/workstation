@@ -12,6 +12,32 @@ def why [e: record] {
     if ($label | is-empty) or $label == $e.msg { $e.msg } else { $"($e.msg): ($label)" }
 }
 
+# `mise activate nu` writes the PATH it sees into the file. PowerShell evaluates its
+# activation in every session; Nushell sources this generated file instead, so each
+# session would get the generator's PATH and lose whatever its terminal passed down
+# (Claude Code's ~\.local\bin, an IDE's tools). Rebase it on the session's own PATH:
+# __MISE_ORIG_PATH, which mise's prompt hook rebuilds PATH from, comes from the session
+# (or the parent shell, as mise itself does when it omits the line), and the two lines
+# that overwrite PATH with the snapshot become no-ops. Returns null when mise's output
+# no longer has that shape.
+def live-path [text: string] {
+    let orig = r##'(?m)^[ \t]*\$env\.__MISE_ORIG_PATH = r#'[^\r\n]*'#[ \t]*\r?\n'##
+    let snap = r##'(?mi)^[ \t]*\$env\.path = \(r#'[^\r\n]*'# \| split row \(char esep\)\)[ \t]*\r?\n'##
+    let row = r##'(?mi)^([ \t]*'?)set,path,[^'\r\n]*'##
+    let start = r##'(?m)^export-env \{[ \t]*\r?\n'##
+    let count = {|re| $text | parse --regex $re | length }
+    if (do $count $orig) > 1 or (do $count $snap) != 1 or (do $count $row) != 1 or (do $count $start) != 1 {
+        return null
+    }
+    $text
+    | str replace --regex $orig ''
+    | str replace --regex $snap ''
+    | str replace --regex $row '${1}hide,__MISE_NO_PATH_SNAPSHOT,'
+    | str replace --regex $start r#'export-env {
+  $$env.__MISE_ORIG_PATH = ($$env.__MISE_ORIG_PATH? | default ($$env.PATH | str join (char esep)))
+'#
+}
+
 # One generated file: rewrite only on change; a failing tool keeps the last good file.
 def gen [dir: string, g: record] {
     let target = ($dir | path join $g.file)
@@ -27,11 +53,20 @@ def gen [dir: string, g: record] {
         print $"nu-init: warning: ($g.tool) exited ($out.exit_code); kept the previous ($g.file)"
         return
     }
+    mut text = $out.stdout
+    if $g.file == "mise.nu" {
+        let live = (live-path $text)
+        if $live == null {
+            print $"nu-init: warning: mise.nu: unexpected `mise activate nu` output, written as-is \(Nushell sessions get its PATH snapshot\)"
+        } else {
+            $text = $live
+        }
+    }
     let old = (if ($target | path exists) { open --raw $target | decode utf-8 } else { "" })
-    if $old == $out.stdout {
+    if $old == $text {
         print $"nu-init: ($g.file) unchanged"
     } else {
-        $out.stdout | save --raw --force $target
+        $text | save --raw --force $target
         print $"nu-init: wrote ($g.file)"
     }
 }
