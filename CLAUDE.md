@@ -19,7 +19,7 @@
 - **The checkout is live config:** `mise use -g`, `mise settings set`, `mise dot add`/`wsr`, `wse` and
   `mise bootstrap` write tracked files here. Commit or revert first; `wsu`'s `git pull --ff-only`
   fails on a dirty tree.
-- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; also CI and the pre-commit hook `mise run install-hooks` generates) and
+- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the `mise run install-hooks` pre-commit hook run it) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
 - **Task names** must not collide with mise built-ins (`mise fmt` is built in, so ours is
   `mise run fmt`).
@@ -29,13 +29,11 @@
 
 ## Layout
 
-Token sets: `mise-env.sh`, saved in `miserc.toml`.
-
 | File | Loads when the token set has | Holds |
 |---|---|---|
-| `config.toml` | always | uv, python, starship/gh/jq/helix (both OSes), `[vars]`, both-OS dotfiles |
+| `config.toml` | always | both-OS tools (uv, python, the CLI toolbelt) and dotfiles; `[vars]` |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
-| `config.owned.toml` | `owned` | owned-host tools on both OSes (node, LSP servers, go, ccstatusline), Windows-only nushell/dnGrep/LogExpert, `~/.claude` dotfiles |
+| `config.owned.toml` | `owned` | owned-host tools on both OSes (node, LSP servers, go, ccstatusline), Windows-only nushell/carapace/dnGrep/LogExpert, `~/.claude` dotfiles |
 | `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
 | `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
@@ -130,13 +128,14 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `~/.claude/CLAUDE.md` is deployed from `dotfiles/claude/CLAUDE.md`. Its TOOLS block is generated.
 
 **Windows**
-- Never render Windows targets with Linux mise (`os()` is the binary's).
-- `bootstrap.ps1` pins only mise; CLI tools are mise tools, GUI apps `config.windows.toml`'s winget
+- Never render Windows targets with Linux mise (`os()` is its OS).
+- `bootstrap.ps1` pins only mise; CLI tools are mise tools, GUI apps winget
   `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
-- Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); post-tools `nu-init` writes its vendor/autoload files.
-- `scripts/test-*.ps1` test Windows (CI `windows-http`: 5.1, pwsh).
-- Scripts never write WT's tracked `settings.json`: SSH launchers go to a WT fragment;
-  Warp's `workstation-*.toml` are runtime artifacts.
+- Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); `nu-init` (post-tools) writes vendor/autoload.
+- `scripts/test-*.ps1` test Windows (CI `windows-http`, 5.1+pwsh).
+- `config.windows.toml` sets `locked = true`: Windows mise reorders lock entries (dirty tree breaks `wsu`)
+- Scripts never write WT's tracked `settings.json`: SSH launchers → a WT fragment;
+  Warp's `workstation-*.toml` are runtime.
 - Warp is primary; WT is compat (default terminal, Nushell).
 - `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
 
