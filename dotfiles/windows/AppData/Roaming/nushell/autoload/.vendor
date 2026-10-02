@@ -9,5 +9,6 @@ vendored:       2026-10-02
 note:           Deploys as a single-file `copy` entry to %APPDATA%\nushell\autoload\ (Nushell's user
                 autoload dir: sourced after config.nu, so its color_config wins); this sidecar is
                 never deployed. check-templates.sh sources it with the rendered config.nu, so a
-                Nushell bump that drops a key it sets fails CI.
+                Nushell bump that drops a top-level key it sets, or changes its type, fails CI
+                (unknown nested keys under color_config/explore are not caught).
                 Bump: re-download at a newer commit, refresh commit + asset + file-sha256 + vendored.

@@ -329,7 +329,7 @@ let workstation_bootstrap_flags = [
 ]
 
 # carapace's own completer (its `_carapace nushell` snippet): an alias completes as
-# its expansion (gs -> git status), and Windows' .exe suffix is dropped.
+# its first word (gs -> git), as carapace's own snippet does, and Windows' .exe suffix is dropped.
 let carapace_completer = {|spans|
     if (which carapace | is-empty) { return null }
     let expanded_alias = (scope aliases | where name == $spans.0 | $in.0?.expansion?)
