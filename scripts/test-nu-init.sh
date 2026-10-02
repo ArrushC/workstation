@@ -151,6 +151,77 @@ rm -rf "$DIR"
 run
 check "no tools at all: exits 0 and writes no init file" bash -c "[ $RC -eq 0 ] && [ -z \"\$(ls '$DIR'/*.nu 2>/dev/null)\" ]"
 
+# mise.nu keeps the session's PATH. `mise activate nu` bakes the PATH it sees into
+# the file; sourced as-is, every Nushell session would get that snapshot instead of
+# the PATH its terminal passed down. The stub prints the same shape as mise 2026.9.9.
+cat >"$T/mise-activate.nu" <<'EOF'
+def "parse vars" [] {
+  $in | from csv --noheaders --no-infer | rename 'op' 'name' 'value'
+}
+def --env "update-env" [] {
+  for $var in $in {
+    if $var.op == "set" {
+      if ($var.name =~ '(?i)^path$') {
+        $env.PATH = ($var.value | split row (char esep))
+      } else {
+        load-env {($var.name): $var.value}
+      }
+    } else if $var.op == "hide" {
+      try { hide-env $var.name }
+    }
+  }
+}
+export-env {
+  $env.__MISE_ORIG_PATH = r#'/snap/a:/snap/b'#
+  $env.PATH = (r#'/snap/shims:/snap/a:/snap/b'# | split row (char esep))
+
+  'hide,GOBIN,
+set,PATH,/snap/shims:/snap/a:/snap/b
+hide,MISE_SHELL,' | parse vars | update-env
+  $env.MISE_SHELL = "nu"
+}
+EOF
+printf '#!/usr/bin/env bash\ncat "%s"\n' "$T/mise-activate.nu" >"$BIN/mise"
+chmod +x "$BIN/mise"
+rm -rf "$DIR"
+run
+M="$DIR/mise.nu"
+check "mise.nu: __MISE_ORIG_PATH comes from the session (or its parent shell)" grep -qF '$env.__MISE_ORIG_PATH = ($env.__MISE_ORIG_PATH? | default ($env.PATH | str join (char esep)))' "$M"
+check "mise.nu: the baked __MISE_ORIG_PATH line is gone" bash -c "! grep -q \"__MISE_ORIG_PATH = r#\" '$M'"
+check "mise.nu: no line overwrites PATH with the snapshot" bash -c "! grep -qE '^[[:space:]]*\\\$env\\.PATH = \\(r#' '$M'"
+check "mise.nu: the snapshot's set,PATH row is neutralised" bash -c "! grep -q 'set,PATH,' '$M' && grep -q 'hide,__MISE_NO_PATH_SNAPSHOT,' '$M'"
+check "mise.nu: everything else is kept" bash -c "grep -q 'hide,GOBIN,' '$M' && grep -q 'MISE_SHELL = \"nu\"' '$M'"
+check "mise.nu: no warning for mise's expected format" bash -c "! printf '%s' \"\$1\" | grep -q 'mise.nu: unexpected'" _ "$OUT"
+LIVE="$(env -u __MISE_ORIG_PATH PATH="/live/x:/usr/bin:/bin" "$NU" --no-config-file --commands "source '$M'; print (\$env.PATH | str join ':')" 2>&1)"
+check "sourcing mise.nu keeps the session's PATH (/live/x) and drops the snapshot (/snap/a)" bash -c "printf '%s' \"\$1\" | grep -q '/live/x' && ! printf '%s' \"\$1\" | grep -q '/snap/a'" _ "$LIVE"
+
+# An unexpected format is written as-is, with a warning.
+printf '#!/usr/bin/env bash\nprintf "# some other format\\n"\n' >"$BIN/mise"
+run
+check "mise.nu: an unexpected format is kept as-is, with a warning" bash -c "[ \"\$(cat '$M')\" = '# some other format' ] && printf '%s' \"\$1\" | grep -q 'mise.nu: unexpected'" _ "$OUT"
+
+# The real mise's output (CI's templates job has it): the rewrite must still match it.
+REAL_MISE="$(command -v mise || true)"
+if [ -n "$REAL_MISE" ]; then
+  mkdir -p "$T/realbin"
+  ln -sf "$REAL_MISE" "$T/realbin/mise"
+  # Without __MISE_ORIG_PATH in the environment mise writes it into the file (as on
+  # Windows); with it inherited, mise omits the line. Both shapes must be rewritten.
+  for orig in unset inherited; do
+    rm -rf "$DIR"
+    if [ "$orig" = unset ]; then
+      OUT="$(env -u __MISE_ORIG_PATH PATH="$T/realbin:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
+    else
+      OUT="$(__MISE_ORIG_PATH=/usr/bin:/bin PATH="$T/realbin:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
+    fi
+    check "real mise ($orig __MISE_ORIG_PATH): the rewrite matches its output" bash -c "grep -qF '__MISE_ORIG_PATH = (\$env.__MISE_ORIG_PATH? | default (\$env.PATH | str join (char esep)))' '$M' && ! grep -q 'set,PATH,' '$M' && ! printf '%s' \"\$1\" | grep -q 'mise.nu: unexpected'" _ "$OUT"
+    LIVE="$(env -u __MISE_ORIG_PATH PATH="/live/x:$T/realbin:/usr/bin:/bin" "$NU" --no-config-file --commands "source '$M'; print (\$env.PATH | str join ':')" 2>&1)"
+    check "real mise ($orig __MISE_ORIG_PATH): sourcing mise.nu keeps the session's PATH" bash -c "printf '%s' \"\$1\" | grep -q '/live/x'" _ "$LIVE"
+  done
+else
+  echo "  SKIP real mise: not on PATH"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
   printf '\033[0;32m✓ all %d nu-init cases passed\033[0m\n' "$pass"
