@@ -20,7 +20,7 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
 - Warp stays the primary terminal; Windows Terminal is the compatibility one (CLAUDE.md).
 - Every tool added on Windows is already pinned for Linux, and each publishes a Windows build at that version.
 - `omp-env.nu` (untracked, in `vendor\autoload\`) holds the user's Vertex AI variables, which stay. Only its PATH line to the deleted `%LOCALAPPDATA%\omp` goes.
-- `mise bootstrap packages status` works on this host. It reports installed apps through `winget list --id <Id> --exact`, and all nine current apps are found that way.
+- `mise bootstrap packages status` works on this host. It reports installed apps through `winget list --id <Id> --exact`, and all of them are, once DevToys uses the Microsoft Store Id `9NBN8W1DS547` (winget can't match this host's Inno-installed preview to `DevToys-app.DevToys`).
 - There is no winget `settings.json` on this host yet.
 
 **Success:**
@@ -104,7 +104,7 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
   - Microsoft.WindowsTerminal
   - Warp.Warp
   - Obsidian.Obsidian
-  - DevToys-app.DevToys
+  - 9NBN8W1DS547 (DevToys, Microsoft Store)
   - DBeaver.DBeaver.Community
   - WinSCP.WinSCP
   - ScooterSoftware.BeyondCompare.5
@@ -173,7 +173,7 @@ Each PR gets its own plan and live check. `README.md` changes ship with the beha
 | Risk | Mitigation |
 |---|---|
 | Nushell config keys change across 0.x bumps | `test-nu-config.nu` in CI fails a bump before it reaches the shell |
-| `winget list` misses an app installed outside winget on a new host | winget installs over it once, which is harmless; on this host all nine are found |
+| `winget list` misses an app installed outside winget on a new host | winget installs over it once, which is harmless; on this host DevToys needed its Store Id; the probe in the plan catches such cases |
 | atuin's TUI misbehaves in Warp | Ctrl-R binding gated on `WT_SESSION` if the live check fails |
 | mise doesn't run bootstrap hooks on Windows | `wsu` calls `mise run nu-init` directly (decided in plan step 1) |
 | Startup slows with five init files | Measured live; the budget is 600 ms. carapace's completer runs only on Tab |

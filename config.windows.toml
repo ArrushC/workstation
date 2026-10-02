@@ -1,4 +1,4 @@
-# config.windows.toml: Windows-only dotfiles (MISE_ENV token `windows`; loads
+# config.windows.toml: Windows-only dotfiles and GUI apps (MISE_ENV token `windows`; loads
 # alongside config.toml and config.owned.toml).
 #
 # Every entry is `copy` (or `template` for .tera sources), never symlink: a file
@@ -28,6 +28,12 @@
 "~/AppData/Local/warp/Warp/config/settings.toml" = { source = "dotfiles/windows/AppData/Local/warp/Warp/config/settings.toml", mode = "copy" }
 # Edit-in-repo-only; kept beside settings.toml so the config tree stays together.
 "~/AppData/Local/warp/Warp/config/keybindings.yaml" = { source = "dotfiles/windows/AppData/Local/warp/Warp/config/keybindings.yaml", mode = "copy" }
+# winget's user settings (`winget --info` shows the path). Edit-in-repo-only; JSON
+# can't carry comments, so the rule lives here: installBehavior.preferences.scope
+# = "user" makes every winget install, [bootstrap.packages] below included, pick a
+# per-user installer when the package has one, and fall back to machine scope when
+# it doesn't (Zed's only installer claims machine scope but installs per-user).
+"~/AppData/Local/Packages/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe/LocalState/settings.json" = { source = "dotfiles/windows/AppData/Local/Packages/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe/LocalState/settings.json", mode = "copy" }
 # Edit-in-repo-only. Warp's Local/Roaming split must be preserved (collapsing it
 # makes Warp ignore the file).
 "~/AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml" = { source = "dotfiles/windows/AppData/Roaming/warp/Warp/data/themes/catppuccin-mocha.yaml", mode = "copy" }
@@ -53,3 +59,19 @@
 # Edited only in-repo; the `wsl --shutdown` reminder after a change is a
 # bootstrap.ps1 sha256-marker step, not a dotfiles concern.
 "~/.wslconfig" = { source = "dotfiles/wslconfig", mode = "copy" }
+
+# GUI apps, installed by `mise bootstrap --only packages` (bootstrap.ps1 runs it after
+# the dotfiles, so winget's scope preference above is already in place). An app counts
+# as installed when `winget list --id <Id> --exact` finds it; "latest" because each one
+# self-updates (`mise bootstrap packages upgrade --manager winget` updates them all).
+# SSHFS-Win is not here: mise installs silently, and its WinFsp MSI must raise UAC, so
+# bootstrap.ps1's Install-SshfsWin installs it (check_bootstrap_config keeps it out).
+[bootstrap.packages]
+"winget:Microsoft.WindowsTerminal" = "latest"
+"winget:Warp.Warp" = "latest"
+"winget:Obsidian.Obsidian" = "latest"
+"winget:9NBN8W1DS547" = "latest"   # DevToys, the Microsoft Store build (winget can't match an Inno-installed preview to DevToys-app.DevToys)
+"winget:DBeaver.DBeaver.Community" = "latest"
+"winget:WinSCP.WinSCP" = "latest"
+"winget:ScooterSoftware.BeyondCompare.5" = "latest"
+"winget:ZedIndustries.Zed" = "latest"

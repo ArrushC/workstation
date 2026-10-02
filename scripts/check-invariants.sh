@@ -473,7 +473,7 @@ PYEOF
 # Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
 # plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
-  hdr "bootstrap-config invariants (config.host/native/wsl/linux.toml)"
+  hdr "bootstrap-config invariants (config.host/native/wsl/linux/windows.toml)"
   if [ -z "$PY" ]; then
     note "no python with tomllib — bootstrap-config checks skipped locally (CI enforces)"
   else
@@ -562,6 +562,38 @@ if bad_pkg or pkg_dupes:
 else:
     print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) across host+native, unique, no dropped names")
 
+# winget GUI apps are Windows-only, so they live in config.windows.toml alone; SSHFS-Win
+# stays in bootstrap.ps1 (mise installs silently, and its WinFsp MSI must raise UAC).
+win_hits = []
+n_winget = 0
+for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
+           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+    try:
+        with open(cf, "rb") as fh:
+            pkgs = tomllib.load(fh).get("bootstrap", {}).get("packages", {})
+    except FileNotFoundError:
+        continue
+    except Exception as e:
+        win_hits.append(f"{cf} failed to parse: {e}")
+        continue
+    for key, val in pkgs.items():
+        if cf == "config.windows.toml":
+            if not key.startswith("winget:"):
+                win_hits.append(f"{cf}:{key} (only winget: packages belong here)")
+                continue
+            n_winget += 1
+            if key.lower() == "winget:sshfs-win.sshfs-win":
+                win_hits.append(f"{cf}:{key} (SSHFS-Win must raise UAC; it stays in bootstrap.ps1's Install-SshfsWin)")
+            if val != "latest":
+                win_hits.append(f"{cf}:{key} = {val!r} (want \"latest\": the apps self-update)")
+        elif key.startswith("winget:"):
+            win_hits.append(f"{cf}:{key} (winget: packages belong in config.windows.toml)")
+if win_hits:
+    print("FAIL|winget|" + "; ".join(win_hits))
+elif n_winget == 0:
+    print("FAIL|winget|config.windows.toml declares no winget: packages")
+else:
+    print(f"PASS|winget|{n_winget} winget: GUI app(s), all in config.windows.toml, \"latest\", SSHFS-Win not among them")
 ruling_hits = []
 for f, d in loaded.items():
     bs = d.get("bootstrap", {})
@@ -584,7 +616,7 @@ for f in ("config.toml", "config.owned.toml"):
         prod_hits.append(f"{f} failed to parse: {e}")
         continue
     if "bootstrap" in d:
-        prod_hits.append(f"{f} has a [bootstrap] table (shared hosts / Windows must never load one)")
+        prod_hits.append(f"{f} has a [bootstrap] table (shared hosts and Windows load it; host state lives in the token-gated files)")
 if prod_hits:
     print("FAIL|shared-safety|" + "; ".join(prod_hits))
 else:
