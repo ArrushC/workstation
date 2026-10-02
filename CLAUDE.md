@@ -135,10 +135,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
 - Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); post-tools `nu-init` writes its vendor/autoload files.
 - `scripts/test-*.ps1` test Windows (CI `windows-http`: 5.1, pwsh).
-- Scripts never write WT's tracked `settings.json`: SSH launchers: WT fragment;
+- Scripts never write WT's tracked `settings.json`: SSH launchers go to a WT fragment;
   Warp's `workstation-*.toml` are runtime artifacts.
-- Warp is primary; WT is the compat one (default terminal, Nushell).
-- `TERM_PROGRAM != WarpTerminal` rc guards never wrap a plugin `source` (`check_warp_guards`).
+- Warp is primary; WT is compat (default terminal, Nushell).
+- `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
 
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays

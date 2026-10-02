@@ -199,7 +199,7 @@ alias hide = clear --keep-scrollback
 
 # --- workstation helpers ----------------------------------------------------
 # Quick path to the workstation repo. Defaults to bootstrap.ps1's clone path;
-# override in a vendor/autoload/*.nu file if you cloned elsewhere.
+# override in a %APPDATA%\nushell\autoload\*.nu file if you cloned elsewhere.
 $env.WORKSTATION_REPO = ($env.USERPROFILE | path join ".config" "mise")
 
 # ssh-copy-id — Windows OpenSSH has none; port of the PowerShell profile helper.

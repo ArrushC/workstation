@@ -607,7 +607,7 @@ function Invoke-WslConfigReminder {
 # --force-dotfiles (a target can already be a differing real file); $MigratedMarker
 # then stops it, so a later real conflict surfaces. After a good tools phase, as
 # scripts/lib/mise-install.sh does on Linux: shims on PATH (later steps need jq,
-# starship, nu, uv), node reinstalled when its declaration changed, prune, reshim.
+# uv), node reinstalled when its declaration changed, prune, reshim.
 function Invoke-MiseBootstrap {
     $phases = @()
     if (-not $SkipDotfiles) { $phases += 'dotfiles' }

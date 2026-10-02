@@ -15,6 +15,7 @@ T="$(mktemp -d)" || exit 1
 trap 'rm -rf "$T"' EXIT
 BIN="$T/bin"
 DIR="$T/autoload"
+STATE="$T/state"
 LOG="$T/calls.log"
 mkdir -p "$BIN"
 pass=0
@@ -33,7 +34,7 @@ stub_atuin() {
   chmod +x "$BIN/atuin"
 }
 run() {
-  OUT="$(PATH="$BIN:/usr/bin:/bin" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" 2>&1)"
+  OUT="$(PATH="$BIN:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
   RC=$?
 }
 check() {
@@ -48,14 +49,31 @@ check() {
     fail=$((fail + 1))
   fi
 }
+# stub_bad prints a partial init and exits 1; stub_empty exits 0 with no output.
+stub_bad() {
+  printf '#!/usr/bin/env bash\nprintf "# partial\\n"\nexit 1\n' >"$BIN/$1"
+  chmod +x "$BIN/$1"
+}
+stub_empty() {
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$BIN/$1"
+  chmod +x "$BIN/$1"
+}
 has_out() { printf '%s' "$OUT" | grep -qF -- "$1"; }
 file_is() { [ "$(cat "$DIR/$1")" = "$2" ]; }
-no_bom() { [ "$(head -c3 "$DIR/$1" | od -An -tx1 | tr -d ' \n')" != efbbbf ]; }
 calls() { grep -c -- "$1" "$LOG" 2>/dev/null || true; }
 
 for t in starship mise zoxide; do stub "$t"; done
 stub_atuin
-mkdir -p "$DIR"
+
+# No Nushell history file yet: the marker is written without importing.
+run
+check "no history: exits 0, marker written, nothing imported" bash -c "[ $RC -eq 0 ] && [ -f '$STATE/.atuin-nu-imported' ] && [ \"\$(grep -c 'atuin import' '$LOG')\" -eq 0 ]"
+check "no history: says there is nothing to import" has_out 'nothing to import'
+rm -rf "$STATE" "$DIR"
+: >"$LOG"
+
+mkdir -p "$DIR" "$T/cfg/nushell"
+printf 'ls\n' >"$T/cfg/nushell/history.txt"
 printf '$env.FOO = 1\n' >"$DIR/omp-env.nu"
 
 run
@@ -66,7 +84,7 @@ done
 check "mise is called with -C <home> activate nu" grep -qE '^mise -C /.+ activate nu$' "$LOG"
 check "atuin init uses --disable-up-arrow" grep -qF 'atuin init nu --disable-up-arrow' "$LOG"
 check "atuin imports Nushell history on the first run" [ "$(calls 'atuin import nu')" -eq 1 ]
-check "the import marker is written" [ -f "$DIR/.atuin-nu-imported" ]
+check "the import marker is written" [ -f "$STATE/.atuin-nu-imported" ]
 
 before="$(stat -c %Y "$DIR"/*.nu | tr '\n' ' ')"
 sleep 1
@@ -77,11 +95,21 @@ check "second run reports every file unchanged" [ "$(printf '%s' "$OUT" | grep -
 check "atuin import runs only once" [ "$(calls 'atuin import nu')" -eq 1 ]
 check "an unowned file (omp-env.nu) survives" file_is omp-env.nu '$env.FOO = 1'
 
+rm -rf "$DIR"
+run
+check "output dir deleted: files regenerated, no re-import" bash -c "[ $RC -eq 0 ] && [ -f '$DIR/starship.nu' ] && [ \"\$(grep -c 'atuin import nu' '$LOG')\" -eq 1 ]"
+
 stub starship 1
 run
 check "a failing tool: still exits 0" [ "$RC" -eq 0 ]
 check "a failing tool: its last good file is kept" file_is starship.nu '# starship init'
 check "a failing tool: a warning names it" has_out 'warning: starship'
+stub_bad starship
+run
+check "a tool that prints then exits 1: last good file kept" file_is starship.nu '# starship init'
+stub_empty starship
+run
+check "a tool that prints nothing: last good file kept" file_is starship.nu '# starship init'
 stub starship
 
 rm "$BIN/zoxide"
@@ -90,15 +118,31 @@ check "a missing tool: still exits 0" [ "$RC" -eq 0 ]
 check "a missing tool: its file is removed" [ ! -e "$DIR/zoxide.nu" ]
 check "a missing tool: the others stay" bash -c "[ -f '$DIR/starship.nu' ] && [ -f '$DIR/mise.nu' ] && [ -f '$DIR/atuin.nu' ]"
 
-rm -rf "$DIR"
+rm -rf "$DIR" "$STATE"
 : >"$LOG"
 export ATUIN_IMPORT_RC=1
 run
-check "atuin import fails: exits 0, no marker, a warning" bash -c "[ $RC -eq 0 ] && [ ! -e '$DIR/.atuin-nu-imported' ]"
-check "atuin import fails: the warning says it retries" has_out 'the next run retries'
+check "atuin import fails: exits 0, no marker, a warning" bash -c "[ $RC -eq 0 ] && [ ! -e '$STATE/.atuin-nu-imported' ]"
+check "atuin import fails: the warning says it retries" has_out 'warning: atuin import nu exited 1; the next run retries'
 export ATUIN_IMPORT_RC=0
 run
-check "atuin import retried and succeeded: marker written" [ -f "$DIR/.atuin-nu-imported" ]
+check "atuin import retried and succeeded: marker written" [ -f "$STATE/.atuin-nu-imported" ]
+
+# Read-only output dir: warnings, still exit 0.
+if [ "$(id -u)" -ne 0 ]; then
+  rm -rf "$DIR"
+  mkdir -p "$DIR"
+  chmod a-w "$DIR"
+  run
+  chmod u+w "$DIR"
+  check "read-only output dir: exits 0 with a warning" bash -c "[ $RC -eq 0 ]" && check "read-only output dir: the warning names the file" has_out 'warning:'
+fi
+
+# Default output dir: $nu.data-dir/vendor/autoload (XDG_DATA_HOME on Linux).
+rm -rf "$DIR"
+OUT="$(PATH="$BIN:/usr/bin:/bin" XDG_DATA_HOME="$T/data" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --state-dir "$STATE" 2>&1)"
+RC=$?
+check "no --dir: writes under the data dir's vendor/autoload" bash -c "[ $RC -eq 0 ] && [ -f '$T/data/nushell/vendor/autoload/starship.nu' ]"
 
 rm -f "$BIN"/*
 rm -rf "$DIR"
