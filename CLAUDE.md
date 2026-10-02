@@ -39,7 +39,7 @@ Token sets: `mise-env.sh`, saved in `miserc.toml`.
 | `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
 | `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
-| `config.windows.toml` | `windows` | Windows-only dotfiles |
+| `config.windows.toml` | `windows` | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
 | `config.local.toml` | always, git-ignored | per-host `[vars] mode/name/email` and overrides |
 
 Token sets come only from `scripts/lib/mise-env.sh`:
@@ -130,17 +130,15 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `~/.claude/CLAUDE.md` is deployed from `dotfiles/claude/CLAUDE.md`. Its TOOLS block is generated.
 
 **Windows**
-- Never render Windows targets with the Linux mise: `os()` is the running binary's OS.
-- `bootstrap.ps1` pins only mise and installs the `$WingetApps` GUI apps (winget); every CLI tool is a
-  mise tool. No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
-- Nushell runs via mise's `nu.exe` shim, so `Install-Mise` renames a running `mise.exe` aside.
-- `scripts/test-*.ps1` test Windows behaviour (CI `windows-http`, 5.1 and pwsh).
-- Scripts never write Windows Terminal's tracked `settings.json`. SSH launchers go to a WT fragment,
-  and Warp's `workstation-*.toml` tab configs are runtime artifacts.
-- Warp is the primary terminal; Windows Terminal is the compatibility one (default-terminal role,
-  Nushell).
-- The rc files' `TERM_PROGRAM != WarpTerminal` guards must never wrap a plugin `source`
-  (`check_warp_guards`).
+- Never render Windows targets with Linux mise: `os()` is the binary's OS.
+- `bootstrap.ps1` pins only mise; CLI tools are mise tools, GUI apps `config.windows.toml`'s winget
+  `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
+- Nushell runs via mise's `nu.exe` shim; `Install-Mise` renames a running `mise.exe`.
+- `scripts/test-*.ps1` test Windows (CI `windows-http`: 5.1, pwsh).
+- Scripts never write Windows Terminal's tracked `settings.json`: SSH launchers go to a WT fragment;
+  Warp's `workstation-*.toml` tab configs are runtime artifacts.
+- Warp is primary; Windows Terminal is the compat one (default-terminal role, Nushell).
+- `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
 
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays

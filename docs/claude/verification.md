@@ -78,7 +78,7 @@
   | `test-config-local.ps1` | `Set-ConfigLocalVar`, `Invoke-EnsureConfigLocal` |
   | `test-ssh-launchers.ps1` | SSH host parsing, the WT fragment, the Warp Tab Configs |
   | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); legacy cleanup; the `config.owned.toml` guard; `-C` pinning; the node marker |
-  | `test-winget-apps.ps1` | `$WingetApps` + `Install-WingetApps` (presence, scope, `Uac` without `--silent`, exit codes); `-HostCheck` adds a read-only presence table for this host |
+  | `test-winget-apps.ps1` | `Install-WingetApps` (`mise bootstrap --only packages`, pinned `-C`) and `Install-SshfsWin` (presence by `winget list`, no `--silent`, the UAC warning, `-SkipElevated`, exit codes) |
   | `test-python-fonts.ps1` | `Invoke-PythonEnv`, `Invoke-InstallNerdFonts`, and `install-nerd-fonts.ps1` on fake TTFs |
 - From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `scripts/python-env.txt` under
   `%TEMP%` (keep the `scripts\` layout: tests find the repo as their parent dir), `cd` to
@@ -95,14 +95,15 @@
     `%LOCALAPPDATA%\workstation\{helix,nu,devtoys-cli,dngrep,logexpert}`.
   - `mise doctor` says `activated: yes` and `shims_on_path: yes`; `mise dot status` lists nothing
     unapplied; `mise bootstrap status` is clean.
+  - `mise bootstrap packages status` lists the eight `config.windows.toml` apps as installed, and `winget --info` prints no settings warning.
   - `wpy -c "import sys, textual; print(sys.version)"` prints the `tools.python` version; there are six
     `JetBrainsMonoNerdFontMono-*.ttf` under `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
   - Windows Terminal opens Nushell, and so does Warp's `Nushell (compatibility)` tab.
   - The run installed no app that was present (no second DevToys or Zed); a second run reports
     "already installed"/"present" throughout.
   - Only a live host shows: a `$MiseVersion` bump with a Nushell tab open (`mise.exe` renamed to
-    `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user under
-    `--scope machine`, and a font bump replacing a loaded TTF.
+    `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user from its
+    machine-scope-only installer despite winget's user-scope preference, and a font bump replacing a loaded TTF.
 
 ## zellij
 
