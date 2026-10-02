@@ -1,14 +1,14 @@
 ﻿# =============================================================================
 # bootstrap.ps1 -- workstation setup (Windows), per-user, no admin. It checks
-# for git and curl.exe (it never installs Git), installs the sha256-pinned mise
-# and the missing $WingetApps GUI apps (winget), clones this repo, writes
-# miserc.toml (windows,owned) and runs `mise bootstrap --only dotfiles,tools`
-# (the dotfiles and every CLI tool), then the steps under RUN SEQUENCE.
-# The one admin step: SSHFS-Win raises UAC (two prompts on a host without
-# WinFsp); declining it, or -SkipElevated, skips only that app.
+# for git and curl.exe (it never installs Git), installs the sha256-pinned mise,
+# clones this repo, writes miserc.toml (windows,owned) and runs `mise bootstrap
+# --only dotfiles,tools` (the dotfiles and every CLI tool), then `mise bootstrap
+# --only packages` (config.windows.toml's winget GUI apps), then the steps under
+# RUN SEQUENCE. The one admin step: SSHFS-Win raises UAC (two prompts on a host
+# without WinFsp); declining it, or -SkipElevated, skips only that app.
 # Run it as README.md's Windows setup shows. $env:GITHUB_TOKEN is optional (a
 # private-fork clone; mise's GitHub API limit). Health: mise doctor, mise
-# bootstrap status, mise dot status, winget upgrade.
+# bootstrap status, mise dot status, mise bootstrap packages status.
 # =============================================================================
 
 [CmdletBinding()]
@@ -51,25 +51,6 @@ $MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
 $MiseEnvTokens = @("windows", "owned")
 
 $WsPythonEnv = Join-Path $WsRoot "python-env"
-
-# winget installs these, then they self-update. Presence is an Uninstall-registry
-# DisplayName glob, so copies winget didn't install count ("DevToys Preview",
-# which `winget list` misses); Zed's is exact, so "Zed Preview" doesn't. Windows
-# Terminal is Appx. Warp's VC++ runtime dependency can raise UAC (not -SkipElevated's).
-$WingetApps = @(
-    @{ Id = "Microsoft.WindowsTerminal";       Name = "Windows Terminal";                                 Scope = "user" },
-    @{ Id = "Warp.Warp";                       Name = "Warp";             Detect = "Warp*";            Scope = "user" },
-    @{ Id = "Obsidian.Obsidian";               Name = "Obsidian";         Detect = "Obsidian*";        Scope = "user" },
-    @{ Id = "DevToys-app.DevToys";             Name = "DevToys";          Detect = "DevToys*";         Scope = "user" },
-    @{ Id = "DBeaver.DBeaver.Community";       Name = "DBeaver";          Detect = "DBeaver*";         Scope = "user" },
-    @{ Id = "WinSCP.WinSCP";                   Name = "WinSCP";           Detect = "WinSCP*";          Scope = "user" },
-    @{ Id = "ScooterSoftware.BeyondCompare.5"; Name = "Beyond Compare";   Detect = "Beyond Compare*";  Scope = "user" },
-    # winget's only Zed installer claims machine scope but is PrivilegesRequired=lowest: per-user, no UAC.
-    @{ Id = "ZedIndustries.Zed";               Name = "Zed";              Detect = "Zed";              Scope = "machine" },
-    # The one UAC install (its WinFsp dependency is a kernel driver: a second prompt
-    # when missing). Uac: no --silent, and -SkipElevated skips it.
-    @{ Id = "SSHFS-Win.SSHFS-Win";             Name = "SSHFS-Win";        Detect = "SSHFS-Win*";       Scope = "machine"; Uac = $true }
-)
 
 # =============================================================================
 # HELPERS: output, HTTP, PATH
@@ -380,47 +361,83 @@ function Test-WindowsTerminalPresent {
     return ([bool]$pkg -or [bool](Get-Command wt.exe -ErrorAction SilentlyContinue))
 }
 
-# winget checks each installer against its manifest sha256. Best-effort: a failure
-# warns and the loop goes on. A Uac entry gets no --silent, which would run its
-# MSI in-process at UI level None, where UAC can't appear (MSI error 1925).
+# The GUI apps are config.windows.toml's [bootstrap.packages] (winget), installed by
+# `mise bootstrap --only packages` once the dotfiles phase has deployed winget's
+# settings.json (prefer per-user installers). mise installs silently, so SSHFS-Win,
+# whose WinFsp MSI must raise UAC, is Install-SshfsWin's. Best-effort: a failure
+# warns and the bootstrap goes on.
 function Install-WingetApps {
+    if ($SkipToolInstall) { Write-Log "GUI apps skipped (-SkipToolInstall)"; return }
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Warn "winget not found — GUI apps skipped (install App Installer from the Microsoft Store, then re-run)"
         return
     }
-    # UPDATE_NOT_APPLICABLE, PACKAGE_ALREADY_INSTALLED, INSTALL_ALREADY_INSTALLED:
-    # winget already has the app, under a DisplayName the glob missed.
-    $alreadyInstalled = @("0x8A15002B", "0x8A150061", "0x8A15010D")
-    foreach ($app in $WingetApps) {
-        $uac = $app.ContainsKey('Uac') -and $app.Uac
-        if ($uac -and $SkipElevated) { Write-Log "$($app.Name) skipped (-SkipElevated)"; continue }
-        $present = if ($app.Id -eq "Microsoft.WindowsTerminal") { Test-WindowsTerminalPresent } else { Test-InstallerPresent $app.Detect }
-        if ($present) { Write-Ok "$($app.Name) present"; continue }
-        Write-Log "Installing $($app.Name) (winget, $($app.Scope) scope)..."
-        $wingetArgs = @("install", "--id", $app.Id, "--exact", "--scope", $app.Scope, "--disable-interactivity",
-                        "--accept-package-agreements", "--accept-source-agreements")
-        if ($uac) { Write-Warn "$($app.Name) installs machine-wide — expect a UAC prompt; a host without WinFsp sees two, one for WinFsp and one for SSHFS-Win (skip with -SkipElevated)" } else { $wingetArgs += "--silent" }
+    if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+        Write-Warn "mise not on PATH — the GUI apps in config.windows.toml were skipped (open a new shell and re-run .\bootstrap.ps1)"
+    } else {
+        Write-Log "Installing missing GUI apps (mise bootstrap --only packages: config.windows.toml's winget list)..."
         $oldEap = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'   # PS 5.1 can turn native stderr into a terminating error under "Stop"
-            & winget @wingetArgs
+            & mise -C $env:USERPROFILE bootstrap --only packages --yes
             $code = $LASTEXITCODE
-            $why = "winget exited " + ('0x{0:X8}' -f [int]$code)
+            $why = "exited $code"
         } catch {
-            $why = "winget could not start ($($_.Exception.Message))"
             $code = -1
+            $why = "could not start ($($_.Exception.Message))"
         } finally {
             $ErrorActionPreference = $oldEap
         }
-        if ($code -eq 0) { Write-Ok "$($app.Name) installed" }
-        elseif ($alreadyInstalled -contains ('0x{0:X8}' -f [int]$code)) { Write-Ok "$($app.Name) present (winget)" }
-        else { Write-Warn "$($app.Name): $why — install it later with: winget install --id $($app.Id)" }
+        if ($code -eq 0) { Write-Ok "GUI apps installed or present ('mise bootstrap packages status' lists them)" }
+        else { Write-Warn "mise bootstrap --only packages $why (output above) — retry: mise bootstrap packages apply --manager winget" }
     }
+    Install-SshfsWin
+}
+
+# The one UAC install, from winget (sha256-checked). No --silent: it would run the
+# MSI in-process at UI level None, where UAC can't appear (MSI error 1925). Only
+# "no installed package found" (0x8A150014) from `winget list` installs, so a
+# broken winget never raises a surprise prompt.
+function Install-SshfsWin {
+    $id = "SSHFS-Win.SSHFS-Win"
+    if ($SkipElevated) { Write-Log "SSHFS-Win skipped (-SkipElevated)"; return }
+    $oldEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & winget list --id $id --exact --disable-interactivity --accept-source-agreements *> $null
+        $listHex = '0x{0:X8}' -f [int]$LASTEXITCODE
+    } catch {
+        $listHex = "error: $($_.Exception.Message)"
+    } finally {
+        $ErrorActionPreference = $oldEap
+    }
+    if ($listHex -eq '0x00000000') { Write-Ok "SSHFS-Win present"; return }
+    if ($listHex -ne '0x8A150014') {
+        Write-Warn "SSHFS-Win: could not check it (winget list $listHex) — not installing; check with: winget list --id $id"
+        return
+    }
+    Write-Warn "SSHFS-Win installs machine-wide — expect a UAC prompt; a host without WinFsp sees two, one for WinFsp and one for SSHFS-Win (skip with -SkipElevated)"
+    $oldEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & winget install --id $id --exact --scope machine --disable-interactivity --accept-package-agreements --accept-source-agreements
+        $code = $LASTEXITCODE
+        $why = "winget exited " + ('0x{0:X8}' -f [int]$code)
+    } catch {
+        $code = -1
+        $why = "winget could not start ($($_.Exception.Message))"
+    } finally {
+        $ErrorActionPreference = $oldEap
+    }
+    # UPDATE_NOT_APPLICABLE, PACKAGE_ALREADY_INSTALLED, INSTALL_ALREADY_INSTALLED.
+    if ($code -eq 0) { Write-Ok "SSHFS-Win installed" }
+    elseif (@("0x8A15002B", "0x8A150061", "0x8A15010D") -contains ('0x{0:X8}' -f [int]$code)) { Write-Ok "SSHFS-Win present (winget)" }
+    else { Write-Warn "SSHFS-Win: $why — install it later with: winget install --id $id" }
 }
 
 function Invoke-ToolInstall {
     if ($SkipToolInstall) {
-        Write-Log "Tool install skipped (-SkipToolInstall) — no mise install, GUI apps ($(@($WingetApps | ForEach-Object { $_.Name }) -join ', ')), mise tools, Python env or Claude Code"
+        Write-Log "Tool install skipped (-SkipToolInstall) — no mise install, mise tools, GUI apps, Python env or Claude Code"
         return
     }
 
@@ -430,7 +447,6 @@ function Invoke-ToolInstall {
 
     Install-Mise
     Add-ToUserPath $WsBin   # python-env's wpy/textual/typer launchers
-    Install-WingetApps      # the UAC entry (SSHFS-Win) comes last in the table
 
     Update-SessionPath
 
@@ -1196,7 +1212,7 @@ function Invoke-ClaudeSettingsLocalSeed {
 }
 
 # The official installer verifies claude.exe against the signed manifest and it
-# self-updates: not a mise tool, nor a $WingetApps entry (no Uninstall key). A child
+# self-updates: not a mise tool, nor a winget GUI app (no Uninstall key). A child
 # powershell.exe runs it because it calls `exit` on its error paths.
 function Invoke-InstallClaudeCode {
     if ($SkipToolInstall) {
@@ -1349,9 +1365,10 @@ function Invoke-EnsureSshKey {
 
 if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
-Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation, then the GUI apps
+Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
 Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; old portable tools removed, shims on PATH, node marker, prune; .wslconfig reminder
+Install-WingetApps        # GUI apps: mise bootstrap --only packages (config.windows.toml's winget list), then SSHFS-Win (UAC)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
