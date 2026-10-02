@@ -122,20 +122,22 @@ rm -rf "$DIR" "$STATE"
 : >"$LOG"
 export ATUIN_IMPORT_RC=1
 run
-check "atuin import fails: exits 0, no marker, a warning" bash -c "[ $RC -eq 0 ] && [ ! -e '$STATE/.atuin-nu-imported' ]"
+check "atuin import fails: exits 0 and leaves no marker" bash -c "[ $RC -eq 0 ] && [ ! -e '$STATE/.atuin-nu-imported' ]"
 check "atuin import fails: the warning says it retries" has_out 'warning: atuin import nu exited 1; the next run retries'
 export ATUIN_IMPORT_RC=0
 run
 check "atuin import retried and succeeded: marker written" [ -f "$STATE/.atuin-nu-imported" ]
 
 # Read-only output dir: warnings, still exit 0.
-if [ "$(id -u)" -ne 0 ]; then
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  SKIP read-only output dir cases (running as root: chmod a-w does not block root)"
+else
   rm -rf "$DIR"
   mkdir -p "$DIR"
   chmod a-w "$DIR"
   run
   chmod u+w "$DIR"
-  check "read-only output dir: exits 0 with a warning" bash -c "[ $RC -eq 0 ]" && check "read-only output dir: the warning names the file" has_out 'warning:'
+  check "read-only output dir: exits 0 with a warning" bash -c "[ $RC -eq 0 ]" && check "read-only output dir: the warning carries the detail" has_out 'failed: I/O error: Permission denied'
 fi
 
 # Default output dir: $nu.data-dir/vendor/autoload (XDG_DATA_HOME on Linux).

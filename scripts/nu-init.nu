@@ -6,6 +6,12 @@
 # so wiping the output dir never re-imports.
 #   nu --no-config-file scripts/nu-init.nu [--dir <path>] [--state-dir <path>]
 
+# An error's headline plus its first label ("I/O error: Permission denied").
+def why [e: record] {
+    let label = (try { $e.json | from json | get -o labels.0.text } catch { null })
+    if ($label | is-empty) { $e.msg } else { $"($e.msg): ($label)" }
+}
+
 # One generated file: rewrite only on change; a failing tool keeps the last good file.
 def gen [dir: string, g: record] {
     let target = ($dir | path join $g.file)
@@ -33,7 +39,7 @@ def gen [dir: string, g: record] {
 def main [--dir: path, --state-dir: path] {
     let dir = ($dir | default ($nu.data-dir | path join "vendor" "autoload"))
     let state = ($state_dir | default (($env.LOCALAPPDATA? | default ($nu.home-dir | path join ".local" "state")) | path join "workstation" "stamps"))
-    try { mkdir $dir } catch {|e| print $"nu-init: warning: could not create ($dir): ($e.msg)" }
+    try { mkdir $dir } catch {|e| print $"nu-init: warning: could not create ($dir): (why $e)" }
     let gens = [
         { file: "starship.nu", tool: "starship", args: ["init" "nu"] }
         { file: "mise.nu", tool: "mise", args: ["-C" $nu.home-dir "activate" "nu"] }
@@ -41,7 +47,7 @@ def main [--dir: path, --state-dir: path] {
         { file: "atuin.nu", tool: "atuin", args: ["init" "nu" "--disable-up-arrow"] }
     ]
     for g in $gens {
-        try { gen $dir $g } catch {|e| print $"nu-init: warning: ($g.file) failed: ($e.msg)" }
+        try { gen $dir $g } catch {|e| print $"nu-init: warning: ($g.file) failed: (why $e)" }
     }
     # atuin's database starts empty: import Nushell's existing history once. With no
     # history file there is nothing from before atuin to bring over.
@@ -62,5 +68,5 @@ def main [--dir: path, --state-dir: path] {
                 }
             }
         }
-    } catch {|e| print $"nu-init: warning: atuin import step failed: ($e.msg)" }
+    } catch {|e| print $"nu-init: warning: atuin import step failed: (why $e)" }
 }
