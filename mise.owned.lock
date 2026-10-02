@@ -61,6 +61,24 @@ checksum = "sha256:7abb9e215412e7cd457b527365cf5700d8cdd383d162d1ca0d9e7f0610ddb
 url = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-windows-x64.exe"
 url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/592158578"
 
+[[tools."github:carapace-sh/carapace-bin"]]
+version = "1.8.0"
+backend = "github:carapace-sh/carapace-bin"
+specifiers = ["1.8.0"]
+
+[tools."github:carapace-sh/carapace-bin".options]
+asset_pattern = "carapace-bin_{version}_windows_amd64.zip"
+
+[tools."github:carapace-sh/carapace-bin"."platforms.linux-x64"]
+checksum = "sha256:ee5ba25180a8929e34c5b7f4aa20f898369c31c5e5939f68819cda0da1959762"
+url = "https://github.com/carapace-sh/carapace-bin/releases/download/v1.8.0/carapace-bin_1.8.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/carapace-sh/carapace-bin/releases/assets/589311077"
+
+[tools."github:carapace-sh/carapace-bin"."platforms.windows-x64"]
+checksum = "sha256:ee5ba25180a8929e34c5b7f4aa20f898369c31c5e5939f68819cda0da1959762"
+url = "https://github.com/carapace-sh/carapace-bin/releases/download/v1.8.0/carapace-bin_1.8.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/carapace-sh/carapace-bin/releases/assets/589311077"
+
 [[tools."github:dnGrep/dnGrep"]]
 version = "5.0.30.0"
 backend = "github:dnGrep/dnGrep"

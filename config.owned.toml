@@ -19,6 +19,7 @@ opencode = "1.18.32"
 "github:pwndbg/pwndbg" = { version = "2026.09.15", os = ["linux"], version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", platforms = { linux-x64 = { asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }, windows-x64 = { asset_pattern = "devtoys.cli_win_x64_portable.zip" } } }   # CLI only; per-platform assets
 nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (WT); launched via %LOCALAPPDATA%\mise\shims\nu.exe
+"github:carapace-sh/carapace-bin" = { version = "1.8.0", os = ["windows"], asset_pattern = "carapace-bin_{{version}}_windows_amd64.zip" }   # Nushell's Tab completion for ~1000 CLIs (config.nu's external completer)
 "github:dnGrep/dnGrep" = { version = "5.0.30.0", os = ["windows"], asset_pattern = "dnGrep.{{version}}.x64.zip" }   # GUI grep; Start Menu shortcut + settings seed by bootstrap.ps1
 "github:LogExperts/LogExpert" = { version = "1.41.0", os = ["windows"], asset_pattern = "LogExpert.{{version}}.zip" }   # GUI log viewer (needs the .NET 10 Desktop Runtime); Start Menu shortcut by bootstrap.ps1
 

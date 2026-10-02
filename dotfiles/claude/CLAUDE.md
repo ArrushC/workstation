@@ -55,16 +55,21 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `helix` 25.07.1
 - `jq` 1.8.2
 - `gh` 2.101.0
+- `fzf` 0.74.4
+- `zoxide` 0.10.0
+- `fd` 10.5.0
+- `bat` 0.26.1
+- `delta` 0.19.2
+- `eza` 0.23.5
+- `ripgrep` 15.2.0
+- `yazi` 26.9.1
+- `atuin` 18.23.0
 - `uv` 0.12.19
 - `python` 3.14.7
 
 ### Linux toolbelt, both modes (config.linux.toml)
-- `fzf` 0.74.4
-- `zoxide` 0.10.0
 - `zellij` 0.45.1
 - `glow` 3.0.0
-- `fd` 10.5.0
-- `bat` 0.26.1
 - `btop` 1.4.7
 - `yq` 4.53.6
 - `witr` 0.3.3
@@ -78,9 +83,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `jj` 0.45.1
 - `ast-grep` 0.45.3
 - `xh` 0.26.2
-- `delta` 0.19.2
 - `micro` 2.0.15
-- `eza` 0.23.5
 - `sd` 1.1.0
 - `ctop` 0.7.7
 - `k9s` 0.51.0
@@ -95,7 +98,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lazyjournal` 0.8.6
 - `cheat` 5.1.0
 - `fx` 39.2.0
-- `ripgrep` 15.2.0
 - `miller` 6.22.0
 - `doggo` 1.4.0
 - `miniserve` 0.35.0
@@ -126,9 +128,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `broot` 1.60.2
 - `nnd` 0.80
 - `gping` 1.21.0
-- `yazi` 26.9.1
 - `television` 0.15.9
-- `atuin` 18.23.0
 - `difftastic` 0.71.0
 - `qsv` 23.0.1
 - `zjstatus` 0.25.0
@@ -162,6 +162,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1
+- `carapace-bin` 1.8.0
 - `dnGrep` 5.0.30.0
 - `LogExpert` 1.41.0
 

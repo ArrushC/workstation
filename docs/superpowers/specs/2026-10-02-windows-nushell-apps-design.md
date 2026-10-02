@@ -47,7 +47,8 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
   - `mise.nu` from `mise -C <home> activate nu`
   - `zoxide.nu` from `zoxide init nushell`
   - `atuin.nu` from `atuin init nu --disable-up-arrow`
-  - `carapace.nu`, from carapace's Nushell output, wired as a fallback completer
+
+  carapace is called from `config.nu`'s external completer (after the `bootstrap.ps1` flags), because carapace's own snippet only installs a completer when none is set.
 - **File rules:**
   - Each file is written without a BOM, and only when its content changed.
   - If a tool isn't on PATH, its file is removed rather than left stale.
@@ -82,8 +83,7 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
 - `config.nu` sources it and applies its `color_config`.
 
 **History:**
-- `history.file_format = "sqlite"`. `ignore_space_prefixed` stays true and `max_size` stays 100000.
-- One-time import: when `history.sqlite3` is absent and `history.txt` exists, `nu-init` runs `history import` with the new format. `history.txt` stays in place.
+- History stays plaintext: Nushell fixes its history backend at startup, and `history import` run from a script writes into the live file (probed 2026-10-02). atuin's database carries cwd/duration/exit per command, and `nu-init` imports Nushell's history into atuin once (marker `.atuin-nu-imported` in the autoload dir).
 
 **Editing:**
 - `buffer_editor = "hx"`, so Ctrl-O opens the command line in Helix, and `$env.EDITOR = "hx"`.
@@ -128,13 +128,9 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
 
 ## 6. Testing
 
-**CI (`windows-http` job, both shells where PowerShell is involved):**
-- `scripts/test-nu-config.nu` renders `config.nu.tera` with the Windows mise into a temp dir, then loads it with the pinned `nu` (`nu --config <file> -c exit`). It fails on any parse error or unknown config key.
-- A `nu-init` test runs `scripts/nu-init.nu` with `APPDATA` pointed at a temp dir. It asserts:
-  - the five files exist with no BOM
-  - a second run rewrites nothing
-  - a tool removed from PATH has its file deleted
-  - an unowned `*.nu` file survives
+**CI (the Linux `templates` job, which renders `config.nu` with mise and has the pinned `nu`; `config.nu.tera` uses no `os()`):**
+- `check-templates.sh` evaluates the rendered `config.nu` and the theme with `nu`
+- `scripts/test-nu-init.sh` runs `nu-init.nu` against stub tools and a temp dir
 - The existing `test-winget-apps.ps1`, now SSHFS-Win only.
 
 **Lint:** `check_completion_parity` still passes, and the new manifest check.
@@ -176,6 +172,6 @@ Each PR gets its own plan and live check. `README.md` changes ship with the beha
 | `winget list` misses an app installed outside winget on a new host | winget installs over it once, which is harmless; on this host DevToys needed its Store Id; the probe in the plan catches such cases |
 | atuin's TUI misbehaves in Warp | Ctrl-R binding gated on `WT_SESSION` if the live check fails |
 | mise doesn't run bootstrap hooks on Windows | `wsu` calls `mise run nu-init` directly (decided in plan step 1) |
-| Startup slows with five init files | Measured live; the budget is 600 ms. carapace's completer runs only on Tab |
+| Startup slows with four init files | Measured live; the budget is 600 ms. carapace's completer runs only on Tab |
 | Moving tools to `config.toml` changes Linux | Tool-set and bootstrap-plan comparisons for all three Linux sets |
 | The winget settings dotfile overwrites user settings | The file doesn't exist on this host; it's a managed `copy` entry, so later edits show as drift that `wsa` catches |
