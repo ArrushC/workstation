@@ -47,19 +47,19 @@ url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpe
 url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
 
 [[tools."github:can1357/oh-my-pi"]]
-version = "18.3.4"
+version = "18.4.8"
 backend = "github:can1357/oh-my-pi"
-specifiers = ["18.3.4"]
+specifiers = ["18.4.8"]
 
 [tools."github:can1357/oh-my-pi"."platforms.linux-x64"]
-checksum = "sha256:e8d13ea8da6281f183108bc25ae94c4a1a5159a2072d188ea8c30bbfce4735b8"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-linux-x64"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/592158580"
+checksum = "sha256:1b88f7a0da3f61edda915d836e11f63f20f2b56aeac2ddfa4ece0faa726f31c2"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-linux-x64"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/602572346"
 
 [tools."github:can1357/oh-my-pi"."platforms.windows-x64"]
-checksum = "sha256:7abb9e215412e7cd457b527365cf5700d8cdd383d162d1ca0d9e7f0610ddbab1"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.3.4/omp-windows-x64.exe"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/592158578"
+checksum = "sha256:64e8cc817c91b6ea5c7f5c507fd4590f1e339759e42f3b414e6071bdcd99cad2"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-windows-x64.exe"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/602572338"
 
 [[tools."github:carapace-sh/carapace-bin"]]
 version = "1.8.0"
@@ -155,19 +155,19 @@ backend = "go:golang.org/x/tools/gopls"
 specifiers = ["0.23.0"]
 
 [[tools.herdr]]
-version = "0.9.1"
+version = "0.9.3"
 backend = "aqua:herdrdev/herdr"
-specifiers = ["0.9.1"]
+specifiers = ["0.9.3"]
 
 [tools.herdr."platforms.linux-x64"]
-checksum = "sha256:2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.9.1/herdr-linux-x86_64"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/568559679"
+checksum = "sha256:18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7"
+url = "https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-linux-x86_64"
+url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/599036383"
 
 [tools.herdr."platforms.windows-x64"]
-checksum = "sha256:04ce380cac5af27bfcf75d0951ac49b7afe4c984aee8852985806d4f71f93a6e"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.9.1/herdr-windows-x86_64.zip"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/568559681"
+checksum = "sha256:c75b1fa49f7a3ba4b8b11789912a6147e4214a3b6fd3556d0f80076c8887d795"
+url = "https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-windows-x86_64.zip"
+url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/599036387"
 
 [[tools.lua-language-server]]
 version = "3.19.1"
@@ -219,19 +219,19 @@ url = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x
 url_api = "https://api.github.com/repos/nushell/nushell/releases/assets/433389998"
 
 [[tools.opencode]]
-version = "1.18.32"
+version = "1.18.34"
 backend = "aqua:anomalyco/opencode"
-specifiers = ["1.18.32"]
+specifiers = ["1.18.34"]
 
 [tools.opencode."platforms.linux-x64"]
-checksum = "sha256:3046e0404fdc60fb80307e7a47824ba07477364178a4d09baa8548496dd6d43b"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.32/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/580000044"
+checksum = "sha256:0f22479647226d1d2dd99595d20082ee7bda3870b62dc6a90b41efc1a71d7e9a"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903965"
 
 [tools.opencode."platforms.windows-x64"]
-checksum = "sha256:1483c72d5adced825590a0ecf8cc18b3e87e535960a125dbf539d33bce135d0f"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.32/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/580003748"
+checksum = "sha256:8ec42ed1ad8db108052394b83ab69d0331398f761fbfff5fe50f91d65bdd3548"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601908697"
 
 [[tools."pypi:basedpyright"]]
 version = "1.40.1"

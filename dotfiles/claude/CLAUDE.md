@@ -54,7 +54,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `starship` 1.26.0
 - `helix` 25.07.1
 - `jq` 1.8.2
-- `gh` 2.101.0
+- `gh` 2.102.0
 - `fzf` 0.74.4
 - `zoxide` 0.10.0
 - `fd` 10.5.0
@@ -64,14 +64,14 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ripgrep` 15.2.0
 - `yazi` 26.9.1
 - `atuin` 18.23.0
-- `uv` 0.12.19
+- `uv` 0.12.21
 - `python` 3.14.7
 
 ### Linux toolbelt, both modes (config.linux.toml)
 - `zellij` 0.45.1
 - `glow` 3.0.0
 - `btop` 1.4.7
-- `yq` 4.53.6
+- `yq` 4.54.1
 - `witr` 0.3.3
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
@@ -108,7 +108,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `dust` 1.2.6
 - `hexyl` 0.17.0
 - `gum` 2.0.2
-- `rust-analyzer` 2026-09-21
+- `rust-analyzer` 2026-09-28
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
 - `usql` 0.21.6
@@ -156,9 +156,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `basedpyright` 1.40.1
 - `ccstatusline` 2.2.30
 - `nerd-fonts` 3.5.1
-- `herdr` 0.9.1
-- `opencode` 1.18.32
-- `oh-my-pi` 18.3.4
+- `herdr` 0.9.3
+- `opencode` 1.18.34
+- `oh-my-pi` 18.4.8
 - `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1

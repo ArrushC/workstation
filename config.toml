@@ -34,7 +34,7 @@ zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invarian
 starship = "1.26.0"
 helix = "25.07.1"          # archive carries runtime/ beside hx — no HELIX_RUNTIME needed
 jq = "1.8.2"
-gh = "2.101.0"
+gh = "2.102.0"
 # The zsh toolbelt Nushell on Windows shares (pickers, z/zi, Ctrl-R history, eza listings, delta pager).
 fzf = "0.74.4"
 zoxide = "0.10.0"
@@ -48,7 +48,7 @@ ripgrep = "15.2.0"
 "github:atuinsh/atuin" = { version = "18.23.0", platforms = { linux-x64 = { asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "atuin-x86_64-pc-windows-msvc.zip" } } }
 # uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
-uv = "0.12.19"
+uv = "0.12.21"
 # python: interpreter for the dependency-locked pypi: tools (without it mise
 # falls back to the system 3.9 and glances/harlequin refuse to install) and
 # for python-env's venv (tasks/python-env; bootstrap.ps1 on Windows). It shadows
