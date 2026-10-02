@@ -7,19 +7,18 @@
 # shell (the Windows Terminal "Nushell" profile); PowerShell stays installed
 # for .NET/COM tasks and the WSL2 notify hook.
 #
-# This file owns the HAND-WRITTEN config (aliases, env, helpers). Two things are
-# wired separately by GENERATED files under %APPDATA%\nushell\vendor\autoload\
-# (everything there is auto-sourced on startup, so no `source` lines here):
-# starship.nu (the prompt — bootstrap.ps1's Invoke-NushellStarship) and mise.nu
-# (`mise activate nu` — Invoke-NushellMise; puts the mise-managed node/Go/uv/
-# LSP servers on PATH ahead of the shims dir).
+# This file owns the HAND-WRITTEN config (aliases, env, keys, helpers). The tool init
+# code is GENERATED into %APPDATA%\nushell\vendor\autoload\ (auto-sourced at startup,
+# so no `source` lines here) by scripts/nu-init.nu: starship.nu, mise.nu, zoxide.nu
+# and atuin.nu. The `nu-init` mise task reruns it after every tools phase (the
+# Windows post-tools hook), so a tool update reaches the next Nushell tab.
 #
 # PARITY NOTE: the ws*/g* aliases below mirror the PowerShell profile
 # (Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera). Keep the two in
 # sync when adding or renaming an alias so both Windows shells behave the same.
 #
 # Per-machine overrides (untracked): drop a `*.nu` file into
-# %APPDATA%\nushell\vendor\autoload\ — it is auto-sourced after this file.
+# %APPDATA%\nushell\autoload\ (the user autoload dir; vendor\autoload is nu-init's).
 # =============================================================================
 
 # --- Shell behaviour --------------------------------------------------------
