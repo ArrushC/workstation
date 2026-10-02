@@ -9,7 +9,7 @@
 # An error's headline plus its first label ("I/O error: Permission denied").
 def why [e: record] {
     let label = (try { $e.json | from json | get -o labels.0.text } catch { null })
-    if ($label | is-empty) { $e.msg } else { $"($e.msg): ($label)" }
+    if ($label | is-empty) or $label == $e.msg { $e.msg } else { $"($e.msg): ($label)" }
 }
 
 # One generated file: rewrite only on change; a failing tool keeps the last good file.

@@ -166,7 +166,15 @@ What `bootstrap.ps1` does:
 9. Build the `wpy` Python env (a uv venv on mise's python with the libraries in `scripts/python-env.txt`) and install the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
 10. Prompt for an SSH key, then print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
 
-Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Nushell completes `bootstrap.ps1` flags via an external completer; PowerShell does it natively.
+Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Nushell carries the zsh toolbelt:
+- `z`/`zi` (zoxide)
+- Ctrl-R history search (atuin, local only; Nushell's earlier history is imported once)
+- Ctrl-T to insert a file and Alt-C to cd into a directory (fzf, with bat/eza previews)
+- `l`/`la`/`ll`/`lt` (eza) and `y` (yazi)
+- Tab completion for about 1,000 CLIs through carapace, after `bootstrap.ps1`'s own flags
+- Ctrl-O to edit the command line in Helix
+
+`rm` goes to the Recycle Bin (`rm --permanent` skips it). The theme is Catppuccin Mocha, vendored into `%APPDATA%\nushell\autoload\`. PowerShell gets the same `l`/`la`/`ll`/`lt`/`y` and `z`; `wsh` lists them all.
 
 | Flag | Meaning |
 |---|---|

@@ -134,6 +134,13 @@ command pins `mise -C $env:USERPROFILE`):
        updates the GUI apps)
   wsh  this help
 
+Shell shortcuts:
+  l / la / ll / lt   eza listings (ll: long + git; lt: tree)
+  y                  yazi; on quit, cd to where you ended up
+  z <dir> / zi       zoxide: jump to / pick a visited directory
+  Nushell only: Ctrl-R history (atuin), Ctrl-T insert a file,
+  Alt-C cd into a directory (fzf), Ctrl-O edit the line in hx
+
 Common flow:
   wse ~/.config/starship.toml   (edit the source)
   wsd                           (preview the change)
@@ -163,6 +170,22 @@ function gl  { git log --oneline --graph --decorate @args }
 function gd  { git diff @args }
 function gco { git checkout @args }
 function gbr { git branch @args }
+
+# --- eza listings + yazi (mirror config.nu and the zsh aliases) -------------
+function l  { eza --group-directories-first --icons=auto --hyperlink @args }
+function la { eza -a --group-directories-first --icons=auto --hyperlink @args }
+function ll { eza -lah --group-directories-first --icons=auto --git --time-style=long-iso --hyperlink @args }
+function lt { eza --tree --level=2 --group-directories-first --icons=auto --hyperlink @args }
+# yazi: `y` opens it; on quit, Set-Location to wherever you ended up.
+function y {
+    $tmp = (New-TemporaryFile).FullName
+    yazi @args --cwd-file="$tmp"
+    $cwd = Get-Content -Path $tmp -Encoding UTF8
+    if (-not [String]::IsNullOrEmpty($cwd) -and $cwd -ne $PWD.Path) {
+        Set-Location -LiteralPath (Resolve-Path -LiteralPath $cwd).Path
+    }
+    Remove-Item -Path $tmp
+}
 
 # --- ssh helpers ------------------------------------------------------------
 # Windows OpenSSH has no ssh-copy-id; this mirrors it. Picks a ~/.ssh/*.pub

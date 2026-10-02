@@ -63,7 +63,7 @@
 # writes these per-machine with gh's absolute path + an empty "reset" line, so
 # ~/.gitconfig always drifted from this source. Track them here in PATH-relative
 # form so `mise dot status` stays clean while gh auth keeps working. gh is on
-# every Linux/WSL host (a mise tool, config.linux.toml); on Windows git uses its bundled Git
+# every Linux/WSL host (a mise tool, config.toml); on Windows git uses its bundled Git
 # Credential Manager, so this block is Linux-only.
 [credential "https://github.com"]
     helper = !gh auth git-credential

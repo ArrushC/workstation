@@ -51,6 +51,9 @@
 "~/AppData/Roaming/helix/config.toml" = { source = "dotfiles/windows/AppData/Roaming/helix/config.toml.tera", mode = "template" }
 # hostname/username banner + ws* aliases; renders host/user identity via exec().
 "~/AppData/Roaming/nushell/config.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/config.nu.tera", mode = "template" }
+# Vendored Catppuccin Mocha theme (provenance in the source dir's .vendor); Nushell's user autoload
+# dir sources it after config.nu. Edit-in-repo-only (re-vendor to change it).
+"~/AppData/Roaming/nushell/autoload/catppuccin_mocha.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/autoload/catppuccin_mocha.nu", mode = "copy" }
 # PS7+ canonical $PROFILE.
 "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1" = { source = "dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera", mode = "template" }
 # Dot-source shim that loads the PS7 profile above when present.

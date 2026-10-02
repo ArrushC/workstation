@@ -24,7 +24,7 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
 - There is no winget `settings.json` on this host yet.
 
 **Success:**
-- A new Nushell tab has `z`/`zi`, Ctrl-R history search, Ctrl-T/Alt-C pickers, Tab completion for common CLIs, the Catppuccin Mocha theme, and sqlite history.
+- A new Nushell tab has `z`/`zi`, Ctrl-R history search, Ctrl-T/Alt-C pickers, Tab completion for common CLIs, the Catppuccin Mocha theme, and atuin's searchable history.
 - Login startup stays under 600 ms; it measured 350–400 ms on 2026-10-01.
 - After `wsu` bumps a tool, the next Nushell tab uses that tool's new init code without re-running `bootstrap.ps1`.
 - The GUI apps are declared once, as data, and `mise bootstrap packages status` reports them.
@@ -142,7 +142,7 @@ Date: 2026-10-02. Status: approved in conversation; this spec is the written rec
 - **After PR B:** `wsu`, then a new Windows Terminal tab. Check:
   - `z`/`zi`, Ctrl-R, Ctrl-T, Alt-C, and Tab after `git ch`
   - the theme
-  - `history | last 3` shows cwd/duration columns
+  - `atuin history list | first 5` lists earlier commands (imported once)
   - `rm` goes to the Recycle Bin
   - login startup under 600 ms (`Measure-Command { nu -l -c exit }`)
   - Warp's Nushell tab works, including Ctrl-R
@@ -168,7 +168,7 @@ Each PR gets its own plan and live check. `README.md` changes ship with the beha
 
 | Risk | Mitigation |
 |---|---|
-| Nushell config keys change across 0.x bumps | `test-nu-config.nu` in CI fails a bump before it reaches the shell |
+| Nushell config keys change across 0.x bumps | `check-templates.sh` evaluates `config.nu` with the pinned `nu`, failing a bump before it reaches the shell |
 | `winget list` misses an app installed outside winget on a new host | winget installs over it once, which is harmless; on this host DevToys needed its Store Id; the probe in the plan catches such cases |
 | atuin's TUI misbehaves in Warp | Ctrl-R binding gated on `WT_SESSION` if the live check fails |
 | mise doesn't run bootstrap hooks on Windows | `wsu` calls `mise run nu-init` directly (decided in plan step 1) |
