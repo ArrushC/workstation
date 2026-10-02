@@ -32,6 +32,7 @@ $script:miseThrows = $false
 $script:listExit = 0
 $script:installExit = 0
 $script:wingetThrows = $false
+$script:installThrows = $false
 # The ErrorActionPreference winget runs under, and the one the warnings run under afterwards.
 $script:wingetEap = New-Object System.Collections.Generic.List[string]
 $script:warnEap = New-Object System.Collections.Generic.List[string]
@@ -44,6 +45,7 @@ function winget {
     $script:events.Add("winget $($args -join ' ')")
     $script:wingetEap.Add("$ErrorActionPreference")
     if ($script:wingetThrows) { throw [System.Management.Automation.ApplicationFailedException]::new('The file cannot be accessed by the system.') }
+    if ($script:installThrows -and $args[0] -eq 'install') { throw [System.Management.Automation.ApplicationFailedException]::new('The file cannot be accessed by the system.') }
     if ($args[0] -eq 'list') { $global:LASTEXITCODE = $script:listExit } else { $global:LASTEXITCODE = $script:installExit }
 }
 foreach ($c in 'mise', 'winget') {
@@ -60,7 +62,7 @@ function Show { $script:events -join ' | ' }
 
 # One GUI-app run with the given stub behaviour.
 function Invoke-Apps([switch]$SkipTools, [switch]$SkipElev, [int]$MiseExit = 0, [switch]$MiseThrows,
-                     [int]$ListExit = 0, [int]$InstallExit = 0, [switch]$WingetThrows) {
+                     [int]$ListExit = 0, [int]$InstallExit = 0, [switch]$WingetThrows, [switch]$InstallThrows) {
     $script:SkipToolInstall = [bool]$SkipTools
     $script:SkipElevated = [bool]$SkipElev
     $script:miseExit = $MiseExit
@@ -68,6 +70,7 @@ function Invoke-Apps([switch]$SkipTools, [switch]$SkipElev, [int]$MiseExit = 0, 
     $script:listExit = $ListExit
     $script:installExit = $InstallExit
     $script:wingetThrows = [bool]$WingetThrows
+    $script:installThrows = [bool]$InstallThrows
     $script:events.Clear()
     $script:wingetEap.Clear()
     $script:warnEap.Clear()
@@ -160,6 +163,15 @@ Test-Case 'a winget that cannot start: a warning, no install, winget ran under C
     Assert ((Get-Events 'winget install *').Count -eq 0) "installed: $(Show)"
     Assert ((Get-Events 'warn: SSHFS-Win: could not check it (winget list error*').Count -eq 1) "log: $(Show)"
     Assert ((@($script:wingetEap | Where-Object { $_ -ne 'Continue' }).Count -eq 0) -and ($script:wingetEap.Count -eq 1)) "EAP inside winget: $($script:wingetEap -join ', ')"
+    Assert ((@($script:warnEap | Where-Object { $_ -ne 'Stop' }).Count -eq 0) -and ($script:warnEap.Count -ge 1)) "EAP at the warning: $($script:warnEap -join ', ')"
+}
+
+Test-Case 'winget install cannot start: a warning with the manual command, no success, install under Continue and the warning under Stop' {
+    Invoke-Apps -ListExit $notFound -InstallThrows
+    Assert ((Get-Events 'warn: SSHFS-Win: winget could not start*winget install --id SSHFS-Win.SSHFS-Win').Count -eq 1) "log: $(Show)"
+    Assert ((Get-Events 'ok: SSHFS-Win installed').Count -eq 0) "reported success: $(Show)"
+    $installEap = @($script:wingetEap)[-1]
+    Assert ($installEap -eq 'Continue') "EAP inside winget install: $installEap"
     Assert ((@($script:warnEap | Where-Object { $_ -ne 'Stop' }).Count -eq 0) -and ($script:warnEap.Count -ge 1)) "EAP at the warning: $($script:warnEap -join ', ')"
 }
 

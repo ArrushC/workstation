@@ -129,7 +129,9 @@ command pins `mise -C $env:USERPROFILE`):
   wss  mise dot status          list managed files and their state
   wsu  git pull + mise bootstrap --only dotfiles,tools
        (every CLI tool -- gh, opencode, omp, nu, ... -- is a mise tool,
-       so wsu updates it; .\bootstrap.ps1 updates mise and the GUI apps)
+       so wsu updates it; .\bootstrap.ps1 updates mise and installs
+       missing GUI apps; mise bootstrap packages upgrade --manager winget
+       updates the GUI apps)
   wsh  this help
 
 Common flow:

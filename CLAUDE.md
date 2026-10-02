@@ -39,7 +39,7 @@ Token sets: `mise-env.sh`, saved in `miserc.toml`.
 | `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
 | `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
 | `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
-| `config.windows.toml` | `windows` | Windows dotfiles; winget GUI apps (`[bootstrap.packages]`) |
+| `config.windows.toml` | `windows` | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
 | `config.local.toml` | always, git-ignored | per-host `[vars] mode/name/email` and overrides |
 
 Token sets come only from `scripts/lib/mise-env.sh`:

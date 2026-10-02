@@ -8,7 +8,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 
 | Piece | Role |
 |---|---|
-| `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, pick the mode, run mise. Nothing is installed by hand in the scripts beyond mise (and, on Windows, the GUI apps). |
+| `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, pick the mode, run mise. Nothing is installed by hand in the scripts beyond mise (and, on Windows, SSHFS-Win). |
 | mise tools | Every tool is a pin in `config.toml` / `config.linux.toml` / `config.owned.toml`. `mise ls` is the tool list. |
 | `mise bootstrap` | Host state from `[bootstrap.*]` tables: dnf packages, `/etc` files, services, repos, then dotfiles and the `bootstrap` task. |
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
@@ -173,7 +173,7 @@ Restart the shell afterwards so the new profile loads. Nushell is the default lo
 | `-RepoPath <dir>` | Clone somewhere other than `%USERPROFILE%\.config\mise`. |
 | `-SkipKeyGen` | Skip the SSH-key prompt. |
 | `-SkipToolInstall` | Skip mise, the mise tools phase, the winget GUI apps, the Python env and Claude Code (assume present). |
-| `-SkipDotfiles` | Clone and install tools but do not apply dotfiles. |
+| `-SkipDotfiles` | Clone and install tools but do not apply dotfiles. On a host's first run this also skips winget's `settings.json` (the per-user preference), so the GUI apps install with winget's default scope. |
 | `-SkipBurntToast` | Skip the BurntToast PowerShell module install. |
 | `-SkipNerdFonts` | Skip the Nerd Font install. |
 | `-SkipElevated` | Skip SSHFS-Win/WinFsp, the one UAC prompt. Warp's VC++ runtime dependency can also raise UAC on a host without that runtime; this flag does not cover it. |

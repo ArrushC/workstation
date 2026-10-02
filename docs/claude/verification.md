@@ -102,8 +102,8 @@
   - The run installed no app that was present (no second DevToys or Zed); a second run reports
     "already installed"/"present" throughout.
   - Only a live host shows: a `$MiseVersion` bump with a Nushell tab open (`mise.exe` renamed to
-    `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user under
-    `--scope machine`, and a font bump replacing a loaded TTF.
+    `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user from its
+    machine-scope-only installer despite winget's user-scope preference, and a font bump replacing a loaded TTF.
 
 ## zellij
 
