@@ -1,13 +1,6 @@
 # config.windows.toml: Windows-only dotfiles and GUI apps (MISE_ENV token `windows`; loads
 # alongside config.toml and config.owned.toml).
 
-# Installs read the lock files and never rewrite them. mise's Windows build writes
-# entries with per-platform options (DevToys, yazi, atuin) in its own order, which
-# dirties this checkout and stops wsu's `git pull --ff-only`. `mise lock` still
-# writes; a tool without a windows-x64 lock entry fails to install (lint requires one).
-[settings]
-locked = true
-
 # Every [dotfiles] entry is `copy` (or `template` for .tera sources), never symlink: a file
 # symlink needs Developer Mode and silently falls back to a copy without it, and a
 # directory symlink becomes a junction. `template` is a separate requirement:

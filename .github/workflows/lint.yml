@@ -27,6 +27,7 @@ jobs:
           MISE_CONFIG_DIR: ${{ github.workspace }}
           MISE_ENV: linux
           MISE_LOCKFILE: "false"
+          MISE_LOCKED: "0" # config.toml's locked = true refuses a lock-file-off install
       - name: Run invariant checks
         run: bash scripts/check-invariants.sh
         env:

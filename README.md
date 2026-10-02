@@ -345,7 +345,7 @@ direnv = "2.34.0"
 "github:direnv/direnv" = { version = "2.34.0", asset_pattern = "direnv.linux-amd64" }
 ```
 
-Check it with `mise install direnv` and `mise where direnv`. `tasks/verify-tools` runs after every install and fails loudly if a binary cannot run on this host; that is the cue to pick an explicit `github:` asset. Multi-binary archives install every binary; restrict with `bin` or `bin_path` on the `github:` entry (see qsv, pwndbg). Refresh the lockfiles and commit the config, the three lockfiles and any new `locks/**` sidecar:
+Installs are locked (`locked = true` in `config.toml`: they read the lockfiles and never rewrite them), so a new pin installs only after its lock entry exists. Refresh the lockfiles first, then check it with `mise install direnv` and `mise where direnv`. `tasks/verify-tools` runs after every install and fails loudly if a binary cannot run on this host; that is the cue to pick an explicit `github:` asset. Multi-binary archives install every binary; restrict with `bin` or `bin_path` on the `github:` entry (see qsv, pwndbg). Commit the config, the three lockfiles and any new `locks/**` sidecar. The refresh:
 
 ```bash
 mise run bump-versions

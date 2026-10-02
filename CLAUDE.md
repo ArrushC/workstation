@@ -59,13 +59,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `config.native.toml` or `config.wsl.toml`, and those files declare no `[tools]`.
 - `[bootstrap.*]` and `[dotfiles]` tables merge by union across loaded files. Declare each item once,
   in the file whose token gates it.
-- Hooks are `mise run <task>`, or `mise run a ::: b` for several, because mise treats hook strings as
-  opaque shell. A hook name may be declared in more than one loaded file, and all of them run. The one exception is
+- Hooks are `mise run <task>` (or `mise run a ::: b`): mise treats hook strings as opaque shell.
+  A hook name declared in several loaded files runs every one. The one exception is
   the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
 - Owned-only steps hang off `final` hooks in `config.host.toml` (vcpkg, claude) and `config.native.toml`
   (fonts). `final` runs only on a full `mise bootstrap`, never on `--only dotfiles`.
-- dnf installs everything in one batch, so a single unresolvable name fails the whole run. Only add
+- dnf installs in one batch, so one unresolvable name fails the run. Only add
   EL9-verified names. `ShellCheck` is capitalised; `fswatch`, `entr` and `cockpit-networkmanager`
   don't resolve.
 - No `[bootstrap.linux.firewall]` table: it makes `mise bootstrap plan`/`status` re-exec with sudo,
@@ -73,8 +73,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`.
 - `[vars]` pins (`vcpkg_version`, `zjstatus_zellij_floor`) reach
   tasks through `#MISE env={X="{{ vars.x }}"}`.
-- Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe in
-  `scripts/bump-versions.sh` and `docs/claude/verification.md`).
+- Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe:
+  `docs/claude/verification.md`). `config.toml` sets `locked = true`: installs never rewrite locks
+  (each OS's mise mangles the other's entries; a dirty tree breaks `wsu`). Lock-file-off installs
+  pass `MISE_LOCKED=0`.
 - `tasks/verify-tools` (the `post-tools` hook) checks that every mise-installed ELF can run on this
   host. Static binaries must pass. A failure means pinning an explicit `github:` `asset_pattern`.
 - vcpkg stays a task: `[bootstrap.repos]` can't shallow-clone or update. The C/C++ toolbelt
@@ -133,7 +135,6 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
 - Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); `nu-init` (post-tools) writes vendor/autoload.
 - `scripts/test-*.ps1` test Windows (CI `windows-http`, 5.1+pwsh).
-- `config.windows.toml` sets `locked = true`: Windows mise reorders lock entries (dirty tree breaks `wsu`)
 - Scripts never write WT's tracked `settings.json`: SSH launchers → a WT fragment;
   Warp's `workstation-*.toml` are runtime.
 - Warp is primary; WT is compat (default terminal, Nushell).

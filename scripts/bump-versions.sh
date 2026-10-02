@@ -350,8 +350,9 @@ if [ -z "$outdated_fail" ]; then
     # lock in #152; the first `wsu` on a host then generated the lock
     # inside the tracked checkout, and tasks/update's `git pull --ff-only`
     # refused the dirty tree. Install the pinned uv first. MISE_LOCKFILE=false
-    # stops this install rewriting the lock files itself.
-    if ! mise_global linux,owned,host,native env MISE_LOCKFILE=false mise install uv; then
+    # stops this install rewriting the lock files itself; locked mode (config.toml)
+    # refuses a lock-file-off install, so MISE_LOCKED=0 lifts it for this one call.
+    if ! mise_global linux,owned,host,native env MISE_LOCKFILE=false MISE_LOCKED=0 mise install uv; then
       printf 'bump-versions.sh: mise install uv failed; pypi: dependency locks will be skipped\n' >&2
       failed="${failed}- \`mise install uv\` failed — pypi: dependency locks not regenerated (manual)\n"
       exit_code=1
