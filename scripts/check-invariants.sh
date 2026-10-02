@@ -594,6 +594,31 @@ elif n_winget == 0:
     print("FAIL|winget|config.windows.toml declares no winget: packages")
 else:
     print(f"PASS|winget|{n_winget} winget: GUI app(s), all in config.windows.toml, \"latest\", SSHFS-Win not among them")
+
+# mise's Windows build rewrites lock entries that carry per-platform options in its
+# own order, which dirties the Windows checkout and breaks wsu's `git pull --ff-only`.
+# config.windows.toml sets [settings] locked = true (installs read the lock, never
+# write it; `mise lock` still writes). Only Windows loads it, so no other file may.
+lock_hits = []
+for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
+           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+    try:
+        with open(cf, "rb") as fh:
+            settings = tomllib.load(fh).get("settings", {})
+    except FileNotFoundError:
+        continue
+    except Exception as e:
+        lock_hits.append(f"{cf} failed to parse: {e}")
+        continue
+    if cf == "config.windows.toml":
+        if settings.get("locked") is not True:
+            lock_hits.append("config.windows.toml must set [settings] locked = true (Windows installs would rewrite the lock files and dirty the checkout)")
+    elif "locked" in settings:
+        lock_hits.append(f"{cf} sets [settings] locked (Windows-only: it belongs in config.windows.toml)")
+if lock_hits:
+    print("FAIL|locked|" + "; ".join(lock_hits))
+else:
+    print("PASS|locked|config.windows.toml sets [settings] locked = true; no other config sets it")
 ruling_hits = []
 for f, d in loaded.items():
     bs = d.get("bootstrap", {})
