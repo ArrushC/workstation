@@ -14,6 +14,15 @@
 # `scripts/bump-versions.sh` (`mise run bump-versions`).
 min_version = "2026.9.9"
 
+# Installs read the lock files and never rewrite them. Each OS's mise rewrites the
+# other OS's entries for tools with per-platform options (DevToys, yazi, atuin):
+# Windows reorders them, Linux drops them. That dirties the checkout, and the next
+# wsu's `git pull --ff-only` fails. `mise lock` (bump-versions) still writes. A pin
+# with no lock entry for this platform won't install, so refresh the locks first.
+# Lock-file-off installs (CI's shfmt/gitleaks, the bumper's uv) set MISE_LOCKED=0.
+[settings]
+locked = true
+
 [vars]
 # Host pins that tasks read via `#MISE env={X="{{ vars.x }}"}`;
 # scripts/check-invariants.sh asserts the dual-edits.
