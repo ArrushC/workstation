@@ -213,11 +213,14 @@ refused="" # bumps reverted because `mise lock` refused the new version
 #    bumping it.
 # Returns 1 only when the failure doesn't name a tool this run bumped (a
 # genuine lock error), leaving the old hard-fail behaviour for those.
+# MISE_LOCKED=0: a pypi: tool's dependency lock runs uv through its shim, and in
+# locked mode (config.toml) that shim refuses a just-bumped uv the lock doesn't list
+# yet ("No version is set for shim: uv"; both platforms failed on 2026-10-05).
 lock_platform() {
   local mise_env="$1" platform="$2" err tool reason tries=0
   err="$(mktemp)"
   while :; do
-    if mise_global "$mise_env" mise lock --global --platform "$platform" 2>"$err"; then
+    if mise_global "$mise_env" env MISE_LOCKED=0 mise lock --global --platform "$platform" 2>"$err"; then
       rm -f "$err"
       return 0
     fi
