@@ -18,15 +18,16 @@ def why [e: record] {
 # (Claude Code's ~\.local\bin, an IDE's tools). Rebase it on the session's own PATH:
 # __MISE_ORIG_PATH, which mise's prompt hook rebuilds PATH from, comes from the session
 # (or the parent shell, as mise itself does when it omits the line), and the two lines
-# that overwrite PATH with the snapshot become no-ops. Returns null when mise's output
-# no longer has that shape.
+# that overwrite PATH with the snapshot become no-ops (the `set,PATH` row appears only
+# when the generator ran inside a mise session). Returns null when mise's output no
+# longer has that shape.
 def live-path [text: string] {
     let orig = r##'(?m)^[ \t]*\$env\.__MISE_ORIG_PATH = r#'[^\r\n]*'#[ \t]*\r?\n'##
     let snap = r##'(?mi)^[ \t]*\$env\.path = \(r#'[^\r\n]*'# \| split row \(char esep\)\)[ \t]*\r?\n'##
     let row = r##'(?mi)^([ \t]*'?)set,path,[^'\r\n]*'##
     let start = r##'(?m)^export-env \{[ \t]*\r?\n'##
     let count = {|re| $text | parse --regex $re | length }
-    if (do $count $orig) > 1 or (do $count $snap) != 1 or (do $count $row) != 1 or (do $count $start) != 1 {
+    if (do $count $orig) > 1 or (do $count $snap) != 1 or (do $count $row) > 1 or (do $count $start) != 1 {
         return null
     }
     $text

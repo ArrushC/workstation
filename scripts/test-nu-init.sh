@@ -195,6 +195,17 @@ check "mise.nu: no warning for mise's expected format" bash -c "! printf '%s' \"
 LIVE="$(env -u __MISE_ORIG_PATH PATH="/live/x:/usr/bin:/bin" "$NU" --no-config-file --commands "source '$M'; print (\$env.PATH | str join ':')" 2>&1)"
 check "sourcing mise.nu keeps the session's PATH (/live/x) and drops the snapshot (/snap/a)" bash -c "printf '%s' \"\$1\" | grep -q '/live/x' && ! printf '%s' \"\$1\" | grep -q '/snap/a'" _ "$LIVE"
 
+# Run outside a mise session (a fresh sign-in, CI), mise's update block is empty: no
+# set,PATH row. The snapshot line is still there and must still go.
+sed -e "/^  'hide,GOBIN,\$/,/^hide,MISE_SHELL,' | parse vars | update-env\$/c\\
+  '' | parse vars | update-env" "$T/mise-activate.nu" >"$T/mise-activate-fresh.nu"
+printf '#!/usr/bin/env bash\ncat "%s"\n' "$T/mise-activate-fresh.nu" >"$BIN/mise"
+rm -rf "$DIR"
+run
+check "mise.nu, no set,PATH row: rewritten, no warning" bash -c "grep -qF '__MISE_ORIG_PATH = (\$env.__MISE_ORIG_PATH? | default (\$env.PATH | str join (char esep)))' '$M' && grep -qF \"'' | parse vars | update-env\" '$M' && ! grep -qE '^[[:space:]]*\\\$env\\.PATH = \\(r#' '$M' && ! printf '%s' \"\$1\" | grep -q 'mise.nu: unexpected'" _ "$OUT"
+LIVE="$(env -u __MISE_ORIG_PATH PATH="/live/x:/usr/bin:/bin" "$NU" --no-config-file --commands "source '$M'; print (\$env.PATH | str join ':')" 2>&1)"
+check "mise.nu, no set,PATH row: sourcing keeps the session's PATH" bash -c "printf '%s' \"\$1\" | grep -q '/live/x' && ! printf '%s' \"\$1\" | grep -q '/snap/a'" _ "$LIVE"
+
 # An unexpected format is written as-is, with a warning.
 printf '#!/usr/bin/env bash\nprintf "# some other format\\n"\n' >"$BIN/mise"
 run
@@ -207,12 +218,14 @@ if [ -n "$REAL_MISE" ]; then
   ln -sf "$REAL_MISE" "$T/realbin/mise"
   # Without __MISE_ORIG_PATH in the environment mise writes it into the file (as on
   # Windows); with it inherited, mise omits the line. Both shapes must be rewritten.
+  # env -i drops the caller's mise session (__MISE_DIFF, __MISE_SESSION), so this
+  # runs the same here as on a fresh CI runner.
   for orig in unset inherited; do
     rm -rf "$DIR"
     if [ "$orig" = unset ]; then
-      OUT="$(env -u __MISE_ORIG_PATH PATH="$T/realbin:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
+      OUT="$(env -i HOME="$HOME" PATH="$T/realbin:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
     else
-      OUT="$(__MISE_ORIG_PATH=/usr/bin:/bin PATH="$T/realbin:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
+      OUT="$(env -i HOME="$HOME" __MISE_ORIG_PATH=/usr/bin:/bin PATH="$T/realbin:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
     fi
     check "real mise ($orig __MISE_ORIG_PATH): the rewrite matches its output" bash -c "grep -qF '__MISE_ORIG_PATH = (\$env.__MISE_ORIG_PATH? | default (\$env.PATH | str join (char esep)))' '$M' && ! grep -q 'set,PATH,' '$M' && ! printf '%s' \"\$1\" | grep -q 'mise.nu: unexpected'" _ "$OUT"
     LIVE="$(env -u __MISE_ORIG_PATH PATH="/live/x:$T/realbin:/usr/bin:/bin" "$NU" --no-config-file --commands "source '$M'; print (\$env.PATH | str join ':')" 2>&1)"
