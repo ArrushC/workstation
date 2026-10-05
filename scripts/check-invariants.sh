@@ -271,6 +271,40 @@ check_ps_variable_drive_refs() {
   [ "$allgood" -eq 1 ] && ok "no unbraced \$name: drive-lookalike refs in $n tracked .ps1 files"
 }
 
+# A bare a,b among a command's arguments is a PowerShell array. A native exe gets
+# "a,b", but `mise` is a function under `mise activate pwsh`, which splats it as two
+# arguments: `mise bootstrap --only dotfiles,tools` ran `--only dotfiles tools`.
+# Quoted strings, comments and here-string bodies don't count.
+_ps1_comma_list_hits() {
+  awk -v q="'" '
+    hs { if ($0 ~ "^[\"" q "]@") hs = 0; next }
+    $0 ~ "@[\"" q "][ \t]*$" { hs = 1 }
+    /^[ \t]*#/ { next }
+    {
+      l = $0
+      gsub(/"[^"]*"/, "", l)
+      gsub(q "[^" q "]*" q, "", l)
+      sub(/#.*/, "", l)
+      if (l ~ /(^|[ \t;{(&|])mise[ \t]/ && l ~ /[ \t][A-Za-z0-9_.-]+,[A-Za-z0-9_.-]+([ \t;})|]|$)/) print FNR ":" $0
+    }' "$1"
+}
+
+check_ps_mise_comma_lists() {
+  hdr "PowerShell: comma lists passed to mise are quoted (the mise function splits a bare a,b)"
+  local f line allgood=1 n=0
+  local -a files
+  mapfile -t files < <(git ls-files '*.ps1' '*.ps1.tera')
+  for f in "${files[@]}"; do
+    n=$((n + 1))
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      allgood=0
+      bad "$f:$line (quote the list: 'a,b')"
+    done < <(_ps1_comma_list_hits "$f")
+  done
+  [ "$allgood" -eq 1 ] && ok "no bare a,b argument to mise in $n tracked PowerShell files"
+}
+
 check_sentinels() {
   hdr "sentinel blocks matched"
   local s e
@@ -1132,6 +1166,7 @@ check_line_endings_and_mode
 check_dotfiles_mode
 check_bom
 check_ps_variable_drive_refs
+check_ps_mise_comma_lists
 check_sentinels
 check_tools_block
 check_mise_config_files
