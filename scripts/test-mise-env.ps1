@@ -1,8 +1,9 @@
 ﻿# Tests bootstrap.ps1's mise plumbing without running the bootstrap: the
 # miserc.toml writer (Initialize-MiseEnv), the one-time cleanup of the
 # pre-mise portable installs (Invoke-LegacyToolCleanup), the mise install /
-# update (Install-Mise) and the mise bootstrap step's guard, ordering and
-# -C pinning (Invoke-MiseBootstrap). The functions are extracted from the
+# update (Install-Mise), the mise bootstrap step's guard, ordering and
+# -C pinning (Invoke-MiseBootstrap), and the Claude Code step's PATH entry
+# (Invoke-InstallClaudeCode). The functions are extracted from the
 # script's AST, as scripts/test-config-local.ps1 does.
 #
 # Nothing real is touched:
@@ -17,7 +18,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Initialize-MiseEnv', 'Invoke-LegacyToolCleanup', 'Install-Mise', 'Invoke-MiseBootstrap'
+$wanted = 'Initialize-MiseEnv', 'Invoke-LegacyToolCleanup', 'Install-Mise', 'Invoke-MiseBootstrap', 'Invoke-InstallClaudeCode'
 $refused = New-Object System.Collections.Generic.List[string]
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     if ($f.Extent.Text -match 'Environment\]::SetEnvironmentVariable') { $refused.Add($f.Name); continue }
@@ -38,7 +39,8 @@ function Set-UserEnv {
     $script:userWrites.Add($Name)
     if ($null -eq $Value) { $script:userEnv.Remove($Name) } else { $script:userEnv[$Name] = $Value }
 }
-function Add-ToUserPath { param([string]$Dir) }
+$script:addedPaths = New-Object System.Collections.Generic.List[string]
+function Add-ToUserPath { param([string]$Dir) $script:addedPaths.Add($Dir) }
 function Update-SessionPath { }
 function Invoke-EnsureConfigLocal { }
 function Invoke-WslConfigReminder { }
@@ -393,6 +395,34 @@ try {
         Assert ($msg -eq '') "failed: $msg"
         Assert (($script:warnings -join ' ') -like '*close running node processes*') "warnings: $($script:warnings -join ' | ')"
         Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 0) 'marker written after a failed reinstall'
+    }
+
+    Test-Case 'Claude Code: an installed ~\.local\bin\claude.exe puts that folder on the User PATH' {
+        $saved = $env:USERPROFILE
+        try {
+            $env:USERPROFILE = Join-Path $tmp 'claude-home'
+            $bin = Join-Path $env:USERPROFILE '.local\bin'
+            New-Item -ItemType Directory -Force -Path $bin | Out-Null
+            Set-Content -LiteralPath (Join-Path $bin 'claude.exe') -Value ''
+            $script:SkipToolInstall = $false
+            $script:addedPaths.Clear()
+            Invoke-InstallClaudeCode
+            Assert (@($script:addedPaths) -contains $bin) "Add-ToUserPath calls: $($script:addedPaths -join ', ')"
+        } finally { $env:USERPROFILE = $saved }
+    }
+
+    Test-Case 'Claude Code: claude found elsewhere, no ~\.local\bin\claude.exe -> PATH untouched, nothing installed' {
+        $saved = $env:USERPROFILE
+        try {
+            $env:USERPROFILE = Join-Path $tmp 'claude-none'
+            New-Item -ItemType Directory -Force -Path $env:USERPROFILE | Out-Null
+            function claude { }
+            $script:SkipToolInstall = $false
+            $script:addedPaths.Clear()
+            $script:curlZip = $null
+            Invoke-InstallClaudeCode
+            Assert ($script:addedPaths.Count -eq 0) "Add-ToUserPath calls: $($script:addedPaths -join ', ')"
+        } finally { $env:USERPROFILE = $saved }
     }
 } finally {
     if ($null -eq $savedMiseEnv) { Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue } else { $env:MISE_ENV = $savedMiseEnv }

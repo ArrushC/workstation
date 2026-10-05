@@ -1172,21 +1172,25 @@ function Invoke-InstallClaudeCode {
     $claudeExe = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
     if ((Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path $claudeExe)) {
         Write-Ok "Claude Code already installed (self-updates in the background)"
-        return
+    } else {
+        Write-Log "Installing Claude Code (official installer, manifest-verified)..."
+        $tmp = Join-Path $env:TEMP "claude-install-$PID.ps1"
+        try {
+            Invoke-CurlRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp
+            if ($LASTEXITCODE -ne 0) { throw "installer exited with code $LASTEXITCODE" }
+            Write-Ok "Claude Code installed (launcher in ~\.local\bin; self-updates)"
+        } catch {
+            Write-Warn "Claude Code install failed: $_"
+            Write-Warn "  Retry by re-running bootstrap.ps1 (leave -SkipToolInstall unset)."
+        } finally {
+            Remove-Item -Force $tmp -ErrorAction SilentlyContinue
+        }
     }
-    Write-Log "Installing Claude Code (official installer, manifest-verified)..."
-    $tmp = Join-Path $env:TEMP "claude-install-$PID.ps1"
-    try {
-        Invoke-CurlRequest -Uri "https://claude.ai/install.ps1" -OutFile $tmp
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp
-        if ($LASTEXITCODE -ne 0) { throw "installer exited with code $LASTEXITCODE" }
-        Write-Ok "Claude Code installed (launcher in ~\.local\bin; self-updates)"
-    } catch {
-        Write-Warn "Claude Code install failed: $_"
-        Write-Warn "  Retry by re-running bootstrap.ps1 (leave -SkipToolInstall unset)."
-    } finally {
-        Remove-Item -Force $tmp -ErrorAction SilentlyContinue
-    }
+    # The installer leaves PATH alone, and a PATH entry naming claude.exe itself (rather
+    # than its folder) finds nothing, so a shell started from a fresh sign-in (Nushell
+    # included) has no `claude`. Put the folder on the User PATH whenever the exe exists.
+    if (Test-Path $claudeExe) { Add-ToUserPath (Split-Path $claudeExe -Parent) }
 }
 
 # The `python-env` task's Windows half: a uv venv on mise's python with python-env.txt's
