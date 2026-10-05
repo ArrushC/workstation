@@ -104,10 +104,12 @@ function wsa {
 # Windows-safe equivalent directly: fast-forward pull, then the same
 # `--only dotfiles,tools` scope bootstrap.ps1 itself uses. The git pull is
 # already pinned via -C $env:WORKSTATION_REPO (a fixed path, not cwd-derived)
-# -- only the mise bootstrap call needed the -C fix.
+# -- only the mise bootstrap call needed the -C fix. Keep 'dotfiles,tools'
+# quoted: `mise` is a function here (mise activate pwsh), and a bare list
+# reaches it as two arguments (check_ps_mise_comma_lists).
 function wsu {
     git -C $env:WORKSTATION_REPO pull --ff-only
-    if ($LASTEXITCODE -eq 0) { mise -C $env:USERPROFILE bootstrap --only dotfiles,tools --yes @args }
+    if ($LASTEXITCODE -eq 0) { mise -C $env:USERPROFILE bootstrap --only 'dotfiles,tools' --yes @args }
 }
 # wsh -- workstation cheatsheet, the Windows twin of the bash/zsh wsh (and
 # of config.nu's). Keep the printed text ASCII: PowerShell 5.1 reads this
