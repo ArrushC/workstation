@@ -23,7 +23,7 @@
 # (network, broken mise, malformed config — the mise tool-pin layer is
 # skipped in that case, though the config.toml [vars] layer still runs and
 # is reported) or a
-# post-bump `mise lock` regeneration fails, so the weekly workflow fails
+# post-bump `mise lock` or TOOLS-block regeneration fails, so the weekly workflow fails
 # visibly instead of silently reporting "nothing to bump". A lock failure
 # that names one bumped tool is NOT fatal: that pin is reverted and reported
 # under "Refused by mise lock", and the lock retried (see lock_platform).
@@ -213,11 +213,14 @@ refused="" # bumps reverted because `mise lock` refused the new version
 #    bumping it.
 # Returns 1 only when the failure doesn't name a tool this run bumped (a
 # genuine lock error), leaving the old hard-fail behaviour for those.
+# MISE_LOCKED=0: a pypi: tool's dependency lock runs uv through its shim, and in
+# locked mode (config.toml) that shim refuses a just-bumped uv the lock doesn't list
+# yet ("No version is set for shim: uv"; both platforms failed on 2026-10-05).
 lock_platform() {
   local mise_env="$1" platform="$2" err tool reason tries=0
   err="$(mktemp)"
   while :; do
-    if mise_global "$mise_env" mise lock --global --platform "$platform" 2>"$err"; then
+    if mise_global "$mise_env" env MISE_LOCKED=0 mise lock --global --platform "$platform" 2>"$err"; then
       rm -f "$err"
       return 0
     fi
@@ -446,8 +449,13 @@ done <<<"$updates"
 # generated file drift, and check-invariants.sh ("TOOLS block in sync")
 # fails on merge. There is no longer a second generated-config script to
 # call here: config*.toml IS the tool layer's single source of truth now.
+# It needs a python with tomllib (3.11+); its stderr says why it failed.
 if [ -n "$bumped$vars_bumped" ] && ! $DRY; then
-  scripts/gen-tool-memory.sh >/dev/null
+  if ! scripts/gen-tool-memory.sh >/dev/null; then
+    printf 'bump-versions.sh: scripts/gen-tool-memory.sh failed\n' >&2
+    failed="${failed}- \`scripts/gen-tool-memory.sh\` failed — the TOOLS block in dotfiles/claude/CLAUDE.md is stale (manual)\n"
+    exit_code=1
+  fi
 fi
 
 {

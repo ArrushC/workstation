@@ -1,5 +1,6 @@
 name: lint
-on: [push, pull_request]
+# workflow_dispatch: version-bumps.yml runs this on its PR (its GITHUB_TOKEN PR triggers nothing).
+on: [push, pull_request, workflow_dispatch]
 
 # All jobs only read the checkout — pin the token to least privilege.
 permissions:

@@ -6,7 +6,8 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 files=(bootstrap.sh bootstrap.ps1 config.toml config.linux.toml config.owned.toml
   dotfiles/zshrc.tera dotfiles/bashrc.tera tasks/vcpkg tasks/check-updates
-  scripts/bump-versions.sh scripts/gen-tool-memory.sh scripts/check-invariants.sh)
+  scripts/bump-versions.sh scripts/gen-tool-memory.sh scripts/check-invariants.sh
+  .github/workflows/lint.yml .github/workflows/version-bumps.yml)
 pass=0
 fail=0
 T=""
@@ -49,6 +50,16 @@ fresh
 sed -i -E 's/^\$MiseVersion( *=)/$MiseVer\1/' "$T/bootstrap.ps1"
 pins
 case_ "pattern stops matching (empty value) fails" 1 "mise drift"
+
+fresh
+sed -i -E 's/^([[:space:]]*version:[[:space:]]*)[0-9.]+/\10.0.1/' "$T/.github/workflows/version-bumps.yml"
+pins
+case_ "a workflow's mise-action version drift fails" 1 "mise drift"
+
+fresh
+sed -i -E '/^[[:space:]]*version:[[:space:]]*[0-9.]+/d' "$T/.github/workflows/lint.yml"
+pins
+case_ "a mise-action step without a version fails" 1 "mise drift"
 
 fresh
 sed -i -E 's#(VCPKG_ROOT=")[^"]*#\1/opt/vcpkg#' "$T/dotfiles/bashrc.tera"
