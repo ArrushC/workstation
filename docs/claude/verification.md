@@ -8,7 +8,7 @@
 
 - `MISE_ENV=<set> mise bootstrap plan --json | jq .summary` gives create/update/remove/unchanged
   counts (0/0/0/N on a stable host). `mise bootstrap status --missing` lists only rows needing
-  attention. Sets: `linux` (shared), `linux,owned,host,native`, `linux,owned,host,wsl`. Safe unprivileged
+  attention. Sets: `linux` (shared), `linux,owned,host` (owned, WSL or not). Safe unprivileged
   because there is no firewall table. Both refuse a dotfiles conflict like a real apply unless
   `--force-dotfiles` is passed.
 - `mise run health` is the full report (saved mode, `miserc.toml`, pueued, python-env,
@@ -17,7 +17,7 @@
 - Sandbox install plus capability gate (no sudo):
   ```
   MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox MISE_STATE_DIR=/tmp/mise-sandbox-state \
-    MISE_CACHE_DIR=/tmp/mise-sandbox-cache MISE_ENV=linux,owned,host,native mise install \
+    MISE_CACHE_DIR=/tmp/mise-sandbox-cache MISE_ENV=linux,owned,host mise install \
     && MISE_DATA_DIR=/tmp/mise-sandbox tasks/verify-tools
   ```
   Expect `✓ verify-tools: N ELF binaries pass`. A failure means that tool needs an explicit
@@ -29,7 +29,7 @@
 - Locks: never hand-edit. Regenerate from outside the checkout for the changed tools, then fold any
   `.mise/locks/` into `locks/` as `normalize_lock_sidecars` in `scripts/bump-versions.sh` does:
   `L=$(mktemp -d); ln -s ~/.config/mise "$L/mise"`, then
-  `(cd /tmp && env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$L" MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 <tools>)`
+  `(cd /tmp && env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$L" MISE_ENV=linux,owned,host mise lock --global --platform linux-x64 <tools>)`
   and the same with `MISE_ENV=windows,owned … --platform windows-x64` for tools that install on Windows.
   `check-invariants.sh` verifies coverage.
 - pueued: `systemctl --user cat dev.mise.pueued.service` has no `Environment=MISE_ENV=` line;

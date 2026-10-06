@@ -410,7 +410,7 @@ for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("confi
             blocks = entries if isinstance(entries, list) else [entries]
             lock_vers = sorted({e.get("version") for e in blocks})
             if pin not in lock_vers:
-                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64")
+                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux,owned,host mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64")
 if missing:
     print("\n".join(missing))
     sys.exit(1)
@@ -418,29 +418,25 @@ PY
   then
     ok "every [tools] entry has a lock entry (linux-x64; windows-x64 where it installs on Windows)"
   else
-    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,owned,host,native mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64"
+    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,owned,host mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64"
   fi
   # host-state files must parse and declare no [tools]; config.toml carries the four [vars] pins they read.
   if [ -z "$PY" ]; then
     note "no python with tomllib — host-state file / [vars] checks skipped locally (CI enforces)"
   else
-    for f in config.host.toml config.native.toml config.wsl.toml; do
-      if [ ! -f "$f" ]; then
-        bad "missing: $f"
-        continue
-      fi
-      if "$PY" - "$f" <<'PY'
+    if [ ! -f config.host.toml ]; then
+      bad "missing: config.host.toml"
+    elif "$PY" - config.host.toml <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as fh:
     d = tomllib.load(fh)
 sys.exit(1 if "tools" in d else 0)
 PY
-      then
-        ok "$f parses and declares no [tools]"
-      else
-        bad "$f declares [tools] — host-state files must not (lock coverage is three files)"
-      fi
-    done
+    then
+      ok "config.host.toml parses and declares no [tools]"
+    else
+      bad "config.host.toml declares [tools] — the host-state file must not (lock coverage is three files)"
+    fi
     local vk vars_bad=0
     for vk in vcpkg_version zjstatus_zellij_floor; do
       if "$PY" - "$vk" <<'PY'
@@ -462,7 +458,7 @@ PY
     local tmp
     tmp="$(mktemp -d)"
     ln -s "$PWD" "$tmp/mise"
-    if XDG_CONFIG_HOME="$tmp" MISE_ENV=linux,owned,host,native mise config ls >/dev/null 2>&1 &&
+    if XDG_CONFIG_HOME="$tmp" MISE_ENV=linux,owned,host mise config ls >/dev/null 2>&1 &&
       env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$tmp" mise tasks validate >/dev/null 2>&1; then
       ok "mise loads the config files and validates tasks/"
     else
@@ -528,7 +524,7 @@ PYEOF
 # Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
 # plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
-  hdr "bootstrap-config invariants (config.host/native/wsl/linux/windows.toml)"
+  hdr "bootstrap-config invariants (config.host/linux/windows.toml)"
   if [ -z "$PY" ]; then
     note "no python with tomllib — bootstrap-config checks skipped locally (CI enforces)"
   else
@@ -537,7 +533,7 @@ check_bootstrap_config() {
       "$PY" - <<'PY'
 import os, re, tomllib
 
-files = ["config.host.toml", "config.native.toml", "config.wsl.toml", "config.linux.toml", "config.windows.toml"]
+files = ["config.host.toml", "config.linux.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
     try:
@@ -551,7 +547,7 @@ for f in files:
 hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
 toml_tasks = set()
 for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
-           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+           "config.windows.toml"]:
     try:
         with open(cf, "rb") as fh:
             toml_tasks |= set(tomllib.load(fh).get("tasks", {}))
@@ -604,7 +600,7 @@ else:
 dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck"}
 seen_pkg = {}
 bad_pkg = []
-for f in ("config.host.toml", "config.native.toml"):
+for f in ("config.host.toml",):
     for key in loaded.get(f, {}).get("bootstrap", {}).get("packages", {}):
         if not key.startswith("dnf:"):
             bad_pkg.append(f"{f}:{key} (missing dnf: prefix)")
@@ -615,14 +611,14 @@ pkg_dupes = [f"{k} in {fs}" for k, fs in seen_pkg.items() if len(fs) > 1]
 if bad_pkg or pkg_dupes:
     print("FAIL|packages|" + "; ".join(bad_pkg + pkg_dupes))
 else:
-    print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) across host+native, unique, no dropped names")
+    print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) in config.host.toml, unique, no dropped names")
 
 # winget GUI apps are Windows-only, so they live in config.windows.toml alone; SSHFS-Win
 # stays in bootstrap.ps1 (mise installs silently, and its WinFsp MSI must raise UAC).
 win_hits = []
 n_winget = 0
 for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
-           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+           "config.windows.toml"]:
     try:
         with open(cf, "rb") as fh:
             pkgs = tomllib.load(fh).get("bootstrap", {}).get("packages", {})
@@ -656,7 +652,7 @@ else:
 # host (installs read the lock files, never write them; `mise lock` still writes).
 lock_hits = []
 for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
-           "config.native.toml", "config.wsl.toml", "config.windows.toml"]:
+           "config.windows.toml"]:
     try:
         with open(cf, "rb") as fh:
             settings = tomllib.load(fh).get("settings", {})
@@ -714,10 +710,10 @@ PY
   fi
 
   if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
-    if MISE_ENV=linux,owned,host,native mise bootstrap plan --json >/dev/null 2>&1; then
-      ok "mise bootstrap plan --json (MISE_ENV=linux,owned,host,native) exits 0"
+    if MISE_ENV=linux,owned,host mise bootstrap plan --json >/dev/null 2>&1; then
+      ok "mise bootstrap plan --json (MISE_ENV=linux,owned,host) exits 0"
     else
-      bad "mise bootstrap plan --json (MISE_ENV=linux,owned,host,native) failed"
+      bad "mise bootstrap plan --json (MISE_ENV=linux,owned,host) failed"
     fi
   else
     note "mise and/or dnf not on PATH — skipped the live 'mise bootstrap plan' check (CI has no dnf)"

@@ -251,7 +251,7 @@ if [ "$mode" = owned ]; then
   else
     row_bad "vcpkg" "missing — mise run vcpkg"
   fi
-  if canon_has native; then
+  if ! WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; is_wsl' _ "$root/bootstrap.sh"; then
     fdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
     if [ -d "$fdir" ] && [ -n "$(find "$fdir" -maxdepth 1 -name '*.ttf' -print -quit 2>/dev/null)" ]; then
       row_ok "fonts" "$fdir has TTFs"

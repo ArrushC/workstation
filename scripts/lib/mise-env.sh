@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # mise-env.sh <owned|shared> [--write] — the MISE_ENV token set for THIS Linux host.
 #   shared → linux
-#   owned  → linux,owned,host,wsl (WSL guest) | linux,owned,host,native (bare metal / VM)
+#   owned  → linux,owned,host (WSL or not: tasks that differ check is_wsl at run time)
 # --write also saves it to ~/.config/mise/miserc.toml (git-ignored). Every mise
 # process reads that file — shells, shims under systemd, cron — so nothing
 # exports MISE_ENV. An exported MISE_ENV still wins over miserc (CI and
 # check-templates.sh set one to pick a token set explicitly).
 set -euo pipefail
 mode="${1:?usage: mise-env.sh <owned|shared> [--write]}"
-is_wsl() { [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; }
 case "$mode" in
-owned) if is_wsl; then tokens="linux,owned,host,wsl"; else tokens="linux,owned,host,native"; fi ;;
+owned) tokens="linux,owned,host" ;;
 shared) tokens="linux" ;;
 *)
   printf 'mise-env.sh: unknown mode %q (owned|shared)\n' "$mode" >&2

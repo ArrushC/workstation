@@ -6,8 +6,6 @@
 #   config.linux.toml    linux             (the Linux toolbelt, both modes)
 #   config.owned.toml    owned             (owned-host tools on both OSes)
 #   config.host.toml     host              (Linux owned: dnf + /etc)
-#   config.native.toml   native            (non-WSL owned: NFS client)
-#   config.wsl.toml      wsl               (/etc/wsl.conf)
 #   config.windows.toml  windows           (Windows-only dotfiles surface)
 #   config.local.toml    always, git-ignored — per-host overrides
 # Pins live here and in mise.lock (URLs + sha256 per platform). Bump with

@@ -24,7 +24,7 @@
 # Design (ONE
 # broken template aborts the WHOLE `mise dot apply`/`mise bootstrap`, and
 # writes nothing at all — so a bulk run alone can never name the culprit):
-#   1. For each of the four real MISE_ENV token sets, discover which
+#   1. For each real MISE_ENV token set (ENVS below), discover which
 #      `mode = "template"` [dotfiles] entries are ACTIVE under that set (a
 #      pure TOML read — config.toml is always active, config.<TOKEN>.toml is
 #      active iff TOKEN is one of the MISE_ENV tokens; mirrors
@@ -264,7 +264,7 @@ apply_and_check() {
   return 0
 }
 
-ENVS=("linux" "linux,owned,host,wsl" "linux,owned,host,native" "windows,owned")
+ENVS=("linux" "linux,owned,host" "windows,owned")
 
 for env in "${ENVS[@]}"; do
   hdr "individual render + syntax check — MISE_ENV=$env"
@@ -324,4 +324,4 @@ if ((fails > 0)); then
   printf '   %d failure(s)\n' "$fails"
   exit 1
 fi
-printf '   all rendered templates pass, across all four MISE_ENV sets\n'
+printf '   all rendered templates pass, across all %d MISE_ENV sets\n' "${#ENVS[@]}"

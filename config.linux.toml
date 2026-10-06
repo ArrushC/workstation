@@ -127,7 +127,7 @@ taplo = "0.10.0"
 
 # ---------------------------------------------------------------------------
 # Host state that needs no sudo (both modes). Sudo-requiring state lives in
-# config.host.toml / config.native.toml / config.wsl.toml (owned-only tokens).
+# config.host.toml (owned-only `host` token).
 # ---------------------------------------------------------------------------
 [bootstrap.hooks]
 # Capability gate over every mise-installed Linux binary (scripts/lib/verify-binary.sh).

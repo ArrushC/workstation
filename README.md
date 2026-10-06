@@ -37,8 +37,7 @@ The mode maps to a token set (`scripts/lib/mise-env.sh` is the single source). `
 | Host | Token set |
 |---|---|
 | shared Linux | `linux` |
-| owned WSL | `linux,owned,host,wsl` |
-| owned native Linux | `linux,owned,host,native` |
+| owned Linux (WSL or not) | `linux,owned,host` |
 | Windows | `windows,owned` |
 
 | Token | Config file | Holds |
@@ -46,13 +45,11 @@ The mode maps to a token set (`scripts/lib/mise-env.sh` is the single source). `
 | (always) | `config.toml` | tools common to all hosts, `[vars]` pins, cross-platform dotfiles |
 | `linux` | `config.linux.toml` | the Linux toolbelt, Linux dotfiles, hooks |
 | `owned` | `config.owned.toml` | owned-only tools and dotfiles (Claude Code config, LSP servers) |
-| `host` | `config.host.toml` | dnf packages, EPEL/CRB hook, Linux-owned-only dotfiles |
-| `native` | `config.native.toml` | NFS client packages |
-| `wsl` | `config.wsl.toml` | `/etc/wsl.conf` |
+| `host` | `config.host.toml` | dnf packages, EPEL/CRB hook, `/etc/wsl.conf`, Linux-owned-only dotfiles |
 | `windows` | `config.windows.toml` | the Windows-only dotfiles |
 | (always) | `config.local.toml` | git-ignored per-host name, email, mode |
 
-Shared hosts load no host state: every sudo-needing table lives in the `host`, `native` or `wsl` files.
+Shared hosts load no host state: every sudo-needing table lives in `config.host.toml`. WSL and non-WSL owned hosts load the same files; the one step that differs (fonts, skipped under WSL) checks at run time.
 
 ## Repo layout
 
@@ -60,8 +57,7 @@ Shared hosts load no host state: every sudo-needing table lives in the `host`, `
 bootstrap.sh, bootstrap.ps1   entry points (Linux; Windows, no admin)
 config.toml, config.linux.toml, config.owned.toml
                               mise tool pins, [vars] pins, [dotfiles] entries
-config.host.toml, config.native.toml, config.wsl.toml
-                              host state as [bootstrap.*] tables (owned hosts only)
+config.host.toml              host state as [bootstrap.*] tables (owned Linux hosts only)
 config.windows.toml           Windows [dotfiles]
 config.local.toml             git-ignored: this host's name, email, mode
 mise.lock, mise.linux.lock, mise.owned.lock, locks/
@@ -109,7 +105,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Resolve the mode (see above) and write it, with name and email, to `config.local.toml`.
-5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hooks: vcpkg and `claude` from `config.host.toml`, fonts from `config.native.toml`). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hook in `config.host.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
 6. Owned hosts only: set zsh as the login shell (`sudo usermod -s`).
 
 Both modes are idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -202,7 +198,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 Answer `owned` where you have sudo (the usual case). Two files configure WSL and the repo owns both:
 
-- `/etc/wsl.conf` (per-distro: systemd, automount, interop, default user, `appendWindowsPath=false`): deployed on owned WSL hosts by `config.wsl.toml` from `configs/wsl/wsl.conf`.
+- `/etc/wsl.conf` (per-distro: systemd, automount, interop, default user, `appendWindowsPath=false`): deployed on owned Linux hosts by `config.host.toml` from `configs/wsl/wsl.conf` (on a non-WSL host nothing reads it).
 - `%USERPROFILE%\.wslconfig` (VM memory, CPU, networking, all distros): deployed on the Windows host by a `copy` dotfile from `dotfiles/wslconfig`. It enables `autoMemoryReclaim=gradual` and pre-opts into `sparseVhd=true`.
 
 Both need `wsl --shutdown` from a Windows terminal to take effect. `bootstrap.ps1` prints that reminder when `.wslconfig` changes; on Linux, remember it yourself after a `/etc/wsl.conf` change. WSL tabs open in `~` because the WSL Terminal fragment launches `wsl.exe -d AlmaLinux-9 --cd ~`. Every tracked shell exports `COLORTERM=truecolor`, so 24-bit color works in Windows Terminal. Keep long-lived work in a zellij session.
@@ -364,7 +360,7 @@ bash scripts/check-invariants.sh
 
 Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while the `dotfiles-migrated` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Commit the config edit and the new source.
 
-**A dnf package.** One line in `config.host.toml` (owned toolchain and core packages) or `config.native.toml` (the NFS client group, non-WSL owned hosts). The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
+**A dnf package.** One line in `config.host.toml`. The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
 
 ```toml
 # config.host.toml — [bootstrap.packages]
@@ -378,10 +374,10 @@ mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap 
 
 Do not re-add names known not to resolve on EL9: `fswatch`, `entr`, `cockpit-networkmanager`. `ShellCheck` is capitalised (EPEL). The batch is all-or-nothing, so a package only some EL releases carry goes in `tasks/optional-packages` instead (the `post-packages` hook), which installs with dnf's `strict=0` and skips it where it is missing: `bear` is there because EL8 has no package.
 
-**A service or `/etc` file.** In `config.native.toml` (or `config.wsl.toml` for WSL-only state): a `[bootstrap.files."/etc/<path>"]` table (source relative to the repo root, under `configs/`; phase is only `pre-packages` or `post-packages`; mise elevates itself) and a `[bootstrap.services.<name>]` table for the unit it belongs to:
+**A service or `/etc` file.** In `config.host.toml`: a `[bootstrap.files."/etc/<path>"]` table (source relative to the repo root, under `configs/`; phase is only `pre-packages` or `post-packages`; mise elevates itself) and a `[bootstrap.services.<name>]` table for the unit it belongs to:
 
 ```toml
-# config.native.toml
+# config.host.toml
 [bootstrap.files."/etc/example/example.conf"]
 source = "configs/example/example.conf"
 owner = "root"
@@ -583,7 +579,7 @@ Provisioning builds the env in both modes. Rebuild it from scratch with `mise ru
 
 ### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
 
-The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is declared in `config.native.toml`, so it applies to native owned hosts only and is skipped on WSL by design. Re-run `mise bootstrap --only packages --yes`. `autofs` is installed but not enabled (no maps yet does nothing): write your maps, then `sudo systemctl enable --now autofs`.
+The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is in `config.host.toml`'s dnf batch, so every owned Linux host gets it (on WSL it is inert: Windows is the NFS/SMB client). Re-run `mise bootstrap --only packages --yes`. `autofs` is installed but not enabled (no maps yet does nothing): write your maps, then `sudo systemctl enable --now autofs`.
 
 ### bootstrap.ps1 popped a UAC prompt (or SSHFS-Win reports "winget exited")
 

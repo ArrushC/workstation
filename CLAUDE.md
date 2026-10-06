@@ -33,16 +33,13 @@
 | `config.toml` | always | both-OS tools (uv, python, the CLI toolbelt) and dotfiles; `[vars]` |
 | `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
 | `config.owned.toml` | `owned` | owned-host tools on both OSes (node, LSP servers, go, ccstatusline), Windows-only nushell/carapace/dnGrep/LogExpert, `~/.claude` dotfiles |
-| `config.host.toml` | `host` | Linux owned host state: dnf batch, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
-| `config.native.toml` | `native` | non-WSL owned: NFS client packages, `final` hook (fonts) |
-| `config.wsl.toml` | `wsl` | `/etc/wsl.conf` via `[bootstrap.files]` |
+| `config.host.toml` | `host` | Linux owned host state (WSL or not): dnf batch, `/etc/wsl.conf`, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude, fonts); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
 | `config.windows.toml` | `windows` | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
 | `config.local.toml` | always, git-ignored | per-host `[vars] mode/name/email` and overrides |
 
 Token sets come only from `scripts/lib/mise-env.sh`:
 - shared: `linux`
-- owned WSL: `linux,owned,host,wsl`
-- owned native: `linux,owned,host,native`
+- owned (WSL or not): `linux,owned,host`
 - Windows: `windows,owned`
 
 Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sidecars. Tasks: files in `tasks/` carry logic; one-line wrappers are `[tasks]` in `config.toml`.
@@ -54,16 +51,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `bootstrap.sh` is a thin seed; its only pin is `MISE_VERSION`/`MISE_SHA256`. Tools are mise pins,
   host state is `[bootstrap.*]` tables, procedural steps are tasks in `tasks/`. Don't add install
   logic to `bootstrap.sh` or new provisioning scripts.
-- Shared hosts load no host state. Every sudo-needing table lives in `config.host.toml`,
-  `config.native.toml` or `config.wsl.toml`, and those files declare no `[tools]`.
+- Shared hosts load no host state. Every sudo-needing table lives in `config.host.toml`, which
+  declares no `[tools]`. A WSL-only step checks `is_wsl` at run time (no WSL token).
 - `[bootstrap.*]` and `[dotfiles]` tables merge by union across loaded files. Declare each item once,
   in the file whose token gates it.
 - Hooks are `mise run <task>` (or `mise run a ::: b`): mise treats hook strings as opaque shell.
   A hook name declared in several loaded files runs every one. The one exception is
   the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
-- Owned-only steps hang off `final` hooks in `config.host.toml` (vcpkg, claude) and `config.native.toml`
-  (fonts). `final` runs only on a full `mise bootstrap`, never on `--only dotfiles`.
+- Owned-only steps hang off `config.host.toml`'s `final` hook (vcpkg, claude, fonts). `final` runs
+  only on a full `mise bootstrap`, never on `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
   and EL9; one some releases lack goes in `tasks/optional-packages`. `ShellCheck` is capitalised;
   `fswatch`, `entr` and `cockpit-networkmanager` don't resolve.
@@ -81,7 +78,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - vcpkg stays a task: `[bootstrap.repos]` can't shallow-clone or update. The C/C++ toolbelt
   spans dnf, mise and vcpkg on purpose; don't unify it.
 - `/dev/tty` reads in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
-- WSL detection is `is_wsl()` (in `bootstrap.sh` and `scripts/lib/mise-env.sh`, which must agree).
+- WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks source it (`WORKSTATION_BOOTSTRAP_LIB=1`).
 
 **Mode and `MISE_ENV`**
 - The mode is `owned` or `shared`, saved as `vars.mode` in `config.local.toml`. It comes from the

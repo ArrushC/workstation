@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-#MISE description="JetBrainsMono Nerd Font Mono into ~/.local/share/fonts from the mise font tool (non-WSL owned hosts; config.native.toml's final hook runs it)"
+#MISE description="JetBrainsMono Nerd Font Mono into ~/.local/share/fonts from the mise font tool (owned hosts' final hook; skipped under WSL)"
 set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Under WSL the Windows terminal resolves fonts, so there is nothing to do. is_wsl is
+# bootstrap.sh's, sourced in library mode so the detection lives in one place.
+if WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; is_wsl' _ "$root/bootstrap.sh"; then
+  echo "  fonts skipped under WSL (the Windows terminal resolves fonts)"
+  exit 0
+fi
 src="$(mise where github:ryanoasis/nerd-fonts)"
 dest="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
 mkdir -p "$dest"

@@ -1,6 +1,6 @@
 # config.host.toml: Linux owned host state (MISE_ENV token `host`). Loaded only on
-# owned hosts (linux,owned,host,{wsl|native}); shared hosts never see it, so nothing
-# here may need sudo there. mise requests sudo itself for the dnf batch and hooks.
+# owned Linux hosts (linux,owned,host), WSL or not; shared hosts never see it, so
+# nothing here may need sudo there. mise requests sudo itself for the dnf batch and hooks.
 
 [bootstrap.hooks]
 # EPEL + CRB must exist before the dnf batch resolves (htop/cppcheck/heaptrack/
@@ -14,13 +14,14 @@
 # Owned-only steps run from here, so shared hosts (which never load this file)
 # never see them. `final` runs only on a full `mise bootstrap`, never on
 # `--only dotfiles` (wsa).
-"final" = "mise run vcpkg ::: claude"
+# fonts skips itself under WSL (the Windows terminal resolves fonts there).
+"final" = "mise run vcpkg ::: claude ::: fonts"
 
 [bootstrap.packages]
 # ONE `sudo dnf install -y <every missing name>` per run: a single unresolvable name
 # fails the whole batch, so every name is EL9-verified. Do not add fswatch/entr (not
 # packaged for EL9) or cockpit-networkmanager (a virtual provide `rpm -q` never sees).
-# `make` stays as a C-toolchain dependency. NFS lives in config.native.toml.
+# `make` stays as a C-toolchain dependency.
 # --- core ---
 "dnf:curl" = "latest"
 "dnf:gcc" = "latest"
@@ -81,11 +82,25 @@
 "dnf:valgrind" = "latest"
 "dnf:vim-common" = "latest"
 "dnf:vim-enhanced" = "latest"
+# --- NFS client --- installed, not enabled: autofs maps are per-host /etc config. WSL
+# gets them too (inert there; Windows is the NFS/SMB client for WSL).
+"dnf:autofs" = "latest"
+"dnf:nfs-utils" = "latest"
+"dnf:nfs4-acl-tools" = "latest"
+
+# /etc/wsl.conf (per-distro WSL settings: systemd, automount, interop, default user).
+# Only WSL's init reads it, so on a non-WSL host it is an inert file. After a change, run
+# `wsl --shutdown` from a Windows terminal (restarts every distro). Keep it LF-only:
+# CRLF corrupts it.
+[bootstrap.files."/etc/wsl.conf"]
+source = "configs/wsl/wsl.conf"
+owner = "root"
+group = "root"
+mode = "0644"
 
 # ---------------------------------------------------------------------------
-# Dotfiles for Linux owned hosts only (`host` token: present in both
-# linux,owned,host,wsl and linux,owned,host,native, absent on windows,owned and shared
-# hosts). Entries here would be dead files on Windows (gdb, herdr are Linux-only) or
+# Dotfiles for Linux owned hosts only (`host` token: present in linux,owned,host,
+# absent on windows,owned and shared hosts). Entries here would be dead files on Windows (gdb, herdr are Linux-only) or
 # wrongly deployed on shared hosts (config.linux.toml has no owned gate).
 # Directory entries keep exclude = [".vendor", ".gitkeep"]: copy on a directory leaves
 # unmanaged siblings alone, and the sidecars never land in $HOME.
