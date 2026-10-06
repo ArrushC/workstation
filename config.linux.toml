@@ -7,7 +7,7 @@ zellij = "0.45.1"
 glow = "3.0.0"
 btop = "1.4.7"
 yq = "4.54.1"
-witr = "0.3.3"
+witr = "0.3.4"
 lazydocker = "0.25.2"
 dive = "0.13.1"
 lnav = "0.14.1"
@@ -27,7 +27,7 @@ croc = "11.5.4"
 hyperfine = "1.20.0"
 sops = "3.13.3"
 htmlq = "0.4.0"
-watchexec = "2.7.3"
+watchexec = "2.7.4"
 bottom = "0.14.9"
 systemctl-tui = "0.8.0"
 lazyjournal = "0.8.6"
@@ -43,7 +43,7 @@ gitleaks = "8.30.1"
 dust = "1.2.6"
 hexyl = "0.17.0"
 gum = "2.0.2"
-rust-analyzer = "2026-09-28"
+rust-analyzer = "2026-10-05"
 marksman = "2026-02-08"
 taplo = "0.10.0"
 # --- github: (registry entry absent or picks the wrong asset for EL9) ---
@@ -59,9 +59,9 @@ taplo = "0.10.0"
 "github:ouch-org/ouch" = { version = "0.8.3", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }   # 0.8.3+ signs with cosign, not GitHub attestations, so mise reads bumps as a provenance downgrade; verified by hand with cosign verify-blob
 "github:boyter/scc" = { version = "4.1.0", asset_pattern = "scc_Linux_x86_64.tar.gz" }
 "github:multiprocessio/dsq" = { version = "0.23.0" }
-"github:unhappychoice/gitlogue" = { version = "0.11.0" }
+"github:unhappychoice/gitlogue" = { version = "0.12.0" }
 "github:PaulJuliusMartinez/jless" = { version = "0.9.0", asset_pattern = "jless-v{{version}}-x86_64-unknown-linux-gnu.zip" }
-"github:Canop/broot" = { version = "1.60.2", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
+"github:Canop/broot" = { version = "1.61.0", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
 "github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd" }
 "github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl
 "github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; binary is `tv`

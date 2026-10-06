@@ -59,12 +59,12 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `zoxide` 0.10.0
 - `fd` 10.5.0
 - `bat` 0.26.1
-- `delta` 0.19.2
+- `delta` 0.20.1
 - `eza` 0.23.5
 - `ripgrep` 15.2.0
 - `yazi` 26.9.1
 - `atuin` 18.23.0
-- `uv` 0.12.21
+- `uv` 0.12.23
 - `python` 3.14.7
 
 ### Linux toolbelt, both modes (config.linux.toml)
@@ -72,7 +72,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `glow` 3.0.0
 - `btop` 1.4.7
 - `yq` 4.54.1
-- `witr` 0.3.3
+- `witr` 0.3.4
 - `lazydocker` 0.25.2
 - `dive` 0.13.1
 - `lnav` 0.14.1
@@ -92,7 +92,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `hyperfine` 1.20.0
 - `sops` 3.13.3
 - `htmlq` 0.4.0
-- `watchexec` 2.7.3
+- `watchexec` 2.7.4
 - `bottom` 0.14.9
 - `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
@@ -108,7 +108,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `dust` 1.2.6
 - `hexyl` 0.17.0
 - `gum` 2.0.2
-- `rust-analyzer` 2026-09-28
+- `rust-analyzer` 2026-10-05
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
 - `usql` 0.21.6
@@ -123,9 +123,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ouch` 0.8.3
 - `scc` 4.1.0
 - `dsq` 0.23.0
-- `gitlogue` 0.11.0
+- `gitlogue` 0.12.0
 - `jless` 0.9.0
-- `broot` 1.60.2
+- `broot` 1.61.0
 - `nnd` 0.80
 - `gping` 1.21.0
 - `television` 0.15.9
@@ -153,12 +153,12 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `go` 1.27.1
 - `gopls` 0.23.0
 - `lua-language-server` 3.19.1
-- `basedpyright` 1.40.1
+- `basedpyright` 1.40.2
 - `ccstatusline` 2.2.30
 - `nerd-fonts` 3.5.1
 - `herdr` 0.9.3
 - `opencode` 1.18.34
-- `oh-my-pi` 18.4.8
+- `oh-my-pi` 18.6.1
 - `pwndbg` 2026.09.15
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1
