@@ -3,8 +3,8 @@
 # here may need sudo there. mise requests sudo itself for the dnf batch and hooks.
 
 [bootstrap.hooks]
-# EPEL + CRB must exist before the dnf batch resolves (ripgrep/htop/cppcheck/
-# heaptrack/bear/ccache are EPEL, meson/ninja-build are CRB). mise has no repo-enabling
+# EPEL + CRB must exist before the dnf batch resolves (htop/cppcheck/heaptrack/
+# bear/ccache are EPEL, meson/ninja-build are CRB). mise has no repo-enabling
 # key, so this is a hook task. Hooks are always `mise run <task>` (opaque strings
 # get no verified cwd/PATH).
 "pre-packages" = "mise run enable-el-repos"
@@ -69,7 +69,6 @@
 "dnf:parallel" = "latest"
 "dnf:perf" = "latest"
 "dnf:pv" = "latest"
-"dnf:ripgrep" = "latest"
 "dnf:rlwrap" = "latest"
 "dnf:rsync" = "latest"
 "dnf:rsyslog" = "latest"
