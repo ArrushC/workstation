@@ -23,7 +23,7 @@
 # (network, broken mise, malformed config — the mise tool-pin layer is
 # skipped in that case, though the config.toml [vars] layer still runs and
 # is reported) or a
-# post-bump `mise lock` regeneration fails, so the weekly workflow fails
+# post-bump `mise lock` or TOOLS-block regeneration fails, so the weekly workflow fails
 # visibly instead of silently reporting "nothing to bump". A lock failure
 # that names one bumped tool is NOT fatal: that pin is reverted and reported
 # under "Refused by mise lock", and the lock retried (see lock_platform).
@@ -449,8 +449,13 @@ done <<<"$updates"
 # generated file drift, and check-invariants.sh ("TOOLS block in sync")
 # fails on merge. There is no longer a second generated-config script to
 # call here: config*.toml IS the tool layer's single source of truth now.
+# It needs a python with tomllib (3.11+); its stderr says why it failed.
 if [ -n "$bumped$vars_bumped" ] && ! $DRY; then
-  scripts/gen-tool-memory.sh >/dev/null
+  if ! scripts/gen-tool-memory.sh >/dev/null; then
+    printf 'bump-versions.sh: scripts/gen-tool-memory.sh failed\n' >&2
+    failed="${failed}- \`scripts/gen-tool-memory.sh\` failed — the TOOLS block in dotfiles/claude/CLAUDE.md is stale (manual)\n"
+    exit_code=1
+  fi
 fi
 
 {

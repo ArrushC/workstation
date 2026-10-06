@@ -43,7 +43,7 @@ $WsBin    = Join-Path $WsRoot "bin"
 $WsMise   = Join-Path $WsRoot "mise"
 $WsStamps = Join-Path $WsRoot "stamps"
 
-# The one pin here: triple-edit with MISE_VERSION (bootstrap.sh) and min_version (config.toml).
+# The one pin here: edit with MISE_VERSION (bootstrap.sh), min_version (config.toml) and CI's mise-action `version:` (check_pins).
 $MiseVersion = "2026.9.9"
 $MiseSha256  = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
 $MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise-v$MiseVersion-windows-x64.zip"

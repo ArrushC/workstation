@@ -79,6 +79,16 @@ pin_equal() {
   if [ -z "$drift" ]; then ok "$label @ $first ($names)"; else bad "$label drift:$shown"; fi
 }
 
+# _mise_action_versions <workflow>: one line per jdx/mise-action step, the
+# `version:` it pins within the next few lines, or an empty line (drift) without one.
+_mise_action_versions() {
+  awk '
+    /uses:[ \t]*jdx\/mise-action/ { if (p) print ""; p = 1; left = 5; next }
+    p && /^[ \t]*version:/ { v = $0; sub(/^[ \t]*version:[ \t]*/, "", v); sub(/[ \t]*(#.*)?$/, "", v); gsub(/"/, "", v); print v; p = 0; next }
+    p && --left == 0 { print ""; p = 0 }
+    END { if (p) print "" }' "$1"
+}
+
 pin_at_least() {
   if [ -z "$2" ] || [ -z "$3" ]; then
     bad "$1: could not read the version ('$2') or its floor ('$3')"
@@ -150,10 +160,21 @@ check_pins() {
     note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
     return
   fi
+  # CI runs the same mise: every jdx/mise-action step pins it with `version:`.
+  local wf v i
+  local -a ci_pins=()
+  for wf in .github/workflows/*.yml; do
+    i=0
+    while IFS= read -r v; do
+      i=$((i + 1))
+      ci_pins+=("${wf##*/}#$i=$v")
+    done < <(_mise_action_versions "$wf")
+  done
   pin_equal "mise" \
     "bootstrap.sh=$(sed -nE 's/^MISE_VERSION="([0-9.]+)".*/\1/p' bootstrap.sh)" \
     "bootstrap.ps1=$(sed -nE 's/^\$MiseVersion *= *"([0-9.]+)".*/\1/p' bootstrap.ps1 | head -1)" \
-    "config.toml min_version=$(tomlval config.toml min_version 2>/dev/null)"
+    "config.toml min_version=$(tomlval config.toml min_version 2>/dev/null)" \
+    "${ci_pins[@]}"
   # zjstatus states the zellij it needs in prose release notes; the floor sits next to the pin.
   # A mismatch fails silently at runtime (the bar pane doesn't render) and
   # `zellij setup --check` still reports "Well defined".
