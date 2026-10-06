@@ -2,6 +2,6 @@
 # `mise install` writes per host type (tools, downloads, uv/go/npm caches), rounded
 # up to 100 MB. Read by the free-space checks in scripts/lib/mise-install.sh (Linux)
 # and bootstrap.ps1 (Windows).
-linux-owned = 5700
-linux-shared = 2600
+linux-owned = 5900
+linux-shared = 2700
 windows-owned = 3000
