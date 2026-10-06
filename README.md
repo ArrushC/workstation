@@ -90,7 +90,7 @@ Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, o
 
 ### Linux
 
-Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the host type's figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (a fresh owned host needs about 6.5 GB, a shared one about 4 GB). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. Then, on the host:
+Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the host type's figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (a fresh owned host needs about 6.7 GB, a shared one about 3.6 GB). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. Then, on the host:
 
 ```bash
 # === Interactive — asks owned or shared ===
@@ -134,7 +134,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, mise's `%LOCALAPPDATA%\mise`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: SSHFS-Win depends on WinFsp, a kernel driver, so its first install raises UAC (two prompts on a host without WinFsp: one for WinFsp, one for SSHFS-Win); decline them or pass `-SkipElevated` and everything else still completes.
 
-Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`), a working `curl.exe` (`curl.exe --version`), and room on the drive holding `%LOCALAPPDATA%` for the tools: `disk-budget.toml`'s `windows-owned` figure plus 1 GB, less what is already installed (about 4.3 GB fresh; `$env:WORKSTATION_SKIP_DISK_CHECK = '1'` overrides). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
+Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`), a working `curl.exe` (`curl.exe --version`), and room on the drive holding `%LOCALAPPDATA%` for the tools: `disk-budget.toml`'s `windows-owned` figure plus 1 GB, less what is already installed (about 4 GB fresh; `$env:WORKSTATION_SKIP_DISK_CHECK = '1'` overrides). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
 
 ```powershell
 $f = "$env:TEMP\bootstrap.ps1"; curl.exe -fsSL --retry 3 -o $f https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1

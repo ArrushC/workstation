@@ -36,7 +36,7 @@ check_disk() {
   data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
   tokens="${MISE_ENV:-$(sed -n 's/^env *= *\[\(.*\)\]/\1/p' "${XDG_CONFIG_HOME:-$HOME/.config}/mise/miserc.toml" 2>/dev/null || true)}"
   case "$tokens" in *owned*) key=linux-owned ;; *) key=linux-shared ;; esac
-  budget="$(sed -n "s/^$key *= *\([0-9][0-9]*\) *\$/\1/p" "$repo/disk-budget.toml" 2>/dev/null || true)"
+  budget="$(tr -d '\r' <"$repo/disk-budget.toml" 2>/dev/null | sed -n "s/^$key *= *\([0-9][0-9]*\) *\$/\1/p" || true)"
   if [ -z "$budget" ]; then
     printf '  ! disk check skipped: no %s figure in %s\n' "$key" "$repo/disk-budget.toml" >&2
     return 0

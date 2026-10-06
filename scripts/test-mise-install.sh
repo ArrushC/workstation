@@ -12,7 +12,8 @@
 # little room stops before installing and lists the largest folders; (11) what
 # is already installed lowers the need; (12) a shared host needs less than an
 # owned one; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
-# an unreadable df and (15) a missing budget skip the check.
+# an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
+# file is still read.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -154,5 +155,10 @@ printf 'linux-shared = 2500\n' >"$R/disk-budget.toml"
 out15="$(FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" || fail "disk check: a missing budget must not stop the install"
 grep -qx install "$FAKE_LOG" || fail "disk check (no budget): mise install did not run"
 printf '%s\n' "$out15" | grep -q 'disk check skipped: no linux-owned figure' || fail "disk check (no budget): no warning: $out15"
+# 16. a CRLF budget file (as a Windows checkout writes it) is still read, not skipped.
+printf 'linux-owned = 5000\r\nlinux-shared = 2500\r\n' >"$R/disk-budget.toml"
+rc16=0
+FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || rc16=$?
+[ "$rc16" = 1 ] || fail "disk check: a CRLF disk-budget.toml must still be read (expected exit 1 at 1 GB free, got $rc16)"
 
 echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped)"
