@@ -65,7 +65,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `yazi` 26.9.1
 - `atuin` 18.23.0
 - `uv` 0.12.23
-- `python` 3.14.7
+- `python` 3.14.8
 
 ### Linux toolbelt, both modes (config.linux.toml)
 - `zellij` 0.45.1
