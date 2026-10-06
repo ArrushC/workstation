@@ -6,8 +6,8 @@
 # --only packages` (config.windows.toml's winget GUI apps), then the steps under
 # RUN SEQUENCE. The one admin step: SSHFS-Win raises UAC (two prompts on a host
 # without WinFsp); declining it, or -SkipElevated, skips only that app.
-# Run it as README.md's Windows setup shows. $env:GITHUB_TOKEN is optional (a
-# private-fork clone; mise's GitHub API limit). Health: mise doctor, mise
+# Run it as README.md's Windows setup shows. $env:GITHUB_TOKEN is optional (mise
+# uses it to lift GitHub's API rate limit). Health: mise doctor, mise
 # bootstrap status, mise dot status, mise bootstrap packages status.
 # =============================================================================
 
@@ -33,9 +33,6 @@ $ErrorActionPreference = "Stop"
 
 $DotfilesRepo = "https://github.com/ArrushC/workstation.git"
 $SshKey       = "$env:USERPROFILE\.ssh\id_ed25519"
-
-# Scoped to github.com, so the token persisted in .git/config never reaches another remote.
-$GhHeaderKey = "http.https://github.com/.extraheader"
 
 # mise\bin (the pinned mise) and bin (python-env launchers) go on the User PATH.
 $WsRoot   = Join-Path $env:LOCALAPPDATA "workstation"
@@ -69,7 +66,7 @@ function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
 
-# Self-contained: bootstrap also runs from memory, before the repo exists.
+# Self-contained: bootstrap also runs from a downloaded copy, before the repo exists.
 function Invoke-CurlRequest {
     [CmdletBinding()]
     param(
@@ -173,18 +170,15 @@ function Invoke-Reinstall {
     Write-Host "    Remove-Item -Recurse -Force '$WsRoot'   # mise re-downloads next run"
     Write-Host ""
 
-    # A script inside $RepoPath would delete itself; the curl.exe form runs from memory ($PSCommandPath $null).
+    # A script inside $RepoPath would delete itself; README.md's download runs a copy in %TEMP%.
     if ($PSCommandPath -and $PSCommandPath.StartsWith($RepoPath, [StringComparison]::OrdinalIgnoreCase)) {
         Write-Fail @"
 Refusing to reinstall — the running script is inside $RepoPath, which would
-be deleted, leaving this invocation orphaned. Either:
+be deleted, leaving this invocation orphaned. Run a copy from outside it
+(README.md's two-line download does this, with -Reinstall on its second line):
 
-  1. Use the checked curl.exe download from README.md with -Reinstall.
-     It runs from memory after the complete download succeeds.
-
-  2. Copy this script somewhere outside the repo first, then re-run:
-       Copy-Item $PSCommandPath `$env:TEMP\bootstrap.ps1
-       & `$env:TEMP\bootstrap.ps1 -Reinstall
+  Copy-Item $PSCommandPath `$env:TEMP\bootstrap.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -File `$env:TEMP\bootstrap.ps1 -Reinstall
 "@
     }
 
@@ -462,41 +456,19 @@ function Invoke-ToolInstall {
 # =============================================================================
 
 function Invoke-CloneRepo {
-    # HTTP Basic "x-access-token:<PAT>", as actions/checkout does: git's smart-HTTP
-    # endpoint on github.com refuses "Authorization: bearer" and silently falls
-    # back to a credential prompt, which breaks a non-interactive clone.
-    $headerVal = ""
-    if ($env:GITHUB_TOKEN) {
-        $b64 = [Convert]::ToBase64String(
-            [System.Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GITHUB_TOKEN"))
-        $headerVal = "Authorization: Basic $b64"
-    }
-
     if (-not (Test-Path "$RepoPath\.git")) {
         Write-Log "Cloning workstation repo into $RepoPath..."
         $parent = Split-Path $RepoPath -Parent
         if (-not (Test-Path $parent)) {
             New-Item -ItemType Directory -Force -Path $parent | Out-Null
         }
-
-        if ($headerVal) {
-            git -c "$GhHeaderKey=$headerVal" clone $DotfilesRepo $RepoPath
-            if ($LASTEXITCODE -ne 0) {
-                Write-Fail "Clone failed. Check network access to github.com, and that `$env:GITHUB_TOKEN is a valid PAT (it is only needed for a private fork)."
-            }
-            git -C $RepoPath config $GhHeaderKey $headerVal
-        } else {
-            git clone $DotfilesRepo $RepoPath
-            if ($LASTEXITCODE -ne 0) {
-                Write-Fail "Clone failed. Check network access to github.com (a private fork also needs `$env:GITHUB_TOKEN set to a PAT with repo read)."
-            }
+        git clone $DotfilesRepo $RepoPath
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "Clone failed. Check network access to github.com."
         }
         Write-Ok "Repo cloned"
     } else {
         Write-Log "Repo already at $RepoPath — pulling latest..."
-        if ($headerVal) {
-            git -C $RepoPath config $GhHeaderKey $headerVal
-        }
         git -C $RepoPath pull --ff-only
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "Could not fast-forward — continuing with current state"

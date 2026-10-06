@@ -101,7 +101,7 @@ exec zsh   # or: source ~/.bashrc, if you can't chsh on this host
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | WORKSTATION_MODE=shared bash
 ```
 
-The repo is public, so no token is needed. `GITHUB_TOKEN` is optional: it is used for a private fork's clone and pull (persisted into `.git/config`) and lifts the 60-requests/hour anonymous GitHub API limit for tools that call it. To use a fork, change `DOTFILES_REPO` at the top of `bootstrap.sh`. Your git name and email are asked once and stored in `config.local.toml`.
+The repo is public, so no token or SSH key is needed. `GITHUB_TOKEN` is optional: mise uses it to lift GitHub's 60-requests/hour anonymous API limit. To use a (public) fork, change `DOTFILES_REPO` at the top of `bootstrap.sh` (`$DotfilesRepo` in `bootstrap.ps1`). Your git name and email are asked once and stored in `config.local.toml`.
 
 What `bootstrap.sh` does:
 
@@ -137,27 +137,17 @@ The Windows host is a client. No admin is needed: everything installs under your
 Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`) and a working `curl.exe` (`curl.exe --version`). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
 
 ```powershell
-$bootstrapFile = [System.IO.Path]::GetTempFileName()
-try {
-    $curl = Get-Command curl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
-    & $curl.Source --disable --fail --silent --show-error --location --retry 3 --retry-delay 2 --connect-timeout 30 `
-      --output $bootstrapFile `
-      https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
-    if ($LASTEXITCODE -ne 0) { throw "Bootstrap download failed (curl exit $LASTEXITCODE)" }
-    $bootstrap = [System.IO.File]::ReadAllText($bootstrapFile, [System.Text.Encoding]::UTF8)
-    & ([scriptblock]::Create($bootstrap))
-} finally {
-    Remove-Item -LiteralPath $bootstrapFile -Force
-}
+$f = "$env:TEMP\bootstrap.ps1"; curl.exe -fsSL --retry 3 -o $f https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
+if ($?) { powershell -NoProfile -ExecutionPolicy Bypass -File $f }
 ```
 
-Or clone and run: `git clone https://github.com/ArrushC/workstation.git "$env:USERPROFILE\.config\mise"`, then `cd` there and `.\bootstrap.ps1`.
+Paste both lines into PowerShell. The script runs in its own Windows PowerShell process with the execution policy bypassed for that process only, so it works on a machine still at the default `Restricted` policy, and a failure leaves your window open with the error. Flags go at the end of the second line (`... -File $f -SkipKeyGen`). Re-run the same two lines any time, or `.\bootstrap.ps1` from the clone if your execution policy allows scripts.
 
 What `bootstrap.ps1` does:
 
 1. Preflight: require `curl.exe` and git (it never installs Git).
 2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
-3. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it). A set `GITHUB_TOKEN` is persisted into `.git/config` so `git pull` and `wsu` authenticate.
+3. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it).
 4. Write `miserc.toml` (`windows,owned`; a User `MISE_ENV` variable is removed), ask once for your git name and email, check that mise loads `config.owned.toml` (it stops otherwise, before anything can prune the owned tools), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
 5. After a successful tools phase: remove the portable tools mise replaced (their directories and User PATH entries), add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder. `mise bootstrap`'s `post-tools` hook (`config.windows.toml`) runs `mise run nu-init`, which regenerates Nushell's init files (starship, mise, zoxide, atuin) in `%APPDATA%\nushell\vendor\autoload`, so `wsu` refreshes them too. Its `mise.nu` builds on each session's own PATH rather than the PATH `mise activate nu` saw, so Nushell finds what its terminal passes down, as PowerShell does.
 6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
@@ -188,7 +178,7 @@ Restart the shell afterwards so the new profile loads. Nushell is the default lo
 | `-Reinstall` | Wipe the cloned repo, then re-bootstrap. Prompts unless `-Yes`. |
 | `-Yes` | Skip confirmation prompts (`-Reinstall`). |
 
-`-Reinstall` from inside the repo is refused. Use the curl.exe download above and append `-Reinstall` to the `& ([scriptblock]::Create($bootstrap))` line.
+`-Reinstall` from inside the repo is refused, since the script would delete itself; the download above runs a copy from `%TEMP%`, so put `-Reinstall` at the end of its second line.
 
 **Health and updates.** There is no report mode in `bootstrap.ps1`. Use `mise doctor`, `mise bootstrap status` and `mise dot status` for the tools, host state and dotfiles. `wsu` updates the dotfiles and every CLI tool. The GUI apps are `config.windows.toml`'s `[bootstrap.packages]`: `mise bootstrap packages status` lists them as installed or missing, `mise bootstrap packages apply --manager winget` installs the missing ones, and `mise bootstrap packages upgrade --manager winget` updates them. To add one, add a `"winget:<Id>" = "latest"` line (the Id from `winget search`).
 
@@ -417,9 +407,9 @@ Install everything listed at once (the script collects every gap up front): `sud
 
 The mode is the `mode` line in the host's `config.local.toml` `[vars]`. Edit or delete it and re-run `./bootstrap.sh`; with the line deleted it prompts again (or reads `WORKSTATION_MODE`). Shared to owned adds system packages, managed `/etc` files and the zsh login shell. Owned to shared stops loading `config.owned.toml` and that run's `mise prune` removes the owned-only tools; dnf packages, `/etc` files and the login shell stay until removed by hand. Log in again so shells pick up the new `MISE_ENV`. Windows is always owned.
 
-### Clone or pull fails with "Authentication failed" or 404
+### Pull fails with "Authentication failed"
 
-The repo is public, so this is usually a stale `GITHUB_TOKEN` (expired or revoked, in the environment or persisted by an earlier run): GitHub rejects it instead of falling back to anonymous access. Refresh it, or clear the persisted copy with `git -C ~/.config/mise config --unset http.https://github.com/.extraheader`. A private fork needs a PAT with Contents:Read (fine-grained) or `repo` (classic).
+The bootstrap scripts clone and pull anonymously. A checkout made while the repo was private may still hold that era's token in `.git/config`, and once it expires GitHub rejects it instead of falling back to anonymous access. Remove it: `git -C ~/.config/mise config --unset http.https://github.com/.extraheader` (on Windows, `-C $env:USERPROFILE\.config\mise`).
 
 ### SSH keeps prompting for a password after ssh-copy-id
 

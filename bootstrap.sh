@@ -52,11 +52,6 @@ BIN="$HOME/.local/bin"
 MISE_VERSION="2026.9.9"
 MISE_SHA256="986f36c5efef4302f6252f1b1e58c32052f3696fcf19b1ed44a1976b3c2b4ffc" # mise-v${MISE_VERSION}-linux-x64-musl.tar.gz
 
-# http.extraheader key scoped to github.com so the token never leaks to
-# other remotes. Stored in the cloned repo's .git/config so subsequent
-# git push, git pull, and manual git ops all authenticate.
-GH_HEADER_KEY="http.https://github.com/.extraheader"
-
 # --- Usage ---------------------------------------------------------------------
 usage() {
   cat <<'EOF'
@@ -241,44 +236,19 @@ Install via your distro's package manager, e.g.
 # `git pull --ff-only` if it's already there.
 # =============================================================================
 clone_or_update_repo() {
-  # The repo is public, so no token is needed. If GITHUB_TOKEN is set anyway
-  # (e.g. bootstrapping from a private fork), use it via http.extraheader
-  # (scoped to github.com); it is persisted into the cloned repo's .git/config
-  # so subsequent push/pull auth too.
-  #
-  # HTTP Basic with a base64-encoded "x-access-token:<PAT>" pair — the same
-  # scheme GitHub Actions' `actions/checkout` uses. `Authorization: bearer`
-  # works for the REST/raw API (and that's how curl fetches bootstrap.sh) but
-  # is NOT accepted by git's smart-HTTP endpoint on github.com — GitHub falls
-  # through to credential prompting, which breaks any non-interactive clone.
-  local gh_header_val="" gh_header_b64
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    gh_header_b64=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
-    gh_header_val="Authorization: Basic $gh_header_b64"
-  fi
-
+  # The repo is public: a plain HTTPS clone, no token.
   if [[ ! -d "$REPO_DIR/.git" ]]; then
     log "Cloning workstation repo into $REPO_DIR..."
-    if [[ -n "$gh_header_val" ]]; then
-      git -c "${GH_HEADER_KEY}=${gh_header_val}" clone "$DOTFILES_REPO" "$REPO_DIR" ||
-        fail "Clone failed. Check network access to github.com, and that GITHUB_TOKEN is a valid PAT (it is only needed for a private fork)."
-      git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$gh_header_val"
-    else
-      git clone "$DOTFILES_REPO" "$REPO_DIR" ||
-        fail "Clone failed. Check network access to github.com (a private fork also needs GITHUB_TOKEN set to a PAT with repo read)."
-    fi
+    git clone "$DOTFILES_REPO" "$REPO_DIR" ||
+      fail "Clone failed. Check network access to github.com."
     ok "Repo cloned"
   else
     log "Repo already present at $REPO_DIR — pulling latest..."
-    # Refresh the stored token if a new one was passed in this invocation.
-    if [[ -n "$gh_header_val" ]]; then
-      git -C "$REPO_DIR" config "$GH_HEADER_KEY" "$gh_header_val"
-    fi
     # A failed pull means we'd run mise bootstrap against a stale-or-broken tree —
     # better to bail out and let the user inspect.
     if ! git -C "$REPO_DIR" pull --ff-only; then
       fail "git pull --ff-only failed in $REPO_DIR.
-This usually means stale credentials in .git/config, or local commits/conflicts.
+This usually means local commits or conflicts.
 Inspect with:
   cd $REPO_DIR && git status && git log --oneline -5
 
