@@ -64,9 +64,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
 - Owned-only steps hang off `final` hooks in `config.host.toml` (vcpkg, claude) and `config.native.toml`
   (fonts). `final` runs only on a full `mise bootstrap`, never on `--only dotfiles`.
-- dnf installs in one batch, so one unresolvable name fails the run. Only add
-  EL9-verified names. `ShellCheck` is capitalised; `fswatch`, `entr` and `cockpit-networkmanager`
-  don't resolve.
+- dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
+  and EL9; one some releases lack goes in `tasks/optional-packages`. `ShellCheck` is capitalised;
+  `fswatch`, `entr` and `cockpit-networkmanager` don't resolve.
 - No `[bootstrap.linux.firewall]` table: it makes `mise bootstrap plan`/`status` re-exec with sudo,
   which breaks `mise run health`. No `[bootstrap.user] login_shell` either: it needs `chsh`.
   `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`.
@@ -76,8 +76,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `docs/claude/verification.md`). `config.toml` sets `locked = true`: installs never rewrite locks
   (each OS's mise mangles the other's entries; a dirty tree breaks `wsu`). Lock-file-off installs
   pass `MISE_LOCKED=0`.
-- `tasks/verify-tools` (the `post-tools` hook) checks that every mise-installed ELF can run on this
-  host. Static binaries must pass. A failure means pinning an explicit `github:` `asset_pattern`.
+- `tasks/verify-tools` (the `post-tools` hook) checks every mise-installed ELF runs on this host;
+  `disk-budget.yml` checks them against EL8's glibc 2.28. Fix: a musl `github:` asset, else `conda:`.
 - vcpkg stays a task: `[bootstrap.repos]` can't shallow-clone or update. The C/C++ toolbelt
   spans dnf, mise and vcpkg on purpose; don't unify it.
 - `/dev/tty` reads in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
@@ -126,7 +126,6 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   syntax-highlighting → history-substring-search last. `bashrc.tera` carries PARITY NOTEs for what
   bash can't do.
 - The fleet runs `TERM=xterm-256color` on purpose.
-- `~/.claude/CLAUDE.md` is deployed from `dotfiles/claude/CLAUDE.md`. Its TOOLS block is generated.
 
 **Windows**
 - Never render Windows targets with Linux mise (`os()` is its OS).

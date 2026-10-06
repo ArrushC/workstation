@@ -4,10 +4,13 @@
 
 [bootstrap.hooks]
 # EPEL + CRB must exist before the dnf batch resolves (htop/cppcheck/heaptrack/
-# bear/ccache are EPEL, meson/ninja-build are CRB). mise has no repo-enabling
+# ccache are EPEL, meson/ninja-build are CRB). mise has no repo-enabling
 # key, so this is a hook task. Hooks are always `mise run <task>` (opaque strings
 # get no verified cwd/PATH).
 "pre-packages" = "mise run enable-el-repos"
+# After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
+# installed with dnf's strict=0 so a missing one is skipped, not fatal.
+"post-packages" = "mise run optional-packages"
 # Owned-only steps run from here, so shared hosts (which never load this file)
 # never see them. `final` runs only on a full `mise bootstrap`, never on
 # `--only dotfiles` (wsa).
@@ -36,7 +39,6 @@
 # --- optional ---
 "dnf:ShellCheck" = "latest"          # EPEL capitalises it
 "dnf:bash-completion" = "latest"
-"dnf:bear" = "latest"
 "dnf:bind-utils" = "latest"
 "dnf:ccache" = "latest"
 "dnf:clang" = "latest"

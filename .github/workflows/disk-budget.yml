@@ -3,7 +3,8 @@ name: disk-budget
 # downloads and the uv/go/npm caches) for each host type, and commits the MB
 # figures to disk-budget.toml on main. The free-space checks read that file:
 # scripts/lib/mise-install.sh on Linux, bootstrap.ps1's Assert-ToolsDiskSpace on
-# Windows. A pull request that changes this workflow measures without committing.
+# Windows. The Linux jobs also check every installed binary runs on EL8's glibc 2.28.
+# A pull request that changes this workflow measures and checks without committing.
 on:
   push:
     branches: [main]
@@ -51,6 +52,9 @@ jobs:
           mkdir -p "$h"
           export HOME="$h" XDG_DATA_HOME="$h/.local/share" XDG_CACHE_HOME="$h/.cache" XDG_STATE_HOME="$h/.local/state" GOPATH="$h/go"
           mise install
+          # Every Linux asset must run on EL8 (glibc 2.28): a bump to a build that
+          # needs a newer glibc fails here (fix: a musl github: asset, else conda:).
+          WORKSTATION_GLIBC_FLOOR=2.28 bash tasks/verify-tools
           mb=$(( ($(du -sk "$h" | cut -f1) + 1023) / 1024 ))
           echo "${{ matrix.key }}: $mb MB" >>"$GITHUB_STEP_SUMMARY"
           mkdir -p "$RUNNER_TEMP/budget"
