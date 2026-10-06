@@ -13,7 +13,10 @@
 # is already installed lowers the need; (12) a shared host needs less than an
 # owned one; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
 # an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
-# file is still read.
+# file is still read. tasks/optional-packages (fake rpm/sudo): (17) nothing
+# missing means no sudo; (18) a missing package goes to dnf with strict=0 and an
+# absent one is reported as skipped, exit 0. (19) verify-binary.sh honours
+# WORKSTATION_GLIBC_FLOOR.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -161,4 +164,37 @@ rc16=0
 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || rc16=$?
 [ "$rc16" = 1 ] || fail "disk check: a CRLF disk-budget.toml must still be read (expected exit 1 at 1 GB free, got $rc16)"
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped)"
+# 17-18. tasks/optional-packages (fake rpm/sudo): installs only what is missing,
+# with dnf's strict=0, and a package this release lacks is skipped, not fatal.
+O="$T/opt-bin"
+mkdir -p "$O"
+cat >"$O/rpm" <<'EOF'
+#!/usr/bin/env bash
+[ -n "${FAKE_RPM_HAS:-}" ]
+EOF
+cat >"$O/sudo" <<'EOF'
+#!/usr/bin/env bash
+echo "sudo $*" >>"$FAKE_LOG"
+EOF
+chmod +x "$O/rpm" "$O/sudo"
+: >"$FAKE_LOG"
+out17="$(FAKE_RPM_HAS=1 PATH="$O:$PATH" bash "$root/tasks/optional-packages" 2>&1)" || fail "optional-packages (present): non-zero exit"
+[ -s "$FAKE_LOG" ] && fail "optional-packages (present): sudo ran: $(cat "$FAKE_LOG")"
+printf '%s\n' "$out17" | grep -q 'optional packages present: bear' || fail "optional-packages (present): $out17"
+: >"$FAKE_LOG"
+out18="$(PATH="$O:$PATH" bash "$root/tasks/optional-packages" 2>&1)" || fail "optional-packages (missing): non-zero exit"
+grep -qx 'sudo dnf install -y --setopt=strict=0 bear' "$FAKE_LOG" || fail "optional-packages (missing): wrong dnf call: $(cat "$FAKE_LOG")"
+printf '%s\n' "$out18" | grep -q "bear isn't packaged for" || fail "optional-packages (missing): no skip note: $out18"
+
+# 19. verify-binary.sh: WORKSTATION_GLIBC_FLOOR judges a binary against that glibc,
+# not this host's (CI checks every Linux asset against EL8's 2.28 this way).
+if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; then
+  sysbin="$(command -v ls)"
+  bash "$root/scripts/lib/verify-binary.sh" "$sysbin" >/dev/null 2>&1 || fail "verify-binary: $sysbin fails on its own host"
+  rc19=0
+  out19="$(WORKSTATION_GLIBC_FLOOR=2.0 bash "$root/scripts/lib/verify-binary.sh" "$sysbin" 2>&1)" || rc19=$?
+  [ "$rc19" = 1 ] || fail "verify-binary: WORKSTATION_GLIBC_FLOOR=2.0 must fail $sysbin (got $rc19)"
+  printf '%s\n' "$out19" | grep -q 'checked against glibc 2.0 (WORKSTATION_GLIBC_FLOOR)' || fail "verify-binary floor: $out19"
+fi
+
+echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped); optional-packages installs only what's missing with strict=0 and skips what the release lacks; verify-binary honours WORKSTATION_GLIBC_FLOOR"

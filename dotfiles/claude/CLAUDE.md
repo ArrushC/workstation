@@ -59,9 +59,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `zoxide` 0.10.0
 - `fd` 10.5.0
 - `bat` 0.26.1
-- `delta` 0.20.1
 - `eza` 0.23.5
 - `ripgrep` 15.2.0
+- `delta` 0.20.1
 - `yazi` 26.9.1
 - `atuin` 18.23.0
 - `uv` 0.12.23
@@ -81,19 +81,14 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gitui` 0.28.1
 - `lazygit` 0.65.1
 - `jj` 0.45.1
-- `ast-grep` 0.45.3
 - `xh` 0.26.2
 - `micro` 2.0.15
-- `sd` 1.1.0
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.75.1
 - `croc` 11.5.4
 - `hyperfine` 1.20.0
 - `sops` 3.13.3
-- `htmlq` 0.4.0
-- `watchexec` 2.7.4
-- `bottom` 0.14.9
 - `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
 - `cheat` 5.1.0
@@ -105,7 +100,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `grex` 1.4.6
 - `shfmt` 3.14.1
 - `gitleaks` 8.30.1
-- `dust` 1.2.6
 - `hexyl` 0.17.0
 - `gum` 2.0.2
 - `rust-analyzer` 2026-10-05
@@ -123,15 +117,22 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ouch` 0.8.3
 - `scc` 4.1.0
 - `dsq` 0.23.0
-- `gitlogue` 0.12.0
-- `jless` 0.9.0
 - `broot` 1.61.0
 - `nnd` 0.80
 - `gping` 1.21.0
 - `television` 0.15.9
 - `difftastic` 0.71.0
+- `bottom` 0.14.9
+- `dust` 1.2.6
+- `sd` 1.1.0
+- `watchexec` 2.7.4
 - `qsv` 23.0.1
 - `zjstatus` 0.25.0
+- `conda:helix` 25.07.1
+- `conda:ast-grep` 0.45.3
+- `conda:jless` 0.9.0
+- `conda:gitlogue` 0.12.0
+- `conda:htmlq` 0.4.0
 - `ncdu` 2.9.1
 - `pueue` 4.0.4
 - `pueued` 4.0.4
@@ -171,7 +172,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `claude` latest
 
 ### System packages (dnf, owned hosts)
-- ShellCheck bash-completion bear bind-utils ccache clang clang-tools-extra cmake cppcheck cronie curl gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson mtr multitail ncurses ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3 python3-pip rlwrap rsync rsyslog strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zsh
+- ShellCheck bash-completion bind-utils ccache clang clang-tools-extra cmake cppcheck cronie curl gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson mtr multitail ncurses ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3 python3-pip rlwrap rsync rsyslog strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zsh
 
 ### System packages (dnf, owned hosts, non-WSL)
 - autofs nfs-utils nfs4-acl-tools

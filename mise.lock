@@ -17,21 +17,6 @@ checksum = "sha256:0f729b4b6f5f28d395c641eacc2e9ff68d0096b85aa0eec344aa62425144b
 url = "https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/sharkdp/bat/releases/assets/323549116"
 
-[[tools.delta]]
-version = "0.20.1"
-backend = "aqua:dandavison/delta"
-specifiers = ["0.20.1"]
-
-[tools.delta."platforms.linux-x64"]
-checksum = "sha256:50f08c879f84c81ceb220e476491a7f492d2c9c671e79918cc44badf961a6240"
-url = "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/610498121"
-
-[tools.delta."platforms.windows-x64"]
-checksum = "sha256:c9af7484b33f1dbc1312a892fc7d5753a6d3365140a4000d49e575a2de742c25"
-url = "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/610501426"
-
 [[tools.eza]]
 version = "0.23.5"
 backend = "aqua:eza-community/eza"
@@ -121,6 +106,32 @@ checksum = "sha256:3e1c1282da39039a7ceb8e53c6b624dfb86200823559bbe80c0ace3d0baf0
 url = "https://github.com/atuinsh/atuin/releases/download/v18.23.0/atuin-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/580134234"
 provenance = "github-attestations"
+
+[[tools."github:dandavison/delta"]]
+version = "0.20.1"
+backend = "github:dandavison/delta"
+specifiers = ["0.20.1"]
+
+[tools."github:dandavison/delta".options]
+asset_pattern = "delta-{{ version }}-x86_64-unknown-linux-musl.tar.gz"
+
+[tools."github:dandavison/delta"."platforms.linux-x64"]
+checksum = "sha256:69dcb4043f55c29118f408c6efd30115e0a4e0a6709253343b8c8fa814ab4a31"
+url = "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/610498263"
+
+[[tools."github:dandavison/delta"]]
+version = "0.20.1"
+backend = "github:dandavison/delta"
+specifiers = ["0.20.1"]
+
+[tools."github:dandavison/delta".options]
+asset_pattern = "delta-{{ version }}-x86_64-pc-windows-msvc.zip"
+
+[tools."github:dandavison/delta"."platforms.windows-x64"]
+checksum = "sha256:c9af7484b33f1dbc1312a892fc7d5753a6d3365140a4000d49e575a2de742c25"
+url = "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/610501426"
 
 [[tools."github:sxyazi/yazi"]]
 version = "26.9.1"

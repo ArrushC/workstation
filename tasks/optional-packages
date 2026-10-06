@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#MISE description="Best-effort dnf packages some EL releases lack (bear isn't packaged for EL8); owned hosts' post-packages hook"
+# config.host.toml's [bootstrap.packages] dnf batch is all-or-nothing on purpose: a
+# misspelled or renamed name fails it loudly. A package that only some EL releases
+# carry goes here instead, installed with strict=0 so dnf skips it where it doesn't
+# exist. bear: EPEL 9 has it; EL8 has no package, conda-forge's build needs glibc
+# 2.39, and upstream ships source only. sudo runs only when something is missing,
+# so a routine update doesn't prompt. Always exits 0: mise runs hooks under
+# `sh -o errexit`, and a missing optional package must not stop the bootstrap.
+set -uo pipefail
+pkgs=(bear)
+
+missing=()
+for p in "${pkgs[@]}"; do
+  rpm -q "$p" >/dev/null 2>&1 || missing+=("$p")
+done
+if [ "${#missing[@]}" -eq 0 ]; then
+  printf '  optional packages present: %s\n' "${pkgs[*]}"
+  exit 0
+fi
+
+printf '==> optional packages (skipped where this release has none): %s\n' "${missing[*]}"
+sudo dnf install -y --setopt=strict=0 "${missing[@]}" ||
+  printf '  ! dnf install exited non-zero; the bootstrap continues\n'
+release="$(. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-this release}")"
+for p in "${missing[@]}"; do
+  rpm -q "$p" >/dev/null 2>&1 || printf "  ! %s isn't packaged for %s; skipped\n" "$p" "${release:-this release}"
+done
+exit 0

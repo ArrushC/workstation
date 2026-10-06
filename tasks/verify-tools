@@ -25,6 +25,12 @@ paths="$(mise bin-paths 2>&1)" || {
 n=0 bad=0
 while IFS= read -r dir; do
   [ -d "$dir" ] || continue
+  # With WORKSTATION_GLIBC_FLOOR (CI checking for EL8), skip what mise builds from
+  # source on the installing host (go:/cargo: backends): it links against that
+  # host's glibc, so it always runs there, whatever the CI runner's glibc.
+  if [ -n "${WORKSTATION_GLIBC_FLOOR:-}" ]; then
+    case "$dir" in */installs/go-* | */installs/cargo-*) continue ;; esac
+  fi
   for f in "$dir"/*; do
     [ -f "$f" ] && [ -x "$f" ] || continue
     head -c4 "$f" 2>/dev/null | grep -q $'\x7fELF' || continue

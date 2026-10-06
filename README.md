@@ -90,7 +90,7 @@ Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, o
 
 ### Linux
 
-Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the host type's figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (a fresh owned host needs about 6.7 GB, a shared one about 3.6 GB). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. Then, on the host:
+Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the host type's figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (a fresh owned host needs about 6.7 GB, a shared one about 3.6 GB). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped, and GEF needs gdb 10 or newer, past EL8's system gdb (8.2), so it won't load there (`pwndbg` brings its own gdb). Then, on the host:
 
 ```bash
 # === Interactive — asks owned or shared ===
@@ -326,12 +326,12 @@ Tabs rename themselves to the current directory's basename on `cd`; set `WORKSTA
 
 ## Adding things
 
-**A tool.** One line in the right file; every tool is a mise pin. `config.linux.toml` is the Linux toolbelt (both modes), `config.owned.toml` is owned-only (add `os = ["linux"]` or `os = ["windows"]` when it is also single-OS), `config.toml` is everything else, including tools both OSes install (starship, gh, jq, helix). Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset (for example a glibc floor EL9 cannot meet). See the gping, yazi, television, atuin and qsv entries for worked examples.
+**A tool.** One line in the right file; every tool is a mise pin. `config.linux.toml` is the Linux toolbelt (both modes), `config.owned.toml` is owned-only (add `os = ["linux"]` or `os = ["windows"]` when it is also single-OS), `config.toml` is everything else, including tools both OSes install (starship, gh, jq, helix). Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset. Every Linux asset must run on EL8's glibc 2.28: prefer a musl build (see the gping, yazi, delta and bottom entries); when a project ships only newer-glibc builds, take conda-forge's (`conda:`, built against glibc 2.17 or 2.28; see helix and ast-grep). After an install, `tasks/verify-tools` checks every binary runs on the host, and `disk-budget.yml` checks them against glibc 2.28 in CI.
 
 ```toml
 # config.linux.toml — [tools] (both modes; aqua registry short name)
 direnv = "2.34.0"
-# pin an explicit asset when the registry default won't run on EL9
+# pin an explicit asset when the registry default won't run on EL8 (glibc 2.28)
 "github:direnv/direnv" = { version = "2.34.0", asset_pattern = "direnv.linux-amd64" }
 ```
 
@@ -372,11 +372,11 @@ Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` auto
 ```
 
 ```bash
-dnf repoquery tig          # confirm the exact name resolves on EL9
+dnf repoquery tig          # confirm the exact name resolves on EL8 and EL9
 mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap plan
 ```
 
-Do not re-add names known not to resolve on EL9: `fswatch`, `entr`, `cockpit-networkmanager`. `ShellCheck` is capitalised (EPEL).
+Do not re-add names known not to resolve on EL9: `fswatch`, `entr`, `cockpit-networkmanager`. `ShellCheck` is capitalised (EPEL). The batch is all-or-nothing, so a package only some EL releases carry goes in `tasks/optional-packages` instead (the `post-packages` hook), which installs with dnf's `strict=0` and skips it where it is missing: `bear` is there because EL8 has no package.
 
 **A service or `/etc` file.** In `config.native.toml` (or `config.wsl.toml` for WSL-only state): a `[bootstrap.files."/etc/<path>"]` table (source relative to the repo root, under `configs/`; phase is only `pre-packages` or `post-packages`; mise elevates itself) and a `[bootstrap.services.<name>]` table for the unit it belongs to:
 

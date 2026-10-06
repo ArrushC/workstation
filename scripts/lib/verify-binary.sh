@@ -15,6 +15,8 @@
 #   2. ldd: static -> PASS; any "not found" -> FAIL  (absent loader/lib)
 #   3. glibc floor: max required GLIBC_x.y <= host glibc  (built too new)
 #      -- needs objdump/readelf (binutils); skipped with a note if absent.
+#      WORKSTATION_GLIBC_FLOOR=x.y checks against that version instead of this
+#      host's: CI (disk-budget.yml) uses 2.28 so every Linux asset runs on EL8.
 #
 # Pure decision logic is decide()/glibc_le(); gather helpers wrap the system
 # tools. The bottom `if main` guard lets test-verify-binary.sh source this file
@@ -165,7 +167,7 @@ main() {
   [ "$(elf_arch "$bin")" = "$(host_arch)" ] && arch_ok=1
   ldd_class=$(classify_ldd "$bin")
   floor=$(max_glibc_floor "$bin")
-  host=$(host_glibc)
+  host="${WORKSTATION_GLIBC_FLOOR:-$(host_glibc)}"
 
   if reason=$(decide "$is_elf" "$arch_ok" "$ldd_class" "$floor" "$host"); then
     if [ "$ldd_class" = ok ] && [ -z "$floor" ]; then
@@ -176,7 +178,11 @@ main() {
     exit 0
   fi
   printf '  \xe2\x9c\x97 verify %s: %s\n' "$bin" "$reason" >&2
-  printf '      host: glibc %s, arch %s\n' "${host:-?}" "$(uname -m)" >&2
+  if [ -n "${WORKSTATION_GLIBC_FLOOR:-}" ]; then
+    printf '      checked against glibc %s (WORKSTATION_GLIBC_FLOOR), arch %s\n' "$host" "$(uname -m)" >&2
+  else
+    printf '      host: glibc %s, arch %s\n' "${host:-?}" "$(uname -m)" >&2
+  fi
   exit 1
 }
 
