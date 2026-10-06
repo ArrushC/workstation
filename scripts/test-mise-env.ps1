@@ -2,7 +2,8 @@
 # miserc.toml writer (Initialize-MiseEnv), the one-time cleanup of the
 # pre-mise portable installs (Invoke-LegacyToolCleanup), the mise install /
 # update (Install-Mise), the mise bootstrap step's guard, ordering and
-# -C pinning (Invoke-MiseBootstrap), and the Claude Code step's PATH entry
+# -C pinning (Invoke-MiseBootstrap), its free-space check
+# (Assert-ToolsDiskSpace), and the Claude Code step's PATH entry
 # (Invoke-InstallClaudeCode). The functions are extracted from the
 # script's AST, as scripts/test-config-local.ps1 does.
 #
@@ -12,13 +13,14 @@
 #    [Environment]::SetEnvironmentVariable itself is refused, not loaded
 #  - `mise` is a function stub (functions win over mise.exe on PATH), and
 #    the script stops unless it resolves to that stub
-#  - Invoke-CurlRequest, Add-ToUserPath and Update-SessionPath are stubbed
+#  - Invoke-CurlRequest, Add-ToUserPath and Update-SessionPath are stubbed, and so
+#    are Get-FreeSpaceMB and Get-DirSizeMB (the disk is whatever a case says)
 #  - every path points at a temp dir
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Initialize-MiseEnv', 'Invoke-LegacyToolCleanup', 'Install-Mise', 'Invoke-MiseBootstrap', 'Invoke-InstallClaudeCode'
+$wanted = 'Initialize-MiseEnv', 'Invoke-LegacyToolCleanup', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode'
 $refused = New-Object System.Collections.Generic.List[string]
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     if ($f.Extent.Text -match 'Environment\]::SetEnvironmentVariable') { $refused.Add($f.Name); continue }
@@ -42,6 +44,11 @@ function Set-UserEnv {
 $script:addedPaths = New-Object System.Collections.Generic.List[string]
 function Add-ToUserPath { param([string]$Dir) $script:addedPaths.Add($Dir) }
 function Update-SessionPath { }
+# The disk: 100 GB free and nothing installed unless a case says otherwise.
+$script:freeMB = 102400
+$script:usedMB = 0
+function Get-FreeSpaceMB { param([string]$Path) $script:freeMB }
+function Get-DirSizeMB { param([string]$Path) $script:usedMB }
 function Invoke-EnsureConfigLocal { }
 function Invoke-WslConfigReminder { }
 # The download: a copy of $script:curlZip, or a failure when it's $null.
@@ -307,6 +314,9 @@ try {
     # Invoke-MiseBootstrap with the stubbed mise.
     $script:RepoPath = Join-Path $tmp 'mb-repo'
     New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
+    # A fixed budget (the real disk-budget.toml changes weekly).
+    $budgetFile = Join-Path $script:RepoPath 'disk-budget.toml'
+    Set-Content -LiteralPath $budgetFile -Value 'windows-owned = 3000'
     $script:MiseEnvTokens = @('windows', 'owned')
     $script:SkipDotfiles = $false
     $script:SkipToolInstall = $false
@@ -395,6 +405,59 @@ try {
         Assert ($msg -eq '') "failed: $msg"
         Assert (($script:warnings -join ' ') -like '*close running node processes*') "warnings: $($script:warnings -join ' | ')"
         Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 0) 'marker written after a failed reinstall'
+    }
+
+    $script:miseReply = @{ 'config ls' = @{ Out = $ownedLs; Exit = 0 } }
+    Test-Case 'disk: too little room stops before mise bootstrap installs anything' {
+        $script:freeMB = 1024; $script:usedMB = 0
+        $msg = Invoke-Bootstrap
+        Assert ($msg -like 'WRITE-FAIL:*Not enough disk space*1.0 GB free*about 3.9 GB needed*Nothing was installed*WORKSTATION_SKIP_DISK_CHECK*') "got: $msg"
+        Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
+    }
+
+    Test-Case 'disk: what is already installed lowers the need (2.8 GB installed, 2 GB free)' {
+        $script:freeMB = 2048; $script:usedMB = 2800
+        $msg = Invoke-Bootstrap
+        Assert ($msg -eq '') "failed: $msg"
+        Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
+    }
+
+    Test-Case 'disk: WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning' {
+        $script:freeMB = 1024; $script:usedMB = 0
+        $env:WORKSTATION_SKIP_DISK_CHECK = '1'
+        try { $msg = Invoke-Bootstrap } finally { Remove-Item Env:WORKSTATION_SKIP_DISK_CHECK }
+        Assert ($msg -eq '') "failed: $msg"
+        Assert (($script:warnings -join ' ') -like '*Low disk space*going ahead*') "warnings: $($script:warnings -join ' | ')"
+        Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
+    }
+
+    Test-Case 'disk: an unreadable drive skips the check; -SkipToolInstall never checks' {
+        $script:freeMB = $null
+        Assert ((Invoke-Bootstrap) -eq '') 'an unreadable drive stopped the bootstrap'
+        $script:freeMB = 1024; $script:SkipToolInstall = $true
+        try { $msg = Invoke-Bootstrap } finally { $script:SkipToolInstall = $false; $script:freeMB = 102400 }
+        Assert ($msg -eq '') "-SkipToolInstall ran the check: $msg"
+    }
+
+    Test-Case 'disk: no windows-owned figure in disk-budget.toml skips the check, with a warning' {
+        Set-Content -LiteralPath $budgetFile -Value 'linux-owned = 5000'
+        $script:freeMB = 1024
+        try { $msg = Invoke-Bootstrap } finally { Set-Content -LiteralPath $budgetFile -Value 'windows-owned = 3000'; $script:freeMB = 102400 }
+        Assert ($msg -eq '') "a missing budget stopped the bootstrap: $msg"
+        Assert (($script:warnings -join ' ') -like '*disk check skipped: no windows-owned figure*') "warnings: $($script:warnings -join ' | ')"
+        Assert (@(Get-MiseCall 'bootstrap --only').Count -ge 1) 'mise bootstrap did not run'
+    }
+
+    Test-Case 'disk: the real Get-FreeSpaceMB reads a drive, and $null for a missing drive or a UNC path' {
+        $src = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-FreeSpaceMB' }, $true))[0]
+        . ([scriptblock]::Create(($src.Extent.Text -replace '^function Get-FreeSpaceMB', 'function Get-RealFreeSpaceMB')))
+        $free = Get-RealFreeSpaceMB $env:TEMP
+        Assert (($null -ne $free) -and ($free -gt 0)) "TEMP's drive: [$free]"
+        $used = @(Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name.ToUpper() })
+        $letter = [char[]](68..90) | Where-Object { "$_" -notin $used } | Select-Object -Last 1
+        $none = Get-RealFreeSpaceMB "${letter}:\nope"
+        Assert ($null -eq $none) "missing drive ${letter}: got [$none], want `$null (not 0)"
+        Assert ($null -eq (Get-RealFreeSpaceMB '\\server\share\x')) 'a UNC path should read as $null'
     }
 
     Test-Case 'Claude Code: an installed ~\.local\bin\claude.exe puts that folder on the User PATH' {

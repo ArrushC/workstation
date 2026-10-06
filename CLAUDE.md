@@ -19,10 +19,9 @@
 - **The checkout is live config:** `mise use -g`, `mise settings set`, `mise dot add`/`wsr`, `wse` and
   `mise bootstrap` write tracked files here. Commit or revert first; `wsu`'s `git pull --ff-only`
   fails on a dirty tree.
-- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the `mise run install-hooks` pre-commit hook run it) and
+- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the pre-commit hook run it) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
-- **Task names** must not collide with mise built-ins (`mise fmt` is built in, so ours is
-  `mise run fmt`).
+- **Task names** must not collide with mise built-ins (`mise fmt` is one; ours is `mise run fmt`).
 - **Real `$HOME`:** agents never run `mise dot apply`, `wsa` or a bulk `mise bootstrap` against the
   real `$HOME` or host. Render into a scratch `$HOME` (`docs/claude/verification.md`) and hand real
   applies and sudo steps to the user.
@@ -157,7 +156,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - First-party shell must be `shfmt -i 2`-clean (`mise run fmt`) and gitleaks-clean.
   - Quote bash associative-array keys: shfmt rewrites an unquoted `[a-b]` as arithmetic.
 - **`dotfiles/claude/skills/workstation-lsp/.lsp.json` must be strict JSON.** A `//` comment silently fails
-  all 12 servers, and `claude plugin validate` tolerates it (which is all `check_lsp_plugin` runs). Check with
+  all 12 servers, and `claude plugin validate` (`check_lsp_plugin`) tolerates it. Check with
   `python3 -m json.tool`; put notes in `SKILL.md`.
 - **Every other file under `dotfiles/` is 100644** (`check_dotfiles_mode`): `copy`/`template`
   propagate the source's exec bit into `$HOME`.
@@ -172,6 +171,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
+  - `disk-budget.toml`, from `.github/workflows/disk-budget.yml`
 - **Parity pairs (change them together):**
   - `zshrc.tera` ↔ `bashrc.tera`
   - `zshenv.tera` ↔ the shims block in `bashrc.tera`

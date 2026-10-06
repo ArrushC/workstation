@@ -90,7 +90,7 @@ Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, o
 
 ### Linux
 
-Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once). Then, on the host:
+Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the host type's figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (a fresh owned host needs about 6.5 GB, a shared one about 4 GB). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. Then, on the host:
 
 ```bash
 # === Interactive — asks owned or shared ===
@@ -134,7 +134,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, mise's `%LOCALAPPDATA%\mise`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: SSHFS-Win depends on WinFsp, a kernel driver, so its first install raises UAC (two prompts on a host without WinFsp: one for WinFsp, one for SSHFS-Win); decline them or pass `-SkipElevated` and everything else still completes.
 
-Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`) and a working `curl.exe` (`curl.exe --version`). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
+Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`), a working `curl.exe` (`curl.exe --version`), and room on the drive holding `%LOCALAPPDATA%` for the tools: `disk-budget.toml`'s `windows-owned` figure plus 1 GB, less what is already installed (about 4.3 GB fresh; `$env:WORKSTATION_SKIP_DISK_CHECK = '1'` overrides). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
 
 ```powershell
 $f = "$env:TEMP\bootstrap.ps1"; curl.exe -fsSL --retry 3 -o $f https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
@@ -286,7 +286,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, free disk space where mise installs tools (a warning below 2 GB), `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
@@ -344,6 +344,8 @@ mise run bump-versions
 It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` previews without writing), so expect unrelated bumps in the diff. It refreshes the lockfiles for every platform the verified way (from outside the checkout through an `XDG_CONFIG_HOME` symlink, then normalising the `.mise/locks` sidecar paths). A hand-run `mise lock` inside the checkout can write sidecar refs to the wrong layout. Do not add tool-specific logic to `bootstrap.sh`. The Claude tool inventory regenerates from `config*.toml` on edit (`scripts/gen-tool-memory.sh`).
 
 **A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. GitHub holds workflow runs on a PR from `github-actions[bot]` until someone approves them, so click **Approve workflows to run** on the PR to start lint, and merge once it passes. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is mise itself: `MISE_VERSION`/`MISE_SHA256` in `bootstrap.sh`, `$MiseVersion`/`$MiseSha256` in `bootstrap.ps1`, `min_version` in `config.toml` and each workflow's `jdx/mise-action` `version:` (lint checks the versions agree). To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
+
+**Disk budget.** After a change to `config*.toml`, `mise*.lock` or `locks/` reaches `main`, `disk-budget.yml` installs the toolbelt fresh for each host type (owned and shared Linux, Windows), measures everything the install wrote (tools, downloads, uv/go/npm caches) and commits the figures, rounded up to 100 MB, to `disk-budget.toml`. The free-space checks in `scripts/lib/mise-install.sh` and `bootstrap.ps1` read it. Run it by hand with `gh workflow run disk-budget.yml`.
 
 **A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
 
@@ -406,6 +408,10 @@ Install everything listed at once (the script collects every gap up front): `sud
 ### Changing a host between owned and shared
 
 The mode is the `mode` line in the host's `config.local.toml` `[vars]`. Edit or delete it and re-run `./bootstrap.sh`; with the line deleted it prompts again (or reads `WORKSTATION_MODE`). Shared to owned adds system packages, managed `/etc` files and the zsh login shell. Owned to shared stops loading `config.owned.toml` and that run's `mise prune` removes the owned-only tools; dnf packages, `/etc` files and the login shell stay until removed by hand. Log in again so shells pick up the new `MISE_ENV`. Windows is always owned.
+
+### The tools step stops with "Not enough disk space for the mise tools"
+
+The check runs before `mise install` because a disk that fills mid-install leaves tools half-extracted that mise still counts as installed. The message gives the free and needed space and the largest folders in your home; IDE remote-server caches are the usual culprits (`~/.cache/JetBrains/RemoteDev`, old `~/.vscode-server/cli/servers/*`, `~/.local/share/zed`). Free the space and re-run. If an earlier run already filled the disk, force the tools it cut short (`mise install --force <tool>`, for example `go` when gopls fails with "package cmp is not in std").
 
 ### Pull fails with "Authentication failed"
 

@@ -574,6 +574,51 @@ function Invoke-WslConfigReminder {
     Write-Warn "for the new WSL2 settings to take effect (restarts all distros)."
 }
 
+# Room for the tools before `mise bootstrap` installs any, as scripts/lib/mise-install.sh
+# checks on Linux: a disk that fills mid-install leaves tools half-extracted that mise
+# still counts as installed. The budget is what a fresh Windows install writes, as
+# measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what is
+# already installed, plus 1 GB for the new versions an update installs before the prune.
+# $env:WORKSTATION_SKIP_DISK_CHECK = '1' goes ahead anyway; a missing budget or an
+# unreadable drive skips it.
+function Assert-ToolsDiskSpace {
+    $budgetFile = Join-Path $RepoPath 'disk-budget.toml'
+    $line = if (Test-Path -LiteralPath $budgetFile) { Select-String -LiteralPath $budgetFile -Pattern '^windows-owned *= *(\d+) *$' | Select-Object -First 1 }
+    if (-not $line) {
+        Write-Warn "disk check skipped: no windows-owned figure in $budgetFile"
+        return
+    }
+    $budgetMB = [int]$line.Matches[0].Groups[1].Value
+    $data = if ($env:MISE_DATA_DIR) { $env:MISE_DATA_DIR } else { Join-Path $env:LOCALAPPDATA 'mise' }
+    $needMB = [math]::Max($budgetMB - (Get-DirSizeMB (Join-Path $data 'installs')), 0) + 1024
+    $freeMB = Get-FreeSpaceMB $data
+    if (($null -eq $freeMB) -or ($freeMB -ge $needMB)) { return }
+    $msg = '{0:N1} GB free on the drive holding {1}, about {2:N1} GB needed' -f ($freeMB / 1024), $data, ($needMB / 1024)
+    if ($env:WORKSTATION_SKIP_DISK_CHECK -eq '1') {
+        Write-Warn "Low disk space for the mise tools: $msg; WORKSTATION_SKIP_DISK_CHECK=1, so going ahead"
+        return
+    }
+    Write-Fail "Not enough disk space for the mise tools: $msg. Nothing was installed. Free some space (Settings > System > Storage), then re-run; `$env:WORKSTATION_SKIP_DISK_CHECK = '1' skips this check."
+}
+
+function Get-DirSizeMB {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return 0 }
+    $sum = (Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
+    [math]::Floor([double]$sum / 1MB)
+}
+
+# $null when the drive can't be read (missing, not ready, a UNC path). Check IsReady
+# first: PowerShell swallows a throwing property getter and AvailableFreeSpace reads as 0.
+function Get-FreeSpaceMB {
+    param([string]$Path)
+    try {
+        $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot([System.IO.Path]::GetFullPath($Path)))
+        if (-not $drive.IsReady) { return $null }
+        [math]::Floor($drive.AvailableFreeSpace / 1MB)
+    } catch { $null }
+}
+
 # `mise bootstrap --only dotfiles,tools`: the [dotfiles] entries and every tool;
 # `--only` keeps the sudo-only [bootstrap.files] out. A host's first apply passes
 # --force-dotfiles (a target can already be a differing real file); $MigratedMarker
@@ -629,6 +674,7 @@ function Invoke-MiseBootstrap {
     # `mise where node` succeeds only when the DECLARED node is installed.
     $hadNode = $false
     if (-not $SkipToolInstall) {
+        Assert-ToolsDiskSpace
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
         & mise @miseCd where node *> $null
         $hadNode = ($LASTEXITCODE -eq 0)
