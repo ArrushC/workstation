@@ -115,17 +115,17 @@ url = "https://github.com/antonmedv/fx/releases/download/39.2.0/fx_linux_amd64"
 url_api = "https://api.github.com/repos/antonmedv/fx/releases/assets/315468989"
 
 [[tools."github:Canop/broot"]]
-version = "1.60.2"
+version = "1.61.0"
 backend = "github:Canop/broot"
-specifiers = ["1.60.2"]
+specifiers = ["1.61.0"]
 
 [tools."github:Canop/broot".options]
 asset_pattern = "broot_{version}.zip"
 
 [tools."github:Canop/broot"."platforms.linux-x64"]
-checksum = "sha256:e238e610ee1fa2cd52353efeb60b43ece470d047529e9b9071c0714c46ced545"
-url = "https://github.com/Canop/broot/releases/download/v1.60.2/broot_1.60.2.zip"
-url_api = "https://api.github.com/repos/Canop/broot/releases/assets/590682619"
+checksum = "sha256:6cafe8e993fb8e5684eb25549703a4fb9dec61ac6a8f1947cbed6566cb4e58e5"
+url = "https://github.com/Canop/broot/releases/download/v1.61.0/broot_1.61.0.zip"
+url_api = "https://api.github.com/repos/Canop/broot/releases/assets/607821944"
 
 [[tools."github:PaulJuliusMartinez/jless"]]
 version = "0.9.0"
@@ -357,14 +357,14 @@ url = "https://github.com/tummychow/git-absorb/releases/download/0.9.0/git-absor
 url_api = "https://api.github.com/repos/tummychow/git-absorb/releases/assets/355709221"
 
 [[tools."github:unhappychoice/gitlogue"]]
-version = "0.11.0"
+version = "0.12.0"
 backend = "github:unhappychoice/gitlogue"
-specifiers = ["0.11.0"]
+specifiers = ["0.12.0"]
 
 [tools."github:unhappychoice/gitlogue"."platforms.linux-x64"]
-checksum = "sha256:ff58adcdbbd5474d5bcabe8194313574aab967a60bfc1757070ba025ff9379c4"
-url = "https://github.com/unhappychoice/gitlogue/releases/download/v0.11.0/gitlogue-v0.11.0-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/unhappychoice/gitlogue/releases/assets/536320141"
+checksum = "sha256:7da67cf99d5304b58242bb641d3b80ce7a7535ac80991db18e0805742c39bbec"
+url = "https://github.com/unhappychoice/gitlogue/releases/download/v0.12.0/gitlogue-v0.12.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/unhappychoice/gitlogue/releases/assets/608018988"
 
 [[tools."github:xo/usql"]]
 version = "0.21.6"
@@ -674,14 +674,14 @@ url = "https://github.com/rclone/rclone/releases/download/v1.75.1/rclone-v1.75.1
 url_api = "https://api.github.com/repos/rclone/rclone/releases/assets/544638482"
 
 [[tools.rust-analyzer]]
-version = "2026-09-28"
+version = "2026-10-05"
 backend = "aqua:rust-lang/rust-analyzer"
-specifiers = ["2026-09-28"]
+specifiers = ["2026-10-05"]
 
 [tools.rust-analyzer."platforms.linux-x64"]
-checksum = "sha256:23f711d86b5f826e22886f01d7355dc01e0f4c1357dafa29710a95b903b48c85"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-28/rust-analyzer-x86_64-unknown-linux-gnu.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/594529241"
+checksum = "sha256:28070188df63b6f217768040781decc8db43bc9d29b126847acb365575b09bc9"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-05/rust-analyzer-x86_64-unknown-linux-gnu.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/611796683"
 
 [[tools.sd]]
 version = "1.1.0"
@@ -737,24 +737,24 @@ url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86
 url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257322600"
 
 [[tools.watchexec]]
-version = "2.7.3"
+version = "2.7.4"
 backend = "aqua:watchexec/watchexec"
-specifiers = ["2.7.3"]
+specifiers = ["2.7.4"]
 
 [tools.watchexec."platforms.linux-x64"]
-checksum = "sha256:8ace3a1d2e752d189f28b6766311d58f155ab977fae66aba60b111ec8aec2f64"
-url = "https://github.com/watchexec/watchexec/releases/download/v2.7.3/watchexec-2.7.3-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/watchexec/watchexec/releases/assets/565495660"
+checksum = "sha256:6d7e89e8815ac1b4eafb9497ed0a8ada986117fbba460b2f9282e0e160f776dd"
+url = "https://github.com/watchexec/watchexec/releases/download/v2.7.4/watchexec-2.7.4-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/watchexec/watchexec/releases/assets/605904460"
 
 [[tools.witr]]
-version = "0.3.3"
+version = "0.3.4"
 backend = "aqua:pranshuparmar/witr"
-specifiers = ["0.3.3"]
+specifiers = ["0.3.4"]
 
 [tools.witr."platforms.linux-x64"]
-checksum = "sha256:08fc46e3f80a374476f71d0d6e6579477cd98c6df5cc59d98224adf948f5ebf5"
-url = "https://github.com/pranshuparmar/witr/releases/download/v0.3.3/witr-linux-amd64"
-url_api = "https://api.github.com/repos/pranshuparmar/witr/releases/assets/456364356"
+checksum = "sha256:d99098c61002f9b8a5337977d527dbe8ee29453f2a62c531038ea2749ea738eb"
+url = "https://github.com/pranshuparmar/witr/releases/download/v0.3.4/witr-linux-amd64"
+url_api = "https://api.github.com/repos/pranshuparmar/witr/releases/assets/610282199"
 
 [[tools.xh]]
 version = "0.26.2"

@@ -40,7 +40,7 @@ fzf = "0.74.4"
 zoxide = "0.10.0"
 fd = "10.5.0"
 bat = "0.26.1"
-delta = "0.19.2"
+delta = "0.20.1"
 eza = "0.23.5"
 ripgrep = "15.2.0"
 # aqua's Linux builds are gnu (GLIBC_2.39/2.38 > EL9's 2.34), so Linux pins musl; Windows takes the msvc zip.
@@ -48,7 +48,7 @@ ripgrep = "15.2.0"
 "github:atuinsh/atuin" = { version = "18.23.0", platforms = { linux-x64 = { asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "atuin-x86_64-pc-windows-msvc.zip" } } }
 # uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
-uv = "0.12.21"
+uv = "0.12.23"
 # python: interpreter for the dependency-locked pypi: tools (without it mise
 # falls back to the system 3.9 and glances/harlequin refuse to install) and
 # for python-env's venv (tasks/python-env; bootstrap.ps1 on Windows). It shadows

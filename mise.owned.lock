@@ -47,19 +47,19 @@ url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpe
 url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
 
 [[tools."github:can1357/oh-my-pi"]]
-version = "18.4.8"
+version = "18.6.1"
 backend = "github:can1357/oh-my-pi"
-specifiers = ["18.4.8"]
+specifiers = ["18.6.1"]
 
 [tools."github:can1357/oh-my-pi"."platforms.linux-x64"]
-checksum = "sha256:1b88f7a0da3f61edda915d836e11f63f20f2b56aeac2ddfa4ece0faa726f31c2"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-linux-x64"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/602572346"
+checksum = "sha256:c92a6846d02984e84f07c6362d18add3783f528f494ffcf1e0f26e594f327463"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.6.1/omp-linux-x64"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/610156065"
 
 [tools."github:can1357/oh-my-pi"."platforms.windows-x64"]
-checksum = "sha256:64e8cc817c91b6ea5c7f5c507fd4590f1e339759e42f3b414e6071bdcd99cad2"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-windows-x64.exe"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/602572338"
+checksum = "sha256:df10906c558ca188aa044c1c2bf27775693cbcf0aea8f16597dcd6949e0d1a1a"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.6.1/omp-windows-x64.exe"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/610156062"
 
 [[tools."github:carapace-sh/carapace-bin"]]
 version = "1.8.0"
@@ -234,7 +234,7 @@ url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601908697"
 
 [[tools."pypi:basedpyright"]]
-version = "1.40.1"
+version = "1.40.2"
 backend = "pypi:basedpyright"
-specifiers = ["1.40.1"]
-uv = { path = "locks/mise.owned/pypi-basedpyright/1.40.1", digest = "sha256:112e805c9c079b9bb7f6dc371b1137335dd4b7e3cb697e07d4ce117ee5c55565" }
+specifiers = ["1.40.2"]
+uv = { path = "locks/mise.owned/pypi-basedpyright/1.40.2", digest = "sha256:b7c65a691c2e44b4b4ca822639ba44ebae1c2fc9aeeba6b538bb8eb5689d7e31" }
