@@ -7,7 +7,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write # dispatch lint.yml on the bump PR (last step)
 
 jobs:
   bump:
@@ -29,13 +28,14 @@ jobs:
           # the PR (and land in the repo on merge). runner.temp is ephemeral.
           BUMP_SUMMARY_FILE: ${{ runner.temp }}/bump-summary.md
           MISE_CONFIG_DIR: ${{ github.workspace }}
-      # Validate the bumped tree here: a PR opened by GITHUB_TOKEN does NOT
-      # trigger lint.yml (GitHub's recursion guard), so the invariant checker
-      # must run in THIS workflow before the PR is created.
+      # Gate the PR on the invariant checker. lint.yml then runs on the PR itself:
+      # its pull_request run belongs to github-actions[bot], which GitHub treats as
+      # a first-time contributor, so it starts on its own only while the repo's
+      # Actions approval policy is "first-time contributors new to GitHub"
+      # (Settings > Actions > General); under a stricter policy, approve it on the PR.
       - name: Verify invariants on the bumped tree
         run: bash scripts/check-invariants.sh
       - name: Create or update PR
-        id: cpr
         uses: peter-evans/create-pull-request@v7
         with:
           branch: automation/version-bumps
@@ -43,11 +43,3 @@ jobs:
           title: 'chore(versions): weekly pin bumps'
           commit-message: 'chore(versions): weekly pin bumps'
           body-path: ${{ runner.temp }}/bump-summary.md
-      # The recursion guard exempts workflow_dispatch, so run the full lint
-      # workflow (templates, PowerShell, Windows) on the bump branch; its checks
-      # land on the PR's head commit. Without this the PR shows no checks.
-      - name: Run lint on the bump PR
-        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
-        run: gh workflow run lint.yml --repo "$GITHUB_REPOSITORY" --ref automation/version-bumps
-        env:
-          GH_TOKEN: ${{ github.token }}
