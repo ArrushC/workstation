@@ -28,11 +28,10 @@ jobs:
           # the PR (and land in the repo on merge). runner.temp is ephemeral.
           BUMP_SUMMARY_FILE: ${{ runner.temp }}/bump-summary.md
           MISE_CONFIG_DIR: ${{ github.workspace }}
-      # Gate the PR on the invariant checker. lint.yml then runs on the PR itself:
-      # its pull_request run belongs to github-actions[bot], which GitHub treats as
-      # a first-time contributor, so it starts on its own only while the repo's
-      # Actions approval policy is "first-time contributors new to GitHub"
-      # (Settings > Actions > General); under a stricter policy, approve it on the PR.
+      # Gate the PR on the invariant checker. lint.yml then runs on the PR itself,
+      # but GitHub holds every workflow run on a PR opened by github-actions[bot]
+      # until someone with write access approves it (since 2026-06-11, whatever the
+      # repo's approval policy; this token can't approve). The PR body says so.
       - name: Verify invariants on the bumped tree
         run: bash scripts/check-invariants.sh
       - name: Create or update PR
