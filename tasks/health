@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, miserc wiring, pueued, python-env, owned extras"
+#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, free disk, miserc wiring, pueued, python-env, owned extras"
 # Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
 # no sudo, but exits 1 if any row_bad fired — this is the
 # gate CI / a human runs post-bootstrap, not just a report.
@@ -186,6 +186,17 @@ if [ -z "$missing_tools" ]; then
 else
   n_missing=$(wc -w <<<"$missing_tools")
   row_bad "mise tools" "$n_missing missing ($missing_tools) — mise install"
+fi
+# An update installs new versions before `mise prune` drops the old ones, and
+# scripts/lib/mise-install.sh refuses to start with less than 1.5 GB free.
+mise_data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
+free_mb=$(df -Pk "$mise_data" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')
+if [ -z "$free_mb" ]; then
+  row_skip "disk" "could not read the free space for $mise_data"
+elif [ "$free_mb" -lt 2048 ]; then
+  row_warn "disk" "$(awk -v m="$free_mb" 'BEGIN { printf "%.1f GB", m / 1024 }') free where mise installs tools — updates need 1.5 GB; free some space (du -xh --max-depth=1 ~ | sort -rh | head)"
+else
+  row_ok "disk" "$(awk -v m="$free_mb" 'BEGIN { printf "%.1f GB", m / 1024 }') free where mise installs tools"
 fi
 echo ""
 

@@ -8,6 +8,12 @@
 # mise-install.sh: (9) an unreadable `tools.node` declaration must force the
 # node reinstall and write NO marker, never the empty-input cksum (a constant
 # marker name froze the whole re-run mechanism).
+# mise-install.sh's disk check (fake df/du, a temp disk-budget.toml): (10) too
+# little room stops before installing and lists the largest folders; (11) what
+# is already installed lowers the need; (12) a shared host needs less than an
+# owned one; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
+# an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
+# file is still read.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -26,6 +32,21 @@ esac
 echo "fake mise: unexpected args: $*" >&2; exit 99
 EOF
 chmod +x "$T/bin/mise"
+# df/du stubs, so the disk check never depends on the real disk: 100 GB free
+# and nothing installed unless a case sets FAKE_FREE_KB / FAKE_USED_KB.
+cat >"$T/bin/df" <<'EOF'
+#!/usr/bin/env bash
+[ -n "${FAKE_DF_FAIL:-}" ] && exit 1
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/fake 999999999 1 %s 1%% /\n' "${FAKE_FREE_KB:-104857600}"
+EOF
+cat >"$T/bin/du" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+-sk) printf '%s\t%s\n' "${FAKE_USED_KB:-0}" "$2" ;;
+*) printf '11G\t%s\n7.5G\t%s/.cache\n2.8G\t%s/.vscode-server\n' "$HOME" "$HOME" "$HOME" ;;
+esac
+EOF
+chmod +x "$T/bin/df" "$T/bin/du"
 export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux,owned,host,wsl
 export FAKE_LOG="$T/log" FAKE_NODE="$T/node-installed" FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@1" }'
 fail() {
@@ -84,4 +105,60 @@ bash "$root/scripts/lib/mise-install.sh" >/dev/null
 ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null ||
   fail "a readable declaration after a failure must write the marker again"
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker"
+# 10-15. The disk check, run from a copy of the script in a temp repo whose
+# disk-budget.toml says owned 5000 MB, shared 2500 MB (the real file changes
+# weekly). 1 GB = 1048576 KB.
+gbkb() { awk -v g="$1" 'BEGIN { printf "%d", g * 1048576 }'; }
+R="$T/repo"
+mkdir -p "$R/scripts/lib"
+cp "$root/scripts/lib/mise-install.sh" "$R/scripts/lib/"
+printf 'linux-owned = 5000\nlinux-shared = 2500\nwindows-owned = 3000\n' >"$R/disk-budget.toml"
+mi="$R/scripts/lib/mise-install.sh"
+installs="$HOME/.local/share/mise/installs"
+# 10. owned, nothing installed, 1 GB free: needs 5000 + 1024 MB, stops before installing.
+: >"$FAKE_LOG"
+rc10=0
+out10="$(FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" || rc10=$?
+[ "$rc10" = 1 ] || fail "disk check (1 GB free, owned): expected exit 1, got $rc10"
+grep -q install "$FAKE_LOG" && fail "disk check (1 GB free, owned): mise install ran"
+printf '%s\n' "$out10" | grep -q 'Not enough disk space for the mise tools: 1.0 GB free.*about 5.9 GB needed' ||
+  fail "disk check (1 GB free, owned): wrong message: $out10"
+printf '%s\n' "$out10" | grep -q '7.5G.*/.cache' || fail "disk check: the largest folders are not listed: $out10"
+printf '%s\n' "$out10" | grep -q "11G.*$HOME\$" && fail "disk check: the home total is listed as a folder: $out10"
+# 11. owned with 4 GB already installed needs 5000 - 4096 + 1024 = 1928 MB: 2 GB free is enough.
+mkdir -p "$installs"
+: >"$FAKE_LOG"
+FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
+  fail "disk check: what is already installed must lower the need (2 GB free, 4 GB installed)"
+grep -qx install "$FAKE_LOG" || fail "disk check (2 GB free, 4 GB installed): mise install did not run"
+rm -rf "$installs"
+# 12. 4.5 GB free, nothing installed: enough for shared (3524 MB), not owned (6024 MB).
+: >"$FAKE_LOG"
+MISE_ENV=linux FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 ||
+  fail "disk check: 4.5 GB must be enough for a shared host"
+rc12=0
+FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 || rc12=$?
+[ "$rc12" = 1 ] || fail "disk check: 4.5 GB must not be enough for an owned host"
+# 13. the override goes ahead, with a warning.
+: >"$FAKE_LOG"
+out13="$(WORKSTATION_SKIP_DISK_CHECK=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" ||
+  fail "disk check: WORKSTATION_SKIP_DISK_CHECK=1 must go ahead"
+grep -qx install "$FAKE_LOG" || fail "disk check override: mise install did not run"
+printf '%s\n' "$out13" | grep -q 'WORKSTATION_SKIP_DISK_CHECK=1, so going ahead' || fail "disk check override: no warning: $out13"
+# 14. an unreadable df skips the check.
+: >"$FAKE_LOG"
+FAKE_DF_FAIL=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || fail "disk check: an unreadable df must not stop the install"
+grep -qx install "$FAKE_LOG" || fail "disk check (no df): mise install did not run"
+# 15. no figure for this host type in disk-budget.toml skips the check, with a warning.
+printf 'linux-shared = 2500\n' >"$R/disk-budget.toml"
+: >"$FAKE_LOG"
+out15="$(FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" || fail "disk check: a missing budget must not stop the install"
+grep -qx install "$FAKE_LOG" || fail "disk check (no budget): mise install did not run"
+printf '%s\n' "$out15" | grep -q 'disk check skipped: no linux-owned figure' || fail "disk check (no budget): no warning: $out15"
+# 16. a CRLF budget file (as a Windows checkout writes it) is still read, not skipped.
+printf 'linux-owned = 5000\r\nlinux-shared = 2500\r\n' >"$R/disk-budget.toml"
+rc16=0
+FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || rc16=$?
+[ "$rc16" = 1 ] || fail "disk check: a CRLF disk-budget.toml must still be read (expected exit 1 at 1 GB free, got $rc16)"
+
+echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped)"
