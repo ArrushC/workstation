@@ -4,7 +4,7 @@
 # config.toml / config.linux.toml / config.owned.toml [tools] tables, the host
 # pins in config.toml [vars] (+ the claude-cli rolling `latest` pin, hard-
 # coded — it has no [vars] entry), and the dnf package keys in
-# config.host.toml / config.native.toml.
+# config.host.toml.
 #
 # Run by .claude/hooks/sync-tool-memory.sh on config*.toml edits, and by
 # scripts/check-invariants.sh (drift check) against a temp MEMFILE.
@@ -103,11 +103,10 @@ print("\n### Host pins (config.toml [vars])")
 for name, val in pins:
     print(f"- `{name}` {val}")
 
-# 5-6. dnf package keys — config.host.toml (owned hosts) and config.native.toml
-# (owned hosts, non-WSL), the `dnf:` prefix stripped, sorted.
+# 5. dnf package keys — config.host.toml (owned Linux hosts), the `dnf:` prefix
+# stripped, sorted.
 pkg_sections = [
     ("System packages (dnf, owned hosts)", "config.host.toml"),
-    ("System packages (dnf, owned hosts, non-WSL)", "config.native.toml"),
 ]
 for title, fname in pkg_sections:
     with open(f"{root}/{fname}", "rb") as fh:

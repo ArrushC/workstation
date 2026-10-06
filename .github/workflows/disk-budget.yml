@@ -26,7 +26,7 @@ jobs:
       matrix:
         include:
           - key: linux-owned
-            tokens: linux,owned,host,native
+            tokens: linux,owned,host
           - key: linux-shared
             tokens: linux
     runs-on: ubuntu-latest

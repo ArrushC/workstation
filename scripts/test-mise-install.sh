@@ -50,7 +50,7 @@ case "$1" in
 esac
 EOF
 chmod +x "$T/bin/df" "$T/bin/du"
-export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux,owned,host,wsl
+export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux,owned,host
 export FAKE_LOG="$T/log" FAKE_NODE="$T/node-installed" FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@1" }'
 fail() {
   echo "FAIL: $*" >&2

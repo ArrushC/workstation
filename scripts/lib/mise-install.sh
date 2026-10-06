@@ -12,7 +12,7 @@
 #
 # The declaration is read with an explicit `-f config.owned.toml`: a bare
 # `mise config get tools.node` reads only the HIGHEST-PRECEDENCE loaded file,
-# which since PR2 is config.host.toml/config.wsl.toml (they declare no tools),
+# which since PR2 is config.host.toml (it declares no tools),
 # so it errors and the cksum would silently be the empty-input constant —
 # freezing the marker and disabling the re-run mechanism entirely. An
 # unreadable declaration force-reinstalls instead of assuming "unchanged":

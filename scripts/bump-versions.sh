@@ -250,7 +250,7 @@ lock_platform() {
 }
 
 mise_err_file="$(mktemp)"
-if ! outdated="$(mise_global linux,owned,host,native mise outdated --bump --json 2>"$mise_err_file")"; then
+if ! outdated="$(mise_global linux,owned,host mise outdated --bump --json 2>"$mise_err_file")"; then
   outdated_fail="$(cat "$mise_err_file")"
   printf 'bump-versions.sh: mise outdated failed:\n%s\n' "$outdated_fail" >&2
   exit_code=1
@@ -355,12 +355,12 @@ if [ -z "$outdated_fail" ]; then
     # refused the dirty tree. Install the pinned uv first. MISE_LOCKFILE=false
     # stops this install rewriting the lock files itself; locked mode (config.toml)
     # refuses a lock-file-off install, so MISE_LOCKED=0 lifts it for this one call.
-    if ! mise_global linux,owned,host,native env MISE_LOCKFILE=false MISE_LOCKED=0 mise install uv; then
+    if ! mise_global linux,owned,host env MISE_LOCKFILE=false MISE_LOCKED=0 mise install uv; then
       printf 'bump-versions.sh: mise install uv failed; pypi: dependency locks will be skipped\n' >&2
       failed="${failed}- \`mise install uv\` failed — pypi: dependency locks not regenerated (manual)\n"
       exit_code=1
     fi
-    if ! lock_platform linux,owned,host,native linux-x64; then
+    if ! lock_platform linux,owned,host linux-x64; then
       printf 'bump-versions.sh: mise lock --platform linux-x64 failed\n' >&2
       failed="${failed}- \`mise lock --platform linux-x64\` failed (manual)\n"
       exit_code=1
