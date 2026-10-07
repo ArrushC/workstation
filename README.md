@@ -66,7 +66,7 @@ Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, o
 
 ### Linux
 
-Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the `linux` figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (about 6.9 GB fresh). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped; GEF works with EL8's gdb 8.2 (its floor is gdb 8.0 with Python 3.6). Then, on the host:
+Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the `linux` figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (about 6.9 GB fresh). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped; plain `gdb` is pwndbg's bundled GDB 17 on every host, so GEF gets a modern gdb there too. Then, on the host:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash && \
@@ -307,7 +307,7 @@ direnv = "2.34.0"
 "github:direnv/direnv" = { version = "2.34.0", asset_pattern = "direnv.linux-amd64" }
 ```
 
-Installs are locked (`locked = true` in `config.toml`: they read the lockfiles and never rewrite them), so a new pin installs only after its lock entry exists. Refresh the lockfiles first, then check it with `mise install direnv` and `mise where direnv`. `tasks/verify-tools` runs after every install and fails loudly if a binary cannot run on this host; that is the cue to pick an explicit `github:` asset. Multi-binary archives install every binary; restrict with `bin` or `bin_path` on the `github:` entry (see qsv, pwndbg). Commit the config, the three lockfiles and any new `locks/**` sidecar. The refresh:
+Installs are locked (`locked = true` in `config.toml`: they read the lockfiles and never rewrite them), so a new pin installs only after its lock entry exists. Refresh the lockfiles first, then check it with `mise install direnv` and `mise where direnv`. `tasks/verify-tools` runs after every install and fails loudly if a binary cannot run on this host; that is the cue to pick an explicit `github:` asset. Multi-binary archives install every binary; restrict with `bin` or `bin_path` on the `github:` entry (see qsv, pwndbg). Commit the config, both lockfiles and any new `locks/**` sidecar. The refresh:
 
 ```bash
 mise run bump-versions
@@ -544,7 +544,7 @@ sudo dnf config-manager --set-enabled crb   # EL9 Alma/Rocky/Stream (powertools 
 mise bootstrap --only packages --yes
 ```
 
-`ninja: command not found`: on RHEL the binary is `ninja-build`; if a project hard-codes `ninja`, link it once with `ln -s "$(command -v ninja-build)" ~/.local/bin/ninja`. Two GDB front-ends coexist: plain `gdb ./a.out` loads GEF (via `~/.gdbinit`), `pwndbg ./a.out` is pwndbg, `gdb -nx ./a.out` is vanilla, and `nnd ./a.out` is a modern TUI debugger. vcpkg lives at `$VCPKG_ROOT` (`~/.local/share/vcpkg`, a user-owned clone at the pinned tag, exported by the shell rc on Linux hosts), so classic `vcpkg install <pkg>` needs no sudo (manifest mode is still preferred); missing entirely, run `mise run vcpkg`. Prefer compiler sanitizers (`-fsanitize=address,undefined`, 2 to 4 times overhead) over Valgrind (20 to 50 times) for everyday checks.
+`ninja: command not found`: on RHEL the binary is `ninja-build`; if a project hard-codes `ninja`, link it once with `ln -s "$(command -v ninja-build)" ~/.local/bin/ninja`. Two GDB front-ends coexist: plain `gdb ./a.out` is pwndbg's bundled GDB 17 (first on `PATH`) with GEF loaded via `~/.gdbinit`, `pwndbg ./a.out` is pwndbg, `gdb -nx ./a.out` is vanilla, `/usr/bin/gdb` is the system gdb, and `nnd ./a.out` is a modern TUI debugger. vcpkg lives at `$VCPKG_ROOT` (`~/.local/share/vcpkg`, a user-owned clone at the pinned tag, exported by the shell rc on Linux hosts), so classic `vcpkg install <pkg>` needs no sudo (manifest mode is still preferred); missing entirely, run `mise run vcpkg`. Prefer compiler sanitizers (`-fsanitize=address,undefined`, 2 to 4 times overhead) over Valgrind (20 to 50 times) for everyday checks.
 
 ### wpy not found, or import textual fails in it
 

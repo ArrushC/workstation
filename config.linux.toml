@@ -43,7 +43,7 @@ marksman = "2026-02-08"
 taplo = "0.10.0"
 herdr = "0.9.3"
 # --- github: (registry entry absent, or its asset needs a glibc newer than EL8's 2.28) ---
-"github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir
+"github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir; its bin/ also holds gdb 17 + gdbserver, first on PATH, so plain `gdb` is this one (GEF via ~/.gdbinit)
 "github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38
 "github:fastfetch-cli/fastfetch" = { version = "2.69.0", asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz" }   # plain build's loader fails on EL9
 "github:dalance/procs" = { version = "0.14.12", asset_pattern = "procs-v{{version}}-x86_64-linux.zip" }
@@ -215,6 +215,7 @@ state = "running"
 "dnf:cppcheck" = "latest"
 "dnf:cronie" = "latest"
 "dnf:gcc-c++" = "latest"
+# The system gdb stays at /usr/bin/gdb (with gcore etc.); plain `gdb` is pwndbg's (above).
 "dnf:gdb" = "latest"
 "dnf:gdb-gdbserver" = "latest"
 # GEF (~/.gdbinit) looks up file, readelf and nm at startup and fails without them:
