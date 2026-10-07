@@ -23,6 +23,14 @@ BLUE=$'\033[0;34m'
 BOLD=$'\033[1m'
 RESET=$'\033[0m'
 
+# Some environments (containers, cron) leave USER unset; set -u would then abort the
+# login-shell step and the closing tips after everything had installed.
+USER="${USER:-$(id -un)}"
+# Set by apply (this host's first dotfiles apply) and set_login_shell (the shell was
+# switched this run); they decide the one-time status-line menu and closing tip.
+FIRST_APPLY=false
+SHELL_CHANGED=false
+
 log() { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
 ok() { echo -e "${GREEN} ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW} !${RESET} $*"; }
@@ -31,9 +39,9 @@ fail() {
   exit 1
 }
 
-# WSL detection — used to swap the end-of-bootstrap ssh-copy-id tip for a
-# WSL one. WSL distros are launched directly by the Windows-side terminal
-# (Windows Terminal's WSL profile, `wsl.exe`), not SSH'd into.
+# WSL detection (also run by tasks/fonts and tasks/health via
+# scripts/lib/bootstrap-fn.sh). WSL distros are launched directly by the
+# Windows-side terminal (Windows Terminal's WSL profile, `wsl.exe`), not SSH'd into.
 #   - WSL_DISTRO_NAME is exported by WSL 2 inside the distro
 #   - /proc/version's "microsoft" marker is the universal backup signal
 is_wsl() {
@@ -183,12 +191,6 @@ open_prompt_fd() {
   { exec 3</dev/tty; } 2>/dev/null
 }
 
-# sudo_state <file>: the saved decision; a missing value means yes (hosts set up
-# before the decision was saved all had sudo).
-sudo_state() {
-  [[ "$(config_get "$1" sudo)" == no ]] && echo no || echo yes
-}
-
 # detect_sudo: 0 sudo works, 1 it doesn't (no binary, or the password prompt
 # failed or was interrupted with Ctrl-C), 2 undecided (no terminal to ask on
 # and no cached credentials). The terminal sends Ctrl-C's SIGINT to the whole
@@ -334,21 +336,21 @@ resolve_host_config() {
 # =============================================================================
 apply() {
   # config.local.toml (name/email if given, sudo) is already written by
-  # resolve_host_config in main(), before this function runs — the Tera
-  # templates guard every vars.* reference, but a real value still shapes
-  # the rendered git identity.
-  log "mise install (tools) — $TOKENS"
+  # resolve_host_config and resolve_system_steps in main(), before this runs —
+  # the Tera templates guard every vars.* reference, but a real value still
+  # shapes the rendered git identity.
+  log "mise install (tools)"
   "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
 
   # Forces only on the first apply: a fresh host's pre-existing files (e.g.
   # /etc/skel's ~/.bashrc) would otherwise make copy/template refuse. Pass
   # it ONLY until this host's own marker exists, so any LATER conflict (a
   # real mistake) is still surfaced loudly instead of silently reclaimed.
-  # The marker file name (dotfiles-migrated) is kept so existing hosts do
-  # not force again.
+  # (The marker's name is historical; renaming it would force every host once more.)
   local marker="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/dotfiles-migrated"
   local dotfiles_flags=()
   if [[ ! -f "$marker" ]]; then
+    FIRST_APPLY=true
     dotfiles_flags=(--force-dotfiles)
     log "First dotfiles apply on this host — passing --force-dotfiles (marker absent: $marker)"
   fi
@@ -404,9 +406,9 @@ set_login_shell() {
     return 0
   fi
 
-  # /etc/passwd is authoritative; don't trust $SHELL (set by the parent shell).
+  # getent is authoritative (files or SSSD); $SHELL was set by the parent shell.
   local current_shell
-  current_shell=$(getent passwd "$USER" | cut -d: -f7)
+  current_shell=$(getent passwd "$USER" | cut -d: -f7 || true)
 
   if [[ "$current_shell" == "$zsh_path" ]]; then
     ok "Default shell is already zsh ($zsh_path)"
@@ -417,6 +419,7 @@ set_login_shell() {
   local err
   if getent -s files passwd "$USER" >/dev/null 2>&1; then
     if err=$(sudo usermod -s "$zsh_path" "$USER" 2>&1); then
+      SHELL_CHANGED=true
       ok "Default shell set to zsh — log out + back in (or open a new tab) to land in it"
     else
       warn "usermod couldn't set the login shell: ${err:-no error text}"
@@ -445,8 +448,9 @@ set_login_shell_sssd() {
     return 0
   fi
   sudo systemctl restart sssd || warn "couldn't restart sssd; the override applies after its next restart"
-  now=$(getent passwd "$USER" | cut -d: -f7)
+  now=$(getent passwd "$USER" | cut -d: -f7 || true)
   if [[ "$now" == "$zsh_path" ]]; then
+    SHELL_CHANGED=true
     ok "Default shell set to zsh (SSSD override on this host) — log out + back in to land in it"
   else
     warn "SSSD still reports ${now:-$current_shell} for $USER after the override; check: sudo sss_override user-show $USER"
@@ -460,16 +464,9 @@ print_next_steps() {
   echo ""
   echo -e "${BOLD}Bootstrap complete.${RESET}"
 
-  # Only print the "you're on zsh" tip when the user actually is. Without
-  # sudo set_login_shell never runs, so this stays quiet on its own; with
-  # sudo it may have bailed out (missing zsh binary, usermod
-  # refused) and already printed its own follow-up command. Read the
-  # authoritative shell from /etc/passwd — $SHELL was set by the parent
-  # process.
-  local login_shell zsh_path
-  login_shell=$(getent passwd "$USER" | cut -d: -f7)
-  zsh_path=$(command -v zsh || true)
-  if [[ -n "$zsh_path" && "$login_shell" == "$zsh_path" ]]; then
+  # Only when set_login_shell switched the shell this run (not on every re-run of a
+  # host that switched long ago).
+  if [[ "$SHELL_CHANGED" == true ]]; then
     echo -e "Log out + back in (or open a new tab) to land in zsh as your login shell."
   fi
 
@@ -589,20 +586,23 @@ main() {
   resolve_system_steps
   { exec 3<&-; } 2>/dev/null || true
 
-  TOKENS="$("$REPO_DIR/scripts/lib/mise-env.sh" --write)"
+  local tokens
+  tokens="$("$REPO_DIR/scripts/lib/mise-env.sh" --write)"
   # miserc.toml is the source from here on; an inherited export would override it.
   unset MISE_ENV
-  log "mise config set: $TOKENS (saved in $REPO_DIR/miserc.toml)"
+  log "mise config set: $tokens (saved in $REPO_DIR/miserc.toml)"
 
   apply
   if [[ "$SYSTEM" == yes ]]; then
     set_login_shell
   fi
 
-  # ccstatusline setup — interactive prompt for the Claude Code statusline.
-  # Re-runnable any time via `mise run statusline`.
-  if [[ -t 0 ]]; then
-    mise run statusline || true
+  # The Claude Code status line menu, once per host (its first dotfiles apply);
+  # `mise run statusline` re-runs it any time. It reads /dev/tty, so it works
+  # under `curl | bash` too; without a terminal it is skipped.
+  if [[ "$FIRST_APPLY" == true ]] && open_prompt_fd; then
+    { exec 3<&-; } 2>/dev/null || true
+    mise run statusline </dev/tty || true
   fi
 
   print_next_steps

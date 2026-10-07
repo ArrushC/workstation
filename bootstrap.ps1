@@ -45,7 +45,6 @@ $MiseVersion = "2026.9.9"
 $MiseSha256  = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
 $MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise-v$MiseVersion-windows-x64.zip"
 $MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
-$MiseEnvTokens = @("windows")
 
 $WsPythonEnv = Join-Path $WsRoot "python-env"
 
@@ -451,12 +450,11 @@ function Invoke-CloneRepo {
 # First-apply marker; the name predates mise and stays so existing hosts don't re-force.
 $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 
-# miserc.toml (git-ignored) holds the token set, as on Linux. An exported MISE_ENV
-# would override it, so this session's is removed.
+# miserc.toml (git-ignored) holds the token set, `windows` (scripts/lib/mise-env.sh writes
+# `linux`). An exported MISE_ENV would override it, so this session's is removed.
 function Initialize-MiseEnv {
     $rc = Join-Path $RepoPath "miserc.toml"
-    $envList = ($MiseEnvTokens | ForEach-Object { '"' + $_ + '"' }) -join ', '
-    $body = "# Written by bootstrap.ps1 (Windows' token set).`nenv = [$envList]`nauto_env = false`n"
+    $body = "# Written by bootstrap.ps1.`nenv = [`"windows`"]`nauto_env = false`n"
     [System.IO.File]::WriteAllText($rc, $body, [System.Text.UTF8Encoding]::new($false))
     Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue
 }
@@ -622,8 +620,8 @@ function Invoke-MiseBootstrap {
     $miseCd = @('-C', $env:USERPROFILE)
 
     # Without config.windows.toml loaded (miserc.toml ignored), the Windows dotfiles and winget
-    # apps would be skipped and `mise prune` could remove Windows-only tools; a failing `config ls` (min_version,
-    # a TOML error) stops too. --json: the table output truncates to the console width.
+    # apps would be skipped silently; a failing `config ls` (min_version, a TOML error) stops
+    # too. --json: the table output truncates to the console width.
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     $lsOut = @(& mise @miseCd config ls --json 2>&1 | ForEach-Object { "$_" })
     $lsCode = $LASTEXITCODE
@@ -1220,8 +1218,6 @@ function Invoke-PythonEnv {
         Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
 
         if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
-        # python-env*: also the older python-env.<pin>.<hash>.stamp names.
-        Get-ChildItem -Path $WsStamps -Filter "python-env*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
         [System.IO.File]::WriteAllText($stamp, $want)
         Write-Ok "Python env built ($WsPythonEnv on $python; launchers: wpy, textual, typer)"
     } catch {
@@ -1303,7 +1299,7 @@ if ($Reinstall) { Invoke-Reinstall }
 Invoke-Preflight
 Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation
 Invoke-CloneRepo
-Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; old portable tools removed, shims on PATH, node marker, prune; .wslconfig reminder; its post-tools hook regenerates Nushell's init files (mise run nu-init)
+Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; shims on PATH, node marker, prune; .wslconfig reminder; its post-tools hook regenerates Nushell's init files (mise run nu-init)
 Install-WingetApps        # GUI apps: mise bootstrap --only packages (config.windows.toml's winget list), then SSHFS-Win (UAC)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals

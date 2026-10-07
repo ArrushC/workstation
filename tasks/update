@@ -12,10 +12,9 @@ tokens="$("$root/scripts/lib/mise-env.sh" --write)"
 unset MISE_ENV
 printf '==> config set %s (miserc.toml)\n' "$tokens"
 
-cfg="$root/config.local.toml"
-lib() { WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; shift; "$@"' _ "$root/bootstrap.sh" "$@"; }
+# The saved sudo decision (bootstrap.sh's; a missing value means yes). An update never asks.
 skip=()
-if [ "$(lib sudo_state "$cfg")" = no ]; then
+if [ "$("$root/scripts/lib/bootstrap-fn.sh" config_get "$root/config.local.toml" sudo)" = no ]; then
   skip=(--skip "packages,files")
   printf ' ! sudo = "no" in config.local.toml: skipping the system steps (dnf, /etc files); re-run %s/bootstrap.sh with sudo to apply them\n' "$root"
 fi
