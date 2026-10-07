@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-On the Windows host, `omp` resolved to `%LOCALAPPDATA%\omp\omp.exe`, not mise's shim. oh-my-pi's own installer/self-update had put that directory on the User PATH twice, ahead of `%LOCALAPPDATA%\mise\shims` (the dir also held `omp.exe.*.bak` and `omp.exe.broken` from 2026-09-07). This repo never installed it there (`git log -S` finds nothing), so `Invoke-LegacyToolCleanup` doesn't know about it.
+On the Windows host, `omp` resolved to `%LOCALAPPDATA%\omp\omp.exe`, not mise's shim. oh-my-pi's own installer/self-update had put that directory on the User PATH twice, ahead of `%LOCALAPPDATA%\mise\shims` (the dir also held `omp.exe.*.bak` and `omp.exe.broken` from 2026-09-07). This repo never installed it there (`git log -S` finds nothing), so the old portable-tool cleanup (since removed) never knew about it.
 
 The user had both entries removed on 2026-10-01, after the PR 4 live run. The directory itself was left in place.
 

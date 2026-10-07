@@ -23,7 +23,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WIDGET_SOURCE="dotfiles/config/ccstatusline/settings.json"
 WIDGET_TRACKED_SRC="$REPO_ROOT/$WIDGET_SOURCE"
-WIDGET_DEST="$HOME/.config/ccstatusline/settings.json"
 # Deliberately literal ~ — this is the [dotfiles] TARGET key (config.toml
 # / config.local.toml) and the string `mise dot apply`/`mise dot add` expect
 # on the command line, not a path for the shell to expand.
@@ -149,9 +148,9 @@ option_use_tracked() {
     optout_remove
   fi
   printf '%bApplying the tracked ccstatusline config...%b\n' "$GREEN" "$RESET"
-  # --force: this host's live file may be a real, independent file left over
-  # from a prior opt-out (option 2/3) rather than the managed symlink — mise
-  # refuses to overwrite a pre-existing real file otherwise. Safe
+  # --force: this host's live file may still hold a prior opt-out's edits
+  # (option 2/3), and mise refuses to overwrite a differing file it didn't
+  # write otherwise. Safe
   # here: a single target, explicitly chosen by the person running this menu
   # — not the fleet-wide `--force-dotfiles` gate bootstrap.sh applies elsewhere.
   mise dot apply --yes --force "$WIDGET_TARGET"
@@ -161,18 +160,6 @@ option_this_machine() {
   if ! optout_present; then
     printf '%bOpting this host out of the tracked config (config.local.toml)...%b\n' "$BOLD" "$RESET"
     optout_add
-  fi
-  # Once opted out, mise no longer manages the target — if it's still a
-  # symlink (a legacy deploy that never re-applied), materialize it into a
-  # real, independent file before the TUI edits it in place. Harmless
-  # (`[ -L ]` on a regular file or nothing is just false) on a host whose
-  # target is already a `copy`.
-  if [ -L "$WIDGET_DEST" ]; then
-    local content
-    content="$(cat "$WIDGET_DEST")"
-    rm -f "$WIDGET_DEST"
-    mkdir -p "$(dirname "$WIDGET_DEST")"
-    printf '%s' "$content" >"$WIDGET_DEST"
   fi
   printf '%bLaunching ccstatusline TUI...%b\n' "$BOLD" "$RESET"
   if ! ccstatusline </dev/tty; then
@@ -187,11 +174,10 @@ option_this_machine() {
     printf '%bStaying opted out in config.local.toml — future `mise bootstrap`/`mise dot apply` runs will leave this file alone.%b\n' "$GREEN" "$RESET"
     ;;
   *)
-    # Reclaim it NOW, not "on the next apply": the TUI just materialized the
-    # symlink into a real file, and a later `mise dot apply` (plain, or the
-    # bulk one `mise bootstrap` runs) refuses
-    # to overwrite a pre-existing real file — a bulk apply would
-    # abort every OTHER dotfile along with it. --force is safe here: a
+    # Reclaim it NOW, not "on the next apply": the TUI just edited the live
+    # file, and a later `mise dot apply` (plain, or the bulk one `mise
+    # bootstrap` runs) refuses to overwrite a differing file it didn't write —
+    # a bulk apply would abort every OTHER dotfile along with it. --force is safe here: a
     # single target the person running this menu just explicitly chose to
     # give up.
     printf '%bRemoving the opt-out and reclaiming the tracked config now...%b\n' "$YELLOW" "$RESET"
@@ -204,15 +190,6 @@ option_set_global() {
   if ! optout_present; then
     printf '%bOpting this host out of the tracked config while you edit it...%b\n' "$BOLD" "$RESET"
     optout_add
-  fi
-  # Same one-time migration safety as option_this_machine above — dead on
-  # any host bootstrapped since the copy migration.
-  if [ -L "$WIDGET_DEST" ]; then
-    local content
-    content="$(cat "$WIDGET_DEST")"
-    rm -f "$WIDGET_DEST"
-    mkdir -p "$(dirname "$WIDGET_DEST")"
-    printf '%s' "$content" >"$WIDGET_DEST"
   fi
   printf '%bLaunching ccstatusline TUI...%b\n' "$BOLD" "$RESET"
   if ! ccstatusline </dev/tty; then

@@ -74,11 +74,11 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-ssh-launchers.ps1
-      - name: Test miserc.toml writer + legacy tool cleanup (Windows PowerShell 5.1)
+      - name: Test miserc.toml writer + mise install/bootstrap steps (Windows PowerShell 5.1)
         if: always()
         shell: powershell
         run: ./scripts/test-mise-env.ps1
-      - name: Test miserc.toml writer + legacy tool cleanup (pwsh)
+      - name: Test miserc.toml writer + mise install/bootstrap steps (pwsh)
         if: always()
         shell: pwsh
         run: ./scripts/test-mise-env.ps1

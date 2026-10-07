@@ -948,8 +948,7 @@ check_completion_parity() {
 check_no_mode() {
   hdr "no owned/shared mode (templates, scripts, tasks)"
   local hits tokens
-  # Real readers only: the one-time tidy-up (`config_get "$cfg" mode` then config_unset)
-  # and the test fixtures are allowed.
+  # The test fixtures and this file are excluded.
   hits=$(git grep -n -E 'vars\.mode|valid_mode|prompt_mode|\$\{?MODE\b|mode = "(owned|shared)"' -- 'dotfiles/*.tera' 'dotfiles/**/*.tera' 'scripts/*.sh' 'scripts/lib/*.sh' 'tasks/*' '.claude/hooks/*.sh' ':!scripts/test-*' ':!scripts/check-invariants.sh' || true)
   tokens=$(bash scripts/lib/mise-env.sh 2>/dev/null)
   if [ -n "$hits" ]; then

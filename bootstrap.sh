@@ -170,23 +170,6 @@ config_set() { # config_set <file> <key> <value>
     END { if (!done) { if (!seen) print "[vars]"; print ENVIRON["LINE"] } }' "$file" >"$tmp" && mv "$tmp" "$file"
 }
 
-config_unset() { # config_unset <file> <key> — drop <key> from [vars]; no-op when absent
-  local file=$1 key=$2 tmp
-  [[ -f "$file" ]] || return 0
-  tmp=$(mktemp)
-  KEY="$key" awk '
-    /^[[:space:]]*\[/ {
-      in_vars = ($0 ~ /^[[:space:]]*\[[[:space:]]*vars[[:space:]]*\][[:space:]]*(#.*)?\r?$/)
-      print; next
-    }
-    in_vars {
-      line = $0
-      sub(/^[[:space:]]+/, "", line)
-      if (index(line, ENVIRON["KEY"]) == 1 && substr(line, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/) next
-    }
-    { print }' "$file" >"$tmp" && mv "$tmp" "$file"
-}
-
 # Prompts read fd 3: /dev/tty in real runs (so `curl | bash` still prompts),
 # a here-string in tests.
 open_prompt_fd() {
@@ -316,14 +299,6 @@ install_mise() {
 # unset (templates guard them) rather than blocking an unattended run.
 resolve_host_config() {
   local cfg="$REPO_DIR/config.local.toml" name email
-  if [[ -n "$(config_get "$cfg" mode)" ]]; then
-    config_unset "$cfg" mode
-    ok "dropped the old mode line from config.local.toml (every host gets the same setup now)"
-  fi
-  if [[ -n "${WORKSTATION_MODE:-}" ]]; then
-    warn "WORKSTATION_MODE is no longer used (every host gets the same setup) — ignored"
-  fi
-
   name=$(config_get "$cfg" name)
   email=$(config_get "$cfg" email)
   if [[ -n "$name" && -n "$email" ]]; then

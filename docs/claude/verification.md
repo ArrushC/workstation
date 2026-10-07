@@ -77,7 +77,7 @@
   | `test-curl.ps1` | `Invoke-CurlRequest` |
   | `test-config-local.ps1` | `Set-ConfigLocalVar`, `Invoke-EnsureConfigLocal` |
   | `test-ssh-launchers.ps1` | SSH host parsing, the WT fragment, the Warp Tab Configs |
-  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); legacy cleanup; the `config.windows.toml` guard; `-C` pinning; the node marker |
+  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); the `config.windows.toml` guard; `-C` pinning; the node marker |
   | `test-winget-apps.ps1` | `Install-WingetApps` (`mise bootstrap --only packages`, pinned `-C`) and `Install-SshfsWin` (presence by `winget list`, no `--silent`, the UAC warning, `-SkipElevated`, exit codes) |
   | `test-python-fonts.ps1` | `Invoke-PythonEnv`, `Invoke-InstallNerdFonts`, and `install-nerd-fonts.ps1` on fake TTFs |
 - From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `scripts/python-env.txt` under

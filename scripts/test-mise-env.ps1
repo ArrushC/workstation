@@ -1,16 +1,15 @@
 ﻿# Tests bootstrap.ps1's mise plumbing without running the bootstrap: the
-# miserc.toml writer (Initialize-MiseEnv), the one-time cleanup of the
-# pre-mise portable installs (Invoke-LegacyToolCleanup), the mise install /
-# update (Install-Mise), the mise bootstrap step's guard, ordering and
+# miserc.toml writer (Initialize-MiseEnv), the mise install / update
+# (Install-Mise), the mise bootstrap step's guard, ordering and
 # -C pinning (Invoke-MiseBootstrap), its free-space check
 # (Assert-ToolsDiskSpace), and the Claude Code step's PATH entry
 # (Invoke-InstallClaudeCode). The functions are extracted from the
 # script's AST, as scripts/test-config-local.ps1 does.
 #
 # Nothing real is touched:
-#  - the User environment only through Get-UserEnv/Set-UserEnv, stubbed here
-#    (PowerShell can't stub a static .NET method); a function that calls
+#  - the User environment is never written: a function that calls
 #    [Environment]::SetEnvironmentVariable itself is refused, not loaded
+#    (PowerShell can't stub a static .NET method)
 #  - `mise` is a function stub (functions win over mise.exe on PATH), and
 #    the script stops unless it resolves to that stub
 #  - Invoke-CurlRequest, Add-ToUserPath and Update-SessionPath are stubbed, and so
@@ -20,7 +19,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Initialize-MiseEnv', 'Invoke-LegacyToolCleanup', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode'
+$wanted = 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode'
 $refused = New-Object System.Collections.Generic.List[string]
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     if ($f.Extent.Text -match 'Environment\]::SetEnvironmentVariable') { $refused.Add($f.Name); continue }
@@ -32,15 +31,6 @@ function Write-Log { param($m) }
 function Write-Warn { param($m) $script:warnings.Add([string]$m) }
 # Write-Fail exits bootstrap.ps1; here it throws so a case can assert on it.
 function Write-Fail { param($m) throw "WRITE-FAIL: $m" }
-# The fake User environment: a case-insensitive name -> value table.
-$script:userEnv = @{}
-$script:userWrites = New-Object System.Collections.Generic.List[string]
-function Get-UserEnv { param([string]$Name) if ($script:userEnv.ContainsKey($Name)) { $script:userEnv[$Name] } }
-function Set-UserEnv {
-    param([string]$Name, $Value)
-    $script:userWrites.Add($Name)
-    if ($null -eq $Value) { $script:userEnv.Remove($Name) } else { $script:userEnv[$Name] = $Value }
-}
 $script:addedPaths = New-Object System.Collections.Generic.List[string]
 function Add-ToUserPath { param([string]$Dir) $script:addedPaths.Add($Dir) }
 function Update-SessionPath { }
@@ -80,7 +70,7 @@ if ((Get-Command mise).CommandType -ne 'Function') { throw 'refusing to run: mis
 function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
 $failures = New-Object System.Collections.Generic.List[string]
-foreach ($name in $refused) { $failures.Add("$name writes the User environment directly (use Set-UserEnv)") }
+foreach ($name in $refused) { $failures.Add("$name writes the User environment directly (the tests would touch the real one)") }
 function Test-Case([string]$Name, [scriptblock]$Body) {
     try {
         $script:warnings.Clear()
@@ -119,13 +109,11 @@ $savedMiseEnv = $env:MISE_ENV
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("miseenv-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
-    Test-Case 'miserc.toml: windows, no BOM, LF; the User and session MISE_ENV go' {
+    Test-Case 'miserc.toml: windows, no BOM, LF; the session MISE_ENV goes' {
         $script:RepoPath = Join-Path $tmp 'repo'
         New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
         $script:MiseEnvTokens = @('windows')
-        $script:userEnv = @{ MISE_ENV = 'windows,owned'; Path = 'C:\x' }
-        $script:userWrites.Clear()
-        $env:MISE_ENV = 'windows,owned'
+        $env:MISE_ENV = 'windows'
         Initialize-MiseEnv
         $rc = Join-Path $script:RepoPath 'miserc.toml'
         $bytes = [System.IO.File]::ReadAllBytes($rc)
@@ -137,85 +125,20 @@ try {
         Assert ($lines -ccontains 'auto_env = false') "no auto_env line: $text"
         Assert (@($lines | Where-Object { $_ -and $_ -notmatch '^#' }).Count -eq 2) "unexpected lines: $text"
         Assert (-not (Test-Path Env:MISE_ENV)) "session MISE_ENV still set: $env:MISE_ENV"
-        Assert (-not $script:userEnv.ContainsKey('MISE_ENV')) 'User MISE_ENV not removed'
-        Assert ($script:userEnv['Path'] -ceq 'C:\x') 'User Path touched'
     }
 
-    Test-Case 'miserc.toml rewritten; no User MISE_ENV means no User write' {
+    Test-Case 'miserc.toml: an existing file is rewritten' {
         $script:RepoPath = Join-Path $tmp 'repo2'
         New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
         [System.IO.File]::WriteAllText((Join-Path $script:RepoPath 'miserc.toml'), "env = [`"linux`"]`n")
         $script:MiseEnvTokens = @('windows')
-        $script:userEnv = @{ Path = 'C:\x' }
-        $script:userWrites.Clear()
         Initialize-MiseEnv
         Assert ((Read-Text (Join-Path $script:RepoPath 'miserc.toml')).Contains('env = ["windows"]')) 'old miserc.toml kept'
-        Assert ($script:userWrites.Count -eq 0) "User environment written: $($script:userWrites -join ', ')"
     }
 
-    Test-Case 'legacy cleanup: old dirs, exes, stamps and PATH entries go; the rest stays' {
-        $script:WsRoot = Join-Path $tmp 'ws'
-        $script:WsBin = Join-Path $script:WsRoot 'bin'
-        $script:WsStamps = Join-Path $script:WsRoot 'stamps'
-        $oldDirs = 'helix', 'nu', 'devtoys-cli', 'dngrep', 'logexpert'
-        foreach ($d in $oldDirs) { New-TestFile (Join-Path $script:WsRoot "$d\tool.exe") }
-        $oldExes = 'starship', 'gh', 'jq', 'omp', 'opencode', 'chezmoi'
-        foreach ($e in $oldExes) { New-TestFile (Join-Path $script:WsBin "$e.exe") }
-        $keepFiles = @(
-            (Join-Path $script:WsBin 'wpy.cmd'),
-            (Join-Path $script:WsBin 'textual.cmd'),
-            (Join-Path $script:WsRoot 'mise\bin\mise.exe'),
-            (Join-Path $script:WsStamps 'mise.2026.9.9.stamp'),
-            (Join-Path $script:WsStamps 'python-env.stamp'),
-            (Join-Path $script:WsStamps 'wslconfig.abcd1234.stamp'),
-            (Join-Path $script:WsStamps 'node-postinstall.0123456789abcdef.stamp')
-        )
-        foreach ($k in $keepFiles) { New-TestFile $k }
-        $oldStamps = 'starship.1.25.1.stamp', 'nu.0.113.1.stamp', 'DevToys.CLI.2.0.9.0.stamp', 'dnGREP.5.0.30.0.stamp', 'mise-runtimes.abcd1234.stamp'
-        foreach ($s in $oldStamps) { New-TestFile (Join-Path $script:WsStamps $s) }
-        $script:userEnv = @{ Path = (@(
-            'C:\Windows',
-            $script:WsBin,
-            (Join-Path $script:WsRoot 'helix'),
-            ((Join-Path $script:WsRoot 'nu') + '\'),
-            (Join-Path $script:WsRoot 'DevToys-CLI'),
-            (Join-Path $script:WsRoot 'dngrep'),
-            (Join-Path $script:WsRoot 'logexpert'),
-            (Join-Path $script:WsRoot 'mise\bin'),
-            'C:\Users\u\AppData\Local\mise\shims'
-        ) -join ';') }
-        $script:userWrites.Clear()
-        Invoke-LegacyToolCleanup
-        foreach ($d in $oldDirs) { Assert (-not (Test-Path (Join-Path $script:WsRoot $d))) "$d dir left behind" }
-        foreach ($e in $oldExes) { Assert (-not (Test-Path (Join-Path $script:WsBin "$e.exe"))) "$e.exe left behind" }
-        foreach ($s in $oldStamps) { Assert (-not (Test-Path (Join-Path $script:WsStamps $s))) "$s left behind" }
-        foreach ($k in $keepFiles) { Assert (Test-Path $k) "$k removed" }
-        $want = @('C:\Windows', $script:WsBin, (Join-Path $script:WsRoot 'mise\bin'), 'C:\Users\u\AppData\Local\mise\shims') -join ';'
-        Assert ($script:userEnv['Path'] -ceq $want) "User Path: $($script:userEnv['Path'])"
-        Assert ($script:warnings.Count -eq 0) "unexpected warning: $($script:warnings -join ' | ')"
-    }
-
-    Test-Case 'legacy cleanup: a second run changes nothing' {
-        $before = $script:userEnv['Path']
-        $script:userWrites.Clear()
-        Invoke-LegacyToolCleanup
-        Assert ($script:userWrites.Count -eq 0) "User environment written: $($script:userWrites -join ', ')"
-        Assert ($script:userEnv['Path'] -ceq $before) 'User Path changed'
-        Assert (Test-Path (Join-Path $script:WsStamps 'mise.2026.9.9.stamp')) 'mise stamp removed'
-    }
-
-    Test-Case 'legacy cleanup: an in-use old exe is named in a warning, not fatal' {
-        $gh = Join-Path $script:WsBin 'gh.exe'
-        New-TestFile $gh
-        $h = [System.IO.File]::Open($gh, 'Open', 'Read', 'Read')   # no Delete share: like a running gh
-        try { Invoke-LegacyToolCleanup } finally { $h.Dispose() }
-        Assert (($script:warnings -join ' ') -like "*gh.exe*close it and re-run*") "warnings: $($script:warnings -join ' | ')"
-        $script:warnings.Clear()
-        Invoke-LegacyToolCleanup
-        Assert (-not (Test-Path $gh)) 'gh.exe left behind once released'
-        Assert ($script:warnings.Count -eq 0) "warned again: $($script:warnings -join ' | ')"
-    }
-
+    $script:WsRoot = Join-Path $tmp 'ws'
+    $script:WsBin = Join-Path $script:WsRoot 'bin'
+    $script:WsStamps = Join-Path $script:WsRoot 'stamps'
     $script:WsMise = Join-Path $tmp 'ws\mise'
     $miseExe = Join-Path $script:WsMise 'bin\mise.exe'
     Test-Case 'Install-Mise: fresh install from the verified zip' {
@@ -325,9 +248,6 @@ try {
     $winLs = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}, {"path": "C:\\Users\\u\\.config\\mise\\config.windows.toml"}]'
     function Invoke-Bootstrap {
         $script:events.Clear()
-        $script:userEnv = @{}
-        # Recorded in the same log as the mise calls, to check the order.
-        function Invoke-LegacyToolCleanup { $script:events.Add('cleanup') }
         $msg = ''
         try { Invoke-MiseBootstrap } catch { $msg = $_.Exception.Message }
         return $msg
@@ -341,7 +261,6 @@ try {
         Assert ($msg -notlike '*min_version*') "min_version hint for an exit-0 config ls: $msg"
         Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
         Assert (@(Get-MiseCall 'prune').Count -eq 0) 'mise prune ran'
-        Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran'
     }
 
     Test-Case 'mise bootstrap: a failing `mise config ls` stops with its first lines and the min_version hint, not the miserc message' {
@@ -362,17 +281,17 @@ try {
         $msg = Invoke-Bootstrap
         Assert ($msg -like 'WRITE-FAIL:*min_version*failed to parse*config.windows.toml*TOML parse error*') "got: $msg"
         Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
-        Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran'
     }
 
-    Test-Case 'mise bootstrap: a failed bootstrap keeps the old tools (no cleanup)' {
+    Test-Case 'mise bootstrap: a failed bootstrap stops before the tool steps (no prune)' {
         $script:miseReply = @{ 'config ls' = @{ Out = $winLs; Exit = 0 }; ' bootstrap ' = @{ Exit = 1 } }
         $msg = Invoke-Bootstrap
         Assert ($msg -like 'WRITE-FAIL:*mise bootstrap*failed*') "got: $msg"
-        Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran after a failed bootstrap'
+        Assert (@(Get-MiseCall 'prune').Count -eq 0) 'mise prune ran after a failed bootstrap'
+        Assert (@(Get-MiseCall 'reshim').Count -eq 0) 'mise reshim ran after a failed bootstrap'
     }
 
-    Test-Case 'mise bootstrap: cleanup after a good bootstrap; every call pinned with -C; node marker' {
+    Test-Case 'mise bootstrap: tool steps after a good bootstrap; every call pinned with -C; node marker' {
         $script:miseReply = @{
             'config ls'  = @{ Out = $winLs; Exit = 0 }
             'where node' = @{ Out = 'C:\node'; Exit = 0 }
@@ -385,8 +304,8 @@ try {
         $pin = "mise -C $env:USERPROFILE "
         foreach ($c in $calls) { Assert ($c.StartsWith($pin)) "not pinned to %USERPROFILE%: $c" }
         $boot = $script:events.IndexOf(@(Get-MiseCall 'bootstrap --only dotfiles,tools --yes')[0])
-        $clean = $script:events.IndexOf('cleanup')
-        Assert (($boot -ge 0) -and ($clean -gt $boot)) "order: $($script:events -join ' | ')"
+        $prune = $script:events.IndexOf(@(Get-MiseCall 'prune --yes')[0])
+        Assert (($boot -ge 0) -and ($prune -gt $boot)) "order: $($script:events -join ' | ')"
         Assert (@(Get-MiseCall 'install --yes --force node').Count -eq 1) 'node not force-reinstalled'
         Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 1) 'no node marker'
         Assert (@(Get-MiseCall 'prune --yes').Count -eq 1 -and @(Get-MiseCall 'reshim').Count -eq 1) 'prune/reshim missing'
