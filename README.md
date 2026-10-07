@@ -540,6 +540,7 @@ The compilers, debuggers and analysis tools (gcc-c++, clang, clangd/clang-tidy/c
 ```bash
 sudo dnf install epel-release
 sudo dnf config-manager --set-enabled crb   # EL9 Alma/Rocky/Stream (powertools on EL8)
+# subscribed RHEL instead: sudo subscription-manager repos --enable codeready-builder-for-rhel-<8|9>-$(uname -m)-rpms
 mise bootstrap --only packages --yes
 ```
 

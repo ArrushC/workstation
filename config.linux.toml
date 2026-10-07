@@ -152,9 +152,9 @@ taplo = "0.10.0"
 # `private = true` is ignored.
 "post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true; chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
 
-# EPEL + CRB must exist before the dnf batch resolves (htop/cppcheck/heaptrack/
-# ccache are EPEL, meson/ninja-build are CRB). mise has no repo-enabling
-# key, so this is a hook task. Hooks are always `mise run <task>` (opaque strings
+# EPEL + CRB must exist before the dnf batch resolves (htop/heaptrack/ccache are
+# EPEL, meson/ninja-build are CRB; cppcheck is EPEL on EL9, CRB on EL8). mise has
+# no repo-enabling key, so this is a hook task. Hooks are always `mise run <task>` (opaque strings
 # get no verified cwd/PATH).
 "pre-packages" = "mise run enable-el-repos"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
