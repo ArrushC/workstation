@@ -570,7 +570,7 @@ main() {
   resolve_host_config
   { exec 3<&-; } 2>/dev/null || true
 
-  TOKENS="$("$REPO_DIR/scripts/lib/mise-env.sh" "$MODE" --write)"
+  TOKENS="$("$REPO_DIR/scripts/lib/mise-env.sh" --write)"
   # miserc.toml is the source from here on; an inherited export would override it.
   unset MISE_ENV
   log "mise config set: $TOKENS (saved in $REPO_DIR/miserc.toml)"

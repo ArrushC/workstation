@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Report available updates: mise tool pins, dnf (owned Linux hosts), and the config.toml [vars] pins vs upstream tags"
+#MISE description="Report available updates: mise tool pins, dnf (Linux), and the config.toml [vars] pins vs upstream tags"
 #MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -uo pipefail
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# enable-el-repos.sh — EPEL + CRB on RHEL-family owned hosts. Invoked by
-# tasks/enable-el-repos (config.host.toml's pre-packages hook), NOT directly.
+# enable-el-repos.sh — EPEL + CRB on RHEL-family hosts. Invoked by
+# tasks/enable-el-repos (config.linux.toml's pre-packages hook), NOT directly.
 #
 # Detection sources /etc/os-release and matches on $ID / $ID_LIKE. Do NOT use a
 # loose `grep -i fedora /etc/os-release`: AlmaLinux's os-release carries
@@ -21,9 +21,9 @@
 # --set-enabled is dnf4 syntax (EL9); a future EL10/dnf5 host would need
 # `config-manager setopt <repo>.enabled=1` instead.
 #
-# sudo — owned hosts only, always interactive or with cached credentials (mise
+# sudo — always interactive or with cached credentials (mise
 # elevates the packages phase the same way; this hook runs before it, via
-# config.host.toml's [bootstrap.hooks] "pre-packages"). Exit 0 always, except
+# config.linux.toml's [bootstrap.hooks] "pre-packages"). Exit 0 always, except
 # when `sudo dnf install -y epel-release` fails on an EL host — the packages
 # batch that follows would fail anyway, so this exits 1.
 

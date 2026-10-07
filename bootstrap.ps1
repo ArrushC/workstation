@@ -1,7 +1,7 @@
 ﻿# =============================================================================
 # bootstrap.ps1 -- workstation setup (Windows), per-user, no admin. It checks
 # for git and curl.exe (it never installs Git), installs the sha256-pinned mise,
-# clones this repo, writes miserc.toml (windows,owned) and runs `mise bootstrap
+# clones this repo, writes miserc.toml (windows) and runs `mise bootstrap
 # --only dotfiles,tools` (the dotfiles and every CLI tool), then `mise bootstrap
 # --only packages` (config.windows.toml's winget GUI apps), then the steps under
 # RUN SEQUENCE. The one admin step: SSHFS-Win raises UAC (two prompts on a host
@@ -45,7 +45,7 @@ $MiseVersion = "2026.9.9"
 $MiseSha256  = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
 $MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise-v$MiseVersion-windows-x64.zip"
 $MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
-$MiseEnvTokens = @("windows", "owned")
+$MiseEnvTokens = @("windows")
 
 $WsPythonEnv = Join-Path $WsRoot "python-env"
 
@@ -486,7 +486,7 @@ $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 function Initialize-MiseEnv {
     $rc = Join-Path $RepoPath "miserc.toml"
     $envList = ($MiseEnvTokens | ForEach-Object { '"' + $_ + '"' }) -join ', '
-    $body = "# Written by bootstrap.ps1 (Windows is always owned).`nenv = [$envList]`nauto_env = false`n"
+    $body = "# Written by bootstrap.ps1 (Windows' token set).`nenv = [$envList]`nauto_env = false`n"
     [System.IO.File]::WriteAllText($rc, $body, [System.Text.UTF8Encoding]::new($false))
     if (Get-UserEnv "MISE_ENV") {
         Set-UserEnv "MISE_ENV" $null
@@ -656,8 +656,8 @@ function Invoke-MiseBootstrap {
     # Native stderr must not trip EAP=Stop (PS 5.1 wraps it as errors).
     $miseCd = @('-C', $env:USERPROFILE)
 
-    # Without config.owned.toml loaded (miserc.toml ignored), the tools phase would skip
-    # the owned tools and `mise prune` delete them; a failing `config ls` (min_version,
+    # Without config.windows.toml loaded (miserc.toml ignored), the Windows dotfiles and winget
+    # apps would be skipped and `mise prune` could remove Windows-only tools; a failing `config ls` (min_version,
     # a TOML error) stops too. --json: the table output truncates to the console width.
     $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     $lsOut = @(& mise @miseCd config ls --json 2>&1 | ForEach-Object { "$_" })
@@ -667,8 +667,8 @@ function Invoke-MiseBootstrap {
         $head = @($lsOut | Where-Object { $_.Trim() } | Select-Object -First 5) -join "`n  "
         Write-Fail "'mise config ls' failed (exit $lsCode) -- an older mise than config.toml's min_version? re-run .\bootstrap.ps1 after a download succeeds:`n  $head"
     }
-    if (($lsOut -join "`n") -notmatch 'config\.owned\.toml') {
-        Write-Fail "mise did not load config.owned.toml, so miserc.toml (windows,owned) was not honoured -- -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune could remove the owned tools; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
+    if (($lsOut -join "`n") -notmatch 'config\.windows\.toml') {
+        Write-Fail "mise did not load config.windows.toml, so miserc.toml (windows) was not honoured -- -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
     }
 
     # `mise where node` succeeds only when the DECLARED node is installed.
@@ -717,7 +717,7 @@ reported above and re-run.
             if ($LASTEXITCODE -eq 0) {
                 # Marker = node's declaration hashed (-f: a bare `config get` reads only
                 # config.windows.toml). Unreadable: reinstall, no marker, the next run retries.
-                $decl = (@(& mise @miseCd config get -f (Join-Path $RepoPath "config.owned.toml") tools.node 2>$null) -join "`n").Trim()
+                $decl = (@(& mise @miseCd config get -f (Join-Path $RepoPath "config.toml") tools.node 2>$null) -join "`n").Trim()
                 $marker = $null
                 if (($LASTEXITCODE -eq 0) -and $decl) {
                     $bytes = [System.Text.Encoding]::UTF8.GetBytes($decl)
@@ -725,7 +725,7 @@ reported above and re-run.
                     $sum = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
                     $marker = Join-Path $WsStamps "node-postinstall.$sum.stamp"
                 } else {
-                    Write-Warn "could not read tools.node from config.owned.toml -- forcing the node reinstall so its npm postinstall can't be skipped"
+                    Write-Warn "could not read tools.node from config.toml -- forcing the node reinstall so its npm postinstall can't be skipped"
                 }
                 $nodeOk = $true
                 if ($hadNode -and -not ($marker -and (Test-Path -LiteralPath $marker))) {
@@ -1266,7 +1266,7 @@ function Invoke-PythonEnv {
     }
 }
 
-# mise installs JetBrainsMono Nerd Font (config.owned.toml, as tasks/fonts uses on
+# mise installs JetBrainsMono Nerd Font (config.toml, as tasks/fonts uses on
 # Linux); scripts/install-nerd-fonts.ps1 copies the six Mono TTFs and registers
 # them per-user, plus an at-logon task, since HKCU fonts don't reliably load alone.
 function Invoke-InstallNerdFonts {

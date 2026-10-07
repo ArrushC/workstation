@@ -1,25 +1,16 @@
 #!/usr/bin/env bash
-# mise-env.sh <owned|shared> [--write] — the MISE_ENV token set for THIS Linux host.
-#   shared → linux
-#   owned  → linux,owned,host (WSL or not: tasks that differ check is_wsl at run time)
-# --write also saves it to ~/.config/mise/miserc.toml (git-ignored). Every mise
-# process reads that file — shells, shims under systemd, cron — so nothing
-# exports MISE_ENV. An exported MISE_ENV still wins over miserc (CI and
-# check-templates.sh set one to pick a token set explicitly).
+# mise-env.sh [--write] — the MISE_ENV token set for THIS Linux host: `linux`.
+# Every host gets the same setup; the token only selects config.linux.toml
+# (bootstrap.ps1 writes `windows` on Windows). --write also saves it to
+# ~/.config/mise/miserc.toml (git-ignored). Every mise process reads that file
+# (shells, shims under systemd, cron), so nothing exports MISE_ENV. An exported
+# MISE_ENV still wins over miserc (CI and check-templates.sh set one).
 set -euo pipefail
-mode="${1:?usage: mise-env.sh <owned|shared> [--write]}"
-case "$mode" in
-owned) tokens="linux,owned,host" ;;
-shared) tokens="linux" ;;
-*)
-  printf 'mise-env.sh: unknown mode %q (owned|shared)\n' "$mode" >&2
-  exit 2
-  ;;
-esac
+tokens="linux"
 
-if [ "${2:-}" = --write ]; then
+if [ "${1:-}" = --write ]; then
   cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
-  printf '# Written by scripts/lib/mise-env.sh from vars.mode in config.local.toml.\nenv = ["%s"]\nauto_env = false\n' \
+  printf '# Written by scripts/lib/mise-env.sh (the token set of this Linux host).\nenv = ["%s"]\nauto_env = false\n' \
     "${tokens//,/\", \"}" >"$cfg/mise/miserc.toml.tmp"
   mv "$cfg/mise/miserc.toml.tmp" "$cfg/mise/miserc.toml"
   # One-time cleanup of the old exported MISE_ENV (an export would override

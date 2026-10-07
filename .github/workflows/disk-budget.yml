@@ -3,7 +3,7 @@ name: disk-budget
 # downloads and the uv/go/npm caches) for each OS, and commits the MB
 # figures to disk-budget.toml on main. The free-space checks read that file:
 # scripts/lib/mise-install.sh on Linux, bootstrap.ps1's Assert-ToolsDiskSpace on
-# Windows. The Linux jobs also check every installed binary runs on EL8's glibc 2.28.
+# Windows. The Linux job also checks every installed binary runs on EL8's glibc 2.28.
 # A pull request that changes this workflow measures and checks without committing.
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
       # avoids mise rewriting the lock files' sidecar refs (see lint.yml).
       - name: Install the toolbelt into an empty home and measure it
         env:
-          MISE_ENV: linux,owned,host
+          MISE_ENV: linux
           MISE_CONFIG_DIR: ${{ github.workspace }}
           MISE_LOCKFILE: "false"
           MISE_LOCKED: "0"
@@ -71,7 +71,7 @@ jobs:
       - name: Install the toolbelt into empty directories and measure them
         shell: pwsh
         env:
-          MISE_ENV: windows,owned
+          MISE_ENV: windows
           MISE_CONFIG_DIR: ${{ github.workspace }}
           MISE_LOCKFILE: "false"
           MISE_LOCKED: "0"

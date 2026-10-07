@@ -4,7 +4,7 @@
 #
 # Invoked by bootstrap.ps1 (Invoke-InstallNerdFonts), NOT directly, with
 # -SourceDir = `mise where github:ryanoasis/nerd-fonts`: mise downloads and
-# checks the font, whose pin lives only in config.owned.toml (tasks/fonts
+# checks the font, whose pin lives only in config.toml (tasks/fonts
 # uses the same tool on Linux). This script copies the six Mono variants from
 # there to %LOCALAPPDATA%\Microsoft\Windows\Fonts\ (only the ones that differ),
 # and registers them (by FULL PATH — bare filenames resolve only against

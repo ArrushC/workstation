@@ -50,7 +50,7 @@ case "$1" in
 esac
 EOF
 chmod +x "$T/bin/df" "$T/bin/du"
-export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux,owned,host
+export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux
 export FAKE_LOG="$T/log" FAKE_NODE="$T/node-installed" FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@1" }'
 fail() {
   echo "FAIL: $*" >&2
@@ -118,17 +118,17 @@ cp "$root/scripts/lib/mise-install.sh" "$R/scripts/lib/"
 printf 'linux = 5000\nwindows = 3000\n' >"$R/disk-budget.toml"
 mi="$R/scripts/lib/mise-install.sh"
 installs="$HOME/.local/share/mise/installs"
-# 10. owned, nothing installed, 1 GB free: needs 5000 + 1024 MB, stops before installing.
+# 10. nothing installed, 1 GB free: needs 5000 + 1024 MB, stops before installing.
 : >"$FAKE_LOG"
 rc10=0
 out10="$(FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" || rc10=$?
-[ "$rc10" = 1 ] || fail "disk check (1 GB free, owned): expected exit 1, got $rc10"
-grep -q install "$FAKE_LOG" && fail "disk check (1 GB free, owned): mise install ran"
+[ "$rc10" = 1 ] || fail "disk check (1 GB free): expected exit 1, got $rc10"
+grep -q install "$FAKE_LOG" && fail "disk check (1 GB free): mise install ran"
 printf '%s\n' "$out10" | grep -q 'Not enough disk space for the mise tools: 1.0 GB free.*about 5.9 GB needed' ||
-  fail "disk check (1 GB free, owned): wrong message: $out10"
+  fail "disk check (1 GB free): wrong message: $out10"
 printf '%s\n' "$out10" | grep -q '7.5G.*/.cache' || fail "disk check: the largest folders are not listed: $out10"
 printf '%s\n' "$out10" | grep -q "11G.*$HOME\$" && fail "disk check: the home total is listed as a folder: $out10"
-# 11. owned with 4 GB already installed needs 5000 - 4096 + 1024 = 1928 MB: 2 GB free is enough.
+# 11. with 4 GB already installed needs 5000 - 4096 + 1024 = 1928 MB: 2 GB free is enough.
 mkdir -p "$installs"
 : >"$FAKE_LOG"
 FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
@@ -150,7 +150,7 @@ printf '%s\n' "$out13" | grep -q 'WORKSTATION_SKIP_DISK_CHECK=1, so going ahead'
 : >"$FAKE_LOG"
 FAKE_DF_FAIL=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || fail "disk check: an unreadable df must not stop the install"
 grep -qx install "$FAKE_LOG" || fail "disk check (no df): mise install did not run"
-# 15. no figure for this host type in disk-budget.toml skips the check, with a warning.
+# 15. no linux figure in disk-budget.toml skips the check, with a warning.
 printf 'windows = 3000\n' >"$R/disk-budget.toml"
 : >"$FAKE_LOG"
 out15="$(FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" || fail "disk check: a missing budget must not stop the install"

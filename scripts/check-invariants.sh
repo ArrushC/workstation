@@ -147,12 +147,12 @@ check_pins() {
     "tasks/vcpkg=$(sed -nE 's/.*vroot="([^"]*)".*/\1/p' tasks/vcpkg | head -1)"
   # TypeScript 7 ships only bin/tsc, no lib/tsserver.js, so typescript-language-server can't start.
   pin_major_at_most "typescript (tsserver for typescript-language-server)" \
-    "$(grep -E '^node = ' config.owned.toml | grep -oE 'typescript@[0-9.]+' | cut -d@ -f2)" 5 \
+    "$(grep -E '^node = ' config.toml | grep -oE 'typescript@[0-9.]+' | cut -d@ -f2)" 5 \
     "keep the 5.x line"
-  if grep -E '^node = ' config.owned.toml | grep -q 'typescript-language-server@'; then
+  if grep -E '^node = ' config.toml | grep -q 'typescript-language-server@'; then
     ok "typescript-language-server is in node's postinstall"
   else
-    bad "typescript-language-server@ missing from node's postinstall in config.owned.toml"
+    bad "typescript-language-server@ missing from node's postinstall in config.toml"
   fi
   # A new pin_equal row over a tools.X pin must add X to this list.
   pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node
@@ -369,7 +369,7 @@ check_tools_block() {
 check_mise_config_files() {
   hdr "mise config*.toml parse + lockfile coverage + min_version"
   local f
-  for f in config.toml config.linux.toml config.owned.toml mise.lock mise.linux.lock mise.owned.lock; do
+  for f in config.toml config.linux.toml mise.lock mise.linux.lock; do
     [ -f "$f" ] || {
       bad "missing: $f"
       return
@@ -384,9 +384,9 @@ def load(f):
     with open(f, "rb") as fh:
         return tomllib.load(fh)
 
-lockmap = {"config.toml": "mise.lock", "config.linux.toml": "mise.linux.lock", "config.owned.toml": "mise.owned.lock"}
+lockmap = {"config.toml": "mise.lock", "config.linux.toml": "mise.linux.lock"}
 missing = []
-for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("config.owned.toml", True)):
+for f, need_win in (("config.toml", True), ("config.linux.toml", False)):
     ltools = load(lockmap[f]).get("tools", {})
     for name, spec in load(f).get("tools", {}).items():
         short = name.split(":", 1)[1] if ":" in name and not name.startswith(("go:", "pypi:", "pipx:", "npm:", "http:")) else name
@@ -410,7 +410,7 @@ for f, need_win in (("config.toml", True), ("config.linux.toml", False), ("confi
             blocks = entries if isinstance(entries, list) else [entries]
             lock_vers = sorted({e.get("version") for e in blocks})
             if pin not in lock_vers:
-                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux,owned,host mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64")
+                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux mise lock --global --platform linux-x64 && MISE_ENV=windows mise lock --global --platform windows-x64")
 if missing:
     print("\n".join(missing))
     sys.exit(1)
@@ -418,24 +418,29 @@ PY
   then
     ok "every [tools] entry has a lock entry (linux-x64; windows-x64 where it installs on Windows)"
   else
-    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux,owned,host mise lock --global --platform linux-x64 && MISE_ENV=windows,owned mise lock --global --platform windows-x64"
+    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux mise lock --global --platform linux-x64 && MISE_ENV=windows mise lock --global --platform windows-x64"
   fi
-  # host-state files must parse and declare no [tools]; config.toml carries the four [vars] pins they read.
+  # System-state tables sit in the OS file that can use them; config.toml carries the [vars] pins they read.
   if [ -z "$PY" ]; then
-    note "no python with tomllib — host-state file / [vars] checks skipped locally (CI enforces)"
+    note "no python with tomllib — system-state placement / [vars] checks skipped locally (CI enforces)"
   else
-    if [ ! -f config.host.toml ]; then
-      bad "missing: config.host.toml"
-    elif "$PY" - config.host.toml <<'PY'
+    if "$PY" - <<'PY'
 import sys, tomllib
-with open(sys.argv[1], "rb") as fh:
-    d = tomllib.load(fh)
-sys.exit(1 if "tools" in d else 0)
+def pkgs(f):
+    with open(f, "rb") as fh:
+        return tomllib.load(fh).get("bootstrap", {})
+bad = []
+for f in ("config.toml", "config.windows.toml"):
+    b = pkgs(f)
+    bad += [f"{f}:{k}" for k in b.get("packages", {}) if k.startswith("dnf:")]
+    bad += [f"{f}:[bootstrap.files]" for _ in [1] if b.get("files")]
+bad += [f"config.linux.toml:{k}" for k in pkgs("config.linux.toml").get("packages", {}) if k.startswith("winget:")]
+print("; ".join(bad)); sys.exit(1 if bad else 0)
 PY
     then
-      ok "config.host.toml parses and declares no [tools]"
+      ok "dnf: packages and [bootstrap.files] only in config.linux.toml; winget: only in config.windows.toml"
     else
-      bad "config.host.toml declares [tools] — the host-state file must not (lock coverage is three files)"
+      bad "system-state tables in the wrong file (dnf/files belong in config.linux.toml, winget in config.windows.toml)"
     fi
     local vk vars_bad=0
     for vk in vcpkg_version zjstatus_zellij_floor; do
@@ -458,7 +463,7 @@ PY
     local tmp
     tmp="$(mktemp -d)"
     ln -s "$PWD" "$tmp/mise"
-    if XDG_CONFIG_HOME="$tmp" MISE_ENV=linux,owned,host mise config ls >/dev/null 2>&1 &&
+    if XDG_CONFIG_HOME="$tmp" MISE_ENV=linux mise config ls >/dev/null 2>&1 &&
       env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$tmp" mise tasks validate >/dev/null 2>&1; then
       ok "mise loads the config files and validates tasks/"
     else
@@ -486,7 +491,7 @@ PY
       lock_ok=0
       ;;
     esac
-  done < <(grep -ho 'path = "[^"]*"' mise.lock mise.linux.lock mise.owned.lock 2>/dev/null | sed -E 's/^path = "(.*)"$/\1/')
+  done < <(grep -ho 'path = "[^"]*"' mise.lock mise.linux.lock 2>/dev/null | sed -E 's/^path = "(.*)"$/\1/')
   if [ "$lock_ok" -eq 1 ]; then
     ok "every lock sidecar path ref is under locks/ and the directory exists"
   fi
@@ -495,7 +500,7 @@ PY
   if [ -n "$PY" ]; then
     local missing
     missing="$(
-      "$PY" - mise.lock mise.linux.lock mise.owned.lock <<'PYEOF'
+      "$PY" - mise.lock mise.linux.lock <<'PYEOF'
 import sys, tomllib
 for f in sys.argv[1:]:
     try:
@@ -524,7 +529,7 @@ PYEOF
 # Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
 # plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
-  hdr "bootstrap-config invariants (config.host/linux/windows.toml)"
+  hdr "bootstrap-config invariants (config.linux/windows.toml)"
   if [ -z "$PY" ]; then
     note "no python with tomllib — bootstrap-config checks skipped locally (CI enforces)"
   else
@@ -533,7 +538,7 @@ check_bootstrap_config() {
       "$PY" - <<'PY'
 import os, re, tomllib
 
-files = ["config.host.toml", "config.linux.toml", "config.windows.toml"]
+files = ["config.linux.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
     try:
@@ -546,8 +551,7 @@ for f in files:
 # Hooks: `mise run <task>[ ::: <task>]`, each task existing; mise runs a name from every loaded file.
 hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
 toml_tasks = set()
-for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
-           "config.windows.toml"]:
+for cf in ["config.toml", "config.linux.toml", "config.windows.toml"]:
     try:
         with open(cf, "rb") as fh:
             toml_tasks |= set(tomllib.load(fh).get("tasks", {}))
@@ -555,7 +559,7 @@ for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host
         pass
 # post-dotfiles is the raw chmod line restoring ~/.ssh and ~/.claude modes, pinned to an
 # exact literal: mise runs hooks as `sh -o errexit`, so each command needs its own `|| true`
-# (on a shared host ~/.claude doesn't exist and the first chmod would abort the bootstrap).
+# (where ~/.claude doesn't exist yet the first chmod would abort the bootstrap).
 EXPECTED_POST_DOTFILES_HOOK = (
     "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; "
     "chmod 600 ~/.ssh/config 2>/dev/null || true; "
@@ -600,7 +604,7 @@ else:
 dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck"}
 seen_pkg = {}
 bad_pkg = []
-for f in ("config.host.toml",):
+for f in ("config.linux.toml",):
     for key in loaded.get(f, {}).get("bootstrap", {}).get("packages", {}):
         if not key.startswith("dnf:"):
             bad_pkg.append(f"{f}:{key} (missing dnf: prefix)")
@@ -611,14 +615,13 @@ pkg_dupes = [f"{k} in {fs}" for k, fs in seen_pkg.items() if len(fs) > 1]
 if bad_pkg or pkg_dupes:
     print("FAIL|packages|" + "; ".join(bad_pkg + pkg_dupes))
 else:
-    print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) in config.host.toml, unique, no dropped names")
+    print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) in config.linux.toml, unique, no dropped names")
 
 # winget GUI apps are Windows-only, so they live in config.windows.toml alone; SSHFS-Win
 # stays in bootstrap.ps1 (mise installs silently, and its WinFsp MSI must raise UAC).
 win_hits = []
 n_winget = 0
-for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
-           "config.windows.toml"]:
+for cf in ["config.toml", "config.linux.toml", "config.windows.toml"]:
     try:
         with open(cf, "rb") as fh:
             pkgs = tomllib.load(fh).get("bootstrap", {}).get("packages", {})
@@ -651,8 +654,7 @@ else:
 # breaks wsu's `git pull --ff-only`. config.toml sets [settings] locked = true for every
 # host (installs read the lock files, never write them; `mise lock` still writes).
 lock_hits = []
-for cf in ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml",
-           "config.windows.toml"]:
+for cf in ["config.toml", "config.linux.toml", "config.windows.toml"]:
     try:
         with open(cf, "rb") as fh:
             settings = tomllib.load(fh).get("settings", {})
@@ -684,7 +686,7 @@ else:
     print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (plan/status would need sudo; login_shell needs chsh)")
 
 prod_hits = []
-for f in ("config.toml", "config.owned.toml"):
+for f in ("config.toml",):
     try:
         with open(f, "rb") as fh:
             d = tomllib.load(fh)
@@ -692,11 +694,11 @@ for f in ("config.toml", "config.owned.toml"):
         prod_hits.append(f"{f} failed to parse: {e}")
         continue
     if "bootstrap" in d:
-        prod_hits.append(f"{f} has a [bootstrap] table (shared hosts and Windows load it; host state lives in the token-gated files)")
+        prod_hits.append(f"{f} has a [bootstrap] table (every host loads it; system state lives in the OS files)")
 if prod_hits:
     print("FAIL|shared-safety|" + "; ".join(prod_hits))
 else:
-    print("PASS|shared-safety|config.toml and config.owned.toml carry no [bootstrap] table")
+    print("PASS|shared-safety|config.toml carries no [bootstrap] table (both OSes load it; system state lives in the OS files)")
 PY
     )
     while IFS='|' read -r result _ detail; do
@@ -710,10 +712,10 @@ PY
   fi
 
   if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
-    if MISE_ENV=linux,owned,host mise bootstrap plan --json >/dev/null 2>&1; then
-      ok "mise bootstrap plan --json (MISE_ENV=linux,owned,host) exits 0"
+    if MISE_ENV=linux mise bootstrap plan --json >/dev/null 2>&1; then
+      ok "mise bootstrap plan --json (MISE_ENV=linux) exits 0"
     else
-      bad "mise bootstrap plan --json (MISE_ENV=linux,owned,host) failed"
+      bad "mise bootstrap plan --json (MISE_ENV=linux) failed"
     fi
   else
     note "mise and/or dnf not on PATH — skipped the live 'mise bootstrap plan' check (CI has no dnf)"
@@ -721,7 +723,7 @@ PY
 }
 
 check_dotfiles_config() {
-  hdr "dotfiles-config invariants (config.toml/linux/dev/host/windows.toml [dotfiles])"
+  hdr "dotfiles-config invariants (config.toml/linux/windows.toml [dotfiles])"
   if [ -z "$PY" ]; then
     note "no python with tomllib — dotfiles-config checks skipped locally (CI enforces)"
     return
@@ -732,8 +734,8 @@ check_dotfiles_config() {
 import glob, os, tomllib
 
 # config.local.toml (git-ignored) is excluded: it exists to REPEAT a key from these files.
-# config.host.toml is listed so its gdb/herdr entries never deploy dead files on Windows.
-files = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
+# config.linux.toml holds the Linux-only gdb/herdr/zed entries.
+files = ["config.toml", "config.linux.toml", "config.windows.toml"]
 loaded = {}
 for f in files:
     try:
@@ -862,7 +864,7 @@ check_lsp_plugin() {
     return
   fi
   if ! command -v claude >/dev/null 2>&1; then
-    note "claude not installed — skipped LSP plugin validate (owned hosts enforce; CI has no claude)"
+    note "claude not installed — skipped LSP plugin validate (hosts with claude enforce; CI has no claude)"
     return
   fi
   local tmp

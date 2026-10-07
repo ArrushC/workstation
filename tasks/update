@@ -18,7 +18,7 @@ owned | shared) ;;
   exit 1
   ;;
 esac
-tokens="$("$root/scripts/lib/mise-env.sh" "$mode" --write)"
+tokens="$("$root/scripts/lib/mise-env.sh" --write)"
 unset MISE_ENV
 printf '==> mode: %s — config set %s (miserc.toml)\n' "$mode" "$tokens"
 

@@ -132,8 +132,8 @@ run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_nam
 ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "config.toml -> silent (sync-tool-memory covers config edits)" empty
-run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.owned.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.owned.toml -> silent" empty
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.linux.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "config.linux.toml -> silent" empty
 run "$RH/parity-reminder.sh" "$(j --arg f 'C:\Users\u\.config\mise\dotfiles\zshrc.tera' '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "backslash path -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/windows/AppData/Roaming/nushell/config.nu.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
@@ -216,8 +216,7 @@ ok "dotfiles-tree config.toml (helix) -> silent, not mise config" empty
 WT="$(mktemp -d)"
 mkdir -p "$WT/scripts" "$WT/dotfiles/claude"
 cp "$ROOT/scripts/gen-tool-memory.sh" "$WT/scripts/"
-cp "$ROOT/config.toml" "$ROOT/config.linux.toml" "$ROOT/config.owned.toml" \
-  "$ROOT/config.host.toml" "$ROOT/config.native.toml" "$WT/"
+cp "$ROOT/config.toml" "$ROOT/config.linux.toml" "$ROOT/config.windows.toml" "$WT/"
 printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/dotfiles/claude/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$WT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | CLAUDE_PROJECT_DIR="$ROOT" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "worktree edit -> commit nudge" has 'commit'

@@ -4,7 +4,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-files=(bootstrap.sh bootstrap.ps1 config.toml config.linux.toml config.owned.toml
+files=(bootstrap.sh bootstrap.ps1 config.toml config.linux.toml
   dotfiles/zshrc.tera dotfiles/bashrc.tera tasks/vcpkg tasks/check-updates
   scripts/bump-versions.sh scripts/gen-tool-memory.sh scripts/check-invariants.sh
   .github/workflows/lint.yml .github/workflows/version-bumps.yml)
@@ -72,7 +72,7 @@ pins
 case_ "zellij below the zjstatus floor fails" 1 "is below"
 
 fresh
-sed -i -E 's/typescript@[0-9.]+/typescript@7.0.0/' "$T/config.owned.toml"
+sed -i -E 's/typescript@[0-9.]+/typescript@7.0.0/' "$T/config.toml"
 pins
 case_ "typescript major 7 fails" 1 "major 7 > 5"
 
@@ -87,7 +87,7 @@ pins
 case_ "unreadable zjstatus pin fails" 1 "zjstatus pin unreadable"
 
 fresh
-sed -i -E 's/typescript-language-server@[0-9.]+ //' "$T/config.owned.toml"
+sed -i -E 's/typescript-language-server@[0-9.]+ //' "$T/config.toml"
 pins
 case_ "typescript-language-server missing from postinstall fails" 1 "missing from node's postinstall"
 

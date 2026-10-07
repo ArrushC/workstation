@@ -15,8 +15,7 @@
 # Each scratch HOME below therefore gets its own .config/mise (make_home):
 # this checkout's entries symlinked in, dotfiles/ copied (so the
 # post-dotfiles chmod hook can't touch the real source), and a
-# config.local.toml whose vars.mode matches the token set — without it only
-# the shared branches of the templates ever render. MISE_CONFIG_DIR and the
+# config.local.toml with the name/email the templates read. MISE_CONFIG_DIR and the
 # cwd point there too, the same setup as check-invariants.sh's MISE_ENV
 # render check. The dotfiles TARGET side ("~/...") honors the per-call
 # `HOME=`, which keeps every render off the real $HOME.
@@ -95,11 +94,9 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # make_home <env> <dir> — a scratch $HOME with its own .config/mise (see the
-# header): this checkout, plus a config.local.toml with the mode the token
-# set implies.
+# header): this checkout, plus a config.local.toml with name and email.
 make_home() {
-  local env=$1 home=$2 cfg entry base mode=shared
-  case ",$env," in *,owned,*) mode=owned ;; esac
+  local env=$1 home=$2 cfg entry base
   cfg="$home/.config/mise"
   mkdir -p "$cfg"
   for entry in "$REPO_ROOT"/*; do
@@ -110,7 +107,7 @@ make_home() {
     *) ln -s "$entry" "$cfg/$base" ;;
     esac
   done
-  printf '[vars]\nname = "Template Check"\nemail = "template-check@example.invalid"\nmode = "%s"\n' "$mode" >"$cfg/config.local.toml"
+  printf '[vars]\nname = "Template Check"\nemail = "template-check@example.invalid"\n' >"$cfg/config.local.toml"
 }
 
 # in_home <env> <home> <cmd…> — run a mise command against that scratch HOME.
@@ -127,7 +124,7 @@ discover_targets() {
 import sys, tomllib
 
 env_tokens = set(sys.argv[1].split(","))
-FILES = ["config.toml", "config.linux.toml", "config.owned.toml", "config.host.toml", "config.windows.toml"]
+FILES = ["config.toml", "config.linux.toml", "config.windows.toml"]
 
 def token_for(fname):
     if fname == "config.toml":
@@ -237,15 +234,12 @@ apply_and_check() {
     bad "$label: apply exited 0 but $path was not written. mise said: $(printf '%s' "$out" | tail -5 | tr '\n' ' ') | HOME=$home ls: $(ls -la "$home" 2>&1 | tr '\n' ' ')"
     return 1
   fi
-  # The mode-gated block must follow config.local.toml's mode.
+  # The vcpkg block is in every Linux render.
   # shellcheck disable=SC2088  # mise target strings, not paths
   case "$target" in
   "~/.zshrc" | "~/.bashrc")
-    if [[ ",$env," == *,owned,* ]] && ! grep -q 'VCPKG_ROOT' "$path"; then
-      bad "$label: rendered without the owned-only VCPKG_ROOT block (vars.mode not seen?)"
-      return 1
-    elif [[ ",$env," != *,owned,* ]] && grep -q 'VCPKG_ROOT' "$path"; then
-      bad "$label: shared render carries the owned-only VCPKG_ROOT block"
+    if [[ ",$env," == *,linux,* ]] && ! grep -q 'VCPKG_ROOT' "$path"; then
+      bad "$label: rendered without the VCPKG_ROOT block"
       return 1
     fi
     ;;
@@ -264,7 +258,7 @@ apply_and_check() {
   return 0
 }
 
-ENVS=("linux" "linux,owned,host" "windows,owned")
+ENVS=("linux" "windows")
 
 for env in "${ENVS[@]}"; do
   hdr "individual render + syntax check — MISE_ENV=$env"
