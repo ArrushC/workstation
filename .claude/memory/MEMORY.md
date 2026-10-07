@@ -22,5 +22,5 @@
 - [Workstation TUI removed](project-workstation-tui-removed.md) — removed 2026-09-06 for maintenance cost; do not re-propose a TUI; python-env stays in both modes.
 - [Windows mise-via-interop gotchas](project-mise-runtimes-shipped.md) — Set-Location before mise; winget long-path uninstall needs pwsh Remove-Item; Sort-Object order differs 5.1 vs 7.
 - [Hosts list removed, history scrubbed](project-hosts-list-removed.md) — hosts.conf and its tooling are gone and history is the public ArrushC/workstation; never reintroduce a tracked host inventory.
-- [bootstrap owned/shared mode](project-bootstrap-owned-shared.md) — mode lives in vars.mode (owned|shared) via saved value, WORKSTATION_MODE or a prompt; never reintroduce --dev/--prod or group key.
+- [bootstrap single mode](project-bootstrap-single-mode.md) — no owned/shared mode since 2026-10-07: OS-only tokens, sudo decided once and saved as vars.sudo; never reintroduce a mode, WORKSTATION_MODE, --dev/--prod or group key.
 - [omp self-install shadows mise](project-omp-self-install-shadows-mise.md) — oh-my-pi put %LOCALAPPDATA%\omp on the Windows User PATH ahead of the shims; removed 2026-10-01; check PATH order first if a mise tool resolves elsewhere.
