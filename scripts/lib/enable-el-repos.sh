@@ -13,25 +13,26 @@
 # CRB (CodeReady Builder) is enabled too because EPEL on EL9 REQUIRES it: many
 # EPEL packages fail dependency resolution without CRB, and some toolbelt
 # packages live directly in CRB (meson, ninja-build) or pull CRB-resident deps
-# (heaptrack, bear) — without it they silently degrade to the packages-optional
-# skip path. Enabling is best-effort + idempotent: ensure dnf-plugins-core (for
-# config-manager), then --set-enabled across the known CRB repo ids — `crb`
-# (EL9 Alma/Rocky/Stream), `powertools` (EL8), and the `codeready-builder-*`
-# name (subscribed RHEL). A failure there only warns (never aborts). NOTE:
-# --set-enabled is dnf4 syntax (EL9); a future EL10/dnf5 host would need
-# `config-manager setopt <repo>.enabled=1` instead.
+# (heaptrack, bear); on EL8 cppcheck is in CRB too. The dnf batch is all-or-
+# nothing, so without CRB it fails. The repo is picked from the host: subscribed
+# RHEL enables `codeready-builder-for-rhel-<major>-<arch>-rpms` through
+# subscription-manager; Alma/Rocky/Stream enable `crb` (EL9+) or `powertools`
+# (EL8) with dnf config-manager (dnf-plugins-core). NOTE: --set-enabled is dnf4
+# syntax; a future EL10/dnf5 host would need `config-manager setopt
+# <repo>.enabled=1` instead.
 #
 # sudo — always interactive or with cached credentials (mise
 # elevates the packages phase the same way; this hook runs before it, via
-# config.linux.toml's [bootstrap.hooks] "pre-packages"). Exit 0 always, except
-# when `sudo dnf install -y epel-release` fails on an EL host — the packages
-# batch that follows would fail anyway, so this exits 1.
+# config.linux.toml's [bootstrap.hooks] "pre-packages"). Exits 1 when EPEL
+# can't be installed or CRB can't be enabled on an EL host: the packages batch
+# that follows would fail anyway, and this names the repo to fix.
 
 set -uo pipefail
 
-if [ -r /etc/os-release ]; then
+osr="${WORKSTATION_OS_RELEASE:-/etc/os-release}" # tests point it at a fixture
+if [ -r "$osr" ]; then
   # shellcheck source=/dev/null
-  . /etc/os-release
+  . "$osr"
 fi
 
 if [ "${ID:-}" = fedora ]; then
@@ -64,16 +65,19 @@ if dnf repolist --enabled -q 2>/dev/null | awk '{print $1}' |
   printf '  CRB already enabled\n'
   exit 0
 fi
-rpm -q dnf-plugins-core >/dev/null 2>&1 || sudo dnf install -y dnf-plugins-core || true
-
-crb_ok=""
-for repo in crb powertools "codeready-builder-for-rhel-9-$(uname -m)-rpms"; do
-  if sudo dnf config-manager --set-enabled "$repo" >/dev/null 2>&1; then
-    printf '  CRB enabled (repo: %s)\n' "$repo"
-    crb_ok=1
-    break
-  fi
-done
-[ -n "$crb_ok" ] || printf '  ! could not auto-enable CRB — meson/ninja-build/heaptrack/bear may skip (enable manually: sudo dnf config-manager --set-enabled crb)\n'
-
-exit 0
+major="${VERSION_ID%%.*}"
+if [ "${ID:-}" = rhel ] && command -v subscription-manager >/dev/null 2>&1; then
+  repo="codeready-builder-for-rhel-${major}-$(uname -m)-rpms"
+  cmd=(sudo subscription-manager repos --enable "$repo")
+else
+  repo=powertools
+  [ "${major:-0}" -ge 9 ] 2>/dev/null && repo=crb
+  rpm -q dnf-plugins-core >/dev/null 2>&1 || sudo dnf install -y dnf-plugins-core || true
+  cmd=(sudo dnf config-manager --set-enabled "$repo")
+fi
+if "${cmd[@]}" >/dev/null 2>&1; then
+  printf '  CRB enabled (repo: %s)\n' "$repo"
+  exit 0
+fi
+printf 'enable-el-repos.sh: could not enable CRB (%s), so the packages batch would fail on meson/ninja-build/cppcheck. Enable it with: %s\n' "$repo" "${cmd[*]}" >&2
+exit 1

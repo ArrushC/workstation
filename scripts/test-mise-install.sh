@@ -16,7 +16,10 @@
 # file is still read. tasks/optional-packages (fake rpm/sudo): (17) nothing
 # missing means no sudo; (18) a missing package goes to dnf with strict=0 and an
 # absent one is reported as skipped, exit 0. (19) verify-binary.sh honours
-# WORKSTATION_GLIBC_FLOOR.
+# WORKSTATION_GLIBC_FLOOR. enable-el-repos.sh (fake os-release/rpm/dnf/sudo):
+# (20) subscribed RHEL 8 enables codeready-builder-for-rhel-8 through
+# subscription-manager; (21) EL8 Alma enables powertools, (22) EL9 crb; (23) an
+# enabled CRB means no sudo; (24) a failed enable exits 1 naming the command.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -184,6 +187,49 @@ out18="$(PATH="$O:$PATH" bash "$root/tasks/optional-packages" 2>&1)" || fail "op
 grep -qx 'sudo dnf install -y --setopt=strict=0 bear' "$FAKE_LOG" || fail "optional-packages (missing): wrong dnf call: $(cat "$FAKE_LOG")"
 printf '%s\n' "$out18" | grep -q "bear isn't packaged for" || fail "optional-packages (missing): no skip note: $out18"
 
+# 20-24. enable-el-repos.sh picks the CRB repo from the host (os-release fixture,
+# fake rpm/dnf/sudo; EPEL and dnf-plugins-core count as installed).
+E="$T/el-bin"
+mkdir -p "$E" "$T/el-subman"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$E/rpm"
+cat >"$E/dnf" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = repolist ] && { printf '%s\n' "${FAKE_REPOLIST:-}"; exit 0; }
+echo "dnf $*" >>"$FAKE_LOG"
+EOF
+cat >"$E/sudo" <<'EOF'
+#!/usr/bin/env bash
+echo "sudo $*" >>"$FAKE_LOG"
+exit "${FAKE_SUDO_RC:-0}"
+EOF
+printf '#!/usr/bin/env bash\nexit 0\n' >"$T/el-subman/subscription-manager"
+chmod +x "$E"/* "$T/el-subman/subscription-manager"
+printf 'ID="rhel"\nID_LIKE="fedora"\nVERSION_ID="8.10"\n' >"$T/os-rhel8"
+printf 'ID="almalinux"\nID_LIKE="rhel centos fedora"\nVERSION_ID="8.10"\n' >"$T/os-alma8"
+printf 'ID="almalinux"\nID_LIKE="rhel centos fedora"\nVERSION_ID="9.6"\n' >"$T/os-alma9"
+# el <fixture> [VAR=value...]: run the script with subscription-manager on PATH.
+el() { env PATH="$E:$T/el-subman:$PATH" WORKSTATION_OS_RELEASE="$T/os-$1" "${@:2}" bash "$root/scripts/lib/enable-el-repos.sh" 2>&1; }
+arch="$(uname -m)"
+: >"$FAKE_LOG"
+out20="$(el rhel8)" || fail "enable-el-repos (RHEL 8): non-zero exit: $out20"
+grep -qx "sudo subscription-manager repos --enable codeready-builder-for-rhel-8-$arch-rpms" "$FAKE_LOG" ||
+  fail "enable-el-repos (RHEL 8): wrong enable: $(cat "$FAKE_LOG")"
+: >"$FAKE_LOG"
+out21="$(el alma8)" || fail "enable-el-repos (Alma 8): non-zero exit: $out21"
+grep -qx 'sudo dnf config-manager --set-enabled powertools' "$FAKE_LOG" || fail "enable-el-repos (Alma 8): $(cat "$FAKE_LOG")"
+: >"$FAKE_LOG"
+out22="$(el alma9)" || fail "enable-el-repos (Alma 9): non-zero exit: $out22"
+grep -qx 'sudo dnf config-manager --set-enabled crb' "$FAKE_LOG" || fail "enable-el-repos (Alma 9): $(cat "$FAKE_LOG")"
+: >"$FAKE_LOG"
+out23="$(el rhel8 FAKE_REPOLIST="codeready-builder-for-rhel-8-$arch-rpms  Red Hat CodeReady Linux Builder")" || fail "enable-el-repos (enabled): non-zero exit"
+[ -s "$FAKE_LOG" ] && fail "enable-el-repos (enabled): sudo ran: $(cat "$FAKE_LOG")"
+printf '%s\n' "$out23" | grep -q 'CRB already enabled' || fail "enable-el-repos (enabled): $out23"
+rc24=0
+out24="$(el rhel8 FAKE_SUDO_RC=1)" || rc24=$?
+[ "$rc24" = 1 ] || fail "enable-el-repos (enable fails): expected exit 1, got $rc24"
+printf '%s\n' "$out24" | grep -q "Enable it with: sudo subscription-manager repos --enable codeready-builder-for-rhel-8-$arch-rpms" ||
+  fail "enable-el-repos (enable fails): no command named: $out24"
+
 # 19. verify-binary.sh: WORKSTATION_GLIBC_FLOOR judges a binary against that glibc,
 # not this host's (CI checks every Linux asset against EL8's 2.28 this way).
 if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; then
@@ -195,4 +241,4 @@ if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; the
   printf '%s\n' "$out19" | grep -q 'checked against glibc 2.0 (WORKSTATION_GLIBC_FLOOR)' || fail "verify-binary floor: $out19"
 fi
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped); optional-packages installs only what's missing with strict=0 and skips what the release lacks; verify-binary honours WORKSTATION_GLIBC_FLOOR"
+echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped); optional-packages installs only what's missing with strict=0 and skips what the release lacks; enable-el-repos picks CRB per host (RHEL subscription-manager, EL8 powertools, EL9 crb) and stops when it can't; verify-binary honours WORKSTATION_GLIBC_FLOOR"
