@@ -21,7 +21,7 @@ for spec in "${pkgs[@]}"; do
   p="${spec%%:*}" first="${spec#*:}"
   if rpm -q "$p" >/dev/null 2>&1; then
     present+=("$p")
-  elif [ "${el:-0}" -lt "$first" ] 2>/dev/null; then
+  elif [ -n "$el" ] && [ "$el" -lt "$first" ] 2>/dev/null; then
     printf "  %s isn't packaged before EL%s; skipped on %s\n" "$p" "$first" "${release:-this release}"
   else
     missing+=("$p")

@@ -24,14 +24,13 @@ bad() {
 }
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
 
-# git_mode <path>: the path's index mode ("" when untracked), from one `git ls-files -s`.
+# Every tracked path's index mode, from one `git ls-files -s`; load_git_modes fills it
+# once (call it directly, not in $(...), or the table is lost with the subshell).
 declare -A GIT_MODES=()
-git_mode() {
-  if [ "${#GIT_MODES[@]}" -eq 0 ]; then
-    local m f
-    while IFS=$'\t' read -r m f; do GIT_MODES["$f"]="${m%% *}"; done < <(git ls-files -s)
-  fi
-  printf '%s' "${GIT_MODES["$1"]:-}"
+load_git_modes() {
+  [ "${#GIT_MODES[@]}" -eq 0 ] || return 0
+  local m f
+  while IFS=$'\t' read -r m f; do GIT_MODES["$f"]="${m%% *}"; done < <(git ls-files -s)
 }
 
 # First-party shell files for shellcheck, shfmt and `mise run fmt` (vendored scripts excluded).
@@ -203,6 +202,7 @@ check_line_endings_and_mode() {
   hdr "line-endings (LF) + git mode (100755)"
   local f mode crlf=0 modebad=0 missing=0
   local -a files=(scripts/*.sh scripts/lib/*.sh tasks/* .claude/hooks/*.sh dotfiles/local/bin/*)
+  load_git_modes
   for f in "${files[@]}"; do
     if [ ! -e "$f" ]; then
       bad "missing: $f"
@@ -213,7 +213,7 @@ check_line_endings_and_mode() {
       bad "CRLF: $f"
       crlf=$((crlf + 1))
     fi
-    mode=$(git_mode "$f")
+    mode="${GIT_MODES["$f"]:-}"
     if [ -z "$mode" ]; then
       note "untracked (commit it so the mode is recorded): $f"
     elif [ "$mode" != "100755" ]; then
@@ -241,9 +241,10 @@ check_dotfiles_mode() {
   local f a mode bad_count=0 n=0 allowed
   local -a tracked
   mapfile -t tracked < <(git ls-files dotfiles/)
+  load_git_modes
   for f in "${tracked[@]}"; do
     n=$((n + 1))
-    mode=$(git_mode "$f")
+    mode="${GIT_MODES["$f"]:-}"
     allowed=0
     for a in "${DOTFILES_MODE_ALLOWLIST[@]}"; do
       [ "$f" = "$a" ] && {
