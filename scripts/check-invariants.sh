@@ -1185,6 +1185,30 @@ check_zellij_config() {
   fi
 }
 
+check_fastfetch_config() {
+  hdr "fastfetch config (loads cleanly, known module types)"
+  local cfg=dotfiles/config/fastfetch/config.jsonc err unknown
+  if ! command -v fastfetch >/dev/null 2>&1; then
+    note "fastfetch not on PATH — skipped the live config load"
+    return
+  fi
+  # A JSON syntax error or an unknown key exits non-zero with the reason on stderr,
+  # which every new top-level shell would print.
+  if err=$(fastfetch --config "$PWD/$cfg" --logo none --pipe true 2>&1 >/dev/null) && [ -z "$err" ]; then
+    ok "$cfg loads cleanly"
+  else
+    bad "fastfetch rejects $cfg: ${err:-non-zero exit, no message}"
+  fi
+  # An unknown module type is dropped without a word, so match each against the list.
+  unknown=$(comm -23 <(sed -nE 's/.*"type": "([^"]+)".*/\1/p' "$cfg" | tr '[:upper:]' '[:lower:]' | sort -u) \
+    <(fastfetch --list-modules autocompletion | cut -d: -f1 | tr '[:upper:]' '[:lower:]' | sort -u))
+  if [ -z "$unknown" ]; then
+    ok "every module type in $cfg is one fastfetch knows"
+  else
+    bad "$cfg names module types fastfetch doesn't know (their rows vanish silently): ${unknown//$'\n'/ }"
+  fi
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -1246,6 +1270,7 @@ check_dotfiles_config
 check_completion_parity
 check_warp_guards
 check_zellij_config
+check_fastfetch_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.

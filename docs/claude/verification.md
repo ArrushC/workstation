@@ -61,6 +61,8 @@
   checkout; `scripts/check-templates.sh` (`make_home`/`in_home`) shows the working pattern, or just
   run it. It renders every template individually for both token sets, syntax-checks, then
   bulk-applies; clean output ends `all rendered templates pass under every MISE_ENV set (linux windows)`.
+- fastfetch finds `~/.config/fastfetch` through the passwd home, not `$HOME`: in a scratch home also set
+  `XDG_CONFIG_HOME="$SCRATCH/.config"`, or it silently prints its default layout.
 ## Windows (`bootstrap.ps1`)
 
 - Parse check under 5.1, the floor (no ternary, `??` or `&&`): copy the file to `%TEMP%\bs.ps1`, then

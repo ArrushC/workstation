@@ -1,0 +1,43 @@
+// ~/.config/fastfetch/config.jsonc — managed by mise dotfiles
+// (dotfiles/config/fastfetch/config.jsonc). Edit with `wse ~/.config/fastfetch/config.jsonc`.
+//
+// Printed by ~/.zshrc and ~/.bashrc when a top-level shell starts (a new terminal
+// or an SSH login; see the fastfetch block at the end of each rc), and by a plain
+// `fastfetch`. Layout: the distro logo (detected per host), then system / session
+// / hardware groups on tree branches, in Catppuccin Mocha (the zellij theme and
+// zsh highlight palette): headers mauve #cba6f7, blue #89b4fa, peach #fab387; values
+// text #cdd6f4; branches overlay #6c7086; bars green/yellow/red on surface #45475a.
+// Icons need a Nerd Font (JetBrainsMono Nerd Font, installed by bootstrap).
+//
+// Only cheap modules: no gpu, display, publicip or cpuusage (cpuusage samples for
+// ~200 ms). The whole run is ~20 ms on WSL. Docs:
+// https://github.com/fastfetch-cli/fastfetch/wiki/Configuration
+// Colour syntax ({##rrggbb} in formats, #rrggbb in fields):
+// https://github.com/fastfetch-cli/fastfetch/wiki/Color-Format-Specification
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": { "padding": { "top": 1, "left": 1, "right": 3 } },
+  "display": {
+    "separator": " ",
+    "color": { "keys": "#6c7086", "title": "#cba6f7", "output": "#cdd6f4", "separator": "#6c7086" },
+    "percent": { "type": ["bar", "num"], "color": { "green": "#a6e3a1", "yellow": "#f9e2af", "red": "#f38ba8" } },
+    "bar": { "width": 10, "border": null, "char": { "elapsed": "■", "total": "·" }, "color": { "total": "#45475a" } }
+  },
+  "modules": [
+    { "type": "title", "format": "{##cba6f7}{user-name}{##6c7086}@{##89b4fa}{host-name}" },
+    { "type": "custom", "format": "{##6c7086}╭─ {##cba6f7}system" },
+    { "type": "os", "key": "{##6c7086}│ {##cba6f7}󰌽 os       ", "format": "{pretty-name} {arch}" },
+    { "type": "kernel", "key": "{##6c7086}│ {##cba6f7} kernel   ", "format": "{release}" },
+    { "type": "uptime", "key": "{##6c7086}│ {##cba6f7}󰅐 uptime   " },
+    { "type": "packages", "key": "{##6c7086}│ {##cba6f7}󰏖 packages " },
+    { "type": "custom", "format": "{##6c7086}├─ {##89b4fa}session" },
+    { "type": "shell", "key": "{##6c7086}│ {##89b4fa} shell    " },
+    { "type": "terminal", "key": "{##6c7086}│ {##89b4fa} terminal " },
+    { "type": "localip", "key": "{##6c7086}│ {##89b4fa}󰩟 ip       ", "format": "{ipv4} ({ifname})" },
+    { "type": "custom", "format": "{##6c7086}├─ {##fab387}hardware" },
+    { "type": "cpu", "key": "{##6c7086}│ {##fab387} cpu      ", "format": "{name} ({cores-logical} threads)" },
+    { "type": "memory", "key": "{##6c7086}│ {##fab387}󰍛 memory   " },
+    { "type": "disk", "key": "{##6c7086}│ {##fab387}󰋊 disk /   ", "folders": "/", "format": "{size-percentage-bar} {size-used} / {size-total} ({size-percentage})" },
+    { "type": "colors", "key": "{##6c7086}╰─", "symbol": "circle" }
+  ]
+}
