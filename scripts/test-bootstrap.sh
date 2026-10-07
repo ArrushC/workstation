@@ -18,7 +18,13 @@ cat >"$T/bin/sudo" <<'EOF'
 echo "sudo $*" >>"${FAKE_SUDO_LOG:-/dev/null}"
 case "$1" in
 -n) exit "${FAKE_SUDO_N:-1}" ;; # -n true: cached / NOPASSWD?
--v) exit "${FAKE_SUDO_V:-1}" ;;  # the password prompt
+-v)
+  if [ "${FAKE_SUDO_V:-1}" = int ]; then # Ctrl-C: SIGINT hits the whole process group
+    kill -INT "$PPID"
+    kill -INT $$
+  fi
+  exit "${FAKE_SUDO_V:-1}"
+  ;; # the password prompt
 esac
 exit 0
 EOF
@@ -58,6 +64,12 @@ out=$(run "$T/s3" $'Ann\nann@x' FAKE_SUDO_N=1 FAKE_SUDO_V=1) || fail "S3: exit �
 grep -q '^SYSTEM=no$' <<<"$out" || fail "S3: $out"
 grep -q '^sudo = "no"$' "$T/s3/config.local.toml" || fail "S3: no not saved"
 grep -q 're-run ./bootstrap.sh' <<<"$out" || fail "S3: no how-to: $out"
+# S7. Ctrl-C at the password prompt: counts as no, saved, the run continues.
+mkdir -p "$T/s7"
+out=$(run "$T/s7" $'Ann\nann@x' FAKE_SUDO_N=1 FAKE_SUDO_V=int) || fail "S7: exit — $out"
+grep -q '^SYSTEM=no$' <<<"$out" || fail "S7: $out"
+grep -q '^sudo = "no"$' "$T/s7/config.local.toml" || fail "S7: no not saved"
+grep -q 're-run ./bootstrap.sh' <<<"$out" || fail "S7: no how-to: $out"
 # S4. no terminal, no cached sudo: no for this run, nothing saved.
 mkdir -p "$T/s4"
 out=$(run "$T/s4" - FAKE_SUDO_N=1) || fail "S4: exit — $out"
@@ -208,4 +220,4 @@ printf '[vars]\nsudo = "no"\n' >"$U/repo/config.local.toml"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U2: update failed"
 grep -qx 'mise bootstrap --yes --skip packages,files' "$U/mise.log" || fail "U2: expected the skip: $(cat "$U/mise.log")"
 
-echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, no terminal, no binary, saved state), stale mode cleanup, pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"
+echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), stale mode cleanup, pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"

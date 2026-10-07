@@ -207,14 +207,20 @@ sudo_state() {
 }
 
 # detect_sudo: 0 sudo works, 1 it doesn't (no binary, or the password prompt
-# failed), 2 undecided (no terminal to ask on and no cached credentials).
+# failed or was interrupted with Ctrl-C), 2 undecided (no terminal to ask on
+# and no cached credentials). The terminal sends Ctrl-C's SIGINT to the whole
+# foreground group, this shell included, so it is trapped around sudo -v alone.
 # sudo -v reads the password from the terminal itself, and the credentials it
 # caches cover mise's own sudo calls for the rest of the run.
 detect_sudo() {
   command -v sudo >/dev/null 2>&1 || return 1
   sudo -n true 2>/dev/null && return 0
   open_prompt_fd || return 2
-  sudo -v && return 0
+  local rc=0
+  trap ':' INT
+  sudo -v || rc=$?
+  trap - INT
+  [[ $rc -eq 0 ]] && return 0
   return 1
 }
 
