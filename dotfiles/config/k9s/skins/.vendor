@@ -1,0 +1,10 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/k9s
+path:           dist/catppuccin-mocha-transparent.yaml
+commit:         fdbec82284744a1fc2eb3e2d24cb92ef87ffb8b4
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/k9s/skins/catppuccin-mocha-transparent.yaml (copy)
+note:           Selected by K9S_SKIN in the rc files; k9s owns and rewrites config.yaml.
+                Bump: re-download dist/catppuccin-mocha-transparent.yaml at the new commit, update commit here.
+                Never hand-edit the vendored file.

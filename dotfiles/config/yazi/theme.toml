@@ -1,0 +1,5 @@
+# ~/.config/yazi/theme.toml — managed by mise dotfiles. yazi picks dark or light from the
+# terminal background; both use the vendored Catppuccin Mocha flavor (flavors/).
+[flavor]
+dark = "catppuccin-mocha"
+light = "catppuccin-mocha"

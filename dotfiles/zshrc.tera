@@ -59,6 +59,11 @@ if command -v batpipe &>/dev/null && command -v bat &>/dev/null; then
   eval "$(batpipe)"
 fi
 export COLORTERM=truecolor   # the fleet's terminals support 24-bit RGB; apps honor this env-var convention (helix, zellij, starship, glow, eza, fzf, bat).
+# Catppuccin Mocha for the two tools whose own config can't select it (the theme
+# files are [dotfiles] entries in config.linux.toml): k9s rewrites config.yaml, and
+# glow.yml already has a `style:` key that doesn't expand `~`. PARITY: same in bashrc.tera.
+export K9S_SKIN=catppuccin-mocha-transparent
+[[ -r "$HOME/.config/glow/catppuccin-mocha.json" ]] && alias glow='glow -s ~/.config/glow/catppuccin-mocha.json'
 
 # --- History -----------------------------------------------------------------
 # HISTSIZE = lines kept in memory; SAVEHIST = lines kept on disk.

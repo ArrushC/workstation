@@ -1,0 +1,10 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/atuin
+path:           themes/mocha/catppuccin-mocha-mauve.toml
+commit:         68aa64b77573c235044b614e752a781701af4eec
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/atuin/themes/catppuccin-mocha-mauve.toml (copy; ~/.config on Windows too)
+note:           Selected by the [theme] block mise appends to config.toml (dotfiles/config/atuin/theme.toml).
+                An unknown theme name falls back to the default without a message.
+                Bump: re-download at the new commit, update commit here. Never hand-edit.

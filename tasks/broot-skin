@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Point broot's dark-terminal skin import at Catppuccin Mocha (mauve) (the final hook)"
+set -euo pipefail
+# broot writes ~/.config/broot/conf.hjson itself, importing skins/dark-blue.hjson for dark
+# terminals. mise can't swap one line inside a file (a line or block entry only appends),
+# and owning the whole conf.hjson would stop broot writing its defaults (verbs.hjson, the
+# stock skins), so this step points that one import at the skin [dotfiles] deploys.
+# Idempotent; a hand-picked other skin is left alone.
+command -v broot >/dev/null 2>&1 || exit 0
+dir="${BROOT_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/broot}"
+skin="skins/catppuccin-mocha-mauve.hjson"
+if [ ! -f "$dir/$skin" ]; then
+  echo "  ! broot skin $dir/$skin missing (dotfiles not applied yet?) — skipped" >&2
+  exit 0
+fi
+# Before broot's first run there is no conf.hjson: write the stock set broot would write.
+[ -f "$dir/conf.hjson" ] || broot --write-default-conf "$dir" >/dev/null
+if grep -qE "^[[:space:]]*file: $skin" "$dir/conf.hjson"; then
+  echo "  broot skin: Catppuccin Mocha (mauve) already selected"
+elif grep -qE '^[[:space:]]*file: skins/dark-blue\.hjson' "$dir/conf.hjson"; then
+  sed -i -E "s#^([[:space:]]*file: )skins/dark-blue\\.hjson#\\1$skin#" "$dir/conf.hjson"
+  echo "  broot skin: selected Catppuccin Mocha (mauve) in $dir/conf.hjson"
+else
+  echo "  broot skin: conf.hjson imports another skin — left as is"
+fi

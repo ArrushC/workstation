@@ -1,0 +1,11 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/television
+path:           themes/catppuccin-mocha-mauve.toml
+commit:         4d9cfc97b0a5a6a2854c9e5f6f8fdae6a9343232
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    a mise block in ~/.config/television/config.toml
+note:           The flat colour keys sit under [ui.theme_overrides] here (tv's built-in `catppuccin`
+                theme has no mauve accent). tv writes config.toml on first run and never rewrites it.
+                Bump: re-download themes/catppuccin-mocha-mauve.toml at the new commit, update commit here.
+                Never hand-edit the vendored file.

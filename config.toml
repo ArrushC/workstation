@@ -95,6 +95,11 @@ nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (W
 "~/.ssh/config" = { source = "dotfiles/ssh/config.tera", mode = "template" }
 # Same path on both OSes.
 "~/.config/starship.toml" = { source = "dotfiles/config/starship.toml", mode = "copy" }
+# atuin's Ctrl-R picker in Catppuccin Mocha (mauve); atuin reads ~/.config/atuin on
+# Windows too. The theme file is new (copy); config.toml is atuin's own (it writes a
+# default on first run and never rewrites it), so the [theme] table is a marker block.
+"~/.config/atuin/themes/catppuccin-mocha-mauve.toml" = { source = "dotfiles/config/atuin/themes/catppuccin-mocha-mauve.toml", mode = "copy" }
+"~/.config/atuin/config.toml/theme" = { source = "dotfiles/config/atuin/theme.toml", template = "tera" }
 
 # Per-host opt-out: scripts/setup-ccstatusline.sh writes a CCSTATUSLINE-OPTOUT block
 # into config.local.toml's own [dotfiles] table. `enabled = false` alone is silently

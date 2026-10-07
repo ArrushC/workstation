@@ -228,6 +228,8 @@ The repo's own scripts complete their flags: `bootstrap.sh` in zsh and bash, `bo
 
 **Greeting (Linux).** A new terminal window or SSH login prints a [fastfetch](https://github.com/fastfetch-cli/fastfetch) summary in Catppuccin Mocha: the distro logo beside system (OS, kernel, OS age, uptime, load, IP), software (shell, python / node / go versions), hardware (CPU, memory and swap bars) and storage (`/`, `/home`, the Windows C: drive) groups, about 30 ms. Plain `fastfetch` prints the same. It stays quiet in zellij panes, nested shells, Claude Code and piped output, and drops the logo below 105 columns. Turn it off with `WORKSTATION_FASTFETCH=0` in `~/.zshrc.local` (or `~/.bashrc.local`); change the layout with `wse ~/.config/fastfetch/config.jsonc`.
 
+**Themes.** Everything draws in Catppuccin Mocha with a mauve accent. That covers the prompt, zellij, zsh highlighting, fzf, delta, helix, `ls` colours and fastfetch; bat, eza, yazi and atuin on both OSes; and btop, lazygit, lazydocker, glow, k9s, gitui, tv and broot on Linux. The theme files are vendored under `dotfiles/config/<tool>/`, with provenance and bump steps in each `.vendor`. A tool's own config file stays the tool's: mise adds one line to it (bat, btop) or a marked block (atuin `[theme]`, lazygit and lazydocker `gui:`, tv `[ui.theme_overrides]`). Put your own settings under those keys in the block's source in `dotfiles/config/<tool>/`, not in a second copy of the key in the live file, which is a parse error. k9s and glow are selected by `K9S_SKIN` and a `glow -s` alias in the rc files, and broot by `tasks/broot-skin` on a full bootstrap. A theme you pick inside btop is replaced by Mocha again on the next apply.
+
 ## Daily use
 
 The same workflow commands exist in bash and zsh on Linux and in Nushell and PowerShell on Windows (`dotfiles/zshrc.tera`, `dotfiles/bashrc.tera`, and the Windows profiles):
@@ -328,7 +330,7 @@ It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` pr
 "~/.config/example/config.toml" = { source = "dotfiles/config/example/config.toml", mode = "copy" }
 ```
 
-Use `mode = "copy"` for plain files (add `exclude = [".vendor", ".gitkeep"]` for a whole directory) and `mode = "template"` for a `.tera` source that needs a rendered value. Guard every `vars.*` reference in a template with `is defined` or `default()`: one undefined variable aborts the entire apply and writes nothing. Render it alone first, then apply just that entry and check:
+Use `mode = "copy"` for plain files (add `exclude = [".vendor", ".gitkeep"]` for a whole directory) and `mode = "template"` for a `.tera` source that needs a rendered value. For a file the application writes itself (its own config), use an edit entry instead: a copy would refuse to overwrite the application's file. A `line` is appended if missing; a `block` is kept between marker comments and can come from a file (`"~/.config/lazygit/config.yml/theme" = { source = "dotfiles/config/lazygit/theme.yml", template = "tera" }`). The pinned mise has no `merge`, and lint refuses one. Guard every `vars.*` reference in a template with `is defined` or `default()`: one undefined variable aborts the entire apply and writes nothing. Render it alone first, then apply just that entry and check:
 
 ```bash
 mise dot apply --yes -- "<target>"   # apply just that entry

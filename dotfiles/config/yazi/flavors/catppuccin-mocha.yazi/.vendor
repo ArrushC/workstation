@@ -1,0 +1,9 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/yazi-rs/flavors
+path:           catppuccin-mocha.yazi/{flavor.toml,tmtheme.xml,LICENSE,LICENSE-tmtheme}
+commit:         1183892c904f7f0efdf4473e856ed308b7bea98d
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/yazi/flavors/ (%APPDATA%\yazi\config\flavors on Windows) (directory copy)
+note:           preview.png and README dropped. Selected by dotfiles/config/yazi/theme.toml ([flavor] dark/light).
+                Bump: re-download at the new commit, update commit here. Never hand-edit.

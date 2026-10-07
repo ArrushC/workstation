@@ -742,12 +742,38 @@ for f in files:
         print(f"FAIL|parse|{f} failed to parse: {e}")
 
 VALID_MODES = {"symlink", "symlink-each", "copy", "template", "track"}
-entries = []  # (file, target, spec)
+entries = []  # (file, target, spec): whole-file entries
+edits = []    # (file, "<target>/<id>", spec): line / block edits inside a file mise doesn't own
 for f, d in loaded.items():
     for target, spec in d.get("dotfiles", {}).items():
         if isinstance(spec, str):
             spec = {"source": spec, "mode": "symlink"}
-        entries.append((f, target, spec))
+        if "line" in spec or "block" in spec or ("template" in spec and "mode" not in spec):
+            edits.append((f, target, spec))
+        else:
+            entries.append((f, target, spec))
+
+# Edit entries: mise 2026.9.9 has line and block (block content inline or from a
+# `source` with template = "tera"). It has no `merge`: such an entry silently becomes a
+# whole-file symlink of its source, so it is refused here.
+bad_edit = []
+for f, d in loaded.items():
+    for target, spec in d.get("dotfiles", {}).items():
+        if isinstance(spec, dict) and "merge" in spec:
+            bad_edit.append(f"{f}:{target} uses merge (unsupported by the pinned mise: it becomes a whole-file symlink)")
+for f, target, spec in edits:
+    src = spec.get("source")
+    if src is not None:
+        if spec.get("template") != "tera":
+            bad_edit.append(f"{f}:{target} has a source without template = \"tera\"")
+        elif not os.path.exists(src):
+            bad_edit.append(f"{f}:{target} source missing: {src}")
+    elif "line" not in spec and "block" not in spec:
+        bad_edit.append(f"{f}:{target} is an edit with no line, block or source")
+if bad_edit:
+    print("FAIL|edits|" + "; ".join(bad_edit))
+else:
+    print(f"PASS|edits|{len(edits)} line/block edit entries, every source present, no merge")
 
 bad_src = []
 for f, target, spec in entries:
