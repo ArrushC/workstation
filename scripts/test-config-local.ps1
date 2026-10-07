@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Set-ConfigLocalVar', 'Invoke-EnsureConfigLocal'
+$wanted = 'Set-ConfigLocalVar', 'Remove-ConfigLocalVar', 'Invoke-EnsureConfigLocal'
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     . ([scriptblock]::Create($f.Extent.Text))
 }
@@ -40,23 +40,22 @@ $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("cfglocal-" + [guid]::NewGui
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $script:SkipToolInstall = $true
 try {
-    Test-Case 'existing file: mode added, rest kept' {
+    Test-Case 'existing file: a stale mode line is dropped, rest kept' {
         $cfg = New-CaseDir 'a'
-        [System.IO.File]::WriteAllText($cfg, "[vars]`nname = `"N`"`nemail = `"e@x`"`n`n[dotfiles]`n`"~/.x`" = { source = `"x`", mode = `"copy`", enabled = false }`n")
+        [System.IO.File]::WriteAllText($cfg, "[vars]`nmode = `"owned`"`nname = `"N`"`nemail = `"e@x`"`n`n[dotfiles]`n`"~/.x`" = { source = `"x`", mode = `"copy`", enabled = false }`n")
         Invoke-EnsureConfigLocal
         $text = Read-Cfg $cfg
-        Assert ($text -match '(?m)^mode = "owned"$') 'mode = "owned" not added'
+        Assert (-not ($text -match '(?m)^\s*mode\s*=')) "mode line kept: $text"
         Assert ($text -match '(?m)^name = "N"$') 'name lost'
         Assert ($text -match '(?m)^\[dotfiles\]$') '[dotfiles] lost'
-        Assert ((Get-MatchCount $text '(?m)^mode = ') -eq 1) 'mode duplicated'
     }
 
-    Test-Case 'missing file, non-interactive: created with [vars] mode, no BOM' {
+    Test-Case 'missing file, non-interactive: nothing written' {
         $cfg = New-CaseDir 'b'
+        $script:warnMsg = $null
         Invoke-EnsureConfigLocal
-        Assert ((Read-Cfg $cfg) -ceq "[vars]`nmode = `"owned`"`n") "got: $(Read-Cfg $cfg)"
-        $bytes = [System.IO.File]::ReadAllBytes($cfg)
-        Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) 'written with a BOM'
+        Assert (-not (Test-Path $cfg)) 'file created'
+        Assert ("$script:warnMsg" -like '*name / email*') "no name/email warning: $script:warnMsg"
     }
 
     Test-Case 'Set-ConfigLocalVar escapes quotes and replaces in place' {
@@ -74,7 +73,14 @@ try {
         $cfg = New-CaseDir 'empty'
         [System.IO.File]::WriteAllText($cfg, '')
         Invoke-EnsureConfigLocal
-        Assert ((Read-Cfg $cfg) -ceq "[vars]`nmode = `"owned`"`n") "got: $(Read-Cfg $cfg)"
+        Assert ((Read-Cfg $cfg) -ceq '') "got: $(Read-Cfg $cfg)"
+    }
+
+    Test-Case 'Remove-ConfigLocalVar: indented, commented key in [vars] removed; other tables untouched' {
+        $cfg = New-CaseDir 'remove'
+        [System.IO.File]::WriteAllText($cfg, "[vars]`n  mode = `"owned`" # laptop`nname = `"N`"`n[other]`nmode = 1`n")
+        Remove-ConfigLocalVar -Path $cfg -Key 'mode'
+        Assert ((Read-Cfg $cfg) -ceq "[vars]`nname = `"N`"`n[other]`nmode = 1`n") "got: $(Read-Cfg $cfg)"
     }
 
     Test-Case 'one-line file, no trailing newline' {

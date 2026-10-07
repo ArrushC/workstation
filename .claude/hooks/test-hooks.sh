@@ -235,17 +235,17 @@ ok "is one JSON object (single line)" oneline
 run_env "$RH/session-context.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
 SC="$(mktemp -d)"
-printf 'env = ["linux", "owned", "host", "wsl"]\nauto_env = false\n' >"$SC/miserc.toml"
+printf 'env = ["linux"]\nauto_env = false\n' >"$SC/miserc.toml"
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-ok "owned miserc -> mode=owned" has 'mode=owned'
-ok "reports the miserc tokens" has 'env=linux,owned,host,wsl'
+ok "reports the miserc tokens" has 'env=linux'
+ok "no mode in the report" lacks 'mode='
 ok "no exported MISE_ENV -> no warning" lacks 'overrides miserc'
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')" MISE_ENV=linux
 ok "exported MISE_ENV -> warned" has 'MISE_ENV=linux (exported; overrides miserc)'
-printf 'env = ["linux"]\n' >"$SC/miserc.toml"
+printf '[vars]\nsudo = "no"\n' >"$SC/config.local.toml"
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-ok "linux-only miserc -> mode=shared" has 'mode=shared'
-rm -f "$SC/miserc.toml"
+ok "sudo = no -> reported" has 'sudo=no'
+rm -f "$SC/config.local.toml" "$SC/miserc.toml"
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
 ok "no miserc -> miserc=missing" has 'miserc=missing'
 rm -rf "$SC"

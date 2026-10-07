@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Read-only health report: saved mode, bootstrap state, mise tools, free disk, miserc wiring, pueued, python-env, owned extras"
+#MISE description="Read-only health report: config set, system steps, bootstrap state, mise tools, free disk, pueued, python-env, extras"
 # Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
 # no sudo, but exits 1 if any row_bad fired — this is the
 # gate CI / a human runs post-bootstrap, not just a report.
@@ -9,7 +9,7 @@ set -uo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 # A python with `json` for parsing `mise bootstrap status --json` (below).
-# wpy is python-env's launcher (both modes); mise's own python and the system
+# wpy is python-env's launcher; mise's own python and the system
 # interpreter are the fallbacks. Empty when none exists — the one caller treats
 # that as "cannot classify" and fails the row rather than passing it.
 PY=""
@@ -50,34 +50,24 @@ row_skip() {
   n_skip=$((n_skip + 1))
 }
 
-# The saved mode is the source of truth, not the calling shell's MISE_ENV:
-# a stale or missing value there would make every check below agree with
-# itself. Read with bootstrap.sh's own config_get in a child shell.
 cfg="$root/config.local.toml"
-mode=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" mode' _ "$root/bootstrap.sh" "$cfg" 2>/dev/null)
 canonical_env=$("$root/scripts/lib/mise-env.sh" 2>/dev/null)
-# canon_has <token> — is <token> in the saved mode's MISE_ENV set?
-canon_has() {
-  case ",$canonical_env," in *,"$1",*) return 0 ;; esac
-  return 1
-}
 rc_tokens=$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')
+sudo_saved=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" sudo' _ "$root/bootstrap.sh" "$cfg" 2>/dev/null)
 
-hdr "workstation health — mode=${mode:-unset} · config=${rc_tokens:-unset} · read-only"
+hdr "workstation health — config=${rc_tokens:-unset} · read-only"
 echo ""
 
-hdr "mode (config.local.toml)"
-if [ -n "$canonical_env" ]; then
-  row_ok "mode" "$mode (saved in config.local.toml) — config set $canonical_env"
-else
-  row_bad "mode" "no valid mode in $cfg${mode:+ (found \"$mode\")} — run $root/bootstrap.sh (it asks) or set mode = \"owned\" or \"shared\" under [vars]"
-fi
-if [ -z "$canonical_env" ]; then
-  row_skip "miserc" "no valid mode — nothing to compare"
-elif [ "$rc_tokens" = "$canonical_env" ]; then
+hdr "config set and system steps"
+if [ "$rc_tokens" = "$canonical_env" ]; then
   row_ok "miserc" "$root/miserc.toml selects $rc_tokens"
 else
-  row_bad "miserc" "$root/miserc.toml has \"${rc_tokens:-<missing>}\", the saved mode needs \"$canonical_env\" — mise run update"
+  row_bad "miserc" "$root/miserc.toml has \"${rc_tokens:-<missing>}\", this host needs \"$canonical_env\" — mise run update"
+fi
+if [ "$sudo_saved" = no ]; then
+  row_warn "system steps" "skipped: sudo = \"no\" in config.local.toml (dnf, /etc files, login shell) — re-run $root/bootstrap.sh with sudo"
+else
+  row_ok "system steps" "applied${sudo_saved:+ (sudo = $sudo_saved)}"
 fi
 # Mise reads miserc unless MISE_ENV is exported; these were the old exporters.
 legacy=""
@@ -223,9 +213,8 @@ else
 fi
 echo ""
 
-# 6. zjstatus — both modes: config.linux.toml's zjstatus tool loads in both
-# modes, and zellij loads it from mise's install dir (see config.kdl), so this
-# row must not be gated on owned.
+# 6. zjstatus — config.linux.toml's zjstatus tool loads on every Linux host, and
+# zellij loads it from mise's install dir (see config.kdl).
 hdr "zjstatus"
 zjs="$HOME/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm"
 if [ -f "$zjs" ]; then
@@ -235,31 +224,29 @@ else
 fi
 echo ""
 
-# 7. owned-only extras
-if [ "$mode" = owned ]; then
-  hdr "owned extras"
-  if command -v claude >/dev/null 2>&1; then
-    row_ok "claude" "$(command -v claude)"
-  else
-    row_bad "claude" "not on PATH — mise run bootstrap"
-  fi
-  if [ -x "$HOME/.local/bin/vcpkg" ] && [ -x "$HOME/.local/share/vcpkg/vcpkg" ]; then
-    row_ok "vcpkg" "present: ~/.local/bin/vcpkg -> ~/.local/share/vcpkg/vcpkg"
-  else
-    row_bad "vcpkg" "missing — mise run vcpkg"
-  fi
-  if ! WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; is_wsl' _ "$root/bootstrap.sh"; then
-    fdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
-    if [ -d "$fdir" ] && [ -n "$(find "$fdir" -maxdepth 1 -name '*.ttf' -print -quit 2>/dev/null)" ]; then
-      row_ok "fonts" "$fdir has TTFs"
-    else
-      row_bad "fonts" "no TTFs in $fdir — mise run fonts"
-    fi
-  else
-    row_skip "fonts" "WSL — the Windows terminal resolves fonts"
-  fi
-  echo ""
+# 7. extras
+hdr "extras"
+if command -v claude >/dev/null 2>&1; then
+  row_ok "claude" "$(command -v claude)"
+else
+  row_bad "claude" "not on PATH — mise run bootstrap"
 fi
+if [ -x "$HOME/.local/bin/vcpkg" ] && [ -x "$HOME/.local/share/vcpkg/vcpkg" ]; then
+  row_ok "vcpkg" "present: ~/.local/bin/vcpkg -> ~/.local/share/vcpkg/vcpkg"
+else
+  row_bad "vcpkg" "missing — mise run vcpkg"
+fi
+if ! WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; is_wsl' _ "$root/bootstrap.sh"; then
+  fdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
+  if [ -d "$fdir" ] && [ -n "$(find "$fdir" -maxdepth 1 -name '*.ttf' -print -quit 2>/dev/null)" ]; then
+    row_ok "fonts" "$fdir has TTFs"
+  else
+    row_bad "fonts" "no TTFs in $fdir — mise run fonts"
+  fi
+else
+  row_skip "fonts" "WSL — the Windows terminal resolves fonts"
+fi
+echo ""
 
 # 8. shell and dotfiles
 hdr "shell and dotfiles"

@@ -529,15 +529,34 @@ function Set-ConfigLocalVar {
     [System.IO.File]::WriteAllText($Path, (($out -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# Windows is always owned. Name/email are asked once; a non-interactive run leaves them to the user.
+# Drop a key from [vars] (the same header and key tolerance as Set-ConfigLocalVar).
+function Remove-ConfigLocalVar {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Key)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $lines = @([System.IO.File]::ReadAllText($Path) -split "`r?`n")
+    if ($lines.Count -gt 0 -and $lines[-1] -eq '') { $lines = @(if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] }) }
+    $out = New-Object System.Collections.Generic.List[string]
+    $inVars = $false
+    $keyPattern = '^\s*' + [regex]::Escape($Key) + '\s*='
+    foreach ($l in $lines) {
+        if ($l -match '^\s*\[') { $inVars = $l -match '^\s*\[\s*vars\s*\]\s*(#.*)?$'; $out.Add($l); continue }
+        if ($inVars -and $l -match $keyPattern) { continue }
+        $out.Add($l)
+    }
+    $text = if ($out.Count) { ($out -join "`n") + "`n" } else { '' }
+    [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Name/email are asked once; a non-interactive run leaves them to the user. A stale
+# mode line from the two-mode era is dropped.
 function Invoke-EnsureConfigLocal {
     $target = Join-Path $RepoPath "config.local.toml"
-    Set-ConfigLocalVar -Path $target -Key 'mode' -Value 'owned'
-    $text = [System.IO.File]::ReadAllText($target)
+    Remove-ConfigLocalVar -Path $target -Key 'mode'
+    $text = if (Test-Path -LiteralPath $target) { [System.IO.File]::ReadAllText($target) } else { '' }
     $hasName = $text -match '(?m)^[ \t]*name[ \t]*='
     $hasEmail = $text -match '(?m)^[ \t]*email[ \t]*='
     if ($hasName -and $hasEmail) {
-        Write-Ok "config.local.toml ready ($target, mode = owned)"
+        Write-Ok "config.local.toml ready ($target)"
         return
     }
     if ($SkipToolInstall -or [Console]::IsInputRedirected) {
