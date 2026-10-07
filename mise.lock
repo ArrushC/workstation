@@ -228,27 +228,6 @@ checksum = "sha256:27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45b
 url = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
 url_api = "https://api.github.com/repos/dnGrep/dnGrep/releases/assets/477232224"
 
-[[tools."github:pwndbg/pwndbg"]]
-version = "2026.09.15"
-backend = "github:pwndbg/pwndbg"
-specifiers = ["2026.09.15"]
-
-[tools."github:pwndbg/pwndbg".options]
-asset_pattern = "pwndbg_{version}_x86_64-portable.tar.xz"
-version_prefix = ""
-
-[tools."github:pwndbg/pwndbg"."platforms.linux-x64"]
-checksum = "sha256:7ba64666ee595885ba4b0e073f85e423829103e9fdbe921ba4eef1acd9150803"
-url = "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026.09.15_x86_64-portable.tar.xz"
-url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/566633367"
-provenance = "github-attestations"
-
-[tools."github:pwndbg/pwndbg"."platforms.windows-x64"]
-checksum = "sha256:7ba64666ee595885ba4b0e073f85e423829103e9fdbe921ba4eef1acd9150803"
-url = "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026.09.15_x86_64-portable.tar.xz"
-url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/566633367"
-provenance = "github-attestations"
-
 [[tools."github:ryanoasis/nerd-fonts"]]
 version = "3.5.1"
 backend = "github:ryanoasis/nerd-fonts"
@@ -325,21 +304,6 @@ url_api = "https://api.github.com/repos/helix-editor/helix/releases/assets/27414
 checksum = "sha256:5c8325ced8bacd8418d62706f669e96d9c3578a9237526e34d546900cbc049b6"
 url = "https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-windows.zip"
 url_api = "https://api.github.com/repos/helix-editor/helix/releases/assets/274144377"
-
-[[tools.herdr]]
-version = "0.9.3"
-backend = "aqua:herdrdev/herdr"
-specifiers = ["0.9.3"]
-
-[tools.herdr."platforms.linux-x64"]
-checksum = "sha256:18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-linux-x86_64"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/599036383"
-
-[tools.herdr."platforms.windows-x64"]
-checksum = "sha256:c75b1fa49f7a3ba4b8b11789912a6147e4214a3b6fd3556d0f80076c8887d795"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-windows-x86_64.zip"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/599036387"
 
 [[tools.jq]]
 version = "1.8.2"

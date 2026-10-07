@@ -10,8 +10,8 @@
 # marker name froze the whole re-run mechanism).
 # mise-install.sh's disk check (fake df/du, a temp disk-budget.toml): (10) too
 # little room stops before installing and lists the largest folders; (11) what
-# is already installed lowers the need; (12) the linux figure applies whatever the
-# token set; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
+# is already installed lowers the need; (12) 4.5 GB is short of the 5000 + 1024 MB
+# need; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
 # an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
 # file is still read. tasks/optional-packages (fake rpm/sudo): (17) nothing
 # missing means no sudo; (18) a missing package goes to dnf with strict=0 and an
@@ -19,7 +19,9 @@
 # WORKSTATION_GLIBC_FLOOR. enable-el-repos.sh (fake os-release/rpm/dnf/sudo):
 # (20) subscribed RHEL 8 enables codeready-builder-for-rhel-8 through
 # subscription-manager; (21) EL8 Alma enables powertools, (22) EL9 crb; (23) an
-# enabled CRB means no sudo; (24) a failed enable exits 1 naming the command.
+# enabled CRB means no sudo; (24) a failed enable exits 1 naming the command and
+# showing its error; (25) RHEL installs EPEL from Fedora's URL, (26) Alma by name.
+# tasks/optional-packages (27): on EL8 bear (EL9+) is skipped without sudo.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -53,7 +55,7 @@ case "$1" in
 esac
 EOF
 chmod +x "$T/bin/df" "$T/bin/du"
-export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state" MISE_ENV=linux
+export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state"
 export FAKE_LOG="$T/log" FAKE_NODE="$T/node-installed" FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@1" }'
 fail() {
   echo "FAIL: $*" >&2
@@ -91,7 +93,7 @@ printf '%s\n' "$out5" | grep -q 'verify-tools: mise bin-paths failed' || fail "v
 
 # 9. mise-install.sh: an UNREADABLE node declaration (the real failure mode —
 # `mise config get tools.node` without `-f` reads only the highest-precedence
-# config file, which since PR2 declares no tools, so it errors) must NOT settle
+# config file, which declares no node, so it errors) must NOT settle
 # on the empty-input cksum. Before the fix that constant marker froze the
 # mechanism: node would never force-reinstall again on a postinstall change.
 : >"$FAKE_LOG"
@@ -138,10 +140,9 @@ FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
   fail "disk check: what is already installed must lower the need (2 GB free, 4 GB installed)"
 grep -qx install "$FAKE_LOG" || fail "disk check (2 GB free, 4 GB installed): mise install did not run"
 rm -rf "$installs"
-# 12. the linux figure applies whatever MISE_ENV says (one setup for every host):
-# 4.5 GB free, nothing installed, needs 5000 + 1024 MB.
+# 12. just short: 4.5 GB free, nothing installed, needs 5000 + 1024 MB.
 rc12=0
-MISE_ENV=linux FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 || rc12=$?
+FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 || rc12=$?
 [ "$rc12" = 1 ] || fail "disk check: 4.5 GB must not be enough (linux budget 5000 MB + 1 GB), got $rc12"
 # 13. the override goes ahead, with a warning.
 : >"$FAKE_LOG"
@@ -178,6 +179,8 @@ cat >"$O/sudo" <<'EOF'
 echo "sudo $*" >>"$FAKE_LOG"
 EOF
 chmod +x "$O/rpm" "$O/sudo"
+printf 'ID="almalinux"\nVERSION_ID="9.6"\nPRETTY_NAME="Alma 9.6"\n' >"$T/os-opt9"
+export WORKSTATION_OS_RELEASE="$T/os-opt9"
 : >"$FAKE_LOG"
 out17="$(FAKE_RPM_HAS=1 PATH="$O:$PATH" bash "$root/tasks/optional-packages" 2>&1)" || fail "optional-packages (present): non-zero exit"
 [ -s "$FAKE_LOG" ] && fail "optional-packages (present): sudo ran: $(cat "$FAKE_LOG")"
@@ -185,13 +188,17 @@ printf '%s\n' "$out17" | grep -q 'optional packages present: bear' || fail "opti
 : >"$FAKE_LOG"
 out18="$(PATH="$O:$PATH" bash "$root/tasks/optional-packages" 2>&1)" || fail "optional-packages (missing): non-zero exit"
 grep -qx 'sudo dnf install -y --setopt=strict=0 bear' "$FAKE_LOG" || fail "optional-packages (missing): wrong dnf call: $(cat "$FAKE_LOG")"
-printf '%s\n' "$out18" | grep -q "bear isn't packaged for" || fail "optional-packages (missing): no skip note: $out18"
+printf '%s\n' "$out18" | grep -q "bear isn't packaged for Alma 9.6" || fail "optional-packages (missing): no skip note: $out18"
+unset WORKSTATION_OS_RELEASE
 
 # 20-24. enable-el-repos.sh picks the CRB repo from the host (os-release fixture,
-# fake rpm/dnf/sudo; EPEL and dnf-plugins-core count as installed).
+# fake rpm/dnf/sudo; a package counts as installed unless FAKE_RPM_MISSING names it).
 E="$T/el-bin"
 mkdir -p "$E" "$T/el-subman"
-printf '#!/usr/bin/env bash\nexit 0\n' >"$E/rpm"
+cat >"$E/rpm" <<'EOF'
+#!/usr/bin/env bash
+case " ${FAKE_RPM_MISSING:-} " in *" $2 "*) exit 1 ;; esac
+EOF
 cat >"$E/dnf" <<'EOF'
 #!/usr/bin/env bash
 [ "$1" = repolist ] && { printf '%s\n' "${FAKE_REPOLIST:-}"; exit 0; }
@@ -200,13 +207,14 @@ EOF
 cat >"$E/sudo" <<'EOF'
 #!/usr/bin/env bash
 echo "sudo $*" >>"$FAKE_LOG"
+[ "${FAKE_SUDO_RC:-0}" = 0 ] || echo "Error: fake sudo failure" >&2
 exit "${FAKE_SUDO_RC:-0}"
 EOF
 printf '#!/usr/bin/env bash\nexit 0\n' >"$T/el-subman/subscription-manager"
 chmod +x "$E"/* "$T/el-subman/subscription-manager"
-printf 'ID="rhel"\nID_LIKE="fedora"\nVERSION_ID="8.10"\n' >"$T/os-rhel8"
-printf 'ID="almalinux"\nID_LIKE="rhel centos fedora"\nVERSION_ID="8.10"\n' >"$T/os-alma8"
-printf 'ID="almalinux"\nID_LIKE="rhel centos fedora"\nVERSION_ID="9.6"\n' >"$T/os-alma9"
+printf 'ID="rhel"\nID_LIKE="fedora"\nVERSION_ID="8.10"\nPRETTY_NAME="RHEL 8.10"\n' >"$T/os-rhel8"
+printf 'ID="almalinux"\nID_LIKE="rhel centos fedora"\nVERSION_ID="8.10"\nPRETTY_NAME="Alma 8.10"\n' >"$T/os-alma8"
+printf 'ID="almalinux"\nID_LIKE="rhel centos fedora"\nVERSION_ID="9.6"\nPRETTY_NAME="Alma 9.6"\n' >"$T/os-alma9"
 # el <fixture> [VAR=value...]: run the script with subscription-manager on PATH.
 el() { env PATH="$E:$T/el-subman:$PATH" WORKSTATION_OS_RELEASE="$T/os-$1" "${@:2}" bash "$root/scripts/lib/enable-el-repos.sh" 2>&1; }
 arch="$(uname -m)"
@@ -229,6 +237,21 @@ out24="$(el rhel8 FAKE_SUDO_RC=1)" || rc24=$?
 [ "$rc24" = 1 ] || fail "enable-el-repos (enable fails): expected exit 1, got $rc24"
 printf '%s\n' "$out24" | grep -q "Enable it with: sudo subscription-manager repos --enable codeready-builder-for-rhel-8-$arch-rpms" ||
   fail "enable-el-repos (enable fails): no command named: $out24"
+printf '%s\n' "$out24" | grep -q 'Error: fake sudo failure' || fail "enable-el-repos (enable fails): the error is hidden: $out24"
+crb_on="codeready-builder-for-rhel-8-$arch-rpms  Red Hat CodeReady Linux Builder"
+: >"$FAKE_LOG"
+el rhel8 FAKE_RPM_MISSING=epel-release FAKE_REPOLIST="$crb_on" >/dev/null || fail "enable-el-repos (RHEL EPEL): non-zero exit"
+grep -qx 'sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm' "$FAKE_LOG" ||
+  fail "enable-el-repos (RHEL EPEL): $(cat "$FAKE_LOG")"
+: >"$FAKE_LOG"
+el alma9 FAKE_RPM_MISSING=epel-release FAKE_REPOLIST="crb  CRB" >/dev/null || fail "enable-el-repos (Alma EPEL): non-zero exit"
+grep -qx 'sudo dnf install -y epel-release' "$FAKE_LOG" || fail "enable-el-repos (Alma EPEL): $(cat "$FAKE_LOG")"
+# 27. tasks/optional-packages on EL8: bear (EL9+) is skipped without a sudo prompt.
+: >"$FAKE_LOG"
+out27="$(env PATH="$E:$PATH" WORKSTATION_OS_RELEASE="$T/os-alma8" FAKE_RPM_MISSING=bear bash "$root/tasks/optional-packages" 2>&1)" ||
+  fail "optional-packages (EL8): non-zero exit"
+[ -s "$FAKE_LOG" ] && fail "optional-packages (EL8): sudo ran: $(cat "$FAKE_LOG")"
+printf '%s\n' "$out27" | grep -q "bear isn't packaged before EL9; skipped on Alma 8.10" || fail "optional-packages (EL8): $out27"
 
 # 19. verify-binary.sh: WORKSTATION_GLIBC_FLOOR judges a binary against that glibc,
 # not this host's (CI checks every Linux asset against EL8's 2.28 this way).
@@ -241,4 +264,4 @@ if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; the
   printf '%s\n' "$out19" | grep -q 'checked against glibc 2.0 (WORKSTATION_GLIBC_FLOOR)' || fail "verify-binary floor: $out19"
 fi
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped); optional-packages installs only what's missing with strict=0 and skips what the release lacks; enable-el-repos picks CRB per host (RHEL subscription-manager, EL8 powertools, EL9 crb) and stops when it can't; verify-binary honours WORKSTATION_GLIBC_FLOOR"
+echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped); optional-packages installs only what's missing with strict=0 and skips what the release lacks; enable-el-repos installs EPEL (by URL on RHEL) and picks CRB per host (RHEL subscription-manager, EL8 powertools, EL9 crb), stopping with the error when it can't; optional-packages skips a package below its first EL release without sudo; verify-binary honours WORKSTATION_GLIBC_FLOOR"

@@ -53,7 +53,7 @@ row_skip() {
 cfg="$root/config.local.toml"
 canonical_env=$("$root/scripts/lib/mise-env.sh" 2>/dev/null)
 rc_tokens=$(sed -n 's/^env = \[\(.*\)\]$/\1/p' "$root/miserc.toml" 2>/dev/null | tr -d '" ')
-sudo_saved=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" sudo' _ "$root/bootstrap.sh" "$cfg" 2>/dev/null)
+sudo_saved=$("$root/scripts/lib/bootstrap-fn.sh" config_get "$cfg" sudo 2>/dev/null)
 
 hdr "workstation health — config=${rc_tokens:-unset} · read-only"
 echo ""
@@ -82,16 +82,18 @@ printf '%s\n' "$bootstrap_out" | sed 's/^/   /'
 if [ "$bootstrap_rc" -eq 0 ]; then
   row_ok "bootstrap state" "current"
 else
-  # Drift. One case is NOT a problem: a host with no systemd user manager (a
-  # shared host reached without a logind session) reports the pueued user service
-  # as `unavailable: systemd user manager not available`, yet `mise bootstrap`
-  # itself skips that service cleanly and exits 0 — so the advice below could
-  # never clear the row. Classify from `--json`'s exact state/action fields
+  # Drift. Two cases are NOT a problem:
+  # - a host with no systemd user manager (no logind session) reports the pueued
+  #   user service as `unavailable: systemd user manager not available`, yet
+  #   `mise bootstrap` itself skips that service cleanly and exits 0;
+  # - with sudo = "no" the dnf packages and /etc files are skipped on purpose (the
+  #   system steps row above says so), and `mise bootstrap status` has no --skip.
+  # The advice below could never clear either. Classify from `--json`'s exact state/action fields
   # (never the human table: a suffix match on words like "installed" would
   # mask a row reading "not installed"). No JSON-capable python => fall back
   # to failing the row, which is the safe direction.
-  bootstrap_why=$(mise bootstrap status --json 2>/dev/null | "$PY" -c '
-import json, sys
+  bootstrap_why=$(mise bootstrap status --json 2>/dev/null | SKIP_SYSTEM="$([ "$sudo_saved" = no ] && echo 1)" "$PY" -c '
+import json, os, sys
 
 try:
     d = json.load(sys.stdin)
@@ -100,14 +102,14 @@ except Exception:
     sys.exit(0)
 
 SETTLED_ACTIONS = {"noop", "unchanged"}
-excused, real = [], []
+skip_system = bool(os.environ.get("SKIP_SYSTEM"))
+excused, skipped, real = [], [], []
 
 for mgr, info in (d.get("packages") or {}).items():
-    if not info.get("available", True):
-        real.append("package manager %s unavailable" % mgr)
-    for p in info.get("packages") or []:
-        if p.get("state") != "installed":
-            real.append("%s:%s %s" % (mgr, p.get("package"), p.get("state")))
+    pending = [] if info.get("available", True) else ["package manager %s unavailable" % mgr]
+    pending += ["%s:%s %s" % (mgr, p.get("package"), p.get("state"))
+                for p in info.get("packages") or [] if p.get("state") != "installed"]
+    (skipped if skip_system else real).extend(pending)
 
 for t in d.get("tools") or []:
     if not t.get("installed"):
@@ -122,15 +124,26 @@ for key in ("files", "services", "compose", "repos", "accounts", "firewall",
         cur = str(r.get("current") or "")
         if key == "user_services" and "systemd user manager not available" in cur:
             excused.append(name)
+        elif key == "files" and skip_system:
+            skipped.append(name)
         else:
             real.append("%s %s -> %s" % (name, cur or "?", r.get("action")))
 
-print("real:" + "; ".join(real[:6]) if real else
-      ("excused:" + ", ".join(excused) if excused else "none"))
+if real:
+    print("real:" + "; ".join(real[:6]))
+elif excused:
+    print("excused:" + ", ".join(excused))
+elif skipped:
+    print("skipped:%d" % len(skipped))
+else:
+    print("none")
 ' 2>/dev/null)
   case "$bootstrap_why" in
   excused:*)
     row_warn "bootstrap state" "pueued skipped — no systemd user manager on this host (loginctl enable-linger to run it)"
+    ;;
+  skipped:*)
+    row_ok "bootstrap state" "current apart from the skipped system steps (${bootstrap_why#skipped:} dnf/file item(s))"
     ;;
   none)
     # --missing said drift, the JSON says every [bootstrap.*] resource is
@@ -165,20 +178,21 @@ else
   n_missing=$(wc -w <<<"$missing_tools")
   row_bad "mise tools" "$n_missing missing ($missing_tools) — mise install"
 fi
-# An update installs new versions before `mise prune` drops the old ones, and
-# scripts/lib/mise-install.sh refuses to start with less than 1.5 GB free.
+# An update installs new versions before `mise prune` drops the old ones;
+# scripts/lib/mise-install.sh stops when free space is below what is left to
+# install plus 1 GB.
 mise_data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
 free_mb=$(df -Pk "$mise_data" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')
 if [ -z "$free_mb" ]; then
   row_skip "disk" "could not read the free space for $mise_data"
 elif [ "$free_mb" -lt 2048 ]; then
-  row_warn "disk" "$(awk -v m="$free_mb" 'BEGIN { printf "%.1f GB", m / 1024 }') free where mise installs tools — updates need 1.5 GB; free some space (du -xh --max-depth=1 ~ | sort -rh | head)"
+  row_warn "disk" "$(awk -v m="$free_mb" 'BEGIN { printf "%.1f GB", m / 1024 }') free where mise installs tools — an update needs about 1 GB on top of what it installs; free some space (du -xh --max-depth=1 ~ | sort -rh | head)"
 else
   row_ok "disk" "$(awk -v m="$free_mb" 'BEGIN { printf "%.1f GB", m / 1024 }') free where mise installs tools"
 fi
 echo ""
 
-# 4. pueued — the mise-managed user unit.
+# 3. pueued — the mise-managed user unit.
 hdr "pueued"
 if systemctl --user is-active --quiet dev.mise.pueued.service 2>/dev/null; then
   row_ok "pueued" "dev.mise.pueued.service active"
@@ -189,7 +203,7 @@ else
 fi
 echo ""
 
-# 5. python-env — wpy's own reported version must match mise's python.
+# 4. python-env — wpy's own reported version must match mise's python.
 hdr "python-env"
 if [ -x "$HOME/.local/bin/wpy" ]; then
   want_v=$(mise current python 2>/dev/null || true)
@@ -204,7 +218,7 @@ else
 fi
 echo ""
 
-# 6. zjstatus — config.linux.toml's zjstatus tool loads on every Linux host, and
+# 5. zjstatus — config.linux.toml's zjstatus tool loads on every Linux host, and
 # zellij loads it from mise's install dir (see config.kdl).
 hdr "zjstatus"
 zjs="$HOME/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm"
@@ -215,7 +229,7 @@ else
 fi
 echo ""
 
-# 7. extras
+# 6. extras
 hdr "extras"
 if command -v claude >/dev/null 2>&1; then
   row_ok "claude" "$(command -v claude)"
@@ -227,7 +241,7 @@ if [ -x "$HOME/.local/bin/vcpkg" ] && [ -x "$HOME/.local/share/vcpkg/vcpkg" ]; t
 else
   row_bad "vcpkg" "missing — mise run vcpkg"
 fi
-if ! WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; is_wsl' _ "$root/bootstrap.sh"; then
+if ! "$root/scripts/lib/bootstrap-fn.sh" is_wsl; then
   fdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFontMono"
   if [ -d "$fdir" ] && [ -n "$(find "$fdir" -maxdepth 1 -name '*.ttf' -print -quit 2>/dev/null)" ]; then
     row_ok "fonts" "$fdir has TTFs"
@@ -239,7 +253,7 @@ else
 fi
 echo ""
 
-# 8. shell and dotfiles
+# 7. shell and dotfiles
 hdr "shell and dotfiles"
 login_shell=$(getent passwd "$USER" | cut -d: -f7)
 if [ "$(basename "$login_shell")" = zsh ]; then

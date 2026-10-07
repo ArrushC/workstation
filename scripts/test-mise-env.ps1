@@ -112,7 +112,6 @@ try {
     Test-Case 'miserc.toml: windows, no BOM, LF; the session MISE_ENV goes' {
         $script:RepoPath = Join-Path $tmp 'repo'
         New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
-        $script:MiseEnvTokens = @('windows')
         $env:MISE_ENV = 'windows'
         Initialize-MiseEnv
         $rc = Join-Path $script:RepoPath 'miserc.toml'
@@ -131,13 +130,11 @@ try {
         $script:RepoPath = Join-Path $tmp 'repo2'
         New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
         [System.IO.File]::WriteAllText((Join-Path $script:RepoPath 'miserc.toml'), "env = [`"linux`"]`n")
-        $script:MiseEnvTokens = @('windows')
         Initialize-MiseEnv
         Assert ((Read-Text (Join-Path $script:RepoPath 'miserc.toml')).Contains('env = ["windows"]')) 'old miserc.toml kept'
     }
 
     $script:WsRoot = Join-Path $tmp 'ws'
-    $script:WsBin = Join-Path $script:WsRoot 'bin'
     $script:WsStamps = Join-Path $script:WsRoot 'stamps'
     $script:WsMise = Join-Path $tmp 'ws\mise'
     $miseExe = Join-Path $script:WsMise 'bin\mise.exe'
@@ -240,7 +237,6 @@ try {
     # A fixed budget (the real disk-budget.toml changes weekly).
     $budgetFile = Join-Path $script:RepoPath 'disk-budget.toml'
     Set-Content -LiteralPath $budgetFile -Value 'windows = 3000'
-    $script:MiseEnvTokens = @('windows')
     $script:SkipDotfiles = $false
     $script:SkipToolInstall = $false
     $script:MigratedMarker = Join-Path $tmp 'ws\dotfiles-migrated'

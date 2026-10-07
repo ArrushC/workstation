@@ -2,27 +2,37 @@
 #MISE description="Best-effort dnf packages some EL releases lack (bear isn't packaged for EL8); the post-packages hook"
 # config.linux.toml's [bootstrap.packages] dnf batch is all-or-nothing on purpose: a
 # misspelled or renamed name fails it loudly. A package that only some EL releases
-# carry goes here instead, installed with strict=0 so dnf skips it where it doesn't
-# exist. bear: EPEL 9 has it; EL8 has no package, conda-forge's build needs glibc
-# 2.39, and upstream ships source only. sudo runs only when something is missing,
-# so a routine update doesn't prompt. Always exits 0: mise runs hooks under
+# carry goes here instead, as <name>:<first EL major that packages it>, installed with
+# strict=0 so dnf skips it where it still doesn't exist. bear: EPEL 9 has it; EL8 has
+# no package, conda-forge's build needs glibc 2.39, and upstream ships source only.
+# sudo runs only when a package this release can have is missing, so a routine update
+# (and every update on EL8) doesn't prompt. Always exits 0: mise runs hooks under
 # `sh -o errexit`, and a missing optional package must not stop the bootstrap.
 set -uo pipefail
-pkgs=(bear)
+pkgs=(bear:9)
 
-missing=()
-for p in "${pkgs[@]}"; do
-  rpm -q "$p" >/dev/null 2>&1 || missing+=("$p")
+osr="${WORKSTATION_OS_RELEASE:-/etc/os-release}" # tests point it at a fixture
+# shellcheck source=/dev/null
+el="$(. "$osr" 2>/dev/null && v="${VERSION_ID:-}" && printf '%s' "${v%%.*}")"
+# shellcheck source=/dev/null
+release="$(. "$osr" 2>/dev/null && printf '%s' "${PRETTY_NAME:-}")"
+present=() missing=()
+for spec in "${pkgs[@]}"; do
+  p="${spec%%:*}" first="${spec#*:}"
+  if rpm -q "$p" >/dev/null 2>&1; then
+    present+=("$p")
+  elif [ -n "$el" ] && [ "$el" -lt "$first" ] 2>/dev/null; then
+    printf "  %s isn't packaged before EL%s; skipped on %s\n" "$p" "$first" "${release:-this release}"
+  else
+    missing+=("$p")
+  fi
 done
-if [ "${#missing[@]}" -eq 0 ]; then
-  printf '  optional packages present: %s\n' "${pkgs[*]}"
-  exit 0
-fi
+[ "${#present[@]}" -eq 0 ] || printf '  optional packages present: %s\n' "${present[*]}"
+[ "${#missing[@]}" -gt 0 ] || exit 0
 
 printf '==> optional packages (skipped where this release has none): %s\n' "${missing[*]}"
 sudo dnf install -y --setopt=strict=0 "${missing[@]}" ||
   printf '  ! dnf install exited non-zero; the bootstrap continues\n'
-release="$(. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-this release}")"
 for p in "${missing[@]}"; do
   rpm -q "$p" >/dev/null 2>&1 || printf "  ! %s isn't packaged for %s; skipped\n" "$p" "${release:-this release}"
 done

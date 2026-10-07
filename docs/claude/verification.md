@@ -60,7 +60,7 @@
   `~/.config/mise` when the scratch `HOME` has none, so from a worktree it silently renders the wrong
   checkout; `scripts/check-templates.sh` (`make_home`/`in_home`) shows the working pattern, or just
   run it. It renders every template individually for both token sets, syntax-checks, then
-  bulk-applies; clean output ends `all rendered templates pass, across both MISE_ENV sets`.
+  bulk-applies; clean output ends `all rendered templates pass under every MISE_ENV set (linux windows)`.
 ## Windows (`bootstrap.ps1`)
 
 - Parse check under 5.1, the floor (no ternary, `??` or `&&`): copy the file to `%TEMP%\bs.ps1`, then
@@ -91,8 +91,7 @@
 - Live checks (the user runs `.\bootstrap.ps1`; then, in a new PowerShell window):
   - `$env:MISE_ENV` is empty and `miserc.toml` holds `env = ["windows"]`.
   - `Get-Command starship, jq, hx, nu, omp, opencode, DevToys.CLI, gh` resolve under
-    `%LOCALAPPDATA%\mise\shims` (gh may be a machine-wide install); the User PATH has no
-    `%LOCALAPPDATA%\workstation\{helix,nu,devtoys-cli,dngrep,logexpert}`.
+    `%LOCALAPPDATA%\mise\shims` (gh may be a machine-wide install).
   - `mise doctor` says `activated: yes` and `shims_on_path: yes`; `mise dot status` lists nothing
     unapplied; `mise bootstrap status` is clean.
   - `mise bootstrap packages status` lists the eight `config.windows.toml` apps as installed, and `winget --info` prints no settings warning.

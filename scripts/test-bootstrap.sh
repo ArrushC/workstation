@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Offline tests for bootstrap.sh: identity prompts and the config.local.toml
 # writer, the sudo decision (stubbed sudo), the login shell for local and
-# directory (SSSD) accounts (stubbed getent/sudo), the --reinstall confirmation.
+# directory (SSSD) accounts (stubbed getent/sudo), the --reinstall confirmation,
+# and tasks/update's sudo skip (U1/U2).
 # Sources bootstrap.sh with WORKSTATION_BOOTSTRAP_LIB=1 so main does not run.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -81,11 +82,12 @@ mkdir -p "$T/s5" "$T/nosudo"
 for c in awk sed grep mktemp mv mkdir dirname cat; do ln -sf "$(command -v $c)" "$T/nosudo/$c"; done
 out=$(env PATH="$T/nosudo" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$T/s5" "$(command -v setsid)" -w "$(command -v bash)" -c 'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; resolve_system_steps; echo "SYSTEM=$SYSTEM"' "$root/bootstrap.sh" </dev/null 3<&- 2>&1) || fail "S5: exit — $out"
 grep -q '^SYSTEM=no$' <<<"$out" || fail "S5: $out"
-# S6. sudo_state: missing means yes; saved no is no.
+# S6. the saved decision through scripts/lib/bootstrap-fn.sh (what tasks/update
+# reads): missing is empty (treated as yes), a saved "no" with a comment is no.
 printf '[vars]\nname = "N"\n' >"$T/s6.toml"
-[ "$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; sudo_state "$1"' "$root/bootstrap.sh" "$T/s6.toml")" = yes ] || fail "S6: missing is not yes"
+[ -z "$("$root/scripts/lib/bootstrap-fn.sh" config_get "$T/s6.toml" sudo)" ] || fail "S6: a missing sudo isn't empty"
 printf '[vars]\nsudo = "no" # no sudo here\n' >"$T/s6.toml"
-[ "$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; sudo_state "$1"' "$root/bootstrap.sh" "$T/s6.toml")" = no ] || fail "S6: saved no not read"
+[ "$("$root/scripts/lib/bootstrap-fn.sh" config_get "$T/s6.toml" sudo)" = no ] || fail "S6: saved no not read"
 # 6. config_set keeps other tables and escapes quotes; config_get reads back.
 mkdir -p "$T/c6"
 printf '[vars]\nname = "Old"\n\n[dotfiles]\n"~/.x" = { source = "x", mode = "copy", enabled = false }\n' >"$T/c6/config.local.toml"
@@ -238,12 +240,13 @@ ls_run() {
   rm -f "$T/ls.shell.pending"
   : >"$T/ls.log"
   env "${@:2}" PATH="$LB:$PATH" USER=tuser FAKE_LOG="$T/ls.log" FAKE_SHELL_FILE="$T/ls.shell" \
-    WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; set_login_shell' "$root/bootstrap.sh" 2>&1
+    WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; set_login_shell; echo "SHELL_CHANGED=$SHELL_CHANGED"' "$root/bootstrap.sh" 2>&1
 }
 out=$(ls_run /bin/bash FAKE_ACCT=local)
 grep -qx "sudo usermod -s $LB/zsh tuser" "$T/ls.log" || fail "L1: no usermod: $(cat "$T/ls.log")"
 [ "$(cat "$T/ls.shell")" = "$LB/zsh" ] || fail "L1: shell not set"
 grep -q 'Default shell set to zsh' <<<"$out" || fail "L1: $out"
+grep -qx 'SHELL_CHANGED=true' <<<"$out" || fail "L1: SHELL_CHANGED not set (the closing tip would be missing)"
 out=$(ls_run /bin/bash FAKE_ACCT=local FAKE_USERMOD_FAIL=1)
 grep -q "does not exist in /etc/passwd" <<<"$out" || fail "L2: usermod's error hidden: $out"
 out=$(ls_run /bin/bash FAKE_ACCT=sss FAKE_SSSD_TOOLS=1)
@@ -258,12 +261,14 @@ out=$(ls_run /bin/bash FAKE_ACCT=sss)
 [ "$(cat "$T/ls.shell")" = "$LB/zsh" ] || fail "L4: shell not set"
 out=$(ls_run /bin/bash FAKE_ACCT=sss FAKE_SSSD_TOOLS=1 FAKE_RESTART_NOOP=1)
 grep -q 'still reports /bin/bash' <<<"$out" || fail "L5: no warning when the override didn't take: $out"
+grep -qx 'SHELL_CHANGED=false' <<<"$out" || fail "L5: SHELL_CHANGED set although nothing changed"
 out=$(ls_run /bin/bash FAKE_ACCT=other)
 [ -s "$T/ls.log" ] && fail "L6: sudo ran for a non-SSSD directory account: $(cat "$T/ls.log")"
 grep -q 'directory account outside SSSD' <<<"$out" || fail "L6: $out"
 out=$(ls_run "$LB/zsh" FAKE_ACCT=sss)
 [ -s "$T/ls.log" ] && fail "L7: sudo ran although the shell is already zsh: $(cat "$T/ls.log")"
 grep -q 'already zsh' <<<"$out" || fail "L7: $out"
+grep -qx 'SHELL_CHANGED=false' <<<"$out" || fail "L7: SHELL_CHANGED set on a re-run (the tip would repeat)"
 
 # U1/U2. tasks/update: runs the full bootstrap when sudo is unset; passes
 # --skip packages,files when sudo = "no".
@@ -271,7 +276,7 @@ U="$T/u"
 mkdir -p "$U/repo/tasks" "$U/repo/scripts/lib" "$U/bin"
 cp "$root/tasks/update" "$U/repo/tasks/update"
 cp "$root/bootstrap.sh" "$U/repo/"
-cp "$root/scripts/lib/mise-env.sh" "$U/repo/scripts/lib/"
+cp "$root/scripts/lib/mise-env.sh" "$root/scripts/lib/bootstrap-fn.sh" "$U/repo/scripts/lib/"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$U/repo/scripts/lib/mise-install.sh"
 chmod +x "$U/repo/scripts/lib/mise-install.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$U/bin/git"
@@ -286,4 +291,4 @@ printf '[vars]\nsudo = "no"\n' >"$U/repo/config.local.toml"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U2: update failed"
 grep -qx 'mise bootstrap --yes --skip packages,files' "$U/mise.log" || fail "U2: expected the skip: $(cat "$U/mise.log")"
 
-echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), login shell (local usermod, SSSD override, other directory), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"
+echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), login shell (local usermod, SSSD override, other directory), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall, update sudo skip"

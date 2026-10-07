@@ -44,11 +44,16 @@ if ! printf '%s %s' "${ID:-}" "${ID_LIKE:-}" | grep -qiwE 'rhel|centos|almalinux
   exit 0
 fi
 
+v="${VERSION_ID:-0}"
+major="${v%%.*}"
 if rpm -q epel-release >/dev/null 2>&1; then
   printf '  EPEL already installed\n'
 else
   printf '==> EPEL (RHEL family)\n'
-  if ! sudo dnf install -y epel-release; then
+  # RHEL's own repos don't carry epel-release; Fedora publishes it as an RPM to install by URL.
+  epel="epel-release"
+  [ "${ID:-}" = rhel ] && epel="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${major}.noarch.rpm"
+  if ! sudo dnf install -y "$epel"; then
     printf 'enable-el-repos.sh: epel-release install failed — the packages batch would fail anyway\n' >&2
     exit 1
   fi
@@ -65,19 +70,20 @@ if dnf repolist --enabled -q 2>/dev/null | awk '{print $1}' |
   printf '  CRB already enabled\n'
   exit 0
 fi
-major="${VERSION_ID%%.*}"
 if [ "${ID:-}" = rhel ] && command -v subscription-manager >/dev/null 2>&1; then
   repo="codeready-builder-for-rhel-${major}-$(uname -m)-rpms"
   cmd=(sudo subscription-manager repos --enable "$repo")
 else
   repo=powertools
-  [ "${major:-0}" -ge 9 ] 2>/dev/null && repo=crb
+  [ "$major" -ge 9 ] 2>/dev/null && repo=crb
   rpm -q dnf-plugins-core >/dev/null 2>&1 || sudo dnf install -y dnf-plugins-core || true
   cmd=(sudo dnf config-manager --set-enabled "$repo")
 fi
-if "${cmd[@]}" >/dev/null 2>&1; then
+# sudo prompts on /dev/tty, so capturing the output keeps the prompt visible.
+if err=$("${cmd[@]}" 2>&1); then
   printf '  CRB enabled (repo: %s)\n' "$repo"
   exit 0
 fi
 printf 'enable-el-repos.sh: could not enable CRB (%s), so the packages batch would fail on meson/ninja-build/cppcheck. Enable it with: %s\n' "$repo" "${cmd[*]}" >&2
+printf '%s\n' "$err" | tail -3 | sed 's/^/    /' >&2
 exit 1

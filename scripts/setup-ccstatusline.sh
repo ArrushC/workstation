@@ -219,7 +219,7 @@ option_set_global() {
     printf '%bNo changes to commit — local config matched tracked.%b\n' "$YELLOW" "$RESET"
     return 0
   fi
-  git commit -m "$(printf 'feat(claude): update ccstatusline tracked config\n\nUpdated via setup-ccstatusline.sh on %s.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>' "$HOST")"
+  git commit -m "$(printf 'feat(claude): update ccstatusline tracked config\n\nUpdated via setup-ccstatusline.sh on %s.' "$HOST")"
   printf '%bPushing to origin...%b\n' "$GREEN" "$RESET"
   git push origin "$(git symbolic-ref --short HEAD)"
   printf '%bDone.%b\n' "$GREEN" "$RESET"
