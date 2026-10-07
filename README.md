@@ -66,7 +66,7 @@ Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, o
 
 ### Linux
 
-Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the `linux` figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (about 6.9 GB fresh). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped, and GEF needs gdb 10 or newer, past EL8's system gdb (8.2), so it won't load there (`pwndbg` brings its own gdb). Then, on the host:
+Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the `linux` figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (about 6.9 GB fresh). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped; GEF works with EL8's gdb 8.2 (its floor is gdb 8.0 with Python 3.6). Then, on the host:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash && \

@@ -217,6 +217,10 @@ state = "running"
 "dnf:gcc-c++" = "latest"
 "dnf:gdb" = "latest"
 "dnf:gdb-gdbserver" = "latest"
+# GEF (~/.gdbinit) looks up file, readelf and nm at startup and fails without them:
+# a minimal EL8 install lacks file(1), and binutils otherwise arrives only via gcc.
+"dnf:file" = "latest"
+"dnf:binutils" = "latest"
 "dnf:goaccess" = "latest"
 "dnf:heaptrack" = "latest"
 "dnf:htop" = "latest"
