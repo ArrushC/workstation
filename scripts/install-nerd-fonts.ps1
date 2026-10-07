@@ -22,12 +22,10 @@
 #   %LOCALAPPDATA%\workstation\nerd-fonts.stamp
 # holds the SHA256s of the six source TTFs AND all six TTFs are present AND all
 # six HKCU registrations exist with full-path values (it still re-runs the cheap
-# session activation + re-registers the per-logon task first, so a host
-# provisioned by an older build — registered but never activated, or registered
-# by bare filename — goes live without a logout). Otherwise TTFs of this family
-# with other names are swept, each changed TTF is deleted and copied anew, and
-# only then are the HKCU entries rewritten (which also turns the bare-filename
-# registrations left by older builds into full paths).
+# session activation + re-registers the per-logon task first, so registered
+# fonts go live without a logout). Otherwise TTFs of this family with other
+# names are swept, each changed TTF is deleted and copied anew, and only then
+# are the HKCU entries rewritten with full paths.
 #
 # Hard-fails when a source TTF is missing or a changed TTF can't be replaced,
 # before HKCU or the stamp change (bootstrap.ps1 warns and goes on).
@@ -84,9 +82,8 @@ function Test-Installed {
         # a bare name resolves only against C:\Windows\Fonts (the implicit base for
         # HKLM/machine fonts), so an HKCU bare-name entry silently fails to load at
         # logon and the font stays invisible to DirectWrite apps (Windows Terminal,
-        # Zed, VS Code) — even though the .ttf is present + the entry exists. Treat a
-        # stale bare-name registration (from an older build of this script) as
-        # not-installed so the fresh-install path below rewrites it with full paths.
+        # Zed, VS Code) — even though the .ttf is present + the entry exists. Any
+        # other value counts as not installed, so the install path below rewrites it.
         if ($prop.Value -ne (Join-Path $FontDir $f)) { return $false }
     }
     return $true
@@ -138,7 +135,7 @@ public static extern int SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam
 # hidden, as the current user with their interactive token (LogonType Interactive
 # → it affects the live session; RunLevel Limited → no elevation). Idempotent
 # (-Force replaces in place) and soft-fail; re-registered every run so a deleted
-# task or a host seeded by an older build self-heals on the next bootstrap.
+# task self-heals on the next bootstrap.
 function Register-FontLogonTask {
     try {
         New-Item -ItemType Directory -Path $StampDir -Force | Out-Null
@@ -246,8 +243,7 @@ if (-not $NoRegister) {
     }
 }
 
-# Stamp (the older builds' nerd-fonts.<version>.stamp files go too).
-Get-ChildItem -Path $StampDir -Filter 'nerd-fonts*.stamp' -ErrorAction SilentlyContinue | Remove-Item -Force
+# Stamp.
 [System.IO.File]::WriteAllText($StampFile, $Key)
 
 # Activate the new faces in the current session (no logout needed — see the
