@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Offline tests for bootstrap.sh: identity prompts and the config.local.toml
-# writer, the sudo decision (stubbed sudo), the --reinstall confirmation.
+# writer, the sudo decision (stubbed sudo), the login shell for local and
+# directory (SSSD) accounts (stubbed getent/sudo), the --reinstall confirmation.
 # Sources bootstrap.sh with WORKSTATION_BOOTSTRAP_LIB=1 so main does not run.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -190,6 +191,80 @@ grep -q 'REINSTALL-DONE' <<<"$out" || fail "--reinstall did not finish: $out"
 grep -q 'config.local.toml (name, email, sudo)' <<<"$out" || fail "--reinstall REMOVE list: $out"
 [ ! -e "$T/c12/repo" ] || fail "--reinstall did not wipe the checkout"
 
+# L1-L7. set_login_shell: a local account goes through usermod; a directory
+# (SSSD) account gets a per-host sss_override plus an sssd restart; a directory
+# account outside SSSD gets an explanation. Stubs: getent answers from FAKE_ACCT
+# (local|sss|other) and the shell in $T/ls.shell; sudo logs and simulates
+# usermod, sss_override (pending until `systemctl restart sssd`), dnf; rpm
+# answers for sssd-tools from FAKE_SSSD_TOOLS.
+LB="$T/ls-bin"
+mkdir -p "$LB"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$LB/zsh"
+cat >"$LB/getent" <<'EOF'
+#!/usr/bin/env bash
+src=all
+[ "$1" = -s ] && { src=$2; shift 2; }
+case "$src:${FAKE_ACCT:-local}" in
+files:local | sss:sss | all:*) printf '%s:x:1000:1000::/home/%s:%s\n' "$USER" "$USER" "$(cat "$FAKE_SHELL_FILE")" ;;
+*) exit 2 ;;
+esac
+EOF
+cat >"$LB/sudo" <<'EOF'
+#!/usr/bin/env bash
+echo "sudo $*" >>"$FAKE_LOG"
+case "$1 ${2:-}" in
+"usermod -s")
+  if [ -n "${FAKE_USERMOD_FAIL:-}" ]; then
+    echo "usermod: user '$4' does not exist in /etc/passwd" >&2
+    exit 6
+  fi
+  echo "$3" >"$FAKE_SHELL_FILE"
+  ;;
+"sss_override user-add") echo "$5" >"$FAKE_SHELL_FILE.pending" ;;
+"systemctl restart")
+  [ -z "${FAKE_RESTART_NOOP:-}" ] && [ -f "$FAKE_SHELL_FILE.pending" ] && mv "$FAKE_SHELL_FILE.pending" "$FAKE_SHELL_FILE"
+  ;;
+esac
+exit 0
+EOF
+cat >"$LB/rpm" <<'EOF'
+#!/usr/bin/env bash
+[ "$*" = "-q sssd-tools" ] && [ -n "${FAKE_SSSD_TOOLS:-}" ]
+EOF
+chmod +x "$LB"/*
+# ls_run <start-shell> [VAR=value ...]: set_login_shell for user `tuser`.
+ls_run() {
+  echo "$1" >"$T/ls.shell"
+  rm -f "$T/ls.shell.pending"
+  : >"$T/ls.log"
+  env "${@:2}" PATH="$LB:$PATH" USER=tuser FAKE_LOG="$T/ls.log" FAKE_SHELL_FILE="$T/ls.shell" \
+    WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; set_login_shell' "$root/bootstrap.sh" 2>&1
+}
+out=$(ls_run /bin/bash FAKE_ACCT=local)
+grep -qx "sudo usermod -s $LB/zsh tuser" "$T/ls.log" || fail "L1: no usermod: $(cat "$T/ls.log")"
+[ "$(cat "$T/ls.shell")" = "$LB/zsh" ] || fail "L1: shell not set"
+grep -q 'Default shell set to zsh' <<<"$out" || fail "L1: $out"
+out=$(ls_run /bin/bash FAKE_ACCT=local FAKE_USERMOD_FAIL=1)
+grep -q "does not exist in /etc/passwd" <<<"$out" || fail "L2: usermod's error hidden: $out"
+out=$(ls_run /bin/bash FAKE_ACCT=sss FAKE_SSSD_TOOLS=1)
+grep -q usermod "$T/ls.log" && fail "L3: usermod tried for a directory account"
+grep -qx "sudo sss_override user-add tuser -s $LB/zsh" "$T/ls.log" || fail "L3: no override: $(cat "$T/ls.log")"
+grep -qx 'sudo systemctl restart sssd' "$T/ls.log" || fail "L3: sssd not restarted: $(cat "$T/ls.log")"
+grep -q 'install' "$T/ls.log" && fail "L3: sssd-tools reinstalled"
+[ "$(cat "$T/ls.shell")" = "$LB/zsh" ] || fail "L3: shell not set"
+grep -q 'SSSD override' <<<"$out" || fail "L3: $out"
+out=$(ls_run /bin/bash FAKE_ACCT=sss)
+[ "$(head -1 "$T/ls.log")" = 'sudo dnf install -y sssd-tools' ] || fail "L4: sssd-tools not installed first: $(cat "$T/ls.log")"
+[ "$(cat "$T/ls.shell")" = "$LB/zsh" ] || fail "L4: shell not set"
+out=$(ls_run /bin/bash FAKE_ACCT=sss FAKE_SSSD_TOOLS=1 FAKE_RESTART_NOOP=1)
+grep -q 'still reports /bin/bash' <<<"$out" || fail "L5: no warning when the override didn't take: $out"
+out=$(ls_run /bin/bash FAKE_ACCT=other)
+[ -s "$T/ls.log" ] && fail "L6: sudo ran for a non-SSSD directory account: $(cat "$T/ls.log")"
+grep -q 'directory account outside SSSD' <<<"$out" || fail "L6: $out"
+out=$(ls_run "$LB/zsh" FAKE_ACCT=sss)
+[ -s "$T/ls.log" ] && fail "L7: sudo ran although the shell is already zsh: $(cat "$T/ls.log")"
+grep -q 'already zsh' <<<"$out" || fail "L7: $out"
+
 # U1/U2. tasks/update: runs the full bootstrap when sudo is unset; passes
 # --skip packages,files when sudo = "no".
 U="$T/u"
@@ -211,4 +286,4 @@ printf '[vars]\nsudo = "no"\n' >"$U/repo/config.local.toml"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U2: update failed"
 grep -qx 'mise bootstrap --yes --skip packages,files' "$U/mise.log" || fail "U2: expected the skip: $(cat "$U/mise.log")"
 
-echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"
+echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), login shell (local usermod, SSSD override, other directory), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"

@@ -245,7 +245,7 @@ login_shell=$(getent passwd "$USER" | cut -d: -f7)
 if [ "$(basename "$login_shell")" = zsh ]; then
   row_ok "login shell" "$login_shell"
 else
-  row_warn "login shell" "$login_shell — expected zsh"
+  row_warn "login shell" "$login_shell — expected zsh; $root/bootstrap.sh sets it (usermod, or an SSSD override for a directory account)"
 fi
 if mise dot status --missing >/dev/null 2>&1; then
   row_ok "dotfiles" "no drift (mise dot status)"

@@ -381,15 +381,19 @@ this script is idempotent — fix what's reported above and run again."
 
 # =============================================================================
 # SET LOGIN SHELL — switch the login shell to zsh. Only when SYSTEM=yes (it
-# needs sudo usermod).
+# needs sudo).
 #
 # ~/.zshrc is a mise dotfiles template (config.linux.toml [dotfiles]);
 # switching the login shell is what makes new SSH/WSL sessions actually read
-# it. `chsh` isn't installed by default on AlmaLinux 9 (needs util-linux-user)
-# and even when present requires PAM auth (interactive password). `sudo
-# usermod -s` edits /etc/passwd directly instead. Best-effort: prints the
-# manual fallback commands when usermod fails (most often: $SUDO_ASKPASS
-# missing under curl|bash from a remote machine).
+# it. Where the account lives decides how:
+#  - local (/etc/passwd): `sudo usermod -s`. `chsh` isn't installed by default
+#    on AlmaLinux 9 (util-linux-user) and needs PAM auth anyway.
+#  - a directory account (AD/LDAP) served by SSSD: the shell comes from the
+#    directory, so usermod and chsh fail. `sss_override user-add -s` (sssd-tools)
+#    sets a per-host override, applied by restarting sssd.
+#  - a directory account outside SSSD (winbind, nslcd): no per-user override
+#    exists, so it only explains.
+# Best-effort: a failure warns and the bootstrap carries on.
 # =============================================================================
 set_login_shell() {
   local zsh_path
@@ -410,12 +414,42 @@ set_login_shell() {
   fi
 
   log "Setting default shell to $zsh_path (current: $current_shell)..."
-  if sudo usermod -s "$zsh_path" "$USER" 2>/dev/null; then
-    ok "Default shell set to zsh — log out + back in (or open a new tab) to land in it"
+  local err
+  if getent -s files passwd "$USER" >/dev/null 2>&1; then
+    if err=$(sudo usermod -s "$zsh_path" "$USER" 2>&1); then
+      ok "Default shell set to zsh — log out + back in (or open a new tab) to land in it"
+    else
+      warn "usermod couldn't set the login shell: ${err:-no error text}"
+      warn "  set it by hand: sudo usermod -s $zsh_path $USER"
+    fi
+  elif getent -s sss passwd "$USER" >/dev/null 2>&1; then
+    set_login_shell_sssd "$zsh_path" "$current_shell"
   else
-    warn "Couldn't set default shell automatically. Run one of:"
-    warn "  sudo usermod -s $zsh_path $USER     (no password prompt)"
-    warn "  chsh -s $zsh_path                   (interactive)"
+    warn "$USER is a directory account outside SSSD (not in /etc/passwd): its login shell"
+    warn "  comes from the directory and has no per-host override. Ask its admin to set"
+    warn "  loginShell to $zsh_path, or start zsh from ~/.bashrc.local."
+  fi
+}
+
+# set_login_shell_sssd <zsh-path> <current-shell>: a per-host SSSD override for a
+# directory account, then an sssd restart so it takes effect.
+set_login_shell_sssd() {
+  local zsh_path=$1 current_shell=$2 now
+  log "$USER is a directory account (SSSD): setting a per-host shell override"
+  if ! rpm -q sssd-tools >/dev/null 2>&1 && ! sudo dnf install -y sssd-tools; then
+    warn "couldn't install sssd-tools (sss_override); login shell unchanged"
+    return 0
+  fi
+  if ! sudo sss_override user-add "$USER" -s "$zsh_path"; then
+    warn "sss_override failed; login shell unchanged"
+    return 0
+  fi
+  sudo systemctl restart sssd || warn "couldn't restart sssd; the override applies after its next restart"
+  now=$(getent passwd "$USER" | cut -d: -f7)
+  if [[ "$now" == "$zsh_path" ]]; then
+    ok "Default shell set to zsh (SSSD override on this host) — log out + back in to land in it"
+  else
+    warn "SSSD still reports ${now:-$current_shell} for $USER after the override; check: sudo sss_override user-show $USER"
   fi
 }
 

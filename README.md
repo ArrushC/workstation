@@ -82,7 +82,7 @@ What `bootstrap.sh` does:
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Ask your name and email once (saved in `config.local.toml`) and decide the system steps (sudo; see above).
 5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
-6. With sudo: set zsh as the login shell (`sudo usermod -s`).
+6. With sudo: set zsh as the login shell: `sudo usermod -s` for a local account, or, for a directory (AD/LDAP) account served by SSSD, a per-host `sss_override` (installing `sssd-tools`) and an `sssd` restart.
 
 It is idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
 
