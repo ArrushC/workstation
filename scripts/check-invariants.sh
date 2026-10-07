@@ -601,7 +601,7 @@ if bad_files:
 else:
     print(f"PASS|files|{n_files} bootstrap.files entry/ies: source exists, phase valid")
 
-dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck"}
+dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck", "dnf:python3"}
 seen_pkg = {}
 bad_pkg = []
 for f in ("config.linux.toml",):
@@ -609,7 +609,7 @@ for f in ("config.linux.toml",):
         if not key.startswith("dnf:"):
             bad_pkg.append(f"{f}:{key} (missing dnf: prefix)")
         if key in dropped:
-            bad_pkg.append(f"{f}:{key} (dropped name — not packaged/virtual/renamed on EL9)")
+            bad_pkg.append(f"{f}:{key} (dropped name — not packaged/virtual/renamed on EL8 or EL9)")
         seen_pkg.setdefault(key, []).append(f)
 pkg_dupes = [f"{k} in {fs}" for k, fs in seen_pkg.items() if len(fs) > 1]
 if bad_pkg or pkg_dupes:
