@@ -162,7 +162,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - the five zsh plugin dirs and `zsh-shift-select.zsh`
   - `_cht.sh`, a rolling snapshot
   - `dotfiles/local/bin/batpipe`: re-apply the 2-line patch recorded in its `.vendor`
-  - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06 while the fleet is EL9 (newer needs Python 3.10)
+  - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06 while the fleet has EL8/EL9 (newer needs Python 3.10)
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
