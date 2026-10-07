@@ -304,12 +304,14 @@ ok "dirty repo -> toast mentions uncommitted" notified 'uncommitted'
 
 # hook must NOT block on the notifier: a slow notifier still returns the hook fast
 : >"$SE/notified.log"
-_t0=$(date +%s)
+# Nanoseconds (GNU date; bash 4.4 on EL8 has no EPOCHREALTIME): whole seconds misread
+# a 1.05 s run that straddles two boundaries as 2 s.
+_t0=$(date +%s%N)
 printf '%s' "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"logout",cwd:$c}')" |
   env -u CLAUDE_PROJECT_DIR HOME="$SE/home" PATH="$SE/bin:$JQ_DIR:$PATH" WORKSTATION_NOTIFY="$SE/slowstub.sh" \
     bash "$RH/session-end-notify.sh" >/dev/null 2>&1
-_t1=$(date +%s)
-ok "does not block on a slow notifier (<2s)" test "$((_t1 - _t0))" -lt 2
+_t1=$(date +%s%N)
+ok "does not block on a slow notifier (<2s; the stub sleeps 3s)" test "$(((_t1 - _t0) / 1000000))" -lt 2000
 
 # reason=clear on dirty repo -> silent (no nag on /clear)
 se_run "$RH/session-end-notify.sh" "$(j --arg c "$SE/repo" '{hook_event_name:"SessionEnd",reason:"clear",cwd:$c}')"

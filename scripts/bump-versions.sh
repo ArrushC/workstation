@@ -91,7 +91,7 @@ COUPLED_AUTO="go go:golang.org/x/tools/gopls node"
 # Run a mise subcommand against this checkout as mise's GLOBAL config dir,
 # from OUTSIDE the checkout, via a throwaway XDG_CONFIG_HOME symlink dir.
 # Verified on-host: this is the only invocation form that
-# reliably merges all three MISE_ENV-suffixed config files under `--global`
+# reliably merges the MISE_ENV-selected config files under `--global`
 # — running with MISE_CONFIG_DIR pointing straight at the checkout (the old
 # form here), or from inside the checkout with neither override set, both
 # leave which config root gets read/written ambiguous. One throwaway
@@ -123,15 +123,22 @@ mise_global() {
 # dependence on checkout naming. See CLAUDE.md and
 # check-invariants.sh's check_mise_config_files.
 normalize_lock_sidecars() {
-  [ -d "$ROOT/.mise/locks" ] || return 0
-  mkdir -p "$ROOT/locks" &&
-    cp -a "$ROOT/.mise/locks/." "$ROOT/locks/" &&
-    rm -rf "${ROOT:?}/.mise" &&
-    sed -i 's#path = "\.mise/locks/#path = "locks/#g' \
-      "$ROOT/mise.lock" "$ROOT/mise.linux.lock" || {
-    echo "ERROR: normalize_lock_sidecars failed" >&2
-    return 1
-  }
+  if [ -d "$ROOT/.mise/locks" ]; then
+    mkdir -p "$ROOT/locks" &&
+      cp -a "$ROOT/.mise/locks/." "$ROOT/locks/" &&
+      rm -rf "${ROOT:?}/.mise" &&
+      sed -i 's#path = "\.mise/locks/#path = "locks/#g' \
+        "$ROOT/mise.lock" "$ROOT/mise.linux.lock" || {
+      echo "ERROR: normalize_lock_sidecars failed" >&2
+      return 1
+    }
+  fi
+  # A bump writes the new version's sidecar and leaves the old one behind.
+  local d
+  while IFS= read -r d; do
+    [ -n "$d" ] && rm -rf "${ROOT:?}/$d"
+  done < <(bash "$ROOT/scripts/lib/lock-sidecar-orphans.sh" "$ROOT")
+  find "$ROOT/locks" -mindepth 1 -type d -empty -delete 2>/dev/null || true
 }
 
 # Rewrite one pin's version string in place and leave the rest of the file
@@ -273,7 +280,7 @@ if [ -z "$outdated_fail" ]; then
     # `source.path` comes back through the symlinked config root (mise
     # doesn't canonicalize it), e.g. /tmp/xxx/mise/config.toml rather than
     # $ROOT/config.toml — basename it instead of stripping a $ROOT prefix.
-    # All three config files sit flat at the repo root, so this is exact.
+    # The config files sit flat at the repo root, so this is exact.
     file="${path##*/}"
     # gopls waits until go's final pin is known (below the loop).
     if [ "$name" = "go:golang.org/x/tools/gopls" ]; then

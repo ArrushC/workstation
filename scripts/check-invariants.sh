@@ -24,6 +24,16 @@ bad() {
 }
 note() { printf '   %s·%s %s\n' "$YELLOW" "$RESET" "$*"; }
 
+# git_mode <path>: the path's index mode ("" when untracked), from one `git ls-files -s`.
+declare -A GIT_MODES=()
+git_mode() {
+  if [ "${#GIT_MODES[@]}" -eq 0 ]; then
+    local m f
+    while IFS=$'\t' read -r m f; do GIT_MODES["$f"]="${m%% *}"; done < <(git ls-files -s)
+  fi
+  printf '%s' "${GIT_MODES["$1"]:-}"
+}
+
 # First-party shell files for shellcheck, shfmt and `mise run fmt` (vendored scripts excluded).
 shell_targets() {
   printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
@@ -203,7 +213,7 @@ check_line_endings_and_mode() {
       bad "CRLF: $f"
       crlf=$((crlf + 1))
     fi
-    mode=$(git ls-files --stage -- "$f" | awk '{print $1}')
+    mode=$(git_mode "$f")
     if [ -z "$mode" ]; then
       note "untracked (commit it so the mode is recorded): $f"
     elif [ "$mode" != "100755" ]; then
@@ -233,7 +243,7 @@ check_dotfiles_mode() {
   mapfile -t tracked < <(git ls-files dotfiles/)
   for f in "${tracked[@]}"; do
     n=$((n + 1))
-    mode=$(git ls-files --stage -- "$f" | awk '{print $1}')
+    mode=$(git_mode "$f")
     allowed=0
     for a in "${DOTFILES_MODE_ALLOWLIST[@]}"; do
       [ "$f" = "$a" ] && {
@@ -420,44 +430,24 @@ PY
   else
     bad "a config*.toml lock is missing entries — run: MISE_ENV=linux mise lock --global --platform linux-x64 && MISE_ENV=windows mise lock --global --platform windows-x64"
   fi
-  # System-state tables sit in the OS file that can use them; config.toml carries the [vars] pins they read.
+  # config.toml carries the [vars] pins the tasks read (#MISE env={X="{{ vars.x }}"}).
   if [ -z "$PY" ]; then
-    note "no python with tomllib — system-state placement / [vars] checks skipped locally (CI enforces)"
+    note "no python with tomllib — [vars] check skipped locally (CI enforces)"
   else
-    if "$PY" - <<'PY'
-import sys, tomllib
-def pkgs(f):
-    with open(f, "rb") as fh:
-        return tomllib.load(fh).get("bootstrap", {})
-bad = []
-for f in ("config.toml", "config.windows.toml"):
-    b = pkgs(f)
-    bad += [f"{f}:{k}" for k in b.get("packages", {}) if k.startswith("dnf:")]
-    bad += [f"{f}:[bootstrap.files]" for _ in [1] if b.get("files")]
-bad += [f"config.linux.toml:{k}" for k in pkgs("config.linux.toml").get("packages", {}) if k.startswith("winget:")]
-print("; ".join(bad)); sys.exit(1 if bad else 0)
-PY
-    then
-      ok "dnf: packages and [bootstrap.files] only in config.linux.toml; winget: only in config.windows.toml"
-    else
-      bad "system-state tables in the wrong file (dnf/files belong in config.linux.toml, winget in config.windows.toml)"
-    fi
-    local vk vars_bad=0
-    for vk in vcpkg_version zjstatus_zellij_floor; do
-      if "$PY" - "$vk" <<'PY'
-import sys, tomllib
+    local vars_missing
+    vars_missing=$(
+      "$PY" - <<'PY'
+import tomllib
 with open("config.toml", "rb") as fh:
-    d = tomllib.load(fh)
-sys.exit(0 if sys.argv[1] in d.get("vars", {}) else 1)
+    v = tomllib.load(fh).get("vars", {})
+print(" ".join(k for k in ("vcpkg_version", "zjstatus_zellij_floor") if k not in v))
 PY
-      then
-        :
-      else
-        bad "config.toml [vars] missing: $vk"
-        vars_bad=1
-      fi
-    done
-    [ "$vars_bad" -eq 0 ] && ok "config.toml [vars] has both host pins"
+    )
+    if [ -z "$vars_missing" ]; then
+      ok "config.toml [vars] has both host pins"
+    else
+      bad "config.toml [vars] missing: $vars_missing"
+    fi
   fi
   if command -v mise >/dev/null 2>&1; then
     local tmp
@@ -477,7 +467,7 @@ PY
   # spacing, any suffix) as a directive, so a wrapped comment such as
   # "# MISE_ENV would ..." breaks the task's parse with a WARN on each `mise run`.
   local stray
-  stray=$(grep -nE '^[[:space:]]*(#|//)[[:space:]]*(MISE|USAGE)' tasks/* 2>/dev/null |
+  stray=$(grep -nHE '^[[:space:]]*(#|//)[[:space:]]*(MISE|USAGE)' tasks/* 2>/dev/null |
     grep -vE '^[^:]+:[0-9]+:#(MISE [a-z_]+=|USAGE )' || true)
   if [ -z "$stray" ]; then
     ok "tasks/*: every line starting #MISE/#USAGE is a real directive"
@@ -506,6 +496,14 @@ PY
   done < <(grep -ho 'path = "[^"]*"' mise.lock mise.linux.lock 2>/dev/null | sed -E 's/^path = "(.*)"$/\1/')
   if [ "$lock_ok" -eq 1 ]; then
     ok "every lock sidecar path ref is under locks/ and the directory exists"
+  fi
+  # ...and the converse: a sidecar dir no lock refers to (scripts/bump-versions.sh prunes them).
+  local orphans
+  orphans=$(bash scripts/lib/lock-sidecar-orphans.sh "$ROOT")
+  if [ -z "$orphans" ]; then
+    ok "every locks/ sidecar dir is referenced by a lock"
+  else
+    bad "locks/ sidecar dirs no lock refers to (a bump left them; delete them): $(tr '\n' ' ' <<<"$orphans")"
   fi
   # Every pypi:/npm: lock entry needs its dependency-lock sidecar ref: `mise lock` only
   # warns when uv < 0.12.10, and the next install then dirties the tracked checkout.
@@ -541,7 +539,7 @@ PYEOF
 # Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
 # plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
-  hdr "bootstrap-config invariants (config.linux/windows.toml)"
+  hdr "bootstrap-config invariants ([bootstrap.*] across config.toml/linux/windows.toml)"
   if [ -z "$PY" ]; then
     note "no python with tomllib — bootstrap-config checks skipped locally (CI enforces)"
   else
@@ -550,9 +548,9 @@ check_bootstrap_config() {
       "$PY" - <<'PY'
 import os, re, tomllib
 
-files = ["config.linux.toml", "config.windows.toml"]
+# config.toml loads on every host, config.linux.toml on Linux, config.windows.toml on Windows.
 loaded = {}
-for f in files:
+for f in ("config.toml", "config.linux.toml", "config.windows.toml"):
     try:
         with open(f, "rb") as fh:
             loaded[f] = tomllib.load(fh)
@@ -560,15 +558,14 @@ for f in files:
     except Exception as e:
         print(f"FAIL|parse|{f} failed to parse: {e}")
 
+
+def boot(f):
+    return loaded.get(f, {}).get("bootstrap", {})
+
+
 # Hooks: `mise run <task>[ ::: <task>]`, each task existing; mise runs a name from every loaded file.
 hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
-toml_tasks = set()
-for cf in ["config.toml", "config.linux.toml", "config.windows.toml"]:
-    try:
-        with open(cf, "rb") as fh:
-            toml_tasks |= set(tomllib.load(fh).get("tasks", {}))
-    except FileNotFoundError:
-        pass
+toml_tasks = {t for d in loaded.values() for t in d.get("tasks", {})}
 # post-dotfiles is the raw chmod line restoring ~/.ssh and ~/.claude modes, pinned to an
 # exact literal: mise runs hooks as `sh -o errexit`, so each command needs its own `|| true`
 # (where ~/.claude doesn't exist yet the first chmod would abort the bootstrap).
@@ -613,47 +610,40 @@ if bad_files:
 else:
     print(f"PASS|files|{n_files} bootstrap.files entry/ies: source exists, phase valid")
 
-dropped = {"dnf:fswatch", "dnf:entr", "dnf:cockpit-networkmanager", "dnf:shellcheck", "dnf:python3"}
-seen_pkg = {}
-bad_pkg = []
-for f in ("config.linux.toml",):
-    for key in loaded.get(f, {}).get("bootstrap", {}).get("packages", {}):
-        if not key.startswith("dnf:"):
-            bad_pkg.append(f"{f}:{key} (missing dnf: prefix)")
-        if key in dropped:
-            bad_pkg.append(f"{f}:{key} (dropped name — not packaged/virtual/renamed on EL8 or EL9)")
-        seen_pkg.setdefault(key, []).append(f)
-pkg_dupes = [f"{k} in {fs}" for k, fs in seen_pkg.items() if len(fs) > 1]
-if bad_pkg or pkg_dupes:
-    print("FAIL|packages|" + "; ".join(bad_pkg + pkg_dupes))
+# dnf installs config.linux.toml's packages in one batch, so a name EL8 or EL9 can't resolve
+# fails the whole run. Names known to be wrong, and why:
+dropped = {
+    "dnf:fswatch": "not packaged for EL",
+    "dnf:entr": "not packaged for EL",
+    "dnf:shellcheck": "the package is ShellCheck",
+    "dnf:cockpit-networkmanager": "a virtual provide: `rpm -q` never sees it installed, so it drifts forever",
+    "dnf:python3": "no package of that name on EL8 (python36 provides it), so it drifts forever; python3-pip brings the interpreter",
+}
+pkgs = boot("config.linux.toml").get("packages", {})
+bad_pkg = [f"config.linux.toml:{k} (missing dnf: prefix)" for k in pkgs if not k.startswith("dnf:")]
+bad_pkg += [f"config.linux.toml:{k} ({dropped[k]})" for k in pkgs if k in dropped]
+if bad_pkg:
+    print("FAIL|packages|" + "; ".join(bad_pkg))
 else:
-    print(f"PASS|packages|{len(seen_pkg)} dnf: package key(s) in config.linux.toml, unique, no dropped names")
+    print(f"PASS|packages|{len(pkgs)} dnf: package key(s) in config.linux.toml, no dropped names")
 
 # winget GUI apps are Windows-only, so they live in config.windows.toml alone; SSHFS-Win
 # stays in bootstrap.ps1 (mise installs silently, and its WinFsp MSI must raise UAC).
 win_hits = []
 n_winget = 0
-for cf in ["config.toml", "config.linux.toml", "config.windows.toml"]:
-    try:
-        with open(cf, "rb") as fh:
-            pkgs = tomllib.load(fh).get("bootstrap", {}).get("packages", {})
-    except FileNotFoundError:
-        continue
-    except Exception as e:
-        win_hits.append(f"{cf} failed to parse: {e}")
-        continue
-    for key, val in pkgs.items():
-        if cf == "config.windows.toml":
+for f, d in loaded.items():
+    for key, val in d.get("bootstrap", {}).get("packages", {}).items():
+        if f == "config.windows.toml":
             if not key.startswith("winget:"):
-                win_hits.append(f"{cf}:{key} (only winget: packages belong here)")
+                win_hits.append(f"{f}:{key} (only winget: packages belong here)")
                 continue
             n_winget += 1
             if key.lower() == "winget:sshfs-win.sshfs-win":
-                win_hits.append(f"{cf}:{key} (SSHFS-Win must raise UAC; it stays in bootstrap.ps1's Install-SshfsWin)")
+                win_hits.append(f"{f}:{key} (SSHFS-Win must raise UAC; it stays in bootstrap.ps1's Install-SshfsWin)")
             if val != "latest":
-                win_hits.append(f"{cf}:{key} = {val!r} (want \"latest\": the apps self-update)")
+                win_hits.append(f"{f}:{key} = {val!r} (want \"latest\": the apps self-update)")
         elif key.startswith("winget:"):
-            win_hits.append(f"{cf}:{key} (winget: packages belong in config.windows.toml)")
+            win_hits.append(f"{f}:{key} (winget: packages belong in config.windows.toml)")
 if win_hits:
     print("FAIL|winget|" + "; ".join(win_hits))
 elif n_winget == 0:
@@ -661,29 +651,35 @@ elif n_winget == 0:
 else:
     print(f"PASS|winget|{n_winget} winget: GUI app(s), all in config.windows.toml, \"latest\", SSHFS-Win not among them")
 
+# System state sits in the OS file that applies it: config.toml loads on both OSes, and
+# /etc files are Linux host state (skipped with `--skip packages,files` without sudo).
+placement = []
+if "bootstrap" in loaded.get("config.toml", {}):
+    placement.append("config.toml has a [bootstrap] table (every host loads it; system state lives in the OS files)")
+if boot("config.windows.toml").get("files"):
+    placement.append("config.windows.toml has [bootstrap.files] (/etc files belong in config.linux.toml)")
+if placement:
+    print("FAIL|placement|" + "; ".join(placement))
+else:
+    print("PASS|placement|config.toml carries no [bootstrap] table; [bootstrap.files] only in config.linux.toml")
+
 # Each OS's mise rewrites the other OS's lock entries for tools with per-platform
 # options (Windows reorders them, Linux drops them), which dirties the checkout and
 # breaks wsu's `git pull --ff-only`. config.toml sets [settings] locked = true for every
 # host (installs read the lock files, never write them; `mise lock` still writes).
 lock_hits = []
-for cf in ["config.toml", "config.linux.toml", "config.windows.toml"]:
-    try:
-        with open(cf, "rb") as fh:
-            settings = tomllib.load(fh).get("settings", {})
-    except FileNotFoundError:
-        continue
-    except Exception as e:
-        lock_hits.append(f"{cf} failed to parse: {e}")
-        continue
-    if cf == "config.toml":
+for f, d in loaded.items():
+    settings = d.get("settings", {})
+    if f == "config.toml":
         if settings.get("locked") is not True:
             lock_hits.append("config.toml must set [settings] locked = true (installs would rewrite the lock files and dirty the checkout)")
     elif "locked" in settings:
-        lock_hits.append(f"{cf} sets [settings] locked (it belongs in config.toml, for every host)")
+        lock_hits.append(f"{f} sets [settings] locked (it belongs in config.toml, for every host)")
 if lock_hits:
     print("FAIL|locked|" + "; ".join(lock_hits))
 else:
     print("PASS|locked|config.toml sets [settings] locked = true; no other config sets it")
+
 ruling_hits = []
 for f, d in loaded.items():
     bs = d.get("bootstrap", {})
@@ -696,21 +692,6 @@ if ruling_hits:
     print("FAIL|rulings|" + "; ".join(ruling_hits))
 else:
     print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (plan/status would need sudo; login_shell needs chsh)")
-
-prod_hits = []
-for f in ("config.toml",):
-    try:
-        with open(f, "rb") as fh:
-            d = tomllib.load(fh)
-    except Exception as e:
-        prod_hits.append(f"{f} failed to parse: {e}")
-        continue
-    if "bootstrap" in d:
-        prod_hits.append(f"{f} has a [bootstrap] table (every host loads it; system state lives in the OS files)")
-if prod_hits:
-    print("FAIL|shared-safety|" + "; ".join(prod_hits))
-else:
-    print("PASS|shared-safety|config.toml carries no [bootstrap] table (both OSes load it; system state lives in the OS files)")
 PY
     )
     while IFS='|' read -r result _ detail; do
@@ -958,18 +939,21 @@ check_completion_parity() {
 
 # One setup for every host: nothing reads a mode, and mise-env.sh emits only the OS token.
 check_no_mode() {
-  hdr "no owned/shared mode (templates, scripts, tasks)"
+  hdr "no owned/shared mode (code, config, dotfiles, docs)"
   local hits tokens
-  # The test fixtures and this file are excluded.
-  hits=$(git grep -n -E 'vars\.mode|valid_mode|prompt_mode|\$\{?MODE\b|mode = "(owned|shared)"' -- 'dotfiles/*.tera' 'dotfiles/**/*.tera' 'scripts/*.sh' 'scripts/lib/*.sh' 'tasks/*' '.claude/hooks/*.sh' ':!scripts/test-*' ':!scripts/check-invariants.sh' || true)
+  # A mode reader, or a reference to the files and token sets the single setup removed.
+  # Test fixtures, this file, memories and the historical plans are excluded.
+  hits=$(git grep -n -E 'vars\.mode|valid_mode|prompt_mode|\$\{?MODE\b|mode = "(owned|shared)"|WORKSTATION_MODE|config\.(owned|host|native|wsl)\.toml|mise\.owned|(linux|windows),owned' -- \
+    bootstrap.sh bootstrap.ps1 'config*.toml' README.md CLAUDE.md docs/claude dotfiles scripts tasks .claude/hooks \
+    ':!scripts/test-*' ':!scripts/check-invariants.sh' || true)
   tokens=$(bash scripts/lib/mise-env.sh 2>/dev/null)
   if [ -n "$hits" ]; then
-    bad "something still reads a mode:"
+    bad "a mode reader or a reference to the removed owned/shared layout:"
     printf '%s\n' "$hits" | sed 's/^/       /'
   elif [ "$tokens" != linux ]; then
     bad "scripts/lib/mise-env.sh emits \"$tokens\" (want linux)"
   else
-    ok "nothing reads a mode; mise-env.sh emits linux"
+    ok "no mode reader or owned/shared-layout reference; mise-env.sh emits linux"
   fi
 }
 
@@ -1018,9 +1002,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self"; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -1228,6 +1212,26 @@ if [ "${1:-}" = --only ]; then
   [ "$fails" -eq 0 ]
   exit
 fi
+# run_parallel <check>...: run the checks concurrently, then print each one's buffered
+# output in this order and add up its failures (each runs in its own subshell).
+run_parallel() {
+  local d c
+  d=$(mktemp -d)
+  for c in "$@"; do
+    (
+      fails=0
+      "$c" >"$d/$c.out" 2>&1
+      echo "$fails" >"$d/$c.n"
+    ) &
+  done
+  wait
+  for c in "$@"; do
+    cat "$d/$c.out"
+    fails=$((fails + $(cat "$d/$c.n")))
+  done
+  rm -rf "$d"
+}
+
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_pins
 check_line_endings_and_mode
@@ -1240,18 +1244,13 @@ check_tools_block
 check_mise_config_files
 check_bootstrap_config
 check_dotfiles_config
-check_lsp_plugin
 check_completion_parity
 check_warp_guards
 check_zellij_config
 check_disk_budget
 check_no_mode
-check_mise_install_lib
-check_bootstrap
-check_self_tests
-check_shellcheck
-check_shfmt
-check_gitleaks
+# The test suites and linters take most of the time and share nothing.
+run_parallel check_lsp_plugin check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
 echo
 if [ "$fails" -eq 0 ]; then
   printf '%s✓ all invariant checks passed%s\n' "$GREEN" "$RESET"

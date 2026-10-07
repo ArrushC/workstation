@@ -16,19 +16,16 @@
 # this checkout's entries symlinked in, dotfiles/ copied (so the
 # post-dotfiles chmod hook can't touch the real source), and a
 # config.local.toml with the name/email the templates read. MISE_CONFIG_DIR and the
-# cwd point there too, the same setup as check-invariants.sh's MISE_ENV
-# render check. The dotfiles TARGET side ("~/...") honors the per-call
+# cwd point there too. The dotfiles TARGET side ("~/...") honors the per-call
 # `HOME=`, which keeps every render off the real $HOME.
 #
-# Design (ONE
-# broken template aborts the WHOLE `mise dot apply`/`mise bootstrap`, and
-# writes nothing at all — so a bulk run alone can never name the culprit):
+# Design (ONE broken template aborts the WHOLE `mise dot apply`/`mise bootstrap`,
+# and writes nothing at all, so a bulk run alone can never name the culprit):
 #   1. For each real MISE_ENV token set (ENVS below), discover which
 #      `mode = "template"` [dotfiles] entries are ACTIVE under that set (a
 #      pure TOML read — config.toml is always active, config.<TOKEN>.toml is
 #      active iff TOKEN is one of the MISE_ENV tokens; mirrors
-#      check-invariants.sh's check_dotfiles_config and the Global
-#      Constraints' file-to-token mapping).
+#      check-invariants.sh's check_dotfiles_config).
 #   2. INDIVIDUALLY apply + syntax-check every active target into one shared
 #      scratch $HOME (one `mise dot apply --force --yes -- <target>` per
 #      target) — a failure here names the exact target and env.
@@ -93,10 +90,10 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# make_home <env> <dir> — a scratch $HOME with its own .config/mise (see the
+# make_home <dir> — a scratch $HOME with its own .config/mise (see the
 # header): this checkout, plus a config.local.toml with name and email.
 make_home() {
-  local env=$1 home=$2 cfg entry base
+  local home=$1 cfg entry base
   cfg="$home/.config/mise"
   mkdir -p "$cfg"
   for entry in "$REPO_ROOT"/*; do
@@ -269,7 +266,7 @@ for env in "${ENVS[@]}"; do
   fi
 
   indiv_home="$WORK/indiv-${env//[,\/]/_}"
-  make_home "$env" "$indiv_home"
+  make_home "$indiv_home"
   env_ok=1
   while IFS= read -r t; do
     [ -n "$t" ] || continue
@@ -284,7 +281,7 @@ for env in "${ENVS[@]}"; do
   fi
 
   bulk_home="$WORK/bulk-${env//[,\/]/_}"
-  make_home "$env" "$bulk_home"
+  make_home "$bulk_home"
   if out=$(in_home "$env" "$bulk_home" mise bootstrap --only dotfiles --force-dotfiles --yes 2>&1); then
     ok "MISE_ENV=$env: mise bootstrap --only dotfiles --force-dotfiles --yes applied cleanly"
     bulk_ok=1
@@ -318,4 +315,4 @@ if ((fails > 0)); then
   printf '   %d failure(s)\n' "$fails"
   exit 1
 fi
-printf '   all rendered templates pass, across all %d MISE_ENV sets\n' "${#ENVS[@]}"
+printf '   all rendered templates pass under every MISE_ENV set (%s)\n' "${ENVS[*]}"

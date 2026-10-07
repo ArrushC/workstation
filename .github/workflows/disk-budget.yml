@@ -4,13 +4,15 @@ name: disk-budget
 # figures to disk-budget.toml on main. The free-space checks read that file:
 # scripts/lib/mise-install.sh on Linux, bootstrap.ps1's Assert-ToolsDiskSpace on
 # Windows. The Linux job also checks every installed binary runs on EL8's glibc 2.28.
-# A pull request that changes this workflow measures and checks without committing.
+# A pull request that changes the toolbelt (config, locks), the glibc check or this
+# workflow measures and checks without committing, so an EL8-incompatible asset fails
+# the PR instead of main.
 on:
   push:
     branches: [main]
     paths: ['config*.toml', 'mise*.lock', 'locks/**', '.github/workflows/disk-budget.yml']
   pull_request:
-    paths: ['.github/workflows/disk-budget.yml']
+    paths: ['config*.toml', 'mise*.lock', 'locks/**', 'scripts/lib/verify-binary.sh', 'tasks/verify-tools', '.github/workflows/disk-budget.yml']
   workflow_dispatch:
 
 permissions:
