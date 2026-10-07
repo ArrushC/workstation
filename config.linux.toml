@@ -109,6 +109,8 @@ herdr = "0.9.3"
 "~/.config/cheat/conf.yml" = { source = "dotfiles/config/cheat/conf.yml.tera", mode = "template" }
 "~/.config/cheat/cheatsheets/personal/workstation" = { source = "dotfiles/config/cheat/cheatsheets/personal/workstation", mode = "copy" }
 "~/.config/tealdeer/config.toml" = { source = "dotfiles/config/tealdeer/config.toml", mode = "copy" }
+# Printed by ~/.zshrc / ~/.bashrc when a top-level shell starts, and by a plain `fastfetch`.
+"~/.config/fastfetch/config.jsonc" = { source = "dotfiles/config/fastfetch/config.jsonc", mode = "copy" }
 # Single Helix source for both OSes: the Windows template
 # (dotfiles/windows/AppData/Roaming/helix/config.toml.tera) read_file()-inlines it.
 # Linux-only here because Windows reads %APPDATA%\helix, not ~/.config/helix.

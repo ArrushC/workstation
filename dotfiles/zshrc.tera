@@ -779,7 +779,8 @@ python-cli() {
 }
 
 # --- Machine-specific overrides ----------------------------------------------
-# Sourced last so they can override anything above
+# Sourced last so they can override anything above (only the fastfetch
+# greeting below runs after them, so the overrides can switch it off)
 {% if vars.project_root is defined %}
 export PROJECT_ROOT="{{ vars.project_root }}"
 {% else %}
@@ -787,3 +788,17 @@ export PROJECT_ROOT="$HOME/projects"
 {% endif %}
 
 [[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
+
+# --- fastfetch on a new top-level shell --------------------------------------
+# A new terminal window/tab or an SSH login prints the system summary from
+# ~/.config/fastfetch/config.jsonc. Skipped where it would be noise: output that
+# isn't a terminal, nested shells (SHLVL > 1: `zsh` inside zsh, `exec zsh`,
+# zellij panes), zellij itself, and Claude Code's shells ($CLAUDECODE). Below 105
+# columns (its widest line with the logo is ~103) the logo is dropped so lines
+# aren't cut off: fastfetch truncates rather than wraps.
+# After the .local file so WORKSTATION_FASTFETCH=0 there turns it off.
+# PARITY: identical body in bashrc.tera.
+if [[ ${WORKSTATION_FASTFETCH:-1} == 1 && -t 1 && ${SHLVL:-1} -le 1 && -z ${ZELLIJ:-} && -z ${CLAUDECODE:-} ]] &&
+  command -v fastfetch &>/dev/null; then
+  if ((${COLUMNS:-80} >= 105)); then fastfetch; else fastfetch --logo none; fi
+fi
