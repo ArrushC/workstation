@@ -192,6 +192,23 @@ conda_deps = [
     "xorg-libxdmcp-1.1.5-h7cc23a3_2",
 ]
 
+[[tools."conda:pueue"]]
+version = "4.0.4"
+backend = "conda:pueue"
+specifiers = ["4.0.4"]
+
+[tools."conda:pueue".options]
+channel = "conda-forge"
+
+[tools."conda:pueue"."platforms.linux-x64"]
+checksum = "sha256:49f3a23fe58450f0a29ec656cd32646192603f17e256feafccbadb01f6501e28"
+url = "https://conda.anaconda.org/conda-forge/linux-64/pueue-4.0.4-hb17b654_0.conda"
+conda_deps = [
+    "libgcc-16.2.0-ha9f2e26_7",
+    "_openmp_mutex-4.5-20_gnu",
+    "libgomp-16.2.0-he0feb66_7",
+]
+
 [[tools.croc]]
 version = "11.5.4"
 backend = "aqua:schollz/croc"
@@ -639,24 +656,6 @@ specifiers = ["2.9.1"]
 [tools."http:ncdu"."platforms.linux-x64"]
 checksum = "blake3:8a33bf4ee11eb471ebe18ee66f77f84b0d1eba4edb95adcd3dd657386af7edb9"
 url = "https://dev.yorhel.nl/download/ncdu-2.9.1-linux-x86_64.tar.gz"
-
-[[tools."http:pueue"]]
-version = "4.0.4"
-backend = "http:pueue"
-specifiers = ["4.0.4"]
-
-[tools."http:pueue"."platforms.linux-x64"]
-checksum = "blake3:4b6e04eb7edb4e58c222b1393722c71db517e06e5f3ff3eef77f3eb06940f764"
-url = "https://github.com/Nukesor/pueue/releases/download/v4.0.4/pueue-x86_64-unknown-linux-musl"
-
-[[tools."http:pueued"]]
-version = "4.0.4"
-backend = "http:pueued"
-specifiers = ["4.0.4"]
-
-[tools."http:pueued"."platforms.linux-x64"]
-checksum = "blake3:63fead7ccbdd423aa237db6ce2d960b0a9dc4b41418c6a15ac958c8c5466714b"
-url = "https://github.com/Nukesor/pueue/releases/download/v4.0.4/pueued-x86_64-unknown-linux-musl"
 
 [[tools."http:ssh-copy-id"]]
 version = "10.5p1"

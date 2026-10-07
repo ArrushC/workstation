@@ -154,9 +154,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `conda:jless` 0.9.0
 - `conda:gitlogue` 0.12.0
 - `conda:htmlq` 0.4.0
+- `conda:pueue` 4.0.4
 - `ncdu` 2.9.1
-- `pueue` 4.0.4
-- `pueued` 4.0.4
 - `nb` 7.25.5
 - `sysz` 1.4.3
 - `ssh-copy-id` 10.5p1
