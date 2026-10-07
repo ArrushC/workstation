@@ -1,5 +1,5 @@
 # config.linux.toml: the Linux toolbelt, Linux-only dotfiles and Linux host state (loads when
-# MISE_ENV has `linux`, i.e. on every Linux host).
+# miserc.toml's token set has `linux`, i.e. on every Linux host).
 # Installed user-level under ~/.local/share/mise; interactive shells get the real bin
 # dirs via `mise activate`, everything else the shims.
 [tools]
@@ -41,7 +41,9 @@ gum = "2.0.2"
 rust-analyzer = "2026-10-05"
 marksman = "2026-02-08"
 taplo = "0.10.0"
+herdr = "0.9.3"
 # --- github: (registry entry absent, or its asset needs a glibc newer than EL8's 2.28) ---
+"github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir
 "github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38
 "github:fastfetch-cli/fastfetch" = { version = "2.69.0", asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz" }   # plain build's loader fails on EL9
 "github:dalance/procs" = { version = "0.14.12", asset_pattern = "procs-v{{version}}-x86_64-linux.zip" }
@@ -127,7 +129,7 @@ taplo = "0.10.0"
 # batpipe + winterop, both executable (git mode 755); .vendor sidecar excluded.
 "~/.local/bin" = { source = "dotfiles/local/bin", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 
-# Linux-only dotfiles (gdb, herdr, zed): dead files on Windows.
+# gdb, herdr and zed (Linux-only).
 "~/.gdbinit" = { source = "dotfiles/gdbinit.tera", mode = "template" }
 "~/.config/gdb" = { source = "dotfiles/config/gdb", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # gef.py, vendored
 "~/.config/herdr/config.toml" = { source = "dotfiles/config/herdr/config.toml", mode = "copy" }
@@ -181,8 +183,10 @@ state = "running"
 
 [bootstrap.packages]
 # ONE `sudo dnf install -y <every missing name>` per run: a single unresolvable name
-# fails the whole batch, so every name is EL9-verified. Do not add fswatch/entr (not
-# packaged for EL9) or cockpit-networkmanager (a virtual provide `rpm -q` never sees).
+# fails the whole batch, so every name is verified on EL8 and EL9. Names that must not
+# come back (check_bootstrap_config rejects them): fswatch/entr (not packaged),
+# shellcheck (the package is ShellCheck), cockpit-networkmanager and python3 (no
+# package of that name, so `rpm -q` never sees it installed and it drifts forever).
 # `make` stays as a C-toolchain dependency.
 # --- core ---
 "dnf:curl" = "latest"
@@ -255,7 +259,6 @@ state = "running"
 # Only WSL's init reads it, so on a non-WSL host it is an inert file. After a change, run
 # `wsl --shutdown` from a Windows terminal (restarts every distro). Keep it LF-only:
 # CRLF corrupts it.
-
 [bootstrap.files."/etc/wsl.conf"]
 source = "configs/wsl/wsl.conf"
 owner = "root"

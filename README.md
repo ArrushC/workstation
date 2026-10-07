@@ -81,7 +81,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Ask your name and email once (saved in `config.local.toml`) and decide the system steps (sudo; see above).
-5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` ([why](#mise-dot-apply--mise-bootstrap-refuses-with-refusing-to-overwrite-existing-files-use---force)).
 6. With sudo: set zsh as the login shell: `sudo usermod -s` for a local account, or, for a directory (AD/LDAP) account served by SSSD, a per-host `sss_override` (installing `sssd-tools`) and an `sssd` restart.
 
 It is idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -100,7 +100,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 `mise run check-updates` runs `mise outdated --bump` for every pinned tool, `dnf check-update` on Linux hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
-**Extras.** At the end of `bootstrap.sh` the bootstrap offers the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) Linux hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.linux.toml`, so they run on Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
+**Extras.** A host's first bootstrap ends by offering the Claude Code status line (ccstatusline), also under `curl | bash`: use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) Linux hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.linux.toml`, so they run on Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
 
 ### Windows
 
@@ -120,7 +120,7 @@ What `bootstrap.ps1` does:
 1. Preflight: require `curl.exe` and git (it never installs Git).
 2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
 3. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it).
-4. Write `miserc.toml` (`windows`), ask once for your git name and email, check that mise loads `config.windows.toml` (it stops otherwise, before anything can prune the Windows tools), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
+4. Write `miserc.toml` (`windows`), ask once for your git name and email, check that mise loads `config.windows.toml` (it stops otherwise: the Windows dotfiles and apps would be skipped silently), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
 5. After a successful tools phase: add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder. `mise bootstrap`'s `post-tools` hook (`config.windows.toml`) runs `mise run nu-init`, which regenerates Nushell's init files (starship, mise, zoxide, atuin) in `%APPDATA%\nushell\vendor\autoload`, so `wsu` refreshes them too. Its `mise.nu` builds on each session's own PATH rather than the PATH `mise activate nu` saw, so Nushell finds what its terminal passes down, as PowerShell does.
 6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
 7. Add Start Menu shortcuts for dnGrep and LogExpert, generate the Warp Tab Configs (local shells plus one per SSH host) and the Windows Terminal SSH fragment, seed dnGrep's settings, and install the PowerShell profile loader when Documents is redirected.
@@ -334,7 +334,7 @@ mise dot status; mise dot diff       # confirm it lands as expected
 bash scripts/check-invariants.sh
 ```
 
-Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while the `dotfiles-migrated` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Commit the config edit and the new source.
+Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply forces over pre-existing files ([why](#mise-dot-apply--mise-bootstrap-refuses-with-refusing-to-overwrite-existing-files-use---force)). Commit the config edit and the new source.
 
 **A dnf package.** One line in `config.linux.toml`. The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
 
@@ -427,7 +427,7 @@ Only mise is checksum-pinned by `bootstrap.ps1` (`$MiseSha256` for `$MiseVersion
 
 ### bootstrap.ps1 stops with "mise did not load config.windows.toml" or "'mise config ls' failed"
 
-Both stop the run before `mise bootstrap` and `mise prune` (a prune without `config.windows.toml` would remove the Windows-only tools). "Did not load config.windows.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there); `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
+Both stop the run before `mise bootstrap` and `mise prune` (continuing would skip the Windows dotfiles and apps). "Did not load config.windows.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there); `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
 
 ### PowerShell aliases / adminpw / ws* don't load (the profile seems ignored)
 
@@ -454,11 +454,11 @@ Example: `mise bootstrap --skip packages --yes` (comma-separate or repeat `--ski
 
 ### mise dot apply / mise bootstrap fails with "Variable … is not defined" — and nothing got applied
 
-One broken template aborts the whole dotfiles apply and writes nothing: a single undefined Tera variable or failing `exec()` in any `template` entry fails the run. mise prints the target, the source file and the error first, then generic boilerplate you can ignore. To find the culprit, apply template entries one at a time, or run the repo check that does this for every `.tera` file under all four `MISE_ENV` sets. Then fix the template (guard with `is defined` or `default(value=...)`) and re-run `wsa`. CI runs `scripts/check-templates.sh` so this is caught before it reaches a host.
+One broken template aborts the whole dotfiles apply and writes nothing: a single undefined Tera variable or failing `exec()` in any `template` entry fails the run. mise prints the target, the source file and the error first, then generic boilerplate you can ignore. To find the culprit, apply template entries one at a time, or run the repo check that does this for every `.tera` file under both `MISE_ENV` sets (`linux`, `windows`). Then fix the template (guard with `is defined` or `default(value=...)`) and re-run `wsa`. CI runs `scripts/check-templates.sh` so this is caught before it reaches a host.
 
 ```bash
 mise dot apply --force --yes -- "<target>"   # one entry at a time, names the failure precisely
-bash scripts/check-templates.sh                    # does exactly this for every .tera file, all four MISE_ENV sets
+bash scripts/check-templates.sh                    # does exactly this for every .tera file, both MISE_ENV sets
 ```
 
 ### mise dot apply / mise bootstrap refuses with "refusing to overwrite existing files (use --force)"
