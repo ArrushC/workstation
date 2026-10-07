@@ -473,6 +473,18 @@ PY
   else
     note "mise not installed — config load check skipped"
   fi
+  # mise reads every task-file line that starts `# MISE` or `# USAGE` (any
+  # spacing, any suffix) as a directive, so a wrapped comment such as
+  # "# MISE_ENV would ..." breaks the task's parse with a WARN on each `mise run`.
+  local stray
+  stray=$(grep -nE '^[[:space:]]*(#|//)[[:space:]]*(MISE|USAGE)' tasks/* 2>/dev/null |
+    grep -vE '^[^:]+:[0-9]+:#(MISE [a-z_]+=|USAGE )' || true)
+  if [ -z "$stray" ]; then
+    ok "tasks/*: every line starting #MISE/#USAGE is a real directive"
+  else
+    bad "tasks/* comment lines mise parses as directives (reword so they don't start with MISE/USAGE):"
+    printf '%s\n' "$stray" | sed 's/^/       /'
+  fi
   # locks/** sidecar layout: a stale .mise/locks/** ref dirties every host's checkout
   # on its next install, which rewrites it to locks/ in place.
   local lock_ok=1 pathref hint

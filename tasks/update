@@ -6,8 +6,8 @@ root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 git -C "$root" pull --ff-only
 
 # miserc.toml from mise-env.sh (the OS token set), then drop any exported
-# MISE_ENV (it would override miserc and could make mise-install.sh's
-# `mise prune` remove tools).
+# variable: an exported MISE_ENV would override miserc and could make
+# mise-install.sh's `mise prune` remove tools.
 tokens="$("$root/scripts/lib/mise-env.sh" --write)"
 unset MISE_ENV
 printf '==> config set %s (miserc.toml)\n' "$tokens"
