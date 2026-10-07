@@ -20,16 +20,15 @@ cheat <topic>             # view a sheet (e.g. cheat tar)
 cheat -e <topic>          # create/edit a personal sheet in $EDITOR
 cheat -s <keyword>        # search across sheets
 cht.sh <lang> <query>     # online answer (e.g. cht.sh python 'reverse a list')
-cht.sh --shell            # interactive cheat.sh REPL (rlwrap on owned hosts)
+cht.sh --shell            # interactive cheat.sh REPL (rlwrap, a dnf package)
 
 # --- provisioning (mise) ---
-./bootstrap.sh                              # asks: owned (sudo, system-wide) or shared (~/.local, no sudo)
-curl ... | WORKSTATION_MODE=shared bash     # unattended first run, no prompt
-# saved in config.local.toml's [vars] mode — edit/delete that line to change it, then re-run
+./bootstrap.sh                              # one setup; system steps need sudo (skipped without)
+# sudo = "no" in config.local.toml's [vars] skips them; get sudo and re-run to apply
 mise bootstrap status      # what mise bootstrap would still change
 mise run health             # tools, host state, services report
-mise run update             # = wsu: git pull, then mise install + mise bootstrap for the saved mode
-mise run check-updates      # mise outdated + dnf check-update (owned) + [vars] pins vs upstream
+mise run update             # = wsu: git pull, then mise install + mise bootstrap (system steps per the saved sudo)
+mise run check-updates      # mise outdated + dnf check-update (where dnf exists) + [vars] pins vs upstream
 mise run python-env         # rebuild the blessed Python venv (on mise python)
 mise run fonts               # install the pinned Nerd Font
 mise run statusline         # (re)configure the Claude Code statusline

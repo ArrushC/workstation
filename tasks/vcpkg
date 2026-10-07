@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="vcpkg C/C++ package manager: shallow clone at the pinned tag into ~/.local/share/vcpkg + ~/.local/bin/vcpkg (owned hosts; config.host.toml's final hook runs it)"
+#MISE description="vcpkg C/C++ package manager: shallow clone at the pinned tag into ~/.local/share/vcpkg + ~/.local/bin/vcpkg (config.linux.toml's final hook runs it)"
 #MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"

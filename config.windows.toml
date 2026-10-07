@@ -1,5 +1,5 @@
 # config.windows.toml: Windows-only dotfiles and GUI apps (MISE_ENV token `windows`; loads
-# alongside config.toml and config.owned.toml).
+# alongside config.toml).
 
 # Every [dotfiles] entry is `copy` (or `template` for .tera sources), never symlink: a file
 # symlink needs Developer Mode and silently falls back to a copy without it, and a
@@ -42,7 +42,7 @@
 "~/AppData/Roaming/Code/User/settings.json" = { source = "dotfiles/windows/AppData/Roaming/Code/User/settings.json", mode = "copy" }
 "~/AppData/Roaming/Code/User/keybindings.json" = { source = "dotfiles/windows/AppData/Roaming/Code/User/keybindings.json", mode = "copy" }
 
-# Zed writes these in place (as with the Linux entry in config.host.toml).
+# Zed writes these in place (as with the Linux entry in config.linux.toml).
 "~/AppData/Roaming/Zed/settings.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/settings.json", mode = "copy" }
 "~/AppData/Roaming/Zed/keymap.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/keymap.json", mode = "copy" }
 

@@ -119,10 +119,10 @@ $savedMiseEnv = $env:MISE_ENV
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("miseenv-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
-    Test-Case 'miserc.toml: windows,owned, no BOM, LF; the User and session MISE_ENV go' {
+    Test-Case 'miserc.toml: windows, no BOM, LF; the User and session MISE_ENV go' {
         $script:RepoPath = Join-Path $tmp 'repo'
         New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
-        $script:MiseEnvTokens = @('windows', 'owned')
+        $script:MiseEnvTokens = @('windows')
         $script:userEnv = @{ MISE_ENV = 'windows,owned'; Path = 'C:\x' }
         $script:userWrites.Clear()
         $env:MISE_ENV = 'windows,owned'
@@ -133,7 +133,7 @@ try {
         $text = Read-Text $rc
         Assert (-not $text.Contains("`r")) 'CR line endings'
         $lines = @($text -split "`n")
-        Assert ($lines -ccontains 'env = ["windows", "owned"]') "no env line: $text"
+        Assert ($lines -ccontains 'env = ["windows"]') "no env line: $text"
         Assert ($lines -ccontains 'auto_env = false') "no auto_env line: $text"
         Assert (@($lines | Where-Object { $_ -and $_ -notmatch '^#' }).Count -eq 2) "unexpected lines: $text"
         Assert (-not (Test-Path Env:MISE_ENV)) "session MISE_ENV still set: $env:MISE_ENV"
@@ -145,11 +145,11 @@ try {
         $script:RepoPath = Join-Path $tmp 'repo2'
         New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
         [System.IO.File]::WriteAllText((Join-Path $script:RepoPath 'miserc.toml'), "env = [`"linux`"]`n")
-        $script:MiseEnvTokens = @('windows', 'owned')
+        $script:MiseEnvTokens = @('windows')
         $script:userEnv = @{ Path = 'C:\x' }
         $script:userWrites.Clear()
         Initialize-MiseEnv
-        Assert ((Read-Text (Join-Path $script:RepoPath 'miserc.toml')).Contains('env = ["windows", "owned"]')) 'old miserc.toml kept'
+        Assert ((Read-Text (Join-Path $script:RepoPath 'miserc.toml')).Contains('env = ["windows"]')) 'old miserc.toml kept'
         Assert ($script:userWrites.Count -eq 0) "User environment written: $($script:userWrites -join ', ')"
     }
 
@@ -316,13 +316,13 @@ try {
     New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
     # A fixed budget (the real disk-budget.toml changes weekly).
     $budgetFile = Join-Path $script:RepoPath 'disk-budget.toml'
-    Set-Content -LiteralPath $budgetFile -Value 'windows-owned = 3000'
-    $script:MiseEnvTokens = @('windows', 'owned')
+    Set-Content -LiteralPath $budgetFile -Value 'windows = 3000'
+    $script:MiseEnvTokens = @('windows')
     $script:SkipDotfiles = $false
     $script:SkipToolInstall = $false
     $script:MigratedMarker = Join-Path $tmp 'ws\dotfiles-migrated'
     $script:MiseShims = Join-Path $tmp 'mise\shims'
-    $ownedLs = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}, {"path": "C:\\Users\\u\\.config\\mise\\config.owned.toml"}]'
+    $winLs = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}, {"path": "C:\\Users\\u\\.config\\mise\\config.windows.toml"}]'
     function Invoke-Bootstrap {
         $script:events.Clear()
         $script:userEnv = @{}
@@ -334,10 +334,10 @@ try {
     }
     function Get-MiseCall([string]$Part) { @($script:events | Where-Object { $_ -like "mise *$Part*" }) }
 
-    Test-Case 'mise bootstrap: stops before bootstrap/prune when config.owned.toml is not loaded' {
+    Test-Case 'mise bootstrap: stops before bootstrap/prune when config.windows.toml is not loaded' {
         $script:miseReply = @{ 'config ls' = @{ Out = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}]'; Exit = 0 } }
         $msg = Invoke-Bootstrap
-        Assert ($msg -like 'WRITE-FAIL:*config.owned.toml*miserc.toml*') "got: $msg"
+        Assert ($msg -like 'WRITE-FAIL:*config.windows.toml*miserc.toml*') "got: $msg"
         Assert ($msg -notlike '*min_version*') "min_version hint for an exit-0 config ls: $msg"
         Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
         Assert (@(Get-MiseCall 'prune').Count -eq 0) 'mise prune ran'
@@ -357,16 +357,16 @@ try {
         Assert (@(Get-MiseCall 'prune').Count -eq 0) 'mise prune ran'
     }
 
-    Test-Case 'mise bootstrap: a failing `mise config ls` stops even when its error names config.owned.toml' {
-        $script:miseReply = @{ 'config ls' = @{ Out = @('mise ERROR failed to parse C:\Users\u\.config\mise\config.owned.toml', 'TOML parse error at line 3, column 1'); Exit = 1 } }
+    Test-Case 'mise bootstrap: a failing `mise config ls` stops even when its error names config.windows.toml' {
+        $script:miseReply = @{ 'config ls' = @{ Out = @('mise ERROR failed to parse C:\Users\u\.config\mise\config.windows.toml', 'TOML parse error at line 3, column 1'); Exit = 1 } }
         $msg = Invoke-Bootstrap
-        Assert ($msg -like 'WRITE-FAIL:*min_version*failed to parse*config.owned.toml*TOML parse error*') "got: $msg"
+        Assert ($msg -like 'WRITE-FAIL:*min_version*failed to parse*config.windows.toml*TOML parse error*') "got: $msg"
         Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
         Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran'
     }
 
     Test-Case 'mise bootstrap: a failed bootstrap keeps the old tools (no cleanup)' {
-        $script:miseReply = @{ 'config ls' = @{ Out = $ownedLs; Exit = 0 }; ' bootstrap ' = @{ Exit = 1 } }
+        $script:miseReply = @{ 'config ls' = @{ Out = $winLs; Exit = 0 }; ' bootstrap ' = @{ Exit = 1 } }
         $msg = Invoke-Bootstrap
         Assert ($msg -like 'WRITE-FAIL:*mise bootstrap*failed*') "got: $msg"
         Assert ($script:events -notcontains 'cleanup') 'legacy cleanup ran after a failed bootstrap'
@@ -374,7 +374,7 @@ try {
 
     Test-Case 'mise bootstrap: cleanup after a good bootstrap; every call pinned with -C; node marker' {
         $script:miseReply = @{
-            'config ls'  = @{ Out = $ownedLs; Exit = 0 }
+            'config ls'  = @{ Out = $winLs; Exit = 0 }
             'where node' = @{ Out = 'C:\node'; Exit = 0 }
             'config get' = @{ Out = 'version = "26.10.0"'; Exit = 0 }
         }
@@ -407,7 +407,7 @@ try {
         Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 0) 'marker written after a failed reinstall'
     }
 
-    $script:miseReply = @{ 'config ls' = @{ Out = $ownedLs; Exit = 0 } }
+    $script:miseReply = @{ 'config ls' = @{ Out = $winLs; Exit = 0 } }
     Test-Case 'disk: too little room stops before mise bootstrap installs anything' {
         $script:freeMB = 1024; $script:usedMB = 0
         $msg = Invoke-Bootstrap
@@ -439,12 +439,12 @@ try {
         Assert ($msg -eq '') "-SkipToolInstall ran the check: $msg"
     }
 
-    Test-Case 'disk: no windows-owned figure in disk-budget.toml skips the check, with a warning' {
-        Set-Content -LiteralPath $budgetFile -Value 'linux-owned = 5000'
+    Test-Case 'disk: no windows figure in disk-budget.toml skips the check, with a warning' {
+        Set-Content -LiteralPath $budgetFile -Value 'linux = 5000'
         $script:freeMB = 1024
-        try { $msg = Invoke-Bootstrap } finally { Set-Content -LiteralPath $budgetFile -Value 'windows-owned = 3000'; $script:freeMB = 102400 }
+        try { $msg = Invoke-Bootstrap } finally { Set-Content -LiteralPath $budgetFile -Value 'windows = 3000'; $script:freeMB = 102400 }
         Assert ($msg -eq '') "a missing budget stopped the bootstrap: $msg"
-        Assert (($script:warnings -join ' ') -like '*disk check skipped: no windows-owned figure*') "warnings: $($script:warnings -join ' | ')"
+        Assert (($script:warnings -join ' ') -like '*disk check skipped: no windows figure*') "warnings: $($script:warnings -join ' | ')"
         Assert (@(Get-MiseCall 'bootstrap --only').Count -ge 1) 'mise bootstrap did not run'
     }
 

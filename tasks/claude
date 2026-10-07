@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Owned Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin (config.host.toml's final hook runs it)"
+#MISE description="Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin (config.linux.toml's final hook runs it)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"

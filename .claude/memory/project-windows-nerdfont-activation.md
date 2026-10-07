@@ -10,7 +10,7 @@ If a Windows DirectWrite app (Windows Terminal, Zed, VS Code) reports
 distinct things can be wrong — check BOTH:
 
 1. **Wrong family name.** The pinned JetBrainsMono Nerd Font (mise's
-   `github:ryanoasis/nerd-fonts` in `config.owned.toml`,
+   `github:ryanoasis/nerd-fonts` in `config.toml`,
    `JetBrainsMonoNerdFontMono-*.ttf`) exposes its **Win32 family name (the one
    WT/GDI/DirectWrite match) as `JetBrainsMono NFM`** (+ `JetBrainsMono NFM
    Medium`). `JetBrainsMono Nerd Font Mono` is only the *typographic* family

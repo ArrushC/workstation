@@ -132,8 +132,8 @@ run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/zshrc.tera" '{tool_nam
 ok "zshrc -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "config.toml -> silent (sync-tool-memory covers config edits)" empty
-run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.owned.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
-ok "config.owned.toml -> silent" empty
+run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/config.linux.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "config.linux.toml -> silent" empty
 run "$RH/parity-reminder.sh" "$(j --arg f 'C:\Users\u\.config\mise\dotfiles\zshrc.tera' '{tool_name:"Edit",tool_input:{file_path:$f}}')"
 ok "backslash path -> bashrc reminder" has 'bashrc'
 run "$RH/parity-reminder.sh" "$(j --arg f "$ROOT/dotfiles/windows/AppData/Roaming/nushell/config.nu.tera" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
@@ -216,8 +216,7 @@ ok "dotfiles-tree config.toml (helix) -> silent, not mise config" empty
 WT="$(mktemp -d)"
 mkdir -p "$WT/scripts" "$WT/dotfiles/claude"
 cp "$ROOT/scripts/gen-tool-memory.sh" "$WT/scripts/"
-cp "$ROOT/config.toml" "$ROOT/config.linux.toml" "$ROOT/config.owned.toml" \
-  "$ROOT/config.host.toml" "$ROOT/config.native.toml" "$WT/"
+cp "$ROOT/config.toml" "$ROOT/config.linux.toml" "$ROOT/config.windows.toml" "$WT/"
 printf 'x\n<!-- TOOLS:START -->\nstale\n<!-- TOOLS:END -->\n' >"$WT/dotfiles/claude/CLAUDE.md"
 OUT="$(printf '%s' "$(j --arg f "$WT/config.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')" | CLAUDE_PROJECT_DIR="$ROOT" bash "$RH/sync-tool-memory.sh" 2>/dev/null)"
 ok "worktree edit -> commit nudge" has 'commit'
@@ -236,17 +235,17 @@ ok "is one JSON object (single line)" oneline
 run_env "$RH/session-context.sh" 'not json at all'
 ok "malformed input -> fail-open silent" empty
 SC="$(mktemp -d)"
-printf 'env = ["linux", "owned", "host", "wsl"]\nauto_env = false\n' >"$SC/miserc.toml"
+printf 'env = ["linux"]\nauto_env = false\n' >"$SC/miserc.toml"
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-ok "owned miserc -> mode=owned" has 'mode=owned'
-ok "reports the miserc tokens" has 'env=linux,owned,host,wsl'
+ok "reports the miserc tokens" has 'env=linux'
+ok "no mode in the report" lacks 'mode='
 ok "no exported MISE_ENV -> no warning" lacks 'overrides miserc'
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')" MISE_ENV=linux
 ok "exported MISE_ENV -> warned" has 'MISE_ENV=linux (exported; overrides miserc)'
-printf 'env = ["linux"]\n' >"$SC/miserc.toml"
+printf '[vars]\nsudo = "no"\n' >"$SC/config.local.toml"
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
-ok "linux-only miserc -> mode=shared" has 'mode=shared'
-rm -f "$SC/miserc.toml"
+ok "sudo = no -> reported" has 'sudo=no'
+rm -f "$SC/config.local.toml" "$SC/miserc.toml"
 run_env "$RH/session-context.sh" "$(j --arg c "$SC" '{hook_event_name:"SessionStart",source:"startup",cwd:$c}')"
 ok "no miserc -> miserc=missing" has 'miserc=missing'
 rm -rf "$SC"

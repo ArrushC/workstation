@@ -36,7 +36,7 @@ changelogs — only running the binary / running the real install reveals them.
 
 **How to apply (post Make→mise, 2026-09):** the file names above (`versions.mk`,
 `packages.mk`, `tools.mk`, eget) are history — pins now live in
-`config.linux.toml`/`config.owned.toml`, dnf packages in `config.host.toml`, and a
+`config.toml`/`config.linux.toml`, dnf packages in `config.linux.toml`, and a
 `github:` tool's asset choice is an explicit `asset_pattern`. The lesson is unchanged.
 - Sandbox install (sudo-free, live tools untouched): the `MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox … mise install && … tasks/verify-tools` recipe in `docs/claude/verification.md` (set `GITHUB_TOKEN` for the API rate limit). `tasks/verify-tools` checks ELF arch, loader and glibc floor via `ldd`, so a libatomic-class missing shared lib now fails the gate — but still EXECUTE the bumped binary (`--version`), since ldd can't see everything.
 - Asset ambiguity on a `github:`-backend major bump: run the real sandbox `mise install` for that tool; when pinning an `asset_pattern`, prefer the build already installed (glibc vs musl) so a bump doesn't smuggle in a behaviour change.

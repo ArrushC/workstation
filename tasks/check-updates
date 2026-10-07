@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-#MISE description="Report available updates: mise tool pins, dnf (owned Linux hosts), and the config.toml [vars] pins vs upstream tags"
+#MISE description="Report available updates: mise tool pins, dnf (Linux hosts with dnf), and the config.toml [vars] pins vs upstream tags"
 #MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -uo pipefail
 
 printf '==> mise tools\n'
 mise outdated --bump || true
 
-case ",${MISE_ENV:-}," in
-*,host,*)
+if command -v dnf >/dev/null 2>&1; then
   printf '\n==> dnf\n'
   dnf -q check-update | head -40 || true # exit 100 means updates exist; never fail
-  ;;
-esac
+fi
 
 # report <name> <pinned> <github owner/repo> <tag prefix>: the newest clean
 # numeric tag upstream vs the pin (git ls-remote: no API, no rate limit).

@@ -3,9 +3,8 @@
 //
 // Opt-in: `zellij -l ops`, or `zs <session> ops`.
 //
-// Built only from BOTH-MODES tools (btop and lazyjournal both live in
-// config.linux.toml, not the owned-only config.owned.toml), so this works on a
-// shared host — which is where you actually want it.
+// Built only from tools in config.linux.toml (btop and lazyjournal), so this
+// works on every Linux host.
 //
 // If lazyjournal lacks journal permissions on a given host it errors inside its
 // pane and the pane stays; that's a degraded pane, not a broken layout.

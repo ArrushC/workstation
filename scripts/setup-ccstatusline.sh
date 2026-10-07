@@ -2,9 +2,9 @@
 # setup-ccstatusline.sh — interactive setup of the Claude Code statusline
 # via ccstatusline. Four options: use tracked / this machine / set global /
 # skip. Invoked by `mise run statusline` and at the tail of bootstrap.sh on
-# an owned host.
+# any Linux host.
 #
-# The widget config is a mise [dotfiles] entry (config.owned.toml,
+# The widget config is a mise [dotfiles] entry (config.toml,
 # `~/.config/ccstatusline/settings.json`, mode = "copy", like every
 # `[dotfiles]` entry) — the live file is an independent COPY of
 # dotfiles/config/ccstatusline/settings.json, not a symlink into the
@@ -24,7 +24,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WIDGET_SOURCE="dotfiles/config/ccstatusline/settings.json"
 WIDGET_TRACKED_SRC="$REPO_ROOT/$WIDGET_SOURCE"
 WIDGET_DEST="$HOME/.config/ccstatusline/settings.json"
-# Deliberately literal ~ — this is the [dotfiles] TARGET key (config.owned.toml
+# Deliberately literal ~ — this is the [dotfiles] TARGET key (config.toml
 # / config.local.toml) and the string `mise dot apply`/`mise dot add` expect
 # on the command line, not a path for the shell to expand.
 # shellcheck disable=SC2088
@@ -54,7 +54,7 @@ SENTINEL_END='# CCSTATUSLINE-OPTOUT:END'
 
 preflight() {
   if ! command -v ccstatusline >/dev/null 2>&1; then
-    printf '%bccstatusline not found%b — %bmise install npm:ccstatusline%b installs it (npm:ccstatusline in config.owned.toml)\n' "$YELLOW" "$RESET" "$YELLOW" "$RESET"
+    printf '%bccstatusline not found%b — %bmise install npm:ccstatusline%b installs it (npm:ccstatusline in config.toml)\n' "$YELLOW" "$RESET" "$YELLOW" "$RESET"
     exit 0
   fi
   # WSL trap: if `ccstatusline` resolves to a Windows-side install (PATH
@@ -225,9 +225,9 @@ option_set_global() {
   # every other key on every save. The statusLine command mise enforces
   # there is edited directly in dotfiles/claude/settings.enforced.json (see
   # scripts/lib/claude-settings-merge.sh); the pin is `npm:ccstatusline` in
-  # config.owned.toml.
+  # config.toml.
   # Remove the opt-out BEFORE `mise dot add`: while it's still active,
-  # config.local.toml's disabled entry (not config.owned.toml's real one) is
+  # config.local.toml's disabled entry (not config.toml's real one) is
   # what mise sees for this target, so `mise dot add` doesn't recognize it
   # as already-managed and seeds a brand new entry instead (verified in a
   # scratch config) — remove it first so `add` updates the real source.

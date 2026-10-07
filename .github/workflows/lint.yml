@@ -115,7 +115,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh
       # nushell here is a CI-ONLY syntax checker for config.nu.tera — NOT a
       # Linux fleet tool, deliberately NOT an enforced dual-edit with the
-      # Windows-only nushell pin in config.owned.toml (drift is harmless; this
+      # Windows-only nushell pin in config.toml (drift is harmless; this
       # only parses). Bump ad-hoc when the check needs newer syntax.
       - name: Install nushell (pinned, CI-only)
         run: |

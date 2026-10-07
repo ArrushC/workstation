@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
-#MISE description="git pull --ff-only, then mise install + mise bootstrap for this host's saved mode"
+#MISE description="git pull --ff-only, then mise install + mise bootstrap (system steps skipped where this host has no sudo)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 git -C "$root" pull --ff-only
 
-# The config set comes from the saved mode, not the calling shell. Rewrite
-# miserc.toml from it, then drop any exported MISE_ENV (it would override
-# miserc and could make mise-install.sh's `mise prune` remove tools).
-cfg="$root/config.local.toml"
-mode=$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; config_get "$2" mode' _ "$root/bootstrap.sh" "$cfg")
-case "$mode" in
-owned | shared) ;;
-*)
-  printf ' ✗ no valid mode in %s%s — run %s/bootstrap.sh (it asks) or set mode = "owned" or "shared" under [vars]\n' \
-    "$cfg" "${mode:+ (found \"$mode\")}" "$root" >&2
-  exit 1
-  ;;
-esac
-tokens="$("$root/scripts/lib/mise-env.sh" "$mode" --write)"
+# miserc.toml from mise-env.sh (the OS token set), then drop any exported
+# MISE_ENV (it would override miserc and could make mise-install.sh's
+# `mise prune` remove tools).
+tokens="$("$root/scripts/lib/mise-env.sh" --write)"
 unset MISE_ENV
-printf '==> mode: %s — config set %s (miserc.toml)\n' "$mode" "$tokens"
+printf '==> config set %s (miserc.toml)\n' "$tokens"
+
+cfg="$root/config.local.toml"
+lib() { WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; shift; "$@"' _ "$root/bootstrap.sh" "$@"; }
+# One-time tidy-up of the two-mode era's `mode` line.
+if [ -n "$(lib config_get "$cfg" mode)" ]; then
+  lib config_unset "$cfg" mode
+  printf ' ✓ dropped the old mode line from config.local.toml\n'
+fi
+skip=()
+if [ "$(lib sudo_state "$cfg")" = no ]; then
+  skip=(--skip "packages,files")
+  printf ' ! sudo = "no" in config.local.toml: skipping the system steps (dnf, /etc files); re-run %s/bootstrap.sh with sudo to apply them\n' "$root"
+fi
 
 "$root/scripts/lib/mise-install.sh"
-mise bootstrap --yes
+mise bootstrap --yes "${skip[@]}"

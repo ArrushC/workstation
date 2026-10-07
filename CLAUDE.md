@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-`workstation` provisions Linux hosts (owned or shared) and one Windows host with mise: tools
+`workstation` provisions Linux hosts and one Windows host with mise: tools
 (`[tools]`), host state (`[bootstrap.*]`, applied by `mise bootstrap`), and dotfiles (`[dotfiles]`,
 `mise dot`). This checkout **is** mise's global config dir: `~/.config/mise`, or
 `%USERPROFILE%\.config\mise` on Windows. User docs: `README.md`. Verification recipes:
@@ -28,21 +28,16 @@
 
 ## Layout
 
-| File | Loads when the token set has | Holds |
+| File | Loads on | Holds |
 |---|---|---|
-| `config.toml` | always | both-OS tools (uv, python, the CLI toolbelt) and dotfiles; `[vars]` |
-| `config.linux.toml` | `linux` | Linux toolbelt (both modes), Linux dotfiles, `post-tools`/`post-dotfiles` hooks, the pueued service |
-| `config.owned.toml` | `owned` | owned-host tools on both OSes (node, LSP servers, go, ccstatusline), Windows-only nushell/carapace/dnGrep/LogExpert, `~/.claude` dotfiles |
-| `config.host.toml` | `host` | Linux owned host state (WSL or not): dnf batch, `/etc/wsl.conf`, EPEL/CRB `pre-packages` hook, `final` hook (vcpkg, claude, fonts); `statusline`/`enable-el-repos` tasks; gdb, herdr, zed dotfiles |
-| `config.windows.toml` | `windows` | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
-| `config.local.toml` | always, git-ignored | per-host `[vars] mode/name/email` and overrides |
+| `config.toml` | every host | both-OS tools (uv, python, the CLI toolbelt, node, go, LSP servers, ccstatusline; Windows-only nushell/carapace/dnGrep/LogExpert carry `os = ["windows"]`), `~/.claude` dotfiles, `[vars]` |
+| `config.linux.toml` | Linux | Linux toolbelt, dnf batch, `/etc/wsl.conf`, EPEL/CRB `pre-packages` hook, `post-packages`/`post-tools`/`post-dotfiles` hooks, `final` hook (vcpkg, claude, fonts), `statusline`/`enable-el-repos` tasks, Linux dotfiles (gdb, herdr, zed), the pueued service |
+| `config.windows.toml` | Windows | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
+| `config.local.toml` | every host, git-ignored | per-host `[vars] name/email/sudo` and overrides |
 
-Token sets come only from `scripts/lib/mise-env.sh`:
-- shared: `linux`
-- owned (WSL or not): `linux,owned,host`
-- Windows: `windows,owned`
+Token sets: Linux `linux`, Windows `windows` (from `scripts/lib/mise-env.sh` and `bootstrap.ps1`).
 
-Locks: `mise.lock`, `mise.linux.lock`, `mise.owned.lock`, plus `locks/**` sidecars. Tasks: files in `tasks/` carry logic; one-line wrappers are `[tasks]` in `config.toml`.
+Locks: `mise.lock`, `mise.linux.lock`, plus `locks/**` sidecars. Tasks: files in `tasks/` carry logic; one-line wrappers are `[tasks]` in `config.toml`.
 mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirect them.
 
 ## Invariants
@@ -51,15 +46,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `bootstrap.sh` is a thin seed; its only pin is `MISE_VERSION`/`MISE_SHA256`. Tools are mise pins,
   host state is `[bootstrap.*]` tables, procedural steps are tasks in `tasks/`. Don't add install
   logic to `bootstrap.sh` or new provisioning scripts.
-- Shared hosts load no host state. Every sudo-needing table lives in `config.host.toml`, which
-  declares no `[tools]`. A WSL-only step checks `is_wsl` at run time (no WSL token).
+- Sudo-needing tables (dnf, `[bootstrap.files]`) live only in `config.linux.toml`; without sudo
+  they're skipped with `--skip packages,files` (`vars.sudo`, decided by `bootstrap.sh`). A WSL-only
+  step checks `is_wsl` at run time.
 - `[bootstrap.*]` and `[dotfiles]` tables merge by union across loaded files. Declare each item once,
   in the file whose token gates it.
 - Hooks are `mise run <task>` (or `mise run a ::: b`): mise treats hook strings as opaque shell.
   A hook name declared in several loaded files runs every one. The one exception is
   the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
-- Owned-only steps hang off `config.host.toml`'s `final` hook (vcpkg, claude, fonts). `final` runs
+- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts). `final` runs
   only on a full `mise bootstrap`, never on `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
   and EL9; one some releases lack goes in `tasks/optional-packages`. `ShellCheck` is capitalised;
@@ -80,13 +76,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `/dev/tty` reads in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
 - WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks source it (`WORKSTATION_BOOTSTRAP_LIB=1`).
 
-**Mode and `MISE_ENV`**
-- The mode is `owned` or `shared`, saved as `vars.mode` in `config.local.toml`. It comes from the
-  saved value, then `WORKSTATION_MODE`, then a prompt. Windows is always owned.
-- `scripts/lib/mise-env.sh <mode> --write` writes the git-ignored `miserc.toml` (`env = [...]`,
-  `auto_env = false`) from the saved mode. Every mise process reads it, shims under systemd
-  included; nothing exports `MISE_ENV`. An exported value overrides it, so `bootstrap.sh`,
-  `bootstrap.ps1` and `tasks/update` unset it, while CI and `check-templates.sh` may pin one.
+**`MISE_ENV` and sudo**
+- One setup for every host; no mode. `scripts/lib/mise-env.sh --write` writes the git-ignored
+  `miserc.toml` (`env = ["linux"]`); `bootstrap.ps1` writes `["windows"]`. Every mise process reads it;
+  nothing exports `MISE_ENV` (`bootstrap.sh`, `bootstrap.ps1` and `tasks/update` unset it; CI and
+  `check-templates.sh` may pin one). `check_no_mode` keeps a mode from coming back.
+- `vars.sudo` (`config.local.toml`) is written only by `bootstrap.sh`; missing means yes.
 - Every `ws*` command and `bootstrap.ps1` pin `mise -C` to the home directory. mise finds its config by walking up from
   the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
   `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).
@@ -127,7 +122,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **Windows**
 - Never render Windows targets with Linux mise (`os()` is its OS).
 - `bootstrap.ps1` pins only mise; CLI tools are mise tools, GUI apps winget
-  `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.owned.toml` loads.
+  `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.windows.toml` loads.
 - Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); `nu-init` (post-tools) writes vendor/autoload.
 - `scripts/test-*.ps1` test Windows (CI `windows-http`, 5.1+pwsh).
 - Scripts never write WT's tracked `settings.json`: SSH launchers → a WT fragment;
@@ -190,7 +185,7 @@ Repo hooks (`.claude/settings.json`) source `lib.sh` (JSON in/out; fail open). `
 - `parity-reminder.sh` names the other half of zshrc/bashrc or the Nushell/PowerShell profiles.
 - `memory-routing-guard.sh` denies home-dir memory writes.
 - `sync-tool-memory.sh` regenerates the TOOLS block after a `config*.toml` edit.
-- `session-context.sh` (SessionStart) reports dotfiles drift, host, mode and miserc tokens (and an exported `MISE_ENV`), WSL interop, tools.
+- `session-context.sh` (SessionStart) reports dotfiles drift, host, miserc tokens (and `sudo=no` where saved; an exported `MISE_ENV`), WSL interop, tools.
 - `session-end-notify.sh` (SessionEnd) notifies when the repo or dotfiles are dirty.
 
 Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enforced.json`):

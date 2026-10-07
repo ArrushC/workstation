@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # gen-tool-memory.sh — regenerate the <!-- TOOLS:START/END --> inventory block
 # in the machine-level Claude memory file from mise's single sources of truth:
-# config.toml / config.linux.toml / config.owned.toml [tools] tables, the host
+# config.toml / config.linux.toml [tools] tables, the host
 # pins in config.toml [vars] (+ the claude-cli rolling `latest` pin, hard-
 # coded — it has no [vars] entry), and the dnf package keys in
-# config.host.toml.
+# config.linux.toml.
 #
 # Run by .claude/hooks/sync-tool-memory.sh on config*.toml edits, and by
 # scripts/check-invariants.sh (drift check) against a temp MEMFILE.
@@ -65,9 +65,8 @@ def fmt_version(spec):
 
 
 sections = [
-    ("Cross-platform tools (config.toml)", "config.toml"),
-    ("Linux toolbelt, both modes (config.linux.toml)", "config.linux.toml"),
-    ("Owned-host tools (config.owned.toml)", "config.owned.toml"),
+    ("Cross-platform tools (config.toml; Windows-only and Linux-only entries carry os)", "config.toml"),
+    ("Linux toolbelt (config.linux.toml)", "config.linux.toml"),
 ]
 
 for title, fname in sections:
@@ -103,10 +102,10 @@ print("\n### Host pins (config.toml [vars])")
 for name, val in pins:
     print(f"- `{name}` {val}")
 
-# 5. dnf package keys — config.host.toml (owned Linux hosts), the `dnf:` prefix
+# 5. dnf package keys — config.linux.toml, the `dnf:` prefix
 # stripped, sorted.
 pkg_sections = [
-    ("System packages (dnf, owned hosts)", "config.host.toml"),
+    ("System packages (dnf, Linux; skipped without sudo)", "config.linux.toml"),
 ]
 for title, fname in pkg_sections:
     with open(f"{root}/{fname}", "rb") as fh:

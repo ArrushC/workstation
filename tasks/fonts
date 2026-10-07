@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="JetBrainsMono Nerd Font Mono into ~/.local/share/fonts from the mise font tool (owned hosts' final hook; skipped under WSL)"
+#MISE description="JetBrainsMono Nerd Font Mono into ~/.local/share/fonts from the mise font tool (the final hook; skipped under WSL)"
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Under WSL the Windows terminal resolves fonts, so there is nothing to do. is_wsl is

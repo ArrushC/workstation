@@ -10,9 +10,9 @@
 # config references. User-level; never sudo. Used directly by bootstrap.sh's
 # apply(), ahead of `mise bootstrap` itself.
 #
-# The declaration is read with an explicit `-f config.owned.toml`: a bare
+# The declaration is read with an explicit `-f config.toml`: a bare
 # `mise config get tools.node` reads only the HIGHEST-PRECEDENCE loaded file,
-# which since PR2 is config.host.toml (it declares no tools),
+# which is config.linux.toml (it declares no node),
 # so it errors and the cksum would silently be the empty-input constant —
 # freezing the marker and disabling the re-run mechanism entirely. An
 # unreadable declaration force-reinstalls instead of assuming "unchanged":
@@ -25,20 +25,18 @@ export MISE_YES=1
 
 # Room for the tools before installing any: a disk that fills mid-install leaves
 # tools half-extracted that mise still counts as installed (a go without its std
-# sources). The budget is what a fresh install writes for this host type, as
+# sources). The budget is what a fresh install writes on Linux, as
 # measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what
 # is already installed, plus 1 GB for the new versions an update installs before
 # `mise prune` drops the old ones. WORKSTATION_SKIP_DISK_CHECK=1 goes ahead
 # anyway; a missing budget or an unreadable df skips the check.
 gb() { awk -v mb="$1" 'BEGIN { printf "%.1f GB", mb / 1024 }'; }
 check_disk() {
-  local data tokens key budget used=0 kb need probe have
+  local data budget used=0 kb need probe have
   data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
-  tokens="${MISE_ENV:-$(sed -n 's/^env *= *\[\(.*\)\]/\1/p' "${XDG_CONFIG_HOME:-$HOME/.config}/mise/miserc.toml" 2>/dev/null || true)}"
-  case "$tokens" in *owned*) key=linux-owned ;; *) key=linux-shared ;; esac
-  budget="$(tr -d '\r' <"$repo/disk-budget.toml" 2>/dev/null | sed -n "s/^$key *= *\([0-9][0-9]*\) *\$/\1/p" || true)"
+  budget="$(tr -d '\r' <"$repo/disk-budget.toml" 2>/dev/null | sed -n 's/^linux *= *\([0-9][0-9]*\) *$/\1/p' || true)"
   if [ -z "$budget" ]; then
-    printf '  ! disk check skipped: no %s figure in %s\n' "$key" "$repo/disk-budget.toml" >&2
+    printf '  ! disk check skipped: no linux figure in %s\n' "$repo/disk-budget.toml" >&2
     return 0
   fi
   if [ -d "$data/installs" ]; then
@@ -72,10 +70,10 @@ if mise where node >/dev/null 2>&1; then had_node=true; fi
 mise install
 
 if mise where node >/dev/null 2>&1; then
-  decl="$(mise config get -f "$repo/config.owned.toml" tools.node 2>/dev/null || true)"
+  decl="$(mise config get -f "$repo/config.toml" tools.node 2>/dev/null || true)"
   if [ -z "$decl" ]; then
     printf '  ! could not read tools.node from %s — forcing the node reinstall so the npm postinstall cannot be silently skipped\n' \
-      "$repo/config.owned.toml" >&2
+      "$repo/config.toml" >&2
     sum=""
   else
     sum="$(printf '%s' "$decl" | cksum | cut -d' ' -f1)"

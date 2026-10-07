@@ -8,16 +8,16 @@
 
 - `MISE_ENV=<set> mise bootstrap plan --json | jq .summary` gives create/update/remove/unchanged
   counts (0/0/0/N on a stable host). `mise bootstrap status --missing` lists only rows needing
-  attention. Sets: `linux` (shared), `linux,owned,host` (owned, WSL or not). Safe unprivileged
+  attention. Sets: `linux` and `windows`. Safe unprivileged
   because there is no firewall table. Both refuse a dotfiles conflict like a real apply unless
   `--force-dotfiles` is passed.
-- `mise run health` is the full report (saved mode, `miserc.toml`, pueued, python-env,
+- `mise run health` is the full report (config set and system steps, `miserc.toml`, pueued, python-env,
   dotfiles drift, dirty checkout); exit 1 on a hard failure. `mise tasks validate`
   catches malformed `#MISE` headers; `mise ls --missing` should be empty.
 - Sandbox install plus capability gate (no sudo):
   ```
   MISE_CONFIG_DIR=$PWD MISE_DATA_DIR=/tmp/mise-sandbox MISE_STATE_DIR=/tmp/mise-sandbox-state \
-    MISE_CACHE_DIR=/tmp/mise-sandbox-cache MISE_ENV=linux,owned,host mise install \
+    MISE_CACHE_DIR=/tmp/mise-sandbox-cache MISE_ENV=linux mise install \
     && MISE_DATA_DIR=/tmp/mise-sandbox tasks/verify-tools
   ```
   Expect `✓ verify-tools: N ELF binaries pass`. A failure means that tool needs an explicit
@@ -29,8 +29,8 @@
 - Locks: never hand-edit. Regenerate from outside the checkout for the changed tools, then fold any
   `.mise/locks/` into `locks/` as `normalize_lock_sidecars` in `scripts/bump-versions.sh` does:
   `L=$(mktemp -d); ln -s ~/.config/mise "$L/mise"`, then
-  `(cd /tmp && env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$L" MISE_ENV=linux,owned,host mise lock --global --platform linux-x64 <tools>)`
-  and the same with `MISE_ENV=windows,owned … --platform windows-x64` for tools that install on Windows.
+  `(cd /tmp && env -u MISE_CONFIG_DIR XDG_CONFIG_HOME="$L" MISE_ENV=linux mise lock --global --platform linux-x64 <tools>)`
+  and the same with `MISE_ENV=windows … --platform windows-x64` for tools that install on Windows.
   `check-invariants.sh` verifies coverage.
 - pueued: `systemctl --user cat dev.mise.pueued.service` has no `Environment=MISE_ENV=` line;
   `~/.config/mise/miserc.toml` has the right `env = [...]`; `systemctl --user is-active dev.mise.pueued`
@@ -38,8 +38,8 @@
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
   A second run prints "up to date"; `mise run python-env --rebuild` forces an upgrade. The env is built on
   `mise where python`. Windows' `Invoke-PythonEnv` reads the same `scripts/python-env.txt` (`scripts/test-python-fonts.ps1`).
-- Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on Linux owned hosts, 0 on
-  WSL and shared hosts. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
+- Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on native Linux hosts, 0 on
+  WSL. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
   `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.
 - Misc after `wsa`: `tldr tar | head -1` prints a page (tealdeer cache seeded); `man ls | head` is
   bat-coloured; `ssh -G <host> | grep -iE 'serveralive|tcpkeepalive|connecttimeout'` shows 30/3/yes/10.
@@ -59,8 +59,8 @@
   file (the single-entry form of `--force-dotfiles`). mise falls back to the account home's
   `~/.config/mise` when the scratch `HOME` has none, so from a worktree it silently renders the wrong
   checkout; `scripts/check-templates.sh` (`make_home`/`in_home`) shows the working pattern, or just
-  run it. It renders every template individually for all four token sets, syntax-checks, then
-  bulk-applies; clean output ends `all rendered templates pass, across all four MISE_ENV sets`.
+  run it. It renders every template individually for both token sets, syntax-checks, then
+  bulk-applies; clean output ends `all rendered templates pass, across both MISE_ENV sets`.
 ## Windows (`bootstrap.ps1`)
 
 - Parse check under 5.1, the floor (no ternary, `??` or `&&`): copy the file to `%TEMP%\bs.ps1`, then
@@ -77,7 +77,7 @@
   | `test-curl.ps1` | `Invoke-CurlRequest` |
   | `test-config-local.ps1` | `Set-ConfigLocalVar`, `Invoke-EnsureConfigLocal` |
   | `test-ssh-launchers.ps1` | SSH host parsing, the WT fragment, the Warp Tab Configs |
-  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); legacy cleanup; the `config.owned.toml` guard; `-C` pinning; the node marker |
+  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); legacy cleanup; the `config.windows.toml` guard; `-C` pinning; the node marker |
   | `test-winget-apps.ps1` | `Install-WingetApps` (`mise bootstrap --only packages`, pinned `-C`) and `Install-SshfsWin` (presence by `winget list`, no `--silent`, the UAC warning, `-SkipElevated`, exit codes) |
   | `test-python-fonts.ps1` | `Invoke-PythonEnv`, `Invoke-InstallNerdFonts`, and `install-nerd-fonts.ps1` on fake TTFs |
 - From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `scripts/python-env.txt` under
@@ -89,7 +89,7 @@
   WSLENV=PSModulePath/w powershell.exe ...`): the inherited pwsh 7 path makes 5.1 report
   "Get-FileHash is not recognized" (a false failure; CI is unaffected).
 - Live checks (the user runs `.\bootstrap.ps1`; then, in a new PowerShell window):
-  - `$env:MISE_ENV` is empty and `miserc.toml` holds `env = ["windows", "owned"]`.
+  - `$env:MISE_ENV` is empty and `miserc.toml` holds `env = ["windows"]`.
   - `Get-Command starship, jq, hx, nu, omp, opencode, DevToys.CLI, gh` resolve under
     `%LOCALAPPDATA%\mise\shims` (gh may be a machine-wide install); the User PATH has no
     `%LOCALAPPDATA%\workstation\{helix,nu,devtoys-cli,dngrep,logexpert}`.
