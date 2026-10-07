@@ -346,8 +346,7 @@ apply() {
   # /etc/skel's ~/.bashrc) would otherwise make copy/template refuse. Pass
   # it ONLY until this host's own marker exists, so any LATER conflict (a
   # real mistake) is still surfaced loudly instead of silently reclaimed.
-  # (The marker's name is historical; renaming it would force every host once more.)
-  local marker="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/dotfiles-migrated"
+  local marker="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/dotfiles-first-apply-done"
   local dotfiles_flags=()
   if [[ ! -f "$marker" ]]; then
     FIRST_APPLY=true
@@ -567,16 +566,21 @@ main() {
   { exec 3<&-; } 2>/dev/null || true
   parse_args "$@"
 
-  if [[ "$REINSTALL" == true ]]; then
-    do_reinstall
-    # Don't keep /dev/tty open across the clone and mise install.
-    { exec 3<&-; } 2>/dev/null || true
+  # Get the checkout current, then run the rest from the checkout's own bootstrap.sh:
+  # bash keeps running the copy it read, so after a pull old code would drive the new
+  # tree. The re-exec drops --reinstall (done) and skips this block.
+  if [[ -z "${WORKSTATION_BOOTSTRAP_PULLED:-}" ]]; then
+    if [[ "$REINSTALL" == true ]]; then
+      do_reinstall
+      # Don't keep /dev/tty open across the clone.
+      { exec 3<&-; } 2>/dev/null || true
+    fi
+    preflight
+    clone_or_update_repo
+    exec env WORKSTATION_BOOTSTRAP_PULLED=1 bash "$REPO_DIR/bootstrap.sh"
   fi
-  preflight
   mkdir -p "$BIN"
   export PATH="$BIN:$HOME/.local/share/mise/shims:$PATH"
-
-  clone_or_update_repo
   install_mise
 
   # fd 3 is opened fresh for the prompts, then closed so /dev/tty isn't

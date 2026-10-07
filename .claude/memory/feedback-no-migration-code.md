@@ -11,5 +11,6 @@ Don't add migration code: no "one-time cleanup, remove once every host has run i
 
 **How to apply:**
 - Before writing a cleanup step, ask whether the leftover is harmful. If it's inert, leave it and mention it; if it breaks something, give the user a one-off command for their hosts instead of committing the cleanup.
-- State reconciliation is not migration and stays: the first-apply `dotfiles-migrated` marker (fresh hosts need `--force-dotfiles` once), the SSH launcher/WT fragment sync that drops entries for removed hosts, nerd-font re-registration with full paths, `normalize_lock_sidecars`.
+- That includes lint and tests: a check should state the current layout (e.g. `check_layout`), not list the removed files or old names. A self-updating script re-execs its pulled copy (`*_PULLED` guards) instead of carrying compatibility shims for its own previous version.
+- State reconciliation is not migration and stays: the first-apply `dotfiles-first-apply-done` marker (renamed from `dotfiles-migrated` in 2026-10; the old file on existing hosts is inert) (fresh hosts need `--force-dotfiles` once), the SSH launcher/WT fragment sync that drops entries for removed hosts, nerd-font re-registration with full paths, `normalize_lock_sidecars`.
 - Related: [[project-bootstrap-single-mode]].

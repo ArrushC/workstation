@@ -2,7 +2,7 @@
 # Offline tests for bootstrap.sh: identity prompts and the config.local.toml
 # writer, the sudo decision (stubbed sudo), the login shell for local and
 # directory (SSSD) accounts (stubbed getent/sudo), the --reinstall confirmation,
-# and tasks/update's sudo skip (U1/U2).
+# tasks/update's sudo skip (U1/U2), and the re-exec into the pulled copy (U3, R1/R2).
 # Sources bootstrap.sh with WORKSTATION_BOOTSTRAP_LIB=1 so main does not run.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -291,4 +291,37 @@ printf '[vars]\nsudo = "no"\n' >"$U/repo/config.local.toml"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U2: update failed"
 grep -qx 'mise bootstrap --yes --skip packages,files' "$U/mise.log" || fail "U2: expected the skip: $(cat "$U/mise.log")"
 
-echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), login shell (local usermod, SSSD override, other directory), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall, update sudo skip"
+# U3. tasks/update carries on in the PULLED copy of itself: the stub git's "pull"
+# replaces tasks/update, and the replacement (not the old code) must run the rest.
+V="$T/v"
+mkdir -p "$V/repo/tasks" "$V/bin"
+cp "$root/tasks/update" "$V/repo/tasks/update"
+cat >"$V/bin/git" <<'EOF'
+#!/usr/bin/env bash
+# git -C <repo> pull --ff-only: "pull" a new tasks/update.
+if [ "$3" = pull ]; then
+  printf '#!/usr/bin/env bash\necho "PULLED-COPY ${WORKSTATION_UPDATE_PULLED:-}"\n' >"$2/tasks/update"
+  chmod +x "$2/tasks/update"
+fi
+EOF
+chmod +x "$V/bin/git"
+out=$(env PATH="$V/bin:$PATH" "$V/repo/tasks/update" 2>&1) || fail "U3: update failed: $out"
+grep -qx 'PULLED-COPY 1' <<<"$out" || fail "U3: the old copy kept running after the pull: $out"
+
+# R1/R2. bootstrap.sh hands over to the checkout's bootstrap.sh after the pull (stubbed
+# preflight/clone/reinstall); --reinstall wipes once and is not passed on.
+R="$T/r"
+mkdir -p "$R"
+printf '#!/usr/bin/env bash\necho "REEXEC ${WORKSTATION_BOOTSTRAP_PULLED:-} args=[$*]"\n' >"$R/bootstrap.sh"
+reexec() {
+  env -u WORKSTATION_BOOTSTRAP_PULLED WORKSTATION_BOOTSTRAP_LIB=1 R="$R" bash -c \
+    'source "$0"; preflight() { :; }; clone_or_update_repo() { :; }; do_reinstall() { echo WIPED; }; REPO_DIR=$R; main "$@"' \
+    "$root/bootstrap.sh" "$@" </dev/null 2>&1
+}
+out=$(reexec) || fail "R1: $out"
+grep -qx 'REEXEC 1 args=\[\]' <<<"$out" || fail "R1: no hand-over to the checkout's bootstrap.sh: $out"
+out=$(reexec --reinstall --yes) || fail "R2: $out"
+[ "$(grep -c WIPED <<<"$out")" = 1 ] || fail "R2: --reinstall did not wipe exactly once: $out"
+grep -qx 'REEXEC 1 args=\[\]' <<<"$out" || fail "R2: --reinstall passed on to the re-exec: $out"
+
+echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), login shell (local usermod, SSSD override, other directory), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall, update sudo skip, re-exec after the pull (update, bootstrap.sh)"

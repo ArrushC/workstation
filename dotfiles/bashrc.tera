@@ -396,10 +396,9 @@ hide() {
   printf '\033[H\033[J' # home + clear the visible screen
 }
 
-# wsa — apply, but SURFACE drift first. Every [dotfiles] entry is `copy` (or
-# `template`) now — no symlink pointed back into this checkout any more, so a
-# live edit under $HOME no longer round-trips implicitly, and copy-mode apply
-# otherwise overwrites an un-recorded live edit with zero diff and zero
+# wsa — apply, but SURFACE drift first. Every [dotfiles] entry is `copy` or
+# `template`, so a live edit under $HOME doesn't reach this checkout on its own,
+# and an apply overwrites an un-recorded live edit with zero diff and zero
 # warning (mise has no built-in prompt; plain `mise bootstrap --only dotfiles
 # --yes` does not ask either). This checks for any entry in `differs` state (NOT
 # `missing` — a host's first-ever apply is expected to be all-missing, not a
