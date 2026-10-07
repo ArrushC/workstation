@@ -447,8 +447,8 @@ function Invoke-CloneRepo {
     }
 }
 
-# First-apply marker; the name predates mise and stays so existing hosts don't re-force.
-$MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
+# Written after a host's first dotfiles apply, which alone passes --force-dotfiles.
+$FirstApplyMarker = Join-Path $WsRoot "dotfiles-first-apply-done"
 
 # miserc.toml (git-ignored) holds the token set, `windows` (scripts/lib/mise-env.sh writes
 # `linux`). An exported MISE_ENV would override it, so this session's is removed.
@@ -584,7 +584,7 @@ function Get-FreeSpaceMB {
 
 # `mise bootstrap --only dotfiles,tools`: the [dotfiles] entries and every tool;
 # `--only` keeps the sudo-only [bootstrap.files] out. A host's first apply passes
-# --force-dotfiles (a target can already be a differing real file); $MigratedMarker
+# --force-dotfiles (a target can already be a differing real file); $FirstApplyMarker
 # then stops it, so a later real conflict surfaces. After a good tools phase, as
 # scripts/lib/mise-install.sh does on Linux: shims on PATH (later steps need jq,
 # uv), node reinstalled when its declaration changed, prune, reshim.
@@ -608,9 +608,9 @@ function Invoke-MiseBootstrap {
     if (-not $SkipDotfiles) {
         # Before the apply: templates guard vars.*, but real values shape the git identity.
         Invoke-EnsureConfigLocal
-        if (-not (Test-Path -LiteralPath $MigratedMarker)) {
+        if (-not (Test-Path -LiteralPath $FirstApplyMarker)) {
             $forceFlags = @('--force-dotfiles')
-            Write-Log "First dotfiles apply on this host -- passing --force-dotfiles (marker absent: $MigratedMarker)"
+            Write-Log "First dotfiles apply on this host -- passing --force-dotfiles (marker absent: $FirstApplyMarker)"
         }
     }
 
@@ -663,11 +663,11 @@ reported above and re-run.
     }
     Write-Ok "mise bootstrap (--only $onlyPhases) complete"
 
-    if (-not $SkipDotfiles -and -not (Test-Path -LiteralPath $MigratedMarker)) {
-        $markerDir = Split-Path $MigratedMarker -Parent
+    if (-not $SkipDotfiles -and -not (Test-Path -LiteralPath $FirstApplyMarker)) {
+        $markerDir = Split-Path $FirstApplyMarker -Parent
         if (-not (Test-Path $markerDir)) { New-Item -ItemType Directory -Force -Path $markerDir | Out-Null }
-        New-Item -ItemType File -Force -Path $MigratedMarker | Out-Null
-        Write-Ok "dotfiles first-apply marker written ($MigratedMarker) -- future runs no longer force-reclaim dotfiles targets"
+        New-Item -ItemType File -Force -Path $FirstApplyMarker | Out-Null
+        Write-Ok "dotfiles first-apply marker written ($FirstApplyMarker) -- future runs no longer force-reclaim dotfiles targets"
     }
 
     if (-not $SkipToolInstall) {
@@ -1295,10 +1295,22 @@ function Invoke-EnsureSshKey {
 # RUN SEQUENCE
 # =============================================================================
 
-if ($Reinstall) { Invoke-Reinstall }
-Invoke-Preflight
+# Get the checkout current, then run the rest from the checkout's own bootstrap.ps1:
+# PowerShell runs the copy it parsed, so after a pull old code would drive the new
+# tree. The re-run (same switches, minus -Reinstall/-Yes) skips this block.
+if (-not $env:WORKSTATION_BOOTSTRAP_PULLED) {
+    if ($Reinstall) { Invoke-Reinstall }
+    Invoke-Preflight
+    Invoke-CloneRepo
+    $env:WORKSTATION_BOOTSTRAP_PULLED = '1'
+    $pass = @{}
+    foreach ($k in $PSBoundParameters.Keys) {
+        if ($k -notin 'Reinstall', 'Yes') { $pass[$k] = $PSBoundParameters[$k] }
+    }
+    & (Join-Path $RepoPath "bootstrap.ps1") @pass
+    exit $LASTEXITCODE
+}
 Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation
-Invoke-CloneRepo
 Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; shims on PATH, node marker, prune; .wslconfig reminder; its post-tools hook regenerates Nushell's init files (mise run nu-init)
 Install-WingetApps        # GUI apps: mise bootstrap --only packages (config.windows.toml's winget list), then SSHFS-Win (UAC)
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
@@ -1345,3 +1357,4 @@ Write-Host "  wse <path>   # edit a tracked file in the repo source"
 Write-Host "  wsd          # see what would change"
 Write-Host "  wsa          # apply; asks first if a deployed file has a local edit it would overwrite"
 Write-Host "  wsr          # record an app's own edit to a deployed file back into the repo"
+exit 0

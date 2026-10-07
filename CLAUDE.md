@@ -75,13 +75,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - vcpkg stays a task: `[bootstrap.repos]` can't shallow-clone or update. The C/C++ toolbelt
   spans dnf, mise and vcpkg on purpose; don't unify it.
 - `/dev/tty` reads in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
+- After `git pull`, `bootstrap.sh`, `bootstrap.ps1` and `tasks/update` re-exec the pulled copy of
+  themselves (guard: `WORKSTATION_BOOTSTRAP_PULLED` / `WORKSTATION_UPDATE_PULLED`), so no old code
+  runs against the new tree. Keep the pull before anything a change could affect.
 - WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks call it (and `config_get`) through `scripts/lib/bootstrap-fn.sh`.
 
 **`MISE_ENV` and sudo**
 - One setup for every host; no mode. `scripts/lib/mise-env.sh --write` writes the git-ignored
   `miserc.toml` (`env = ["linux"]`); `bootstrap.ps1` writes `["windows"]`. Every mise process reads it;
   nothing exports `MISE_ENV` (`bootstrap.sh`, `bootstrap.ps1` and `tasks/update` unset it; CI and
-  `check-templates.sh` may pin one). `check_no_mode` keeps a mode from coming back.
+  `check-templates.sh` may pin one). `check_layout` holds the three-file, OS-token layout.
 - `vars.sudo` (`config.local.toml`) is written only by `bootstrap.sh`; missing means yes.
 - Every `ws*` command and `bootstrap.ps1` pin `mise -C` to the home directory. mise finds its config by walking up from
   the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
@@ -103,7 +106,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     `mise dot status` for drift and asks first.
 - Disabling an inherited entry needs `enabled = false` **and** a repeated `mode`.
 - A host's first apply needs `--force-dotfiles`. `bootstrap.sh` and `bootstrap.ps1` pass it only while
-  `dotfiles-migrated` is absent (`~/.local/state/workstation/`; Windows `%LOCALAPPDATA%\workstation\`).
+  `dotfiles-first-apply-done` is absent (`~/.local/state/workstation/`; Windows `%LOCALAPPDATA%\workstation\`).
 - The `post-dotfiles` hook is the only thing that sets these modes:
   - `~/.ssh`, `~/.claude`: 700
   - `~/.ssh/config`: 600

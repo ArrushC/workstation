@@ -938,23 +938,21 @@ check_completion_parity() {
     "$(_nu_completion_flags workstation_bootstrap_flags)"
 }
 
-# One setup for every host: nothing reads a mode, and mise-env.sh emits only the OS token.
-check_no_mode() {
-  hdr "no owned/shared mode (code, config, dotfiles, docs)"
-  local hits tokens
-  # A mode reader, or a reference to the files and token sets the single setup removed.
-  # Test fixtures, this file, memories and the historical plans are excluded.
-  hits=$(git grep -n -E 'vars\.mode|valid_mode|prompt_mode|\$\{?MODE\b|mode = "(owned|shared)"|WORKSTATION_MODE|config\.(owned|host|native|wsl)\.toml|mise\.owned|(linux|windows),owned' -- \
-    bootstrap.sh bootstrap.ps1 'config*.toml' README.md CLAUDE.md docs/claude dotfiles scripts tasks .claude/hooks \
-    ':!scripts/test-*' ':!scripts/check-invariants.sh' || true)
+# One setup per OS: exactly three tracked config files, and the token set is the OS
+# alone (scripts/lib/mise-env.sh prints `linux`, bootstrap.ps1 writes `windows`).
+check_layout() {
+  hdr "layout (three config files, OS-only token sets)"
+  local files tokens
+  files=$(git ls-files 'config*.toml' | paste -sd' ' -)
   tokens=$(bash scripts/lib/mise-env.sh 2>/dev/null)
-  if [ -n "$hits" ]; then
-    bad "a mode reader or a reference to the removed owned/shared layout:"
-    printf '%s\n' "$hits" | sed 's/^/       /'
+  if [ "$files" != "config.linux.toml config.toml config.windows.toml" ]; then
+    bad "tracked config files are \"$files\" (want config.toml, config.linux.toml, config.windows.toml; per-host settings go in the git-ignored config.local.toml)"
   elif [ "$tokens" != linux ]; then
-    bad "scripts/lib/mise-env.sh emits \"$tokens\" (want linux)"
+    bad "scripts/lib/mise-env.sh prints \"$tokens\" (want linux)"
+  elif ! grep -qF 'env = [`"windows`"]' bootstrap.ps1; then
+    bad "bootstrap.ps1 no longer writes miserc.toml's env = [\"windows\"]"
   else
-    ok "no mode reader or owned/shared-layout reference; mise-env.sh emits linux"
+    ok "config.toml + config.linux.toml + config.windows.toml; tokens linux / windows"
   fi
 }
 
@@ -1249,7 +1247,7 @@ check_completion_parity
 check_warp_guards
 check_zellij_config
 check_disk_budget
-check_no_mode
+check_layout
 # The test suites and linters take most of the time and share nothing.
 run_parallel check_lsp_plugin check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
 echo

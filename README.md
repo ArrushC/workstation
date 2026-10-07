@@ -78,7 +78,7 @@ The repo is public, so no token or SSH key is needed. `GITHUB_TOKEN` is optional
 What `bootstrap.sh` does:
 
 1. Preflight: `curl`, `git`, `tar`.
-2. Clone this repo to `~/.config/mise`.
+2. Clone this repo to `~/.config/mise` (or pull it), then carry on in the checkout's own `bootstrap.sh`, so a pull's changes apply in the same run.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Ask your name and email once (saved in `config.local.toml`) and decide the system steps (sudo; see above).
 5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` ([why](#mise-dot-apply--mise-bootstrap-refuses-with-refusing-to-overwrite-existing-files-use---force)).
@@ -118,8 +118,8 @@ Paste both lines into PowerShell. The script runs in its own Windows PowerShell 
 What `bootstrap.ps1` does:
 
 1. Preflight: require `curl.exe` and git (it never installs Git).
-2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
-3. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it).
+2. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it), then carry on in the checkout's own `bootstrap.ps1`, so a pull's changes apply in the same run.
+3. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
 4. Write `miserc.toml` (`windows`), ask once for your git name and email, check that mise loads `config.windows.toml` (it stops otherwise: the Windows dotfiles and apps would be skipped silently), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
 5. After a successful tools phase: add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder. `mise bootstrap`'s `post-tools` hook (`config.windows.toml`) runs `mise run nu-init`, which regenerates Nushell's init files (starship, mise, zoxide, atuin) in `%APPDATA%\nushell\vendor\autoload`, so `wsu` refreshes them too. Its `mise.nu` builds on each session's own PATH rather than the PATH `mise activate nu` saw, so Nushell finds what its terminal passes down, as PowerShell does.
 6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
@@ -463,7 +463,7 @@ bash scripts/check-templates.sh                    # does exactly this for every
 
 ### mise dot apply / mise bootstrap refuses with "refusing to overwrite existing files (use --force)"
 
-`copy` and `template` targets refuse to replace a pre-existing file that already differs (even `--dry-run` exits 1). That is expected on a fresh host's first apply (for example `/etc/skel`'s `~/.bashrc`), and the bootstrap scripts pass `--force-dotfiles` automatically while the `dotfiles-migrated` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Once it is written, the message means a real conflict: a file you or another tool created at that exact path. Inspect it, then either let the dotfiles win with `mise dot apply --force --yes -- "<target>"` or move the file aside. Do not use `--force-dotfiles` or `--force` as a reflex; it discards whatever was there.
+`copy` and `template` targets refuse to replace a pre-existing file that already differs (even `--dry-run` exits 1). That is expected on a fresh host's first apply (for example `/etc/skel`'s `~/.bashrc`), and the bootstrap scripts pass `--force-dotfiles` automatically while the `dotfiles-first-apply-done` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Once it is written, the message means a real conflict: a file you or another tool created at that exact path. Inspect it, then either let the dotfiles win with `mise dot apply --force --yes -- "<target>"` or move the file aside. Do not use `--force-dotfiles` or `--force` as a reflex; it discards whatever was there.
 
 ### wsu fails with "fatal: Not possible to fast-forward, aborting"
 

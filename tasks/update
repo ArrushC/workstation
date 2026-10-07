@@ -3,7 +3,13 @@
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
-git -C "$root" pull --ff-only
+# Pull, then carry on in the pulled copy of this file: bash keeps reading the copy it
+# opened, so without the re-exec an update's own changes would apply one run late and
+# its old code would call into the freshly pulled scripts.
+if [ -z "${WORKSTATION_UPDATE_PULLED:-}" ]; then
+  git -C "$root" pull --ff-only
+  exec env WORKSTATION_UPDATE_PULLED=1 "$root/tasks/update" "$@"
+fi
 
 # miserc.toml from mise-env.sh (the OS token set), then drop any exported
 # variable: an exported MISE_ENV would override miserc and could make

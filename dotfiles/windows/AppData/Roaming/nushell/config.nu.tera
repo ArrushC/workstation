@@ -115,10 +115,9 @@ alias wsd = mise -C $env.USERPROFILE dot diff
 alias wss = mise -C $env.USERPROFILE dot status
 alias wsr = mise -C $env.USERPROFILE dot add --changed
 # wsa is a def (below) — it checks for un-recorded drift before applying,
-# since copy mode has no built-in prompt. Every [dotfiles]
-# entry is `copy` (or `template`) now — a live edit under $HOME no longer
-# round-trips implicitly, and copy-mode apply otherwise overwrites an
-# un-recorded live edit with zero diff and zero warning. `differs` (NOT
+# since copy mode has no built-in prompt. Every [dotfiles] entry is `copy` or
+# `template`, so a live edit under $HOME doesn't reach this checkout on its own,
+# and an apply overwrites an un-recorded live edit with zero diff and zero warning. `differs` (NOT
 # `missing` — a host's first-ever apply is expected to be all-missing) means
 # $HOME has an edit `wsr`/`mise dot add <path>` hasn't captured yet.
 #

@@ -2,9 +2,10 @@
 # miserc.toml writer (Initialize-MiseEnv), the mise install / update
 # (Install-Mise), the mise bootstrap step's guard, ordering and
 # -C pinning (Invoke-MiseBootstrap), its free-space check
-# (Assert-ToolsDiskSpace), and the Claude Code step's PATH entry
-# (Invoke-InstallClaudeCode). The functions are extracted from the
-# script's AST, as scripts/test-config-local.ps1 does.
+# (Assert-ToolsDiskSpace), the Claude Code step's PATH entry
+# (Invoke-InstallClaudeCode), and the run sequence's hand-over to the pulled
+# bootstrap.ps1. The functions are extracted from the script's AST, as
+# scripts/test-config-local.ps1 does.
 #
 # Nothing real is touched:
 #  - the User environment is never written: a function that calls
@@ -239,7 +240,7 @@ try {
     Set-Content -LiteralPath $budgetFile -Value 'windows = 3000'
     $script:SkipDotfiles = $false
     $script:SkipToolInstall = $false
-    $script:MigratedMarker = Join-Path $tmp 'ws\dotfiles-migrated'
+    $script:FirstApplyMarker = Join-Path $tmp 'ws\dotfiles-first-apply-done'
     $script:MiseShims = Join-Path $tmp 'mise\shims'
     $winLs = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}, {"path": "C:\\Users\\u\\.config\\mise\\config.windows.toml"}]'
     function Invoke-Bootstrap {
@@ -401,6 +402,28 @@ try {
             Invoke-InstallClaudeCode
             Assert ($script:addedPaths.Count -eq 0) "Add-ToUserPath calls: $($script:addedPaths -join ', ')"
         } finally { $env:USERPROFILE = $saved }
+    }
+
+    # The run sequence's hand-over after the pull: the if-block is taken from the AST and
+    # run in a child PowerShell with the clone steps stubbed and a fake checkout script.
+    Test-Case 'run sequence: after the pull the checkout''s bootstrap.ps1 runs the rest (without -Reinstall/-Yes), once' {
+        $ifAst = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Extent.Text -like '*WORKSTATION_BOOTSTRAP_PULLED*' }, $true))[0]
+        Assert ($null -ne $ifAst) 'no WORKSTATION_BOOTSTRAP_PULLED block in bootstrap.ps1'
+        $repo = Join-Path $tmp 'reexec-repo'
+        New-Item -ItemType Directory -Force -Path $repo | Out-Null
+        Set-Content -LiteralPath (Join-Path $repo 'bootstrap.ps1') -Value 'param([switch]$SkipKeyGen, [switch]$Reinstall, [switch]$Yes) "CHILD pulled=$env:WORKSTATION_BOOTSTRAP_PULLED SkipKeyGen=$SkipKeyGen Reinstall=$Reinstall Yes=$Yes"; exit 7'
+        $harness = Join-Path $tmp 'reexec-harness.ps1'
+        $head = "param([switch]`$SkipKeyGen, [switch]`$Reinstall, [switch]`$Yes)`n`$RepoPath = '$repo'`n" +
+            "function Invoke-Reinstall { 'WIPED' }`nfunction Invoke-Preflight { }`nfunction Invoke-CloneRepo { 'PULLED' }`n"
+        Set-Content -LiteralPath $harness -Value ($head + $ifAst.Extent.Text + "`n'PARENT-CONTINUED'")
+        $savedPulled = $env:WORKSTATION_BOOTSTRAP_PULLED
+        Remove-Item Env:WORKSTATION_BOOTSTRAP_PULLED -ErrorAction SilentlyContinue
+        try {
+            $out = @(& (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -File $harness -SkipKeyGen -Reinstall -Yes)
+            $code = $LASTEXITCODE
+        } finally { if ($savedPulled) { $env:WORKSTATION_BOOTSTRAP_PULLED = $savedPulled } }
+        Assert (($out -join '|') -ceq 'WIPED|PULLED|CHILD pulled=1 SkipKeyGen=True Reinstall=False Yes=False') "output: $($out -join '|')"
+        Assert ($code -eq 7) "exit code $code, want the checkout script's 7"
     }
 } finally {
     if ($null -eq $savedMiseEnv) { Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue } else { $env:MISE_ENV = $savedMiseEnv }

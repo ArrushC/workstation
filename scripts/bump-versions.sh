@@ -454,8 +454,8 @@ done <<<"$updates"
 # script runs in CI (and locally) where the Claude Code sync-tool-memory.sh
 # hook never fires, so regenerate here — otherwise the bumped pins and the
 # generated file drift, and check-invariants.sh ("TOOLS block in sync")
-# fails on merge. There is no longer a second generated-config script to
-# call here: config*.toml IS the tool layer's single source of truth now.
+# fails on merge. config*.toml is the single source of the tool list, so this is
+# the only generated file to refresh.
 # It needs a python with tomllib (3.11+); its stderr says why it failed.
 if [ -n "$bumped$vars_bumped" ] && ! $DRY; then
   if ! scripts/gen-tool-memory.sh >/dev/null; then
