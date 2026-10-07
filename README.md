@@ -8,8 +8,8 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 
 | Piece | Role |
 |---|---|
-| `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, pick the mode, run mise. Nothing is installed by hand in the scripts beyond mise (and, on Windows, SSHFS-Win). |
-| mise tools | Every tool is a pin in `config.toml` / `config.linux.toml` / `config.owned.toml`. `mise ls` is the tool list. |
+| `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, decide the system steps, run mise. Nothing is installed by hand in the scripts beyond mise (and, on Windows, SSHFS-Win). |
+| mise tools | Every tool is a pin in `config.toml` / `config.linux.toml`. `mise ls` is the tool list. |
 | `mise bootstrap` | Host state from `[bootstrap.*]` tables: dnf packages, `/etc` files, services, repos, then dotfiles and the `bootstrap` task. |
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
@@ -19,53 +19,33 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 
 Nothing is pushed anywhere and there is no host list: each host keeps itself current with `wsu`.
 
-## Owned and shared hosts
+## One setup, two OS files
 
-Every host is exactly one mode. `bootstrap.sh` resolves it and saves it as `mode` under `[vars]` in the host's git-ignored `config.local.toml`.
+Every host gets the same setup. Three config files hold it, and miserc.toml (git-ignored, written by `scripts/lib/mise-env.sh` on Linux and `bootstrap.ps1` on Windows) picks the OS file:
 
-| Mode | Sudo | System packages and `/etc` | Used for |
-|---|---|---|---|
-| owned | yes | dnf packages and managed `/etc` files; login shell switched to zsh via `sudo usermod` | your machine |
-| shared | no | none | someone else's machine: user-wide only |
-
-Every mise tool installs the same way in both modes: user-level under `~/.local/share/mise`, reached through `mise activate` or `~/.local/share/mise/shims`. The sudo column is about system packages and `/etc` only.
-
-**How the mode is chosen**, in order: the saved `mode` in `config.local.toml`; else the `WORKSTATION_MODE` environment variable (`owned` or `shared`, for unattended runs); else an interactive prompt on `/dev/tty` (works under `curl | bash`). The answer is written back, so later runs do not ask. Windows is always owned: `bootstrap.ps1` writes `mode = "owned"` without asking.
-
-The mode maps to a token set (`scripts/lib/mise-env.sh` is the single source). `bootstrap.sh` and `mise run update` save it in the git-ignored `~/.config/mise/miserc.toml`, which every mise process reads (shells, shims, systemd units); nothing exports `MISE_ENV`. Each token loads one more config file:
-
-| Host | Token set |
-|---|---|
-| shared Linux | `linux` |
-| owned Linux (WSL or not) | `linux,owned,host` |
-| Windows | `windows,owned` |
-
-| Token | Config file | Holds |
+| File | Loads on | Holds |
 |---|---|---|
-| (always) | `config.toml` | tools common to all hosts, `[vars]` pins, cross-platform dotfiles |
-| `linux` | `config.linux.toml` | the Linux toolbelt, Linux dotfiles, hooks |
-| `owned` | `config.owned.toml` | owned-only tools and dotfiles (Claude Code config, LSP servers) |
-| `host` | `config.host.toml` | dnf packages, EPEL/CRB hook, `/etc/wsl.conf`, Linux-owned-only dotfiles |
-| `windows` | `config.windows.toml` | the Windows-only dotfiles |
-| (always) | `config.local.toml` | git-ignored per-host name, email, mode |
+| `config.toml` | every host | tools for both OSes (Windows-only and Linux-only entries carry `os = [...]`), `[vars]` pins, cross-platform dotfiles |
+| `config.linux.toml` | Linux | the Linux toolbelt, dnf packages, `/etc/wsl.conf`, hooks, Linux dotfiles |
+| `config.windows.toml` | Windows | Windows dotfiles, winget GUI apps |
+| `config.local.toml` | every host, git-ignored | name, email, `sudo`, per-host overrides |
 
-Shared hosts load no host state: every sudo-needing table lives in `config.host.toml`. WSL and non-WSL owned hosts load the same files; the one step that differs (fonts, skipped under WSL) checks at run time.
+**System steps and sudo.** dnf packages, `/etc` files and zsh as the login shell need sudo. `bootstrap.sh` checks once: cached sudo or a password prompt that succeeds means they run; a failed prompt saves `sudo = "no"` in `config.local.toml`, and from then on `bootstrap.sh`, `mise run update` and `wsu` skip them (`mise bootstrap --skip packages,files`) while everything user-level still installs. An unattended run with no terminal skips them for that run only. To apply them later, get sudo and re-run `./bootstrap.sh`. `mise run health` shows the state in its "system steps" row.
 
 ## Repo layout
 
 ```
 bootstrap.sh, bootstrap.ps1   entry points (Linux; Windows, no admin)
-config.toml, config.linux.toml, config.owned.toml
-                              mise tool pins, [vars] pins, [dotfiles] entries
-config.host.toml              host state as [bootstrap.*] tables (owned Linux hosts only)
-config.windows.toml           Windows [dotfiles]
-config.local.toml             git-ignored: this host's name, email, mode
-mise.lock, mise.linux.lock, mise.owned.lock, locks/
+config.toml, config.linux.toml, config.windows.toml
+                              mise tool pins, [vars] pins, [dotfiles] entries,
+                              host state as [bootstrap.*] tables (Linux)
+config.local.toml             git-ignored: this host's name, email, sudo
+mise.lock, mise.linux.lock, locks/
                               generated lockfiles; never hand-edit
 tasks/                        file tasks with real logic: bootstrap, health, update,
                               check-updates, python-env, fonts, vcpkg, claude,
                               verify-tools
-                              (statusline, enable-el-repos: owned Linux, in config.host.toml)
+                              (statusline, enable-el-repos: Linux, in config.linux.toml)
                               (one-line wrappers — lint, fmt, secrets, ps-lint,
                               bump-versions, install-hooks — are [tasks] in config.toml)
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
@@ -86,15 +66,11 @@ Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, o
 
 ### Linux
 
-Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the host type's figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (a fresh owned host needs about 6.7 GB, a shared one about 3.6 GB). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped, and GEF needs gdb 10 or newer, past EL8's system gdb (8.2), so it won't load there (`pwndbg` brings its own gdb). Then, on the host:
+Prerequisites: `curl`, `git`, `tar` (a single preflight lists every missing one at once), and free space in `$HOME` for the tools: the `linux` figure in [`disk-budget.toml`](disk-budget.toml) plus 1 GB, less what is already installed (about 6.9 GB fresh). Without it the tools step stops before installing anything and lists the largest folders in your home; `WORKSTATION_SKIP_DISK_CHECK=1` overrides. RHEL-family EL8 and EL9 are supported (tested on AlmaLinux 9.8 and RHEL 8.10). On EL8, `bear` isn't packaged and is skipped, and GEF needs gdb 10 or newer, past EL8's system gdb (8.2), so it won't load there (`pwndbg` brings its own gdb). Then, on the host:
 
 ```bash
-# === Interactive — asks owned or shared ===
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash && \
 exec zsh   # or: source ~/.bashrc, if you can't chsh on this host
-
-# === Unattended first run — no prompt ===
-curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | WORKSTATION_MODE=shared bash
 ```
 
 The repo is public, so no token or SSH key is needed. `GITHUB_TOKEN` is optional: mise uses it to lift GitHub's 60-requests/hour anonymous API limit. To use a (public) fork, change `DOTFILES_REPO` at the top of `bootstrap.sh` (`$DotfilesRepo` in `bootstrap.ps1`). Your git name and email are asked once and stored in `config.local.toml`.
@@ -104,15 +80,15 @@ What `bootstrap.sh` does:
 1. Preflight: `curl`, `git`, `tar`.
 2. Clone this repo to `~/.config/mise`.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
-4. Resolve the mode (see above) and write it, with name and email, to `config.local.toml`.
-5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the owned-only `final` hook in `config.host.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
-6. Owned hosts only: set zsh as the login shell (`sudo usermod -s`).
+4. Ask your name and email once (saved in `config.local.toml`) and decide the system steps (sudo; see above).
+5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` while `~/.local/state/workstation/dotfiles-migrated` is absent.
+6. With sudo: set zsh as the login shell (`sudo usermod -s`).
 
-Both modes are idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
+It is idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
 
 | Flag | Meaning |
 |---|---|
-| `--reinstall` | Wipe the cloned repo (including `config.local.toml`, so name, email and mode are asked again), then re-bootstrap. Prompts first. Installed tools, deployed dotfiles, SSH keys and system packages are kept. |
+| `--reinstall` | Wipe the cloned repo (including `config.local.toml`, so name and email are asked again), then re-bootstrap. Prompts first. Installed tools, deployed dotfiles, SSH keys and system packages are kept. |
 | `--yes`, `-y` | Skip the `--reinstall` confirmation. |
 | `--help`, `-h` | Usage. |
 
@@ -122,15 +98,15 @@ Running `--reinstall` from inside the repo is refused (the script would delete i
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash -s -- --reinstall
 ```
 
-`mise run check-updates` runs `mise outdated --bump` for every pinned tool, `dnf check-update` on owned hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
+`mise run check-updates` runs `mise outdated --bump` for every pinned tool, `dnf check-update` on Linux hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
-**Owned extras.** At the end of `bootstrap.sh` an owned host is offered the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) owned hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.host.toml`, so they run on owned Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
+**Extras.** At the end of `bootstrap.sh` the bootstrap offers the Claude Code status line (ccstatusline): use the tracked config, define one for this machine only (persisted as a per-host opt-out in `config.local.toml`), set a new global one (committed back to `dotfiles/config/ccstatusline/settings.json`), or skip. Re-run any time with `mise run statusline`. On native (non-WSL) Linux hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.linux.toml`, so they run on Linux hosts only and only on a full `mise bootstrap` (not `wsa`). Re-run with `mise run fonts` or `mise run claude`.
 
 ### Windows
 
 The Windows host is a client. No admin is needed: everything installs under your user profile (`%LOCALAPPDATA%\workstation`, mise's `%LOCALAPPDATA%\mise`, the User PATH, CurrentUser PSGallery, HKCU fonts). One best-effort exception: SSHFS-Win depends on WinFsp, a kernel driver, so its first install raises UAC (two prompts on a host without WinFsp: one for WinFsp, one for SSHFS-Win); decline them or pass `-SkipElevated` and everything else still completes.
 
-Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`), a working `curl.exe` (`curl.exe --version`), and room on the drive holding `%LOCALAPPDATA%` for the tools: `disk-budget.toml`'s `windows-owned` figure plus 1 GB, less what is already installed (about 4 GB fresh; `$env:WORKSTATION_SKIP_DISK_CHECK = '1'` overrides). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
+Prerequisites: Git (the script hard-fails with a link if it is missing; `winget install Git.Git`), a working `curl.exe` (`curl.exe --version`), and room on the drive holding `%LOCALAPPDATA%` for the tools: `disk-budget.toml`'s `windows` figure plus 1 GB, less what is already installed (about 4 GB fresh; `$env:WORKSTATION_SKIP_DISK_CHECK = '1'` overrides). PowerShell 5.1 and 7 are supported. Windows HTTP downloads use `curl.exe` with redirects, retries and checked exit codes.
 
 ```powershell
 $f = "$env:TEMP\bootstrap.ps1"; curl.exe -fsSL --retry 3 -o $f https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.ps1
@@ -144,7 +120,7 @@ What `bootstrap.ps1` does:
 1. Preflight: require `curl.exe` and git (it never installs Git).
 2. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
 3. Clone this repo to `%USERPROFILE%\.config\mise` (or pull it).
-4. Write `miserc.toml` (`windows,owned`; a User `MISE_ENV` variable is removed), ask once for your git name and email, check that mise loads `config.owned.toml` (it stops otherwise, before anything can prune the owned tools), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
+4. Write `miserc.toml` (`windows`; a User `MISE_ENV` variable and a stale `mode` line are removed), ask once for your git name and email, check that mise loads `config.windows.toml` (it stops otherwise, before anything can prune the Windows tools), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline). The first run passes `--force-dotfiles`.
 5. After a successful tools phase: remove the portable tools mise replaced (their directories and User PATH entries), add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder. `mise bootstrap`'s `post-tools` hook (`config.windows.toml`) runs `mise run nu-init`, which regenerates Nushell's init files (starship, mise, zoxide, atuin) in `%APPDATA%\nushell\vendor\autoload`, so `wsu` refreshes them too. Its `mise.nu` builds on each session's own PATH rather than the PATH `mise activate nu` saw, so Nushell finds what its terminal passes down, as PowerShell does.
 6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
 7. Add Start Menu shortcuts for dnGrep and LogExpert, generate the Warp Tab Configs (local shells plus one per SSH host) and the Windows Terminal SSH fragment, seed dnGrep's settings, and install the PowerShell profile loader when Documents is redirected.
@@ -196,9 +172,9 @@ sudo apt install -y curl git tar python3 python3-pip   # Debian / Ubuntu
 curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 ```
 
-Answer `owned` where you have sudo (the usual case). Two files configure WSL and the repo owns both:
+Run it where you have sudo (the usual case); without it the system steps, `/etc/wsl.conf` included, are skipped. Two files configure WSL and the repo owns both:
 
-- `/etc/wsl.conf` (per-distro: systemd, automount, interop, default user, `appendWindowsPath=false`): deployed on owned Linux hosts by `config.host.toml` from `configs/wsl/wsl.conf` (on a non-WSL host nothing reads it).
+- `/etc/wsl.conf` (per-distro: systemd, automount, interop, default user, `appendWindowsPath=false`): deployed on Linux hosts by `config.linux.toml` from `configs/wsl/wsl.conf` (on a non-WSL host nothing reads it).
 - `%USERPROFILE%\.wslconfig` (VM memory, CPU, networking, all distros): deployed on the Windows host by a `copy` dotfile from `dotfiles/wslconfig`. It enables `autoMemoryReclaim=gradual` and pre-opts into `sparseVhd=true`.
 
 Both need `wsl --shutdown` from a Windows terminal to take effect. `bootstrap.ps1` prints that reminder when `.wslconfig` changes; on Linux, remember it yourself after a `/etc/wsl.conf` change. WSL tabs open in `~` because the WSL Terminal fragment launches `wsl.exe -d AlmaLinux-9 --cd ~`. Every tracked shell exports `COLORTERM=truecolor`, so 24-bit color works in Windows Terminal. Keep long-lived work in a zellij session.
@@ -261,7 +237,7 @@ The same workflow commands exist in bash and zsh on Linux and in Nushell and Pow
 | `wsa` | Apply tracked state to `$HOME`. First checks `mise dot status` for an un-recorded live edit (`differs`); if found, prints the diff and asks (refuses when non-interactive). The raw `mise bootstrap --only dotfiles --yes` skips that check and overwrites silently. |
 | `wsr` | `mise dot add --changed`: record an edited copy-mode file back to its source |
 | `wss` | `mise dot status`: every managed file and its state |
-| `wsu` | `mise run update`: `git pull --ff-only`, then `mise install` and `mise bootstrap` for the saved mode |
+| `wsu` | `mise run update`: `git pull --ff-only`, then `mise install` and `mise bootstrap` (system steps per the saved `sudo`) |
 | `wsh` | Print the workstation cheatsheet |
 
 Every `ws*` command pins `mise -C` to the host's own home, so it acts on this host's checkout from any directory. (mise finds its config root by walking up from the current directory, and a stray `.config/mise` on that path, such as a Windows drive mount under WSL, would otherwise be managed instead.) `wsa` also refuses if mise resolves a different config root. The Windows versions cover what differs there: `wsu` is a pull plus a dotfiles-and-tools bootstrap, and mise itself and the GUI apps are left to `bootstrap.ps1`.
@@ -282,7 +258,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` prints one row per check with the exact repair command: the saved mode, `mise bootstrap status --missing`, toolbelt completeness, free disk space where mise installs tools (a warning below 2 GB), `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, owned extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t` on an owned host, since dnf and `/etc` files can prompt for sudo) and run `wsu` there; it refuses to run without a valid saved mode.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the config set and the system steps, `mise bootstrap status --missing`, toolbelt completeness, free disk space where mise installs tools (a warning below 2 GB), `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t`, since dnf and `/etc` files can prompt for sudo) and run `wsu` there.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
@@ -300,7 +276,7 @@ mise bootstrap --only packages --yes   # narrow to one phase
 **Python env.** `wpy script.py` (or `#!/usr/bin/env wpy`) runs in a uv-built venv on mise's Python (`tools.python` in `config.toml`) with Textual, Click, rich, httpx, pydantic, typer, polars and duckdb; `textual` and `typer` CLIs are on PATH. Libraries (listed in `scripts/python-env.txt`) track latest at build time. A `tools.python` bump rebuilds the env on the next `mise run python-env`. On Windows `bootstrap.ps1` builds the same env (`%LOCALAPPDATA%\workstation\python-env`, `.cmd` launchers) and rebuilds it after a `tools.python` bump or a `python-env.txt` edit. Rebuild to upgrade the libraries:
 
 ```bash
-mise run python-env --rebuild   # runs on both modes; upgrades to latest libs
+mise run python-env --rebuild   # runs on every host; upgrades to latest libs
 ```
 
 **Zellij.** Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
@@ -322,10 +298,10 @@ Tabs rename themselves to the current directory's basename on `cd`; set `WORKSTA
 
 ## Adding things
 
-**A tool.** One line in the right file; every tool is a mise pin. `config.linux.toml` is the Linux toolbelt (both modes), `config.owned.toml` is owned-only (add `os = ["linux"]` or `os = ["windows"]` when it is also single-OS), `config.toml` is everything else, including tools both OSes install (starship, gh, jq, helix). Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset. Every Linux asset must run on EL8's glibc 2.28: prefer a musl build (see the gping, yazi, delta and bottom entries); when a project ships only newer-glibc builds, take conda-forge's (`conda:`, built against glibc 2.17 or 2.28; see helix and ast-grep). After an install, `tasks/verify-tools` checks every binary runs on the host, and `disk-budget.yml` checks them against glibc 2.28 in CI.
+**A tool.** One line in the right file; every tool is a mise pin. `config.toml` holds tools for both OSes (add `os = ["linux"]` or `os = ["windows"]` for single-OS ones) and `config.linux.toml` the Linux toolbelt. Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset. Every Linux asset must run on EL8's glibc 2.28: prefer a musl build (see the gping, yazi, delta and bottom entries); when a project ships only newer-glibc builds, take conda-forge's (`conda:`, built against glibc 2.17 or 2.28; see helix and ast-grep). After an install, `tasks/verify-tools` checks every binary runs on the host, and `disk-budget.yml` checks them against glibc 2.28 in CI.
 
 ```toml
-# config.linux.toml — [tools] (both modes; aqua registry short name)
+# config.linux.toml — [tools] (aqua registry short name)
 direnv = "2.34.0"
 # pin an explicit asset when the registry default won't run on EL8 (glibc 2.28)
 "github:direnv/direnv" = { version = "2.34.0", asset_pattern = "direnv.linux-amd64" }
@@ -341,9 +317,9 @@ It also bumps every other outdated pin (`mise run bump-versions -- --dry-run` pr
 
 **A version bump.** A weekly workflow (`version-bumps.yml`) runs `mise run bump-versions`: it bumps mise tool pins with `mise outdated --bump` plus an in-place rewrite that keeps comments, refreshes the lockfiles, bumps drifted `config.toml` `[vars]` pins, and opens a PR. GitHub holds workflow runs on a PR from `github-actions[bot]` until someone approves them, so click **Approve workflows to run** on the PR to start lint, and merge once it passes. A version `mise lock` refuses is put back and listed for review. zjstatus, ncdu and python (the tool pin) are bumped by hand, and so is mise itself: `MISE_VERSION`/`MISE_SHA256` in `bootstrap.sh`, `$MiseVersion`/`$MiseSha256` in `bootstrap.ps1`, `min_version` in `config.toml` and each workflow's `jdx/mise-action` `version:` (lint checks the versions agree). To do it manually, edit the version in `config*.toml`, refresh the lockfiles with `mise run bump-versions` as above, commit.
 
-**Disk budget.** After a change to `config*.toml`, `mise*.lock` or `locks/` reaches `main`, `disk-budget.yml` installs the toolbelt fresh for each host type (owned and shared Linux, Windows), measures everything the install wrote (tools, downloads, uv/go/npm caches) and commits the figures, rounded up to 100 MB, to `disk-budget.toml`. The free-space checks in `scripts/lib/mise-install.sh` and `bootstrap.ps1` read it. Run it by hand with `gh workflow run disk-budget.yml`.
+**Disk budget.** After a change to `config*.toml`, `mise*.lock` or `locks/` reaches `main`, `disk-budget.yml` installs the toolbelt fresh for each OS (Linux, Windows), measures everything the install wrote (tools, downloads, uv/go/npm caches) and commits the figures, rounded up to 100 MB, to `disk-budget.toml`. The free-space checks in `scripts/lib/mise-install.sh` and `bootstrap.ps1` read it. Run it by hand with `gh workflow run disk-budget.yml`.
 
-**A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`, owned-only `config.owned.toml`, Linux-owned-only `config.host.toml`):
+**A dotfile.** One `[dotfiles]` entry keyed by the target, plus the source under `dotfiles/`, in the config file whose `MISE_ENV` token should gate it (cross-platform in `config.toml`, Linux `config.linux.toml`, Windows `config.windows.toml`):
 
 ```toml
 # config.linux.toml — [dotfiles]
@@ -360,10 +336,10 @@ bash scripts/check-invariants.sh
 
 Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` automatically; the one manual step is mapping a syntax checker for the new target in its `select_checker()`. To disable an entry inherited from a less-specific file, override it with `enabled = false` **and** a repeated `mode` (`enabled = false` alone is ignored). A host's first apply needs `--force-dotfiles` because a file such as `/etc/skel`'s `~/.bashrc` already occupies a target; the bootstrap scripts pass it automatically while the `dotfiles-migrated` marker is absent (`~/.local/state/workstation/`, or `%LOCALAPPDATA%\workstation\` on Windows). Commit the config edit and the new source.
 
-**A dnf package.** One line in `config.host.toml`. The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
+**A dnf package.** One line in `config.linux.toml`. The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
 
 ```toml
-# config.host.toml — [bootstrap.packages]
+# config.linux.toml — [bootstrap.packages]
 "dnf:tig" = "latest"
 ```
 
@@ -374,10 +350,10 @@ mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap 
 
 Do not re-add names known not to resolve on EL9: `fswatch`, `entr`, `cockpit-networkmanager`. `ShellCheck` is capitalised (EPEL). The batch is all-or-nothing, so a package only some EL releases carry goes in `tasks/optional-packages` instead (the `post-packages` hook), which installs with dnf's `strict=0` and skips it where it is missing: `bear` is there because EL8 has no package.
 
-**A service or `/etc` file.** In `config.host.toml`: a `[bootstrap.files."/etc/<path>"]` table (source relative to the repo root, under `configs/`; phase is only `pre-packages` or `post-packages`; mise elevates itself) and a `[bootstrap.services.<name>]` table for the unit it belongs to:
+**A service or `/etc` file.** In `config.linux.toml`: a `[bootstrap.files."/etc/<path>"]` table (source relative to the repo root, under `configs/`; phase is only `pre-packages` or `post-packages`; mise elevates itself) and a `[bootstrap.services.<name>]` table for the unit it belongs to:
 
 ```toml
-# config.host.toml
+# config.linux.toml
 [bootstrap.files."/etc/example/example.conf"]
 source = "configs/example/example.conf"
 owner = "root"
@@ -400,10 +376,6 @@ Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-p
 ### Bootstrap reports "Missing required prerequisites: …"
 
 Install everything listed at once (the script collects every gap up front): `sudo dnf install curl git tar` (RHEL/Fedora) or `sudo apt install curl git tar` (Debian/Ubuntu).
-
-### Changing a host between owned and shared
-
-The mode is the `mode` line in the host's `config.local.toml` `[vars]`. Edit or delete it and re-run `./bootstrap.sh`; with the line deleted it prompts again (or reads `WORKSTATION_MODE`). Shared to owned adds system packages, managed `/etc` files and the zsh login shell. Owned to shared stops loading `config.owned.toml` and that run's `mise prune` removes the owned-only tools; dnf packages, `/etc` files and the login shell stay until removed by hand. Log in again so shells pick up the new `MISE_ENV`. Windows is always owned.
 
 ### The tools step stops with "Not enough disk space for the mise tools"
 
@@ -453,9 +425,9 @@ Only mise is checksum-pinned by `bootstrap.ps1` (`$MiseSha256` for `$MiseVersion
 (Get-FileHash -Algorithm SHA256 .\<asset>.zip).Hash.ToLower()
 ```
 
-### bootstrap.ps1 stops with "mise did not load config.owned.toml" or "'mise config ls' failed"
+### bootstrap.ps1 stops with "mise did not load config.windows.toml" or "'mise config ls' failed"
 
-Both stop the run before `mise bootstrap` and `mise prune` (a prune without `config.owned.toml` would remove the owned tools). "Did not load config.owned.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there); `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
+Both stop the run before `mise bootstrap` and `mise prune` (a prune without `config.windows.toml` would remove the Windows-only tools). "Did not load config.windows.toml" means `miserc.toml` was not honoured, usually because `-RepoPath` is outside `%USERPROFILE%\.config\mise` (mise reads `miserc.toml` from there); `mise -C $env:USERPROFILE config ls` shows what loaded. "'mise config ls' failed" prints mise's own error: usually an installed mise older than `config.toml`'s `min_version` (a mise download that failed after a bump; re-run once the download succeeds), or a TOML error in a config file.
 
 ### PowerShell aliases / adminpw / ws* don't load (the profile seems ignored)
 
@@ -529,7 +501,7 @@ Symptoms: starship shows boxes, eza rows show empty cells, lazygit/k9s/yazi look
 - **Linux:** `fc-list | grep -i 'jetbrainsmono nerd font mono'` should list 6 entries; if empty, `mise run fonts`, then restart shells. A WSL host says fonts are skipped: intentional, run `bootstrap.ps1` on the Windows side.
 - **Windows:** `Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Fonts\JetBrainsMonoNerdFontMono-Regular.ttf"` should be `True`; if not, re-run `bootstrap.ps1` (idempotent). If the file exists but apps cannot find the font after a reboot, Windows did not load the HKCU per-user font at logon; re-run `bootstrap.ps1` to re-create the `WorkstationNerdFontActivate` logon task and re-activate the current session.
 - VS Code and Zed cache font lists at launch: quit and relaunch. On Windows the family name must be `JetBrainsMono NFM`, not `JetBrainsMono Nerd Font Mono` (Nerd Fonts shortens the GDI name to fit 31 characters). Restart Windows Terminal to re-enumerate fonts.
-- Both OSes install the font from the one `github:ryanoasis/nerd-fonts` pin in `config.owned.toml`. `mise where github:ryanoasis/nerd-fonts` must list the six `JetBrainsMonoNerdFontMono-*.ttf` files; if not, run `mise install github:ryanoasis/nerd-fonts` (on Windows from `%USERPROFILE%`), then `mise run fonts` (Linux) or `bootstrap.ps1` (Windows).
+- Both OSes install the font from the one `github:ryanoasis/nerd-fonts` pin in `config.toml`. `mise where github:ryanoasis/nerd-fonts` must list the six `JetBrainsMonoNerdFontMono-*.ttf` files; if not, run `mise install github:ryanoasis/nerd-fonts` (on Windows from `%USERPROFILE%`), then `mise run fonts` (Linux) or `bootstrap.ps1` (Windows).
 
 ### Shell startup / a PATH-scanning command feels slow on WSL
 
@@ -559,11 +531,11 @@ RAM is the separate, already-solved half: `autoMemoryReclaim=gradual` in the tra
 
 ### LSP servers — a language server is missing after mise bootstrap
 
-`mise bootstrap`'s tools phase installs the whole stack. rust-analyzer, marksman and taplo are aqua-registry tools in both modes. gopls, lua-language-server, basedpyright, typescript-language-server, bash-language-server, yaml-language-server and vscode-json-language-server come from `config.owned.toml`. `mise ls --missing` lists what did not install; `mise doctor` must report `activated: yes` and `shims_on_path: yes` (else `wsa` and open a new shell). A stale npm server after a pin bump means node's postinstall did not re-run: `mise install --force node`. TypeScript is held on 5.x on purpose (TypeScript 7 ships no `tsserver.js`). clangd comes from dnf (`clang-tools-extra` in `config.host.toml`); `mise run health` does not check it, so use `command -v clangd`. On Windows the same servers install through `mise bootstrap` (run by `bootstrap.ps1` and `wsu`); check with `mise ls --missing` and `mise doctor`, and open a new terminal after the first run. Re-run the stack with `mise bootstrap --only tools --yes`, or force one tool with `mise uninstall <name> && mise install <name>`.
+`mise bootstrap`'s tools phase installs the whole stack. rust-analyzer, marksman and taplo are aqua-registry tools. gopls, lua-language-server, basedpyright, typescript-language-server, bash-language-server, yaml-language-server and vscode-json-language-server come from `config.toml`. `mise ls --missing` lists what did not install; `mise doctor` must report `activated: yes` and `shims_on_path: yes` (else `wsa` and open a new shell). A stale npm server after a pin bump means node's postinstall did not re-run: `mise install --force node`. TypeScript is held on 5.x on purpose (TypeScript 7 ships no `tsserver.js`). clangd comes from dnf (`clang-tools-extra` in `config.linux.toml`); `mise run health` does not check it, so use `command -v clangd`. On Windows the same servers install through `mise bootstrap` (run by `bootstrap.ps1` and `wsu`); check with `mise ls --missing` and `mise doctor`, and open a new terminal after the first run. Re-run the stack with `mise bootstrap --only tools --yes`, or force one tool with `mise uninstall <name> && mise install <name>`.
 
 ### C / C++ toolchain — a tool is missing, or ninja / vcpkg behaves oddly
 
-The compilers, debuggers and analysis tools (gcc-c++, clang, clangd/clang-tidy/clang-format, lldb, valgrind, cppcheck, cmake, meson, ninja-build, heaptrack, sanitizer runtimes) install through dnf on owned hosts only. Several come from EPEL/CRB; the `config.host.toml` `pre-packages` hook (`mise run enable-el-repos`) enables both before the batch. If a package still does not resolve, enable them by hand and re-run:
+The compilers, debuggers and analysis tools (gcc-c++, clang, clangd/clang-tidy/clang-format, lldb, valgrind, cppcheck, cmake, meson, ninja-build, heaptrack, sanitizer runtimes) install through dnf (with sudo). Several come from EPEL/CRB; the `config.linux.toml` `pre-packages` hook (`mise run enable-el-repos`) enables both before the batch. If a package still does not resolve, enable them by hand and re-run:
 
 ```bash
 sudo dnf install epel-release
@@ -571,15 +543,15 @@ sudo dnf config-manager --set-enabled crb   # EL9 Alma/Rocky/Stream (powertools 
 mise bootstrap --only packages --yes
 ```
 
-`ninja: command not found`: on RHEL the binary is `ninja-build`; if a project hard-codes `ninja`, link it once with `ln -s "$(command -v ninja-build)" ~/.local/bin/ninja`. Two GDB front-ends coexist: plain `gdb ./a.out` loads GEF (via `~/.gdbinit`), `pwndbg ./a.out` is pwndbg, `gdb -nx ./a.out` is vanilla, and `nnd ./a.out` is a modern TUI debugger. vcpkg lives at `$VCPKG_ROOT` (`~/.local/share/vcpkg`, a user-owned clone at the pinned tag, exported by the shell rc on owned hosts), so classic `vcpkg install <pkg>` needs no sudo (manifest mode is still preferred); missing entirely, run `mise run vcpkg`. Prefer compiler sanitizers (`-fsanitize=address,undefined`, 2 to 4 times overhead) over Valgrind (20 to 50 times) for everyday checks.
+`ninja: command not found`: on RHEL the binary is `ninja-build`; if a project hard-codes `ninja`, link it once with `ln -s "$(command -v ninja-build)" ~/.local/bin/ninja`. Two GDB front-ends coexist: plain `gdb ./a.out` loads GEF (via `~/.gdbinit`), `pwndbg ./a.out` is pwndbg, `gdb -nx ./a.out` is vanilla, and `nnd ./a.out` is a modern TUI debugger. vcpkg lives at `$VCPKG_ROOT` (`~/.local/share/vcpkg`, a user-owned clone at the pinned tag, exported by the shell rc on Linux hosts), so classic `vcpkg install <pkg>` needs no sudo (manifest mode is still preferred); missing entirely, run `mise run vcpkg`. Prefer compiler sanitizers (`-fsanitize=address,undefined`, 2 to 4 times overhead) over Valgrind (20 to 50 times) for everyday checks.
 
 ### wpy not found, or import textual fails in it
 
-Provisioning builds the env in both modes. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows the env is built on `mise where python` (run from `%USERPROFILE%`; it must print an install dir), so a missing `wpy` usually means the mise tools phase failed. To rebuild, delete `%LOCALAPPDATA%\workstation\stamps\python-env.stamp` and re-run `.\bootstrap.ps1`. On a host set up before mise managed Python, `uv python uninstall --all` and `uv cache clean` reclaim uv's old interpreters and cache (not automated; mise keeps using uv to install `pypi:` tools).
+Provisioning builds the env on every host. Rebuild it from scratch with `mise run python-env --rebuild` (the same rebuild upgrades the latest-tracking libraries and resets the env to the canonical nine, undoing any ad-hoc `uv pip install`). On Windows the env is built on `mise where python` (run from `%USERPROFILE%`; it must print an install dir), so a missing `wpy` usually means the mise tools phase failed. To rebuild, delete `%LOCALAPPDATA%\workstation\stamps\python-env.stamp` and re-run `.\bootstrap.ps1`. On a host set up before mise managed Python, `uv python uninstall --all` and `uv cache clean` reclaim uv's old interpreters and cache (not automated; mise keeps using uv to install `pypi:` tools).
 
-### NFS tools (showmount, nfsstat, autofs) are missing on an owned host
+### NFS tools (showmount, nfsstat, autofs) are missing on a host
 
-The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is in `config.host.toml`'s dnf batch, so every owned Linux host gets it (on WSL it is inert: Windows is the NFS/SMB client). Re-run `mise bootstrap --only packages --yes`. `autofs` is installed but not enabled (no maps yet does nothing): write your maps, then `sudo systemctl enable --now autofs`.
+The NFS client group (`nfs-utils`, `nfs4-acl-tools`, `autofs`) is in `config.linux.toml`'s dnf batch, so every Linux host with sudo gets it (on WSL it is inert: Windows is the NFS/SMB client). Re-run `mise bootstrap --only packages --yes`. `autofs` is installed but not enabled (no maps yet does nothing): write your maps, then `sudo systemctl enable --now autofs`.
 
 ### bootstrap.ps1 popped a UAC prompt (or SSHFS-Win reports "winget exited")
 

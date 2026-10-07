@@ -1,5 +1,5 @@
-﻿# Tests bootstrap.ps1's config.local.toml writer (Set-ConfigLocalVar and
-# Invoke-EnsureConfigLocal) without running the bootstrap: the two functions
+﻿# Tests bootstrap.ps1's config.local.toml writer (Set-ConfigLocalVar,
+# Remove-ConfigLocalVar and Invoke-EnsureConfigLocal) without running the bootstrap: the three functions
 # are extracted from the script's AST, the same way scripts/test-curl.ps1 works.
 # StrictMode matches bootstrap.ps1's own, so a strict-only crash fails here too.
 Set-StrictMode -Version Latest
