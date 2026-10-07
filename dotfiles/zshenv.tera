@@ -5,10 +5,9 @@
 # =============================================================================
 
 # --- ~/.local/bin: user-level tools for NON-interactive shells ---------------
-# python-env's launchers (wpy/textual/typer), claude, and on a shared host every
-# eget-installed tool live here; ~/.zshrc only prepends it for interactive
-# shells. (Some hosts' stock ~/.zshenv carries this same line.) Guarded: zsh
-# re-reads this file in every subshell.
+# python-env's launchers (wpy/textual/typer) and claude live here; ~/.zshrc
+# only prepends it for interactive shells. (Some hosts' stock ~/.zshenv carries
+# this same line.) Guarded: zsh re-reads this file in every subshell.
 case ":$PATH:" in
 *":$HOME/.local/bin:"*) ;;
 *) export PATH="$HOME/.local/bin:$PATH" ;;

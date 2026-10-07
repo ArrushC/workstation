@@ -21,7 +21,7 @@ Nothing is pushed anywhere and there is no host list: each host keeps itself cur
 
 ## One setup, two OS files
 
-Every host gets the same setup. Three config files hold it, and miserc.toml (git-ignored, written by `scripts/lib/mise-env.sh` on Linux and `bootstrap.ps1` on Windows) picks the OS file:
+Every host gets the same setup. Three tracked config files hold it, plus the git-ignored `config.local.toml` for per-host values, and miserc.toml (git-ignored, written by `scripts/lib/mise-env.sh` on Linux and `bootstrap.ps1` on Windows) picks the OS file:
 
 | File | Loads on | Holds |
 |---|---|---|

@@ -789,7 +789,7 @@ for f, target, spec in entries:
 if bad_symlink:
     print("FAIL|no-symlink-anywhere|" + "; ".join(bad_symlink))
 else:
-    print(f"PASS|no-symlink-anywhere|{n_total} entries across all 5 config files are copy or template, none symlink/symlink-each")
+    print(f"PASS|no-symlink-anywhere|{n_total} entries across all {len(files)} config files are copy or template, none symlink/symlink-each")
 
 # Every directory entry that declares `exclude` covers each .vendor/.gitkeep
 # sidecar actually present there.
