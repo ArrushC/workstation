@@ -7,10 +7,9 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.sh | bash
 #
-# First run asks which of two modes this host is (or a saved vars.mode in
-# config.local.toml, or WORKSTATION_MODE=owned|shared — see resolve_host_config):
-#   owned   your machine  — sudo, full toolbelt, zsh login shell
-#   shared  someone else's — no sudo, user-level toolbelt only
+# Every host gets the same setup. The steps that need sudo (dnf packages, /etc
+# files, zsh as login shell) run when sudo works and are skipped, with a
+# warning, when it doesn't; see resolve_system_steps.
 #
 # See ./bootstrap.sh --help for flags (--reinstall, --yes).
 # =============================================================================
@@ -57,12 +56,10 @@ usage() {
   cat <<'EOF'
 Usage: ./bootstrap.sh [flags]
 
-Sets up this host with mise. The first run asks whether the host is yours:
-  owned   your machine — sudo: system packages, /etc files, services, zsh
-          login shell, plus the full developer toolbelt
-  shared  someone else's — no sudo: the user-level toolbelt only
-The answer is saved in ~/.config/mise/config.local.toml (vars.mode).
-Unattended first run: WORKSTATION_MODE=owned|shared.
+Sets up this host with mise: the toolbelt, dotfiles and, where sudo works,
+system packages, /etc files and zsh as login shell. Without sudo those are
+skipped (the result is saved as sudo = "no" in ~/.config/mise/config.local.toml;
+re-run with sudo to apply them).
 
 Flags:
   --reinstall   Wipe the cloned repo (incl. config.local.toml), then bootstrap
@@ -75,8 +72,7 @@ EOF
 }
 
 # --- Argument parsing ---------------------------------------------------------
-# Accepts in any order: --reinstall, --yes/-y. No mode flag — see
-# resolve_host_config.
+# Accepts in any order: --reinstall, --yes/-y.
 parse_args() {
   REINSTALL=false
   YES=false
@@ -99,7 +95,7 @@ parse_args() {
   done
 }
 
-# --- Config helpers + mode functions ------------------------------------------
+# --- Config helpers ------------------------------------------
 
 # config.local.toml is `key = "value"` lines under [vars], so plain awk reads
 # and writes it — no Python needed before tools exist. The reader also takes
@@ -174,7 +170,22 @@ config_set() { # config_set <file> <key> <value>
     END { if (!done) { if (!seen) print "[vars]"; print ENVIRON["LINE"] } }' "$file" >"$tmp" && mv "$tmp" "$file"
 }
 
-valid_mode() { [[ "${1:-}" == owned || "${1:-}" == shared ]]; }
+config_unset() { # config_unset <file> <key> — drop <key> from [vars]; no-op when absent
+  local file=$1 key=$2 tmp
+  [[ -f "$file" ]] || return 0
+  tmp=$(mktemp)
+  KEY="$key" awk '
+    /^[[:space:]]*\[/ {
+      in_vars = ($0 ~ /^[[:space:]]*\[[[:space:]]*vars[[:space:]]*\][[:space:]]*(#.*)?\r?$/)
+      print; next
+    }
+    in_vars {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (index(line, ENVIRON["KEY"]) == 1 && substr(line, length(ENVIRON["KEY"]) + 1) ~ /^[[:space:]]*=/) next
+    }
+    { print }' "$file" >"$tmp" && mv "$tmp" "$file"
+}
 
 # Prompts read fd 3: /dev/tty in real runs (so `curl | bash` still prompts),
 # a here-string in tests.
@@ -189,23 +200,39 @@ open_prompt_fd() {
   { exec 3</dev/tty; } 2>/dev/null
 }
 
-prompt_mode() {
-  local choice
-  {
-    echo "Is this host yours?"
-    echo "  1) owned    my machine — sudo, full install"
-    echo "  2) shared   someone else's — no sudo,"
-    echo "              user-level toolbelt only"
-  } >&2
-  while :; do
-    printf 'Choose [1/2]: ' >&2
-    IFS= read -r choice <&3 || fail "No answer to the setup-mode question."
-    case "$choice" in
-    1 | owned) echo owned && return 0 ;;
-    2 | shared) echo shared && return 0 ;;
-    *) echo "  Please answer 1 or 2." >&2 ;;
-    esac
-  done
+# sudo_state <file>: the saved decision; a missing value means yes (hosts set up
+# before the decision was saved all had sudo).
+sudo_state() {
+  [[ "$(config_get "$1" sudo)" == no ]] && echo no || echo yes
+}
+
+# detect_sudo: 0 sudo works, 1 it doesn't (no binary, or the password prompt
+# failed), 2 undecided (no terminal to ask on and no cached credentials).
+# sudo -v reads the password from the terminal itself, and the credentials it
+# caches cover mise's own sudo calls for the rest of the run.
+detect_sudo() {
+  command -v sudo >/dev/null 2>&1 || return 1
+  sudo -n true 2>/dev/null && return 0
+  open_prompt_fd || return 2
+  sudo -v && return 0
+  return 1
+}
+
+# resolve_system_steps: SYSTEM=yes|no for this run. A real answer is saved as
+# vars.sudo, so `mise run update` never has to ask; "no terminal" decides
+# nothing beyond this run.
+resolve_system_steps() {
+  local cfg="$REPO_DIR/config.local.toml" rc=0
+  detect_sudo || rc=$?
+  case "$rc" in
+  0) SYSTEM=yes && config_set "$cfg" sudo yes ;;
+  1) SYSTEM=no && config_set "$cfg" sudo no ;;
+  *) SYSTEM=no ;;
+  esac
+  if [[ "$SYSTEM" == no ]]; then
+    warn "No sudo here — skipping the system steps: dnf packages, /etc files, zsh as login shell."
+    warn "  Everything user-level still installs. To apply them later: get sudo, then re-run ./bootstrap.sh"
+  fi
 }
 
 # --- Step functions ------------------------------------------------------------
@@ -279,31 +306,17 @@ install_mise() {
   ok "mise $MISE_VERSION installed ($BIN/mise)"
 }
 
-# Mode: saved in config.local.toml, else WORKSTATION_MODE, else a prompt.
 # Name/email are asked on a first run; without a terminal they are left
 # unset (templates guard them) rather than blocking an unattended run.
 resolve_host_config() {
   local cfg="$REPO_DIR/config.local.toml" name email
-  MODE=$(config_get "$cfg" mode)
-  if [[ -n "$MODE" ]]; then
-    valid_mode "$MODE" || fail "$cfg has mode = \"$MODE\" — expected owned or shared. Fix or delete that line and re-run."
-    ok "mode: $MODE (saved in config.local.toml)"
-    if [[ -n "${WORKSTATION_MODE:-}" && "$WORKSTATION_MODE" != "$MODE" ]]; then
-      warn "WORKSTATION_MODE=$WORKSTATION_MODE ignored — this host is saved as $MODE in config.local.toml; edit or delete that line to change it"
-    fi
-  elif [[ -n "${WORKSTATION_MODE:-}" ]]; then
-    valid_mode "$WORKSTATION_MODE" || fail "WORKSTATION_MODE=$WORKSTATION_MODE — expected owned or shared."
-    MODE=$WORKSTATION_MODE
-    ok "mode: $MODE (from WORKSTATION_MODE)"
-  elif open_prompt_fd; then
-    MODE=$(prompt_mode)
-    ok "mode: $MODE"
-  else
-    fail "No terminal to ask the setup mode on.
-   Re-run interactively:  ssh -t <host> '...'
-   or answer up front:    WORKSTATION_MODE=shared   (or owned)"
+  if [[ -n "$(config_get "$cfg" mode)" ]]; then
+    config_unset "$cfg" mode
+    ok "dropped the old mode line from config.local.toml (every host gets the same setup now)"
   fi
-  config_set "$cfg" mode "$MODE"
+  if [[ -n "${WORKSTATION_MODE:-}" ]]; then
+    warn "WORKSTATION_MODE is no longer used (every host gets the same setup) — ignored"
+  fi
 
   name=$(config_get "$cfg" name)
   email=$(config_get "$cfg" email)
@@ -334,12 +347,12 @@ resolve_host_config() {
 
 # =============================================================================
 # APPLY — install tools, then run `mise bootstrap` (packages, /etc files, services, compose, repos,
-# dotfiles, tools gate, then the `bootstrap` task itself). Sudo (owned hosts
-# only) is scoped to the dnf batch and /etc files inside mise's own
-# elevation — this script never runs sudo directly.
+# dotfiles, tools gate, then the `bootstrap` task itself). Sudo is scoped to
+# the dnf batch and /etc files inside mise's own elevation, and skipped
+# entirely when SYSTEM=no.
 # =============================================================================
 apply() {
-  # config.local.toml (mode, and name/email if given) is already written by
+  # config.local.toml (name/email if given, sudo) is already written by
   # resolve_host_config in main(), before this function runs — the Tera
   # templates guard every vars.* reference, but a real value still shapes
   # the rendered git identity.
@@ -360,10 +373,12 @@ apply() {
   fi
 
   log "mise bootstrap — packages, /etc files, services, compose, repos, dotfiles, tools gate, then the bootstrap task"
-  if [[ "$MODE" == "owned" ]]; then
-    log "owned host — sudo will prompt for the dnf batch and /etc files"
+  local skip_flags=()
+  if [[ "$SYSTEM" == no ]]; then
+    skip_flags=(--skip "packages,files")
+    log "skipping the system steps (no sudo): mise bootstrap --skip packages,files"
   fi
-  if ! mise bootstrap --yes "${dotfiles_flags[@]}"; then
+  if ! mise bootstrap --yes "${dotfiles_flags[@]}" "${skip_flags[@]}"; then
     fail "mise bootstrap failed — see the failing phase above.
 
 A dotfiles conflict aborts the WHOLE dotfiles phase (one bad entry blocks
@@ -384,8 +399,8 @@ this script is idempotent — fix what's reported above and run again."
 }
 
 # =============================================================================
-# SET LOGIN SHELL — switch the login shell to zsh. Owned hosts only — main
-# calls this only when $MODE == owned, since shared hosts have no sudo.
+# SET LOGIN SHELL — switch the login shell to zsh. Only when SYSTEM=yes (it
+# needs sudo usermod).
 #
 # ~/.zshrc is a mise dotfiles template (config.linux.toml [dotfiles]);
 # switching the login shell is what makes new SSH/WSL sessions actually read
@@ -430,9 +445,9 @@ print_next_steps() {
   echo ""
   echo -e "${BOLD}Bootstrap complete.${RESET}"
 
-  # Only print the "you're on zsh" tip when the user actually is. On shared
-  # hosts set_login_shell never runs, so this stays quiet on its own; on
-  # owned hosts it may have bailed out (missing zsh binary, usermod
+  # Only print the "you're on zsh" tip when the user actually is. Without
+  # sudo set_login_shell never runs, so this stays quiet on its own; with
+  # sudo it may have bailed out (missing zsh binary, usermod
   # refused) and already printed its own follow-up command. Read the
   # authoritative shell from /etc/passwd — $SHELL was set by the parent
   # process.
@@ -450,10 +465,8 @@ print_next_steps() {
     echo -e "Enable passwordless SSH from your client:"
     echo -e "  ${YELLOW}ssh-copy-id $(whoami)@$(hostname -s)${RESET}  (Linux/WSL, and Windows via the PowerShell profile's ssh-copy-id)"
   fi
-  if [[ "$MODE" == owned ]]; then
-    echo -e "Re-configure the Claude Code statusline any time:"
-    echo -e "  ${YELLOW}mise run statusline${RESET}"
-  fi
+  echo -e "Re-configure the Claude Code statusline any time:"
+  echo -e "  ${YELLOW}mise run statusline${RESET}"
   echo -e "Health check any time: ${YELLOW}mise run health${RESET}"
 }
 
@@ -485,7 +498,7 @@ do_reinstall() {
   echo ""
   echo "  Will REMOVE:"
   echo "    - $REPO_DIR   (cloned workstation repo)"
-  echo "    - config.local.toml (mode, name, email) — asked again after the wipe"
+  echo "    - config.local.toml (name, email, sudo) — asked again after the wipe"
   echo ""
   echo "  Will NOT remove (leaving for re-bootstrap to no-op over):"
   echo "    - Installed tools in ~/.local/bin (tools are user-level)"
@@ -512,16 +525,6 @@ Either pipe the remote script (runs from memory):
 Or copy this script out of the repo first:
   cp $script_real /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --reinstall"
     fi
-  fi
-
-  # The wipe takes the saved mode with it, so make sure it can be supplied
-  # again before deleting anything.
-  if [[ -n "${WORKSTATION_MODE:-}" ]]; then
-    valid_mode "$WORKSTATION_MODE" || fail "WORKSTATION_MODE=$WORKSTATION_MODE — expected owned or shared. Nothing was removed."
-  elif ! open_prompt_fd; then
-    fail "No terminal to ask the setup mode on after the wipe — nothing was removed.
-   Re-run interactively:  ssh -t <host> '...'
-   or answer up front:    WORKSTATION_MODE=shared   (or owned)"
   fi
 
   if ! confirm_reinstall; then
@@ -568,6 +571,7 @@ main() {
   # inherited by mise/sudo/the bootstrap task below.
   { exec 3<&-; } 2>/dev/null || true
   resolve_host_config
+  resolve_system_steps
   { exec 3<&-; } 2>/dev/null || true
 
   TOKENS="$("$REPO_DIR/scripts/lib/mise-env.sh" --write)"
@@ -576,13 +580,13 @@ main() {
   log "mise config set: $TOKENS (saved in $REPO_DIR/miserc.toml)"
 
   apply
-  if [[ "$MODE" == owned ]]; then
+  if [[ "$SYSTEM" == yes ]]; then
     set_login_shell
   fi
 
-  # ccstatusline setup (owned hosts only) — interactive prompt for the Claude
-  # Code statusline. Re-runnable any time via `mise run statusline`.
-  if [[ "$MODE" == owned && -t 0 ]]; then
+  # ccstatusline setup — interactive prompt for the Claude Code statusline.
+  # Re-runnable any time via `mise run statusline`.
+  if [[ -t 0 ]]; then
     mise run statusline || true
   fi
 

@@ -975,13 +975,13 @@ check_mise_install_lib() {
   fi
 }
 
-check_bootstrap_mode() {
-  hdr "bootstrap.sh mode resolution (scripts/test-bootstrap-mode.sh)"
+check_bootstrap() {
+  hdr "bootstrap.sh (scripts/test-bootstrap.sh)"
   local out
-  if out=$(bash scripts/test-bootstrap-mode.sh 2>&1); then
+  if out=$(bash scripts/test-bootstrap.sh 2>&1); then
     ok "${out#PASS: }"
   else
-    bad "scripts/test-bootstrap-mode.sh failed:"
+    bad "scripts/test-bootstrap.sh failed:"
     printf '%s\n' "$out" | sed 's/^/       /' | head -10
   fi
 }
@@ -1217,7 +1217,7 @@ check_warp_guards
 check_zellij_config
 check_disk_budget
 check_mise_install_lib
-check_bootstrap_mode
+check_bootstrap
 check_self_tests
 check_shellcheck
 check_shfmt
