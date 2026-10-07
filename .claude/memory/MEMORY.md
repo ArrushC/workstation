@@ -25,3 +25,4 @@
 - [bootstrap single mode](project-bootstrap-single-mode.md) — no owned/shared mode since 2026-10-07: OS-only tokens, sudo decided once and saved as vars.sudo; never reintroduce a mode, WORKSTATION_MODE, --dev/--prod or group key.
 - [omp self-install shadows mise](project-omp-self-install-shadows-mise.md) — oh-my-pi put %LOCALAPPDATA%\omp on the Windows User PATH ahead of the shims; removed 2026-10-01; check PATH order first if a mise tool resolves elsewhere.
 - [No migration code](feedback-no-migration-code.md) — no one-time cleanups or stale-state tidy-ups in the repo; leave inert leftovers or hand the user a one-off command.
+- [Directory (SSSD) accounts](project-directory-accounts-sssd.md) — atc-cache-dev10 users come from SSSD: shell via sss_override, and musl static tools cannot resolve the username (pueued, fixed by conda:pueue).

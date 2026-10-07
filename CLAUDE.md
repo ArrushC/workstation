@@ -62,7 +62,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `fswatch`, `entr` and `cockpit-networkmanager` don't resolve.
 - No `[bootstrap.linux.firewall]` table: it makes `mise bootstrap plan`/`status` re-exec with sudo,
   which breaks `mise run health`. No `[bootstrap.user] login_shell` either: it needs `chsh`.
-  `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`.
+  `bootstrap.sh`'s `set_login_shell` uses `sudo usermod`, or `sss_override` + an sssd restart for a
+  directory (SSSD) account (not in /etc/passwd), which `usermod`/`chsh` can't change.
 - `[vars]` pins (`vcpkg_version`, `zjstatus_zellij_floor`) reach
   tasks through `#MISE env={X="{{ vars.x }}"}`.
 - Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe:

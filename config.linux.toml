@@ -65,16 +65,18 @@ taplo = "0.10.0"
 "github:watchexec/watchexec" = { version = "2.7.4", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
 "github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
-# --- conda: (the project ships only glibc builds newer than EL8's 2.28; conda-forge builds against glibc 2.17/2.28) ---
+# --- conda: (the project ships only glibc builds newer than EL8's 2.28, or only static musl ones; conda-forge builds against glibc 2.17/2.28) ---
 "conda:helix" = "25.07.1"   # glibc 2.17, runtime bundled (no HELIX_RUNTIME); Windows keeps aqua's helix (config.toml)
 "conda:ast-grep" = "0.45.3"   # provides `ast-grep` and `sg`
 "conda:jless" = "0.9.0"
 "conda:gitlogue" = "0.12.0"
 "conda:htmlq" = "0.4.0"
+# pueue + pueued. Upstream ships only static musl builds, whose user lookup reads
+# /etc/passwd alone: for a directory (SSSD/LDAP) account pueued can't name its
+# socket and exits. The glibc build looks the user up through NSS.
+"conda:pueue" = "4.0.4"
 # --- http: (no GitHub release, bare assets, or scripts) ---
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
-"http:pueue" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueue-x86_64-unknown-linux-musl", bin = "pueue" }
-"http:pueued" = { version = "4.0.4", url = "https://github.com/Nukesor/pueue/releases/download/v{{version}}/pueued-x86_64-unknown-linux-musl", bin = "pueued" }
 "http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }
 "http:sysz" = { version = "1.4.3", url = "https://raw.githubusercontent.com/joehillen/sysz/{{version}}/sysz", bin = "sysz" }
 # The OpenSSH tag in the URL is hard-coded: bump it with `version` (10.6p1 -> V_10_6_P1).
