@@ -10,13 +10,14 @@ vendored:       2026-06-20
 
 PYTHON FLOOR — load-bearing pin: 2024.06 is the LAST GEF release that supports
 Python 3.6–3.9 (`PYTHON_MIN_VERSION = (3, 6)`, no `match` statements). GEF
-2025.01+ requires Python 3.10 and uses 3.10 `match`/`case` syntax. The fleet is
-AlmaLinux 9, whose gdb embeds Python 3.9 — so current GEF fails to *parse* at
-load (SyntaxError), spamming a traceback on every `gdb` start. DO NOT bump past
-2024.06 while any managed host runs EL9 / gdb-with-Python-3.9. Verify a bump on
-an EL9 host with:
-  gdb -nx -batch -ex 'source ~/.config/gdb/gef.py' -ex 'gef help'
-— it must print "GEF for linux ready ... using Python engine 3.9", NOT a Python
+2025.01+ requires Python 3.10 and uses 3.10 `match`/`case` syntax. Plain `gdb`
+on PATH is pwndbg's bundled GDB 17 (Python 3.13), but the system /usr/bin/gdb
+embeds Python 3.6 (EL8) or 3.9 (EL9), and current GEF fails to *parse* there
+(SyntaxError, a traceback on every start). DO NOT bump past 2024.06 while any
+managed host's /usr/bin/gdb has Python < 3.10. Verify a bump with the SYSTEM gdb
+(plain `gdb` would test pwndbg's Python 3.13 and pass falsely):
+  /usr/bin/gdb -nx -batch -ex 'source ~/.config/gdb/gef.py' -ex 'gef help'
+— it must print "GEF for linux ready ... using Python engine 3.6/3.9", NOT a Python
 SyntaxError. (`gef-legacy` is NOT a fallback — it targets GDB+Python2.) pwndbg,
 the other front-end, is immune: its portable build bundles a newer Python.
 
@@ -27,9 +28,9 @@ note:           Leading-dot filename (.vendor) → excluded by the symlink-each 
                 ~/.gdbinit (dotfiles/gdbinit.tera) so plain `gdb` loads the GEF UI.
                 Linux-only: both ~/.gdbinit and ~/.config/gdb are declared only in
                 config.linux.toml, so they never deploy on Windows. The OTHER GDB
-                front-end, pwndbg, is installed separately as a standalone `pwndbg`
-                command — a mise tool (`github:pwndbg/pwndbg` in config.linux.toml) that does NOT hook
-                ~/.gdbinit, so the two never collide. No config.toml [vars] entry — pinned only here.
+                front-end, pwndbg (`github:pwndbg/pwndbg` in config.linux.toml), does NOT
+                read ~/.gdbinit; its bundled gdb is the one plain `gdb` runs (first on
+                PATH), so plain `gdb` = GDB 17 + GEF and `pwndbg` = pwndbg. No config.toml [vars] entry — pinned only here.
                 Bump (ONLY once the fleet's gdb-Python ≥ the target GEF's floor — see PYTHON
                 FLOOR above): re-download gef.py at the new tag, refresh release + asset +
                 file-sha256 + vendored, then re-verify the load on an EL9 host. ~/.gdbinit
