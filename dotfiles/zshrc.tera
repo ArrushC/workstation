@@ -793,11 +793,12 @@ export PROJECT_ROOT="$HOME/projects"
 # A new terminal window/tab or an SSH login prints the system summary from
 # ~/.config/fastfetch/config.jsonc. Skipped where it would be noise: output that
 # isn't a terminal, nested shells (SHLVL > 1: `zsh` inside zsh, `exec zsh`,
-# zellij panes), zellij itself, and Claude Code's shells ($CLAUDECODE). Below 100
-# columns the logo is dropped so lines aren't cut off (fastfetch doesn't wrap).
+# zellij panes), zellij itself, and Claude Code's shells ($CLAUDECODE). Below 110
+# columns (its widest line with the logo) the logo is dropped so lines aren't cut
+# off: fastfetch truncates rather than wraps.
 # After the .local file so WORKSTATION_FASTFETCH=0 there turns it off.
 # PARITY: identical body in bashrc.tera.
 if [[ ${WORKSTATION_FASTFETCH:-1} == 1 && -t 1 && ${SHLVL:-1} -le 1 && -z ${ZELLIJ:-} && -z ${CLAUDECODE:-} ]] &&
   command -v fastfetch &>/dev/null; then
-  if ((${COLUMNS:-80} >= 100)); then fastfetch; else fastfetch --logo none; fi
+  if ((${COLUMNS:-80} >= 110)); then fastfetch; else fastfetch --logo none; fi
 fi
