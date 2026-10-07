@@ -14,11 +14,6 @@ printf '==> config set %s (miserc.toml)\n' "$tokens"
 
 cfg="$root/config.local.toml"
 lib() { WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$1"; shift; "$@"' _ "$root/bootstrap.sh" "$@"; }
-# One-time tidy-up of the two-mode era's `mode` line.
-if [ -n "$(lib config_get "$cfg" mode)" ]; then
-  lib config_unset "$cfg" mode
-  printf ' ✓ dropped the old mode line from config.local.toml\n'
-fi
 skip=()
 if [ "$(lib sudo_state "$cfg")" = no ]; then
   skip=(--skip "packages,files")

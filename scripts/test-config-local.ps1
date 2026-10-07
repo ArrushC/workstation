@@ -1,12 +1,12 @@
-﻿# Tests bootstrap.ps1's config.local.toml writer (Set-ConfigLocalVar,
-# Remove-ConfigLocalVar and Invoke-EnsureConfigLocal) without running the bootstrap: the three functions
+﻿# Tests bootstrap.ps1's config.local.toml writer (Set-ConfigLocalVar and
+# Invoke-EnsureConfigLocal) without running the bootstrap: the two functions
 # are extracted from the script's AST, the same way scripts/test-curl.ps1 works.
 # StrictMode matches bootstrap.ps1's own, so a strict-only crash fails here too.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Set-ConfigLocalVar', 'Remove-ConfigLocalVar', 'Invoke-EnsureConfigLocal'
+$wanted = 'Set-ConfigLocalVar', 'Invoke-EnsureConfigLocal'
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
     . ([scriptblock]::Create($f.Extent.Text))
 }
@@ -40,14 +40,12 @@ $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("cfglocal-" + [guid]::NewGui
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $script:SkipToolInstall = $true
 try {
-    Test-Case 'existing file: a stale mode line is dropped, rest kept' {
+    Test-Case 'existing file with name and email: left byte-for-byte' {
         $cfg = New-CaseDir 'a'
-        [System.IO.File]::WriteAllText($cfg, "[vars]`nmode = `"owned`"`nname = `"N`"`nemail = `"e@x`"`n`n[dotfiles]`n`"~/.x`" = { source = `"x`", mode = `"copy`", enabled = false }`n")
+        $before = "[vars]`nname = `"N`"`nemail = `"e@x`"`n`n[dotfiles]`n`"~/.x`" = { source = `"x`", mode = `"copy`", enabled = false }`n"
+        [System.IO.File]::WriteAllText($cfg, $before)
         Invoke-EnsureConfigLocal
-        $text = Read-Cfg $cfg
-        Assert (-not ($text -match '(?m)^\s*mode\s*=')) "mode line kept: $text"
-        Assert ($text -match '(?m)^name = "N"$') 'name lost'
-        Assert ($text -match '(?m)^\[dotfiles\]$') '[dotfiles] lost'
+        Assert ((Read-Cfg $cfg) -ceq $before) "file changed: $(Read-Cfg $cfg)"
     }
 
     Test-Case 'missing file, non-interactive: nothing written' {
@@ -76,59 +74,52 @@ try {
         Assert ((Read-Cfg $cfg) -ceq '') "got: $(Read-Cfg $cfg)"
     }
 
-    Test-Case 'Remove-ConfigLocalVar: indented, commented key in [vars] removed; other tables untouched' {
-        $cfg = New-CaseDir 'remove'
-        [System.IO.File]::WriteAllText($cfg, "[vars]`n  mode = `"owned`" # laptop`nname = `"N`"`n[other]`nmode = 1`n")
-        Remove-ConfigLocalVar -Path $cfg -Key 'mode'
-        Assert ((Read-Cfg $cfg) -ceq "[vars]`nname = `"N`"`n[other]`nmode = 1`n") "got: $(Read-Cfg $cfg)"
-    }
-
     Test-Case 'one-line file, no trailing newline' {
         $cfg = New-CaseDir 'one-nonl'
         [System.IO.File]::WriteAllText($cfg, '[vars]')
-        Set-ConfigLocalVar -Path $cfg -Key 'mode' -Value 'owned'
-        Assert ((Read-Cfg $cfg) -ceq "[vars]`nmode = `"owned`"`n") "got: $(Read-Cfg $cfg)"
+        Set-ConfigLocalVar -Path $cfg -Key 'editor' -Value 'hx'
+        Assert ((Read-Cfg $cfg) -ceq "[vars]`neditor = `"hx`"`n") "got: $(Read-Cfg $cfg)"
     }
 
     Test-Case 'one-line file, trailing newline' {
         $cfg = New-CaseDir 'one-nl'
         [System.IO.File]::WriteAllText($cfg, "[vars]`n")
-        Set-ConfigLocalVar -Path $cfg -Key 'mode' -Value 'owned'
-        Assert ((Read-Cfg $cfg) -ceq "[vars]`nmode = `"owned`"`n") "got: $(Read-Cfg $cfg)"
+        Set-ConfigLocalVar -Path $cfg -Key 'editor' -Value 'hx'
+        Assert ((Read-Cfg $cfg) -ceq "[vars]`neditor = `"hx`"`n") "got: $(Read-Cfg $cfg)"
     }
 
     Test-Case '[vars] header with a trailing space' {
         $cfg = New-CaseDir 'hdr-space'
         [System.IO.File]::WriteAllText($cfg, "[vars] `r`nname = `"N`"`r`n")
-        Set-ConfigLocalVar -Path $cfg -Key 'mode' -Value 'owned'
+        Set-ConfigLocalVar -Path $cfg -Key 'editor' -Value 'hx'
         $text = Read-Cfg $cfg
         Assert ((Get-MatchCount $text '(?m)^\s*\[\s*vars\s*\]') -eq 1) "duplicate [vars] table: $text"
-        Assert ($text -match '(?m)^mode = "owned"$') "mode not added: $text"
+        Assert ($text -match '(?m)^editor = "hx"$') "key not added: $text"
     }
 
     Test-Case '[vars] header with a trailing comment' {
         $cfg = New-CaseDir 'hdr-comment'
         [System.IO.File]::WriteAllText($cfg, "[vars] # identity`nname = `"N`"`n")
-        Set-ConfigLocalVar -Path $cfg -Key 'mode' -Value 'owned'
+        Set-ConfigLocalVar -Path $cfg -Key 'editor' -Value 'hx'
         $text = Read-Cfg $cfg
         Assert ((Get-MatchCount $text '(?m)^\s*\[\s*vars\s*\]') -eq 1) "duplicate [vars] table: $text"
-        Assert ($text -match '(?m)^mode = "owned"$') "mode not added: $text"
+        Assert ($text -match '(?m)^editor = "hx"$') "key not added: $text"
     }
 
     Test-Case 'indented key is replaced, not duplicated' {
         $cfg = New-CaseDir 'indent-key'
-        [System.IO.File]::WriteAllText($cfg, "[vars]`n  mode = `"shared`"`n")
-        Set-ConfigLocalVar -Path $cfg -Key 'mode' -Value 'owned'
+        [System.IO.File]::WriteAllText($cfg, "[vars]`n  editor = `"vi`"`n")
+        Set-ConfigLocalVar -Path $cfg -Key 'editor' -Value 'hx'
         $text = Read-Cfg $cfg
-        Assert ((Get-MatchCount $text '(?m)^\s*mode\s*=') -eq 1) "duplicate mode key: $text"
-        Assert ($text -match '(?m)^mode = "owned"$') "mode not replaced: $text"
+        Assert ((Get-MatchCount $text '(?m)^\s*editor\s*=') -eq 1) "duplicate key: $text"
+        Assert ($text -match '(?m)^editor = "hx"$') "key not replaced: $text"
     }
 
     Test-Case 'indented header of another table leaves [vars]' {
         $cfg = New-CaseDir 'indent-hdr'
         [System.IO.File]::WriteAllText($cfg, "[vars]`nname = `"N`"`n  [dotfiles]`nx = 1`n")
-        Set-ConfigLocalVar -Path $cfg -Key 'mode' -Value 'owned'
-        Assert ((Read-Cfg $cfg) -ceq "[vars]`nname = `"N`"`nmode = `"owned`"`n  [dotfiles]`nx = 1`n") "mode not kept in [vars]: $(Read-Cfg $cfg)"
+        Set-ConfigLocalVar -Path $cfg -Key 'editor' -Value 'hx'
+        Assert ((Read-Cfg $cfg) -ceq "[vars]`nname = `"N`"`neditor = `"hx`"`n  [dotfiles]`nx = 1`n") "key not kept in [vars]: $(Read-Cfg $cfg)"
     }
 
     Test-Case 'indented name/email count as present' {

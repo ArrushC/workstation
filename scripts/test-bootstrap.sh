@@ -85,14 +85,6 @@ printf '[vars]\nname = "N"\n' >"$T/s6.toml"
 [ "$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; sudo_state "$1"' "$root/bootstrap.sh" "$T/s6.toml")" = yes ] || fail "S6: missing is not yes"
 printf '[vars]\nsudo = "no" # no sudo here\n' >"$T/s6.toml"
 [ "$(WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; sudo_state "$1"' "$root/bootstrap.sh" "$T/s6.toml")" = no ] || fail "S6: saved no not read"
-# T1. the stale mode line is dropped (indented, commented, CRLF), the rest kept; WORKSTATION_MODE is ignored with a note.
-mkdir -p "$T/t1"
-printf '[vars]\r\n  mode = "owned" # laptop\r\nname = "N"\r\nemail = "e@x"\r\n' >"$T/t1/config.local.toml"
-out=$(run "$T/t1" - FAKE_SUDO_N=0 WORKSTATION_MODE=shared) || fail "T1: exit — $out"
-grep -q 'mode' "$T/t1/config.local.toml" && fail "T1: mode line kept: $(cat "$T/t1/config.local.toml")"
-grep -q '^name = "N"' "$T/t1/config.local.toml" || fail "T1: name lost"
-grep -q 'WORKSTATION_MODE is no longer used' <<<"$out" || fail "T1: no note for WORKSTATION_MODE: $out"
-
 # 6. config_set keeps other tables and escapes quotes; config_get reads back.
 mkdir -p "$T/c6"
 printf '[vars]\nname = "Old"\n\n[dotfiles]\n"~/.x" = { source = "x", mode = "copy", enabled = false }\n' >"$T/c6/config.local.toml"
@@ -168,22 +160,22 @@ grep -q 'Re-run with --yes' <<<"$out" || fail "no-terminal reinstall confirm mis
 mkdir -p "$T/c11"
 cat >"$T/c11/config.local.toml" <<'TOML'
 [vars]
-mode = "owned" # laptop
+editor = "hx" # laptop
 name = 'O\x "q"'   # literal: no escapes
 email = "a # b" # not part of the value
 k1 = "Q \"q\" \\ z"
-k2 = 'shared'
+k2 = 'lit'
 k3 = "t"	# tab before the comment
 TOML
 get() { WORKSTATION_BOOTSTRAP_LIB=1 bash -c 'source "$0"; config_get "$1" "$2"' "$root/bootstrap.sh" "$T/c11/config.local.toml" "$1"; }
-[ "$(get mode)" = 'owned' ] || fail "config_get: trailing comment after a basic string: got [$(get mode)]"
+[ "$(get editor)" = 'hx' ] || fail "config_get: trailing comment after a basic string: got [$(get editor)]"
 [ "$(get name)" = 'O\x "q"' ] || fail "config_get: literal string: got [$(get name)]"
 [ "$(get email)" = 'a # b' ] || fail "config_get: '#' inside quotes: got [$(get email)]"
 [ "$(get k1)" = 'Q "q" \ z' ] || fail "config_get: basic-string escapes: got [$(get k1)]"
-[ "$(get k2)" = 'shared' ] || fail "config_get: literal string without comment: got [$(get k2)]"
+[ "$(get k2)" = 'lit' ] || fail "config_get: literal string without comment: got [$(get k2)]"
 [ "$(get k3)" = 't' ] || fail "config_get: tab before a comment: got [$(get k3)]"
 
-# 12. --reinstall without a terminal still wipes (no mode to ask), and the
+# 12. --reinstall without a terminal still wipes (nothing to ask first), and the
 # "Will REMOVE" list names config.local.toml (name, email, sudo).
 reinstall() { # reinstall <dir> [VAR=value ...] -> wipe outcome
   local dir=$1
@@ -198,8 +190,8 @@ grep -q 'REINSTALL-DONE' <<<"$out" || fail "--reinstall did not finish: $out"
 grep -q 'config.local.toml (name, email, sudo)' <<<"$out" || fail "--reinstall REMOVE list: $out"
 [ ! -e "$T/c12/repo" ] || fail "--reinstall did not wipe the checkout"
 
-# U1/U2. tasks/update: drops a stale mode line and runs the full bootstrap when
-# sudo is unset; passes --skip packages,files when sudo = "no".
+# U1/U2. tasks/update: runs the full bootstrap when sudo is unset; passes
+# --skip packages,files when sudo = "no".
 U="$T/u"
 mkdir -p "$U/repo/tasks" "$U/repo/scripts/lib" "$U/bin"
 cp "$root/tasks/update" "$U/repo/tasks/update"
@@ -210,14 +202,13 @@ chmod +x "$U/repo/scripts/lib/mise-install.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$U/bin/git"
 printf '#!/usr/bin/env bash\necho "mise $*" >>"%s/mise.log"\n' "$U" >"$U/bin/mise"
 chmod +x "$U/bin/git" "$U/bin/mise"
-printf '[vars]\nmode = "owned"\nname = "N"\n' >"$U/repo/config.local.toml"
+printf '[vars]\nname = "N"\n' >"$U/repo/config.local.toml"
 : >"$U/mise.log"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" bash -c 'mkdir -p "$XDG_CONFIG_HOME/mise"; "$0"' "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U1: update failed"
-grep -q 'mode' "$U/repo/config.local.toml" && fail "U1: mode line kept"
 grep -qx 'mise bootstrap --yes' "$U/mise.log" || fail "U1: expected a full bootstrap: $(cat "$U/mise.log")"
 printf '[vars]\nsudo = "no"\n' >"$U/repo/config.local.toml"
 : >"$U/mise.log"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U2: update failed"
 grep -qx 'mise bootstrap --yes --skip packages,files' "$U/mise.log" || fail "U2: expected the skip: $(cat "$U/mise.log")"
 
-echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), stale mode cleanup, pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"
+echo "PASS: bootstrap.sh identity prompts, sudo decision (cached, prompt ok/fail, interrupted prompt, no terminal, no binary, saved state), pty stderr safety, CRLF header, config.local.toml writer, hand-edited TOML, --reinstall"

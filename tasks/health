@@ -69,16 +69,7 @@ if [ "$sudo_saved" = no ]; then
 else
   row_ok "system steps" "applied${sudo_saved:+ (sudo = $sudo_saved)}"
 fi
-# Mise reads miserc unless MISE_ENV is exported; these were the old exporters.
-legacy=""
-grep -qs 'export MISE_ENV=' "$HOME/.zshenv" "$HOME/.bashrc" && legacy="$legacy rc-files"
-[ -e "$HOME/.config/environment.d/10-mise.conf" ] && legacy="$legacy environment.d"
-systemctl --user show-environment 2>/dev/null | grep '^MISE_ENV=' >/dev/null && legacy="$legacy systemd-user-manager"
-if [ -z "$legacy" ]; then
-  row_ok "MISE_ENV export" "nothing exports it (miserc.toml rules)"
-else
-  row_warn "MISE_ENV export" "still exported by:$legacy — mise run update, then open a new shell"
-fi
+# The report's own mise calls follow miserc.toml, as every other mise process does.
 unset MISE_ENV
 echo ""
 

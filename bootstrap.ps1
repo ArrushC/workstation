@@ -118,10 +118,6 @@ function Invoke-CurlRequest {
     }
 }
 
-# A seam scripts/test-mise-env.ps1 can stub (a static .NET method can't be); $null deletes.
-function Get-UserEnv { param([string]$Name) [Environment]::GetEnvironmentVariable($Name, "User") }
-function Set-UserEnv { param([string]$Name, $Value) [Environment]::SetEnvironmentVariable($Name, $Value, "User") }
-
 function Update-SessionPath {
     # The session keeps its own PATH copy; rebuild it so new User PATH entries resolve now.
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
@@ -306,32 +302,6 @@ function Install-Mise {
     }
 }
 
-# Removes the portable installs mise replaced (their User PATH entries shadow the
-# shims) and only their own stamps: wslconfig/node-postinstall/python-env stamps are
-# live. Runs after a good tools phase. Remove once every Windows host has run it.
-function Invoke-LegacyToolCleanup {
-    $old = @("helix", "nu", "devtoys-cli", "dngrep", "logexpert") | ForEach-Object { Join-Path $WsRoot $_ }
-    $oldExes = @("starship", "gh", "jq", "omp", "opencode", "chezmoi") | ForEach-Object { Join-Path $WsBin "$_.exe" }
-    $userPath = Get-UserEnv "Path"
-    if ($userPath) {
-        $kept = @($userPath -split ';' | Where-Object { $_ -and ($old -notcontains $_.TrimEnd('\')) })
-        $newPath = $kept -join ';'
-        if ($newPath -ne $userPath) {
-            Set-UserEnv "Path" $newPath
-            Write-Ok "removed old portable-tool directories from the User PATH"
-        }
-    }
-    foreach ($d in $old) { if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
-    foreach ($exe in $oldExes) { Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue }
-    $left = @(@($old) + @($oldExes) | Where-Object { Test-Path -LiteralPath $_ })
-    if ($left.Count -gt 0) {
-        Write-Warn "old portable tools still present (in use?): $($left -join ', ') -- close it and re-run .\bootstrap.ps1"
-    }
-    Get-ChildItem -Path $WsStamps -Filter "*.stamp" -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '^(starship|gh|hx|nu|jq|opencode|omp|DevToys\.CLI|dnGREP|LogExpert|uv|chezmoi|mise-runtimes)\.' } |
-        Remove-Item -Force -ErrorAction SilentlyContinue
-}
-
 # Path-independent, and a Control-Panel uninstall removes the key, so the next run reinstalls.
 function Test-InstallerPresent {
     param([string]$DisplayName)
@@ -482,16 +452,12 @@ function Invoke-CloneRepo {
 $MigratedMarker = Join-Path $WsRoot "dotfiles-migrated"
 
 # miserc.toml (git-ignored) holds the token set, as on Linux. An exported MISE_ENV
-# would override it, so a User MISE_ENV is removed, and this session's too.
+# would override it, so this session's is removed.
 function Initialize-MiseEnv {
     $rc = Join-Path $RepoPath "miserc.toml"
     $envList = ($MiseEnvTokens | ForEach-Object { '"' + $_ + '"' }) -join ', '
     $body = "# Written by bootstrap.ps1 (Windows' token set).`nenv = [$envList]`nauto_env = false`n"
     [System.IO.File]::WriteAllText($rc, $body, [System.Text.UTF8Encoding]::new($false))
-    if (Get-UserEnv "MISE_ENV") {
-        Set-UserEnv "MISE_ENV" $null
-        Write-Ok "removed the old User MISE_ENV variable (miserc.toml replaces it)"
-    }
     Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue
 }
 
@@ -529,29 +495,9 @@ function Set-ConfigLocalVar {
     [System.IO.File]::WriteAllText($Path, (($out -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# Drop a key from [vars] (the same header and key tolerance as Set-ConfigLocalVar).
-function Remove-ConfigLocalVar {
-    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Key)
-    if (-not (Test-Path -LiteralPath $Path)) { return }
-    $lines = @([System.IO.File]::ReadAllText($Path) -split "`r?`n")
-    if ($lines.Count -gt 0 -and $lines[-1] -eq '') { $lines = @(if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] }) }
-    $out = New-Object System.Collections.Generic.List[string]
-    $inVars = $false
-    $keyPattern = '^\s*' + [regex]::Escape($Key) + '\s*='
-    foreach ($l in $lines) {
-        if ($l -match '^\s*\[') { $inVars = $l -match '^\s*\[\s*vars\s*\]\s*(#.*)?$'; $out.Add($l); continue }
-        if ($inVars -and $l -match $keyPattern) { continue }
-        $out.Add($l)
-    }
-    $text = if ($out.Count) { ($out -join "`n") + "`n" } else { '' }
-    [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
-}
-
-# Name/email are asked once; a non-interactive run leaves them to the user. A stale
-# mode line from the two-mode era is dropped.
+# Name/email are asked once; a non-interactive run leaves them to the user.
 function Invoke-EnsureConfigLocal {
     $target = Join-Path $RepoPath "config.local.toml"
-    Remove-ConfigLocalVar -Path $target -Key 'mode'
     $text = if (Test-Path -LiteralPath $target) { [System.IO.File]::ReadAllText($target) } else { '' }
     $hasName = $text -match '(?m)^[ \t]*name[ \t]*='
     $hasEmail = $text -match '(?m)^[ \t]*email[ \t]*='
@@ -727,7 +673,6 @@ reported above and re-run.
     }
 
     if (-not $SkipToolInstall) {
-        Invoke-LegacyToolCleanup
         Add-ToUserPath $MiseShims
         Update-SessionPath
         $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'

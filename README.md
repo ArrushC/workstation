@@ -258,7 +258,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` prints one row per check with the exact repair command: the config set and the system steps, `mise bootstrap status --missing`, toolbelt completeness, free disk space where mise installs tools (a warning below 2 GB), `miserc.toml` and leftover `MISE_ENV` exports, pueued, python-env, extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t`, since dnf and `/etc` files can prompt for sudo) and run `wsu` there.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the config set and the system steps, `mise bootstrap status --missing`, toolbelt completeness, free disk space where mise installs tools (a warning below 2 GB), `miserc.toml`, pueued, python-env, extras (Claude Code, vcpkg, fonts), the zjstatus plugin, the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t`, since dnf and `/etc` files can prompt for sudo) and run `wsu` there.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
