@@ -226,7 +226,7 @@ Key map: Ctrl-R atuin history · ↑/↓ substring search · → accept suggesti
 
 The repo's own scripts complete their flags: `bootstrap.sh` in zsh and bash, `bootstrap.ps1` in Nushell (kept in step by `scripts/check-invariants.sh`).
 
-**Greeting (Linux).** A new terminal window or SSH login prints a [fastfetch](https://github.com/fastfetch-cli/fastfetch) summary in Catppuccin Mocha: the distro logo beside system (OS, host, OS age, uptime and boot time, load), software (packages, mise tools, toolchain versions, shell), network, hardware (CPU, GPU, memory and swap bars, battery, display) and storage (`/`, `/home`, the Windows C: drive) groups, about 40 ms. Plain `fastfetch` prints the same. It stays quiet in zellij panes, nested shells, Claude Code and piped output, and drops the logo below 110 columns. Turn it off with `WORKSTATION_FASTFETCH=0` in `~/.zshrc.local` (or `~/.bashrc.local`); change the layout with `wse ~/.config/fastfetch/config.jsonc`.
+**Greeting (Linux).** A new terminal window or SSH login prints a [fastfetch](https://github.com/fastfetch-cli/fastfetch) summary in Catppuccin Mocha: the distro logo beside system (OS, kernel, OS age, uptime, load, IP), software (shell, python / node / go versions), hardware (CPU, memory and swap bars) and storage (`/`, `/home`, the Windows C: drive) groups, about 30 ms. Plain `fastfetch` prints the same. It stays quiet in zellij panes, nested shells, Claude Code and piped output, and drops the logo below 105 columns. Turn it off with `WORKSTATION_FASTFETCH=0` in `~/.zshrc.local` (or `~/.bashrc.local`); change the layout with `wse ~/.config/fastfetch/config.jsonc`.
 
 ## Daily use
 

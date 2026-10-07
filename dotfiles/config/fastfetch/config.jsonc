@@ -4,15 +4,18 @@
 // Printed by ~/.zshrc and ~/.bashrc when a top-level shell starts (a new terminal
 // or an SSH login; see the fastfetch block at the end of each rc), and by a plain
 // `fastfetch`. Layout: the distro logo (detected per host), then system / software
-// / network / hardware / storage groups on tree branches, in Catppuccin Mocha (the
-// zellij theme and zsh highlight palette): headers mauve #cba6f7, blue #89b4fa,
-// teal #94e2d5, peach #fab387, yellow #f9e2af; values text #cdd6f4; branches
-// overlay #6c7086; bars green/yellow/red on surface #45475a. A row whose
-// module finds nothing (no battery or display over SSH, /home not a mount point)
-// is left out. Icons need a Nerd Font (JetBrainsMono Nerd Font, from bootstrap).
+// / hardware / storage groups on tree branches, in Catppuccin Mocha (the zellij
+// theme and zsh highlight palette): headers mauve #cba6f7, blue #89b4fa, peach
+// #fab387, yellow #f9e2af; values text #cdd6f4; branches overlay #6c7086; bars
+// green/yellow/red on surface #45475a. A row whose module finds nothing (/home
+// not a mount point, no mise tools on PATH) is left out. Icons need a Nerd Font
+// (JetBrainsMono Nerd Font, from bootstrap).
 //
-// Only local modules, ~40 ms on WSL: no publicip/weather (network calls), and no
-// cpuusage/netio/diskio, which sample for ~200 ms. Docs:
+// Kept to what tells hosts apart or is worth acting on; rows that read the same
+// everywhere (init, locale, dns, packages) or don't matter in a terminal (gpu,
+// battery, display) were dropped. Only local modules, ~30 ms on WSL: no
+// publicip/weather (network calls), and no cpuusage/netio/diskio, which sample
+// for ~200 ms. Docs:
 // https://github.com/fastfetch-cli/fastfetch/wiki/Configuration
 // Colour syntax ({##rrggbb} in formats and keys, #rrggbb in fields):
 // https://github.com/fastfetch-cli/fastfetch/wiki/Color-Format-Specification
@@ -29,30 +32,18 @@
     { "type": "title", "format": "{##cba6f7}{user-name}{##6c7086}@{##89b4fa}{host-name}" },
     { "type": "custom", "format": "{##6c7086}╭─ {##cba6f7}system" },
     { "type": "os", "key": "{##6c7086}│ {##cba6f7}󰌽 os        ", "format": "{pretty-name} {arch}" },
-    { "type": "host", "key": "{##6c7086}│ {##cba6f7}󰌢 host      " },
     { "type": "kernel", "key": "{##6c7086}│ {##cba6f7} kernel    ", "format": "{release}" },
     { "type": "disk", "key": "{##6c7086}│ {##cba6f7}󰃭 age       ", "folders": "/", "format": "{?create-time}{days} days (installed {create-time:10}){?}" },
-    { "type": "uptime", "key": "{##6c7086}│ {##cba6f7}󰅐 uptime    ", "format": "{formatted} (booted {boot-time:16})" },
+    { "type": "uptime", "key": "{##6c7086}│ {##cba6f7}󰅐 uptime    " },
     { "type": "loadavg", "key": "{##6c7086}│ {##cba6f7}󰓅 load      ", "format": "{loadavg1}, {loadavg2}, {loadavg3}" },
-    { "type": "processes", "key": "{##6c7086}│ {##cba6f7}󰹇 processes " },
-    { "type": "locale", "key": "{##6c7086}│ {##cba6f7}󰗊 locale    " },
+    { "type": "localip", "key": "{##6c7086}│ {##cba6f7}󰩟 ip        ", "format": "{ipv4} ({ifname})" },
     { "type": "custom", "format": "{##6c7086}├─ {##89b4fa}software" },
-    { "type": "initsystem", "key": "{##6c7086}│ {##89b4fa}󰐥 init      ", "format": "{name} {version:3}" },
-    { "type": "packages", "key": "{##6c7086}│ {##89b4fa}󰏖 packages  " },
-    { "type": "command", "key": "{##6c7086}│ {##89b4fa}󱪗 mise      ", "text": "n=$(ls \"${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs\" 2>/dev/null | wc -l); [ \"$n\" -gt 0 ] && echo \"$n\"", "format": "{result} tools" },
-    { "type": "command", "key": "{##6c7086}│ {##89b4fa}󰅩 toolchain ", "text": "v() { p=$(command -v \"$2\") || return 0; case $p in */installs/*/bin/*) p=${p%/bin/*}; printf '%s%s %s' \"$sep\" \"$1\" \"${p##*/}\"; sep=' · ' ;; esac; }; v python python3; v node node; v go go" },
     { "type": "shell", "key": "{##6c7086}│ {##89b4fa} shell     " },
-    { "type": "terminal", "key": "{##6c7086}│ {##89b4fa} terminal  " },
-    { "type": "custom", "format": "{##6c7086}├─ {##94e2d5}network" },
-    { "type": "localip", "key": "{##6c7086}│ {##94e2d5}󰩟 ip        ", "format": "{ipv4} ({ifname})" },
-    { "type": "dns", "key": "{##6c7086}│ {##94e2d5}󰌘 dns       " },
+    { "type": "command", "key": "{##6c7086}│ {##89b4fa}󰅩 toolchain ", "text": "v() { p=$(command -v \"$2\") || return 0; case $p in */installs/*/bin/*) p=${p%/bin/*}; printf '%s%s %s' \"$sep\" \"$1\" \"${p##*/}\"; sep=' · ' ;; esac; }; v python python3; v node node; v go go" },
     { "type": "custom", "format": "{##6c7086}├─ {##fab387}hardware" },
     { "type": "cpu", "key": "{##6c7086}│ {##fab387} cpu       ", "format": "{name} ({cores-logical} threads)" },
-    { "type": "gpu", "key": "{##6c7086}│ {##fab387}󰢮 gpu       ", "format": "{name} [{type}]" },
     { "type": "memory", "key": "{##6c7086}│ {##fab387}󰍛 memory    " },
     { "type": "swap", "key": "{##6c7086}│ {##fab387}󰓡 swap      " },
-    { "type": "battery", "key": "{##6c7086}│ {##fab387}󰁹 battery   ", "format": "{capacity} [{status}]" },
-    { "type": "display", "key": "{##6c7086}│ {##fab387}󰍹 display   ", "format": "{width}x{height} @ {refresh-rate} Hz" },
     { "type": "custom", "format": "{##6c7086}├─ {##f9e2af}storage" },
     { "type": "disk", "key": "{##6c7086}│ {##f9e2af}󰋊 /         ", "folders": "/", "format": "{size-percentage-bar} {size-used} / {size-total} ({size-percentage}) {filesystem}" },
     { "type": "disk", "key": "{##6c7086}│ {##f9e2af}󰋊 /home     ", "folders": "/home", "format": "{size-percentage-bar} {size-used} / {size-total} ({size-percentage}) {filesystem}" },
