@@ -583,9 +583,9 @@ function Invoke-WslConfigReminder {
 # unreadable drive skips it.
 function Assert-ToolsDiskSpace {
     $budgetFile = Join-Path $RepoPath 'disk-budget.toml'
-    $line = if (Test-Path -LiteralPath $budgetFile) { Select-String -LiteralPath $budgetFile -Pattern '^windows-owned *= *(\d+) *$' | Select-Object -First 1 }
+    $line = if (Test-Path -LiteralPath $budgetFile) { Select-String -LiteralPath $budgetFile -Pattern '^windows *= *(\d+) *$' | Select-Object -First 1 }
     if (-not $line) {
-        Write-Warn "disk check skipped: no windows-owned figure in $budgetFile"
+        Write-Warn "disk check skipped: no windows figure in $budgetFile"
         return
     }
     $budgetMB = [int]$line.Matches[0].Groups[1].Value

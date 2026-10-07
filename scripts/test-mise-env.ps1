@@ -316,7 +316,7 @@ try {
     New-Item -ItemType Directory -Path $script:RepoPath | Out-Null
     # A fixed budget (the real disk-budget.toml changes weekly).
     $budgetFile = Join-Path $script:RepoPath 'disk-budget.toml'
-    Set-Content -LiteralPath $budgetFile -Value 'windows-owned = 3000'
+    Set-Content -LiteralPath $budgetFile -Value 'windows = 3000'
     $script:MiseEnvTokens = @('windows', 'owned')
     $script:SkipDotfiles = $false
     $script:SkipToolInstall = $false
@@ -439,12 +439,12 @@ try {
         Assert ($msg -eq '') "-SkipToolInstall ran the check: $msg"
     }
 
-    Test-Case 'disk: no windows-owned figure in disk-budget.toml skips the check, with a warning' {
-        Set-Content -LiteralPath $budgetFile -Value 'linux-owned = 5000'
+    Test-Case 'disk: no windows figure in disk-budget.toml skips the check, with a warning' {
+        Set-Content -LiteralPath $budgetFile -Value 'linux = 5000'
         $script:freeMB = 1024
-        try { $msg = Invoke-Bootstrap } finally { Set-Content -LiteralPath $budgetFile -Value 'windows-owned = 3000'; $script:freeMB = 102400 }
+        try { $msg = Invoke-Bootstrap } finally { Set-Content -LiteralPath $budgetFile -Value 'windows = 3000'; $script:freeMB = 102400 }
         Assert ($msg -eq '') "a missing budget stopped the bootstrap: $msg"
-        Assert (($script:warnings -join ' ') -like '*disk check skipped: no windows-owned figure*') "warnings: $($script:warnings -join ' | ')"
+        Assert (($script:warnings -join ' ') -like '*disk check skipped: no windows figure*') "warnings: $($script:warnings -join ' | ')"
         Assert (@(Get-MiseCall 'bootstrap --only').Count -ge 1) 'mise bootstrap did not run'
     }
 

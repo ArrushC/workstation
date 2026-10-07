@@ -10,8 +10,8 @@
 # marker name froze the whole re-run mechanism).
 # mise-install.sh's disk check (fake df/du, a temp disk-budget.toml): (10) too
 # little room stops before installing and lists the largest folders; (11) what
-# is already installed lowers the need; (12) a shared host needs less than an
-# owned one; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
+# is already installed lowers the need; (12) the linux figure applies whatever the
+# token set; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
 # an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
 # file is still read. tasks/optional-packages (fake rpm/sudo): (17) nothing
 # missing means no sudo; (18) a missing package goes to dnf with strict=0 and an
@@ -109,13 +109,13 @@ ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null ||
   fail "a readable declaration after a failure must write the marker again"
 
 # 10-15. The disk check, run from a copy of the script in a temp repo whose
-# disk-budget.toml says owned 5000 MB, shared 2500 MB (the real file changes
+# disk-budget.toml says linux 5000 MB (the real file changes
 # weekly). 1 GB = 1048576 KB.
 gbkb() { awk -v g="$1" 'BEGIN { printf "%d", g * 1048576 }'; }
 R="$T/repo"
 mkdir -p "$R/scripts/lib"
 cp "$root/scripts/lib/mise-install.sh" "$R/scripts/lib/"
-printf 'linux-owned = 5000\nlinux-shared = 2500\nwindows-owned = 3000\n' >"$R/disk-budget.toml"
+printf 'linux = 5000\nwindows = 3000\n' >"$R/disk-budget.toml"
 mi="$R/scripts/lib/mise-install.sh"
 installs="$HOME/.local/share/mise/installs"
 # 10. owned, nothing installed, 1 GB free: needs 5000 + 1024 MB, stops before installing.
@@ -135,13 +135,11 @@ FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
   fail "disk check: what is already installed must lower the need (2 GB free, 4 GB installed)"
 grep -qx install "$FAKE_LOG" || fail "disk check (2 GB free, 4 GB installed): mise install did not run"
 rm -rf "$installs"
-# 12. 4.5 GB free, nothing installed: enough for shared (3524 MB), not owned (6024 MB).
-: >"$FAKE_LOG"
-MISE_ENV=linux FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 ||
-  fail "disk check: 4.5 GB must be enough for a shared host"
+# 12. the linux figure applies whatever MISE_ENV says (one setup for every host):
+# 4.5 GB free, nothing installed, needs 5000 + 1024 MB.
 rc12=0
-FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 || rc12=$?
-[ "$rc12" = 1 ] || fail "disk check: 4.5 GB must not be enough for an owned host"
+MISE_ENV=linux FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 || rc12=$?
+[ "$rc12" = 1 ] || fail "disk check: 4.5 GB must not be enough (linux budget 5000 MB + 1 GB), got $rc12"
 # 13. the override goes ahead, with a warning.
 : >"$FAKE_LOG"
 out13="$(WORKSTATION_SKIP_DISK_CHECK=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" ||
@@ -153,13 +151,13 @@ printf '%s\n' "$out13" | grep -q 'WORKSTATION_SKIP_DISK_CHECK=1, so going ahead'
 FAKE_DF_FAIL=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || fail "disk check: an unreadable df must not stop the install"
 grep -qx install "$FAKE_LOG" || fail "disk check (no df): mise install did not run"
 # 15. no figure for this host type in disk-budget.toml skips the check, with a warning.
-printf 'linux-shared = 2500\n' >"$R/disk-budget.toml"
+printf 'windows = 3000\n' >"$R/disk-budget.toml"
 : >"$FAKE_LOG"
 out15="$(FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" || fail "disk check: a missing budget must not stop the install"
 grep -qx install "$FAKE_LOG" || fail "disk check (no budget): mise install did not run"
-printf '%s\n' "$out15" | grep -q 'disk check skipped: no linux-owned figure' || fail "disk check (no budget): no warning: $out15"
+printf '%s\n' "$out15" | grep -q 'disk check skipped: no linux figure' || fail "disk check (no budget): no warning: $out15"
 # 16. a CRLF budget file (as a Windows checkout writes it) is still read, not skipped.
-printf 'linux-owned = 5000\r\nlinux-shared = 2500\r\n' >"$R/disk-budget.toml"
+printf 'linux = 5000\r\nwindows = 3000\r\n' >"$R/disk-budget.toml"
 rc16=0
 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || rc16=$?
 [ "$rc16" = 1 ] || fail "disk check: a CRLF disk-budget.toml must still be read (expected exit 1 at 1 GB free, got $rc16)"
