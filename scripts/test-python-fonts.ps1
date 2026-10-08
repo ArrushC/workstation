@@ -1,12 +1,12 @@
 ﻿# Tests bootstrap.ps1's python-env and Nerd Font steps without running the
 # bootstrap: Invoke-PythonEnv, Invoke-InstallNerdFonts and Get-MiseToolExe
-# are extracted from the script's AST, as scripts/test-mise-env.ps1 does,
-# and scripts/install-nerd-fonts.ps1 runs for real on fake TTFs.
+# are extracted from the script's AST (scripts/lib/test-helpers.ps1), and
+# scripts/install-nerd-fonts.ps1 runs for real on fake TTFs.
 #
 # Nothing real is touched:
-#  - `mise` and `uv` are function stubs that record their arguments
-#    (functions win over mise.exe/uv.exe on PATH); the script stops unless
-#    both resolve to them
+#  - `mise` (the helper's) and `uv` are function stubs that record their
+#    arguments (functions win over mise.exe/uv.exe on PATH); the script stops
+#    unless both resolve to them
 #  - $RepoPath, the workstation dirs and $env:LOCALAPPDATA point at a temp dir
 #  - install-nerd-fonts.ps1 mostly runs with -NoRegister: no HKCU Fonts key,
 #    no session activation, no logon task. Get-/New-/Remove-ItemProperty,
@@ -15,35 +15,11 @@
 #    two cases without -NoRegister observe the HKCU pass through them
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fontScript = Join-Path $repoRoot 'scripts\install-nerd-fonts.ps1'
-$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Get-MiseToolExe', 'Invoke-PythonEnv', 'Invoke-InstallNerdFonts'
-foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
-    . ([scriptblock]::Create($f.Extent.Text))
-}
-$script:warnings = New-Object System.Collections.Generic.List[string]
-function Write-Ok { param($m) }
-function Write-Log { param($m) }
-function Write-Warn { param($m) $script:warnings.Add([string]$m) }
-# The mise stub: records each call (args joined) in $script:miseCalls and
-# answers from $script:miseReply (first key found in the call -> Out/Exit).
-$script:miseCalls = New-Object System.Collections.Generic.List[string]
-$script:miseReply = @{}
-function mise {
-    $line = $args -join ' '
-    $script:miseCalls.Add("mise $line")
-    $exit = 0
-    foreach ($k in $script:miseReply.Keys) {
-        if ($line.Contains($k)) {
-            $r = $script:miseReply[$k]
-            if ($r.ContainsKey('Out')) { $r.Out }
-            $exit = $r.Exit
-            break
-        }
-    }
-    $global:LASTEXITCODE = $exit
-}
+$ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
+. (Import-AstFunction $ast 'Get-MiseToolExe', 'Invoke-PythonEnv', 'Invoke-InstallNerdFonts', 'Invoke-Native')
 # The uv stub (`mise which uv` answers "uv", so `& $uvExe` lands here). Each
 # call keeps its arguments unjoined, so an unsplatted library list shows up.
 $script:uvCalls = New-Object System.Collections.Generic.List[object]
@@ -76,30 +52,11 @@ function New-ScheduledTaskAction { 'action' }
 function New-ScheduledTaskTrigger { 'trigger' }
 function New-ScheduledTaskSettingsSet { 'settings' }
 function New-ScheduledTaskPrincipal { 'principal' }
-foreach ($c in 'mise', 'uv', 'Get-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Add-Type', 'Register-ScheduledTask',
-    'New-ScheduledTaskAction', 'New-ScheduledTaskTrigger', 'New-ScheduledTaskSettingsSet', 'New-ScheduledTaskPrincipal') {
-    if ((Get-Command $c).CommandType -ne 'Function') { throw "refusing to run: $c does not resolve to the test stub" }
-}
+Assert-Stub 'mise', 'uv', 'Get-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Add-Type', 'Register-ScheduledTask',
+    'New-ScheduledTaskAction', 'New-ScheduledTaskTrigger', 'New-ScheduledTaskSettingsSet', 'New-ScheduledTaskPrincipal'
 # A real activation type in this process would let the font script call GDI.
 if (([System.Management.Automation.PSTypeName]'Workstation.FontActivator').Type) { throw 'refusing to run: Workstation.FontActivator is loaded' }
-function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
-$failures = New-Object System.Collections.Generic.List[string]
-function Test-Case([string]$Name, [scriptblock]$Body) {
-    try {
-        $script:warnings.Clear()
-        & $Body
-        Write-Host "  ok    $Name"
-    } catch {
-        $failures.Add($Name)
-        Write-Host "  FAIL  $Name -- $($_.Exception.Message)"
-    }
-}
-function New-TestFile([string]$Path, [string]$Content = 'x') {
-    New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    [System.IO.File]::WriteAllText($Path, $Content)
-}
-function Read-Text([string]$Path) { [System.IO.File]::ReadAllText($Path) }
 # The first recorded uv call whose first argument is $Verb (unrolled: no).
 function Get-UvCall([string]$Verb) {
     foreach ($c in $script:uvCalls) { if (@($c).Count -gt 0 -and $c[0] -ceq $Verb) { return ,$c } }
@@ -117,8 +74,7 @@ function Test-Args($Call, [string[]]$Want) {
 }
 
 $savedLocalAppData = $env:LOCALAPPDATA
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("pyfonts-" + [guid]::NewGuid())
-New-Item -ItemType Directory -Path $tmp | Out-Null
+$tmp = New-TestTempDir 'pyfonts-'
 try {
     $script:RepoPath = Join-Path $tmp 'repo'
     $txt = Join-Path $script:RepoPath 'scripts\python-env.txt'
@@ -393,6 +349,4 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
     $env:LOCALAPPDATA = $savedLocalAppData
     Remove-Item -Recurse -Force $tmp
 }
-if ($failures.Count -gt 0) { throw "python-env/fonts: $($failures.Count) case(s) failed: $($failures -join '; ')" }
-Write-Host "python-env and font checks passed on PowerShell $($PSVersionTable.PSVersion)"
-$global:LASTEXITCODE = 0
+Complete-Test 'python-env and font'

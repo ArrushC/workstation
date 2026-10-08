@@ -1,7 +1,7 @@
 ﻿# Tests bootstrap.ps1's GUI-app step without running the bootstrap: Install-WingetApps
 # (mise bootstrap --only packages: config.windows.toml's winget list) and
-# Install-SshfsWin (the one UAC install). Both are extracted from the script's AST,
-# as scripts/test-ssh-launchers.ps1 does.
+# Install-SshfsWin (the one UAC install). Both are extracted from the script's AST
+# (scripts/lib/test-helpers.ps1).
 #
 # Nothing is installed: `mise` and `winget` are function stubs that record their
 # arguments (functions win over mise.exe/winget.exe on PATH), and the script stops
@@ -10,23 +10,15 @@
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$failures = New-Object System.Collections.Generic.List[string]
-$wanted = 'Install-WingetApps', 'Install-SshfsWin'
-$found = @()
-foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
-    . ([scriptblock]::Create($f.Extent.Text))
-    $found += $f.Name
-}
-foreach ($w in $wanted) { if ($found -notcontains $w) { $failures.Add("bootstrap.ps1 has no function $w") } }
+$ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
+. (Import-AstFunction $ast 'Install-WingetApps', 'Install-SshfsWin', 'Invoke-Native')
 if ($ast.Find({ param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] -and $n.VariablePath.UserPath -eq 'WingetApps' }, $true)) {
-    $failures.Add('bootstrap.ps1 still references $WingetApps (the apps live in config.windows.toml)')
+    throw 'winget apps: bootstrap.ps1 still references $WingetApps (the apps live in config.windows.toml)'
 }
-if ($failures.Count -gt 0) { throw "winget apps: $($failures -join '; ')" }
 
-# Every mise/winget call and log line, in order.
-$script:events = New-Object System.Collections.Generic.List[string]
+# Every mise/winget call and log line, in order, in the helper's $script:events.
 $script:miseExit = 0
 $script:miseThrows = $false
 $script:listExit = 0
@@ -48,13 +40,8 @@ function winget {
     if ($script:installThrows -and $args[0] -eq 'install') { throw [System.Management.Automation.ApplicationFailedException]::new('The file cannot be accessed by the system.') }
     if ($args[0] -eq 'list') { $global:LASTEXITCODE = $script:listExit } else { $global:LASTEXITCODE = $script:installExit }
 }
-foreach ($c in 'mise', 'winget') {
-    if ((Get-Command $c).CommandType -ne 'Function') { throw "refusing to run: $c does not resolve to the test stub" }
-}
-function Write-Log { param($m) $script:events.Add("log: $m") }
-function Write-Ok { param($m) $script:events.Add("ok: $m") }
+Assert-Stub 'mise', 'winget'
 function Write-Warn { param($m) $script:events.Add("warn: $m"); $script:warnEap.Add("$ErrorActionPreference") }
-function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 function Get-Code([string]$Hex) { [Convert]::ToInt32($Hex, 16) }
 # The leading comma keeps an empty or one-item result an array (StrictMode: $null has no .Count).
 function Get-Events([string]$Like) { , @($script:events | Where-Object { $_ -like $Like }) }
@@ -81,16 +68,6 @@ $miseCall = "mise -C $env:USERPROFILE bootstrap --only packages --yes"
 $listCall = 'winget list --id SSHFS-Win.SSHFS-Win --exact --disable-interactivity --accept-source-agreements'
 $installCall = 'winget install --id SSHFS-Win.SSHFS-Win --exact --scope machine --disable-interactivity --accept-package-agreements --accept-source-agreements'
 $notFound = Get-Code '8A150014'
-
-function Test-Case([string]$Name, [scriptblock]$Body) {
-    try {
-        & $Body
-        Write-Host "  ok    $Name"
-    } catch {
-        $failures.Add($Name)
-        Write-Host "  FAIL  $Name -- $($_.Exception.Message)"
-    }
-}
 
 Test-Case '-SkipToolInstall: neither mise nor winget runs' {
     Invoke-Apps -SkipTools
@@ -175,6 +152,4 @@ Test-Case 'winget install cannot start: a warning with the manual command, no su
     Assert ((@($script:warnEap | Where-Object { $_ -ne 'Stop' }).Count -eq 0) -and ($script:warnEap.Count -ge 1)) "EAP at the warning: $($script:warnEap -join ', ')"
 }
 
-if ($failures.Count -gt 0) { throw "winget apps: $($failures.Count) case(s) failed: $($failures -join '; ')" }
-Write-Host "winget app checks passed on PowerShell $($PSVersionTable.PSVersion)"
-$global:LASTEXITCODE = 0
+Complete-Test 'winget app'

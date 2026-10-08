@@ -15,28 +15,26 @@ def why [e: record] {
 # `mise activate nu` writes the PATH it sees into the file. PowerShell evaluates its
 # activation in every session; Nushell sources this generated file instead, so each
 # session would get the generator's PATH and lose whatever its terminal passed down
-# (Claude Code's ~\.local\bin, an IDE's tools). Rebase it on the session's own PATH:
-# __MISE_ORIG_PATH, which mise's prompt hook rebuilds PATH from, comes from the session
-# (or the parent shell, as mise itself does when it omits the line), and the two lines
-# that overwrite PATH with the snapshot become no-ops (the `set,PATH` row appears only
-# when the generator ran inside a mise session). Returns null when mise's output no
-# longer has that shape.
+# (Claude Code's ~\.local\bin, an IDE's tools). Keep the session's own PATH by wrapping
+# mise's output, never editing it: a prologue saves the session's PATH and any
+# __MISE_ORIG_PATH a parent shell passed down, and an epilogue restores PATH and sets
+# __MISE_ORIG_PATH (which mise's prompt hook rebuilds PATH from) to the inherited value,
+# else the session's PATH. mise's snapshot lines run in between and are undone, in
+# whatever form mise writes them.
 def live-path [text: string] {
-    let orig = r##'(?m)^[ \t]*\$env\.__MISE_ORIG_PATH = r#'[^\r\n]*'#[ \t]*\r?\n'##
-    let snap = r##'(?mi)^[ \t]*\$env\.path = \(r#'[^\r\n]*'# \| split row \(char esep\)\)[ \t]*\r?\n'##
-    let row = r##'(?mi)^([ \t]*'?)set,path,[^'\r\n]*'##
-    let start = r##'(?m)^export-env \{[ \t]*\r?\n'##
-    let count = {|re| $text | parse --regex $re | length }
-    if (do $count $orig) > 1 or (do $count $snap) != 1 or (do $count $row) > 1 or (do $count $start) != 1 {
-        return null
-    }
-    $text
-    | str replace --regex $orig ''
-    | str replace --regex $snap ''
-    | str replace --regex $row '${1}hide,__MISE_NO_PATH_SNAPSHOT,'
-    | str replace --regex $start r#'export-env {
-  $$env.__MISE_ORIG_PATH = ($$env.__MISE_ORIG_PATH? | default ($$env.PATH | str join (char esep)))
-'#
+    let prologue = [
+        "# nu-init: keep the session's PATH (mise's lines below write the generator's)"
+        '$env.__NU_INIT_PATH = $env.PATH'
+        '$env.__NU_INIT_ORIG_PATH = $env.__MISE_ORIG_PATH?'
+    ]
+    let epilogue = [
+        "# nu-init: restore the session's PATH; mise's prompt hook rebuilds PATH from __MISE_ORIG_PATH"
+        '$env.PATH = $env.__NU_INIT_PATH'
+        '$env.__MISE_ORIG_PATH = ($env.__NU_INIT_ORIG_PATH | default ($env.__NU_INIT_PATH | str join (char esep)))'
+        'hide-env __NU_INIT_PATH __NU_INIT_ORIG_PATH'
+    ]
+    let sep = (if ($text | str ends-with "\n") { "" } else { "\n" })
+    $"($prologue | str join "\n")\n($text)($sep)($epilogue | str join "\n")\n"
 }
 
 # One generated file: rewrite only on change; a failing tool keeps the last good file.
@@ -55,14 +53,7 @@ def gen [dir: string, g: record] {
         return
     }
     mut text = $out.stdout
-    if $g.file == "mise.nu" {
-        let live = (live-path $text)
-        if $live == null {
-            print $"nu-init: warning: mise.nu: unexpected `mise activate nu` output, written as-is \(Nushell sessions get its PATH snapshot\)"
-        } else {
-            $text = $live
-        }
-    }
+    if $g.file == "mise.nu" { $text = (live-path $text) }
     # atuin's hooks start background jobs (`history end` on every prompt, the search
     # index at startup) and starship's prompt counts `job list` for its jobs gear, so the
     # gear showed on nearly every prompt; in zsh atuin's work isn't a shell job. Label

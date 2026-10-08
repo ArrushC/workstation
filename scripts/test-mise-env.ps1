@@ -4,34 +4,28 @@
 # -C pinning (Invoke-MiseBootstrap), its free-space check
 # (Assert-ToolsDiskSpace), the Claude Code step's PATH entry
 # (Invoke-InstallClaudeCode), and the run sequence's hand-over to the pulled
-# bootstrap.ps1. The functions are extracted from the script's AST, as
-# scripts/test-config-local.ps1 does.
+# bootstrap.ps1. The functions are extracted from the script's AST
+# (scripts/lib/test-helpers.ps1, which also has the mise stub).
 #
 # Nothing real is touched:
 #  - the User environment is never written: a function that calls
 #    [Environment]::SetEnvironmentVariable itself is refused, not loaded
 #    (PowerShell can't stub a static .NET method)
-#  - `mise` is a function stub (functions win over mise.exe on PATH), and
-#    the script stops unless it resolves to that stub
+#  - `mise` is the helper's function stub (functions win over mise.exe on
+#    PATH), and the script stops unless it resolves to that stub
 #  - Invoke-CurlRequest, Add-ToUserPath and Update-SessionPath are stubbed, and so
 #    are Get-FreeSpaceMB and Get-DirSizeMB (the disk is whatever a case says)
 #  - every path points at a temp dir
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode'
+$ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
 $refused = New-Object System.Collections.Generic.List[string]
-foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
+foreach ($f in (Get-AstFunction $ast 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode', 'Invoke-Native', 'Write-Utf8NoBom')) {
     if ($f.Extent.Text -match 'Environment\]::SetEnvironmentVariable') { $refused.Add($f.Name); continue }
     . ([scriptblock]::Create($f.Extent.Text))
 }
-$script:warnings = New-Object System.Collections.Generic.List[string]
-function Write-Ok { param($m) }
-function Write-Log { param($m) }
-function Write-Warn { param($m) $script:warnings.Add([string]$m) }
-# Write-Fail exits bootstrap.ps1; here it throws so a case can assert on it.
-function Write-Fail { param($m) throw "WRITE-FAIL: $m" }
 $script:addedPaths = New-Object System.Collections.Generic.List[string]
 function Add-ToUserPath { param([string]$Dir) $script:addedPaths.Add($Dir) }
 function Update-SessionPath { }
@@ -49,43 +43,9 @@ function Invoke-CurlRequest {
     if (-not $script:curlZip) { throw 'curl.exe request failed (exit 6)' }
     Copy-Item -LiteralPath $script:curlZip -Destination $OutFile -Force
 }
-# The mise stub: records each call (args joined) in $script:events and
-# answers from $script:miseReply (first key found in the call -> Out/Exit).
-$script:events = New-Object System.Collections.Generic.List[string]
-$script:miseReply = @{}
-function mise {
-    $line = $args -join ' '
-    $script:events.Add("mise $line")
-    $exit = 0
-    foreach ($k in $script:miseReply.Keys) {
-        if ($line.Contains($k)) {
-            $r = $script:miseReply[$k]
-            if ($r.ContainsKey('Out')) { $r.Out }
-            $exit = $r.Exit
-            break
-        }
-    }
-    $global:LASTEXITCODE = $exit
-}
-if ((Get-Command mise).CommandType -ne 'Function') { throw 'refusing to run: mise does not resolve to the test stub' }
-function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
-
-$failures = New-Object System.Collections.Generic.List[string]
+Assert-Stub 'mise'
 foreach ($name in $refused) { $failures.Add("$name writes the User environment directly (the tests would touch the real one)") }
-function Test-Case([string]$Name, [scriptblock]$Body) {
-    try {
-        $script:warnings.Clear()
-        & $Body
-        Write-Host "  ok    $Name"
-    } catch {
-        $failures.Add($Name)
-        Write-Host "  FAIL  $Name -- $($_.Exception.Message)"
-    }
-}
-function New-TestFile([string]$Path, [string]$Content = 'x') {
-    New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    [System.IO.File]::WriteAllText($Path, $Content)
-}
+
 # A zip laid out like mise's release: mise\bin\{mise,mise-shim}.exe + mise\extra.txt,
 # plus mise\<$Extra> when given.
 function New-MiseZip([string]$Name, [string]$Extra) {
@@ -104,11 +64,9 @@ function Use-MiseZip([string]$Version, [string]$Zip) {
     $script:curlZip = $Zip
     $script:MiseSha256 = if ($Zip) { (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLower() } else { 'none' }
 }
-function Read-Text([string]$Path) { [System.IO.File]::ReadAllText($Path) }
 
 $savedMiseEnv = $env:MISE_ENV
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("miseenv-" + [guid]::NewGuid())
-New-Item -ItemType Directory -Path $tmp | Out-Null
+$tmp = New-TestTempDir 'miseenv-'
 try {
     Test-Case 'miserc.toml: windows, no BOM, LF; the session MISE_ENV goes' {
         $script:RepoPath = Join-Path $tmp 'repo'
@@ -244,12 +202,12 @@ try {
     $script:MiseShims = Join-Path $tmp 'mise\shims'
     $winLs = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}, {"path": "C:\\Users\\u\\.config\\mise\\config.windows.toml"}]'
     function Invoke-Bootstrap {
-        $script:events.Clear()
+        $script:miseCalls.Clear()
         $msg = ''
         try { Invoke-MiseBootstrap } catch { $msg = $_.Exception.Message }
         return $msg
     }
-    function Get-MiseCall([string]$Part) { @($script:events | Where-Object { $_ -like "mise *$Part*" }) }
+    function Get-MiseCall([string]$Part) { @($script:miseCalls | Where-Object { $_ -like "mise *$Part*" }) }
 
     Test-Case 'mise bootstrap: stops before bootstrap/prune when config.windows.toml is not loaded' {
         $script:miseReply = @{ 'config ls' = @{ Out = '[{"path": "C:\\Users\\u\\.config\\mise\\config.toml"}]'; Exit = 0 } }
@@ -297,12 +255,12 @@ try {
         Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp' | Remove-Item -Force
         $msg = Invoke-Bootstrap
         Assert ($msg -eq '') "failed: $msg"
-        $calls = @($script:events | Where-Object { $_ -like 'mise *' })
+        $calls = @($script:miseCalls | Where-Object { $_ -like 'mise *' })
         $pin = "mise -C $env:USERPROFILE "
         foreach ($c in $calls) { Assert ($c.StartsWith($pin)) "not pinned to %USERPROFILE%: $c" }
-        $boot = $script:events.IndexOf(@(Get-MiseCall 'bootstrap --only dotfiles,tools --yes')[0])
-        $prune = $script:events.IndexOf(@(Get-MiseCall 'prune --yes')[0])
-        Assert (($boot -ge 0) -and ($prune -gt $boot)) "order: $($script:events -join ' | ')"
+        $boot = $script:miseCalls.IndexOf(@(Get-MiseCall 'bootstrap --only dotfiles,tools --yes')[0])
+        $prune = $script:miseCalls.IndexOf(@(Get-MiseCall 'prune --yes')[0])
+        Assert (($boot -ge 0) -and ($prune -gt $boot)) "order: $($script:miseCalls -join ' | ')"
         Assert (@(Get-MiseCall 'install --yes --force node').Count -eq 1) 'node not force-reinstalled'
         Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 1) 'no node marker'
         Assert (@(Get-MiseCall 'prune --yes').Count -eq 1 -and @(Get-MiseCall 'reshim').Count -eq 1) 'prune/reshim missing'
@@ -429,6 +387,4 @@ try {
     if ($null -eq $savedMiseEnv) { Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue } else { $env:MISE_ENV = $savedMiseEnv }
     Remove-Item -Recurse -Force $tmp
 }
-if ($failures.Count -gt 0) { throw "mise plumbing: $($failures.Count) case(s) failed: $($failures -join '; ')" }
-Write-Host "mise plumbing checks passed on PowerShell $($PSVersionTable.PSVersion)"
-$global:LASTEXITCODE = 0
+Complete-Test 'mise plumbing'
