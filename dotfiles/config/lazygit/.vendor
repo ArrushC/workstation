@@ -1,0 +1,12 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/lazygit
+path:           themes/mocha/mauve.yml
+commit:         798ad2e75a11766e9ba50e76e59aea6a81eb4866
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    a mise block in ~/.config/lazygit/config.yml
+note:           Upstream's top-level theme:/authorColors: are nested under gui: here (lazygit reads
+                gui.theme); otherwise identical. lazygit creates config.yml empty and never rewrites it.
+                Own gui: settings go in this file, not a second top-level gui: (duplicate key).
+                Bump: re-download themes/mocha/mauve.yml at the new commit, update commit here.
+                Never hand-edit the vendored file.

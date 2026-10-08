@@ -1,0 +1,10 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/btop
+path:           themes/catppuccin_mocha.theme
+commit:         f437574b600f1c6d932627050b15ff5153b58fa3
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/btop/themes/catppuccin_mocha.theme (copy)
+note:           Selected by the `color_theme = "catppuccin_mocha"` line entry in btop.conf (a name, not a path).
+                Bump: re-download themes/catppuccin_mocha.theme at the new commit, update commit here.
+                Never hand-edit the vendored file.

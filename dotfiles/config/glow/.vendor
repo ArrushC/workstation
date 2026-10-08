@@ -1,0 +1,11 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/glamour
+path:           themes/catppuccin-mocha.json
+commit:         00c97fa3823d272d9d041d5d872ae6335555a776
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/glow/catppuccin-mocha.json (copy)
+note:           Selected by the rc files' `glow -s` alias: glow.yml's own `style:` key can't be edited
+                (a second key is a YAML error) and `~` doesn't expand there.
+                Bump: re-download themes/catppuccin-mocha.json at the new commit, update commit here.
+                Never hand-edit the vendored file.

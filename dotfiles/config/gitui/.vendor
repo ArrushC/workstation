@@ -1,0 +1,10 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/gitui
+path:           themes/catppuccin-mocha.ron
+commit:         df2f59f847e047ff119a105afff49238311b2d36
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/gitui/theme.ron (copy; gitui reads theme.ron by default)
+note:           RON format matches gitui 0.28; a parse error only shows in `gitui --logging`'s log.
+                Bump: re-download themes/catppuccin-mocha.ron at the new commit, update commit here.
+                Never hand-edit the vendored file.

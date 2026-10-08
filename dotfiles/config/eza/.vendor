@@ -1,0 +1,10 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/eza
+path:           themes/mocha/catppuccin-mocha-mauve.yml
+commit:         70f805f6cc27fa5b91750b75afb4296a0ec7fec9
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    theme.yml in eza's config dir (~/.config/eza, %APPDATA%\eza) (copy)
+note:           LS_COLORS (from ~/.dircolors, already Mocha) still wins for file types; theme.yml colours
+                what LS_COLORS has no key for: permissions, sizes, users, dates, git columns.
+                Bump: re-download at the new commit, update commit here. Never hand-edit.

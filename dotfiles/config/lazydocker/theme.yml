@@ -1,0 +1,15 @@
+# Catppuccin Mocha (mauve accent) for lazydocker, hand-derived from catppuccin/lazygit's
+# themes/mocha/mauve.yml (there is no official lazydocker port). Deployed as a mise block in
+# ~/.config/lazydocker/config.yml: lazydocker creates that file empty and never rewrites it.
+# Own gui: settings go in this file, not a second top-level gui: (a duplicate YAML key).
+gui:
+  theme:
+    activeBorderColor:
+      - '#cba6f7'
+      - bold
+    inactiveBorderColor:
+      - '#a6adc8'
+    selectedLineBgColor:
+      - '#313244'
+    optionsTextColor:
+      - '#89b4fa'

@@ -111,6 +111,31 @@ herdr = "0.9.3"
 "~/.config/tealdeer/config.toml" = { source = "dotfiles/config/tealdeer/config.toml", mode = "copy" }
 # Printed by ~/.zshrc / ~/.bashrc when a top-level shell starts, and by a plain `fastfetch`.
 "~/.config/fastfetch/config.jsonc" = { source = "dotfiles/config/fastfetch/config.jsonc", mode = "copy" }
+# --- Catppuccin Mocha (mauve accent) for the TUI toolbelt ---------------------
+# Theme files sit at new paths nothing else writes (copy); provenance is in each
+# dir's .vendor. Each tool owns its own config file and mise 2026.9.9 can't merge
+# keys into one, so the theme is selected by an edit entry (a line, or a marker
+# block in a file the tool creates empty and never rewrites), an rc-file env var or
+# alias (k9s, glow), or a task (broot). Own settings for lazygit, lazydocker and tv
+# go in the block's source file: a second top-level key of the same name is an error.
+# bat ships the theme; its config is a flag file only `bat --generate-config-file` writes
+# (BAT_THEME or --theme still override). Also reaches batpipe, MANPAGER and previews.
+"~/.config/bat/config/theme" = { line = '--theme="Catppuccin Mocha"' }
+# eza: LS_COLORS (~/.dircolors, already Mocha) keeps file types; theme.yml colours the rest.
+"~/.config/eza/theme.yml" = { source = "dotfiles/config/eza/theme.yml", mode = "copy" }
+"~/.config/yazi/theme.toml" = { source = "dotfiles/config/yazi/theme.toml", mode = "copy" }
+"~/.config/yazi/flavors/catppuccin-mocha.yazi" = { source = "dotfiles/config/yazi/flavors/catppuccin-mocha.yazi", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/btop/themes/catppuccin_mocha.theme" = { source = "dotfiles/config/btop/themes/catppuccin_mocha.theme", mode = "copy" }
+# btop rewrites btop.conf but writes this exact line back, so the edit stays applied;
+# appended after the stock `color_theme = "Default"`, it wins (last one counts).
+"~/.config/btop/btop.conf/theme" = { line = 'color_theme = "catppuccin_mocha"' }
+"~/.config/lazygit/config.yml/theme" = { source = "dotfiles/config/lazygit/theme.yml", template = "tera" }
+"~/.config/lazydocker/config.yml/theme" = { source = "dotfiles/config/lazydocker/theme.yml", template = "tera" }
+"~/.config/television/config.toml/theme" = { source = "dotfiles/config/television/theme.toml", template = "tera" }
+"~/.config/gitui/theme.ron" = { source = "dotfiles/config/gitui/theme.ron", mode = "copy" }
+"~/.config/k9s/skins/catppuccin-mocha-transparent.yaml" = { source = "dotfiles/config/k9s/skins/catppuccin-mocha-transparent.yaml", mode = "copy" }   # K9S_SKIN in the rc files
+"~/.config/glow/catppuccin-mocha.json" = { source = "dotfiles/config/glow/catppuccin-mocha.json", mode = "copy" }   # the rc files' `glow -s` alias
+"~/.config/broot/skins/catppuccin-mocha-mauve.hjson" = { source = "dotfiles/config/broot/skins/catppuccin-mocha-mauve.hjson", mode = "copy" }   # tasks/broot-skin
 # Single Helix source for both OSes: the Windows template
 # (dotfiles/windows/AppData/Roaming/helix/config.toml.tera) read_file()-inlines it.
 # Linux-only here because Windows reads %APPDATA%\helix, not ~/.config/helix.
@@ -166,10 +191,10 @@ herdr = "0.9.3"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
 # installed with dnf's strict=0 so a missing one is skipped, not fatal.
 "post-packages" = "mise run optional-packages"
-# `final` runs vcpkg, claude and fonts, and only on a full `mise bootstrap`, never on
-# `--only dotfiles` (wsa).
+# `final` runs vcpkg, claude, fonts and broot-skin, and only on a full `mise bootstrap`,
+# never on `--only dotfiles` (wsa).
 # fonts skips itself under WSL (the Windows terminal resolves fonts there).
-"final" = "mise run vcpkg ::: claude ::: fonts"
+"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
 # it. systemd expands %h in ExecStart; the shim picks its config set from

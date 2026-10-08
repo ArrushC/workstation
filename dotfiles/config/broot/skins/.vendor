@@ -1,0 +1,10 @@
+theme:          Catppuccin Mocha
+upstream:       https://github.com/catppuccin/broot
+path:           themes/mocha/catppuccin-mocha-mauve.hjson
+commit:         404357d2e5abbf8d28658796696995d4410e3390
+license:        MIT (LICENSE beside it)
+vendored:       2026-10-07
+deployed as:    ~/.config/broot/skins/catppuccin-mocha-mauve.hjson (copy)
+note:           Selected by tasks/broot-skin (final hook), which points conf.hjson's dark-skin import at it.
+                Bump: re-download themes/mocha/catppuccin-mocha-mauve.hjson at the new commit, update commit here.
+                Never hand-edit the vendored file.

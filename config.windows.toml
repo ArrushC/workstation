@@ -54,6 +54,12 @@
 # Vendored Catppuccin Mocha theme (provenance in the source dir's .vendor); Nushell's user autoload
 # dir sources it after config.nu. Edit-in-repo-only (re-vendor to change it).
 "~/AppData/Roaming/nushell/autoload/catppuccin_mocha.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/autoload/catppuccin_mocha.nu", mode = "copy" }
+# Catppuccin Mocha for bat, eza and yazi, from the same sources as config.linux.toml's
+# entries; Windows keeps their configs under %APPDATA% (atuin's pair is in config.toml).
+"~/AppData/Roaming/bat/config/theme" = { line = '--theme="Catppuccin Mocha"' }
+"~/AppData/Roaming/eza/theme.yml" = { source = "dotfiles/config/eza/theme.yml", mode = "copy" }
+"~/AppData/Roaming/yazi/config/theme.toml" = { source = "dotfiles/config/yazi/theme.toml", mode = "copy" }
+"~/AppData/Roaming/yazi/config/flavors/catppuccin-mocha.yazi" = { source = "dotfiles/config/yazi/flavors/catppuccin-mocha.yazi", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 # PS7+ canonical $PROFILE.
 "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1" = { source = "dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera", mode = "template" }
 # Dot-source shim that loads the PS7 profile above when present.

@@ -21,7 +21,7 @@
   fails on a dirty tree.
 - **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the pre-commit hook run it) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
-- **Task names** must not collide with mise built-ins (`mise fmt` is one; ours is `mise run fmt`).
+- **Task names** must not collide with mise built-ins (`mise fmt` is one; ours: `mise run fmt`).
 - **Real `$HOME`:** agents never run `mise dot apply`, `wsa` or a bulk `mise bootstrap` against the
   real `$HOME` or host. Render into a scratch `$HOME` (`docs/claude/verification.md`) and hand real
   applies and sudo steps to the user.
@@ -30,8 +30,8 @@
 
 | File | Loads on | Holds |
 |---|---|---|
-| `config.toml` | every host | both-OS tools (uv, python, the CLI toolbelt, node, go, LSP servers, ccstatusline; Windows-only nushell/carapace/dnGrep/LogExpert carry `os = ["windows"]`), `~/.claude` dotfiles, `[vars]` |
-| `config.linux.toml` | Linux | Linux toolbelt, dnf batch, `/etc/wsl.conf`, EPEL/CRB `pre-packages` hook, `post-packages`/`post-tools`/`post-dotfiles` hooks, `final` hook (vcpkg, claude, fonts), `statusline`/`enable-el-repos` tasks, Linux dotfiles (gdb, herdr, zed), the pueued service |
+| `config.toml` | every host | both-OS tools (Windows-only ones carry `os = ["windows"]`), `~/.claude` and atuin dotfiles, `[vars]` |
+| `config.linux.toml` | Linux | Linux toolbelt and dotfiles, dnf batch, `/etc/wsl.conf`, the `pre-packages` (EPEL/CRB) to `final` hooks, `statusline`/`enable-el-repos` tasks, the pueued service |
 | `config.windows.toml` | Windows | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
 | `config.local.toml` | every host, git-ignored | per-host `[vars] name/email/sudo` and overrides |
 
@@ -55,7 +55,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   A hook name declared in several loaded files runs every one. The one exception is
   the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
   `sh -o errexit`, so each of its commands keeps its own `|| true`.
-- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts). `final` runs
+- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts, broot-skin). `final` runs
   only on a full `mise bootstrap`, never on `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
   and EL9; one some releases lack goes in `tasks/optional-packages`. `ShellCheck` is capitalised;
@@ -93,31 +93,31 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **Dotfiles**
 - `template` for the `.tera` sources, `copy` for everything else, never `symlink`/`symlink-each`
   (a directory symlink replaces the whole directory, deleting unmanaged files).
+- A file a tool writes itself gets an edit entry (`line`, or a `block` from a `tera` source), not
+  `copy` (it refuses to overwrite). mise 2026.9.9 has no `merge`; lint refuses it.
 - One undefined variable or failing `exec()` in any template aborts the whole apply, so guard every
   `vars.*` with `is defined` or `default()`.
 - Directory `copy` entries keep `exclude = [".vendor", ".gitkeep"]`. `copy` on a directory leaves
   unmanaged files in it alone.
-- Deployed files are independent copies, so a live edit under `$HOME` doesn't reach the repo on its
-  own:
+- Deployed files are copies, so a live edit under `$HOME` doesn't reach the repo on its own:
   - `wsr` (`mise dot add --changed`) records file entries but skips directory entries.
-  - For a directory entry, run `mise dot add <the directory>`. It replaces the source directory; it
-    doesn't merge.
+  - For a directory entry, `mise dot add <the directory>` replaces (doesn't merge) the source.
   - `mise dot apply` silently overwrites edits that were never recorded. `wsa` checks
     `mise dot status` for drift and asks first.
-- Disabling an inherited entry needs `enabled = false` **and** a repeated `mode`.
+- Disabling an inherited entry needs `enabled = false` **and** the `mode` again.
 - A host's first apply needs `--force-dotfiles`. `bootstrap.sh` and `bootstrap.ps1` pass it only while
   `dotfiles-first-apply-done` is absent (`~/.local/state/workstation/`; Windows `%LOCALAPPDATA%\workstation\`).
 - The `post-dotfiles` hook is the only thing that sets these modes:
   - `~/.ssh`, `~/.claude`: 700
   - `~/.ssh/config`: 600
   - source `dotfiles/ssh/config.tera`: 600, so mise stops reporting a mode diff
-- `~/.claude/settings.json` isn't a dotfile. `scripts/lib/claude-settings-merge.sh` (on Windows,
-  `Invoke-ClaudeSettingsMerge` with the same jq filter) merges three layers:
+- `~/.claude/settings.json` isn't a dotfile. `scripts/lib/claude-settings-merge.sh` (Windows:
+  `Invoke-ClaudeSettingsMerge`, same jq filter) merges three layers:
   `settings.seed.json` (only where a key is absent) → the live file → `settings.enforced.json`
   (always wins). Change cross-host keys in the enforced file.
 - `/etc` files come from `configs/` via `[bootstrap.files]`. Today that is only `/etc/wsl.conf`, which
   keeps `appendWindowsPath=false` and stays LF-only (CRLF corrupts it). `[dotfiles]` owns `$HOME` only.
-- `dotfiles/ssh/config.tera` gates SSH multiplexing out on Windows (its OpenSSH can't multiplex).
+- `dotfiles/ssh/config.tera` gates SSH multiplexing out on Windows (its OpenSSH lacks it).
 - zsh plugin order in `dotfiles/zshrc.tera`: fzf-tab after `compinit` → autosuggestions →
   syntax-highlighting → history-substring-search last. `bashrc.tera` carries PARITY NOTEs for what
   bash can't do.
@@ -162,7 +162,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - the five zsh plugin dirs and `zsh-shift-select.zsh`
   - `_cht.sh`, a rolling snapshot
   - `dotfiles/local/bin/batpipe`: re-apply the 2-line patch recorded in its `.vendor`
-  - `dotfiles/config/gdb/gef.py`: stay on GEF 2024.06: `/usr/bin/gdb` has Python 3.6 on EL8; newer needs 3.10
+  - `gef.py`: stay on GEF 2024.06 (`/usr/bin/gdb` has Python 3.6 on EL8; newer needs 3.10)
+  - Catppuccin themes in `dotfiles/config/<tool>/` (see each `.vendor`)
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
@@ -189,7 +190,7 @@ Repo hooks (`.claude/settings.json`) source `lib.sh` (JSON in/out; fail open). `
 - `parity-reminder.sh` names the other half of zshrc/bashrc or the Nushell/PowerShell profiles.
 - `memory-routing-guard.sh` denies home-dir memory writes.
 - `sync-tool-memory.sh` regenerates the TOOLS block after a `config*.toml` edit.
-- `session-context.sh` (SessionStart) reports dotfiles drift, host, miserc tokens (and `sudo=no` where saved; an exported `MISE_ENV`), WSL interop, tools.
+- `session-context.sh` (SessionStart) reports dotfiles drift, host, miserc tokens, a saved `sudo=no`, an exported `MISE_ENV`, WSL interop, tools.
 - `session-end-notify.sh` (SessionEnd) notifies when the repo or dotfiles are dirty.
 
 Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enforced.json`):
