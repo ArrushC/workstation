@@ -2,7 +2,8 @@
 # test-nu-init.sh: scripts/nu-init.nu writes one init file per tool into a vendor
 # autoload dir, leaves unchanged files alone, drops a missing tool's file, keeps the
 # last good file when a tool fails, never touches files it doesn't own, imports
-# Nushell's history into atuin once, and always exits 0. The tools are stubs on PATH.
+# Nushell's history into atuin once, labels atuin's background jobs so starship's
+# jobs gear skips them, and always exits 0. The tools are stubs on PATH.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -233,6 +234,67 @@ if [ -n "$REAL_MISE" ]; then
   done
 else
   echo "  SKIP real mise: not on PATH"
+fi
+
+# atuin's hooks start background jobs (`history end` on every prompt, the search index
+# at startup), and starship.nu counts `job list` for its jobs gear, so the gear showed on
+# nearly every prompt; in zsh atuin's work isn't a shell job. atuin.nu labels its jobs
+# and starship.nu leaves them out of the count.
+cat >"$T/atuin-init.nu" <<'EOF'
+let _atuin_pre_prompt = {||
+    if (version).minor >= 104 or (version).major > 0 {
+        job spawn {
+            ^atuin history end --hook -- $env.ATUIN_HISTORY_ID | complete
+        } | ignore
+    }
+}
+if (version).minor >= 104 or (version).major > 0 {
+    with-env { ATUIN_SHELL: nu } {
+        job spawn {
+            atuin __internal prepare-search-index | complete
+        } | ignore
+    }
+}
+EOF
+cat >"$T/starship-init.nu" <<'EOF'
+export-env { $env.PROMPT_COMMAND = {||
+    ^starship prompt ...(
+        if (which "job list" | where type == built-in | is-not-empty) {
+            ["--jobs", (job list | length)]
+        } else { [] }
+    )
+} }
+EOF
+printf '#!/usr/bin/env bash\nif [ "$1" = import ]; then exit 0; fi\ncat "%s"\n' "$T/atuin-init.nu" >"$BIN/atuin"
+printf '#!/usr/bin/env bash\ncat "%s"\n' "$T/starship-init.nu" >"$BIN/starship"
+chmod +x "$BIN/atuin" "$BIN/starship"
+rm -rf "$DIR"
+run
+A="$DIR/atuin.nu"
+S="$DIR/starship.nu"
+check "atuin.nu: both of atuin's job spawns carry --description atuin" bash -c "[ \"\$(grep -c 'job spawn --description atuin {' '$A')\" -eq 2 ] && ! grep -q 'job spawn {' '$A'"
+check "starship.nu: the jobs count leaves atuin's jobs out" bash -c "grep -qF \"(job list | where description? != 'atuin' | length)\" '$S' && ! grep -qF '(job list | length)' '$S'"
+check "atuin.nu / starship.nu: no warning for the expected format" bash -c "! printf '%s' \"\$1\" | grep -qE '(atuin|starship)\\.nu: unexpected'" _ "$OUT"
+GEAR="$("$NU" --no-config-file --commands "job spawn --description atuin { sleep 2sec } | ignore; print (job list | where description? != 'atuin' | length); job spawn { sleep 2sec } | ignore; print (job list | where description? != 'atuin' | length)" 2>&1 | tr '\n' ' ')"
+check "an atuin-labelled job isn't counted, the user's own job is ('0 1', got '$GEAR')" [ "$GEAR" = "0 1 " ]
+# A changed format is written as-is, with a warning (the gear may then show atuin's jobs).
+printf 'job spawn --other {\n  x\n} | ignore\n' >"$T/atuin-init.nu"
+printf 'let n = (job list | where x | length)\n' >"$T/starship-init.nu"
+run
+check "atuin.nu / starship.nu: an unexpected format is kept, with a warning each" bash -c "grep -q 'job spawn --other {' '$A' && grep -qF '(job list | where x | length)' '$S' && printf '%s' \"\$1\" | grep -q 'atuin.nu: unexpected' && printf '%s' \"\$1\" | grep -q 'starship.nu: unexpected'" _ "$OUT"
+
+# The real atuin and starship (where installed): the patterns must still match theirs.
+REAL_ATUIN="$(command -v atuin || true)"
+REAL_STARSHIP="$(command -v starship || true)"
+if [ -n "$REAL_ATUIN" ] && [ -n "$REAL_STARSHIP" ]; then
+  mkdir -p "$T/realbin2"
+  ln -sf "$REAL_ATUIN" "$T/realbin2/atuin"
+  ln -sf "$REAL_STARSHIP" "$T/realbin2/starship"
+  rm -rf "$DIR"
+  OUT="$(env -i HOME="$HOME" PATH="$T/realbin2:/usr/bin:/bin" XDG_CONFIG_HOME="$T/cfg" "$NU" --no-config-file "$ROOT/scripts/nu-init.nu" --dir "$DIR" --state-dir "$STATE" 2>&1)"
+  check "real atuin + starship: atuin's jobs labelled, starship skips them, no warning" bash -c "grep -q 'job spawn --description atuin {' '$A' && ! grep -q 'job spawn {' '$A' && grep -qF \"(job list | where description? != 'atuin' | length)\" '$S' && ! printf '%s' \"\$1\" | grep -qE '(atuin|starship)\\.nu: unexpected'" _ "$OUT"
+else
+  echo "  SKIP real atuin + starship: not both on PATH"
 fi
 
 echo

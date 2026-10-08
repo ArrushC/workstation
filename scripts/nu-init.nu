@@ -63,6 +63,24 @@ def gen [dir: string, g: record] {
             $text = $live
         }
     }
+    # atuin's hooks start background jobs (`history end` on every prompt, the search
+    # index at startup) and starship's prompt counts `job list` for its jobs gear, so the
+    # gear showed on nearly every prompt; in zsh atuin's work isn't a shell job. Label
+    # atuin's jobs and leave them out of starship's count. A changed format is written
+    # as-is with a warning (the gear may then count atuin's jobs again).
+    if $g.file == "atuin.nu" and ($text | str contains "job spawn") {
+        $text = ($text | str replace --all "job spawn {" "job spawn --description atuin {")
+        let all = ($text | parse --regex 'job spawn' | length)
+        if ($text | parse --regex 'job spawn --description atuin \{' | length) != $all {
+            print "nu-init: warning: atuin.nu: unexpected `job spawn` form; starship's jobs gear may count atuin's background jobs"
+        }
+    }
+    if $g.file == "starship.nu" and ($text | str contains "job list") {
+        $text = ($text | str replace --all "(job list | length)" "(job list | where description? != 'atuin' | length)")
+        if not ($text | str contains "description? != 'atuin'") {
+            print "nu-init: warning: starship.nu: unexpected `job list` form; its jobs gear may count atuin's background jobs"
+        }
+    }
     let old = (if ($target | path exists) { open --raw $target | decode utf-8 } else { "" })
     if $old == $text {
         print $"nu-init: ($g.file) unchanged"
