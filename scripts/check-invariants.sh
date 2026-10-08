@@ -549,8 +549,12 @@ def boot(f):
     return loaded.get(f, {}).get("bootstrap", {})
 
 
-# Hooks: `mise run <task>[ ::: <task>]`, each task existing; mise runs a name from every loaded file.
-hook_re = re.compile(r"^mise run [a-z-]+( ::: [a-z-]+)*$")
+# Hooks: `mise run [--skip-tools] <task>[ ::: <task>]`, each task existing; mise runs a name
+# from every loaded file. A hook that runs before the tools phase must pass --skip-tools:
+# `mise run` otherwise installs every missing tool first, so a fresh host's tools (node's
+# postinstall needs dnf's libatomic) would install before the dnf batch.
+hook_re = re.compile(r"^mise run (--skip-tools )?[a-z-]+( ::: [a-z-]+)*$")
+AFTER_TOOLS_HOOKS = {"post-tools", "final"}
 toml_tasks = {t for d in loaded.values() for t in d.get("tasks", {})}
 # post-dotfiles is the raw chmod line restoring ~/.ssh and ~/.claude modes, pinned to an
 # exact literal: mise runs hooks as `sh -o errexit`, so each command needs its own `|| true`
@@ -572,7 +576,9 @@ for f, d in loaded.items():
         if not hook_re.match(val):
             bad_hooks.append(f"{f}:{name}={val!r} (want 'mise run <task>')")
             continue
-        for task in val.split("mise run ", 1)[1].split(" ::: "):
+        if name not in AFTER_TOOLS_HOOKS and "--skip-tools" not in val:
+            bad_hooks.append(f"{f}:{name} runs before the tools phase: use 'mise run --skip-tools <task>' (else it installs every tool before dnf)")
+        for task in val.split("mise run ", 1)[1].removeprefix("--skip-tools ").split(" ::: "):
             if not (os.path.isfile(os.path.join("tasks", task)) or task in toml_tasks):
                 bad_hooks.append(f"{f}:{name} -> task {task} is neither tasks/{task} nor a [tasks.{task}] table")
 if bad_hooks:
@@ -604,6 +610,7 @@ dropped = {
     "dnf:shellcheck": "the package is ShellCheck",
     "dnf:cockpit-networkmanager": "a virtual provide: `rpm -q` never sees it installed, so it drifts forever",
     "dnf:python3": "no package of that name on EL8 (python36 provides it), so it drifts forever; python3-pip brings the interpreter",
+    "dnf:curl": "conflicts with EL9's default curl-minimal, failing the batch; bootstrap.sh needs a curl first anyway",
 }
 pkgs = boot("config.linux.toml").get("packages", {})
 bad_pkg = [f"config.linux.toml:{k} (missing dnf: prefix)" for k in pkgs if not k.startswith("dnf:")]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="git pull --ff-only, then mise install + mise bootstrap (system steps skipped where this host has no sudo)"
+#MISE description="git pull --ff-only, then mise bootstrap, whose pre-tools hook installs the tools (system steps skipped where this host has no sudo)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
@@ -12,8 +12,8 @@ if [ -z "${WORKSTATION_UPDATE_PULLED:-}" ]; then
 fi
 
 # miserc.toml from mise-env.sh (the OS token set), then drop any exported
-# variable: an exported MISE_ENV would override miserc and could make
-# mise-install.sh's `mise prune` remove tools.
+# variable: an exported MISE_ENV would override miserc and could make the pre-tools
+# hook's `mise prune` (scripts/lib/mise-install.sh) remove tools.
 tokens="$("$root/scripts/lib/mise-env.sh" --write)"
 unset MISE_ENV
 printf '==> config set %s (miserc.toml)\n' "$tokens"
@@ -25,5 +25,4 @@ if [ "$("$root/scripts/lib/bootstrap-fn.sh" config_get "$root/config.local.toml"
   printf ' ! sudo = "no" in config.local.toml: skipping the system steps (dnf, /etc files); re-run %s/bootstrap.sh with sudo to apply them\n' "$root"
 fi
 
-"$root/scripts/lib/mise-install.sh"
 mise bootstrap --yes "${skip[@]}"

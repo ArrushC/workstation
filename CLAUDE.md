@@ -51,10 +51,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   step checks `is_wsl` at run time.
 - `[bootstrap.*]` and `[dotfiles]` tables merge by union across loaded files. Declare each item once,
   in the file whose token gates it.
-- Hooks are `mise run <task>` (or `mise run a ::: b`): mise treats hook strings as opaque shell.
-  A hook name declared in several loaded files runs every one. The one exception is
-  the literal `post-dotfiles` chmod line in `config.linux.toml`. mise runs hooks under
-  `sh -o errexit`, so each of its commands keeps its own `|| true`.
+- Hooks are `mise run <task>` (or `a ::: b`); before the tools phase `mise run --skip-tools <task>`,
+  or it installs every tool before dnf (node needs dnf's libatomic). A hook name in several loaded
+  files runs every one. Exception: the literal `post-dotfiles` chmod line, each command with its
+  own `|| true` (`sh -o errexit`).
 - Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts, broot-skin). `final` runs
   only on a full `mise bootstrap`, never on `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8

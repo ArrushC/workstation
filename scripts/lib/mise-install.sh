@@ -7,8 +7,8 @@
 # would otherwise never land. Marker = cksum of node's declaration under
 # ~/.local/state/workstation/; when node was ALREADY installed and the marker
 # is stale, node is force-reinstalled once. Then `mise prune` drops versions no
-# config references. User-level; never sudo. Used directly by bootstrap.sh's
-# apply(), ahead of `mise bootstrap` itself.
+# config references. User-level; never sudo. Run by `mise bootstrap`'s pre-tools
+# hook (config.linux.toml), so after the dnf batch: node needs libatomic to start.
 #
 # The declaration is read with an explicit `-f config.toml`: a bare
 # `mise config get tools.node` reads only the HIGHEST-PRECEDENCE loaded file,

@@ -169,6 +169,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `claude` latest
 
 ### System packages (dnf, Linux; skipped without sudo)
-- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie curl file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rsync rsyslog strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zsh
+- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rsync rsyslog strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
 
 <!-- TOOLS:END -->
