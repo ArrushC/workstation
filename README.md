@@ -496,7 +496,7 @@ Check the unit, then its log: `systemctl --user is-active dev.mise.pueued.servic
 
 ### Colors look banded or 8-bit on a remote host
 
-The remote app only emits truecolor if `$COLORTERM=truecolor` is set, which the tracked `zshrc`/`bashrc` do. Run `wsu` on the affected host, open a new shell, and check that `echo "$COLORTERM"` prints `truecolor`.
+The remote app only emits truecolor if `$COLORTERM=truecolor` is set, which the tracked `zshrc`/`bashrc` do (and, on Windows, the PowerShell and Nushell profiles). Run `wsu` on the affected host, open a new shell, and check that `echo "$COLORTERM"` prints `truecolor`.
 
 ### Tofu boxes / missing icons after install
 

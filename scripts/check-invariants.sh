@@ -1379,6 +1379,26 @@ PY
   done <<<"$out"
 }
 
+check_colorterm() {
+  hdr "COLORTERM=truecolor in every interactive shell profile"
+  # Without it bat (and other apps) fall back to 256 colours, so the Catppuccin themes drift.
+  local f missing=()
+  local -A want=(
+    ["dotfiles/zshrc.tera"]='^export COLORTERM=truecolor'
+    ["dotfiles/bashrc.tera"]='^export COLORTERM=truecolor'
+    ["dotfiles/windows/AppData/Roaming/nushell/config.nu.tera"]='^\$env\.COLORTERM = "truecolor"'
+    ["dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera"]="^\\\$env:COLORTERM = 'truecolor'"
+  )
+  for f in "${!want[@]}"; do
+    grep -qE "${want[$f]}" "$f" || missing+=("$f")
+  done
+  if [ "${#missing[@]}" -eq 0 ]; then
+    ok "zshrc, bashrc, config.nu and the PowerShell profile set COLORTERM=truecolor"
+  else
+    bad "COLORTERM=truecolor missing from: ${missing[*]}"
+  fi
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -1443,6 +1463,7 @@ check_zellij_config
 check_fastfetch_config
 check_zed_settings
 check_shell_highlight_parity
+check_colorterm
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.

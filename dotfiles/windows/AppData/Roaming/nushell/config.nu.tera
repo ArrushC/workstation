@@ -30,6 +30,10 @@ $env.config.show_banner = false
 # Ctrl-O opens the command line in Helix; EDITOR serves everything else.
 $env.EDITOR = "hx"
 $env.config.buffer_editor = "hx"
+# Windows Terminal and Warp draw 24-bit colour; COLORTERM tells bat, delta, glow, eza and
+# helix so (without it bat falls back to 256 colours). PARITY: the PowerShell profile and
+# the Linux zshrc/bashrc set it too.
+$env.COLORTERM = "truecolor"
 $env.config.cursor_shape.emacs = "line"
 # Deletes go to the Recycle Bin; `rm --permanent` skips it.
 $env.config.rm.always_trash = true
