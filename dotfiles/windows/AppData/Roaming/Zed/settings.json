@@ -103,7 +103,6 @@
   },
   "show_wrap_guides": false,
   "terminal": {
-    "shell": { "program": "nu" },
     "font_size": 13.0,
     "font_family": "JetBrainsMono NFM",
     "toolbar": {
@@ -115,6 +114,15 @@
         "directories": [".venv", "venv", "env", ".env"],
         "activate_script": "default",
       },
+    },
+  },
+  // Nushell for local terminals only. Zed sends these settings to an SSH remote's server,
+  // and since Zed 1.23.1 a remote terminal runs the terminal.shell they resolve to there:
+  // a top-level "nu" fails on Linux hosts ("env: 'nu': No such file or directory"). The
+  // "windows" block applies only where Zed runs on Windows, so remotes keep their login shell.
+  "windows": {
+    "terminal": {
+      "shell": { "program": "nu" },
     },
   },
   "debugger": {

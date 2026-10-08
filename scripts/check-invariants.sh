@@ -1235,6 +1235,87 @@ check_fastfetch_config() {
   fi
 }
 
+check_zed_settings() {
+  hdr "Zed settings (no top-level terminal.shell: SSH remotes inherit it)"
+  if [ -z "$PY" ]; then
+    note "no python — Zed settings check skipped locally (CI enforces)"
+    return
+  fi
+  local out result detail
+  # Zed sends the client's user settings to an SSH remote's server, and since Zed 1.23.1
+  # the remote terminal launches the terminal.shell those settings resolve to there. A
+  # top-level shell (Windows' "nu") then runs on Linux hosts that don't have it; one under
+  # a "windows"/"linux"/"macos" key only applies on that OS.
+  out=$(
+    "$PY" - dotfiles/windows/AppData/Roaming/Zed/settings.json dotfiles/config/zed/settings.json <<'PY'
+import json, sys
+
+def jsonc(text):
+    # Drop // and /* */ comments outside strings, then trailing commas before } or ].
+    out, i, n, in_str = [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if c == "\\":
+                out.append(text[i + 1]); i += 1
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True; out.append(c)
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        elif text.startswith("/*", i):
+            i = text.index("*/", i) + 2
+            continue
+        else:
+            out.append(c)
+        i += 1
+    s, res, in_str, j = "".join(out), [], False, 0
+    while j < len(s):
+        c = s[j]
+        if in_str:
+            res.append(c)
+            if c == "\\":
+                res.append(s[j + 1]); j += 1
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True; res.append(c)
+        elif c == ",":
+            k = j + 1
+            while k < len(s) and s[k] in " \t\r\n":
+                k += 1
+            if k < len(s) and s[k] in "}]":
+                j += 1
+                continue
+            res.append(c)
+        else:
+            res.append(c)
+        j += 1
+    return json.loads("".join(res))
+
+for path in sys.argv[1:]:
+    try:
+        d = jsonc(open(path, encoding="utf-8").read())
+    except Exception as e:
+        print(f"FAIL|{path} doesn't parse as JSONC: {e}")
+        continue
+    if "shell" in d.get("terminal", {}):
+        print(f"FAIL|{path}: top-level terminal.shell ({d['terminal']['shell']!r}) reaches SSH remotes; move it under \"windows\"/\"linux\"")
+    else:
+        where = [k for k in ("windows", "linux", "macos") if "shell" in d.get(k, {}).get("terminal", {})]
+        print(f"PASS|{path}: no top-level terminal.shell" + (f" (per-OS: {', '.join(where)})" if where else ""))
+PY
+  )
+  while IFS='|' read -r result detail; do
+    [ -n "$result" ] || continue
+    if [ "$result" = PASS ]; then ok "$detail"; else bad "$detail"; fi
+  done <<<"$out"
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -1297,6 +1378,7 @@ check_completion_parity
 check_warp_guards
 check_zellij_config
 check_fastfetch_config
+check_zed_settings
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.
