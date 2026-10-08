@@ -2,7 +2,7 @@
 # post-edit-guard.sh — Claude Code PostToolUse hook (Edit|Write|MultiEdit).
 #
 # Repo-specific. The repo's load-bearing file invariants (LF endings, 0755 git
-# mode, UTF-8 BOM on three .ps1 files) are enforced at COMMIT time by
+# mode, UTF-8 BOM on two .ps1 files) are enforced at COMMIT time by
 # scripts/check-invariants.sh (pre-commit hook + CI + `mise run lint`). This hook
 # pulls that feedback forward to EDIT time and AUTO-REPAIRS the cheap cases, so
 # a regression Claude just introduced cannot survive the turn:
