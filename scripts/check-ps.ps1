@@ -16,6 +16,7 @@ $targets = @(
     'scripts/test-mise-env.ps1',
     'scripts/test-winget-apps.ps1',
     'scripts/test-python-fonts.ps1',
+    'scripts/lib/test-helpers.ps1',
     'scripts/check-ps.ps1'
 ) | ForEach-Object { Join-Path $repoRoot $_ }
 

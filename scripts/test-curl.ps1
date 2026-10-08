@@ -5,30 +5,10 @@ param()
 # Same StrictMode as bootstrap.ps1, so a strict-only failure shows up here.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
-
-function Get-TestFunction {
-    param([string]$Path, [string]$Name)
-    $parseErrors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile(
-        $Path, [ref]$null, [ref]$parseErrors)
-    if ($parseErrors) { throw ($parseErrors | Out-String) }
-    $node = $ast.Find({
-        param($item)
-        $item -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq $Name
-    }, $true)
-    if (-not $node) { throw "Missing function: $Name" }
-    return $node.Extent.Text
-}
-
-function Assert-Test {
-    param([bool]$Condition, [string]$Message)
-    if (-not $Condition) { throw $Message }
-}
-
-$bootstrapPath = Join-Path $repoRoot 'bootstrap.ps1'
-$helper = Get-TestFunction $bootstrapPath 'Invoke-CurlRequest'
-. ([scriptblock]::Create($helper))
+$ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
+. (Import-AstFunction $ast 'Invoke-CurlRequest')
 
 # Bind an ephemeral loopback port without HttpListener URL ACL requirements.
 $server = Start-Job {
@@ -98,9 +78,9 @@ try {
     } while ($true)
     $base = "http://127.0.0.1:$port"
     $expected = "line one`n$([char]0x2713) caf$([char]0xe9)`n"
-    Assert-Test ((Invoke-CurlRequest "$base/redirect") -ceq $expected) 'Redirect / UTF-8 / multiline failure'
-    Assert-Test ((Invoke-CurlRequest "$base/auth" -Headers @{Authorization='Bearer fixture-token'}) -ceq $expected) 'Header forwarding failure'
-    Assert-Test ((Invoke-CurlRequest "$base/retry") -ceq $expected) 'Retry failed'
+    Assert ((Invoke-CurlRequest "$base/redirect") -ceq $expected) 'Redirect / UTF-8 / multiline failure'
+    Assert ((Invoke-CurlRequest "$base/auth" -Headers @{Authorization='Bearer fixture-token'}) -ceq $expected) 'Header forwarding failure'
+    Assert ((Invoke-CurlRequest "$base/retry") -ceq $expected) 'Retry failed'
     # Two curl.exe on PATH (System32 + Git's mingw64\bin is the everyday case, and
     # GitHub's windows runner): Get-Command returns BOTH, and the helper must still
     # resolve to exactly one executable.
@@ -112,23 +92,23 @@ try {
     $oldPath = $env:PATH
     try {
         $env:PATH = "$shadowDir;$oldPath"
-        Assert-Test (@(Get-Command curl.exe -CommandType Application).Count -ge 2) 'Fixture did not put two curl.exe on PATH'
-        Assert-Test ((Invoke-CurlRequest "$base/redirect") -ceq $expected) 'Helper failed with two curl.exe on PATH'
+        Assert (@(Get-Command curl.exe -CommandType Application).Count -ge 2) 'Fixture did not put two curl.exe on PATH'
+        Assert ((Invoke-CurlRequest "$base/redirect") -ceq $expected) 'Helper failed with two curl.exe on PATH'
     } finally { $env:PATH = $oldPath }
     $outFile = Join-Path $testDir 'binary with spaces.bin'
     $result = Invoke-CurlRequest "$base/binary" -OutFile $outFile
-    Assert-Test ($null -eq $result) 'File download polluted the success pipeline'
-    Assert-Test (([System.IO.File]::ReadAllBytes($outFile) -join ',') -ceq ((0..255) -join ',')) 'Binary bytes changed'
+    Assert ($null -eq $result) 'File download polluted the success pipeline'
+    Assert (([System.IO.File]::ReadAllBytes($outFile) -join ',') -ceq ((0..255) -join ',')) 'Binary bytes changed'
     $object = Invoke-CurlRequest "$base/object" | ConvertFrom-Json
-    Assert-Test ($object.tag_name -eq 'v1') 'JSON object parsing failed'
+    Assert ($object.tag_name -eq 'v1') 'JSON object parsing failed'
     foreach ($route in @('empty', 'single', 'multi')) {
         $items = Invoke-CurlRequest "$base/$route" | ConvertFrom-Json
         $count = @($items | ForEach-Object { $_ }).Count
         $expectedCount = @{empty=0; single=1; multi=2}[$route]
-        Assert-Test ($count -eq $expectedCount) "JSON array shape failed: $route"
+        Assert ($count -eq $expectedCount) "JSON array shape failed: $route"
         if ($count) {
             $release = $items | Where-Object { -not $_.draft } | Select-Object -First 1
-            Assert-Test ($release.tag_name -eq 'v2') 'Prerelease selection regressed'
+            Assert ($release.tag_name -eq 'v2') 'Prerelease selection regressed'
         }
     }
     foreach ($route in @('missing', 'auth', 'partial', 'invalid')) {
@@ -136,29 +116,29 @@ try {
         try {
             $null = Invoke-CurlRequest "$base/$route" | ConvertFrom-Json -ErrorAction Stop
         } catch { $failed = $true }
-        Assert-Test $failed "Failure did not throw: $route"
+        Assert $failed "Failure did not throw: $route"
     }
     $message = ''
     try { $null = Invoke-CurlRequest "$base/missing" } catch { $message = $_.Exception.Message }
-    Assert-Test ($message -like '*404*') 'HTTP status missing from failure message'
+    Assert ($message -like '*404*') 'HTTP status missing from failure message'
     $failed = $false
     try { Invoke-CurlRequest "$base/partial" -OutFile $outFile } catch { $failed = $true }
-    Assert-Test $failed 'Partial binary download did not throw'
-    Assert-Test (([System.IO.File]::ReadAllBytes($outFile)).Length -eq 256) 'Failed download replaced existing destination'
-    Assert-Test (@(Get-ChildItem -LiteralPath $testDir).Count -eq 1) 'Temporary downloads leaked'
+    Assert $failed 'Partial binary download did not throw'
+    Assert (([System.IO.File]::ReadAllBytes($outFile)).Length -eq 256) 'Failed download replaced existing destination'
+    Assert (@(Get-ChildItem -LiteralPath $testDir).Count -eq 1) 'Temporary downloads leaked'
     $script:downloadExecuted = $false
     $failed = $false
     try {
         $download = Invoke-CurlRequest "$base/script-error"
         & ([scriptblock]::Create($download))
     } catch { $failed = $true }
-    Assert-Test ($failed -and -not $script:downloadExecuted) 'Failed script download reached execution'
+    Assert ($failed -and -not $script:downloadExecuted) 'Failed script download reached execution'
 
     Stop-Job $server
     $failed = $false
     try { $null = Invoke-CurlRequest "$base/text" } catch { $failed = $true }
-    Assert-Test $failed 'Connection failure did not throw'
-    Assert-Test (@(Get-ChildItem -LiteralPath $testDir).Count -eq 1) 'Connection failure leaked temp files'
+    Assert $failed 'Connection failure did not throw'
+    Assert (@(Get-ChildItem -LiteralPath $testDir).Count -eq 1) 'Connection failure leaked temp files'
     $oldPath = $env:PATH
     try {
         $env:PATH = $testDir
@@ -166,9 +146,8 @@ try {
         try { $null = Invoke-CurlRequest "$base/text" } catch {
             $failed = $_.Exception.Message -like 'curl.exe is required*'
         }
-        Assert-Test $failed 'Missing curl.exe did not produce prerequisite guidance'
+        Assert $failed 'Missing curl.exe did not produce prerequisite guidance'
     } finally { $env:PATH = $oldPath }
-    Write-Host "curl integration checks passed on PowerShell $($PSVersionTable.PSVersion)"
 } finally {
     $env:TEMP = $oldTemp
     $env:TMP = $oldTmp
@@ -177,7 +156,6 @@ try {
     Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
     if ($shadowDir) { Remove-Item -LiteralPath $shadowDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
-# The GitHub runner appends `exit $LASTEXITCODE` to every pwsh/powershell step,
-# and the last native call above is the deliberate connection-refused fixture
-# (curl exit 7). Reaching this line means every assertion passed.
-$global:LASTEXITCODE = 0
+# The last native call above is the deliberate connection-refused fixture (curl
+# exit 7); reaching this line means every assertion passed.
+Complete-Test 'curl integration'

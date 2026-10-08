@@ -1,33 +1,17 @@
 ﻿# Tests bootstrap.ps1's SSH host launchers (Get-SshLauncherHosts, the Windows
 # Terminal fragment and the Warp Tab Configs) without running the bootstrap:
-# the functions are extracted from the script's AST, as scripts/test-curl.ps1
-# does. USERPROFILE/LOCALAPPDATA/APPDATA point at a temp dir for the run.
+# the functions are extracted from the script's AST (scripts/lib/test-helpers.ps1).
+# USERPROFILE/LOCALAPPDATA/APPDATA point at a temp dir for the run.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'bootstrap.ps1'), [ref]$null, [ref]$null)
-$wanted = 'Get-SshLauncherHosts', 'New-Uuid5', 'Test-WindowsTerminalPresent', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs'
-foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in $wanted }, $true)) {
-    . ([scriptblock]::Create($f.Extent.Text))
-}
-$script:warnings = New-Object System.Collections.Generic.List[string]
-function Write-Ok { param($m) }
-function Write-Warn { param($m) $script:warnings.Add([string]$m) }
+$ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
+. (Import-AstFunction $ast 'Get-SshLauncherHosts', 'New-Uuid5', 'Test-WindowsTerminalPresent', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs')
 # Stand-ins for "Windows Terminal / Warp are installed".
 function Get-AppxPackage { [CmdletBinding()] param([string]$Name) [pscustomobject]@{ Name = $Name } }
 function Test-InstallerPresent { param($DisplayName) $DisplayName -ceq 'Warp*' }
-function Assert([bool]$cond, [string]$msg) { if (-not $cond) { throw "FAIL: $msg" } }
 
-$failures = New-Object System.Collections.Generic.List[string]
-function Test-Case([string]$Name, [scriptblock]$Body) {
-    try {
-        & $Body
-        Write-Host "  ok    $Name"
-    } catch {
-        $failures.Add($Name)
-        Write-Host "  FAIL  $Name -- $($_.Exception.Message)"
-    }
-}
 # A fresh fake profile per case; $Hosts (if given) becomes ~\.ssh\config.local.
 function New-Profile([string]$Name, [string]$Hosts) {
     $root = Join-Path $tmp $Name
@@ -41,8 +25,7 @@ function Get-Fragment { Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\
 function Get-WarpDir { Join-Path $env:APPDATA 'warp\Warp\data\tab_configs' }
 
 $saved = @{ USERPROFILE = $env:USERPROFILE; LOCALAPPDATA = $env:LOCALAPPDATA; APPDATA = $env:APPDATA }
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("sshlaunch-" + [guid]::NewGuid())
-New-Item -ItemType Directory -Path $tmp | Out-Null
+$tmp = New-TestTempDir 'sshlaunch-'
 try {
     Test-Case 'concrete Host aliases only, in order, de-duplicated' {
         New-Profile 'parse' (@(
@@ -60,7 +43,6 @@ try {
             'Match host foo',
             ''
         ) -join "`r`n")
-        $script:warnings.Clear()
         $got = @(Get-SshLauncherHosts) -join ','
         Assert ($got -ceq 'alpha,beta,delta,eq-host,lower.case,inline') "got: $got"
         Assert (($script:warnings -join ' ') -like '*bad;rm*') "no warning for the unsafe alias: $($script:warnings -join ' | ')"
@@ -128,6 +110,4 @@ try {
     foreach ($k in $saved.Keys) { Set-Item -Path "env:$k" -Value $saved[$k] }
     Remove-Item -Recurse -Force $tmp
 }
-if ($failures.Count -gt 0) { throw "SSH host launchers: $($failures.Count) case(s) failed: $($failures -join '; ')" }
-Write-Host "SSH host launcher checks passed on PowerShell $($PSVersionTable.PSVersion)"
-$global:LASTEXITCODE = 0
+Complete-Test 'SSH host launcher'
