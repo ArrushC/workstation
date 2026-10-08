@@ -6,6 +6,9 @@
 # and overrides only the shape_* keys that have a zsh twin; table and value colours,
 # variables, numbers and closures stay Catppuccin's.
 # $zsh's keys are zsh's style names; check_shell_highlight_parity holds them equal.
+# One gap zsh doesn't have: Nushell's parser gives every argument of an external command
+# (ssh, git) the one shape externalarg (nu-parser flatten.rs), so a flag, quoted string or
+# glob there draws as plain text; Nushell's own commands colour them as zsh does.
 let zsh = {
   default: "#cdd6f4"
   "unknown-token": { fg: "#f38ba8" attr: b }
