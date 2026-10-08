@@ -220,10 +220,11 @@ state = "running"
 # fails the whole batch, so every name is verified on EL8 and EL9. Names that must not
 # come back (check_bootstrap_config rejects them): fswatch/entr (not packaged),
 # shellcheck (the package is ShellCheck), cockpit-networkmanager and python3 (no
-# package of that name, so `rpm -q` never sees it installed and it drifts forever).
+# package of that name, so `rpm -q` never sees it installed and it drifts forever),
+# and curl: EL9 ships curl-minimal, which conflicts with curl in a plain `dnf install`,
+# and bootstrap.sh needs a curl before any of this runs anyway.
 # `make` stays as a C-toolchain dependency.
 # --- core ---
-"dnf:curl" = "latest"
 "dnf:gcc" = "latest"
 "dnf:git" = "latest"
 "dnf:libatomic" = "latest"          # node >=25 links libatomic.so.1 (BaseOS); without it node/ccstatusline die at startup

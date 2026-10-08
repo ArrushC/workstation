@@ -353,7 +353,7 @@ dnf repoquery tig          # confirm the exact name resolves on EL8 and EL9
 mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap plan
 ```
 
-Do not re-add names known not to resolve on EL9: `fswatch`, `entr`, `cockpit-networkmanager`. `ShellCheck` is capitalised (EPEL). The batch is all-or-nothing, so a package only some EL releases carry goes in `tasks/optional-packages` instead (the `post-packages` hook), which installs with dnf's `strict=0` and skips it where it is missing: `bear` is there because EL8 has no package.
+Do not re-add names known not to resolve on EL9: `fswatch`, `entr`, `cockpit-networkmanager`. Nor `curl`: EL9 ships `curl-minimal`, which conflicts with it, and the bootstrap needs a curl before it starts anyway. `ShellCheck` is capitalised (EPEL). The batch is all-or-nothing, so a package only some EL releases carry goes in `tasks/optional-packages` instead (the `post-packages` hook), which installs with dnf's `strict=0` and skips it where it is missing: `bear` is there because EL8 has no package.
 
 **A service or `/etc` file.** In `config.linux.toml`: a `[bootstrap.files."/etc/<path>"]` table (source relative to the repo root, under `configs/`; phase is only `pre-packages` or `post-packages`; mise elevates itself) and a `[bootstrap.services.<name>]` table for the unit it belongs to:
 

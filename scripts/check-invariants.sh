@@ -625,6 +625,7 @@ dropped = {
     "dnf:shellcheck": "the package is ShellCheck",
     "dnf:cockpit-networkmanager": "a virtual provide: `rpm -q` never sees it installed, so it drifts forever",
     "dnf:python3": "no package of that name on EL8 (python36 provides it), so it drifts forever; python3-pip brings the interpreter",
+    "dnf:curl": "conflicts with EL9's default curl-minimal, failing the batch; bootstrap.sh needs a curl first anyway",
 }
 pkgs = boot("config.linux.toml").get("packages", {})
 bad_pkg = [f"config.linux.toml:{k} (missing dnf: prefix)" for k in pkgs if not k.startswith("dnf:")]
