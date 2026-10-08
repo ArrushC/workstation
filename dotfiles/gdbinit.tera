@@ -1,20 +1,150 @@
 {#
-~/.gdbinit — load GEF (GDB Enhanced Features) into every gdb session.
+~/.gdbinit: shared gdb settings, then GEF (GDB Enhanced Features).
 
-Linux only: this file and the gef.py it sources are declared only
-in config.linux.toml, so they never deploy on Windows. gef.py is vendored at dotfiles/config/gdb/gef.py, pinned to GEF
-release 2024.06 — the LAST release supporting Python 3.6–3.9. Plain `gdb` is
-pwndbg's bundled GDB 17 (Python 3.13), but /usr/bin/gdb embeds Python 3.6 (EL8)
-or 3.9 (EL9), where GEF 2025.01+ would SyntaxError on load. Provenance + the
-don't-bump-past-2024.06 constraint live in its .vendor sidecar.
+Linux only: this file and the gef.py it sources are declared only in
+config.linux.toml, so they never deploy on Windows.
 
-This is a template ONLY to resolve the absolute home dir — gdb's `source` does not
-shell-expand `~`, so we emit the full path. GEF is non-destructive: every native
-gdb command still works; it just adds the dashboard/context UI.
+WHO READS THIS FILE (verified with pwndbg 2026.09.15):
+- plain `gdb`: pwndbg's bundled GDB 17 (Python 3.13), first on PATH.
+- /usr/bin/gdb: GDB 16.x (Python 3.9) on EL9, GDB 8.2 (Python 3.6) on EL8.
+- `pwndbg`: its launcher passes -nx, then pwndbg sources this file itself, after
+  pwndbg has loaded (pwndbg/dbg_mod/gdb/__init__.py, _load_gdbinit). It picks
+  ~/.config/gdb/gdbinit instead when that exists, so never create that file.
+Vanilla gdb: `gdb -nx`.
 
-The OTHER GDB front-end, pwndbg, is a mise tool (config.linux.toml) whose bin/
-also holds its own gdb and gdbserver; mise puts them first on PATH. So plain `gdb`
-is pwndbg's GDB 17 with GEF loaded from here, `pwndbg` starts pwndbg (it does NOT
-read this file), and /usr/bin/gdb is the system gdb. Vanilla gdb: `gdb -nx`.
+WHY ALL PYTHON: GDB aborts the rest of an init file at the first command it
+doesn't know (`set debuginfod`, `set style`, ... don't exist in 8.2), and
+$_gdb_setting only arrived in GDB 10. Every gdb above embeds Python, so each
+command runs in its own try/except and a gdb that lacks it skips just that line.
+Keep the code Python 3.6-compatible (EL8's /usr/bin/gdb).
+
+GEF: gef.py is vendored at dotfiles/config/gdb/gef.py, pinned to release 2024.06,
+the LAST release that supports Python 3.6-3.9 (see its .vendor sidecar). It is
+skipped inside pwndbg: loading both swaps pwndbg's prompt and context for GEF's.
+GEF forces hex output and unlimited `print elements` on load; the block after
+it puts C/C++-friendly values back.
+
+This is a template only to resolve the absolute home dir for gef.py: gdb's
+`source` does not expand `~`.
 -#}
-source {{ env.HOME }}/.config/gdb/gef.py
+python
+import os as _ws_os
+import sys as _ws_sys
+
+
+def _ws_set(*cmds):
+    for cmd in cmds:
+        try:
+            gdb.execute(cmd, to_string=True)
+        except gdb.error:
+            pass  # this gdb lacks the setting (8.2: debuginfod, style, ...)
+
+
+# pwndbg's GDB (plain `gdb` and `pwndbg`) runs with PYTHONHOME/PYTHONPATH aimed at
+# its bundled Python 3.13. Inferiors inherit them, so `gdb --args python3 x.py`
+# dies on import: drop them from the inferior's environment. They are also hidden
+# from GEF's `python3` probe below, which crashes on them, then put back.
+def _ws_hide_pyenv():
+    saved = {}
+    if _ws_os.environ.get("PYTHONHOME", "").split(":")[0] == _ws_sys.prefix:
+        _ws_set("unset environment PYTHONHOME", "unset environment PYTHONPATH",
+                "unset environment PYTHONNOUSERSITE")
+        for var in ("PYTHONHOME", "PYTHONPATH"):
+            if var in _ws_os.environ:
+                saved[var] = _ws_os.environ.pop(var)
+    return saved
+
+
+_ws_pyenv = _ws_hide_pyenv()
+
+_ws_set(
+    # pwndbg's GDB bundles a glibc that finds no locales, so it detects ASCII and
+    # GEF's prompt (U+27A4) raises UnicodeEncodeError. pwndbg sets the same.
+    "set charset UTF-8",
+    "set confirm off",
+    "set pagination off",
+    "set history save on",
+    "set history size 10000",
+    "set history remove-duplicates unlimited",
+    # With confirm off, the default "auto" answers no, and the breakpoint is dropped.
+    "set breakpoint pending on",
+    "set print pretty on",
+    "set print object on",
+    "set print asm-demangle on",
+    "set print thread-events off",
+    "set disassembly-flavor intel",
+    # pwndbg's relocated GDB 17 looks only in its own data dir, so it misses the
+    # distro's libstdc++ pretty printers and valgrind's vgdb commands
+    # (valgrind-monitor.py), and declines the host's libthread_db.
+    "add-auto-load-safe-path /usr/share/gdb/auto-load",
+    "add-auto-load-scripts-directory /usr/share/gdb/auto-load",
+    "add-auto-load-safe-path /usr/lib64/libthread_db.so.1",
+    # Step over libstdc++ headers wherever they live (/usr/include/c++/N for gcc,
+    # /opt/rh/gcc-toolset-N/... for clang). A pattern is matched against the same
+    # number of trailing path components, and * never crosses a /.
+    "skip -gfile include/c++/*/*",
+    "skip -gfile include/c++/*/*/*",
+    "skip -gfile include/c++/*/*/*/*",
+)
+
+# One history file for every gdb; the default is ./.gdb_history in each cwd.
+if "GDBHISTFILE" not in _ws_os.environ:
+    _ws_set("set history filename " + _ws_os.path.expanduser("~/.gdb_history"))
+
+
+def _ws_debuginfod_urls():
+    # $DEBUGINFOD_URLS wins when set (export it empty to opt out); otherwise
+    # elfutils' federating server, which also indexes RHEL's UBI 8/9/10 packages.
+    # Set here, not in the shell, so only gdb queries it. Behind a firewall that
+    # drops packets every lookup hangs for minutes and gdb ignores SIGTERM, so
+    # probe the first server once, unless a proxy is configured.
+    urls = _ws_os.environ.get("DEBUGINFOD_URLS", "https://debuginfod.elfutils.org/")
+    servers = [u for u in urls.split() if "://" in u]
+    if not servers:
+        return ""
+    proxies = ("https_proxy", "HTTPS_PROXY", "http_proxy", "all_proxy", "ALL_PROXY")
+    if any(_ws_os.environ.get(v) for v in proxies):
+        return urls
+    import socket
+    from urllib.parse import urlsplit
+    try:
+        url = urlsplit(servers[0])
+        if url.scheme in ("http", "https"):  # file:// needs no network
+            port = url.port or (443 if url.scheme == "https" else 80)
+            socket.create_connection((url.hostname, port), timeout=1.5).close()
+        return urls
+    except (OSError, ValueError):
+        print("~/.gdbinit: %s unreachable, debuginfod off for this session" % servers[0])
+        return ""
+
+
+# GDB 12+ (8.2 has no debuginfod and skips both). Never "ask": it prompts at every
+# `run`, and pwndbg's GDB would otherwise fall back to its built-in server.
+_ws_urls = _ws_debuginfod_urls()
+if _ws_urls:
+    _ws_set("set debuginfod urls " + _ws_urls, "set debuginfod enabled on")
+else:
+    _ws_set("set debuginfod enabled off")
+
+if "pwndbg" in _ws_sys.modules:
+    # pwndbg sets `auto-load safe-path /`, then sources ./.gdbinit from whatever
+    # directory you start it in, unchecked. Put gdb's protection back; run a
+    # project's .gdbinit explicitly with `pwndbg -x .gdbinit`.
+    _ws_set("set auto-load safe-path $debugdir:$datadir/auto-load"
+            ":/usr/share/gdb/auto-load:/usr/lib64/libthread_db.so.1",
+            "set auto-load local-gdbinit off")
+else:
+    # GEF appends the sys.path of whatever `python3` is first on PATH (mise's 3.14,
+    # a project venv) to gdb's own Python (3.6/3.9/3.13); put the original back.
+    _ws_path = list(_ws_sys.path)
+    try:
+        gdb.execute("source {{ env.HOME }}/.config/gdb/gef.py")
+    except gdb.error as _ws_err:
+        print("~/.gdbinit: GEF did not load: %s" % _ws_err)
+    _ws_sys.path[:] = _ws_path
+    del _ws_path
+    _ws_set("set output-radix 10", "set print elements 1000")
+_ws_os.environ.update(_ws_pyenv)
+
+del _ws_set, _ws_hide_pyenv, _ws_debuginfod_urls, _ws_urls, _ws_pyenv, _ws_os, _ws_sys
+end

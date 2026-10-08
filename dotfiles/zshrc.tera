@@ -564,6 +564,9 @@ alias zjl='zellij list-sessions'
 alias zja='zellij attach'
 alias py='python-cli' # mise's Python, never downloads (see python-cli fn)
 alias devtoys='devtoys.cli' # DevToys CLI
+# Thorough memcheck: where each uninitialised value came from (about 2x slower) and
+# leaked fds, on top of ~/.valgrindrc. PARITY: same in bashrc.tera.
+alias vgm='valgrind --tool=memcheck --track-origins=yes --track-fds=yes'
 
 # --- Aliases — workstation (mise dotfiles) -----------------------------------
 # Every ws* command pins `-C "$HOME"`: mise resolves its config root by

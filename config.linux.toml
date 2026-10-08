@@ -153,6 +153,12 @@ herdr = "0.9.3"
 # gdb, herdr and zed (Linux-only).
 "~/.gdbinit" = { source = "dotfiles/gdbinit.tera", mode = "template" }
 "~/.config/gdb" = { source = "dotfiles/config/gdb", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # gef.py, vendored
+# Valgrind defaults for every tool and every caller (CTest, meson --wrap too). The file
+# takes no comments (valgrind reads `#` as an option and won't start), so notes live
+# here. Memcheck-only options carry `--memcheck:`: unprefixed, they stop callgrind,
+# massif and helgrind ("Unknown option"). track-origins (about 2x slower) and track-fds
+# (differs between 3.22 and 3.26) stay out: the `vgm` alias adds them.
+"~/.valgrindrc" = { source = "dotfiles/valgrindrc", mode = "copy" }
 "~/.config/herdr/config.toml" = { source = "dotfiles/config/herdr/config.toml", mode = "copy" }
 # Zed rewrites this in place; record a live edit back with `wsr`. Windows sibling:
 # config.windows.toml.
