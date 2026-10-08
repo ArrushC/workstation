@@ -40,11 +40,58 @@ fi
 # bin dirs on PATH (in front of the shims from ~/.zshenv) and layers any
 # project mise.toml on top as you cd. Activation runs that hook once, so it sits
 # after the last PATH change and before every `eval "$(tool init)"` below: run
-# through a shim, each init costs ~100 ms (a fresh tab took ~750 ms), and a PATH
-# change after it makes the first prompt run the hook again.
+# through a shim, each init costs ~100 ms (a fresh tab took ~750 ms).
 # PARITY: same place in bashrc.tera.
 if command -v mise &>/dev/null; then
   eval "$(mise activate zsh)"
+fi
+
+# mise's hook re-resolves the whole toolset (~100 tools) on every cd, ~100 ms, and
+# checks again on every prompt, ~10 ms. Its answer only changes with what it reads:
+# the project config files from $PWD up to /, the global config, the installed
+# tools, trusted configs and MISE_* variables. This gate fingerprints those (paths,
+# mtimes, values; ~0.5 ms) and calls mise's own hook only when the fingerprint
+# changes, so a cd outside a project costs nothing and one into a project still
+# loads its config. WORKSTATION_MISE_GATE=0 (e.g. in ~/.zshrc.local) hands every
+# prompt and cd back to mise's stock hooks. bashrc.tera has the PARITY NOTE.
+if (( $+functions[_mise_hook] && $+functions[_mise_hook_precmd] && $+functions[_mise_hook_chpwd] )) &&
+  zmodload -F zsh/stat b:zstat 2>/dev/null; then
+  typeset -g _ws_mise_sig=
+  _ws_mise_inputs() {
+    emulate -L zsh -o extended_glob -o null_glob
+    local d=$PWD n cfg=${XDG_CONFIG_HOME:-$HOME/.config} data=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
+    local -a files mtimes
+    while :; do
+      files+=($d/(.|)mise(|.*).toml $d/(.|)mise/(config|mise)(|.*).toml $d/(.|)mise/conf.d/*.toml
+        $d/.config/mise(|.*).toml $d/.config/mise/(config|mise)(|.*).toml $d/.config/mise/conf.d/*.toml
+        $d/.tool-versions(N))
+      [[ $d == / ]] && break
+      d=${d:h}
+    done
+    files=(${files:#$cfg/mise/*} $cfg/mise/*.toml $cfg/mise/conf.d/*.toml $data/installs(/) $data/installs/*(/)
+      ${XDG_STATE_HOME:-$HOME/.local/state}/mise/trusted-configs(/))
+    zstat -N -A mtimes +mtime -- $files 2>/dev/null
+    REPLY="${(j.:.)files}|${(j.:.)mtimes}"
+    for n in ${(ok)parameters[(I)MISE_*]}; do REPLY+="|$n=${(P)n}"; done
+  }
+  _ws_mise_gate() {
+    (( $+functions[_mise_hook] )) || return 0 # after `mise deactivate`
+    if [[ ${WORKSTATION_MISE_GATE:-1} != 1 ]]; then
+      _mise_hook_${1:-precmd}
+      return
+    fi
+    local REPLY
+    _ws_mise_inputs
+    [[ $REPLY == "$_ws_mise_sig" ]] && return 0
+    _ws_mise_sig=$REPLY
+    _mise_hook --reason ${1:-precmd}
+  }
+  _ws_mise_gate_chpwd() { _ws_mise_gate chpwd; }
+  add-zsh-hook -d precmd _mise_hook_precmd
+  add-zsh-hook -d chpwd _mise_hook_chpwd
+  add-zsh-hook precmd _ws_mise_gate
+  add-zsh-hook chpwd _ws_mise_gate_chpwd
+  () { local REPLY; _ws_mise_inputs; _ws_mise_sig=$REPLY; } # activation just ran the hook
 fi
 
 # --- Core env ----------------------------------------------------------------
@@ -194,6 +241,11 @@ fi
 # `honor_ps1 = false`), so a starship PS1 would double up.
 if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
+  # starship.toml has no right_format, so RPROMPT would start starship a second time
+  # every prompt only to print nothing (bash has no right prompt).
+  _ws_starship_cfg=${STARSHIP_CONFIG:-$HOME/.config/starship.toml}
+  [[ -r $_ws_starship_cfg && $(<$_ws_starship_cfg) != *right_format* ]] && RPROMPT=''
+  unset _ws_starship_cfg
 fi
 
 # --- Windows Terminal shell integration (WSL tabs) ---------------------------
@@ -382,6 +434,9 @@ fi
 # suggestion with → (forward-char) or End. Suggestion color = Catppuccin Mocha
 # overlay0 (a muted grey-blue) so it reads as a hint, not real input.
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#6c7086'
+# Bind its widgets once, at the first prompt (after every plugin below has loaded),
+# instead of re-wrapping all of them before every prompt (~15 ms each time).
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1
 [[ -r "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] \
   && source "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
