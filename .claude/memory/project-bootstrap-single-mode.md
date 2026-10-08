@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-History: `--dev`/`--prod` and `vars.group` became an owned/shared mode on 2026-09-25 (PR #3), saved as `vars.mode` and mapped to token sets `linux,owned,host` / `linux` / `windows,owned`. The user then merged the two modes (spec `docs/superpowers/specs/2026-10-06-single-mode-design.md`): "managing it is a pain and the workstation setup is going to be done carefully anyway"; no host ran shared.
+History: `--dev`/`--prod` and `vars.group` became an owned/shared mode on 2026-09-25 (PR #3), saved as `vars.mode` and mapped to token sets `linux,owned,host` / `linux` / `windows,owned`. The user then merged the two modes (PR #30, 519fd46; its design spec is in git history): "managing it is a pain and the workstation setup is going to be done carefully anyway"; no host ran shared.
 
 **Now:**
 - Three config files: `config.toml` (every host; absorbed `config.owned.toml`), `config.linux.toml` (Linux; absorbed `config.host.toml`: dnf batch, `/etc/wsl.conf`, packages-phase and `final` hooks), `config.windows.toml`. Locks `mise.lock` + `mise.linux.lock`; mise.lock's sidecars sit at `locks/<tool>/<ver>` (mise's naming for the root lock), mise.linux.lock's at `locks/mise.linux/`.
