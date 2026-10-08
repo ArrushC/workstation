@@ -40,6 +40,11 @@ if (Get-Command mise -ErrorAction SilentlyContinue) {
     (& mise activate pwsh) | Out-String | Invoke-Expression
 }
 
+# Windows Terminal and Warp draw 24-bit colour; COLORTERM tells bat, delta, glow, eza and
+# helix so (without it bat falls back to 256 colours). PARITY: config.nu and the Linux
+# zshrc/bashrc set it too. The 5.1 profile dot-sources this one.
+$env:COLORTERM = 'truecolor'
+
 # --- workstation aliases (mise dotfiles; mirror the Linux bashrc) -----------
 # Every ws* command pins `-C $env:USERPROFILE`: mise resolves its config root
 # by walking UP from the current directory, and this checkout IS
