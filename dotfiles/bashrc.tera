@@ -59,6 +59,9 @@ fi
 if command -v mise &>/dev/null; then
   eval "$(mise activate bash)"
 fi
+# PARITY NOTE (mise hook gate): zshrc.tera calls mise's hook only when a fingerprint
+# of what it reads changes, which makes a cd ~100 ms cheaper. bash keeps mise's stock
+# hooks: it has no builtin stat for the mtimes, and it is the fallback shell.
 
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
