@@ -159,19 +159,21 @@ pin_bumper_handles() {
 }
 
 # pin_vars_reachable — every config.toml [vars] *_version pin is reported by
-# tasks/check-updates (as UPPER_CASE) and listed by scripts/gen-tool-memory.sh.
+# tasks/check-updates (as UPPER_CASE), bumped by scripts/bump-versions.sh (by name)
+# and listed by scripts/gen-tool-memory.sh.
 pin_vars_reachable() {
   local key missing="" n=0
   while read -r key; do
     [ -n "$key" ] || continue
     n=$((n + 1))
     grep -q "$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')" tasks/check-updates || missing="$missing $key(tasks/check-updates)"
+    grep -q "$key" scripts/bump-versions.sh || missing="$missing $key(bump-versions.sh)"
     grep -q "$key" scripts/gen-tool-memory.sh || missing="$missing $key(gen-tool-memory.sh)"
   done < <("$PY" -c 'import tomllib
 for k in tomllib.load(open("config.toml","rb")).get("vars",{}):
     print(k) if k.endswith("_version") else None')
   if [ "$n" -eq 0 ]; then missing=" <none found>"; fi
-  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then ok "all $n [vars] *_version pin(s) reach check-updates and gen-tool-memory"; else bad "[vars] pin(s) not covered:$missing"; fi
+  if [ "$n" -gt 0 ] && [ -z "$missing" ]; then ok "all $n [vars] *_version pin(s) reach check-updates, bump-versions and gen-tool-memory"; else bad "[vars] pin(s) not covered:$missing"; fi
 }
 
 check_pins() {
@@ -779,7 +781,7 @@ else:
     print(f"PASS|no-symlink-anywhere|{n_total} entries across all {len(files)} config files are copy or template, none symlink/symlink-each")
 
 # Every directory entry that declares `exclude` covers each .vendor/.gitkeep
-# sidecar actually present there.
+# sidecar present anywhere under its source (mise matches exclude names at any depth).
 bad_exclude = []
 n_each = 0
 for f, target, spec in entries:
@@ -790,7 +792,7 @@ for f, target, spec in entries:
     exclude = set(spec.get("exclude", []))
     if not src or not os.path.isdir(src):
         continue
-    sidecars = {name for name in (".vendor", ".gitkeep") if os.path.exists(os.path.join(src, name))}
+    sidecars = {n for _, _, names in os.walk(src) for n in names if n in (".vendor", ".gitkeep")}
     missing = sidecars - exclude
     if missing:
         bad_exclude.append(f"{f}:{target} source has {sorted(missing)} but exclude={sorted(exclude)}")

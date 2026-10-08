@@ -4,8 +4,8 @@
 #
 #   (1) mise tool pins in config.toml / config.linux.toml,
 #       via `mise outdated --bump --json` + set_pin + `mise lock`.
-#   (2) the one host pin config.toml [vars] bumps (vcpkg_version), via git
-#       ls-remote (the same pin tasks/check-updates reports) + set_pin.
+#   (2) the one host pin config.toml [vars] bumps (vcpkg_version), via
+#       scripts/lib/latest-tag.sh (the lookup tasks/check-updates reports) + set_pin.
 #       zjstatus_zellij_floor is a coupling floor, never bumped.
 #
 # Coupled tool pins (go+gopls, node's postinstall LSP servers) are bumped by
@@ -390,64 +390,20 @@ if [ -z "$outdated_fail" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Layer 2: config.toml [vars] — vcpkg_version bumps automatically. Drift is
-# checked via git ls-remote against the SAME pin tasks/check-updates reports;
-# claude-cli is a rolling `latest` pin outside [vars] (no bump path), so isn't
-# checked here. zjstatus_zellij_floor is a coupling floor, not a pin, so it
-# never reaches this path either.
+# Layer 2: config.toml [vars] vcpkg_version, to the newest upstream release tag
+# (scripts/lib/latest-tag.sh, the lookup tasks/check-updates reports).
+# zjstatus_zellij_floor is a coupling floor, not a pin, so it is never bumped.
 # -----------------------------------------------------------------------------
-
-# config.toml [vars] key -> its current string value (a plain `key = "value"`
-# line — the same shape check-invariants.sh's tomlval reads via tomllib; grep
-# is enough here since every [vars] entry is a single-line string).
-varval() {
-  grep -E "^$1 = " config.toml | head -1 | sed -E 's/^[^"]*"([^"]*)".*/\1/'
-}
-
-# update-spec name -> its config.toml [vars] key.
-declare -A VARS_KEY=(
-  ["vcpkg"]=vcpkg_version
-)
-
-# vars_latest <github owner/repo> <tag prefix>: newest clean numeric upstream
-# tag (git ls-remote: no API, no rate limit), prefix stripped. Empty if none.
-vars_latest() {
-  GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --refs "https://github.com/$1.git" "refs/tags/$2*" 2>/dev/null |
-    sed "s#.*refs/tags/$2##" | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -1
-}
-
-# Emits `update|<name>|<old> → <new>` for each [vars] pin behind upstream.
-vars_updates() {
-  local name old repo prefix latest
-  while IFS='|' read -r name old repo prefix; do
-    latest=$(vars_latest "$repo" "$prefix")
-    if [ -n "$latest" ] && [ "$latest" != "$old" ] &&
-      [ "$(printf '%s\n%s\n' "$old" "$latest" | sort -V | tail -1)" = "$latest" ]; then
-      printf 'update|%s|%s → %s\n' "$name" "$old" "$latest"
-    fi
-  done <<EOF2
-vcpkg|$(varval vcpkg_version)|microsoft/vcpkg|
-EOF2
-}
-
-updates=$(vars_updates)
-
-while IFS='|' read -r _ name detail; do
-  [ -n "${name:-}" ] || continue
-  old="${detail%% *}" # "old → new" -> "old"
-  new="${detail##* }" # "old → new" -> "new"
-  key="${VARS_KEY[$name]:-}"
-  [ -n "$key" ] || continue
-
-  if $DRY; then
-    vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"
-  elif set_pin config.toml "$key" "$old" "$new"; then
-    vars_bumped="${vars_bumped}- \`$key\` ($name): $old → $new\n"
+vcpkg_cur="$(grep -m1 -E '^vcpkg_version = ' config.toml | sed -E 's/^[^"]*"([^"]*)".*/\1/')"
+vcpkg_new="$(scripts/lib/latest-tag.sh microsoft/vcpkg)"
+if [ -n "$vcpkg_new" ] && version_gt "$vcpkg_new" "$vcpkg_cur"; then
+  if $DRY || set_pin config.toml vcpkg_version "$vcpkg_cur" "$vcpkg_new"; then
+    vars_bumped="- \`vcpkg_version\` (vcpkg): $vcpkg_cur → $vcpkg_new\n"
   else
-    printf '  ! could not rewrite %s = "%s" in config.toml\n' "$key" "$old" >&2
-    failed="${failed}- \`$key\` ($name): could not rewrite its pin in place (manual)\n"
+    printf '  ! could not rewrite vcpkg_version = "%s" in config.toml\n' "$vcpkg_cur" >&2
+    failed="${failed}- \`vcpkg_version\` (vcpkg): could not rewrite its pin in place (manual)\n"
   fi
-done <<<"$updates"
+fi
 
 # Keep the generated machine-memory TOOLS block (dotfiles/claude/CLAUDE.md)
 # in sync with the pins we just bumped, in either layer. This

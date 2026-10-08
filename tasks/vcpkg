@@ -1,15 +1,41 @@
 #!/usr/bin/env bash
 #MISE description="vcpkg C/C++ package manager: shallow clone at the pinned tag into ~/.local/share/vcpkg + ~/.local/bin/vcpkg (config.linux.toml's final hook runs it)"
 #MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
+# vcpkg is its own VCPKG_ROOT tree: the ports registry and the bootstrapped binary both
+# live in the clone. So clone it at the pinned tag (a re-run fast-forwards the existing
+# clone instead), bootstrap it (needs network and gcc-c++), and link only the binary into
+# ~/.local/bin, which is on PATH. A per-version stamp skips all of it once done.
 set -euo pipefail
-root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 mkdir -p "$state"
 stamp="$state/vcpkg-$VCPKG_VERSION.done"
 vroot="$HOME/.local/share/vcpkg" # == VCPKG_ROOT in the rc files (check-invariants)
-if [ -f "$stamp" ] && [ -x "$vroot/vcpkg" ] && [ -L "$HOME/.local/bin/vcpkg" ]; then
+bin="$HOME/.local/bin"
+if [ -f "$stamp" ] && [ -x "$vroot/vcpkg" ] && [ -L "$bin/vcpkg" ]; then
   echo "  vcpkg $VCPKG_VERSION already installed"
   exit 0
 fi
-DEST="$HOME/.local/bin" "$root/scripts/lib/vcpkg.sh" "$VCPKG_VERSION" "$vroot"
+mkdir -p "$bin"
+# advice.detachedHead=false: the tag checkout and the --branch <tag> clone both land on
+# a detached HEAD, and git's hint about it is noise in the log.
+if [ -d "$vroot/.git" ]; then
+  printf '  ↻ updating vcpkg clone at %s -> %s\n' "$vroot" "$VCPKG_VERSION"
+  git -C "$vroot" fetch --depth 1 origin "refs/tags/$VCPKG_VERSION" --quiet
+  git -C "$vroot" -c advice.detachedHead=false checkout --quiet --force FETCH_HEAD
+else
+  printf '  ↓ cloning microsoft/vcpkg @ %s -> %s\n' "$VCPKG_VERSION" "$vroot"
+  rm -rf "$vroot"
+  git -c advice.detachedHead=false clone --depth 1 --branch "$VCPKG_VERSION" \
+    https://github.com/microsoft/vcpkg.git "$vroot" --quiet
+fi
+printf '  ↪ bootstrapping vcpkg\n'
+# -disableMetrics opts out of vcpkg's telemetry for good (a vcpkg.disable-metrics
+# marker in the tree).
+"$vroot/bootstrap-vcpkg.sh" -disableMetrics
+if [ ! -x "$vroot/vcpkg" ]; then
+  printf 'tasks/vcpkg: bootstrap did not produce %s/vcpkg\n' "$vroot" >&2
+  exit 1
+fi
+ln -sfn "$vroot/vcpkg" "$bin/vcpkg"
+printf '  ✓ vcpkg %s ready at %s/vcpkg (VCPKG_ROOT=%s)\n' "$VCPKG_VERSION" "$bin" "$vroot"
 touch "$stamp"

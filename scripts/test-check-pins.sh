@@ -102,6 +102,11 @@ pins
 case_ "uncovered [vars] *_version pin fails" 1 "foo_version"
 
 fresh
+sed -i 's/vcpkg_version/vcpkg_ver/g' "$T/scripts/bump-versions.sh"
+pins
+case_ "a [vars] pin bump-versions.sh doesn't bump fails" 1 "vcpkg_version(bump-versions.sh)"
+
+fresh
 sed -i -E 's#(VCPKG_ROOT=")[^"]*#\1/opt/vcpkg#' "$T/dotfiles/bashrc.tera"
 pins CHECK_INVARIANTS_NO_PY=1
 case_ "no python: non-TOML rows still fail on drift" 1 "VCPKG_ROOT drift"
