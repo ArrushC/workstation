@@ -22,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
 $refused = New-Object System.Collections.Generic.List[string]
-foreach ($f in (Get-AstFunction $ast 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode')) {
+foreach ($f in (Get-AstFunction $ast 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode', 'Invoke-Native', 'Write-Utf8NoBom')) {
     if ($f.Extent.Text -match 'Environment\]::SetEnvironmentVariable') { $refused.Add($f.Name); continue }
     . ([scriptblock]::Create($f.Extent.Text))
 }

@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
-. (Import-AstFunction $ast 'Install-WingetApps', 'Install-SshfsWin')
+. (Import-AstFunction $ast 'Install-WingetApps', 'Install-SshfsWin', 'Invoke-Native')
 if ($ast.Find({ param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] -and $n.VariablePath.UserPath -eq 'WingetApps' }, $true)) {
     throw 'winget apps: bootstrap.ps1 still references $WingetApps (the apps live in config.windows.toml)'
 }

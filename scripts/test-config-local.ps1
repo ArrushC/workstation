@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
-. (Import-AstFunction $ast 'Set-ConfigLocalVar', 'Invoke-EnsureConfigLocal')
+. (Import-AstFunction $ast 'Set-ConfigLocalVar', 'Invoke-EnsureConfigLocal', 'Write-Utf8NoBom')
 
 function New-CaseDir([string]$Name) {
     $script:RepoPath = Join-Path $tmp $Name

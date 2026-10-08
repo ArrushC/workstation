@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib\test-helpers.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
-. (Import-AstFunction $ast 'Get-SshLauncherHosts', 'New-Uuid5', 'Test-WindowsTerminalPresent', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs')
+. (Import-AstFunction $ast 'Get-SshLauncherHosts', 'New-Uuid5', 'Test-WindowsTerminalPresent', 'Invoke-WindowsTerminalFragments', 'Invoke-WarpTabConfigs', 'Write-Utf8NoBom')
 # Stand-ins for "Windows Terminal / Warp are installed".
 function Get-AppxPackage { [CmdletBinding()] param([string]$Name) [pscustomobject]@{ Name = $Name } }
 function Test-InstallerPresent { param($DisplayName) $DisplayName -ceq 'Warp*' }

@@ -19,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fontScript = Join-Path $repoRoot 'scripts\install-nerd-fonts.ps1'
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
-. (Import-AstFunction $ast 'Get-MiseToolExe', 'Invoke-PythonEnv', 'Invoke-InstallNerdFonts')
+. (Import-AstFunction $ast 'Get-MiseToolExe', 'Invoke-PythonEnv', 'Invoke-InstallNerdFonts', 'Invoke-Native')
 # The uv stub (`mise which uv` answers "uv", so `& $uvExe` lands here). Each
 # call keeps its arguments unjoined, so an unsplatted library list shows up.
 $script:uvCalls = New-Object System.Collections.Generic.List[object]

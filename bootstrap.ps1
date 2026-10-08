@@ -65,6 +65,22 @@ function Write-Ok     { param($msg) Write-Host "${Green} ✓${Reset} $msg" }
 function Write-Warn   { param($msg) Write-Host "${Yellow} !${Reset} $msg" }
 function Write-Fail   { param($msg) Write-Host "${Red} ✗${Reset} $msg"; exit 1 }
 
+# Runs $Block with $ErrorActionPreference = 'Continue', local to this call so the
+# caller's 'Stop' stands: PS 5.1 can turn a native command's stderr into an error
+# record, which 'Stop' makes terminating. Output and $LASTEXITCODE pass through, a
+# command that can't start still throws, and variables $Block sets stay inside it.
+function Invoke-Native {
+    param([scriptblock]$Block)
+    $ErrorActionPreference = 'Continue'
+    & $Block
+}
+
+# UTF-8 without a BOM (5.1's Set-Content -Encoding UTF8 writes one).
+function Write-Utf8NoBom {
+    param([string]$Path, [string]$Text)
+    [System.IO.File]::WriteAllText($Path, $Text, [System.Text.UTF8Encoding]::new($false))
+}
+
 # Self-contained: bootstrap also runs from a downloaded copy, before the repo exists.
 function Invoke-CurlRequest {
     [CmdletBinding()]
@@ -339,17 +355,13 @@ function Install-WingetApps {
         Write-Warn "mise not on PATH — the GUI apps in config.windows.toml were skipped (open a new shell and re-run .\bootstrap.ps1)"
     } else {
         Write-Log "Installing missing GUI apps (mise bootstrap --only packages: config.windows.toml's winget list)..."
-        $oldEap = $ErrorActionPreference
         try {
-            $ErrorActionPreference = 'Continue'   # PS 5.1 can turn native stderr into a terminating error under "Stop"
-            & mise -C $env:USERPROFILE bootstrap --only packages --yes
+            Invoke-Native { & mise -C $env:USERPROFILE bootstrap --only packages --yes }
             $code = $LASTEXITCODE
             $why = "exited $code"
         } catch {
             $code = -1
             $why = "could not start ($($_.Exception.Message))"
-        } finally {
-            $ErrorActionPreference = $oldEap
         }
         if ($code -eq 0) { Write-Ok "GUI apps installed or present ('mise bootstrap packages status' lists them)" }
         else { Write-Warn "mise bootstrap --only packages $why (output above) — retry: mise bootstrap packages apply --manager winget" }
@@ -364,15 +376,11 @@ function Install-WingetApps {
 function Install-SshfsWin {
     $id = "SSHFS-Win.SSHFS-Win"
     if ($SkipElevated) { Write-Log "SSHFS-Win skipped (-SkipElevated)"; return }
-    $oldEap = $ErrorActionPreference
     try {
-        $ErrorActionPreference = 'Continue'
-        & winget list --id $id --exact --disable-interactivity --accept-source-agreements *> $null
+        Invoke-Native { & winget list --id $id --exact --disable-interactivity --accept-source-agreements *> $null }
         $listHex = '0x{0:X8}' -f [int]$LASTEXITCODE
     } catch {
         $listHex = "error: $($_.Exception.Message)"
-    } finally {
-        $ErrorActionPreference = $oldEap
     }
     if ($listHex -eq '0x00000000') { Write-Ok "SSHFS-Win present"; return }
     if ($listHex -ne '0x8A150014') {
@@ -380,17 +388,13 @@ function Install-SshfsWin {
         return
     }
     Write-Warn "SSHFS-Win installs machine-wide — expect a UAC prompt; a host without WinFsp sees two, one for WinFsp and one for SSHFS-Win (skip with -SkipElevated)"
-    $oldEap = $ErrorActionPreference
     try {
-        $ErrorActionPreference = 'Continue'
-        & winget install --id $id --exact --scope machine --disable-interactivity --accept-package-agreements --accept-source-agreements
+        Invoke-Native { & winget install --id $id --exact --scope machine --disable-interactivity --accept-package-agreements --accept-source-agreements }
         $code = $LASTEXITCODE
         $why = "winget exited " + ('0x{0:X8}' -f [int]$code)
     } catch {
         $code = -1
         $why = "winget could not start ($($_.Exception.Message))"
-    } finally {
-        $ErrorActionPreference = $oldEap
     }
     # UPDATE_NOT_APPLICABLE, PACKAGE_ALREADY_INSTALLED, INSTALL_ALREADY_INSTALLED.
     if ($code -eq 0) { Write-Ok "SSHFS-Win installed" }
@@ -455,7 +459,7 @@ $FirstApplyMarker = Join-Path $WsRoot "dotfiles-first-apply-done"
 function Initialize-MiseEnv {
     $rc = Join-Path $RepoPath "miserc.toml"
     $body = "# Written by bootstrap.ps1.`nenv = [`"windows`"]`nauto_env = false`n"
-    [System.IO.File]::WriteAllText($rc, $body, [System.Text.UTF8Encoding]::new($false))
+    Write-Utf8NoBom $rc $body
     Remove-Item Env:MISE_ENV -ErrorAction SilentlyContinue
 }
 
@@ -490,7 +494,7 @@ function Set-ConfigLocalVar {
     if (-not $done) { if (-not $seen) { $out.Add('[vars]') }; $out.Add($line) }
     $dir = Split-Path $Path -Parent
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    [System.IO.File]::WriteAllText($Path, (($out -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Utf8NoBom $Path (($out -join "`n") + "`n")
 }
 
 # Name/email are asked once; a non-interactive run leaves them to the user.
@@ -622,10 +626,8 @@ function Invoke-MiseBootstrap {
     # Without config.windows.toml loaded (miserc.toml ignored), the Windows dotfiles and winget
     # apps would be skipped silently; a failing `config ls` (min_version, a TOML error) stops
     # too. --json: the table output truncates to the console width.
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $lsOut = @(& mise @miseCd config ls --json 2>&1 | ForEach-Object { "$_" })
+    $lsOut = @(Invoke-Native { & mise @miseCd config ls --json 2>&1 | ForEach-Object { "$_" } })
     $lsCode = $LASTEXITCODE
-    $ErrorActionPreference = $oldEap
     if ($lsCode -ne 0) {
         $head = @($lsOut | Where-Object { $_.Trim() } | Select-Object -First 5) -join "`n  "
         Write-Fail "'mise config ls' failed (exit $lsCode) -- an older mise than config.toml's min_version? re-run .\bootstrap.ps1 after a download succeeds:`n  $head"
@@ -638,10 +640,8 @@ function Invoke-MiseBootstrap {
     $hadNode = $false
     if (-not $SkipToolInstall) {
         Assert-ToolsDiskSpace
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        & mise @miseCd where node *> $null
+        Invoke-Native { & mise @miseCd where node *> $null }
         $hadNode = ($LASTEXITCODE -eq 0)
-        $ErrorActionPreference = $oldEap
     }
 
     $onlyPhases = $phases -join ','
@@ -673,8 +673,7 @@ reported above and re-run.
     if (-not $SkipToolInstall) {
         Add-ToUserPath $MiseShims
         Update-SessionPath
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        try {
+        Invoke-Native {
             & mise @miseCd where node *> $null
             if ($LASTEXITCODE -eq 0) {
                 # Marker = node's declaration hashed (-f: a bare `config get` reads only
@@ -716,8 +715,6 @@ reported above and re-run.
             if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
             & mise @miseCd reshim
             if ($LASTEXITCODE -ne 0) { Write-Warn "mise reshim exited $LASTEXITCODE (non-fatal)" }
-        } finally {
-            $ErrorActionPreference = $oldEap
         }
     }
 
@@ -771,8 +768,7 @@ if (Test-Path $canonical) { . $canonical }
 function Get-MiseToolExe {
     param([string]$Tool, [string]$Exe)
     if (-not (Get-Command mise -ErrorAction SilentlyContinue)) { return $null }
-    $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $out = @(& mise -C $env:USERPROFILE where $Tool 2>$null); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $oldEap }
+    $out = @(Invoke-Native { & mise -C $env:USERPROFILE where $Tool 2>$null }); $code = $LASTEXITCODE
     if (($code -ne 0) -or ($out.Count -eq 0) -or -not "$($out[0])".Trim()) { return $null }
     $path = Join-Path "$($out[0])".Trim() $Exe
     if (Test-Path -LiteralPath $path) { return $path }
@@ -889,7 +885,7 @@ function Invoke-WindowsTerminalFragments {
         })
         $json = ConvertTo-Json -InputObject ([ordered]@{ profiles = $profiles }) -Depth 5
         # PS 5.1 joins JSON lines with CRLF; write LF, UTF-8 without a BOM.
-        [System.IO.File]::WriteAllText((Join-Path $fragDir "hosts.json"), (($json -replace "`r`n", "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        Write-Utf8NoBom (Join-Path $fragDir "hosts.json") (($json -replace "`r`n", "`n") + "`n")
         Write-Ok "Windows Terminal SSH host profiles: $($hosts.Count) from ~\.ssh\config.local — restart Windows Terminal to see them"
     } catch {
         Write-Warn "Could not write the Windows Terminal SSH host profiles: $($_.Exception.Message)"
@@ -912,7 +908,6 @@ function Invoke-WarpTabConfigs {
         Get-ChildItem -Path $dir -Filter "workstation-*.toml" -File -ErrorAction SilentlyContinue |
             Remove-Item -Force
 
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
         $configs = @{
             "workstation-wsl-almalinux-9.toml" = @'
 name = "WSL: AlmaLinux-9"
@@ -952,7 +947,7 @@ is_focused = true
 '@
         }
         foreach ($entry in $configs.GetEnumerator()) {
-            [System.IO.File]::WriteAllText((Join-Path $dir $entry.Key), $entry.Value.Trim() + "`n", $utf8)
+            Write-Utf8NoBom (Join-Path $dir $entry.Key) ($entry.Value.Trim() + "`n")
         }
         $hosts = @(Get-SshLauncherHosts)
         $slugs = @{}
@@ -973,7 +968,7 @@ shell = "pwsh"
 commands = ['ssh -t $h zellij attach --create main']
 is_focused = true
 "@
-            [System.IO.File]::WriteAllText((Join-Path $dir "workstation-ssh-$slug.toml"), $body.Trim() + "`n", $utf8)
+            Write-Utf8NoBom (Join-Path $dir "workstation-ssh-$slug.toml") ($body.Trim() + "`n")
         }
         Write-Ok "Warp Tab Configs regenerated ($($configs.Count) local shells + $($hosts.Count) SSH host(s), $dir)"
     } catch {
@@ -1023,7 +1018,7 @@ function Invoke-DnGrepConfig {
         # Dirs first (-Force creates $dataDir too): if that fails, no config is
         # written and dnGrep keeps its exe-dir default instead of crashing.
         New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-        [System.IO.File]::WriteAllText($cfg, $xml, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Utf8NoBom $cfg $xml
         Write-Ok "dnGrep config seeded (settings dir -> $dataDir)"
     } catch {
         Write-Warn "Could not seed the dnGrep config: $($_.Exception.Message)"
@@ -1096,9 +1091,9 @@ function Invoke-ClaudeSettingsMerge {
                 Write-Warn "$dest is not valid JSON -- leaving it untouched"
                 return
             }
-            [System.IO.File]::WriteAllText($currentTmp, ($currentOut -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+            Write-Utf8NoBom $currentTmp ($currentOut -join "`n")
         } else {
-            [System.IO.File]::WriteAllText($currentTmp, '{}', (New-Object System.Text.UTF8Encoding($false)))
+            Write-Utf8NoBom $currentTmp '{}'
         }
 
         $mergedOut = & jq -s '.[0] * .[1] * .[2]' $seed $currentTmp $enforced 2>$null
@@ -1107,7 +1102,7 @@ function Invoke-ClaudeSettingsMerge {
             return
         }
 
-        [System.IO.File]::WriteAllText($outTmp, ($mergedOut -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        Write-Utf8NoBom $outTmp ($mergedOut -join "`n")
         Move-Item -Force -LiteralPath $outTmp -Destination $dest
         Write-Ok "merged seed + live + enforced -> $dest"
     } catch {
@@ -1184,8 +1179,7 @@ function Invoke-PythonEnv {
     $python = Get-MiseToolExe -Tool python -Exe python.exe
     $uvExe = $null
     if ($python) {
-        $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        try { $out = @(& mise -C $env:USERPROFILE which uv 2>$null); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $oldEap }
+        $out = @(Invoke-Native { & mise -C $env:USERPROFILE which uv 2>$null }); $code = $LASTEXITCODE
         if (($code -eq 0) -and ($out.Count -gt 0)) { $uvExe = "$($out[0])".Trim() }
     }
     $libsFile = Join-Path $RepoPath "scripts\python-env.txt"
