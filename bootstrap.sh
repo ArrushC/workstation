@@ -329,18 +329,17 @@ resolve_host_config() {
 }
 
 # =============================================================================
-# APPLY — install tools, then run `mise bootstrap` (packages, /etc files, services, compose, repos,
-# dotfiles, tools gate, then the `bootstrap` task itself). Sudo is scoped to
-# the dnf batch and /etc files inside mise's own elevation, and skipped
-# entirely when SYSTEM=no.
+# APPLY — run `mise bootstrap` (packages, /etc files, services, compose, repos, dotfiles,
+# the tools, then the `bootstrap` task itself). The tools come from its pre-tools hook
+# (scripts/lib/mise-install.sh), after the dnf batch: node needs libatomic to start.
+# Sudo is scoped to the dnf batch and /etc files inside mise's own elevation, and
+# skipped entirely when SYSTEM=no.
 # =============================================================================
 apply() {
   # config.local.toml (name/email if given, sudo) is already written by
   # resolve_host_config and resolve_system_steps in main(), before this runs —
   # the Tera templates guard every vars.* reference, but a real value still
   # shapes the rendered git identity.
-  log "mise install (tools)"
-  "$REPO_DIR/scripts/lib/mise-install.sh" || fail "mise install failed — see above"
 
   # Forces only on the first apply: a fresh host's pre-existing files (e.g.
   # /etc/skel's ~/.bashrc) would otherwise make copy/template refuse. Pass
@@ -354,7 +353,7 @@ apply() {
     log "First dotfiles apply on this host — passing --force-dotfiles (marker absent: $marker)"
   fi
 
-  log "mise bootstrap — packages, /etc files, services, compose, repos, dotfiles, tools gate, then the bootstrap task"
+  log "mise bootstrap — packages, /etc files, services, compose, repos, dotfiles, tools, then the bootstrap task"
   local skip_flags=()
   if [[ "$SYSTEM" == no ]]; then
     skip_flags=(--skip "packages,files")

@@ -271,13 +271,14 @@ grep -q 'already zsh' <<<"$out" || fail "L7: $out"
 grep -qx 'SHELL_CHANGED=false' <<<"$out" || fail "L7: SHELL_CHANGED set on a re-run (the tip would repeat)"
 
 # U1/U2. tasks/update: runs the full bootstrap when sudo is unset; passes
-# --skip packages,files when sudo = "no".
+# --skip packages,files when sudo = "no". Nothing installs the tools ahead of it
+# (the pre-tools hook does, after dnf), so mise-install.sh is a tripwire here.
 U="$T/u"
 mkdir -p "$U/repo/tasks" "$U/repo/scripts/lib" "$U/bin"
 cp "$root/tasks/update" "$U/repo/tasks/update"
 cp "$root/bootstrap.sh" "$U/repo/"
 cp "$root/scripts/lib/mise-env.sh" "$root/scripts/lib/bootstrap-fn.sh" "$U/repo/scripts/lib/"
-printf '#!/usr/bin/env bash\nexit 0\n' >"$U/repo/scripts/lib/mise-install.sh"
+printf '#!/usr/bin/env bash\necho "mise-install.sh" >>"%s/mise.log"\n' "$U" >"$U/repo/scripts/lib/mise-install.sh"
 chmod +x "$U/repo/scripts/lib/mise-install.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$U/bin/git"
 printf '#!/usr/bin/env bash\necho "mise $*" >>"%s/mise.log"\n' "$U" >"$U/bin/mise"
@@ -285,11 +286,11 @@ chmod +x "$U/bin/git" "$U/bin/mise"
 printf '[vars]\nname = "N"\n' >"$U/repo/config.local.toml"
 : >"$U/mise.log"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" bash -c 'mkdir -p "$XDG_CONFIG_HOME/mise"; "$0"' "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U1: update failed"
-grep -qx 'mise bootstrap --yes' "$U/mise.log" || fail "U1: expected a full bootstrap: $(cat "$U/mise.log")"
+[ "$(cat "$U/mise.log")" = 'mise bootstrap --yes' ] || fail "U1: expected only a full bootstrap: $(cat "$U/mise.log")"
 printf '[vars]\nsudo = "no"\n' >"$U/repo/config.local.toml"
 : >"$U/mise.log"
 env PATH="$U/bin:$PATH" XDG_CONFIG_HOME="$U/xdg" "$U/repo/tasks/update" >/dev/null 2>&1 || fail "U2: update failed"
-grep -qx 'mise bootstrap --yes --skip packages,files' "$U/mise.log" || fail "U2: expected the skip: $(cat "$U/mise.log")"
+[ "$(cat "$U/mise.log")" = 'mise bootstrap --yes --skip packages,files' ] || fail "U2: expected only the skip: $(cat "$U/mise.log")"
 
 # U3. tasks/update carries on in the PULLED copy of itself: the stub git's "pull"
 # replaces tasks/update, and the replacement (not the old code) must run the rest.

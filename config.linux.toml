@@ -170,6 +170,13 @@ herdr = "0.9.3"
 # (bootstrap.sh decides; vars.sudo).
 # ---------------------------------------------------------------------------
 [bootstrap.hooks]
+# The tools install after the dnf batch: node's postinstall runs node, which needs
+# libatomic (dnf) to start, and a stock EL9 doesn't have it. scripts/lib/mise-install.sh
+# checks the disk first, then installs, re-runs node's postinstall when its declaration
+# changed, and prunes; mise's own tools phase then has nothing left to do.
+# Every hook that runs before the tools phase passes --skip-tools: `mise run` installs
+# every missing tool before running its task otherwise (task.run_auto_install).
+"pre-tools" = "mise run --skip-tools install-tools"
 # Capability gate over every mise-installed Linux binary (scripts/lib/verify-binary.sh).
 "post-tools" = "mise run verify-tools"
 # Restores the ~/.ssh and ~/.claude directory modes that copy/template can't express
@@ -187,10 +194,10 @@ herdr = "0.9.3"
 # EPEL, meson/ninja-build are CRB; cppcheck is EPEL on EL9, CRB on EL8). mise has
 # no repo-enabling key, so this is a hook task. Hooks are always `mise run <task>` (opaque strings
 # get no verified cwd/PATH).
-"pre-packages" = "mise run enable-el-repos"
+"pre-packages" = "mise run --skip-tools enable-el-repos"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
 # installed with dnf's strict=0 so a missing one is skipped, not fatal.
-"post-packages" = "mise run optional-packages"
+"post-packages" = "mise run --skip-tools optional-packages"
 # `final` runs vcpkg, claude, fonts and broot-skin, and only on a full `mise bootstrap`,
 # never on `--only dotfiles` (wsa).
 # fonts skips itself under WSL (the Windows terminal resolves fonts there).
@@ -296,6 +303,11 @@ source = "configs/wsl/wsl.conf"
 owner = "root"
 group = "root"
 mode = "0644"
+
+[tasks.install-tools]
+description = "pre-tools hook: disk check, mise install, node's postinstall on change, prune"
+hide = true
+run = "{{ xdg_config_home }}/mise/scripts/lib/mise-install.sh"
 
 [tasks.enable-el-repos]
 description = "pre-packages hook: enable EPEL + CRB on RHEL-family hosts"

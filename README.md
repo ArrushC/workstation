@@ -10,7 +10,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 |---|---|
 | `bootstrap.sh` / `bootstrap.ps1` | Install pinned mise, decide the system steps, run mise. Nothing is installed by hand in the scripts beyond mise (and, on Windows, SSHFS-Win). |
 | mise tools | Every tool is a pin in `config.toml` / `config.linux.toml`. `mise ls` is the tool list. |
-| `mise bootstrap` | Host state from `[bootstrap.*]` tables: dnf packages, `/etc` files, services, repos, then dotfiles and the `bootstrap` task. |
+| `mise bootstrap` | Host state from `[bootstrap.*]` tables: dnf packages, `/etc` files, services, repos, dotfiles, then the tools and the `bootstrap` task. |
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
 | zellij | Persistent sessions; runs on the remote host so a dropped SSH tab loses nothing. |
@@ -45,7 +45,8 @@ mise.lock, mise.linux.lock, locks/
 tasks/                        file tasks with real logic: bootstrap, health, update,
                               check-updates, python-env, fonts, vcpkg, claude,
                               verify-tools
-                              (statusline, enable-el-repos: Linux, in config.linux.toml)
+                              (statusline, enable-el-repos, install-tools: Linux,
+                              in config.linux.toml)
                               (one-line wrappers — lint, fmt, secrets, ps-lint,
                               bump-versions, install-hooks — are [tasks] in config.toml)
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
@@ -81,7 +82,7 @@ What `bootstrap.sh` does:
 2. Clone this repo to `~/.config/mise` (or pull it), then carry on in the checkout's own `bootstrap.sh`, so a pull's changes apply in the same run.
 3. Install the pinned, sha256-verified mise into `~/.local/bin`.
 4. Ask your name and email once (saved in `config.local.toml`) and decide the system steps (sudo; see above).
-5. Write the token set to `miserc.toml`, run `scripts/lib/mise-install.sh` (tools), then `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The first run passes `--force-dotfiles` ([why](#mise-dot-apply--mise-bootstrap-refuses-with-refusing-to-overwrite-existing-files-use---force)).
+5. Write the token set to `miserc.toml`, then run `mise bootstrap --yes` (packages, `/etc` files, services, repos, dotfiles, the tools, the `bootstrap` task, then the Linux-only `final` hook in `config.linux.toml`: vcpkg, `claude` and fonts, which skips itself under WSL). The tools come from its `pre-tools` hook (`scripts/lib/mise-install.sh`: the disk check, then `mise install`), after the dnf batch, because node needs dnf's `libatomic` to start. The first run passes `--force-dotfiles` ([why](#mise-dot-apply--mise-bootstrap-refuses-with-refusing-to-overwrite-existing-files-use---force)).
 6. With sudo: set zsh as the login shell: `sudo usermod -s` for a local account, or, for a directory (AD/LDAP) account served by SSSD, a per-host `sss_override` (installing `sssd-tools`) and an `sssd` restart.
 
 It is idempotent; re-run any time. Copy your SSH key from a client with `ssh-copy-id <user>@<host>`.
@@ -241,7 +242,7 @@ The same workflow commands exist in bash and zsh on Linux and in Nushell and Pow
 | `wsa` | Apply tracked state to `$HOME`. First checks `mise dot status` for an un-recorded live edit (`differs`); if found, prints the diff and asks (refuses when non-interactive). The raw `mise bootstrap --only dotfiles --yes` skips that check and overwrites silently. |
 | `wsr` | `mise dot add --changed`: record an edited copy-mode file back to its source |
 | `wss` | `mise dot status`: every managed file and its state |
-| `wsu` | `mise run update`: `git pull --ff-only`, then `mise install` and `mise bootstrap` (system steps per the saved `sudo`) |
+| `wsu` | `mise run update`: `git pull --ff-only`, then `mise bootstrap`, which installs the tools too (system steps per the saved `sudo`) |
 | `wsh` | Print the workstation cheatsheet |
 
 Every `ws*` command pins `mise -C` to the host's own home, so it acts on this host's checkout from any directory. (mise finds its config root by walking up from the current directory, and a stray `.config/mise` on that path, such as a Windows drive mount under WSL, would otherwise be managed instead.) `wsa` also refuses if mise resolves a different config root. The Windows versions cover what differs there: `wsu` is a pull plus a dotfiles-and-tools bootstrap, and mise itself and the GUI apps are left to `bootstrap.ps1`.
