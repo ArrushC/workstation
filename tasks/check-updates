@@ -2,6 +2,7 @@
 #MISE description="Report available updates: mise tool pins, dnf (Linux hosts with dnf), and the config.toml [vars] pins vs upstream tags"
 #MISE env={VCPKG_VERSION="{{ vars.vcpkg_version }}"}
 set -uo pipefail
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 printf '==> mise tools\n'
 mise outdated --bump || true
@@ -11,12 +12,11 @@ if command -v dnf >/dev/null 2>&1; then
   dnf -q check-update | head -40 || true # exit 100 means updates exist; never fail
 fi
 
-# report <name> <pinned> <github owner/repo> <tag prefix>: the newest clean
-# numeric tag upstream vs the pin (git ls-remote: no API, no rate limit).
+# report <name> <pinned> <github owner/repo>: the newest clean numeric tag upstream
+# (scripts/lib/latest-tag.sh, which bump-versions.sh bumps to as well) vs the pin.
 report() {
   local latest
-  latest=$(GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --tags --refs "https://github.com/$3.git" "refs/tags/$4*" 2>/dev/null |
-    sed "s#.*refs/tags/$4##" | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -1)
+  latest=$("$root/scripts/lib/latest-tag.sh" "$3")
   if [ -z "$latest" ]; then
     printf '  ? %-12s %s (no tags found; offline?)\n' "$1" "$2"
   elif [ "$latest" = "$2" ]; then
@@ -26,4 +26,4 @@ report() {
   fi
 }
 printf '\n==> config.toml [vars] pins\n'
-report vcpkg "$VCPKG_VERSION" microsoft/vcpkg ""
+report vcpkg "$VCPKG_VERSION" microsoft/vcpkg
