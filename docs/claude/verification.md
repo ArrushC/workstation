@@ -161,3 +161,18 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
 - Taskbar progress shows during `mise run lint` in a WSL tab and clears at the next prompt (needs
   Windows "Show animations"). `$env:WT_SESSION` is non-empty in pwsh; scroll a long output to confirm
   the effective historySize (record the real ceiling in CLAUDE.md if WT clamps below 100000).
+
+## mise 2026.9.9 behaviour this setup relies on
+
+Verified against the installed binary in a scratch `HOME` (2026-09-29 simplification; the design
+and plans are in git history before this section). Re-check one before relying on it after a mise bump.
+- `miserc.toml`'s `env = [...]` selects the config set from any cwd, and for shims run under `env -i`
+  (the pueued unit). An exported `MISE_ENV`, even an empty one, overrides it. `auto_env` is read from
+  `miserc.toml` only (not `config.toml [settings]`); it's pinned `false` because the default flips in 2027.6.0.
+- Tasks in the global config: `{{ config_root }}` is `$HOME`, hence `dir = "{{ xdg_config_home }}/mise"`.
+  A task that `depends` on one defined only in a token-gated file fails with `task not found` where
+  that file doesn't load. File tasks get `MISE_TASK_DIR`/`MISE_TASK_NAME`.
+- Bootstrap hook names: `pre/post-packages`, `pre/post-repos`, `pre/post-dotfiles`, `pre/post-defaults`,
+  `pre/post-user`, `pre/post-tools`, `final`. `post-packages` runs before dotfiles and tools, so a step
+  that needs a mise tool goes in `post-tools` or `final`.
+- Removing a `[dotfiles]` entry doesn't delete the file it deployed.
