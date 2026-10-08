@@ -238,6 +238,7 @@ state = "running"
 "dnf:tar" = "latest"
 "dnf:unzip" = "latest"
 "dnf:wget" = "latest"
+"dnf:zip" = "latest"                # vcpkg's bootstrap (the final hook) stops without it; a stock EL8/EL9 lacks it
 "dnf:zsh" = "latest"
 # --- optional ---
 "dnf:ShellCheck" = "latest"          # EPEL capitalises it
