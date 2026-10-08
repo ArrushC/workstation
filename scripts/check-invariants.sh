@@ -812,7 +812,7 @@ else:
     print(f"PASS|no-symlink-anywhere|{n_total} entries across all {len(files)} config files are copy or template, none symlink/symlink-each")
 
 # Every directory entry that declares `exclude` covers each .vendor/.gitkeep
-# sidecar actually present there.
+# sidecar present anywhere under its source (mise matches exclude names at any depth).
 bad_exclude = []
 n_each = 0
 for f, target, spec in entries:
@@ -823,7 +823,7 @@ for f, target, spec in entries:
     exclude = set(spec.get("exclude", []))
     if not src or not os.path.isdir(src):
         continue
-    sidecars = {name for name in (".vendor", ".gitkeep") if os.path.exists(os.path.join(src, name))}
+    sidecars = {n for _, _, names in os.walk(src) for n in names if n in (".vendor", ".gitkeep")}
     missing = sidecars - exclude
     if missing:
         bad_exclude.append(f"{f}:{target} source has {sorted(missing)} but exclude={sorted(exclude)}")

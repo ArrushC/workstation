@@ -141,17 +141,11 @@ herdr = "0.9.3"
 # Linux-only here because Windows reads %APPDATA%\helix, not ~/.config/helix.
 "~/.config/helix/config.toml" = { source = "dotfiles/config/helix/config.toml", mode = "copy" }
 "~/.config/zellij" = { source = "dotfiles/config/zellij", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # layouts/, themes/ nested
-"~/.config/zsh/completions" = { source = "dotfiles/config/zsh/completions", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # unmanaged completions (e.g. _workstation) survive
-
-# zsh plugin dirs — all vendored, all carry a .vendor provenance sidecar that
-# must never itself land under ~/.config/zsh/plugins/*.
-"~/.config/zsh/plugins/fzf-tab" = { source = "dotfiles/config/zsh/plugins/fzf-tab", mode = "copy", exclude = [".vendor", ".gitkeep"] }
-"~/.config/zsh/plugins/zsh-autosuggestions" = { source = "dotfiles/config/zsh/plugins/zsh-autosuggestions", mode = "copy", exclude = [".vendor", ".gitkeep"] }
-"~/.config/zsh/plugins/zsh-history-substring-search" = { source = "dotfiles/config/zsh/plugins/zsh-history-substring-search", mode = "copy", exclude = [".vendor", ".gitkeep"] }
-"~/.config/zsh/plugins/zsh-syntax-highlighting" = { source = "dotfiles/config/zsh/plugins/zsh-syntax-highlighting", mode = "copy", exclude = [".vendor", ".gitkeep"] }
-"~/.config/zsh/plugins/zsh-you-should-use" = { source = "dotfiles/config/zsh/plugins/zsh-you-should-use", mode = "copy", exclude = [".vendor", ".gitkeep"] }
-# Single vendored file — provenance is in its own header, no separate .vendor sidecar.
-"~/.config/zsh/plugins/zsh-shift-select.zsh" = { source = "dotfiles/config/zsh/plugins/zsh-shift-select.zsh", mode = "copy" }
+# zsh completions/ and the vendored plugins/ (five plugin dirs, each with a .vendor
+# provenance sidecar, plus zsh-shift-select.zsh, whose provenance is its header).
+# exclude matches the sidecars at any depth; unmanaged completions (e.g. _workstation)
+# survive because copy on a directory leaves them alone.
+"~/.config/zsh" = { source = "dotfiles/config/zsh", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 
 # batpipe + winterop, both executable (git mode 755); .vendor sidecar excluded.
 "~/.local/bin" = { source = "dotfiles/local/bin", mode = "copy", exclude = [".vendor", ".gitkeep"] }
