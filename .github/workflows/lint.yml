@@ -1,5 +1,14 @@
 name: lint
-on: [push, pull_request]
+# A branch with a PR runs once, as the PR; main runs on the merge push. A newer push to a
+# PR cancels its older run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # All jobs only read the checkout — pin the token to least privilege.
 permissions:
