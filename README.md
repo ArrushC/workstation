@@ -299,6 +299,32 @@ Tabs rename themselves to the current directory's basename on `cd`; set `WORKSTA
 
 **pueue.** The pueue daemon runs as a per-user systemd unit (`dev.mise.pueued`, declared in `config.linux.toml`): `systemctl --user status dev.mise.pueued`. It stops with your last login session; use `loginctl enable-linger` if jobs must survive logout.
 
+**gdb (Linux).** Plain `gdb ./a.out` is pwndbg's bundled GDB 17 (first on `PATH`) with GEF, `pwndbg ./a.out` is pwndbg, `/usr/bin/gdb` is the system gdb (16 on EL9, 8.2 on EL8), `gdb -nx` is vanilla and `nnd ./a.out` is a TUI debugger. All but the last two read `~/.gdbinit` (`dotfiles/gdbinit.tera`; a gdb too old for a setting skips just that one). It gives you:
+- libstdc++'s pretty printers, and `step` that skips the STL headers. A lambda called through `std::function` or `std::sort` is skipped too, so break inside it or run `skip disable`;
+- one shared history in `~/.gdb_history`, no paging and no confirmation prompts, and a pending breakpoint for a function that isn't loaded yet;
+- decimal output (GEF forces hex; pwndbg keeps hex) and up to 1000 elements per print.
+
+GEF loads only in gdb, not inside pwndbg. pwndbg no longer runs a project's `./.gdbinit` by itself: use `pwndbg -x .gdbinit`.
+
+Debug info for system libraries comes from debuginfod.elfutils.org when that server answers within 1.5 s at startup. It covers RHEL 8 fully but AlmaLinux 9 only in part. The build IDs of the loaded objects go to sourceware.org. `DEBUGINFOD_URLS=` (empty) turns this off, and a URL list replaces the server.
+
+**Valgrind (Linux).** `~/.valgrindrc` (`dotfiles/valgrindrc`) applies to every valgrind run, CTest and meson included. It holds only cheap defaults: 30-frame stacks, full leak reports, and kept debug info for `dlclose`d libraries. Memcheck options in it are written `--memcheck:…`, so other tools still start. The file can't hold `#` comments. `vgm ./prog` is the thorough run: it adds `--track-origins=yes` (where each uninitialised value came from; about 2x slower, +100 MB) and `--track-fds=yes` (leaked file descriptors).
+
+```bash
+vgm ./prog                                     # memcheck + origins + fd report
+valgrind --tool=massif --massif-out-file=massif.out ./prog && ms_print massif.out | less
+valgrind --tool=callgrind --callgrind-out-file=cg.out ./prog && callgrind_annotate cg.out | less
+valgrind --tool=helgrind ./prog                # data races and lock order (or --tool=drd)
+valgrind --trace-children=yes --log-file=vg.%p.log ./script.sh   # one log per process
+valgrind --gen-suppressions=all ./prog         # print a suppression for each error
+```
+
+To debug under Memcheck:
+1. Run `valgrind --vgdb-error=0 ./prog`. Use `=1` instead to run to the first error.
+2. In another pane, run `/usr/bin/gdb -nx ./prog -ex 'target remote | vgdb'`. `continue` stops at each error, and `monitor leak_check full` queries Memcheck live.
+
+For an interpreter, add `--errors-for-leak-kinds=definite --show-leak-kinds=definite`: Python alone reports thousands of "possibly lost" blocks. A cloned project's `./.valgrindrc` overrides yours; `valgrind --command-line-only=yes` ignores every rc file.
+
 **winterop** (in `~/.local/bin` on Linux and WSL, WSL-only) talks to the Windows host: no arguments shows the detected environment and live channels, and `winterop run <cmd>`, `path <p>`, `clip [get|set]`, `open <path|url>`, `host` cover the common cases (`winterop help` lists the rest). In a plain VM it points you at SSH, shared folders or RDP.
 
 ## Adding things
@@ -549,7 +575,7 @@ sudo dnf config-manager --set-enabled crb   # EL9 Alma/Rocky/Stream (powertools 
 mise bootstrap --only packages --yes
 ```
 
-`ninja: command not found`: on RHEL the binary is `ninja-build`; if a project hard-codes `ninja`, link it once with `ln -s "$(command -v ninja-build)" ~/.local/bin/ninja`. Two GDB front-ends coexist: plain `gdb ./a.out` is pwndbg's bundled GDB 17 (first on `PATH`) with GEF loaded via `~/.gdbinit`, `pwndbg ./a.out` is pwndbg, `gdb -nx ./a.out` is vanilla, `/usr/bin/gdb` is the system gdb, and `nnd ./a.out` is a modern TUI debugger. vcpkg lives at `$VCPKG_ROOT` (`~/.local/share/vcpkg`, a user-owned clone at the pinned tag, exported by the shell rc on Linux hosts), so classic `vcpkg install <pkg>` needs no sudo (manifest mode is still preferred); missing entirely, run `mise run vcpkg`. Prefer compiler sanitizers (`-fsanitize=address,undefined`, 2 to 4 times overhead) over Valgrind (20 to 50 times) for everyday checks.
+`ninja: command not found`: on RHEL the binary is `ninja-build`; if a project hard-codes `ninja`, link it once with `ln -s "$(command -v ninja-build)" ~/.local/bin/ninja`. Which gdb is which: see **gdb** under Daily use. vcpkg lives at `$VCPKG_ROOT` (`~/.local/share/vcpkg`, a user-owned clone at the pinned tag, exported by the shell rc on Linux hosts), so classic `vcpkg install <pkg>` needs no sudo (manifest mode is still preferred); missing entirely, run `mise run vcpkg`. Prefer compiler sanitizers (`-fsanitize=address,undefined`, 2 to 4 times overhead) over Valgrind (20 to 50 times) for everyday checks.
 
 ### wpy not found, or import textual fails in it
 

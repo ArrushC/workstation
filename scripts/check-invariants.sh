@@ -1338,6 +1338,50 @@ check_colorterm() {
   fi
 }
 
+check_debugger_config() {
+  hdr "gdb and valgrind config (~/.gdbinit loads in gdb 8.2-17; ~/.valgrindrc starts every tool)"
+  # valgrind reads ~/.valgrindrc as whitespace-separated options: a `#` is an option
+  # ("Unknown option: #") and an unprefixed tool option (--leak-check) stops every other
+  # tool, so only core options go bare and the rest carry --<tool>:.
+  local rc=dotfiles/valgrindrc opt bare=() core=" --num-callers "
+  if grep -q '#' "$rc"; then
+    bad "$rc has a '#': valgrind takes it as an option and refuses to start (notes go in config.linux.toml)"
+  else
+    for opt in $(cat "$rc"); do
+      case "$opt" in
+      --[a-z]*:*) ;;
+      *) [[ $core == *" ${opt%%=*} "* ]] || bare+=("$opt") ;;
+      esac
+    done
+    if [ "${#bare[@]}" -eq 0 ]; then
+      ok "$rc: no comments; tool options carry --<tool>: (bare only:$core)"
+    else
+      bad "$rc: prefix these with --memcheck: (or add a core option to the list here): ${bare[*]}"
+    fi
+  fi
+  # gdb 16/17 and pwndbg read ~/.config/gdb/gdbinit INSTEAD of ~/.gdbinit; gdb 8.2 never does.
+  if [ -e dotfiles/config/gdb/gdbinit ]; then
+    bad "dotfiles/config/gdb/gdbinit would replace ~/.gdbinit in gdb 16/17 and pwndbg; keep settings in dotfiles/gdbinit.tera"
+  else
+    ok "no ~/.config/gdb/gdbinit to shadow ~/.gdbinit"
+  fi
+  # The python block runs under EL8's /usr/bin/gdb (Python 3.6) too.
+  py_report "gdbinit python check" dotfiles/gdbinit.tera <<'PY'
+import ast, re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r"^python\n(.*?)^end$", text, re.M | re.S)
+if not m:
+    print("FAIL|gdbinit|dotfiles/gdbinit.tera has no python ... end block")
+    sys.exit()
+src = re.sub(r"\{\{.*?\}\}", "X", m[1])
+try:
+    ast.parse(src, feature_version=(3, 6))
+    print("PASS|gdbinit|dotfiles/gdbinit.tera's python block parses as Python 3.6 (EL8's gdb)")
+except SyntaxError as e:
+    print(f"FAIL|gdbinit|dotfiles/gdbinit.tera's python block isn't Python 3.6: line {e.lineno}: {e.msg}")
+PY
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -1403,6 +1447,7 @@ check_fastfetch_config
 check_zed_settings
 check_shell_highlight_parity
 check_colorterm
+check_debugger_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.
