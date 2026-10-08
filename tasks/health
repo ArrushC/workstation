@@ -8,18 +8,6 @@
 set -uo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
-# A python with `json` for parsing `mise bootstrap status --json` (below).
-# wpy is python-env's launcher; mise's own python and the system
-# interpreter are the fallbacks. Empty when none exists — the one caller treats
-# that as "cannot classify" and fails the row rather than passing it.
-PY=""
-for _py in "$HOME/.local/bin/wpy" python3 python; do
-  if command -v "$_py" >/dev/null 2>&1 && "$_py" -c 'import json' >/dev/null 2>&1; then
-    PY="$_py"
-    break
-  fi
-done
-
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
 RED=$'\033[0;31m'
@@ -74,90 +62,64 @@ unset MISE_ENV
 echo ""
 
 # 1. mise bootstrap status — packages/files/services/compose/repos per origin
-# file, one host-state gate over everything [bootstrap.*] owns.
+# file, one host-state gate over everything [bootstrap.*] owns. The table is for
+# the reader; every row below classifies from ONE `--json` call, by its exact
+# state/action fields (never the table: a suffix match on words like "installed"
+# would mask a row reading "not installed").
 hdr "bootstrap state (mise bootstrap status --missing)"
 bootstrap_out=$(mise bootstrap status --missing 2>&1)
 bootstrap_rc=$?
 printf '%s\n' "$bootstrap_out" | sed 's/^/   /'
+# Three lines: the drift class (real, excused, skipped:<n> or none), "tools:" and
+# the missing tools, "dotfiles:" and how many dotfile entries/edits aren't applied.
+# Empty without jq or readable JSON; the rows below then fail or warn (the safe
+# direction).
+# Drift that is NOT a problem, which the advice below could never clear:
+# - excused: a host with no systemd user manager (no logind session) reports the
+#   pueued user service as `unavailable: systemd user manager not available`, yet
+#   `mise bootstrap` itself skips that service cleanly and exits 0;
+# - skipped: with sudo = "no" the dnf packages and /etc files are skipped on purpose
+#   (the system steps row above says so), and `mise bootstrap status` has no --skip.
+facts=$(mise bootstrap status --json 2>/dev/null | SKIP_SYSTEM="$([ "$sudo_saved" = no ] && echo 1)" jq -r '
+  def settled: (.action // "") as $a | $a == "" or $a == "noop" or $a == "unchanged";
+  (($ENV.SKIP_SYSTEM // "") != "") as $skip
+  | [(.packages // {}) | to_entries[] | .key as $m | .value
+      | (if has("available") and (.available | not) then "\($m) unavailable" else empty end),
+        ((.packages // [])[] | select(.state != "installed") | "\($m):\(.package)")] as $pkgs
+  | [.tools[]? | select(.installed | not) | .tool] as $tools
+  | [("files", "services", "compose", "repos", "accounts", "firewall", "mise_shell_activate", "user_services") as $k
+      | (.[$k] // [])[] | select(settled | not)
+      | if $k == "user_services" and ((.current // "") | tostring | contains("systemd user manager not available")) then "excused"
+        elif $k == "files" and $skip then "skipped"
+        else "real" end] as $res
+  | ((if $skip then $pkgs else [] end) + [$res[] | select(. == "skipped")]) as $skipped
+  | if (if $skip then [] else $pkgs end) + $tools + [$res[] | select(. == "real")] != [] then "real"
+    elif any($res[]; . == "excused") then "excused"
+    elif $skipped != [] then "skipped:\($skipped | length)"
+    else "none" end,
+    "tools:" + ($tools | sort | join(" ")),
+    "dotfiles:\([(.dotfiles.files // [])[], (.dotfiles.edits // [])[] | select(.state != "applied")] | length)"
+' 2>/dev/null)
+{
+  IFS= read -r bootstrap_why
+  IFS= read -r tools_line
+  IFS= read -r dotfiles_line
+} <<<"$facts"
 if [ "$bootstrap_rc" -eq 0 ]; then
   row_ok "bootstrap state" "current"
 else
-  # Drift. Two cases are NOT a problem:
-  # - a host with no systemd user manager (no logind session) reports the pueued
-  #   user service as `unavailable: systemd user manager not available`, yet
-  #   `mise bootstrap` itself skips that service cleanly and exits 0;
-  # - with sudo = "no" the dnf packages and /etc files are skipped on purpose (the
-  #   system steps row above says so), and `mise bootstrap status` has no --skip.
-  # The advice below could never clear either. Classify from `--json`'s exact state/action fields
-  # (never the human table: a suffix match on words like "installed" would
-  # mask a row reading "not installed"). No JSON-capable python => fall back
-  # to failing the row, which is the safe direction.
-  bootstrap_why=$(mise bootstrap status --json 2>/dev/null | SKIP_SYSTEM="$([ "$sudo_saved" = no ] && echo 1)" "$PY" -c '
-import json, os, sys
-
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    print("unparseable")
-    sys.exit(0)
-
-SETTLED_ACTIONS = {"noop", "unchanged"}
-skip_system = bool(os.environ.get("SKIP_SYSTEM"))
-excused, skipped, real = [], [], []
-
-for mgr, info in (d.get("packages") or {}).items():
-    pending = [] if info.get("available", True) else ["package manager %s unavailable" % mgr]
-    pending += ["%s:%s %s" % (mgr, p.get("package"), p.get("state"))
-                for p in info.get("packages") or [] if p.get("state") != "installed"]
-    (skipped if skip_system else real).extend(pending)
-
-for t in d.get("tools") or []:
-    if not t.get("installed"):
-        real.append("tool %s %s" % (t.get("tool"), t.get("state")))
-
-for key in ("files", "services", "compose", "repos", "accounts", "firewall",
-            "mise_shell_activate", "user_services"):
-    for r in d.get(key) or []:
-        if (r.get("action") or "noop") in SETTLED_ACTIONS:
-            continue
-        name = r.get("name") or (r.get("id") or {}).get("name") or key
-        cur = str(r.get("current") or "")
-        if key == "user_services" and "systemd user manager not available" in cur:
-            excused.append(name)
-        elif key == "files" and skip_system:
-            skipped.append(name)
-        else:
-            real.append("%s %s -> %s" % (name, cur or "?", r.get("action")))
-
-if real:
-    print("real:" + "; ".join(real[:6]))
-elif excused:
-    print("excused:" + ", ".join(excused))
-elif skipped:
-    print("skipped:%d" % len(skipped))
-else:
-    print("none")
-' 2>/dev/null)
   case "$bootstrap_why" in
-  excused:*)
+  excused)
     row_warn "bootstrap state" "pueued skipped — no systemd user manager on this host (loginctl enable-linger to run it)"
     ;;
   skipped:*)
     row_ok "bootstrap state" "current apart from the skipped system steps (${bootstrap_why#skipped:} dnf/file item(s))"
     ;;
   none)
-    # --missing said drift, the JSON says every [bootstrap.*] resource is
-    # settled. One known, non-bad cause: `mise bootstrap status --json`'s
-    # top-level exit code also reflects [dotfiles] drift (its "dotfiles" key
-    # is just {"edits": []} — no per-target state to classify, unlike
-    # files/services/etc above), so a single un-applied dotfile makes
-    # `--missing` exit non-zero with nothing "real" for this classifier to
-    # find. Don't guess from the JSON (it structurally can't tell us) —
-    # re-probe with the SAME command the dedicated "dotfiles" row below uses
-    # and let that row own dotfiles drift instead of double-reporting it here
-    # at hard-failure severity. If dotfiles are ALSO clean, the drift is
-    # genuinely unattributable and stays a hard failure.
-    if mise dot status --missing >/dev/null 2>&1; then
+    # Every [bootstrap.*] resource is settled, but --missing also counts [dotfiles]
+    # drift: the dotfiles row below owns that, so it isn't reported twice at
+    # hard-failure severity. Drift with no cause in the JSON stays a failure.
+    if [ "$dotfiles_line" = dotfiles:0 ]; then
       row_bad "bootstrap state" "drift reported by --missing but not visible in --json — inspect: mise bootstrap status"
     else
       row_warn "bootstrap state" "drift is dotfiles-only (see the dotfiles row below) — inspect: mise dot status"
@@ -171,8 +133,10 @@ fi
 
 # 2. mise-installed tools
 hdr "mise tools"
-missing_tools=$(mise ls --missing 2>/dev/null | awk 'NF {print $1}' | paste -sd' ' -)
-if [ -z "$missing_tools" ]; then
+missing_tools=${tools_line#tools:}
+if [ "${tools_line:0:6}" != tools: ]; then
+  row_bad "mise tools" "can't tell: no readable mise bootstrap status --json — mise doctor"
+elif [ -z "$missing_tools" ]; then
   row_ok "mise tools" "every declared tool installed"
 else
   n_missing=$(wc -w <<<"$missing_tools")
@@ -261,7 +225,7 @@ if [ "$(basename "$login_shell")" = zsh ]; then
 else
   row_warn "login shell" "$login_shell — expected zsh; $root/bootstrap.sh sets it (usermod, or an SSSD override for a directory account)"
 fi
-if mise dot status --missing >/dev/null 2>&1; then
+if [ "$dotfiles_line" = dotfiles:0 ]; then
   row_ok "dotfiles" "no drift (mise dot status)"
 else
   row_warn "dotfiles" "drift — inspect: mise dot status · apply: mise dot apply"
