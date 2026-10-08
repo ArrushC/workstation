@@ -1316,6 +1316,69 @@ PY
   done <<<"$out"
 }
 
+check_shell_highlight_parity() {
+  hdr "Nushell command-line colours == zsh's (syntax-highlight.nu vs zshrc.tera)"
+  if [ -z "$PY" ]; then
+    note "no python — highlight parity check skipped locally (CI enforces)"
+    return
+  fi
+  local out result detail
+  out=$(
+    "$PY" - dotfiles/zshrc.tera dotfiles/windows/AppData/Roaming/nushell/autoload/syntax-highlight.nu <<'PY'
+import re, sys
+zshrc, nu = (open(p, encoding="utf-8").read() for p in sys.argv[1:])
+ATTR = {"bold": "b", "underline": "u", "italic": "i"}
+
+def zsh_style(spec):
+    fg, attrs = None, set()
+    for part in spec.split(","):
+        if part.startswith("fg="):
+            fg = part[3:].lower()
+        elif part in ATTR:
+            attrs.add(ATTR[part])
+    return fg, attrs
+
+zsh = {m[1]: zsh_style(m[2]) for m in re.finditer(r"^ZSH_HIGHLIGHT_STYLES\[([a-z0-9-]+)\]='([^']*)'", zshrc, re.M)}
+m = re.search(r"^ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='([^']*)'", zshrc, re.M)
+if m:
+    zsh["autosuggest"] = zsh_style(m[1])
+
+block = re.search(r"^let zsh = \{\n(.*?)^\}", nu, re.M | re.S)
+if not block:
+    print("FAIL|syntax-highlight.nu has no `let zsh = {...}` record")
+    sys.exit()
+bad, n = [], 0
+for line in block[1].splitlines():
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    km = re.match(r'"?([a-z0-9-]+)"?:\s*(.*)$', line)
+    if not km:
+        bad.append(f"unparsed line {line!r}")
+        continue
+    key, val = km[1], km[2]
+    vm = re.match(r'"(#[0-9a-fA-F]{6})"$', val) or re.match(r'\{ fg: "(#[0-9a-fA-F]{6})" attr: ([a-z]+) \}$', val)
+    if not vm:
+        bad.append(f"{key}: unparsed value {val!r}")
+        continue
+    nu_style = (vm[1].lower(), set(vm[2]) if vm.lastindex == 2 else set())
+    n += 1
+    if key not in zsh:
+        bad.append(f"{key}: no ZSH_HIGHLIGHT_STYLES[{key}] in zshrc.tera")
+    elif zsh[key] != nu_style:
+        bad.append(f"{key}: Nushell {nu_style} != zsh {zsh[key]}")
+if bad:
+    print("FAIL|" + "; ".join(bad))
+else:
+    print(f"PASS|{n} Nushell styles match zshrc.tera's (colour and bold/underline/italic)")
+PY
+  )
+  while IFS='|' read -r result detail; do
+    [ -n "$result" ] || continue
+    if [ "$result" = PASS ]; then ok "$detail"; else bad "$detail"; fi
+  done <<<"$out"
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -1379,6 +1442,7 @@ check_warp_guards
 check_zellij_config
 check_fastfetch_config
 check_zed_settings
+check_shell_highlight_parity
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.

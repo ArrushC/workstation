@@ -54,6 +54,9 @@
 # Vendored Catppuccin Mocha theme (provenance in the source dir's .vendor); Nushell's user autoload
 # dir sources it after config.nu. Edit-in-repo-only (re-vendor to change it).
 "~/AppData/Roaming/nushell/autoload/catppuccin_mocha.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/autoload/catppuccin_mocha.nu", mode = "copy" }
+# Loads after catppuccin_mocha.nu (autoload runs in name order): command-line colours
+# matching zsh's highlighting on the Linux hosts (check_shell_highlight_parity).
+"~/AppData/Roaming/nushell/autoload/syntax-highlight.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/autoload/syntax-highlight.nu", mode = "copy" }
 # Catppuccin Mocha for bat, eza and yazi, from the same sources as config.linux.toml's
 # entries; Windows keeps their configs under %APPDATA% (atuin's pair is in config.toml).
 "~/AppData/Roaming/bat/config/theme" = { line = '--theme="Catppuccin Mocha"' }
