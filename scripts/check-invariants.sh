@@ -62,6 +62,33 @@ print(d["version"] if isinstance(d, dict) else d)
 PY
 }
 
+# need_py <what> — true with a tomllib python; otherwise notes that <what> is skipped.
+need_py() {
+  [ -n "$PY" ] && return 0
+  note "no python with tomllib — $1 skipped locally (CI enforces)"
+  return 1
+}
+
+# py_report <what> [arg...] <<'PY' — run the Python check on stdin (args become sys.argv[1:])
+# and report each `RESULT|key|detail` line it prints: PASS -> ok, NOTE -> note, else bad.
+# A non-zero exit (a traceback) fails too. Without python, notes that <what> is skipped.
+py_report() {
+  local what="$1" out rc result detail
+  shift
+  need_py "$what" || return 0
+  out=$("$PY" - "$@")
+  rc=$?
+  while IFS='|' read -r result _ detail; do
+    [ -n "$result" ] || continue
+    case "$result" in
+    PASS) ok "$detail" ;;
+    NOTE) note "$detail" ;;
+    *) bad "$detail" ;;
+    esac
+  done <<<"$out"
+  [ "$rc" -eq 0 ] || bad "$what: python exited $rc"
+}
+
 # _ps1_drive_ref_hits <file> — non-comment lines with an unbraced $name: reference.
 # In a double-quoted PowerShell string "$name:" parses as a drive-qualified variable
 # and throws, unless the colon is a real scope ($env:, $script:, ...) or the ref is ${name}:.
@@ -163,7 +190,8 @@ check_pins() {
   else
     bad "typescript-language-server@ missing from node's postinstall in config.toml"
   fi
-  # A new pin_equal row over a tools.X pin must add X to this list.
+  # Pins the bumper must skip or bump as a pair: zjstatus (its zellij floor), ncdu (URL
+  # 404s on some releases), go + gopls, node (its postinstall pins the LSP servers).
   pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node
   if [ -z "$PY" ]; then
     note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
@@ -358,10 +386,7 @@ check_tools_block() {
     bad "missing: $mem"
     return
   fi
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — TOOLS block drift check skipped locally (CI enforces)"
-    return
-  fi
+  need_py "TOOLS block drift check" || return
   tmp="$(mktemp)"
   cp "$mem" "$tmp"
   if MEMFILE="$tmp" scripts/gen-tool-memory.sh >/dev/null 2>&1; then
@@ -386,9 +411,10 @@ check_mise_config_files() {
       return
     }
   done
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — parse/lock coverage skipped locally (CI enforces)"
-  elif "$PY" - <<'PY'
+  local hint
+  hint="run: mise lock --global (from OUTSIDE the checkout with XDG_CONFIG_HOME pointing at a dir whose mise/ is a symlink to it — see scripts/bump-versions.sh)"
+  # One pass over the lock files: [tools] coverage and pins, then the pypi:/npm: sidecars.
+  py_report "lock coverage and pypi:/npm: sidecar checks" "$hint" <<'PY'
 import tomllib, sys
 
 def load(f):
@@ -396,9 +422,10 @@ def load(f):
         return tomllib.load(fh)
 
 lockmap = {"config.toml": "mise.lock", "config.linux.toml": "mise.linux.lock"}
+locks = {lf: load(lf).get("tools", {}) for lf in lockmap.values()}
 missing = []
 for f, need_win in (("config.toml", True), ("config.linux.toml", False)):
-    ltools = load(lockmap[f]).get("tools", {})
+    ltools = locks[lockmap[f]]
     for name, spec in load(f).get("tools", {}).items():
         short = name.split(":", 1)[1] if ":" in name and not name.startswith(("go:", "pypi:", "pipx:", "npm:", "http:")) else name
         entries = ltools.get(name) or ltools.get(short)
@@ -421,35 +448,26 @@ for f, need_win in (("config.toml", True), ("config.linux.toml", False)):
             blocks = entries if isinstance(entries, list) else [entries]
             lock_vers = sorted({e.get("version") for e in blocks})
             if pin not in lock_vers:
-                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)} — run: MISE_ENV=linux mise lock --global --platform linux-x64 && MISE_ENV=windows mise lock --global --platform windows-x64")
+                missing.append(f"{f}:{name} pin {pin} != lock {','.join(str(v) for v in lock_vers)}")
 if missing:
-    print("\n".join(missing))
-    sys.exit(1)
+    items = "; ".join(missing)
+    print(f"FAIL|coverage|a config*.toml lock is missing entries ({items}) — run: MISE_ENV=linux mise lock --global --platform linux-x64 && MISE_ENV=windows mise lock --global --platform windows-x64")
+else:
+    print("PASS|coverage|every [tools] entry has a lock entry (linux-x64; windows-x64 where it installs on Windows)")
+
+# Every pypi:/npm: lock entry needs its dependency-lock sidecar ref: `mise lock` only
+# warns when uv < 0.12.10, and the next install then dirties the tracked checkout.
+no_sidecar = []
+for lf, tools in locks.items():
+    for name, entries in tools.items():
+        key = {"pypi": "uv", "npm": "aube"}.get(name.split(":", 1)[0])
+        if not key:
+            continue
+        for e in entries if isinstance(entries, list) else [entries]:
+            if not isinstance(e.get(key), dict) or "path" not in e[key]:
+                no_sidecar.append(f"FAIL|sidecar|{lf}: {name}@{e.get('version')} has no {key} dependency lock — install uv (pypi:) then re-run: {sys.argv[1]}")
+print("\n".join(no_sidecar) or "PASS|sidecar|every pypi:/npm: lock entry carries its dependency-lock sidecar")
 PY
-  then
-    ok "every [tools] entry has a lock entry (linux-x64; windows-x64 where it installs on Windows)"
-  else
-    bad "a config*.toml lock is missing entries — run: MISE_ENV=linux mise lock --global --platform linux-x64 && MISE_ENV=windows mise lock --global --platform windows-x64"
-  fi
-  # config.toml carries the [vars] pins the tasks read (#MISE env={X="{{ vars.x }}"}).
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — [vars] check skipped locally (CI enforces)"
-  else
-    local vars_missing
-    vars_missing=$(
-      "$PY" - <<'PY'
-import tomllib
-with open("config.toml", "rb") as fh:
-    v = tomllib.load(fh).get("vars", {})
-print(" ".join(k for k in ("vcpkg_version", "zjstatus_zellij_floor") if k not in v))
-PY
-    )
-    if [ -z "$vars_missing" ]; then
-      ok "config.toml [vars] has both host pins"
-    else
-      bad "config.toml [vars] missing: $vars_missing"
-    fi
-  fi
   if command -v mise >/dev/null 2>&1; then
     local tmp
     tmp="$(mktemp -d)"
@@ -478,8 +496,7 @@ PY
   fi
   # locks/** sidecar layout: a stale .mise/locks/** ref dirties every host's checkout
   # on its next install, which rewrites it to locks/ in place.
-  local lock_ok=1 pathref hint
-  hint="run: mise lock --global (from OUTSIDE the checkout with XDG_CONFIG_HOME pointing at a dir whose mise/ is a symlink to it — see scripts/bump-versions.sh)"
+  local lock_ok=1 pathref
   while IFS= read -r pathref; do
     [ -n "$pathref" ] || continue
     case "$pathref" in
@@ -506,47 +523,13 @@ PY
   else
     bad "locks/ sidecar dirs no lock refers to (a bump left them; delete them): $(tr '\n' ' ' <<<"$orphans")"
   fi
-  # Every pypi:/npm: lock entry needs its dependency-lock sidecar ref: `mise lock` only
-  # warns when uv < 0.12.10, and the next install then dirties the tracked checkout.
-  if [ -n "$PY" ]; then
-    local missing
-    missing="$(
-      "$PY" - mise.lock mise.linux.lock <<'PYEOF'
-import sys, tomllib
-for f in sys.argv[1:]:
-    try:
-        tools = tomllib.load(open(f, "rb")).get("tools", {})
-    except FileNotFoundError:
-        continue
-    for name, entries in tools.items():
-        key = {"pypi": "uv", "npm": "aube"}.get(name.split(":", 1)[0])
-        if not key:
-            continue
-        for e in entries if isinstance(entries, list) else [entries]:
-            if not isinstance(e.get(key), dict) or "path" not in e[key]:
-                print(f"{f}: {name}@{e.get('version')} has no {key} dependency lock")
-PYEOF
-    )"
-    if [ -n "$missing" ]; then
-      while IFS= read -r m; do bad "$m — install uv (pypi:) then re-run: $hint"; done <<<"$missing"
-    else
-      ok "every pypi:/npm: lock entry carries its dependency-lock sidecar"
-    fi
-  else
-    note "no python with tomllib — pypi:/npm: sidecar presence check skipped locally (CI enforces)"
-  fi
 }
 
 # Bootstrap-config invariants over the [bootstrap.*] files; the last check is a live `mise bootstrap
 # plan`, skipped unless mise and dnf exist (CI has no dnf).
 check_bootstrap_config() {
   hdr "bootstrap-config invariants ([bootstrap.*] across config.toml/linux/windows.toml)"
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — bootstrap-config checks skipped locally (CI enforces)"
-  else
-    local out result detail
-    out=$(
-      "$PY" - <<'PY'
+  py_report "bootstrap-config checks" <<'PY'
 import os, re, tomllib
 
 # config.toml loads on every host, config.linux.toml on Linux, config.windows.toml on Windows.
@@ -694,16 +677,6 @@ if ruling_hits:
 else:
     print("PASS|rulings|no [bootstrap.linux.firewall] or [bootstrap.user] table (plan/status would need sudo; login_shell needs chsh)")
 PY
-    )
-    while IFS='|' read -r result _ detail; do
-      [ -n "$result" ] || continue
-      if [ "$result" = PASS ]; then
-        ok "$detail"
-      else
-        bad "$detail"
-      fi
-    done <<<"$out"
-  fi
 
   if command -v mise >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then
     if MISE_ENV=linux mise bootstrap plan --json >/dev/null 2>&1; then
@@ -718,13 +691,7 @@ PY
 
 check_dotfiles_config() {
   hdr "dotfiles-config invariants (config.toml/linux/windows.toml [dotfiles])"
-  if [ -z "$PY" ]; then
-    note "no python with tomllib — dotfiles-config checks skipped locally (CI enforces)"
-    return
-  fi
-  local out result detail
-  out=$(
-    "$PY" - <<'PY'
+  py_report "dotfiles-config checks" <<'PY'
 import glob, os, tomllib
 
 # config.local.toml (git-ignored) is excluded: it exists to REPEAT a key from these files.
@@ -861,17 +828,6 @@ if bad_tera:
 else:
     print(f"PASS|tera-coverage|{len(tera_files)} dotfiles/**/*.tera file(s), each referenced by exactly one entry")
 PY
-  )
-  while IFS='|' read -r result _ detail; do
-    [ -n "$result" ] || continue
-    if [ "$result" = PASS ]; then
-      ok "$detail"
-    elif [ "$result" = NOTE ]; then
-      note "$detail"
-    else
-      bad "$detail"
-    fi
-  done <<<"$out"
 }
 
 check_lsp_plugin() {
@@ -903,19 +859,13 @@ check_lsp_plugin() {
 }
 
 # --- flag-parity: repo-script flags == completion-surface flags --------------
-# Five pairs (three .sh scripts, two .ps1 scripts), long-form flags only. Trailing args to
-# _sh_script_flags are flags the script accepts but completions deliberately omit.
+# Three pairs: bootstrap.sh's long flags against its zsh and bash completions, and
+# bootstrap.ps1's parameters against config.nu's flag record.
 
-# Long flags a bash script accepts from its case arms; $2+ are exclusions.
+# Long flags a bash script accepts from its case arms.
 _sh_script_flags() {
-  local script=$1 out f
-  shift
-  out=$(grep -E '^[[:space:]]*-{1,2}[A-Za-z-]+([[:space:]]*\|[[:space:]]*-{1,2}[A-Za-z-]+)*\)' "$script" |
-    grep -oE -- '--[a-z-]+' | sort -u)
-  for f in "$@"; do
-    out=$(printf '%s\n' "$out" | grep -vx -- "$f")
-  done
-  printf '%s\n' "$out"
+  grep -E '^[[:space:]]*-{1,2}[A-Za-z-]+([[:space:]]*\|[[:space:]]*-{1,2}[A-Za-z-]+)*\)' "$1" |
+    grep -oE -- '--[a-z-]+' | sort -u
 }
 
 _ps_script_flags() {
@@ -1237,17 +1187,12 @@ check_fastfetch_config() {
 
 check_zed_settings() {
   hdr "Zed settings (no top-level terminal.shell: SSH remotes inherit it)"
-  if [ -z "$PY" ]; then
-    note "no python — Zed settings check skipped locally (CI enforces)"
-    return
-  fi
-  local out result detail
   # Zed sends the client's user settings to an SSH remote's server, and since Zed 1.23.1
   # the remote terminal launches the terminal.shell those settings resolve to there. A
   # top-level shell (Windows' "nu") then runs on Linux hosts that don't have it; one under
   # a "windows"/"linux"/"macos" key only applies on that OS.
-  out=$(
-    "$PY" - dotfiles/windows/AppData/Roaming/Zed/settings.json dotfiles/config/zed/settings.json <<'PY'
+  py_report "Zed settings check" \
+    dotfiles/windows/AppData/Roaming/Zed/settings.json dotfiles/config/zed/settings.json <<'PY'
 import json, sys
 
 def jsonc(text):
@@ -1301,30 +1246,20 @@ for path in sys.argv[1:]:
     try:
         d = jsonc(open(path, encoding="utf-8").read())
     except Exception as e:
-        print(f"FAIL|{path} doesn't parse as JSONC: {e}")
+        print(f"FAIL|zed|{path} doesn't parse as JSONC: {e}")
         continue
     if "shell" in d.get("terminal", {}):
-        print(f"FAIL|{path}: top-level terminal.shell ({d['terminal']['shell']!r}) reaches SSH remotes; move it under \"windows\"/\"linux\"")
+        print(f"FAIL|zed|{path}: top-level terminal.shell ({d['terminal']['shell']!r}) reaches SSH remotes; move it under \"windows\"/\"linux\"")
     else:
         where = [k for k in ("windows", "linux", "macos") if "shell" in d.get(k, {}).get("terminal", {})]
-        print(f"PASS|{path}: no top-level terminal.shell" + (f" (per-OS: {', '.join(where)})" if where else ""))
+        print(f"PASS|zed|{path}: no top-level terminal.shell" + (f" (per-OS: {', '.join(where)})" if where else ""))
 PY
-  )
-  while IFS='|' read -r result detail; do
-    [ -n "$result" ] || continue
-    if [ "$result" = PASS ]; then ok "$detail"; else bad "$detail"; fi
-  done <<<"$out"
 }
 
 check_shell_highlight_parity() {
   hdr "Nushell command-line colours == zsh's (syntax-highlight.nu vs zshrc.tera)"
-  if [ -z "$PY" ]; then
-    note "no python — highlight parity check skipped locally (CI enforces)"
-    return
-  fi
-  local out result detail
-  out=$(
-    "$PY" - dotfiles/zshrc.tera dotfiles/windows/AppData/Roaming/nushell/autoload/syntax-highlight.nu <<'PY'
+  py_report "highlight parity check" \
+    dotfiles/zshrc.tera dotfiles/windows/AppData/Roaming/nushell/autoload/syntax-highlight.nu <<'PY'
 import re, sys
 zshrc, nu = (open(p, encoding="utf-8").read() for p in sys.argv[1:])
 ATTR = {"bold": "b", "underline": "u", "italic": "i"}
@@ -1345,7 +1280,7 @@ if m:
 
 block = re.search(r"^let zsh = \{\n(.*?)^\}", nu, re.M | re.S)
 if not block:
-    print("FAIL|syntax-highlight.nu has no `let zsh = {...}` record")
+    print("FAIL|highlight|syntax-highlight.nu has no `let zsh = {...}` record")
     sys.exit()
 bad, n = [], 0
 for line in block[1].splitlines():
@@ -1368,15 +1303,10 @@ for line in block[1].splitlines():
     elif zsh[key] != nu_style:
         bad.append(f"{key}: Nushell {nu_style} != zsh {zsh[key]}")
 if bad:
-    print("FAIL|" + "; ".join(bad))
+    print("FAIL|highlight|" + "; ".join(bad))
 else:
-    print(f"PASS|{n} Nushell styles match zshrc.tera's (colour and bold/underline/italic)")
+    print(f"PASS|highlight|{n} Nushell styles match zshrc.tera's (colour and bold/underline/italic)")
 PY
-  )
-  while IFS='|' read -r result detail; do
-    [ -n "$result" ] || continue
-    if [ "$result" = PASS ]; then ok "$detail"; else bad "$detail"; fi
-  done <<<"$out"
 }
 
 check_colorterm() {
