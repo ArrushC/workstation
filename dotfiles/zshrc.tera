@@ -34,6 +34,19 @@ if [[ -n "$WSL_DISTRO_NAME" ]]; then
   export PATH
 fi
 
+# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
+# The global pins are declared in ~/.config/mise/config*.toml (this
+# checkout). `mise activate` installs a precmd/chpwd hook that puts the real
+# bin dirs on PATH (in front of the shims from ~/.zshenv) and layers any
+# project mise.toml on top as you cd. Activation runs that hook once, so it sits
+# after the last PATH change and before every `eval "$(tool init)"` below: run
+# through a shim, each init costs ~100 ms (a fresh tab took ~750 ms), and a PATH
+# change after it makes the first prompt run the hook again.
+# PARITY: same place in bashrc.tera.
+if command -v mise &>/dev/null; then
+  eval "$(mise activate zsh)"
+fi
+
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
 export VISUAL="hx"
@@ -174,15 +187,6 @@ fi
 # (the function captures broot's --outcmd). First run creates ~/.config/broot.
 if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function zsh)"
-fi
-
-# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
-# The global pins are declared in ~/.config/mise/config*.toml (this
-# checkout). `mise activate` installs a precmd/chpwd hook that puts the real
-# bin dirs on PATH (in front of the shims from ~/.zshenv) and layers any
-# project mise.toml on top as you cd.
-if command -v mise &>/dev/null; then
-  eval "$(mise activate zsh)"
 fi
 
 # --- starship prompt ---------------------------------------------------------

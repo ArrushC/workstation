@@ -50,6 +50,16 @@ if [[ -n "$WSL_DISTRO_NAME" ]]; then
   export PATH
 fi
 
+# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
+# Global pins are declared in ~/.config/mise/config*.toml (this checkout).
+# `mise activate` hooks PROMPT_COMMAND to put the real bin dirs on PATH (in
+# front of the shims exported above the guard). Activation runs that hook once,
+# so it comes BEFORE every `eval "$(tool init)"` below: run through a shim, each
+# init costs ~100 ms. PARITY: same place in zshrc.tera.
+if command -v mise &>/dev/null; then
+  eval "$(mise activate bash)"
+fi
+
 # --- Core env ----------------------------------------------------------------
 export EDITOR="hx"
 export VISUAL="hx"
@@ -113,12 +123,14 @@ fi
 # For LOGIN shells it's auto-loaded via /etc/profile.d/bash_completion.sh, but
 # NON-login interactive shells (a bare `bash` subshell, `bash -i`, some terminal
 # spawns) never source profile.d, so completion would silently be missing there.
-# Explicitly source the package's compat entrypoint to cover that case: it's
-# guarded (no-op where the file is absent) and idempotent (the file guards its
-# own re-entry, so re-sourcing on a login shell is harmless). zsh's parity file
-# calls `compinit` directly for the same reason — neither shell can rely on a
-# login-only loader.
-[[ -f /etc/bash_completion ]] && source /etc/bash_completion
+# Source the package's main file to cover that case, under the same guard as
+# profile.d's loader (BASH_COMPLETION_VERSINFO is set once it has loaded, so a
+# login shell doesn't load it twice). EL8 and EL9 ship only this path, not the
+# Debian-style /etc/bash_completion. zsh's parity file calls `compinit`
+# directly for the same reason — neither shell can rely on a login-only loader.
+if [[ -z ${BASH_COMPLETION_VERSINFO:-} && -r /usr/share/bash-completion/bash_completion ]]; then
+  source /usr/share/bash-completion/bash_completion
+fi
 
 # First-party completions for the repo's own script (bootstrap.sh — its
 # flag words), deployed
@@ -233,14 +245,6 @@ fi
 # First run creates ~/.config/broot. (Parity with zshrc.tera.)
 if command -v broot &>/dev/null; then
   eval "$(broot --print-shell-function bash)"
-fi
-
-# --- mise (runtimes: node/go/uv/LSP servers + per-project mise.toml) ---------
-# Global pins are declared in ~/.config/mise/config*.toml (this checkout).
-# `mise activate` hooks PROMPT_COMMAND to put the real bin dirs on PATH (in
-# front of the shims exported above the guard).
-if command -v mise &>/dev/null; then
-  eval "$(mise activate bash)"
 fi
 
 # --- starship prompt ---------------------------------------------------------
