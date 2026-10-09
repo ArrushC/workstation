@@ -54,27 +54,13 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
--- Text objects and motions (helix-like names): f function, t type/class,
--- a argument, c comment, o loop/conditional.
+-- Motions and swaps from nvim-treesitter-textobjects (helix-like names:
+-- f function, t type/class, a argument). Selection (af, it, ...) is mini.ai's,
+-- driven by this plugin's queries (ws.editing).
 util.setup('nvim-treesitter-textobjects', function(to)
-  to.setup({
-    select = { lookahead = true, include_surrounding_whitespace = false },
-    move = { set_jumps = true },
-  })
-  local select = require('nvim-treesitter-textobjects.select')
+  to.setup({ move = { set_jumps = true } })
   local move = require('nvim-treesitter-textobjects.move')
   local swap = require('nvim-treesitter-textobjects.swap')
-  local objects = {
-    f = 'function', t = 'class', a = 'parameter', c = 'comment', o = 'loop',
-  }
-  for key, obj in pairs(objects) do
-    for _, kind in ipairs({ 'outer', 'inner' }) do
-      local lhs = (kind == 'outer' and 'a' or 'i') .. key
-      vim.keymap.set({ 'x', 'o' }, lhs, function()
-        select.select_textobject('@' .. obj .. '.' .. kind, 'textobjects')
-      end, { desc = obj .. ' (' .. kind .. ')' })
-    end
-  end
   for key, obj in pairs({ f = 'function', t = 'class', a = 'parameter' }) do
     local q = '@' .. obj .. '.outer'
     vim.keymap.set({ 'n', 'x', 'o' }, ']' .. key, function()

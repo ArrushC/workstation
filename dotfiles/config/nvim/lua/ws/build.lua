@@ -7,6 +7,7 @@
 --                  with compile_commands.json for clangd
 --   :Cppcheck      cppcheck over build/compile_commands.json into quickfix
 --   :MakeStop      stop the running job
+--   :Run [args]    run a program from build/ in a terminal split (:Run! picks again)
 local util = require('ws.util')
 local M = {}
 local job ---@type vim.SystemObj?
@@ -180,7 +181,58 @@ vim.api.nvim_create_user_command('MakeStop', function()
   end
 end, { desc = 'Stop the running build' })
 
+--- Executables under the project's build/ (else root), without CMake's probes.
+function M.executables(root)
+  local dir = vim.uv.fs_stat(root .. '/build') and (root .. '/build') or root
+  local out = {}
+  for name, kind in vim.fs.dir(dir, {
+    depth = 4,
+    skip = function(d)
+      local base = vim.fs.basename(d)
+      return not (base == 'CMakeFiles' or base:match('^%.'))
+    end,
+  }) do
+    local p = dir .. '/' .. name
+    if kind == 'file' and not name:match('%.so[%.%d]*$') and vim.fn.executable(p) == 1 then
+      out[#out + 1] = p
+    end
+  end
+  table.sort(out)
+  return out
+end
+
+local last_run ---@type string?
+vim.api.nvim_create_user_command('Run', function(a)
+  local root = util.root()
+  local function run(exe)
+    if not exe then
+      return
+    end
+    last_run = exe
+    vim.cmd('botright 15new')
+    vim.fn.jobstart(vim.list_extend({ exe }, vim.split(a.args, '%s+', { trimempty = true })), {
+      term = true,
+      cwd = root,
+    })
+    vim.cmd.startinsert()
+  end
+  if last_run and not a.bang then
+    return run(last_run)
+  end
+  local exes = M.executables(root)
+  if #exes == 0 then
+    return vim.notify('no executables under ' .. root .. '/build (:Make first)', vim.log.levels.WARN)
+  end
+  vim.ui.select(exes, {
+    prompt = 'Run',
+    format_item = function(p)
+      return vim.fs.relpath(root, p) or p
+    end,
+  }, run)
+end, { nargs = '*', bang = true, desc = 'Run a built program in a terminal split' })
+
 vim.keymap.set('n', '<leader>mm', '<cmd>Make<cr>', { desc = 'Build (:Make)' })
+vim.keymap.set('n', '<leader>mr', '<cmd>Run<cr>', { desc = 'Run program (:Run, :Run! to pick)' })
 vim.keymap.set('n', '<leader>mc', '<cmd>CMakeConfigure<cr>', { desc = 'CMake configure (Debug)' })
 vim.keymap.set('n', '<leader>mk', '<cmd>Cppcheck<cr>', { desc = 'cppcheck' })
 vim.keymap.set('n', '<leader>mt', function()

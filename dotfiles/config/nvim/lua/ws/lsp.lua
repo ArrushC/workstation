@@ -74,12 +74,16 @@ vim.api.nvim_create_autocmd('LspAttach', {
       map('<leader>cM', '<cmd>ClangdMemoryUsage<cr>', 'clangd memory usage')
     end
 
-    if client:supports_method('textDocument/inlayHint', buf) then
+    -- An unnamed buffer (`:enew | set ft=cpp`) has no URI clangd can resolve:
+    -- inlay-hint and highlight requests on it only produce errors.
+    local named = vim.api.nvim_buf_get_name(buf) ~= ''
+
+    if named and client:supports_method('textDocument/inlayHint', buf) then
       vim.lsp.inlay_hint.enable(true, { bufnr = buf })
     end
 
     -- Highlight other uses of the symbol under the cursor.
-    if client:supports_method('textDocument/documentHighlight', buf) then
+    if named and client:supports_method('textDocument/documentHighlight', buf) then
       local hl = vim.api.nvim_create_augroup('ws.lsp.highlight.' .. buf, { clear = true })
       vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
         group = hl,

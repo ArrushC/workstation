@@ -17,7 +17,8 @@ if [ ! -f "$cfg/lua/ws/provision.lua" ]; then
 fi
 if timeout 1200 nvim --headless --cmd 'let g:ws_pack_install = 1' \
   -c "lua require('ws.provision').run()" 2>&1 |
-  sed -u -e '/Installing parser$/d' -e '/Language installed$/d' -e '/^$/d' -e 's/^/  /'; then
+  sed -u -e '/Installing parser$/d' -e '/Language installed$/d' -e '/Downloading tree-sitter-.*\.\.\.$/d' \
+    -e '/Compiling parser$/d' -e '/^$/d' -e 's/^/  /'; then
   echo "  nvim: plugins, matcher and parsers ready"
 else
   echo "  ! nvim plugins incomplete (offline?): re-run \`mise run nvim-plugins\`" >&2

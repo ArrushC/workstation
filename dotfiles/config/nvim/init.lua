@@ -18,6 +18,7 @@ require('ws.clipboard')
 require('ws.plugins') -- vim.pack.add; installs missing plugins from the lockfile
 require('ws.ui')
 require('ws.treesitter')
+require('ws.editing')
 require('ws.lsp')
 require('ws.completion')
 require('ws.format')

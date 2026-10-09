@@ -48,8 +48,8 @@ vim.api.nvim_create_autocmd('BufWritePre', {
   group = vim.api.nvim_create_augroup('ws.format', { clear = true }),
   desc = 'clang-format on save where the project has a .clang-format',
   callback = function(ev)
-    if vim.g.autoformat == false or vim.b[ev.buf].autoformat == false then
-      return
+    if vim.g.autoformat == false or vim.b[ev.buf].autoformat == false or vim.g.ws_autosaving then
+      return -- off, or an auto-save (ws.autocmds): only explicit writes format
     end
     if not clang[vim.bo[ev.buf].filetype] then
       return

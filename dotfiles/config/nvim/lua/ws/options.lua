@@ -7,11 +7,15 @@ o.cursorline = true
 o.signcolumn = 'yes' -- no text shift when diagnostics or git signs appear
 o.colorcolumn = '80,120'
 o.termguicolors = true -- COLORTERM=truecolor on the fleet
+-- Cursor shapes as in helix: block in normal, bar in insert, underline in
+-- visual (helix's select mode) and replace.
+o.guicursor = 'n-c-sm:block,i-ci-ve:ver25,v:hor20,r-cr-o:hor20,t:block-blinkon500-blinkoff500-TermCursor'
 o.showmode = false -- the statusline shows it
 o.list = true
 o.listchars = { tab = '» ', trail = '·', nbsp = '␣', extends = '›', precedes = '‹' }
 o.fillchars = { eob = ' ', fold = ' ', foldopen = '\u{f078}', foldclose = '\u{f054}', foldsep = ' ' }
 o.wrap = false
+o.smoothscroll = true -- scroll wrapped lines by screen line (no animation: SSH)
 o.linebreak = true
 o.breakindent = true
 o.winborder = 'rounded' -- every floating window (hover, signature, diagnostics)

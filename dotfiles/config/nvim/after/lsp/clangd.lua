@@ -20,12 +20,20 @@ return {
     '--query-driver=/usr/bin/gcc*,/usr/bin/g++*,/usr/bin/cc,/usr/bin/c++,/usr/bin/clang*,'
       .. '/usr/lib64/ccache/*,/opt/rh/gcc-toolset-*/root/usr/bin/*',
   },
-  -- Treat a compile database as the strongest root marker, then build files, then git.
-  root_markers = {
-    { 'compile_commands.json', 'compile_flags.txt', '.clangd' },
-    { 'CMakeLists.txt', 'meson.build', '.clang-tidy', '.clang-format' },
-    '.git',
-  },
+  -- Root: a compile database is the strongest marker, then build files, then
+  -- git. Never for an unnamed buffer (`:enew | set ft=cpp`): clangd cannot
+  -- resolve its URI, every request on it fails, and that clangd outlives nvim.
+  root_dir = function(bufnr, on_dir)
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if name == '' then
+      return
+    end
+    on_dir(vim.fs.root(bufnr, {
+      { 'compile_commands.json', 'compile_flags.txt', '.clangd' },
+      { 'CMakeLists.txt', 'meson.build', '.clang-tidy', '.clang-format' },
+      '.git',
+    }) or vim.fs.dirname(name))
+  end,
   init_options = {
     fallbackFlags = { '-std=c++20' }, -- files outside any compile database
   },

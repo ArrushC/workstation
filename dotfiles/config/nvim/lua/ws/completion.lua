@@ -21,7 +21,13 @@ local function setup()
         menu = { draw = { treesitter = { 'lsp' } } },
       },
       signature = { enabled = true },
-      sources = { default = { 'lsp', 'path', 'snippets', 'buffer' } },
+      sources = {
+        default = { 'lsp', 'path', 'snippets', 'buffer' },
+        providers = {
+          -- friendly-snippets' Doxygen sets (/** , @param, @return) for C and C++
+          snippets = { opts = { extended_filetypes = { c = { 'cdoc' }, cpp = { 'cppdoc' } } } },
+        },
+      },
       fuzzy = { implementation = 'prefer_rust' }, -- quiet Lua fallback offline
     })
   end)

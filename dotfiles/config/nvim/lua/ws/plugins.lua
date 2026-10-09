@@ -32,7 +32,8 @@ vim.api.nvim_create_autocmd('PackChanged', {
 local specs = {
   -- UI
   { src = gh('catppuccin/nvim'), name = 'catppuccin' },
-  { src = gh('nvim-mini/mini.nvim'), version = 'stable' }, -- icons, statusline, clue, hipatterns
+  -- mini: icons, statusline, tabline, notify, clue, hipatterns, ai, pairs, surround, bufremove
+  { src = gh('nvim-mini/mini.nvim'), version = 'stable' },
   { src = gh('lewis6991/gitsigns.nvim') },
   { src = gh('lukas-reineke/indent-blankline.nvim') },
   { src = gh('ibhagwan/fzf-lua') },
@@ -41,6 +42,7 @@ local specs = {
   -- Syntax
   { src = gh('nvim-treesitter/nvim-treesitter'), version = 'main' },
   { src = gh('nvim-treesitter/nvim-treesitter-textobjects'), version = 'main' },
+  { src = gh('nvim-treesitter/nvim-treesitter-context') }, -- sticky function/class/namespace header
   -- LSP, completion, formatting
   { src = gh('neovim/nvim-lspconfig') }, -- server definitions only (lsp/*.lua)
   { src = gh('dchinmay2/clangd_extensions.nvim') }, -- :ClangdAST, type hierarchy, memory usage
@@ -49,10 +51,11 @@ local specs = {
   { src = gh('stevearc/conform.nvim') },
 }
 
--- Installed with everything else, loaded on first use (see ws.dap).
+-- Installed with everything else, loaded on first use (ws.dap, ws.editing).
 local on_demand = {
   { src = gh('mfussenegger/nvim-dap') },
   { src = gh('igorlfs/nvim-dap-view'), version = vim.version.range('1.*') },
+  { src = gh('danymat/neogen') }, -- Doxygen comment from the declaration (<leader>cn)
 }
 
 -- Startup never touches the network. vim.pack installs every plugin that the

@@ -33,6 +33,13 @@ map('n', '<leader>xd', fzf('diagnostics_document'), { desc = 'Diagnostics (buffe
 map('n', '<leader>xD', fzf('diagnostics_workspace'), { desc = 'Diagnostics (workspace)' })
 map('n', '<leader>xq', fzf('quickfix'), { desc = 'Quickfix list' })
 map('n', '<leader>xl', vim.diagnostic.setloclist, { desc = 'Diagnostics to location list' })
+-- trouble-like lists, built in: every diagnostic of every buffer into quickfix
+map('n', '<leader>xx', function()
+  vim.diagnostic.setqflist({ title = 'Diagnostics', open = true })
+end, { desc = 'Diagnostics (all buffers) to quickfix' })
+-- todo-comments-like search for what mini.hipatterns highlights
+map('n', '<leader>xt', fzf('grep', { search = [[\b(TODO|FIXME|HACK|BUG|XXX|NOTE)\b]], no_esc = true }),
+  { desc = 'TODO/FIXME comments (project)' })
 
 -- lazygit in a new tab; closes with lazygit
 map('n', '<leader>gg', function()
@@ -82,4 +89,35 @@ map('n', '<leader>uv', function()
   })
 end, { desc = 'Toggle diagnostic virtual lines' })
 map('n', '<leader>uw', '<cmd>set wrap!<cr>', { desc = 'Toggle wrap' })
+map('n', '<leader>ua', function()
+  vim.g.autosave = vim.g.autosave == false
+  vim.notify('auto-save: ' .. (vim.g.autosave and 'on' or 'off'))
+end, { desc = 'Toggle auto-save' })
+map('n', '<leader>uc', function()
+  local ctx = util.try('treesitter-context')
+  if ctx then
+    ctx.toggle()
+  end
+end, { desc = 'Toggle sticky context' })
+map('n', '<leader>un', function()
+  if _G.MiniNotify then
+    MiniNotify.show_history()
+  end
+end, { desc = 'Notification history' })
+
+-- Sessions (ws.autocmds saves one per directory on exit)
+map('n', '<leader>qs', function()
+  local f = require('ws.autocmds').session_file()
+  if vim.uv.fs_stat(f) then
+    vim.cmd('silent! %bwipeout')
+    vim.cmd('source ' .. vim.fn.fnameescape(f))
+  else
+    vim.notify('no saved session for ' .. vim.fn.getcwd(), vim.log.levels.WARN)
+  end
+end, { desc = 'Restore session (this directory)' })
+map('n', '<leader>qd', function()
+  vim.g.ws_session = false
+  vim.notify('this session will not be saved')
+end, { desc = "Don't save session on exit" })
+map('n', '<leader>qq', '<cmd>confirm qall<cr>', { desc = 'Quit all' })
 map('n', '<leader>ur', '<cmd>set relativenumber!<cr>', { desc = 'Toggle relative numbers' })
