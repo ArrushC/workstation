@@ -419,6 +419,15 @@ aube = { path = "locks/npm-ccstatusline/2.2.30", digest = "sha256:df2c07c76c465a
 backend = "npm:ccstatusline"
 specifiers = ["2.2.30"]
 
+[[tools."npm:oh-my-mermaid"]]
+version = "0.2.0"
+aube = { path = "locks/npm-oh-my-mermaid/0.2.0~10d8d8ef", digest = "sha256:3ec56f2e3dee216bef4fed6284ccb5268b967ff1cbc9f9600b129abc7c2bff1e" }
+backend = "npm:oh-my-mermaid"
+specifiers = ["0.2.0"]
+
+[tools."npm:oh-my-mermaid".options]
+allow_low_downloads = "true"
+
 [[tools.nushell]]
 version = "0.113.1"
 backend = "aqua:nushell/nushell"

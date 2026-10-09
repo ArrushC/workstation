@@ -1,0 +1,7 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "dependencies": {
+    "oh-my-mermaid": "0.2.0"
+  }
+}

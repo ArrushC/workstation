@@ -1,0 +1,12 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "aube": {
+    "allowBuilds": {
+      "tree-sitter-kotlin": true
+    }
+  },
+  "dependencies": {
+    "@nanonets/graft": "0.21.1"
+  }
+}
