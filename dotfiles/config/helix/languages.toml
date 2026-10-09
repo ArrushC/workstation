@@ -22,8 +22,8 @@ args = [
   # formatting when clang-format is missing, and `=` always uses it.
   "--fallback-style=none",
   # System include paths as the real build sees them: gcc, ccache wrappers (CMake on the
-  # fleet records /usr/lib64/ccache/c++), gcc-toolset on EL8, clang.
-  "--query-driver=/usr/bin/gcc*,/usr/bin/g++*,/usr/bin/cc,/usr/bin/c++,/usr/bin/clang*,/usr/lib64/ccache/*,/opt/rh/gcc-toolset-*/root/usr/bin/*",
+  # fleet records /usr/lib64/ccache/c++), gcc-toolset on EL8, clang; Windows: llvm-mingw.
+  "--query-driver=/usr/bin/gcc*,/usr/bin/g++*,/usr/bin/cc,/usr/bin/c++,/usr/bin/clang*,/usr/lib64/ccache/*,/opt/rh/gcc-toolset-*/root/usr/bin/*,**/github-mstorsjo-llvm-mingw/*/bin/*",
 ]
 # No fallbackFlags (Neovim passes -std=c++20): clangd adds them to C files too, and every
 # .c file outside a compile database then shows "'-std=c++20' not allowed with 'C'".

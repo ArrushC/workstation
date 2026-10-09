@@ -33,6 +33,18 @@ starship = "1.26.0"
 # takes conda-forge's build (config.linux.toml): the GitHub archive needs glibc 2.34, past
 # EL8's 2.28, and conda-forge has no Windows build.
 helix = { version = "25.07.1", os = ["windows"] }
+# Neovim on Windows (Linux: github:neovim/neovim-releases in config.linux.toml). The short
+# name `neovim` resolves to vfox; aqua installs nvim-win64.zip (runtime/ and win32yank.exe
+# in its bin/), per-user, unlike winget's machine-scope MSI.
+"aqua:neovim/neovim" = { version = "0.12.5", os = ["windows"] }
+# nvim-treesitter's parser builds (Linux: conda:tree-sitter-cli). An MSVC build: ws.treesitter
+# points its cc-rs at llvm-mingw's clang (CC + CFLAGS_x86_64_pc_windows_msvc).
+tree-sitter = { version = "0.27.0", os = ["windows"] }
+# C/C++ toolchain on Windows, no admin: clang/clang++ (also as cc, gcc, g++), clangd,
+# clang-format, clang-tidy, lldb-dap, lld, mingw32-make; UCRT, LLVM 23. ~180 MB zip, ~715 MB.
+"github:mstorsjo/llvm-mingw" = { version = "20261006", os = ["windows"], asset_pattern = "llvm-mingw-{{version}}-ucrt-x86_64.zip" }
+cmake = { version = "4.4.4", os = ["windows"] }   # Neovim's :Make/:CMakeConfigure (Linux: dnf cmake)
+ninja = { version = "1.13.2", os = ["windows"] }  # CMake's generator (Linux: dnf ninja-build)
 jq = "1.8.2"
 gh = "2.102.0"
 # The zsh toolbelt Nushell on Windows shares (pickers, z/zi, Ctrl-R history, eza listings, delta pager).

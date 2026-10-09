@@ -1,0 +1,12 @@
+#!/bin/sh
+# zcc / zc++: mise's zig as a C / C++ compiler under names that shadow nothing
+# (cc, gcc and g++ stay the host's). For a host without one: CC=zcc CXX=zc++.
+# Targets glibc 2.28, the fleet's floor: zig assumes 2.31 on EL8, so its default
+# output can need symbols EL8 lacks. Drops the --target=<rust triple> that
+# cc-rs (cargo, tree-sitter) adds, which zig rejects.
+for a; do
+  shift
+  case $a in --target=*) ;; *) set -- "$@" "$a" ;; esac
+done
+case $0 in *++) lang=c++ ;; *) lang=cc ;; esac
+exec zig "$lang" -target "$(uname -m)-linux-gnu.2.28" "$@"

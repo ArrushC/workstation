@@ -37,7 +37,7 @@ load_git_modes() {
 shell_targets() {
   printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
     .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
-    dotfiles/claude/notify.sh dotfiles/local/bin/winterop \
+    dotfiles/claude/notify.sh dotfiles/local/bin/winterop dotfiles/local/bin/zcc dotfiles/local/bin/zc++ \
     dotfiles/config/bash/completions.bash
 }
 
@@ -226,6 +226,14 @@ check_pins() {
     "$(tomlval config.toml vars.zjstatus_zellij_floor 2>/dev/null)" \
     "bump zellij, or pin the zjstatus release built for it (and its floor)"
   pin_vars_reachable
+  # zig assumes glibc 2.31 on EL8 (2.28), so its users pin the floor explicitly.
+  local floor
+  floor="$(sed -nE 's/.*WORKSTATION_GLIBC_FLOOR=([0-9.]+).*/\1/p' .github/workflows/disk-budget.yml | head -1)"
+  pin_equal "zig's glibc target (EL8 floor)" "disk-budget.yml=$floor" \
+    "treesitter.lua=$(sed -nE 's/.*linux-gnu\.([0-9.]+).*/\1/p' dotfiles/config/nvim/lua/ws/treesitter.lua | head -1)" \
+    "zcc=$(sed -nE 's/.*linux-gnu\.([0-9.]+).*/\1/p' dotfiles/local/bin/zcc | head -1)" \
+    "zc++=$(sed -nE 's/.*linux-gnu\.([0-9.]+).*/\1/p' dotfiles/local/bin/zc++ | head -1)"
+  if cmp -s dotfiles/local/bin/zcc dotfiles/local/bin/zc++; then ok "zcc and zc++ are the same script"; else bad "dotfiles/local/bin/zcc and zc++ differ (one script, dispatched on \$0)"; fi
 }
 
 check_line_endings_and_mode() {
@@ -265,6 +273,8 @@ DOTFILES_MODE_ALLOWLIST=(
   "dotfiles/claude/notify.sh"                        # ~/.claude/notify.sh copy entry — invoked directly as a hook command
   "dotfiles/local/bin/batpipe"                       # ~/.local/bin copy entry — a LESSOPEN preprocessor invoked directly
   "dotfiles/local/bin/winterop"                      # ~/.local/bin copy entry — a script invoked directly from the shell
+  "dotfiles/local/bin/zcc"                           # ~/.local/bin copy entry — zig as a C compiler, invoked directly
+  "dotfiles/local/bin/zc++"                          # ~/.local/bin copy entry — the same script as C++
 )
 check_dotfiles_mode() {
   hdr "dotfiles/ sources: git mode 100644 except the allowlist"
@@ -1338,6 +1348,36 @@ check_colorterm() {
   fi
 }
 
+# No tracked Linux tool is part of the C/C++ toolchain or its build drivers: dnf owns them
+# where there is sudo, and a mise copy first on PATH would shadow them (another
+# gcc/libstdc++ for every build and ccache; CMake 4 refuses cmake_minimum_required < 3.5).
+# zig is the fallback compiler under its own name; a no-sudo host without cmake, ninja or
+# make adds them in its git-ignored config.local.toml. tasks/verify-tools checks the
+# installed result (no mise binary named cc, gcc, g++, c++, cpp, clang, clang++, ld, as).
+check_toolchain_shadow() {
+  hdr "no tracked Linux mise tool shadows the dnf C/C++ toolchain"
+  py_report "toolchain-shadow" <<'PY'
+import tomllib
+deny = {"gcc", "gxx", "clang", "clangxx", "llvm", "binutils", "compilers", "c-compiler",
+        "cxx-compiler", "make", "cmake", "ninja"}
+hits, n = [], 0
+for f in ("config.toml", "config.linux.toml"):
+    with open(f, "rb") as fh:
+        tools = tomllib.load(fh).get("tools", {})
+    for key, val in tools.items():
+        if isinstance(val, dict) and val.get("os") and "linux" not in val["os"]:
+            continue
+        n += 1
+        name = key.split(":", 1)[-1].rsplit("/", 1)[-1].lower()
+        if name in deny or name.split("_", 1)[0] in deny:
+            hits.append(f"{f}:{key}")
+if hits:
+    print("FAIL|shadow|" + "; ".join(hits) + " shadow the dnf toolchain (a no-sudo host adds cmake/ninja/make in config.local.toml; the compiler fallback is zig)")
+else:
+    print(f"PASS|shadow|{n} Linux tool key(s), none from the C/C++ toolchain")
+PY
+}
+
 check_debugger_config() {
   hdr "gdb and valgrind config (~/.gdbinit loads in gdb 8.2-17; ~/.valgrindrc starts every tool)"
   # valgrind reads ~/.valgrindrc as whitespace-separated options: a `#` is an option
@@ -1458,6 +1498,7 @@ check_sentinels
 check_tools_block
 check_mise_config_files
 check_bootstrap_config
+check_toolchain_shadow
 check_dotfiles_config
 check_completion_parity
 check_warp_guards

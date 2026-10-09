@@ -32,6 +32,8 @@ Every host gets the same setup. Three tracked config files hold it, plus the git
 
 **System steps and sudo.** dnf packages, `/etc` files and zsh as the login shell need sudo. `bootstrap.sh` checks once: cached sudo or a password prompt that succeeds means they run; a failed prompt saves `sudo = "no"` in `config.local.toml`, and from then on `bootstrap.sh`, `mise run update` and `wsu` skip them (`mise bootstrap --skip packages,files`) while everything user-level still installs. An unattended run with no terminal skips them for that run only. To apply them later, get sudo and re-run `./bootstrap.sh`. `mise run health` shows the state in its "system steps" row.
 
+**A compiler without sudo (Linux).** Every Linux host also gets mise's zig, which adds only `zig` to PATH, so a host's own gcc always wins. Neovim builds its parsers with it when there is no `cc`. `CC=zcc CXX=zc++` uses it for your own builds: clang-based, targeting glibc 2.28, with LLVM's libc++ and no AddressSanitizer. cmake, ninja and make stay dnf-only, because mise copies would shadow dnf's. A no-sudo host that lacks them adds e.g. `cmake = "4.4.4"` to its `config.local.toml`, then runs `cd ~ && mise lock --global --platform linux-x64 cmake && mise install`, which writes the git-ignored `mise.local.lock`.
+
 ## Repo layout
 
 ```
@@ -49,7 +51,7 @@ dotfiles/                     every deployed source under its real name
   *.tera                      templates (zshrc, bashrc, zshenv, gitconfig, ssh/config, ...)
   config/                     ~/.config/*: starship, helix, nvim, zellij, zsh plugins, ...
   claude/                     ~/.claude/*: CLAUDE.md, hooks, skills, settings seed and enforced keys
-  local/bin/                  ~/.local/bin: batpipe, winterop
+  local/bin/                  ~/.local/bin: batpipe, winterop, zcc, zc++
   windows/                    the Windows-only sources
 configs/wsl/wsl.conf          source of /etc/wsl.conf ([bootstrap.files], not [dotfiles])
 docs/claude/, .claude/        notes, hooks and settings for Claude Code
@@ -320,7 +322,7 @@ To debug under Memcheck:
 
 For an interpreter, add `--errors-for-leak-kinds=definite --show-leak-kinds=definite`: Python alone reports thousands of "possibly lost" blocks. A cloned project's `./.valgrindrc` overrides yours; `valgrind --command-line-only=yes` ignores every rc file.
 
-**Neovim (Linux).** `nvim` is a second editor next to helix (`$EDITOR`), set up for C/C++ in `dotfiles/config/nvim`. It uses Neovim 0.12's built-in `vim.pack` with 18 plugins pinned in `nvim-pack-lock.json`. It downloads no tools: clangd, gdb, lldb-dap, clang-format and the language servers are the ones already installed. It looks and behaves like helix where that makes sense: Catppuccin Mocha with the mauve accent, relative numbers, rulers at 80/120, `╎` indent guides, an always-on buffer line, helix's statusline fields and cursor shapes, `<C-s>` to save, and auto-save when the terminal loses focus or you leave a buffer (`<leader>ua` toggles; auto-saves never reformat).
+**Neovim.** `nvim` is a second editor next to helix (`$EDITOR`), set up for C/C++ in `dotfiles/config/nvim`. On Windows the same config deploys to `%LOCALAPPDATA%\nvim`, with llvm-mingw (clang, clangd, clang-format, lldb-dap; no admin) as the toolchain, and `wsu`'s post-tools hook installs the plugins. It uses Neovim 0.12's built-in `vim.pack` with 18 plugins pinned in `nvim-pack-lock.json`. It downloads no tools: clangd, gdb, lldb-dap, clang-format and the language servers are the ones already installed. It looks and behaves like helix where that makes sense: Catppuccin Mocha with the mauve accent, relative numbers, rulers at 80/120, `╎` indent guides, an always-on buffer line, helix's statusline fields and cursor shapes, `<C-s>` to save, and auto-save when the terminal loses focus or you leave a buffer (`<leader>ua` toggles; auto-saves never reformat).
 - **Code:** clangd with clang-tidy and inlay hints. `gd` goes to the definition, `<leader>ch` switches between source and header, `<leader>cn` writes a Doxygen comment for the function under the cursor, and `<leader>cf` runs clang-format, which also runs on save in projects with a `.clang-format`.
 - **Edit:** brackets and quotes close themselves; `sa`/`sd`/`sr` add, delete and replace surroundings; `af`/`if` (function), `at` (type), `aa` (argument), `ac` (comment), `ao` (loop or condition) select, and `]f`/`[f` move. `<leader>uu` opens the undo tree.
 - **Build and debug:** `:Make` (or `<leader>mm`) runs cmake, meson or make into the quickfix list, and `:Run` (`<leader>mr`) runs the program in a split. `:CMakeConfigure` also writes `compile_commands.json`, which clangd needs. F5, F9 and F10–F12 drive gdb's own DAP (lldb-dap is the second choice).
@@ -373,12 +375,8 @@ Every `dotfiles/**/*.tera` file is rendered by `scripts/check-templates.sh` auto
 
 **A dnf package.** One line in `config.linux.toml`. The whole table installs as one `sudo dnf install -y` batch, so a single unresolvable name fails everything: verify the name first.
 
-```toml
-# config.linux.toml — [bootstrap.packages]
-"dnf:tig" = "latest"
-```
-
 ```bash
+# config.linux.toml [bootstrap.packages]:  "dnf:tig" = "latest"
 dnf repoquery tig          # confirm the exact name resolves on EL8 and EL9
 mise bootstrap --only packages --yes   # or: MISE_ENV=<your set> mise bootstrap plan
 ```

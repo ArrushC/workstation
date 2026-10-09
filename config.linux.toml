@@ -42,6 +42,12 @@ rust-analyzer = "2026-10-05"
 marksman = "2026-02-08"
 taplo = "0.10.0"
 herdr = "0.9.3"
+# --- core: ---
+# zig: the C/C++ compiler of last resort, for a host without the dnf gcc (no sudo). Static,
+# and it exposes only `zig`, so the host's cc/gcc/g++/ld are never shadowed (tasks/verify-tools
+# fails on a mise binary named like them). Neovim's parser builds fall back to it
+# (lua/ws/treesitter.lua); in the shell, zcc/zc++ (~/.local/bin) wrap it for glibc 2.28.
+zig = "0.16.0"
 # --- github: (registry entry absent, or its asset needs a glibc newer than EL8's 2.28) ---
 "github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir; its bin/ also holds gdb 17 + gdbserver, first on PATH, so plain `gdb` is this one (GEF via ~/.gdbinit)
 "github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38

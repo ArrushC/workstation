@@ -22,3 +22,6 @@ Thumbs.db
 
 # Per-host mise overrides (name/email vars from PR3 onward) — never committed
 config.local.toml
+
+# Per-host lock for tools a host adds in config.local.toml (`mise lock --global` writes it)
+mise.local.lock

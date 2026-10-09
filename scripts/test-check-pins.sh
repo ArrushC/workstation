@@ -7,7 +7,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 files=(bootstrap.sh bootstrap.ps1 config.toml config.linux.toml
   dotfiles/zshrc.tera dotfiles/bashrc.tera tasks/vcpkg tasks/check-updates
   scripts/bump-versions.sh scripts/gen-tool-memory.sh scripts/check-invariants.sh
-  .github/workflows/lint.yml .github/workflows/version-bumps.yml)
+  .github/workflows/lint.yml .github/workflows/version-bumps.yml
+  .github/workflows/disk-budget.yml dotfiles/config/nvim/lua/ws/treesitter.lua
+  dotfiles/local/bin/zcc dotfiles/local/bin/zc++)
 pass=0
 fail=0
 T=""
