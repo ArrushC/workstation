@@ -209,6 +209,23 @@ conda_deps = [
     "libgomp-16.2.0-he0feb66_7",
 ]
 
+[[tools."conda:tree-sitter-cli"]]
+version = "0.27.0"
+backend = "conda:tree-sitter-cli"
+specifiers = ["0.27.0"]
+
+[tools."conda:tree-sitter-cli".options]
+channel = "conda-forge"
+
+[tools."conda:tree-sitter-cli"."platforms.linux-x64"]
+checksum = "sha256:b7fa9523db9091171f9d8e6c4f6aeef10ab9a6fdec5f63a5ad97f2bb8d3f40d1"
+url = "https://conda.anaconda.org/conda-forge/linux-64/tree-sitter-cli-0.27.0-hc7555a6_0.conda"
+conda_deps = [
+    "libgcc-16.2.0-ha9f2e26_7",
+    "_openmp_mutex-4.5-20_gnu",
+    "libgomp-16.2.0-he0feb66_7",
+]
+
 [[tools.croc]]
 version = "11.5.4"
 backend = "aqua:schollz/croc"
@@ -477,6 +494,19 @@ specifiers = ["0.23.0"]
 checksum = "blake3:96cc0f5dd5c38b758d20f2c4f85242469238fad4a2839252916153d1bd1cbda9"
 url = "https://github.com/multiprocessio/dsq/releases/download/v0.23.0/dsq-linux-x64-v0.23.0.zip"
 url_api = "https://api.github.com/repos/multiprocessio/dsq/releases/assets/81728447"
+
+[[tools."github:neovim/neovim-releases"]]
+version = "0.12.5"
+backend = "github:neovim/neovim-releases"
+specifiers = ["0.12.5"]
+
+[tools."github:neovim/neovim-releases".options]
+asset_pattern = "nvim-linux-x86_64.tar.gz"
+
+[tools."github:neovim/neovim-releases"."platforms.linux-x64"]
+checksum = "sha256:9e4a0e9c2aebbcf1eb5f6cdf645b460c9249f517650d0191170f9f152ecfd721"
+url = "https://github.com/neovim/neovim-releases/releases/download/v0.12.5/nvim-linux-x86_64.tar.gz"
+url_api = "https://api.github.com/repos/neovim/neovim-releases/releases/assets/574819112"
 
 [[tools."github:orf/gping"]]
 version = "1.21.0"

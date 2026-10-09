@@ -67,6 +67,7 @@ herdr = "0.9.3"
 "github:watchexec/watchexec" = { version = "2.7.4", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
 "github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
+"github:neovim/neovim-releases" = { version = "0.12.5", asset_pattern = "nvim-linux-x86_64.tar.gz" }   # neovim's own glibc-2.17 build (LuaJIT); the main repo's tarball and appimage (aqua) need glibc 2.34; releases trail upstream by days to weeks
 # --- conda: (the project ships only glibc builds newer than EL8's 2.28, or only static musl ones; conda-forge builds against glibc 2.17/2.28) ---
 "conda:helix" = "25.07.1"   # glibc 2.17, runtime bundled (no HELIX_RUNTIME); Windows keeps aqua's helix (config.toml)
 "conda:ast-grep" = "0.45.3"   # provides `ast-grep` and `sg`
@@ -77,6 +78,7 @@ herdr = "0.9.3"
 # /etc/passwd alone: for a directory (SSSD/LDAP) account pueued can't name its
 # socket and exits. The glibc build looks the user up through NSS.
 "conda:pueue" = "4.0.4"
+"conda:tree-sitter-cli" = "0.27.0"   # nvim-treesitter (main) builds parsers with it; upstream's asset needs glibc 2.39 and there is no musl build
 # --- http: (no GitHub release, bare assets, or scripts) ---
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
 "http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }
@@ -159,6 +161,12 @@ herdr = "0.9.3"
 # massif and helgrind ("Unknown option"). track-origins (about 2x slower) and track-fds
 # (differs between 3.22 and 3.26) stay out: the `vgm` alias adds them.
 "~/.valgrindrc" = { source = "dotfiles/valgrindrc", mode = "copy" }
+# Neovim, a second editor next to helix ($EDITOR), tuned for C/C++ (dotfiles/config/nvim/init.lua).
+# vim.pack rewrites nvim-pack-lock.json on :PackUpdate, so the lockfile is its own file
+# entry (`wsr` records it; it skips directory entries) and the directory copy excludes it.
+# Plugins install from the final hook's nvim-plugins task, never at nvim startup.
+"~/.config/nvim" = { source = "dotfiles/config/nvim", mode = "copy", exclude = [".vendor", ".gitkeep", "nvim-pack-lock.json"] }
+"~/.config/nvim/nvim-pack-lock.json" = { source = "dotfiles/config/nvim/nvim-pack-lock.json", mode = "copy" }
 "~/.config/herdr/config.toml" = { source = "dotfiles/config/herdr/config.toml", mode = "copy" }
 # Zed rewrites this in place; record a live edit back with `wsr`. Windows sibling:
 # config.windows.toml.
@@ -198,10 +206,10 @@ herdr = "0.9.3"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
 # installed with dnf's strict=0 so a missing one is skipped, not fatal.
 "post-packages" = "mise run --skip-tools optional-packages"
-# `final` runs vcpkg, claude, fonts and broot-skin, and only on a full `mise bootstrap`,
+# `final` runs vcpkg, claude, fonts, broot-skin and nvim-plugins, and only on a full `mise bootstrap`,
 # never on `--only dotfiles` (wsa).
 # fonts skips itself under WSL (the Windows terminal resolves fonts there).
-"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin"
+"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin ::: nvim-plugins"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
 # it. systemd expands %h in ExecStart; the shim picks its config set from

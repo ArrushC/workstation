@@ -55,8 +55,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   or it installs every tool before dnf (node needs dnf's libatomic). A hook name in several loaded
   files runs every one. Exception: the literal `post-dotfiles` chmod line, each command with its
   own `|| true` (`sh -o errexit`).
-- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts, broot-skin). `final` runs
-  only on a full `mise bootstrap`, never on `--only dotfiles`.
+- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts, broot-skin,
+  nvim-plugins): a full `mise bootstrap` only, never `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
   and EL9; one some releases lack goes in `tasks/optional-packages`. `ShellCheck` is capitalised;
   `fswatch`, `entr` and `cockpit-networkmanager` don't resolve.

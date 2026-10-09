@@ -42,17 +42,12 @@ config.toml, config.linux.toml, config.windows.toml
 config.local.toml             git-ignored: this host's name, email, sudo
 mise.lock, mise.linux.lock, locks/
                               generated lockfiles; never hand-edit
-tasks/                        file tasks with real logic: bootstrap, health, update,
-                              check-updates, python-env, fonts, vcpkg, claude,
-                              verify-tools
-                              (statusline, enable-el-repos, install-tools: Linux,
-                              in config.linux.toml)
-                              (one-line wrappers — lint, fmt, secrets, ps-lint,
-                              bump-versions, install-hooks — are [tasks] in config.toml)
+tasks/                        file tasks with real logic (bootstrap, health, update, ...);
+                              one-line wrappers are [tasks] in config.toml / config.linux.toml
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
 dotfiles/                     every deployed source under its real name
   *.tera                      templates (zshrc, bashrc, zshenv, gitconfig, ssh/config, ...)
-  config/                     ~/.config/*: starship, helix, zellij, zsh plugins, ...
+  config/                     ~/.config/*: starship, helix, nvim, zellij, zsh plugins, ...
   claude/                     ~/.claude/*: CLAUDE.md, hooks, skills, settings seed and enforced keys
   local/bin/                  ~/.local/bin: batpipe, winterop
   windows/                    the Windows-only sources
@@ -324,6 +319,15 @@ To debug under Memcheck:
 2. In another pane, run `/usr/bin/gdb -nx ./prog -ex 'target remote | vgdb'`. `continue` stops at each error, and `monitor leak_check full` queries Memcheck live.
 
 For an interpreter, add `--errors-for-leak-kinds=definite --show-leak-kinds=definite`: Python alone reports thousands of "possibly lost" blocks. A cloned project's `./.valgrindrc` overrides yours; `valgrind --command-line-only=yes` ignores every rc file.
+
+**Neovim (Linux).** `nvim` is a second editor next to helix (`$EDITOR`), set up for C/C++ in `dotfiles/config/nvim`. It uses Neovim 0.12's built-in `vim.pack` with 16 plugins pinned in `nvim-pack-lock.json`. It downloads no tools: clangd, gdb, lldb-dap, clang-format and the language servers are the ones already installed.
+- **Code:** clangd with clang-tidy and inlay hints. `gd` goes to the definition, `<leader>ch` switches between source and header, and `<leader>cf` runs clang-format, which also runs on save in projects with a `.clang-format`.
+- **Build:** `:Make` (or `<leader>mm`) runs cmake, meson or make into the quickfix list. `:CMakeConfigure` also writes `compile_commands.json`, which clangd needs.
+- **Debug:** F5, F9 and F10–F12 drive gdb's own DAP (lldb-dap is the second choice).
+- **Find:** fzf-lua, with `<leader>f` for files and `<leader>/` to grep. `-` opens the directory as a buffer.
+- **Clipboard:** `<leader>y` copies over OSC 52; paste with the terminal's paste key. Lock zellij (Ctrl+G) inside nvim.
+
+Plugins install only from the `nvim-plugins` task (the `final` hook, so `wsu` too) or `:PackInstall`, never at startup: a failed clone would empty the lockfile. To update, run `:PackUpdate`, review, `:write`, then `wsr` and commit. Per-host additions go in `~/.config/nvim/lua/ws/local.lua`.
 
 **winterop** (in `~/.local/bin` on Linux and WSL, WSL-only) talks to the Windows host: no arguments shows the detected environment and live channels, and `winterop run <cmd>`, `path <p>`, `clip [get|set]`, `open <path|url>`, `host` cover the common cases (`winterop help` lists the rest). In a plain VM it points you at SSH, shared folders or RDP.
 

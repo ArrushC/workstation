@@ -149,12 +149,14 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `watchexec` 2.7.4
 - `qsv` 23.0.1
 - `zjstatus` 0.25.0
+- `neovim-releases` 0.12.5
 - `conda:helix` 25.07.1
 - `conda:ast-grep` 0.45.3
 - `conda:jless` 0.9.0
 - `conda:gitlogue` 0.12.0
 - `conda:htmlq` 0.4.0
 - `conda:pueue` 4.0.4
+- `conda:tree-sitter-cli` 0.27.0
 - `ncdu` 2.9.1
 - `nb` 7.25.5
 - `sysz` 1.4.3
