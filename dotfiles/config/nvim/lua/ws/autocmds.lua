@@ -98,20 +98,26 @@ function M.session_file()
   return session_dir .. vim.fn.getcwd():gsub('[/\\:]', '%%') .. '.vim'
 end
 
-au('VimLeavePre', {
-  desc = 'Save the session for this directory',
-  callback = function()
-    if vim.g.ws_session == false or #vim.api.nvim_list_uis() == 0 then
-      return -- opted out, or headless (provisioning, scripts)
+--- Save the session for the current directory (when a file is open). The
+--- side panels are closed first: a session cannot restore them, so ws.ide
+--- remembers and reopens them itself.
+function M.save_session()
+  if vim.g.ws_session == false or #vim.api.nvim_list_uis() == 0 then
+    return -- opted out, or headless (provisioning, scripts)
+  end
+  local ide = package.loaded['ws.ide']
+  if ide then
+    pcall(ide.before_session_save)
+  end
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[b].buflisted and vim.bo[b].buftype == '' and vim.api.nvim_buf_get_name(b) ~= '' then
+      vim.fn.mkdir(session_dir, 'p')
+      vim.cmd('silent! mksession! ' .. vim.fn.fnameescape(M.session_file()))
+      return
     end
-    for _, b in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.bo[b].buflisted and vim.bo[b].buftype == '' and vim.api.nvim_buf_get_name(b) ~= '' then
-        vim.fn.mkdir(session_dir, 'p')
-        vim.cmd('silent! mksession! ' .. vim.fn.fnameescape(M.session_file()))
-        return
-      end
-    end
-  end,
-})
+  end
+end
+
+au('VimLeavePre', { desc = 'Save the session for this directory', callback = M.save_session })
 
 return M

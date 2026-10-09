@@ -52,13 +52,22 @@ local specs = {
   { src = gh('saghen/blink.cmp'), version = vim.version.range('1.*') }, -- tag => prebuilt fuzzy lib
   { src = gh('rafamadriz/friendly-snippets') },
   { src = gh('stevearc/conform.nvim') },
+  -- IDE layout (ws.ide)
+  { src = gh('nvim-tree/nvim-tree.lua'), version = vim.version.range('1.*') }, -- file tree sidebar
+  { src = gh('Bekaboo/dropbar.nvim'), version = vim.version.range('14.*') }, -- breadcrumbs (winbar)
 }
 
--- Installed with everything else, loaded on first use (ws.dap, ws.editing).
+-- Installed with everything else, loaded on first use (ws.dap, ws.editing, ws.ide).
 local on_demand = {
   { src = gh('mfussenegger/nvim-dap') },
   { src = gh('igorlfs/nvim-dap-view'), version = vim.version.range('1.*') },
   { src = gh('danymat/neogen') }, -- Doxygen comment from the declaration (<leader>cn)
+  { src = gh('stevearc/aerial.nvim'), version = vim.version.range('4.*') }, -- outline (<leader>o)
+  -- ws.ide_extras
+  { src = gh('dlyongemallo/diffview-plus.nvim') }, -- maintained fork of sindrets/diffview.nvim
+  { src = gh('dnlhc/glance.nvim') }, -- peek definition/references
+  { src = gh('kosayoda/nvim-lightbulb') }, -- sign where a code action exists
+  { src = gh('stevearc/quicker.nvim'), version = vim.version.range('1.*') }, -- quickfix view
 }
 
 -- Startup never touches the network. vim.pack installs every plugin that the
