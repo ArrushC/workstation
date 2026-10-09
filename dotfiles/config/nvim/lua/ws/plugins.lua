@@ -35,7 +35,7 @@ vim.api.nvim_create_autocmd('PackChanged', {
 local specs = {
   -- UI
   { src = gh('catppuccin/nvim'), name = 'catppuccin' },
-  -- mini: icons, statusline, tabline, notify, clue, hipatterns, ai, pairs, surround, bufremove
+  -- mini: icons, statusline, tabline, notify, clue, hipatterns, cursorword, ai, pairs, surround, bufremove
   { src = gh('nvim-mini/mini.nvim'), version = 'stable' },
   { src = gh('lewis6991/gitsigns.nvim') },
   { src = gh('lukas-reineke/indent-blankline.nvim') },
