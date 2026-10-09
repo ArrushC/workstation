@@ -84,6 +84,7 @@ vim.api.nvim_create_autocmd('LspAttach', {
 
     -- Highlight other uses of the symbol under the cursor.
     if named and client:supports_method('textDocument/documentHighlight', buf) then
+      vim.b[buf].minicursorword_disable = true -- the server's highlight replaces mini.cursorword's
       local hl = vim.api.nvim_create_augroup('ws.lsp.highlight.' .. buf, { clear = true })
       vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
         group = hl,

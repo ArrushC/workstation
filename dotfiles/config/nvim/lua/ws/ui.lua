@@ -223,6 +223,15 @@ util.later(function()
   end)
 end)
 
+-- Other occurrences of the word under the cursor, for buffers without a language
+-- server (configs, logs, shell). Where clangd & co. highlight the symbol's real uses
+-- (ws.lsp, documentHighlight), ws.lsp switches this off for that buffer.
+util.later(function()
+  util.setup('mini.cursorword', function(cw)
+    cw.setup({ delay = 250 }) -- updatetime, so it matches the LSP highlight's timing
+  end)
+end)
+
 util.later(function()
   util.setup('gitsigns', function(gs)
     gs.setup({
