@@ -8,6 +8,10 @@ local map = vim.keymap.set
 local function fzf(name, opts)
   return function()
     local f = util.try('fzf-lua')
+    local ide = package.loaded['ws.ide']
+    if ide then
+      ide.to_editor() -- never open a file in the tree or another panel
+    end
     if f then
       f[name](opts)
     else

@@ -22,6 +22,11 @@ util.setup('catppuccin', function(cat)
       indent_blankline = { enabled = true, scope_color = 'mauve' },
       mini = { enabled = true },
       treesitter_context = true,
+      -- ws.ide, ws.ide_extras
+      nvimtree = true,
+      aerial = true,
+      dropbar = { enabled = true, color_mode = true },
+      diffview = true,
     },
     lsp_styles = {
       underlines = {
@@ -62,6 +67,11 @@ util.setup('catppuccin', function(cat)
         MiniNotifyBorder = accent,
         MiniNotifyTitle = title,
         TreesitterContextBottom = { sp = c.surface1, style = { 'underline' } },
+        NvimTreeWinSeparator = { fg = c.surface1, bg = c.base },
+        NvimTreeRootFolder = title,
+        AerialLine = { bg = c.surface0, style = { 'bold' } },
+        GlanceBorderTop = accent,
+        GlanceWinBarTitle = title,
       }
     end,
   })
