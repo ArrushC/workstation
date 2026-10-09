@@ -83,6 +83,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `basedpyright` 1.40.2
 - `ccstatusline` 2.2.30
 - `oh-my-mermaid` 0.2.0
+- `archify` 3.0.1
 - `nerd-fonts` 3.5.1
 - `opencode` 1.18.34
 - `oh-my-pi` 18.6.1

@@ -9,6 +9,9 @@
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
   "inputNeededNotifEnabled": true,
+  "env": {
+    "ARCHIFY_UPDATE_CHECK_DISABLED": "1"
+  },
   "hooks": {
     "PreToolUse": [
       {

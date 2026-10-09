@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin (config.linux.toml's final hook runs it)"
+#MISE description="Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin, the archify skill link (config.linux.toml's final hook runs it)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
@@ -99,4 +99,20 @@ if [ ! -f "$herdr_plugins_marker" ]; then
   else
     echo "  herdr not found on PATH — skipping herdr plugin install (retries next run)" >&2
   fi
+fi
+# 6. The archify skill, a mise tool whose release zip is the skill directory
+# (config.toml): ~/.claude/skills/archify links to mise's `latest`, so a version bump
+# needs no new link. ~/.claude/skills is a copy-mode directory entry, which leaves the
+# link alone. A real directory there (say, from `npx skills add`) is left alone too.
+if archify_dir="$(mise where github:tt-a1i/archify 2>/dev/null)"; then
+  archify_link="$HOME/.claude/skills/archify"
+  archify_target="$(dirname "$archify_dir")/latest"
+  if [ -e "$archify_link" ] && [ ! -L "$archify_link" ]; then
+    echo "  ! $archify_link is not mise's link — left alone (remove it to use the pinned archify)" >&2
+  elif [ "$(readlink "$archify_link" 2>/dev/null)" != "$archify_target" ]; then
+    mkdir -p "$HOME/.claude/skills" && ln -sfn "$archify_target" "$archify_link" &&
+      echo "  linked $archify_link -> $archify_target"
+  fi
+else
+  echo "  archify not installed (mise install) — skill link skipped (retries next run)" >&2
 fi

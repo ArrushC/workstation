@@ -13,7 +13,8 @@
 #      overwriting the live file's own values for the same key (statusLine,
 #      hooks, enabledPlugins, skipAutoPermissionPrompt,
 #      skipWorkflowUsageWarning, remoteControlAtStartup,
-#      agentPushNotifEnabled, inputNeededNotifEnabled).
+#      agentPushNotifEnabled, inputNeededNotifEnabled, and
+#      env.ARCHIFY_UPDATE_CHECK_DISABLED: mise pins the archify skill).
 #
 # The merge is a recursive object merge (jq `.[0] * .[1] * .[2]`), matching
 # a recursive overwrite: a later operand overwrites a matching LEAF, but

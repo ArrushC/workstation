@@ -99,8 +99,14 @@ description = "Install Neovim's plugins at nvim-pack-lock.json's commits, blink.
 dir = "{{ xdg_config_home }}/mise"
 run = "nu --no-config-file scripts/nvim-plugins.nu || exit /b 0"
 
+# The archify skill into %USERPROFILE%\.claude\skills: tasks/claude's job on Linux.
+[tasks.claude-skills-win]
+description = "Copy mise's archify skill to ~/.claude/skills/archify (the post-tools hook)"
+dir = "{{ xdg_config_home }}/mise"
+run = "nu --no-config-file scripts/claude-skills.nu || exit /b 0"
+
 [bootstrap.hooks]
-post-tools = "mise run nu-init ::: nvim-plugins-win"
+post-tools = "mise run nu-init ::: nvim-plugins-win ::: claude-skills-win"
 
 # GUI apps, installed by `mise bootstrap --only packages` (bootstrap.ps1 runs it after
 # the dotfiles, so winget's scope preference above is already in place). An app counts
