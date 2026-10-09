@@ -42,8 +42,19 @@ function M.detect(root)
   elseif exists(root .. '/meson.build') then
     return 'meson setup build --buildtype=debug && meson compile -C build'
   elseif exists(root .. '/Makefile') or exists(root .. '/makefile') then
-    return 'make -j' .. #vim.uv.cpu_info()
+    -- Windows: llvm-mingw ships GNU make as mingw32-make
+    local make = vim.fn.executable('make') == 0 and vim.fn.executable('mingw32-make') == 1 and 'mingw32-make' or 'make'
+    return make .. ' -j' .. #vim.uv.cpu_info()
   end
+end
+
+--- argv running `cmd` through 'shell'. 'shellcmdflag' can be several words
+--- (cmd.exe: "/s /c"); passed as one argument, cmd.exe runs nothing.
+local function shell_argv(cmd)
+  local argv = { vim.o.shell }
+  vim.list_extend(argv, vim.split(vim.o.shellcmdflag, ' ', { trimempty = true }))
+  argv[#argv + 1] = cmd
+  return argv
 end
 
 function M.configure_cmd(build_type)
@@ -84,7 +95,7 @@ function M.run(cmd, opts)
   end
 
   vim.notify('build: ' .. cmd)
-  job = vim.system({ vim.o.shell, vim.o.shellcmdflag, cmd }, {
+  job = vim.system(shell_argv(cmd), {
     cwd = cwd,
     text = true,
     stdout = function(_, d)
@@ -162,8 +173,8 @@ vim.api.nvim_create_user_command('Cppcheck', function()
   local root = util.root()
   local db = root .. '/build/compile_commands.json'
   local src = exists(db) and ('--project=' .. vim.fn.shellescape(db)) or '.'
+  vim.fn.mkdir(root .. '/build/cppcheck', 'p') -- not `mkdir -p`: cmd.exe has no -p
   local cmd = table.concat({
-    'mkdir -p build/cppcheck &&',
     'cppcheck',
     src,
     '--enable=warning,style,performance,portability',

@@ -43,6 +43,9 @@ map('n', '<leader>xt', fzf('grep', { search = [[\b(TODO|FIXME|HACK|BUG|XXX|NOTE)
 
 -- lazygit in a new tab; closes with lazygit
 map('n', '<leader>gg', function()
+  if vim.fn.executable('lazygit') == 0 then -- Linux toolbelt only
+    return vim.notify('lazygit is not installed', vim.log.levels.WARN)
+  end
   vim.cmd('tabnew')
   vim.fn.jobstart({ 'lazygit' }, {
     term = true,

@@ -48,10 +48,15 @@
 
 # Rendered from the Linux helix source (config.linux.toml) via Tera read_file(), not
 # edited independently; the template swaps the OSC 52 clipboard for the Win32 one.
-# languages.toml and the theme are the Linux files as they are (no clangd here is harmless).
+# languages.toml and the theme are the Linux files as they are (llvm-mingw, config.toml, provides clangd, clang-format and lldb-dap).
 "~/AppData/Roaming/helix/config.toml" = { source = "dotfiles/windows/AppData/Roaming/helix/config.toml.tera", mode = "template" }
 "~/AppData/Roaming/helix/languages.toml" = { source = "dotfiles/config/helix/languages.toml", mode = "copy" }
 "~/AppData/Roaming/helix/themes/catppuccin_mocha_mauve.toml" = { source = "dotfiles/config/helix/themes/catppuccin_mocha_mauve.toml", mode = "copy" }
+# Neovim: the tree config.linux.toml deploys to ~/.config/nvim; Windows Neovim reads
+# %LOCALAPPDATA%\nvim. The lockfile is its own entry for the same reason (wsr skips
+# directory entries; vim.pack rewrites it on :PackUpdate).
+"~/AppData/Local/nvim" = { source = "dotfiles/config/nvim", mode = "copy", exclude = [".vendor", ".gitkeep", "nvim-pack-lock.json"] }
+"~/AppData/Local/nvim/nvim-pack-lock.json" = { source = "dotfiles/config/nvim/nvim-pack-lock.json", mode = "copy" }
 # hostname/username banner + ws* aliases; renders host/user identity via exec().
 "~/AppData/Roaming/nushell/config.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/config.nu.tera", mode = "template" }
 # Vendored Catppuccin Mocha theme (provenance in the source dir's .vendor); Nushell's user autoload
@@ -85,8 +90,17 @@ description = "Regenerate Nushell's vendor/autoload init files (starship, mise, 
 dir = "{{ xdg_config_home }}/mise"
 run = "nu --no-config-file scripts/nu-init.nu || exit /b 0"
 
+# Neovim's plugins, blink.cmp's matcher and the treesitter parsers: tasks/nvim-plugins'
+# job (lua/ws/provision.lua), from post-tools since Windows never runs `final`
+# (bootstrap.ps1 and wsu pass --only dotfiles,tools). Its own name: a [tasks] entry named
+# like a file in tasks/ is listed, but `mise run` runs the (bash) file.
+[tasks.nvim-plugins-win]
+description = "Install Neovim's plugins at nvim-pack-lock.json's commits, blink.cmp's matcher and the treesitter parsers (the post-tools hook)"
+dir = "{{ xdg_config_home }}/mise"
+run = "nu --no-config-file scripts/nvim-plugins.nu || exit /b 0"
+
 [bootstrap.hooks]
-post-tools = "mise run nu-init"
+post-tools = "mise run nu-init ::: nvim-plugins-win"
 
 # GUI apps, installed by `mise bootstrap --only packages` (bootstrap.ps1 runs it after
 # the dotfiles, so winget's scope preference above is already in place). An app counts

@@ -4,7 +4,8 @@
 --    at the lockfile's commits; here plugins already on disk are moved to the
 --    lockfile too (after `wsu` pulled a new one).
 -- 2. blink.cmp's prebuilt fuzzy library is downloaded.
--- 3. Treesitter parsers are built (skipped, not failed, without cc/tree-sitter).
+-- 3. Treesitter parsers are built with the host's cc, else mise's zig (Linux)
+--    or llvm-mingw's clang (Windows); skipped, not failed, without either.
 -- Exits non-zero only when something that should have worked failed.
 local M = {}
 
@@ -57,7 +58,7 @@ function M.run()
     failed = true
     say('treesitter: some parsers failed to build (:checkhealth nvim-treesitter)')
   else
-    say('treesitter: %d parsers ready', #ts.parsers)
+    say('treesitter: %d parsers ready (compiler: %s)', #ts.parsers, ts.compiler())
   end
 
   vim.cmd(failed and 'cquit 1' or 'qall!')

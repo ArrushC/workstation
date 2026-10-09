@@ -24,6 +24,9 @@ vim.api.nvim_create_autocmd('PackChanged', {
       if not ev.data.active then
         vim.cmd.packadd('nvim-treesitter')
       end
+      pcall(function()
+        require('ws.treesitter').missing_tools() -- Windows: points tree-sitter at the compiler
+      end)
       pcall(vim.cmd, 'TSUpdate')
     end
   end,

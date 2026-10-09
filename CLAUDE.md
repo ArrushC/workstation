@@ -146,7 +146,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `scripts/*.sh`, `scripts/lib/*.sh`, every `tasks/*` file (mise silently skips a non-executable
     task), `.claude/hooks/*.sh`
   - executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
-    `dotfiles/local/bin/{batpipe,winterop}`
+    `dotfiles/local/bin/{batpipe,winterop,zcc,zc++}`
   - Repair: `sed -i 's/\r$//' <f>`; `git update-index --chmod=+x <f>`.
   - First-party shell must be `shfmt -i 2`-clean (`mise run fmt`) and gitleaks-clean.
   - Quote bash associative-array keys: shfmt rewrites an unquoted `[a-b]` as arithmetic.

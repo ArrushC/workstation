@@ -4,8 +4,9 @@ set -euo pipefail
 # Headless Neovim runs lua/ws/provision.lua from the deployed ~/.config/nvim:
 # it installs missing plugins at the lockfile's commits, moves the others to
 # them (after `wsu` pulled a new lockfile), fetches blink.cmp's prebuilt
-# matcher and builds the treesitter parsers (tree-sitter CLI + cc; skipped,
-# not failed, on a host without a C compiler). Interactive Neovim never
+# matcher and builds the treesitter parsers (tree-sitter CLI + the host's cc,
+# else mise's zig; skipped, not failed, without either). Windows runs
+# scripts/nvim-plugins.nu from its post-tools hook instead. Interactive Neovim never
 # installs (lua/ws/plugins.lua explains why), so plugins arrive only here or
 # by :PackInstall. Idempotent: a second run is a ~1 s no-op. A failure warns
 # and exits 0 like the other final-hook tasks; re-run `mise run nvim-plugins`.

@@ -22,7 +22,7 @@ paths="$(mise bin-paths 2>&1)" || {
   printf 'verify-tools: mise bin-paths failed:\n%s\n' "$paths" >&2
   exit 1
 }
-n=0 bad=0
+n=0 bad=0 shadow=0
 while IFS= read -r dir; do
   [ -d "$dir" ] || continue
   # With WORKSTATION_GLIBC_FLOOR (CI checking for EL8), skip what mise builds from
@@ -32,6 +32,15 @@ while IFS= read -r dir; do
     case "$dir" in */installs/go-* | */installs/cargo-*) continue ;; esac
   fi
   for f in "$dir"/*; do
+    # The host's C/C++ toolchain (dnf gcc, clang, binutils) owns these names: a mise
+    # copy first on PATH would build every project, and ccache, with another compiler
+    # and runtime. A host without one gets zig under its own names (zcc, zc++).
+    case "${f##*/}" in
+    cc | gcc | g++ | c++ | cpp | clang | clang++ | ld | as)
+      shadow=$((shadow + 1))
+      printf ' ✗ %s shadows the host C toolchain\n' "$f"
+      ;;
+    esac
     [ -f "$f" ] && [ -x "$f" ] || continue
     head -c4 "$f" 2>/dev/null | grep -q $'\x7fELF' || continue
     n=$((n + 1))
@@ -41,6 +50,10 @@ while IFS= read -r dir; do
     fi
   done
 done <<<"$paths"
+if [ "$shadow" -gt 0 ]; then
+  printf 'verify-tools: %d mise binaries take a C toolchain name (cc, gcc, ld...) — drop that tool, or pick a package that exposes prefixed names only\n' "$shadow" >&2
+  exit 1
+fi
 if [ "$bad" -gt 0 ]; then
   printf 'verify-tools: %d of %d binaries cannot run on this host — pick an explicit asset (github: asset_pattern) for each in config*.toml\n' "$bad" "$n" >&2
   exit 1

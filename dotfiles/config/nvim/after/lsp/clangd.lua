@@ -17,8 +17,11 @@ return {
     -- Let clangd ask these compilers for their system include paths, so headers
     -- resolve as the real build sees them: gcc and ccache wrappers (CMake on the
     -- fleet records /usr/lib64/ccache/c++), gcc-toolset on EL8, and clang.
+    -- Windows: llvm-mingw's drivers under mise's installs (the Linux globs never
+    -- match there, nor this one on Linux).
     '--query-driver=/usr/bin/gcc*,/usr/bin/g++*,/usr/bin/cc,/usr/bin/c++,/usr/bin/clang*,'
-      .. '/usr/lib64/ccache/*,/opt/rh/gcc-toolset-*/root/usr/bin/*',
+      .. '/usr/lib64/ccache/*,/opt/rh/gcc-toolset-*/root/usr/bin/*,'
+      .. '**/github-mstorsjo-llvm-mingw/*/bin/*',
   },
   -- Root: a compile database is the strongest marker, then build files, then
   -- git. Never for an unnamed buffer (`:enew | set ft=cpp`): clangd cannot

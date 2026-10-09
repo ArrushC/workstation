@@ -7,8 +7,14 @@
 -- and Warp (write_only) never answer it. Paste from Windows with the
 -- terminal's paste key (bracketed paste) instead.
 --
--- Set unconditionally: auto-detection (XTGETTCAP) fails behind zellij, and
--- WSL hosts have no win32yank/clip.exe on PATH (appendWindowsPath=false).
+-- Set unconditionally on Linux: auto-detection (XTGETTCAP) fails behind zellij,
+-- and WSL hosts have no win32yank/clip.exe on PATH (appendWindowsPath=false).
+-- Native Windows Neovim keeps its default provider: win32yank.exe ships in
+-- nvim-win64.zip's bin/ and reads and writes the Win32 clipboard (copy and paste).
+if vim.fn.has('win32') == 1 then
+  return
+end
+
 local osc52 = require('vim.ui.clipboard.osc52')
 
 local last = { { '' }, 'v' }

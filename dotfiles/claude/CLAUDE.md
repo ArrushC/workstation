@@ -53,6 +53,11 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Tools for both OSes (config.toml; Windows-only entries carry os)
 - `starship` 1.26.0
 - `helix` 25.07.1
+- `aqua:neovim/neovim` 0.12.5
+- `tree-sitter` 0.27.0
+- `llvm-mingw` 20261006
+- `cmake` 4.4.4
+- `ninja` 1.13.2
 - `jq` 1.8.2
 - `gh` 2.102.0
 - `fzf` 0.74.4
@@ -125,6 +130,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
 - `herdr` 0.9.3
+- `zig` 0.16.0
 - `pwndbg` 2026.09.15
 - `usql` 0.21.6
 - `fastfetch` 2.69.0
