@@ -2,5 +2,5 @@
 # `mise install` writes per OS (tools, downloads, uv/go/npm caches), rounded
 # up to 100 MB. Read by the free-space checks in scripts/lib/mise-install.sh (Linux)
 # and bootstrap.ps1 (Windows).
-linux = 5900
-windows = 3000
+linux = 6300
+windows = 4000
