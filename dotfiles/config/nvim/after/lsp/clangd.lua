@@ -34,7 +34,7 @@ return {
       '.git',
     }) or vim.fs.dirname(name))
   end,
-  init_options = {
-    fallbackFlags = { '-std=c++20' }, -- files outside any compile database
-  },
+  -- No fallbackFlags: clangd adds them to C files too, so `-std=c++20` put "not allowed
+  -- with 'C'" on every .c file outside a compile database. Loose files get clang's
+  -- defaults (C17, C++17); a compile_flags.txt sets anything else. Same as helix.
 }

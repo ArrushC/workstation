@@ -142,6 +142,8 @@ herdr = "0.9.3"
 # (dotfiles/windows/AppData/Roaming/helix/config.toml.tera) read_file()-inlines it.
 # Linux-only here because Windows reads %APPDATA%\helix, not ~/.config/helix.
 "~/.config/helix/config.toml" = { source = "dotfiles/config/helix/config.toml", mode = "copy" }
+"~/.config/helix/languages.toml" = { source = "dotfiles/config/helix/languages.toml", mode = "copy" }   # clangd flags (as Neovim), clang-format only with a .clang-format
+"~/.config/helix/themes/catppuccin_mocha_mauve.toml" = { source = "dotfiles/config/helix/themes/catppuccin_mocha_mauve.toml", mode = "copy" }   # the built-in theme with the fleet's mauve accent
 "~/.config/zellij" = { source = "dotfiles/config/zellij", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # layouts/, themes/ nested
 # zsh completions/ and the vendored plugins/ (five plugin dirs, each with a .vendor
 # provenance sidecar, plus zsh-shift-select.zsh, whose provenance is its header).

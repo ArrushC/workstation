@@ -47,8 +47,11 @@
 "~/AppData/Roaming/Zed/keymap.json" = { source = "dotfiles/windows/AppData/Roaming/Zed/keymap.json", mode = "copy" }
 
 # Rendered from the Linux helix source (config.linux.toml) via Tera read_file(), not
-# edited independently.
+# edited independently; the template swaps the OSC 52 clipboard for the Win32 one.
+# languages.toml and the theme are the Linux files as they are (no clangd here is harmless).
 "~/AppData/Roaming/helix/config.toml" = { source = "dotfiles/windows/AppData/Roaming/helix/config.toml.tera", mode = "template" }
+"~/AppData/Roaming/helix/languages.toml" = { source = "dotfiles/config/helix/languages.toml", mode = "copy" }
+"~/AppData/Roaming/helix/themes/catppuccin_mocha_mauve.toml" = { source = "dotfiles/config/helix/themes/catppuccin_mocha_mauve.toml", mode = "copy" }
 # hostname/username banner + ws* aliases; renders host/user identity via exec().
 "~/AppData/Roaming/nushell/config.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/config.nu.tera", mode = "template" }
 # Vendored Catppuccin Mocha theme (provenance in the source dir's .vendor); Nushell's user autoload

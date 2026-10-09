@@ -1,0 +1,58 @@
+# ~/.config/helix/languages.toml — managed by mise dotfiles
+#
+# Merged over helix's built-in languages.toml (25.07.1): only what its defaults get wrong
+# for the servers this fleet installs. Check with `hx --health <language>`.
+
+# clangd (dnf clang-tools-extra): the same flags as Neovim's after/lsp/clangd.lua.
+# Per-project tuning belongs in the project's .clangd and .clang-tidy.
+[language-server.clangd]
+command = "clangd"
+args = [
+  "--background-index",               # whole-project index in .cache/clangd/
+  "--background-index-priority=low",
+  "--clang-tidy",                     # the project's .clang-tidy
+  "--header-insertion=iwyu",
+  "--header-insertion-decorators",
+  "--completion-style=detailed",
+  "--function-arg-placeholders=1",    # snippet placeholders (editor.lsp.snippets)
+  "--pch-storage=memory",
+  "--enable-config",                  # .clangd and ~/.config/clangd/config.yaml
+  "--log=error",
+  # No .clang-format, no formatting, on the LSP path too: helix falls back to clangd's
+  # formatting when clang-format is missing, and `=` always uses it.
+  "--fallback-style=none",
+  # System include paths as the real build sees them: gcc, ccache wrappers (CMake on the
+  # fleet records /usr/lib64/ccache/c++), gcc-toolset on EL8, clang.
+  "--query-driver=/usr/bin/gcc*,/usr/bin/g++*,/usr/bin/cc,/usr/bin/c++,/usr/bin/clang*,/usr/lib64/ccache/*,/opt/rh/gcc-toolset-*/root/usr/bin/*",
+]
+# No fallbackFlags (Neovim passes -std=c++20): clangd adds them to C files too, and every
+# .c file outside a compile database then shows "'-std=c++20' not allowed with 'C'".
+# Loose files get clang's defaults (C17, C++17); a compile_flags.txt sets anything else.
+
+# Format on :w only where the project has a .clang-format: --fallback-style=none leaves
+# the buffer untouched otherwise (Neovim's policy). Auto-saves never format. helix runs
+# the formatter in the file's directory; %{buffer_name} gives clang-format the extension.
+[[language]]
+name = "c"
+auto-format = true
+formatter = { command = "clang-format", args = ["--fallback-style=none", "--assume-filename=%{buffer_name}"] }
+
+[[language]]
+name = "cpp"
+auto-format = true
+formatter = { command = "clang-format", args = ["--fallback-style=none", "--assume-filename=%{buffer_name}"] }
+
+# basedpyright (mise) instead of the default ty/ruff/jedi/pylsp, none of which is installed.
+[[language]]
+name = "python"
+language-servers = ["basedpyright"]
+
+# Upstream formats JSON on every :w, which explodes compact arrays/objects: 16 of the 17
+# JSON files in this repo would change (and `wse` edits them in hx). :format still works.
+[[language]]
+name = "json"
+auto-format = false
+
+[[language]]
+name = "jsonc"
+auto-format = false

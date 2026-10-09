@@ -14,7 +14,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
 | zellij | Persistent sessions; runs on the remote host so a dropped SSH tab loses nothing. |
-| helix | Modal editor. |
+| helix | Modal editor and `$EDITOR` (`dotfiles/config/helix`). It uses Catppuccin Mocha with the mauve accent and the same clangd flags as Neovim. clang-format runs on save only where the project has a `.clang-format`. Files auto-save 3 s after an edit, and yanks copy over OSC 52 on Linux (the Windows clipboard on Windows). |
 | Warp, Windows Terminal | The two Windows terminals (see [Terminals](#terminals-warp-and-windows-terminal)). |
 
 Nothing is pushed anywhere and there is no host list: each host keeps itself current with `wsu`.

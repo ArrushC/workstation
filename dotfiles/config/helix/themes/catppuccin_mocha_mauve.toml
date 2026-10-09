@@ -1,0 +1,31 @@
+# ~/.config/helix/themes/catppuccin_mocha_mauve.toml — managed by mise dotfiles
+#
+# helix's built-in catppuccin_mocha (synced from catppuccin/helix, which has no accent
+# option and documents `inherits` for customising), re-accented to MAUVE #cba6f7 like
+# zellij's catppuccin-mocha-mauve, Warp's accent/cursor and Neovim's custom_highlights.
+# Everything not listed is inherited. Selections stay surface1, as fzf's selected-bg
+# and zellij's text_selected use surface tones (keywords are mauve: a mauve-tinted
+# selection would hide them).
+inherits = "catppuccin_mocha"
+
+# Was lavender (Neovim: CursorLineNr mauve bold).
+"ui.linenr.selected" = { fg = "mauve", modifiers = ["bold"] }
+
+# Normal mode: statusline badge and cursor in the accent (was rosewater). catppuccin/helix
+# keeps cursor and mode badge the same colour (its #63/#64), so both change together.
+"ui.statusline.normal" = { fg = "base", bg = "mauve", modifiers = ["bold"] }
+"ui.cursor.primary" = { fg = "base", bg = "mauve" }
+"ui.cursor.primary.normal" = { fg = "base", bg = "mauve" }
+
+# Popup borders (editor.popup-border): hover, signature help and completion docs draw their
+# border in ui.popup's fg; their text is ui.text. The keymap info box uses ui.popup.info.
+"ui.popup" = { fg = "mauve", bg = "surface0" }
+"ui.popup.info" = { fg = "mauve", bg = "surface0" }
+
+# Inlay hints readable on mantle (upstream surface1 is ~1.9:1); Neovim's catppuccin uses overlay0.
+"ui.virtual.inlay-hint" = { fg = "overlay0", bg = "mantle" }
+
+[palette]
+# Secondary cursors: the accent at 70% over base, as upstream derives its rosewater ones.
+secondary_cursor = "#977dbb"
+secondary_cursor_normal = "#977dbb"

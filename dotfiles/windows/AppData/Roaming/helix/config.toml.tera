@@ -1,1 +1,3 @@
-{{ read_file(path="dotfiles/config/helix/config.toml") }}
+{#- Native helix on Windows: the Win32 clipboard (copy and paste) instead of OSC 52.
+"windows" exists only in Windows builds, so it must never reach the Linux file. -#}
+{{ read_file(path="dotfiles/config/helix/config.toml") | replace(from='clipboard-provider = "termcode"', to='clipboard-provider = "windows"') }}

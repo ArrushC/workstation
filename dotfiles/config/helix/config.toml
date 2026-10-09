@@ -1,6 +1,7 @@
 # ~/.config/helix/config.toml — managed by mise dotfiles
 
-theme = "catppuccin_mocha"
+# Built-in catppuccin_mocha with the fleet's mauve accent (themes/catppuccin_mocha_mauve.toml).
+theme = "catppuccin_mocha_mauve"
 
 [editor]
 line-number        = "relative"
@@ -9,7 +10,30 @@ cursorline         = true
 color-modes        = true
 rulers             = [80, 120]
 bufferline         = "always"
-auto-save          = true
+# Trust the fleet's truecolor terminals even when COLORTERM is missing (sudo, ssh host cmd,
+# cron/systemd): without truecolor helix refuses a non-16-color theme and falls back to default.
+true-color         = true
+# OSC 52 only (zellij's copy_command stays unset). Auto-detection would switch to wl-copy or
+# xclip as soon as one is installed (WSLg sets WAYLAND_DISPLAY and DISPLAY; ssh -X sets DISPLAY).
+# Copy-only: `space p` pastes helix's own last yank; paste from Windows with the terminal's key.
+clipboard-provider = "termcode"
+popup-border       = "all"
+# helix's recommended diagnostics layout: errors/warnings under the cursor line, the rest at EOL.
+end-of-line-diagnostics = "hint"
+
+[editor.auto-save]
+# `auto-save = true` only meant focus-lost, and zellij forwards only the host terminal's
+# focus changes, not pane switches, so also save 3 s after the last edit (outside insert
+# mode). Auto-saves never run the formatter; :w does.
+focus-lost          = true
+after-delay.enable  = true
+after-delay.timeout = 3000
+
+[editor.lsp]
+display-inlay-hints = true   # clangd parameter names and deduced types, as in Neovim
+
+[editor.inline-diagnostics]
+cursor-line = "warning"
 
 [editor.cursor-shape]
 insert = "bar"
@@ -20,9 +44,20 @@ select = "underline"
 hidden = false
 
 [editor.statusline]
-left   = ["mode", "spinner", "file-name", "file-modification-indicator"]
+left   = ["mode", "spinner", "version-control", "file-name", "read-only-indicator", "file-modification-indicator"]
 center = []
-right  = ["diagnostics", "selections", "position", "file-encoding", "file-line-ending", "file-type"]
+right  = ["diagnostics", "selections", "register", "position", "file-encoding", "file-line-ending", "file-type"]
+
+# Tabs and non-breaking spaces only (Neovim's listchars: tab », nbsp ␣).
+[editor.whitespace.render]
+tab   = "all"
+nbsp  = "all"
+nnbsp = "all"
+
+[editor.whitespace.characters]
+tab  = "»"
+nbsp = "␣"
+tabpad = "·"
 
 [editor.indent-guides]
 render    = true
