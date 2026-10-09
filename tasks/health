@@ -70,8 +70,9 @@ hdr "bootstrap state (mise bootstrap status --missing)"
 bootstrap_out=$(mise bootstrap status --missing 2>&1)
 bootstrap_rc=$?
 printf '%s\n' "$bootstrap_out" | sed 's/^/   /'
-# Three lines: the drift class (real, excused, skipped:<n> or none), "tools:" and
-# the missing tools, "dotfiles:" and how many dotfile entries/edits aren't applied.
+# Four lines: the drift class (real, excused, skipped:<n> or none), "tools:" and
+# the missing tools, "dotfiles:" and how many dotfile entries/edits aren't applied,
+# "lazy:" and the lazy tools not yet installed (not drift, below).
 # Empty without jq or readable JSON; the rows below then fail or warn (the safe
 # direction).
 # Drift that is NOT a problem, which the advice below could never clear:
@@ -79,14 +80,23 @@ printf '%s\n' "$bootstrap_out" | sed 's/^/   /'
 #   pueued user service as `unavailable: systemd user manager not available`, yet
 #   `mise bootstrap` itself skips that service cleanly and exits 0;
 # - skipped: with sudo = "no" the dnf packages and /etc files are skipped on purpose
-#   (the system steps row above says so), and `mise bootstrap status` has no --skip.
-facts=$(mise bootstrap status --json 2>/dev/null | SKIP_SYSTEM="$([ "$sudo_saved" = no ] && echo 1)" jq -r '
+#   (the system steps row above says so), and `mise bootstrap status` has no --skip;
+# - lazy: a `lazy = true` tool (graft) installs the first time its command runs, so
+#   it reads as missing until then. The names come from config.toml/config.linux.toml
+#   (`mise tool --json` reports lazy = null once a lock entry exists).
+lazy_tools=$(for f in "$root/config.toml" "$root/config.linux.toml"; do
+  mise config get -f "$f" tools 2>/dev/null
+done | awk '/^\[/ { name = $0; gsub(/^\["?|"?\]$/, "", name) } $0 == "lazy = true" { print name }' | paste -sd' ' -)
+facts=$(mise bootstrap status --json 2>/dev/null | SKIP_SYSTEM="$([ "$sudo_saved" = no ] && echo 1)" LAZY="$lazy_tools" jq -r '
   def settled: (.action // "") as $a | $a == "" or $a == "noop" or $a == "unchanged";
   (($ENV.SKIP_SYSTEM // "") != "") as $skip
+  | ($ENV.LAZY // "" | split(" ")) as $lazy
   | [(.packages // {}) | to_entries[] | .key as $m | .value
       | (if has("available") and (.available | not) then "\($m) unavailable" else empty end),
         ((.packages // [])[] | select(.state != "installed") | "\($m):\(.package)")] as $pkgs
-  | [.tools[]? | select(.installed | not) | .tool] as $tools
+  | [.tools[]? | select(.installed | not) | .tool] as $unset
+  | [$unset[] | select(IN($lazy[]) | not)] as $tools
+  | [$unset[] | select(IN($lazy[]))] as $later
   | [("files", "services", "compose", "repos", "accounts", "firewall", "mise_shell_activate", "user_services") as $k
       | (.[$k] // [])[] | select(settled | not)
       | if $k == "user_services" and ((.current // "") | tostring | contains("systemd user manager not available")) then "excused"
@@ -98,13 +108,16 @@ facts=$(mise bootstrap status --json 2>/dev/null | SKIP_SYSTEM="$([ "$sudo_saved
     elif $skipped != [] then "skipped:\($skipped | length)"
     else "none" end,
     "tools:" + ($tools | sort | join(" ")),
-    "dotfiles:\([(.dotfiles.files // [])[], (.dotfiles.edits // [])[] | select(.state != "applied")] | length)"
+    "dotfiles:\([(.dotfiles.files // [])[], (.dotfiles.edits // [])[] | select(.state != "applied")] | length)",
+    "lazy:" + ($later | sort | join(" "))
 ' 2>/dev/null)
 {
   IFS= read -r bootstrap_why
   IFS= read -r tools_line
   IFS= read -r dotfiles_line
+  IFS= read -r lazy_line
 } <<<"$facts"
+later=${lazy_line#lazy:}
 if [ "$bootstrap_rc" -eq 0 ]; then
   row_ok "bootstrap state" "current"
 else
@@ -119,7 +132,9 @@ else
     # Every [bootstrap.*] resource is settled, but --missing also counts [dotfiles]
     # drift: the dotfiles row below owns that, so it isn't reported twice at
     # hard-failure severity. Drift with no cause in the JSON stays a failure.
-    if [ "$dotfiles_line" = dotfiles:0 ]; then
+    if [ "$dotfiles_line" = dotfiles:0 ] && [ -n "$later" ]; then
+      row_ok "bootstrap state" "current (lazy tools install on first use)"
+    elif [ "$dotfiles_line" = dotfiles:0 ]; then
       row_bad "bootstrap state" "drift reported by --missing but not visible in --json — inspect: mise bootstrap status"
     else
       row_warn "bootstrap state" "drift is dotfiles-only (see the dotfiles row below) — inspect: mise dot status"
@@ -137,7 +152,7 @@ missing_tools=${tools_line#tools:}
 if [ "${tools_line:0:6}" != tools: ]; then
   row_bad "mise tools" "can't tell: no readable mise bootstrap status --json — mise doctor"
 elif [ -z "$missing_tools" ]; then
-  row_ok "mise tools" "every declared tool installed"
+  row_ok "mise tools" "every declared tool installed${later:+ (on first use: $later)}"
 else
   n_missing=$(wc -w <<<"$missing_tools")
   row_bad "mise tools" "$n_missing missing ($missing_tools) — mise install"

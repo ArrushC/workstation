@@ -320,6 +320,26 @@ checksum = "sha256:7c033e5f2de6355fd03d865319053fc97db780275974ed17653c057f5d0f8
 url = "https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/sxyazi/yazi/releases/assets/539261401"
 
+[[tools."github:tt-a1i/archify"]]
+version = "3.0.1"
+backend = "github:tt-a1i/archify"
+specifiers = ["3.0.1"]
+
+[tools."github:tt-a1i/archify".options]
+asset_pattern = "archify.zip"
+
+[tools."github:tt-a1i/archify"."platforms.linux-x64"]
+checksum = "sha256:b0b23bd28db314f04ca8ab9620fe20f8c1ac6474a3546bd8fe4679508aa1b7f5"
+url = "https://github.com/tt-a1i/archify/releases/download/v3.0.1/archify.zip"
+url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/595744695"
+provenance = "github-attestations"
+
+[tools."github:tt-a1i/archify"."platforms.windows-x64"]
+checksum = "sha256:b0b23bd28db314f04ca8ab9620fe20f8c1ac6474a3546bd8fe4679508aa1b7f5"
+url = "https://github.com/tt-a1i/archify/releases/download/v3.0.1/archify.zip"
+url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/595744695"
+provenance = "github-attestations"
+
 [[tools.go]]
 version = "1.27.1"
 backend = "core:go"
@@ -418,6 +438,15 @@ version = "2.2.30"
 aube = { path = "locks/npm-ccstatusline/2.2.30", digest = "sha256:df2c07c76c465a27faaae3a947d2eeb3ac2ecf3638f2ee82b878c3676638b79c" }
 backend = "npm:ccstatusline"
 specifiers = ["2.2.30"]
+
+[[tools."npm:oh-my-mermaid"]]
+version = "0.2.0"
+aube = { path = "locks/npm-oh-my-mermaid/0.2.0~10d8d8ef", digest = "sha256:3ec56f2e3dee216bef4fed6284ccb5268b967ff1cbc9f9600b129abc7c2bff1e" }
+backend = "npm:oh-my-mermaid"
+specifiers = ["0.2.0"]
+
+[tools."npm:oh-my-mermaid".options]
+allow_low_downloads = "true"
 
 [[tools.nushell]]
 version = "0.113.1"

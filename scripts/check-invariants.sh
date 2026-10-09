@@ -1378,6 +1378,28 @@ else:
 PY
 }
 
+# An npm tool that compiles at install (allow_builds runs node-gyp) needs Python >= 3.8 and a
+# C++20 g++, which EL8 lacks: eager, it would fail the tools phase there and stop `wsu`.
+check_lazy_builds() {
+  hdr "tools that compile at install are lazy"
+  py_report "lazy-builds" <<'PY'
+import tomllib
+eager, n = [], 0
+for f in ("config.toml", "config.linux.toml"):
+    with open(f, "rb") as fh:
+        tools = tomllib.load(fh).get("tools", {})
+    for key, val in tools.items():
+        if isinstance(val, dict) and val.get("allow_builds"):
+            n += 1
+            if val.get("lazy") is not True:
+                eager.append(f"{f}:{key}")
+if eager:
+    print("FAIL|lazy|" + "; ".join(eager) + " set allow_builds without lazy = true (an EL8 host fails the build)")
+else:
+    print(f"PASS|lazy|{n} tool(s) with allow_builds, all lazy")
+PY
+}
+
 check_debugger_config() {
   hdr "gdb and valgrind config (~/.gdbinit loads in gdb 8.2-17; ~/.valgrindrc starts every tool)"
   # valgrind reads ~/.valgrindrc as whitespace-separated options: a `#` is an option
@@ -1499,6 +1521,7 @@ check_tools_block
 check_mise_config_files
 check_bootstrap_config
 check_toolchain_shadow
+check_lazy_builds
 check_dotfiles_config
 check_completion_parity
 check_warp_guards

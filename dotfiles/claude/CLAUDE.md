@@ -82,6 +82,8 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `lua-language-server` 3.19.1
 - `basedpyright` 1.40.2
 - `ccstatusline` 2.2.30
+- `oh-my-mermaid` 0.2.0
+- `archify` 3.0.1
 - `nerd-fonts` 3.5.1
 - `opencode` 1.18.34
 - `oh-my-pi` 18.6.1
@@ -171,6 +173,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `glances` latest
 - `asciinema` latest
 - `harlequin` latest
+- `@nanonets/graft` 0.21.1
 
 ### Host pins (config.toml [vars])
 - `vcpkg` 2026.07.29

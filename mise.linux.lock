@@ -840,6 +840,15 @@ checksum = "sha256:3b43ec6cb8ef5d5cc72a216b2309ef77c90952fd2c3e3c6eb9010dec39f3a
 url = "https://github.com/svenstaro/miniserve/releases/download/v0.35.0/miniserve-0.35.0-x86_64-unknown-linux-gnu"
 url_api = "https://api.github.com/repos/svenstaro/miniserve/releases/assets/391553074"
 
+[[tools."npm:@nanonets/graft"]]
+version = "0.21.1"
+aube = { path = "locks/mise.linux/npm-nanonets-graft/0.21.1~b7f055f2", digest = "sha256:e29ec9dbbc1db6af132ac977cd01010637502e1a9d22e0c997b1ad99e7b543f6" }
+backend = "npm:@nanonets/graft"
+specifiers = ["0.21.1"]
+
+[tools."npm:@nanonets/graft".options]
+allow_builds = '["tree-sitter-kotlin"]'
+
 [[tools.numbat]]
 version = "1.24.0"
 backend = "aqua:sharkdp/numbat"
