@@ -14,7 +14,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
 | zellij | Persistent sessions; runs on the remote host so a dropped SSH tab loses nothing. |
-| helix | Modal editor. |
+| helix | Modal editor and `$EDITOR` (`dotfiles/config/helix`). It uses Catppuccin Mocha with the mauve accent and the same clangd flags as Neovim. clang-format runs on save only where the project has a `.clang-format`. Files auto-save 3 s after an edit, and yanks copy over OSC 52 on Linux (the Windows clipboard on Windows). |
 | Warp, Windows Terminal | The two Windows terminals (see [Terminals](#terminals-warp-and-windows-terminal)). |
 
 Nothing is pushed anywhere and there is no host list: each host keeps itself current with `wsu`.
@@ -42,17 +42,12 @@ config.toml, config.linux.toml, config.windows.toml
 config.local.toml             git-ignored: this host's name, email, sudo
 mise.lock, mise.linux.lock, locks/
                               generated lockfiles; never hand-edit
-tasks/                        file tasks with real logic: bootstrap, health, update,
-                              check-updates, python-env, fonts, vcpkg, claude,
-                              verify-tools
-                              (statusline, enable-el-repos, install-tools: Linux,
-                              in config.linux.toml)
-                              (one-line wrappers — lint, fmt, secrets, ps-lint,
-                              bump-versions, install-hooks — are [tasks] in config.toml)
+tasks/                        file tasks with real logic (bootstrap, health, update, ...);
+                              one-line wrappers are [tasks] in config.toml / config.linux.toml
 scripts/, scripts/lib/        checks (check-invariants.sh, check-templates.sh), helpers, tests
 dotfiles/                     every deployed source under its real name
   *.tera                      templates (zshrc, bashrc, zshenv, gitconfig, ssh/config, ...)
-  config/                     ~/.config/*: starship, helix, zellij, zsh plugins, ...
+  config/                     ~/.config/*: starship, helix, nvim, zellij, zsh plugins, ...
   claude/                     ~/.claude/*: CLAUDE.md, hooks, skills, settings seed and enforced keys
   local/bin/                  ~/.local/bin: batpipe, winterop
   windows/                    the Windows-only sources
@@ -324,6 +319,15 @@ To debug under Memcheck:
 2. In another pane, run `/usr/bin/gdb -nx ./prog -ex 'target remote | vgdb'`. `continue` stops at each error, and `monitor leak_check full` queries Memcheck live.
 
 For an interpreter, add `--errors-for-leak-kinds=definite --show-leak-kinds=definite`: Python alone reports thousands of "possibly lost" blocks. A cloned project's `./.valgrindrc` overrides yours; `valgrind --command-line-only=yes` ignores every rc file.
+
+**Neovim (Linux).** `nvim` is a second editor next to helix (`$EDITOR`), set up for C/C++ in `dotfiles/config/nvim`. It uses Neovim 0.12's built-in `vim.pack` with 18 plugins pinned in `nvim-pack-lock.json`. It downloads no tools: clangd, gdb, lldb-dap, clang-format and the language servers are the ones already installed. It looks and behaves like helix where that makes sense: Catppuccin Mocha with the mauve accent, relative numbers, rulers at 80/120, `╎` indent guides, an always-on buffer line, helix's statusline fields and cursor shapes, `<C-s>` to save, and auto-save when the terminal loses focus or you leave a buffer (`<leader>ua` toggles; auto-saves never reformat).
+- **Code:** clangd with clang-tidy and inlay hints. `gd` goes to the definition, `<leader>ch` switches between source and header, `<leader>cn` writes a Doxygen comment for the function under the cursor, and `<leader>cf` runs clang-format, which also runs on save in projects with a `.clang-format`.
+- **Edit:** brackets and quotes close themselves; `sa`/`sd`/`sr` add, delete and replace surroundings; `af`/`if` (function), `at` (type), `aa` (argument), `ac` (comment), `ao` (loop or condition) select, and `]f`/`[f` move. `<leader>uu` opens the undo tree.
+- **Build and debug:** `:Make` (or `<leader>mm`) runs cmake, meson or make into the quickfix list, and `:Run` (`<leader>mr`) runs the program in a split. `:CMakeConfigure` also writes `compile_commands.json`, which clangd needs. F5, F9 and F10–F12 drive gdb's own DAP (lldb-dap is the second choice).
+- **Find:** fzf-lua, with `<leader>f` for files, `<leader>/` to grep, `<leader>xt` for TODO comments and `<leader>xx` for every diagnostic. `-` opens the directory as a buffer.
+- **Sessions and clipboard:** each directory's open files are saved on exit (`<leader>qs` restores them). `<leader>y` copies over OSC 52; paste with the terminal's paste key. Lock zellij (Ctrl+G) inside nvim.
+
+Plugins install only from the `nvim-plugins` task (the `final` hook, so `wsu` too) or `:PackInstall`, never at startup: a failed clone would empty the lockfile. To update, run `:PackUpdate`, review, `:write`, then `wsr` and commit. Per-host additions go in `~/.config/nvim/lua/ws/local.lua`.
 
 **winterop** (in `~/.local/bin` on Linux and WSL, WSL-only) talks to the Windows host: no arguments shows the detected environment and live channels, and `winterop run <cmd>`, `path <p>`, `clip [get|set]`, `open <path|url>`, `host` cover the common cases (`winterop help` lists the rest). In a plain VM it points you at SSH, shared folders or RDP.
 

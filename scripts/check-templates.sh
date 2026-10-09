@@ -171,6 +171,15 @@ pwsh_check() {
 }
 yaml_check() { yq eval '.' "$1" >/dev/null; }
 toml_check() { "$PY" -c 'import tomllib,sys; tomllib.load(open(sys.argv[1],"rb"))' "$1"; }
+# Windows helix: valid TOML, and the template swapped OSC 52 ("termcode") for the Win32
+# clipboard ("windows" exists only in Windows builds; the Linux file must keep termcode).
+helix_win_check() {
+  toml_check "$1" || return 1
+  grep -q '^clipboard-provider = "windows"' "$1" || {
+    echo "clipboard-provider is not \"windows\" (did the Linux line change, so the replace no longer matches?)"
+    return 1
+  }
+}
 
 # select_checker <target> — sets $CHECK_CMD (checker function name, or empty)
 # and $CHECK_NOTE (why it's empty: soft-skip vs "no checker by design").
@@ -194,7 +203,7 @@ select_checker() {
     if command -v yq >/dev/null 2>&1; then CHECK_CMD="yaml_check"; else CHECK_NOTE="yq not installed"; fi
     ;;
   "~/AppData/Roaming/helix/config.toml")
-    CHECK_CMD="toml_check"
+    CHECK_CMD="helix_win_check"
     ;; # $PY already verified present above
   "~/AppData/Roaming/nushell/config.nu")
     if command -v nu >/dev/null 2>&1; then CHECK_CMD="nu_check"; else CHECK_NOTE="nu not installed"; fi

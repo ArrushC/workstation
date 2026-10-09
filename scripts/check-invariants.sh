@@ -1382,6 +1382,25 @@ except SyntaxError as e:
 PY
 }
 
+check_helix_config() {
+  hdr "helix config (custom theme present; one OSC 52 clipboard line for the Windows swap)"
+  local cfg=dotfiles/config/helix/config.toml theme n
+  # helix falls back to its default theme without a word when `theme =` names no theme.
+  theme=$(sed -n 's/^theme *= *"\([^"]*\)".*/\1/p' "$cfg")
+  if [ -f "dotfiles/config/helix/themes/$theme.toml" ]; then
+    ok "theme \"$theme\" is dotfiles/config/helix/themes/$theme.toml"
+  else
+    bad "$cfg: theme \"$theme\" has no dotfiles/config/helix/themes/$theme.toml (helix would silently use its default)"
+  fi
+  # The Windows template replaces this exact line with clipboard-provider = "windows".
+  n=$(grep -c '^clipboard-provider = "termcode"$' "$cfg" || true)
+  if [ "$n" -eq 1 ]; then
+    ok "$cfg: one clipboard-provider = \"termcode\" line for the Windows template's replace"
+  else
+    bad "$cfg: want exactly one 'clipboard-provider = \"termcode\"' line (found $n); the Windows template replaces it"
+  fi
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -1448,6 +1467,7 @@ check_zed_settings
 check_shell_highlight_parity
 check_colorterm
 check_debugger_config
+check_helix_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.
