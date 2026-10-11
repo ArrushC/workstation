@@ -92,8 +92,10 @@ zig = "0.16.0"
 # The OpenSSH tag in the URL is hard-coded: bump it with `version` (10.6p1 -> V_10_6_P1).
 "http:ssh-copy-id" = { version = "10.5p1", url = "https://raw.githubusercontent.com/openssh/openssh-portable/V_10_5_P1/contrib/ssh-copy-id", bin = "ssh-copy-id" }
 # Rolling raw script with no release or {{version}} in the URL; the http: backend
-# rejects "latest", so version = "0" is a placeholder.
-"http:cht.sh" = { version = "0", url = "https://cht.sh/:cht.sh", bin = "cht.sh" }
+# rejects "latest", so version = "0" is a placeholder. Lazy: the first `cht.sh` installs
+# it, so `mise install` (a fresh host's bootstrap, the disk-budget job) never fails when
+# cht.sh's site is down (HTTP 500 on 2026-10-11); the script queries that site anyway.
+"http:cht.sh" = { version = "0", url = "https://cht.sh/:cht.sh", bin = "cht.sh", lazy = true, lazy_bins = ["cht.sh"] }
 # --- pypi: (latest at install time, pinned by mise.lock) ---
 "pypi:glances" = "latest"
 "pypi:asciinema" = "latest"
