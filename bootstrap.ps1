@@ -779,7 +779,8 @@ function Get-MiseToolExe {
 # overwrites, so no duplicates), re-pointed when a version bump moves the exe.
 $MiseShortcuts = @(
     @{ Name = "dnGrep"; Tool = "github:dnGrep/dnGrep"; Exe = "dnGREP.exe"; Description = "dnGrep — search and replace in files (grep GUI)" },
-    @{ Name = "LogExpert"; Tool = "github:LogExperts/LogExpert"; Exe = "LogExpert.exe"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
+    @{ Name = "LogExpert"; Tool = "github:LogExperts/LogExpert"; Exe = "LogExpert.exe"; Description = "LogExpert — tabbed log-file viewer with tail-follow" },
+    @{ Name = "WezTerm"; Tool = "github:wezterm/wezterm"; Exe = "wezterm-gui.exe"; Description = "WezTerm — GPU terminal (config: ~\.wezterm.lua)" }
 )
 function Invoke-StartMenuShortcuts {
     foreach ($tool in $MiseShortcuts) {
@@ -1307,7 +1308,7 @@ if (-not $env:WORKSTATION_BOOTSTRAP_PULLED) {
 Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation
 Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; shims on PATH, node marker, prune; .wslconfig reminder; its post-tools hook regenerates Nushell's init files (mise run nu-init)
 Install-WingetApps        # GUI apps: mise bootstrap --only packages (config.windows.toml's winget list), then SSHFS-Win (UAC)
-Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
+Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert/WezTerm)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; re-seeded per mise install dir)

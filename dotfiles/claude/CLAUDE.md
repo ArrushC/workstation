@@ -92,6 +92,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `carapace-bin` 1.8.0
 - `dnGrep` 5.0.30.0
 - `LogExpert` 1.41.0
+- `wezterm` 20240203-110809-5046fc22
 
 ### Linux toolbelt (config.linux.toml)
 - `zellij` 0.45.1

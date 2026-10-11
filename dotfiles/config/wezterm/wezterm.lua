@@ -1,6 +1,7 @@
 -- ~/.wezterm.lua: WezTerm, managed by mise dotfiles (dotfiles/config/wezterm/wezterm.lua).
 --
--- Windows installs WezTerm with winget (config.windows.toml). It sits beside Warp (the
+-- Windows installs WezTerm's portable build with mise (config.toml; bootstrap.ps1 adds the
+-- Start Menu shortcut). It sits beside Warp (the
 -- primary terminal) and Windows Terminal (the default one) and looks and starts like them:
 -- Catppuccin Mocha with the mauve accent, JetBrainsMono NFM 10.5 with a bar cursor, Nushell
 -- through mise's shim, and in the launcher (Ctrl+Alt+L, Warp's key) the other shells,
@@ -15,7 +16,7 @@ local act = wezterm.action
 local config = wezterm.config_builder()
 local windows = wezterm.target_triple:find('windows') ~= nil
 
--- Updates come from winget (`mise bootstrap packages upgrade --manager winget`).
+-- Updates come through the mise pin (config.toml), not WezTerm's own check.
 config.check_for_updates = false
 
 -- Look -------------------------------------------------------------------------
