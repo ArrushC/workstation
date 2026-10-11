@@ -15,7 +15,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
 | zellij | Persistent sessions; runs on the remote host so a dropped SSH tab loses nothing. |
 | helix | Modal editor and `$EDITOR` (`dotfiles/config/helix`). It uses Catppuccin Mocha with the mauve accent and the same clangd flags as Neovim. clang-format runs on save only where the project has a `.clang-format`. Files auto-save 3 s after an edit, and yanks copy over OSC 52 on Linux (the Windows clipboard on Windows). |
-| Warp, Windows Terminal | The two Windows terminals (see [Terminals](#terminals-warp-and-windows-terminal)). |
+| Warp, Windows Terminal, WezTerm | The Windows terminals (see [Terminals](#terminals-warp-windows-terminal-and-wezterm)). |
 
 Nothing is pushed anywhere and there is no host list: each host keeps itself current with `wsu`.
 
@@ -120,7 +120,7 @@ What `bootstrap.ps1` does:
 3. Install the pinned, sha256-verified mise into `%LOCALAPPDATA%\workstation\mise`. mise is the only version `bootstrap.ps1` pins; every CLI tool is a mise pin in `config*.toml`.
 4. Write `miserc.toml` (`windows`), ask once for your git name and email, check that mise loads `config.windows.toml` (it stops otherwise: the Windows dotfiles and apps would be skipped silently), and run `mise bootstrap --only dotfiles,tools`: the dotfiles plus every CLI tool (gh, Starship, Helix, Nushell, jq, OpenCode, omp, DevToys CLI, dnGrep, LogExpert, Node, Go, uv, gopls, language servers, ccstatusline, oh-my-mermaid, archify). The first run passes `--force-dotfiles`.
 5. After a successful tools phase: add mise's shims dir to the User PATH, reinstall node when its declaration changed (its postinstall carries the language servers), then `mise prune` and `mise reshim`. A changed `.wslconfig` prints the `wsl --shutdown` reminder. `mise bootstrap`'s `post-tools` hook (`config.windows.toml`) runs `mise run nu-init`, which regenerates Nushell's init files (starship, mise, zoxide, atuin) in `%APPDATA%\nushell\vendor\autoload`, so `wsu` refreshes them too. Its `mise.nu` builds on each session's own PATH rather than the PATH `mise activate nu` saw, so Nushell finds what its terminal passes down, as PowerShell does.
-6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
+6. Install the missing GUI apps: `mise bootstrap --only packages` installs `config.windows.toml`'s `[bootstrap.packages]` winget list (Windows Terminal, Warp, WezTerm, Obsidian, DevToys, DBeaver, WinSCP, Beyond Compare, Zed; latest, checked against the winget manifest's sha256, each self-updating). winget's own `settings.json`, a tracked dotfile, prefers per-user installers; Zed's only installer is machine scope but installs per-user, without admin. An app counts as installed when `winget list --id <Id> --exact` finds it. DevToys is the Microsoft Store build (`9NBN8W1DS547`). Then SSHFS-Win (UAC). Without winget (App Installer) the step warns and skips.
 7. Add Start Menu shortcuts for dnGrep and LogExpert, generate the Warp Tab Configs (local shells plus one per SSH host) and the Windows Terminal SSH fragment, seed dnGrep's settings, and install the PowerShell profile loader when Documents is redirected.
 8. Install BurntToast and Claude Code (native installer, self-updating; `~\.local\bin` goes on the User PATH), merge `~/.claude/settings.json` and seed `settings.local.json`.
 9. Build the `wpy` Python env (a uv venv on mise's python with the libraries in `scripts/python-env.txt`) and install the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
@@ -177,9 +177,9 @@ Run it where you have sudo (the usual case); without it the system steps, `/etc/
 
 Both need `wsl --shutdown` from a Windows terminal to take effect. `bootstrap.ps1` prints that reminder when `.wslconfig` changes; on Linux, remember it yourself after a `/etc/wsl.conf` change. WSL tabs open in `~` because the WSL Terminal fragment launches `wsl.exe -d AlmaLinux-9 --cd ~`. Every tracked shell exports `COLORTERM=truecolor`, so 24-bit color works in Windows Terminal. Keep long-lived work in a zellij session.
 
-### Terminals (Warp and Windows Terminal)
+### Terminals (Warp, Windows Terminal and WezTerm)
 
-Warp is the day-to-day Windows terminal and opens into AlmaLinux-9 (WSL zsh). Its "+" menu (CTRL+ALT+L) lists the generated Tab Configs. Windows Terminal stays fully configured because Warp cannot run Nushell (its supported shells are PowerShell, WSL2 and Git Bash) and cannot take Windows' default-terminal role. Warp skips the shell-side fzf, atuin, starship, shift-select and fzf-tab wiring (`TERM_PROGRAM=WarpTerminal`), since its own editor handles those. The pane mnemonics follow zellij's pane mode (d = down, r = right) so muscle memory transfers between local panes and SSH plus zellij.
+Warp is the day-to-day Windows terminal and opens into AlmaLinux-9 (WSL zsh). Its "+" menu (CTRL+ALT+L) lists the generated Tab Configs. Windows Terminal stays fully configured because Warp cannot run Nushell (its supported shells are PowerShell, WSL2 and Git Bash) and cannot take Windows' default-terminal role. Warp skips the shell-side fzf, atuin, starship, shift-select and fzf-tab wiring (`TERM_PROGRAM=WarpTerminal`), since its own editor handles those. The pane mnemonics follow zellij's pane mode (d = down, r = right) so muscle memory transfers between local panes and SSH plus zellij. WezTerm (`wez.wezterm.nightly`: the last stable release is from 2024) reads `~/.wezterm.lua` (`dotfiles/config/wezterm/wezterm.lua`), which matches Windows Terminal: Catppuccin Mocha with the mauve accent, JetBrainsMono NFM 10.5, Nushell first, and Windows Terminal's split, pane, zoom, font-size, search and prompt keys below. CTRL+ALT+L opens its launcher (Nushell, PowerShell, AlmaLinux-9 and an `SSH: <host>` entry per `~/.ssh/config.local` host that attaches zellij); copy and paste are CTRL+SHIFT+C / V, so CTRL+V still reaches the shell or editor.
 
 | Warp | Action |
 |---|---|
@@ -206,7 +206,7 @@ Warp is the day-to-day Windows terminal and opens into AlmaLinux-9 (WSL zsh). It
 
 Windows Terminal's profiles are also reachable from the `wt` CLI, e.g. `wt -w 0 nt -p "PowerShell"` (new tab, current window), `wt -p "AlmaLinux-9"` (new window in the WSL distro).
 
-Local Nushell and WSL tabs emit prompt marks (OSC 133) and report the working directory (OSC 9;9), and long commands show taskbar progress. PowerShell tabs report the working directory too. An SSH tab running zellij composites its own panes, so marks stop there.
+Local Nushell and WSL tabs emit prompt marks (OSC 133) and report the working directory (OSC 9;9), and long commands show taskbar progress. PowerShell tabs report the working directory too; in WezTerm both Windows shells report it with OSC 7, which it reads instead. An SSH tab running zellij composites its own panes, so marks stop there.
 
 ### Shell prompt and completion
 

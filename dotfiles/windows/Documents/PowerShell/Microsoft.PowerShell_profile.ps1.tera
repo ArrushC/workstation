@@ -198,14 +198,17 @@ elseif (Get-Command starship -ErrorAction SilentlyContinue) { Invoke-Expression 
 
 # Starship calls this before drawing each prompt, after reading $? and $LASTEXITCODE:
 # mise's and zoxide's prompt hooks (starship's prompt replaced their wrappers), then the
-# current directory for Windows Terminal (OSC 9;9), so a duplicated tab or split opens
-# there (config.nu's Nushell does the same).
+# current directory, so a duplicated tab or split opens there (config.nu's Nushell does
+# the same): OSC 9;9 for Windows Terminal, OSC 7 (file://<host>/C:/path) for WezTerm.
 function Invoke-Starship-PreCommand {
     if (Test-Path Function:\_mise_hook) { _mise_hook }
     if (Test-Path Function:\__zoxide_hook) { $null = __zoxide_hook }
     $loc = $executionContext.SessionState.Path.CurrentLocation
-    if ($env:WT_SESSION -and $loc.Provider.Name -eq 'FileSystem') {
+    if ($loc.Provider.Name -ne 'FileSystem') { return }
+    if ($env:WT_SESSION) {
         $Host.UI.Write("$([char]27)]9;9;`"$($loc.ProviderPath)`"$([char]7)")
+    } elseif ($env:TERM_PROGRAM -eq 'WezTerm') {
+        $Host.UI.Write("$([char]27)]7;file://$env:COMPUTERNAME/$($loc.ProviderPath -replace '\\', '/')$([char]27)\")
     }
 }
 
