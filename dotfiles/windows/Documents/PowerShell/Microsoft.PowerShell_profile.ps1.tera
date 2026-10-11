@@ -5,45 +5,209 @@
 # This file is rendered from dotfiles/windows/Documents/PowerShell/<name>.tera on apply.
 # For per-machine overrides that aren't tracked, drop the same logic into
 # Microsoft.PowerShell_profile.local.ps1 next to this file (sourced last).
+# Windows PowerShell 5.1 dot-sources this file too (Documents/WindowsPowerShell).
 #
-# PARITY NOTE (Windows Terminal shell integration): config.nu carries
-# reedline-specific WT hooks (OSC 9;4 taskbar progress + osc9_9 cwd
-# reporting). Those are Nushell-only by design — this profile's parity
-# obligation with config.nu covers the ws*/g* aliases below, not the hooks.
+# PARITY NOTE: the ws*/g* aliases, the eza listings, fssh, hide and the fzf/atuin keys
+# mirror config.nu. Its OSC 9;4 taskbar-progress hooks are Nushell-only (reedline).
 # =============================================================================
 
 # --- Encoding (UTF-8 in/out so emoji and ANSI render correctly) -------------
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding           = [System.Text.Encoding]::UTF8
-
-# --- Starship prompt --------------------------------------------------------
-if (Get-Command starship -ErrorAction SilentlyContinue) {
-    Invoke-Expression (& starship init powershell)
-}
-
-# --- zoxide (smarter cd) ----------------------------------------------------
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-    Invoke-Expression (& { (zoxide init powershell | Out-String) })
-}
-
-# --- mise (runtimes: node / Go / uv / LSP servers + per-project mise.toml) ----
-# The checkout at %USERPROFILE%\.config\mise IS mise's config dir
-# (config.toml + config.windows.toml — installed by bootstrap.ps1's
-# `mise bootstrap`). The hook puts the real bin dirs on PATH ahead of the
-# shims dir bootstrap added to the User PATH. Dot-sourced by the 5.1 profile
-# too — `mise activate pwsh` output is plain PowerShell.
-if (Get-Command mise -ErrorAction SilentlyContinue) {
-    # Windows PowerShell 5.1 (dot-sources this file) lacks the chpwd hook mise
-    # needs for per-directory switching; activation itself works there. Silence
-    # the warning mise prints about it on every 5.1 shell start.
-    if ($PSVersionTable.PSVersion.Major -lt 7) { $env:MISE_PWSH_CHPWD_WARNING = '0' }
-    (& mise activate pwsh) | Out-String | Invoke-Expression
-}
+# No BOM: 5.1's [Text.Encoding]::UTF8 would send one to every native program's stdin.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$OutputEncoding           = [Text.UTF8Encoding]::new($false)
 
 # Windows Terminal and Warp draw 24-bit colour; COLORTERM tells bat, delta, glow, eza and
 # helix so (without it bat falls back to 256 colours). PARITY: config.nu and the Linux
-# zshrc/bashrc set it too. The 5.1 profile dot-sources this one.
+# zshrc/bashrc set it too.
 $env:COLORTERM = 'truecolor'
+$env:EDITOR = 'hx'
+# fzf: the look and file list config.nu and the zsh side use (PARITY: config.nu).
+$env:FZF_DEFAULT_OPTS = '--height 40% --layout=reverse --border --info=inline --bind=ctrl-/:toggle-preview --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8 --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4'
+$env:FZF_DEFAULT_COMMAND = 'rg --files --hidden --follow --glob "!.git"'
+# 5.1 aliases curl and wget to Invoke-WebRequest; let them run the real programs.
+if ($PSVersionTable.PSVersion.Major -lt 6) { Remove-Item Alias:curl, Alias:wget -Force -ErrorAction SilentlyContinue }
+# Write-Progress also drives Windows Terminal's taskbar progress (pwsh 7.2+).
+if ($PSStyle) { $PSStyle.Progress.UseOSCIndicator = $true }
+
+# --- PSReadLine: history, completion, colours, fzf keys ----------------------
+# First: -EditMode resets every key binding, so atuin's Ctrl-R (below) comes after it.
+# Only in a console someone types into: with output redirected (a script, an IDE task,
+# Claude Code running pwsh) the prediction options throw on every start. The console
+# host has already loaded PSReadLine by now.
+if ((Get-Module PSReadLine) -and -not [Console]::IsOutputRedirected) {
+    $psrl = (Get-Module PSReadLine).Version
+    Set-PSReadLineOption -EditMode Windows -BellStyle None -MaximumHistoryCount 20000 -HistorySearchCursorMovesToEnd
+    # Up/Down search the history for lines that start with what's typed, as Nushell's
+    # Up does (Ctrl-R is atuin's full search); Ctrl-D on an empty line exits, Ctrl-W
+    # deletes a word back and Alt-. inserts the last word of the previous line, as in zsh.
+    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+    Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+    Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteCharOrExit
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+w' -Function UnixWordRubout
+    Set-PSReadLineKeyHandler -Chord 'Alt+.' -Function YankLastArg
+    # Command-line colours: zsh's and Nushell's (syntax-highlight.nu) where they have a
+    # twin (commands green, strings and keywords yellow, flags peach, operators teal,
+    # errors red, suggestions overlay0), Catppuccin Mocha's for the rest. Escape
+    # sequences, which every PSReadLine (5.1's 2.0 too) accepts.
+    $fg = { param($hex) $n = [Convert]::ToInt32($hex.Substring(1), 16); "$([char]27)[38;2;$($n -shr 16);$(($n -shr 8) -band 255);$($n -band 255)m" }
+    $colors = @{
+        Default            = & $fg '#cdd6f4'
+        Command            = & $fg '#a6e3a1'
+        Parameter          = & $fg '#fab387'
+        String             = & $fg '#f9e2af'
+        Keyword            = & $fg '#f9e2af'
+        Operator           = & $fg '#94e2d5'
+        Variable           = & $fg '#b4befe'
+        Number             = & $fg '#fab387'
+        Type               = & $fg '#f9e2af'
+        Member             = & $fg '#f5e0dc'
+        Comment            = & $fg '#6c7086'
+        Error              = & $fg '#f38ba8'
+        ContinuationPrompt = & $fg '#94e2d5'
+        Emphasis           = & $fg '#cba6f7'
+        Selection          = "$([char]27)[48;2;69;71;90m"
+    }
+    # Predictions (and their colours) need PSReadLine 2.2+; 5.1 ships 2.0. HistoryAndPlugin
+    # is 2.2.6's default and keeps plugin predictors (Az, CompletionPredictor) working.
+    if ($psrl -ge [version]'2.2.0') {
+        Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView
+        $colors.InlinePrediction = & $fg '#6c7086'
+        $colors.ListPrediction = & $fg '#cba6f7'
+        $colors.ListPredictionSelected = "$([char]27)[48;2;49;50;68m"
+    }
+    Set-PSReadLineOption -Colors $colors
+    Remove-Variable psrl, fg, colors
+
+    # Ctrl-T inserts a picked file at the cursor; Alt-C cds into a picked directory
+    # (PARITY: config.nu's fzf keybindings). Esc in the picker changes nothing.
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+t' -BriefDescription 'fzf: insert a file' -ScriptBlock {
+        $f = fd --type f --hidden --exclude .git | fzf --preview 'bat --color=always --style=numbers --line-range=:200 {}'
+        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+        if ($f) {
+            if ($f -match "[\s'`$&(){}@;,]") { $f = "'" + ($f -replace "'", "''") + "'" }
+            [Microsoft.PowerShell.PSConsoleReadLine]::Insert($f)
+        }
+    }
+    Set-PSReadLineKeyHandler -Chord 'Alt+c' -BriefDescription 'fzf: cd into a directory' -ScriptBlock {
+        $d = fd --type d --hidden --exclude .git | fzf --preview 'eza --tree --level=1 --icons=always --color=always {}'
+        if ($d) { Set-Location -LiteralPath $d }
+        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+    }
+}
+
+# --- Tool init: mise, zoxide, atuin, starship ---------------------------------
+# scripts/nu-init.nu writes each tool's init script, and LS_COLORS from the repo's
+# dircolors (the Catppuccin file types eza shows on Linux), into
+# %LOCALAPPDATA%\workstation\pwsh-init after every tools phase (the nu-init post-tools
+# task). Dot-sourcing a file takes milliseconds; running `<tool> init` here took
+# 0.2-1 s each, through mise's shims. Without a file (before the first wsu, or a tool
+# that isn't installed) the tool's own init runs.
+# Starship goes last: mise and zoxide wrap whatever prompt function exists when they
+# load, and their wrappers reset $? before the inner prompt runs, so with starship inside
+# them every failed command showed as a success. Starship's pre-prompt hook (below) runs
+# their hooks instead, after starship has read $? and $LASTEXITCODE.
+$wsInit = Join-Path $env:LOCALAPPDATA 'workstation\pwsh-init'
+if (Test-Path "$wsInit\ls_colors.ps1") { . "$wsInit\ls_colors.ps1" }
+
+# mise (runtimes: node / Go / uv / LSP servers + per-project mise.toml). The checkout at
+# %USERPROFILE%\.config\mise IS mise's config dir. The hook puts the real bin dirs on
+# PATH ahead of the shims dir bootstrap added to the User PATH.
+if ((Test-Path "$wsInit\mise.ps1") -or (Get-Command mise -ErrorAction SilentlyContinue)) {
+    # Windows PowerShell 5.1 lacks the chpwd hook mise needs for per-directory
+    # switching (the prompt hook covers it there); silence mise's warning about it.
+    if ($PSVersionTable.PSVersion.Major -lt 7) { $env:MISE_PWSH_CHPWD_WARNING = '0' }
+    if (Test-Path "$wsInit\mise.ps1") { . "$wsInit\mise.ps1" }
+    else { (& mise activate pwsh) | Out-String | Invoke-Expression }
+}
+
+# mise's hook starts mise.exe at every prompt and every cd to ask whether anything
+# changed, about 0.5 s here. Its answer depends only on what it reads: the config files
+# from the current directory up to the drive root, the global config, the installed
+# tools, trusted configs and MISE_* variables. This gate fingerprints those (one
+# directory listing per folder, a few ms) and calls mise's hook only when the
+# fingerprint changes. Same idea as zshrc.tera's _ws_mise_gate and the gate nu-init
+# writes into Nushell's mise.nu. $env:WORKSTATION_MISE_GATE = '0' (in the .local.ps1)
+# hands every prompt back to mise's own hook.
+if (Test-Path Function:\_mise_hook) {
+    ${function:Global:__ws_mise_hook} = ${function:_mise_hook}
+    function Global:__ws_mise_inputs {
+        $seen = [System.Collections.Generic.List[string]]::new()
+        $list = {
+            param([string]$Dir, [string]$Pattern)
+            $info = [IO.DirectoryInfo]$Dir
+            if (-not $info.Exists) { return }
+            foreach ($e in $info.EnumerateFileSystemInfos()) {
+                if ($e.Name -match $Pattern) { $seen.Add("$($e.FullName)@$($e.LastWriteTimeUtc.Ticks)") }
+            }
+        }
+        $file = '^(\.?mise(\..+)?\.toml|\.tool-versions)$'
+        $conf = '^(config|mise)(\..+)?\.toml$'
+        if ($PWD.Provider.Name -eq 'FileSystem') {
+            for ($d = [IO.DirectoryInfo]$PWD.ProviderPath; $d; $d = $d.Parent) {
+                $subs = @()
+                try {
+                    foreach ($e in $d.EnumerateFileSystemInfos()) {
+                        if ($e.Name -match $file) { $seen.Add("$($e.FullName)@$($e.LastWriteTimeUtc.Ticks)") }
+                        elseif ($e -is [IO.DirectoryInfo] -and $e.Name -in 'mise', '.mise', '.config') { $subs += $e.FullName }
+                    }
+                } catch { continue }
+                foreach ($s in $subs) {
+                    if ($s.EndsWith('.config')) {
+                        & $list $s '^mise(\..+)?\.toml$'
+                        & $list "$s\mise" $conf
+                        & $list "$s\mise\conf.d" '\.toml$'
+                    } else {
+                        & $list $s $conf
+                        & $list "$s\conf.d" '\.toml$'
+                    }
+                }
+            }
+        }
+        $cfg = if ($env:MISE_CONFIG_DIR) { $env:MISE_CONFIG_DIR } elseif ($env:XDG_CONFIG_HOME) { "$env:XDG_CONFIG_HOME\mise" } else { "$HOME\.config\mise" }
+        $data = if ($env:MISE_DATA_DIR) { $env:MISE_DATA_DIR } else { "$env:LOCALAPPDATA\mise" }
+        $state = if ($env:MISE_STATE_DIR) { $env:MISE_STATE_DIR } elseif ($env:XDG_STATE_HOME) { "$env:XDG_STATE_HOME\mise" } else { "$HOME\.local\state\mise" }
+        & $list $cfg '\.toml$'
+        & $list "$cfg\conf.d" '\.toml$'
+        & $list "$data\installs" '.'
+        & $list "$state\trusted-configs" '.'
+        foreach ($v in Get-ChildItem Env:MISE_* | Sort-Object Name) { $seen.Add("$($v.Name)=$($v.Value)") }
+        ($seen | Select-Object -Unique) -join "`n"
+    }
+    function Global:_mise_hook {
+        if ($env:WORKSTATION_MISE_GATE -ne '0') {
+            $sig = __ws_mise_inputs
+            if ($sig -ceq $Global:__ws_mise_sig) { return }
+            $Global:__ws_mise_sig = $sig
+        }
+        __ws_mise_hook @args
+    }
+    $Global:__ws_mise_sig = __ws_mise_inputs # activation just ran the hook
+}
+
+if (Test-Path "$wsInit\zoxide.ps1") { . "$wsInit\zoxide.ps1" }
+elseif (Get-Command zoxide -ErrorAction SilentlyContinue) { Invoke-Expression (& { (zoxide init powershell | Out-String) }) }
+# atuin: Ctrl-R searches the history it shares with Nushell; Up stays PSReadLine's. It
+# needs PSReadLine, which only an interactive console loads.
+if (Get-Module PSReadLine) {
+    if (Test-Path "$wsInit\atuin.ps1") { . "$wsInit\atuin.ps1" }
+    elseif (Get-Command atuin -ErrorAction SilentlyContinue) { & atuin init powershell --disable-up-arrow | Out-String | Invoke-Expression }
+}
+if (Test-Path "$wsInit\starship.ps1") { . "$wsInit\starship.ps1" }
+elseif (Get-Command starship -ErrorAction SilentlyContinue) { Invoke-Expression (& starship init powershell) }
+
+# Starship calls this before drawing each prompt, after reading $? and $LASTEXITCODE:
+# mise's and zoxide's prompt hooks (starship's prompt replaced their wrappers), then the
+# current directory for Windows Terminal (OSC 9;9), so a duplicated tab or split opens
+# there (config.nu's Nushell does the same).
+function Invoke-Starship-PreCommand {
+    if (Test-Path Function:\_mise_hook) { _mise_hook }
+    if (Test-Path Function:\__zoxide_hook) { $null = __zoxide_hook }
+    $loc = $executionContext.SessionState.Path.CurrentLocation
+    if ($env:WT_SESSION -and $loc.Provider.Name -eq 'FileSystem') {
+        $Host.UI.Write("$([char]27)]9;9;`"$($loc.ProviderPath)`"$([char]7)")
+    }
+}
 
 # --- workstation aliases (mise dotfiles; mirror the Linux bashrc) -----------
 # Every ws* command pins `-C $env:USERPROFILE`: mise resolves its config root
@@ -141,11 +305,16 @@ command pins `mise -C $env:USERPROFILE`):
   wsh  this help
 
 Shell shortcuts:
-  l / la / ll / lt   eza listings (ll: long + git; lt: tree)
+  l / la / ll / lt   eza listings (ll: long + git; lt: tree; lta: + hidden;
+                     ltl: tree + details)
   y                  yazi; on quit, cd to where you ended up
   z <dir> / zi       zoxide: jump to / pick a visited directory
-  Nushell only: Ctrl-R history (atuin), Ctrl-T insert a file,
-  Alt-C cd into a directory (fzf), Ctrl-O edit the line in hx
+  fssh               pick a host from ~/.ssh/config and ssh to it
+  hide               clear the screen, keep the scrollback
+  Ctrl-R history (atuin), Ctrl-T insert a file, Alt-C cd into a
+  directory (fzf), Up/Down history starting with what's typed,
+  Alt-. last word of the previous line
+  Nushell only: Ctrl-O edit the line in hx
 
 Common flow:
   wse ~/.config/starship.toml   (edit the source)
@@ -168,6 +337,10 @@ Per-machine overrides (untracked):
 }
 
 # --- git aliases ------------------------------------------------------------
+# gc, gp and gl are built-in aliases (Get-Content, Get-ItemProperty, Get-Location), and
+# PowerShell runs an alias before a function of the same name, so without this the three
+# functions below never ran.
+foreach ($a in 'gc', 'gp', 'gl') { Remove-Item "Alias:$a" -Force -ErrorAction SilentlyContinue }
 function gs  { git status @args }
 function ga  { git add @args }
 function gc  { git commit @args }
@@ -182,6 +355,8 @@ function l  { eza --group-directories-first --icons=auto --hyperlink @args }
 function la { eza -a --group-directories-first --icons=auto --hyperlink @args }
 function ll { eza -lah --group-directories-first --icons=auto --git --time-style=long-iso --hyperlink @args }
 function lt { eza --tree --level=2 --group-directories-first --icons=auto --hyperlink @args }
+function lta { eza --tree --level=2 -a --git-ignore --group-directories-first --icons=auto --hyperlink @args }
+function ltl { eza --tree --level=2 -lh --git --group-directories-first --icons=auto --time-style=long-iso --hyperlink @args }
 # yazi: `y` opens it; on quit, Set-Location to wherever you ended up.
 function y {
     $tmp = (New-TemporaryFile).FullName
@@ -217,9 +392,22 @@ function ssh-copy-id {
     Get-Content $key.FullName | ssh $Target "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 }
 
-# --- Navigation -------------------------------------------------------------
+# fssh: pick a Host from ~/.ssh/config with fzf, then ssh to it (zsh's and config.nu's fssh).
+function fssh {
+    $cfg = Join-Path $HOME '.ssh\config'
+    if (-not (Test-Path $cfg)) { return }
+    $h = Select-String -Path $cfg -Pattern '^Host\s+(\S+)' |
+        ForEach-Object { $_.Matches[0].Groups[1].Value } |
+        Where-Object { $_ -notmatch '[*?]' } | fzf
+    if ($h) { ssh $h }
+}
+
+# --- Navigation and screen --------------------------------------------------
 function .. { Set-Location .. }
 function ... { Set-Location ../.. }
+# hide: clear the screen but keep the scrollback (Clear-Host wipes it), like zsh's and
+# Nushell's hide.
+function hide { [Console]::Write("$([char]27)[H$([char]27)[2J") }
 
 # --- workstation helpers ----------------------------------------------------
 # Quick path to the workstation repo. Defaults to bootstrap.ps1's default
@@ -257,20 +445,6 @@ function Get-AdminPassword {
     Write-Host ("  expires: {0}" -f $r.ExpirationTimestamp) -ForegroundColor DarkGray
 }
 Set-Alias -Name adminpw -Value Get-AdminPassword
-
-# --- PSReadLine: better history + tab completion ----------------------------
-if (Get-Module -ListAvailable -Name PSReadLine) {
-    Import-Module PSReadLine
-    Set-PSReadLineOption -EditMode Windows
-    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-    # Predictive IntelliSense needs PSReadLine 2.2+. Windows PowerShell 5.1 ships
-    # 2.0 (no -PredictionSource/-PredictionViewStyle), so version-guard these or
-    # 5.1 throws on every startup. Upgrade with: Install-Module PSReadLine -Force
-    if ((Get-Module PSReadLine).Version -ge [version]"2.2.0") {
-        Set-PSReadLineOption -PredictionSource History
-        Set-PSReadLineOption -PredictionViewStyle ListView
-    }
-}
 
 # --- Per-machine override (untracked) ---------------------------------------
 # Sourced last so it can override anything above.

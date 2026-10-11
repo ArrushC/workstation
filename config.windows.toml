@@ -80,13 +80,14 @@
 # bootstrap.ps1 sha256-marker step, not a dotfiles concern.
 "~/.wslconfig" = { source = "dotfiles/wslconfig", mode = "copy" }
 
-# Nushell's generated init files (starship, mise, zoxide, atuin in vendor\autoload)
+# Nushell's generated init files (starship, mise, zoxide, atuin, LS_COLORS in
+# vendor\autoload) and the PowerShell profile's (%LOCALAPPDATA%\workstation\pwsh-init)
 # follow the installed tools: the post-tools hook reruns nu-init after every tools
 # phase (bootstrap.ps1, wsu). Windows runs tasks and hooks with `cmd /c`; a failing
 # hook stops `mise bootstrap`, so the task ends `|| exit /b 0` (a stale init file
 # is better than a stopped bootstrap).
 [tasks.nu-init]
-description = "Regenerate Nushell's vendor/autoload init files (starship, mise, zoxide, atuin)"
+description = "Regenerate Nushell's and PowerShell's tool init files (starship, mise, zoxide, atuin, LS_COLORS)"
 dir = "{{ xdg_config_home }}/mise"
 run = "nu --no-config-file scripts/nu-init.nu || exit /b 0"
 
