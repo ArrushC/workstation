@@ -328,7 +328,8 @@ check "starship.nu: an unreadable starship.toml keeps it" [ "$(right "$T/missing
 # LS_COLORS: the string `dircolors -b` makes of dotfiles/dircolors (Linux's ~/.dircolors).
 LSC="$("$NU" --no-config-file --commands "source '$DIR/ls_colors.nu'; print \$env.LS_COLORS" 2>&1)"
 if command -v dircolors >/dev/null 2>&1; then
-  WANT="$(dircolors -b "$ROOT/dotfiles/dircolors" | sed -n "s/^LS_COLORS='\(.*\)';\$/\1/p")"
+  # dircolors emits nothing unless TERM matches a TERM line (CI has none); the fleet's is this.
+  WANT="$(TERM=xterm-256color dircolors -b "$ROOT/dotfiles/dircolors" | sed -n "s/^LS_COLORS='\(.*\)';\$/\1/p")"
   check "ls_colors.nu: LS_COLORS is what dircolors -b makes of dotfiles/dircolors" bash -c '[ -n "$1" ] && [ "$1" = "$2" ]' _ "$WANT" "$LSC"
 else
   echo "  SKIP ls_colors.nu vs dircolors: dircolors not installed"
