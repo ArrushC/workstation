@@ -129,20 +129,22 @@ $env.config.keybindings = ($env.config.keybindings | append [
     }
 ])
 
-# --- Windows Terminal shell integration --------------------------------------
+# --- Windows Terminal and WezTerm shell integration ------------------------
 # Nushell already emits the OSC 133 prompt marks WT renders on the scrollbar
 # (shell_integration.osc133 defaults true) and, on Windows, the OSC 9;9 cwd that
 # lets duplicate-tab/split reopen the current directory (osc9_9, on by default
 # since 0.105). The hooks add ConEmu OSC 9;4 taskbar progress (indeterminate while a curated
 # long-runner executes; cleared at the next prompt — the same curated list as
-# the zsh side: make/mise/wsa/wsu/dnf/cargo/npm/uv + git push/pull/fetch/clone).
-# Gated on WT_SESSION so nothing is emitted under any other host terminal.
+# the zsh side: make/mise/wsa/wsu/dnf/cargo/npm/uv + git push/pull/fetch/clone);
+# WezTerm draws it as a tab spinner. WezTerm reads the cwd from OSC 7, not 9;9
+# (which it ignores), so it gets an OSC 7 at every prompt as well.
+# Gated on WT_SESSION / TERM_PROGRAM so nothing is emitted under any other terminal.
 # Escapes: nu has no \a — use \u{1b} (ESC) and \u{07} (BEL).
 # PRE-1.0 CHURN: hooks + shell_integration are churn surfaces — re-check on
 # every Nushell pin bump (see CLAUDE.md).
 # PARITY NOTE: reedline/Nushell-specific — the PowerShell profile's parity
 # obligation with this file covers the ws*/g* aliases only, not these hooks.
-if "WT_SESSION" in $env {
+if "WT_SESSION" in $env or ($env.TERM_PROGRAM? == "WezTerm") {
     $env.config.hooks.pre_execution = (
         $env.config.hooks.pre_execution? | default [] | append {||
             let cmd = (commandline | str trim)
@@ -157,6 +159,14 @@ if "WT_SESSION" in $env {
     $env.config.hooks.pre_prompt = (
         $env.config.hooks.pre_prompt? | default [] | append {||
             print -n "\u{1b}]9;4;0;0\u{07}"
+        }
+    )
+}
+# OSC 7 as WezTerm documents it for Windows shells: file://<host>/C:/path.
+if ($env.TERM_PROGRAM? == "WezTerm") {
+    $env.config.hooks.pre_prompt = (
+        $env.config.hooks.pre_prompt? | default [] | append {||
+            print -n $"\u{1b}]7;file://($env.COMPUTERNAME? | default '')/($env.PWD | str replace --all '\' '/')\u{1b}\\"
         }
     )
 }

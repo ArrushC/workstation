@@ -1378,6 +1378,67 @@ else:
 PY
 }
 
+# WezTerm's config (dotfiles/config/wezterm/wezterm.lua, deployed on Windows) runs in WezTerm's
+# Lua at startup, and an error there leaves WezTerm on its defaults. Run it under Neovim's
+# LuaJIT with a stand-in wezterm module, as Windows and as Linux, against a fake
+# ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
+check_wezterm_config() {
+  hdr "WezTerm config (runs with a stand-in wezterm module)"
+  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out
+  if ! command -v nvim >/dev/null 2>&1; then
+    note "nvim not on PATH — skipped running $cfg"
+    return 0
+  fi
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.ssh"
+  printf 'Host alpha beta\nHost *.corp\nHost !bad\n  HostName x.example\n  host = gamma # comment\nHost bad"quote\n' >"$tmp/.ssh/config.local"
+  # The config builds the Windows shim path with backslashes; on Linux that is one file name.
+  : >"$tmp/la\\mise\\shims\\nu.exe"
+  cat >"$tmp/check.lua" <<'LUA'
+local path, triple, home, localappdata = arg[1], arg[2], arg[3], arg[4]
+local real_getenv = os.getenv
+os.getenv = function(k) if k == 'LOCALAPPDATA' then return localappdata end return real_getenv(k) end
+package.loaded.wezterm = {
+  target_triple = triple,
+  home_dir = home,
+  config_builder = function() return {} end,
+  font_with_fallback = function(list) return { fallback = list } end,
+  color = { get_builtin_schemes = function() return { ['Catppuccin Mocha'] = { background = '#1e1e2e' } } end },
+  action = setmetatable({}, { __index = function(_, name) return function(args) return { action = name, args = args } end end }),
+}
+local c = dofile(path)
+local function check(cond, msg) if not cond then error(msg, 0) end end
+check(type(c) == 'table', 'the file does not return the config table')
+check(c.color_schemes and c.color_schemes[c.color_scheme], 'color_scheme names no scheme in color_schemes')
+check(c.color_schemes[c.color_scheme].tab_bar.active_tab.bg_color == '#cba6f7', 'the active tab is not mauve')
+check(c.font and c.font.fallback[1] == 'JetBrainsMono NFM' and c.font_size == 10.5, 'font is not JetBrainsMono NFM 10.5')
+check(c.check_for_updates == false, 'check_for_updates is not false (winget updates WezTerm)')
+check(c.keys[1].mods == 'CTRL|ALT' and c.keys[1].action.action == 'ShowLauncherArgs', 'Ctrl+Alt+L does not open the launcher')
+check(type(c.ssh_domains) == 'table' and #c.ssh_domains == 0, 'ssh_domains is not empty')
+local labels = {}
+for _, item in ipairs(c.launch_menu) do labels[#labels + 1] = item.label end
+local got = table.concat(labels, ',')
+if triple:find('windows') then
+  check(c.default_prog and c.default_prog[1] == localappdata .. '\\mise\\shims\\nu.exe', 'Windows: default_prog is not the Nushell shim')
+  check(got == 'Nushell,PowerShell,Windows PowerShell,SSH: alpha,SSH: beta,SSH: gamma', 'Windows launch menu: ' .. got)
+else
+  check(c.default_prog == nil, 'Linux: default_prog is set')
+  check(got == 'SSH: alpha,SSH: beta,SSH: gamma', 'Linux launch menu: ' .. got)
+end
+check(c.launch_menu[#c.launch_menu].args[3] == 'gamma' and c.launch_menu[#c.launch_menu].args[4] == 'zellij', 'SSH entries do not run ssh -t <host> zellij ...')
+io.write('ok')
+LUA
+  for triple in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu; do
+    out=$(nvim --clean --headless -l "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
+    if [ "$out" = ok ]; then
+      ok "$cfg runs as $triple: theme, font, launcher, SSH hosts from ~/.ssh/config.local"
+    else
+      bad "$cfg as $triple: $out"
+    fi
+  done
+  rm -rf "$tmp"
+}
+
 # PowerShell runs a built-in alias before a function of the same name, so a profile
 # function named like one (gc, gp, gl) never runs unless the profile removes that alias
 # first. The names are Windows PowerShell 5.1's and pwsh 7's built-in aliases.
@@ -1563,6 +1624,7 @@ check_shell_highlight_parity
 check_colorterm
 check_debugger_config
 check_helix_config
+check_wezterm_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.

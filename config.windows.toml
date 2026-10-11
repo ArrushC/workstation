@@ -65,6 +65,8 @@
 # Loads after catppuccin_mocha.nu (autoload runs in name order): command-line colours
 # matching zsh's highlighting on the Linux hosts (check_shell_highlight_parity).
 "~/AppData/Roaming/nushell/autoload/syntax-highlight.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/autoload/syntax-highlight.nu", mode = "copy" }
+# WezTerm (winget, below) reads ~/.wezterm.lua and never writes it.
+"~/.wezterm.lua" = { source = "dotfiles/config/wezterm/wezterm.lua", mode = "copy" }
 # Catppuccin Mocha for bat, eza and yazi, from the same sources as config.linux.toml's
 # entries; Windows keeps their configs under %APPDATA% (atuin's pair is in config.toml).
 "~/AppData/Roaming/bat/config/theme" = { line = '--theme="Catppuccin Mocha"' }
@@ -118,6 +120,9 @@ post-tools = "mise run nu-init ::: nvim-plugins-win ::: claude-skills-win"
 [bootstrap.packages]
 "winget:Microsoft.WindowsTerminal" = "latest"
 "winget:Warp.Warp" = "latest"
+# WezTerm's nightly: its last stable release (wez.wezterm) is 20240203, and the project
+# publishes everything since as nightly builds, which its docs recommend.
+"winget:wez.wezterm.nightly" = "latest"
 "winget:Obsidian.Obsidian" = "latest"
 "winget:9NBN8W1DS547" = "latest"   # DevToys, the Microsoft Store build (winget can't match an Inno-installed preview to DevToys-app.DevToys)
 "winget:DBeaver.DBeaver.Community" = "latest"
