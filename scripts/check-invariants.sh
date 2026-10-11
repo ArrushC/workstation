@@ -1378,6 +1378,36 @@ else:
 PY
 }
 
+# PowerShell runs a built-in alias before a function of the same name, so a profile
+# function named like one (gc, gp, gl) never runs unless the profile removes that alias
+# first. The names are Windows PowerShell 5.1's and pwsh 7's built-in aliases.
+check_ps_alias_shadow() {
+  hdr "PowerShell profile functions aren't shadowed by built-in aliases"
+  py_report "ps-alias" <<'PY'
+import re
+builtin = set("""% ? ac asnp cat cd chdir clc clear clhy cli clp cls clv cnsn compare copy cp cpi cpp curl
+cvpa dbp del diff dir dnsn ebp echo epal epcsv epsn erase etsn exsn fc fl foreach ft fw gal gbp gc gci
+gcm gcs gdr ghy gi gjb gl gm gmo gp gps gpv group gsn gsnp gsv gu gv gwmi h history icm iex ihy ii ipal
+ipcsv ipmo ipsn irm ise iwmi iwr kill lp ls man md measure mi mount move mp mv nal ndr ni nmo npssc nsn
+nv ogv oh popd ps pushd pwd r rbp rcjb rcsn rd rdr ren ri rjb rm rmdir rmo rni rnp rp rsn rsnp rujb rv
+rvpa rwmi sajb sal saps sasv sbp sc select set shcm si sl sleep sls sort sp spjb spps spsv start sujb sv
+swmi tee trcm type wget where wjb write""".split())
+f = "dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera"
+text = open(f, encoding="utf-8").read()
+funcs = {m.lower() for m in re.findall(r"(?mi)^\s*function\s+(?:global:)?([\w.-]+)", text)}
+removed = set()
+for line in text.splitlines():
+    if re.search(r"Remove-Item\s+[\"']?Alias:", line, re.I):
+        removed |= {n.lower() for n in re.findall(r"'([\w.-]+)'", line)}
+        removed |= {n.lower() for n in re.findall(r"Alias:([\w.-]+)", line)}
+bad = sorted((funcs & builtin) - removed)
+if bad:
+    print("FAIL|alias|" + ", ".join(bad) + f" in {f} are built-in aliases: remove each (Remove-Item Alias:<name> -Force) before the function")
+else:
+    print(f"PASS|alias|{len(funcs)} profile functions; the {len(funcs & builtin)} named like built-in aliases have them removed")
+PY
+}
+
 # An npm tool that compiles at install (allow_builds runs node-gyp) needs Python >= 3.8 and a
 # C++20 g++, which EL8 lacks: eager, it would fail the tools phase there and stop `wsu`.
 check_lazy_builds() {
@@ -1522,6 +1552,7 @@ check_mise_config_files
 check_bootstrap_config
 check_toolchain_shadow
 check_lazy_builds
+check_ps_alias_shadow
 check_dotfiles_config
 check_completion_parity
 check_warp_guards

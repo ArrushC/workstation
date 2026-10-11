@@ -126,15 +126,15 @@ What `bootstrap.ps1` does:
 9. Build the `wpy` Python env (a uv venv on mise's python with the libraries in `scripts/python-env.txt`) and install the Nerd Font (mise's `github:ryanoasis/nerd-fonts`, registered per-user by `scripts/install-nerd-fonts.ps1` with a logon task that re-activates it).
 10. Prompt for an SSH key, then print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
 
-Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Zed's SSH remote terminals use the remote's login shell instead: Zed sends its settings to the remote, so the Nushell setting sits under its `"windows"` key. Nushell's command-line colours match zsh's on the Linux hosts (commands green, unknown commands red, quoted strings yellow, flags peach, paths underlined): `autoload/syntax-highlight.nu` overrides the vendored Catppuccin theme's, and lint keeps the two in step. One gap: Nushell gives every argument of an external command (`ssh`, `git`) one colour, so its flags and quoted strings stay plain where zsh colours them. atuin's own background jobs don't light starship's jobs gear (`scripts/nu-init.nu` labels them). Nushell carries the zsh toolbelt:
-- `z`/`zi` (zoxide)
-- Ctrl-R history search (atuin, local only; Nushell's earlier history is imported once)
+Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Zed's SSH remote terminals use the remote's login shell instead: Zed sends its settings to the remote, so the Nushell setting sits under its `"windows"` key. Nushell's command-line colours match zsh's on the Linux hosts (commands green, unknown commands red, quoted strings yellow, flags peach, paths underlined): `autoload/syntax-highlight.nu` overrides the vendored Catppuccin theme's, and lint keeps the two in step. One gap: Nushell gives every argument of an external command (`ssh`, `git`) one colour, so its flags and quoted strings stay plain where zsh colours them. atuin's own background jobs don't light starship's jobs gear (`scripts/nu-init.nu` labels them). Both shells carry the zsh toolbelt (`wsh` lists it):
+- `z`/`zi` (zoxide), `l`/`la`/`ll`/`lt`/`lta`/`ltl` (eza), `y` (yazi), `fssh` (pick an SSH host) and `hide`
+- Ctrl-R history search (atuin, local only; each shell's earlier history is imported once), Up/Down for history starting with what's typed, Alt-. for the previous line's last word
 - Ctrl-T to insert a file and Alt-C to cd into a directory (fzf, with bat/eza previews)
-- `l`/`la`/`ll`/`lt` (eza) and `y` (yazi)
-- Tab completion for about 1,000 CLIs through carapace, after `bootstrap.ps1`'s own flags
-- Ctrl-O to edit the command line in Helix
+- Nushell: Tab opens a completion menu with descriptions for about 1,000 CLIs (carapace, after `bootstrap.ps1`'s own flags); Ctrl-O edits the command line in Helix
+- Speed: `nu-init` writes both shells' tool init after every tools phase, and mise's prompt hook runs only when a config file, an installed tool or a `MISE_*` variable changes (`WORKSTATION_MISE_GATE=0` turns that check off), so a prompt costs milliseconds rather than a `mise.exe` start
+- PowerShell: `gc`/`gp`/`gl` run git (PowerShell's built-in aliases are removed first), and the prompt shows a failed command's exit code
 
-`rm` goes to the Recycle Bin (`rm --permanent` skips it). The theme is Catppuccin Mocha, vendored into `%APPDATA%\nushell\autoload\`. PowerShell gets the same `l`/`la`/`ll`/`lt`/`y` and `z`; `wsh` lists them all.
+`rm` goes to the Recycle Bin (`rm --permanent` skips it). The theme is Catppuccin Mocha, vendored into `%APPDATA%\nushell\autoload\`; `ls`, eza and the completion menu use the Linux hosts' `LS_COLORS` (from `dotfiles/dircolors`), and PowerShell's command line has zsh's colours.
 
 | Flag | Meaning |
 |---|---|
@@ -206,7 +206,7 @@ Warp is the day-to-day Windows terminal and opens into AlmaLinux-9 (WSL zsh). It
 
 Windows Terminal's profiles are also reachable from the `wt` CLI, e.g. `wt -w 0 nt -p "PowerShell"` (new tab, current window), `wt -p "AlmaLinux-9"` (new window in the WSL distro).
 
-Local Nushell and WSL tabs emit prompt marks (OSC 133) and report the working directory (OSC 9;9), and long commands show taskbar progress. An SSH tab running zellij composites its own panes, so marks stop there.
+Local Nushell and WSL tabs emit prompt marks (OSC 133) and report the working directory (OSC 9;9), and long commands show taskbar progress. PowerShell tabs report the working directory too. An SSH tab running zellij composites its own panes, so marks stop there.
 
 ### Shell prompt and completion
 
