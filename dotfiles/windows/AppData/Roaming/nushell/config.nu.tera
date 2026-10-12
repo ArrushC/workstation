@@ -136,7 +136,7 @@ $env.config.keybindings = ($env.config.keybindings | append [
 # since 0.105). The hooks add ConEmu OSC 9;4 taskbar progress (indeterminate while a curated
 # long-runner executes; cleared at the next prompt — the same curated list as
 # the zsh side: make/mise/wsa/wsu/dnf/cargo/npm/uv + git push/pull/fetch/clone);
-# WezTerm's nightly builds draw it as a tab spinner (its 2024 release ignores it). WezTerm reads the cwd from OSC 7, not 9;9
+# WezTerm (nightly) draws it as a tab spinner. WezTerm reads the cwd from OSC 7, not 9;9
 # (which it ignores), so it gets an OSC 7 at every prompt as well.
 # Gated on WT_SESSION / TERM_PROGRAM so nothing is emitted under any other terminal.
 # Escapes: nu has no \a — use \u{1b} (ESC) and \u{07} (BEL).

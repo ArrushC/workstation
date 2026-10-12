@@ -340,24 +340,6 @@ url = "https://github.com/tt-a1i/archify/releases/download/v3.0.1/archify.zip"
 url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/595744695"
 provenance = "github-attestations"
 
-[[tools."github:wezterm/wezterm"]]
-version = "20240203-110809-5046fc22"
-backend = "github:wezterm/wezterm"
-specifiers = ["20240203-110809-5046fc22"]
-
-[tools."github:wezterm/wezterm".options]
-asset_pattern = "WezTerm-windows-{version}.zip"
-
-[tools."github:wezterm/wezterm"."platforms.linux-x64"]
-checksum = "sha256:57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
-url = "https://github.com/wezterm/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
-url_api = "https://api.github.com/repos/wezterm/wezterm/releases/assets/149623827"
-
-[tools."github:wezterm/wezterm"."platforms.windows-x64"]
-checksum = "sha256:57e5d03b585303d81e8b8e96d1230362852eb39aca92b3b29c7a42cfb82f9ac4"
-url = "https://github.com/wezterm/wezterm/releases/download/20240203-110809-5046fc22/WezTerm-windows-20240203-110809-5046fc22.zip"
-url_api = "https://api.github.com/repos/wezterm/wezterm/releases/assets/149623827"
-
 [[tools.go]]
 version = "1.27.1"
 backend = "core:go"

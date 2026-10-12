@@ -65,7 +65,7 @@
 # Loads after catppuccin_mocha.nu (autoload runs in name order): command-line colours
 # matching zsh's highlighting on the Linux hosts (check_shell_highlight_parity).
 "~/AppData/Roaming/nushell/autoload/syntax-highlight.nu" = { source = "dotfiles/windows/AppData/Roaming/nushell/autoload/syntax-highlight.nu", mode = "copy" }
-# WezTerm (a mise tool, config.toml) reads ~/.wezterm.lua and never writes it.
+# WezTerm (the wezterm-nightly-win task, below) reads ~/.wezterm.lua and never writes it.
 "~/.wezterm.lua" = { source = "dotfiles/config/wezterm/wezterm.lua", mode = "copy" }
 # Catppuccin Mocha for bat, eza and yazi, from the same sources as config.linux.toml's
 # entries; Windows keeps their configs under %APPDATA% (atuin's pair is in config.toml).
@@ -108,8 +108,18 @@ description = "Copy mise's archify skill to ~/.claude/skills/archify (the post-t
 dir = "{{ xdg_config_home }}/mise"
 run = "nu --no-config-file scripts/claude-skills.nu || exit /b 0"
 
+# WezTerm's nightly build, per-user in %LOCALAPPDATA%\workstation\wezterm, checked against
+# the SHA256 WezTerm publishes beside the zip. Not a mise pin (the rolling nightly asset
+# outdates a locked checksum the next day) and not winget (its nightly manifest's checksum
+# lags the asset, and both WezTerm packages' installers raise UAC). It downloads only
+# when a new nightly exists; scripts/wezterm-nightly.ps1 has the details.
+[tasks.wezterm-nightly-win]
+description = "Install or update WezTerm's nightly build (the post-tools hook)"
+dir = "{{ xdg_config_home }}/mise"
+run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-nightly.ps1 || exit /b 0"
+
 [bootstrap.hooks]
-post-tools = "mise run nu-init ::: nvim-plugins-win ::: claude-skills-win"
+post-tools = "mise run nu-init ::: nvim-plugins-win ::: claude-skills-win ::: wezterm-nightly-win"
 
 # GUI apps, installed by `mise bootstrap --only packages` (bootstrap.ps1 runs it after
 # the dotfiles, so winget's scope preference above is already in place). An app counts
