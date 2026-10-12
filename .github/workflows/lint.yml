@@ -107,6 +107,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-python-fonts.ps1
+      - name: Test WezTerm nightly installer (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-wezterm-nightly.ps1
+      - name: Test WezTerm nightly installer (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-wezterm-nightly.ps1
   templates:
     runs-on: ubuntu-latest
     steps:
