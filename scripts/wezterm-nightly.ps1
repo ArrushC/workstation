@@ -16,10 +16,14 @@
 #      <Root>\current\wezterm-gui.exe, so the shortcut and a taskbar pin survive updates;
 #   5. delete older builds no running process uses (a running WezTerm keeps its own
 #      directory; the next run deletes it).
-# Every run also registers WezTerm's toast id (Register-ToastId), whatever the download does.
+# Every run also registers WezTerm's toast id (Register-ToastId) and sets the User
+# environment (Set-UserEnvironment): WEZTERM_CONFIG_FILE at this checkout's
+# dotfiles\config\wezterm\wezterm.lua, and <Root>\current on PATH for the wezterm CLI;
+# whatever the download does.
 # Every failure warns and exits 0: a failing hook would stop `mise bootstrap`.
 # ASCII only: Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page.
-# scripts/test-wezterm-nightly.ps1 tests it against file:// URLs (-BaseUrl).
+# scripts/test-wezterm-nightly.ps1 tests it against file:// URLs (-BaseUrl), with
+# throwaway registry keys (-ToastKey, -EnvKey).
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-nightly.ps1
 # =============================================================================
 [CmdletBinding()]
@@ -27,7 +31,8 @@ param(
     [string]$BaseUrl = 'https://github.com/wezterm/wezterm/releases/download/nightly',
     [string]$Root = (Join-Path $env:LOCALAPPDATA 'workstation\wezterm'),
     [string]$ShortcutDir = [Environment]::GetFolderPath('Programs'),
-    [string]$ToastKey = 'HKCU:\Software\Classes\AppUserModelId\org.wezfurlong.wezterm'
+    [string]$ToastKey = 'HKCU:\Software\Classes\AppUserModelId\org.wezfurlong.wezterm',
+    [string]$EnvKey = 'HKCU:\Environment'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -51,7 +56,7 @@ function Get-Url([string]$Uri, [string]$OutFile) {
     }
 }
 
-# The Start Menu entry, (re)written only when it is missing or points elsewhere.
+# The Start Menu entry, (re)written only when it is missing or differs.
 function Set-Shortcut([string]$Target) {
     New-Item -ItemType Directory -Force -Path $ShortcutDir | Out-Null
     $lnk = Join-Path $ShortcutDir 'WezTerm.lnk'
@@ -59,10 +64,11 @@ function Set-Shortcut([string]$Target) {
     try {
         $existed = Test-Path -LiteralPath $lnk
         $sc = $wsh.CreateShortcut($lnk)
-        if ($existed -and $sc.TargetPath -eq $Target) { return }
+        $description = 'WezTerm (nightly): GPU terminal'
+        if ($existed -and $sc.TargetPath -eq $Target -and $sc.Description -eq $description) { return }
         $sc.TargetPath = $Target
         $sc.WorkingDirectory = $env:USERPROFILE
-        $sc.Description = 'WezTerm (nightly): GPU terminal, config ~\.wezterm.lua'
+        $sc.Description = $description
         $sc.Save()
         Write-Step "Start Menu shortcut -> $Target"
     } finally {
@@ -86,6 +92,52 @@ function Register-ToastId {
     }
 }
 
+# WezTerm loads its config straight from this checkout, so a save there or a wsu pull
+# reloads it and no copy is deployed; <Root>\current on PATH gives the wezterm CLI
+# (wezterm imgcat, wezterm cli) to every shell. Written to the registry with PATH's kind
+# kept (usually REG_EXPAND_SZ, which [Environment]::SetEnvironmentVariable would flatten
+# to REG_SZ), then announced, so Explorer, and the Start Menu shortcut it launches,
+# picks them up without a sign-out. A running WezTerm keeps its old environment.
+function Set-UserEnvironment([string]$Config, [string]$Bin) {
+    try {
+        if (-not (Test-Path -LiteralPath $EnvKey)) { New-Item -Path $EnvKey -Force | Out-Null }
+        $key = Get-Item -LiteralPath $EnvKey
+        $changed = $false
+        if ($key.GetValue('WEZTERM_CONFIG_FILE') -ne $Config) {
+            New-ItemProperty -LiteralPath $EnvKey -Name WEZTERM_CONFIG_FILE -Value $Config -PropertyType String -Force | Out-Null
+            Write-Step "WEZTERM_CONFIG_FILE -> $Config"
+            $changed = $true
+        }
+        $path = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+        $onPath = $path.Split(';') | Where-Object {
+            $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $Bin.TrimEnd('\')
+        }
+        if (-not $onPath) {
+            $kind = if ($key.GetValueNames() -contains 'Path') { "$($key.GetValueKind('Path'))" } else { 'ExpandString' }
+            $new = if ($path.TrimEnd(';')) { "$($path.TrimEnd(';'));$Bin" } else { $Bin }
+            New-ItemProperty -LiteralPath $EnvKey -Name Path -Value $new -PropertyType $kind -Force | Out-Null
+            Write-Step "added $Bin to the User PATH (the wezterm CLI)"
+            $changed = $true
+        }
+        if ($changed) { Send-EnvironmentChange }
+    } catch {
+        Write-Step "! could not set the User environment: $($_.Exception.Message)"
+    }
+}
+
+# WM_SETTINGCHANGE "Environment" to every top-level window, as setx sends it.
+function Send-EnvironmentChange {
+    if (-not ('Workstation.EnvironmentChange' -as [type])) {
+        Add-Type -Namespace Workstation -Name EnvironmentChange -MemberDefinition @'
+[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+'@
+    }
+    # HWND_BROADCAST = 0xffff, WM_SETTINGCHANGE = 0x001A, SMTO_ABORTIFHUNG = 0x0002
+    $res = [UIntPtr]::Zero
+    [void][Workstation.EnvironmentChange]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, 'Environment', 0x0002, 5000, [ref]$res)
+}
+
 # True when a running process's image lives under $Dir.
 function Test-InUse([string]$Dir) {
     $prefix = $Dir.TrimEnd('\') + '\'
@@ -98,6 +150,7 @@ function Test-InUse([string]$Dir) {
 }
 
 Register-ToastId
+Set-UserEnvironment ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\dotfiles\config\wezterm\wezterm.lua'))) $current
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("wezterm-nightly-" + [guid]::NewGuid())
 try {
     New-Item -ItemType Directory -Force -Path $Root, $tmp | Out-Null

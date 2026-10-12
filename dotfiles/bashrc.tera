@@ -316,33 +316,42 @@ if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; t
   eval "$(starship init bash)"
 fi
 
-# --- Windows Terminal and WezTerm shell integration ----------------------------
-# Prompt-side half of the zsh block (see zshrc.tera): OSC 133 A/D marks
-# (scrollbar marks + ctrl+up/down jumps, exit-code colored), the cwd (WezTerm's
-# OSC 7 URL with $HOSTNAME, zsh's $HOST; else WT's OSC 9;9, a Windows path via
-# wslpath -w), OSC 9;4;0 progress clear. Runs FIRST in PROMPT_COMMAND and returns
-# the original $? so starship's exit-code module still sees the real status.
-# PARITY NOTE (WT preexec): zsh additionally emits OSC 133;C + OSC 9;4;3
-# (output-start mark, in-flight taskbar progress) from a preexec hook. bash has
-# no preexec without bash-preexec, and starship owns bash's DEBUG trap — so
-# this fallback shell deliberately skips the preexec half (same precedent as
-# atuin above). Marks still appear and color by exit code; there is just no
-# in-flight taskbar progress.
-if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+# --- Terminal shell integration (prompt marks, cwd, progress) -----------------
+# The zsh block's marks and cwd (see zshrc.tera), in every terminal but Warp and
+# TERM=dumb/linux: OSC 133 A/B/C/D and OSC 7 (with $HOSTNAME, zsh's $HOST), plus
+# the OSC 9 progress clear and WT's 9;9 cwd under Windows Terminal and WezTerm
+# outside zellij. _wt_prompt_cmd runs FIRST in PROMPT_COMMAND and returns the
+# original $? so starship's exit-code module still sees the real status;
+# _wt_prompt_end runs LAST and appends B to PS1, which starship rebuilds every
+# prompt (the guard keeps a static PS1 from growing). C comes from PS0, which bash
+# prints after Enter, before the command runs.
+# PARITY NOTE (WT preexec): zsh additionally emits OSC 9;4;3 (in-flight taskbar
+# progress) from a preexec hook. bash has no preexec without bash-preexec, and
+# starship owns bash's DEBUG trap, so this fallback shell skips it (same precedent
+# as atuin above): there is no in-flight taskbar progress.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && $TERM != dumb && $TERM != linux ]]; then
+  if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+    _wt_osc9=1
+  else
+    _wt_osc9=
+  fi
   _wt_prompt_cmd() {
     local _wt_status=$?
     printf '\e]133;D;%s\a' "$_wt_status"
-    if [[ $TERM_PROGRAM == WezTerm || $TERM == wezterm ]]; then
-      printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
-    elif command -v wslpath &>/dev/null; then
+    printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
+    if [[ -n $_wt_osc9 && $TERM_PROGRAM != WezTerm && $TERM != wezterm ]] && command -v wslpath &>/dev/null; then
       printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
     fi
     printf '\e]133;A\a'
-    printf '\e]9;4;0;0\a'
+    [[ -n $_wt_osc9 ]] && printf '\e]9;4;0;0\a'
     return "$_wt_status"
   }
+  _wt_prompt_end() {
+    [[ ${PS1-} == *']133;B'* ]] || PS1+='\[\e]133;B\a\]'
+  }
   # Re-source guard: don't register twice (matches starship's own convention).
-  [[ $PROMPT_COMMAND == *_wt_prompt_cmd* ]] || PROMPT_COMMAND="_wt_prompt_cmd${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
+  [[ $PROMPT_COMMAND == *_wt_prompt_cmd* ]] || PROMPT_COMMAND="_wt_prompt_cmd${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}; _wt_prompt_end"
+  [[ ${PS0-} == *']133;C'* ]] || PS0+='\e]133;C\a'
 fi
 
 # --- zellij: name the tab after the current directory -------------------------

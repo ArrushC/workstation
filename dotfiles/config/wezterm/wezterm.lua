@@ -1,12 +1,14 @@
--- ~/.wezterm.lua: WezTerm, managed by mise dotfiles (dotfiles/config/wezterm/wezterm.lua).
+-- WezTerm's config, loaded straight from the Windows checkout
+-- (dotfiles/config/wezterm/wezterm.lua): WEZTERM_CONFIG_FILE names it, so no copy is
+-- deployed, and a save here or a wsu pull reloads every window (Ctrl+Shift+R forces it).
 --
 -- Windows installs WezTerm's nightly build per-user (scripts/wezterm-nightly.ps1, run after
--- every tools phase, which also keeps its Start Menu shortcut and registers its toast id).
+-- every tools phase, which also keeps its Start Menu shortcut, registers its toast id, sets
+-- WEZTERM_CONFIG_FILE and puts the wezterm CLI on the User PATH).
 -- It sits beside Warp (the primary terminal) and Windows Terminal (the default one):
 -- Catppuccin Mocha with the mauve accent, JetBrainsMono NFM 10.5, Nushell through mise's
 -- shim, no title bar, and the tab bar at the bottom with a status footer on its right.
--- Ctrl+Shift+H lists every key. WezTerm reloads this file on save (Ctrl+Shift+R forces it);
--- edit the source with wse.
+-- Ctrl+Shift+H lists every key.
 -- WezTerm runs Lua 5.4; scripts/check-invariants.sh (check_wezterm_config) runs this file
 -- and its event handlers under LuaJIT with a stand-in wezterm module, so keep to Lua 5.1
 -- syntax and give each new wezterm.* call a stand-in there. Never call wezterm.gui.* at
@@ -183,27 +185,54 @@ config.quick_select_remove_styling = true
 
 -- Shells ----------------------------------------------------------------------------
 -- ~/.ssh/config.local's concrete Host aliases (patterns, negations and names that would
--- need quoting skipped), as bootstrap.ps1's Get-SshLauncherHosts reads them.
-local function ssh_hosts()
-  local hosts, seen = {}, {}
+-- need quoting skipped), as bootstrap.ps1's Get-SshLauncherHosts reads them, and a map
+-- from each name a host goes by (the alias; its HostName, and that name's short form) to
+-- its block's first alias.
+local function ssh_config()
+  local hosts, aliases, real = {}, {}, {}
   local f = io.open(wezterm.home_dir .. '/.ssh/config.local', 'r')
   if not f then
-    return hosts
+    return hosts, aliases, real
   end
+  local block = {}
   for line in f:lines() do
+    line = line:gsub('%s#.*$', '')
     local list = line:match('^%s*[Hh][Oo][Ss][Tt]%s*=%s*(.+)$') or line:match('^%s*[Hh][Oo][Ss][Tt]%s+(.+)$')
+    local name = line:match('^%s*[Hh][Oo][Ss][Tt][Nn][Aa][Mm][Ee]%s*=%s*(%S+)') or line:match('^%s*[Hh][Oo][Ss][Tt][Nn][Aa][Mm][Ee]%s+(%S+)')
     if list then
-      list = list:gsub('%s#.*$', '')
+      block = {}
       for token in list:gmatch('%S+') do
-        if not token:find('[%*%?!]') and token:match('^[%w%._@%-]+$') and not seen[token] then
-          seen[token] = true
-          table.insert(hosts, token)
+        if not token:find('[%*%?!]') and token:match('^[%w%._@%-]+$') then
+          table.insert(block, token)
+          if not aliases[token:lower()] then
+            aliases[token:lower()] = token
+            table.insert(hosts, token)
+          end
         end
+      end
+    elseif line:find('^%s*[Mm][Aa][Tt][Cc][Hh][%s=]') then
+      block = {}
+    elseif name and block[1] and not name:find('%%') then
+      name = name:lower()
+      real[name] = real[name] or block[1]
+      -- An address has no short form (10.0.0.9 isn't host "10").
+      if name:find('%a') and not name:find(':') then
+        local short = name:match('^[^.]*')
+        real[short] = real[short] or block[1]
       end
     end
   end
   f:close()
-  return hosts
+  return hosts, aliases, real
+end
+local ssh_hosts, ssh_aliases, ssh_real = ssh_config()
+
+-- The name a host goes by here: its alias, when the name (or its short form) is one or is
+-- its HostName. So an SSH tab to dev10 and a WSL tab whose OSC 7 says atc-cache-dev10.corp
+-- show the same name in the same colour. Other names pass through.
+local function canonical(host)
+  local h = host:lower()
+  return ssh_aliases[h] or ssh_real[h] or ssh_real[h:match('^[^.]*')] or host
 end
 
 -- Launch entries run in the local domain: without it an entry picked from a WSL tab would
@@ -221,9 +250,10 @@ if windows then
   end
   table.insert(config.launch_menu, { label = 'PowerShell', args = { 'pwsh.exe', '-NoLogo' }, domain = here })
   table.insert(config.launch_menu, { label = 'Windows PowerShell', args = { 'powershell.exe', '-NoLogo' }, domain = here })
-  -- WSL tabs start in the distro's home: wsl.exe expands this '~' inside Linux. (A '~' cwd
-  -- on a spawn is expanded on Windows first, to C:\Users\<you>, which WSL opens as
-  -- /mnt/c/Users/<you>.) New tabs and splits then follow the shell's OSC 7.
+  table.insert(config.launch_menu, { label = 'cmd', args = { 'cmd.exe' }, domain = here })
+  -- WSL tabs start in the distro's home: WezTerm hands this '~' to wsl.exe as is
+  -- (`--cd ~`), which expands it inside Linux. New tabs and splits then follow the shell's
+  -- OSC 7 (spawn_from, below).
   local wsl = wezterm.default_wsl_domains()
   for _, d in ipairs(wsl) do
     d.default_cwd = '~'
@@ -233,7 +263,7 @@ end
 -- ssh sends TERM=wezterm with the pty; a host without that terminfo entry starts zellij
 -- with xterm-256color instead.
 local attach = 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color; exec zellij attach --create main'
-for _, host in ipairs(ssh_hosts()) do
+for _, host in ipairs(ssh_hosts) do
   table.insert(config.launch_menu, { label = 'SSH: ' .. host, args = { 'ssh', '-t', host, attach }, domain = here })
 end
 -- No built-in SSH domains: by default WezTerm lists SSH: and SSHMUX: domains for every
@@ -272,8 +302,19 @@ local function ssh_dest(argv)
   end
 end
 
--- { host, argv, dest } for a pane whose foreground program is ssh, or the last one seen in
--- it once ssh has exited; nil for a live local shell. `pane` is a Pane object.
+-- The zellij session a remote command attaches (the launcher's `zellij attach --create
+-- main`), or nil.
+local function zellij_session(cmd)
+  local rest = cmd:match('zellij%s+attach%s+(.*)$') or cmd:match('zellij%s+a%s+(.*)$')
+  for word in (rest or ''):gmatch('[^%s;&|]+') do
+    if word:sub(1, 1) ~= '-' then
+      return word
+    end
+  end
+end
+
+-- { host, argv, dest, zellij } for a pane whose foreground program is ssh, or the last one
+-- seen in it once ssh has exited; nil for a live local shell. `pane` is a Pane object.
 local function ssh_of(pane)
   local id = tostring(pane:pane_id())
   local seen = wezterm.GLOBAL.ssh_panes or {}
@@ -282,11 +323,15 @@ local function ssh_of(pane)
     return seen[id]
   end
   local name = (info.name or ''):lower():gsub('%.exe$', '')
-  local dest = name == 'ssh' and info.argv and ssh_dest(info.argv)
+  local dest, at
+  if name == 'ssh' and info.argv then
+    dest, at = ssh_dest(info.argv)
+  end
   if dest then
-    local host = dest:gsub('^ssh://', ''):gsub('^.*@', ''):gsub(':%d+$', '')
+    local host = canonical((dest:gsub('^ssh://', ''):gsub('^.*@', ''):gsub(':%d+$', '')))
     if not seen[id] or seen[id].host ~= host then
-      seen[id] = { host = host, argv = info.argv, dest = dest }
+      local session = zellij_session(table.concat(info.argv, ' ', at + 1))
+      seen[id] = { host = host, argv = info.argv, dest = dest, zellij = session }
       wezterm.GLOBAL.ssh_panes = seen
     end
     return seen[id]
@@ -300,12 +345,12 @@ end
 local local_host = (wezterm.hostname() or ''):lower():match('^[^.]*')
 
 -- A WSL pane's remote host: the OSC 7 host when it is neither this machine nor the distro.
-local function wsl_remote(pane_info, distro)
-  local cwd = pane_info.current_working_dir
+-- `cwd` is a pane's current_working_dir (a Url, or a string in PaneInformation).
+local function wsl_remote(cwd, distro)
   local host = cwd and tostring(cwd):match('^file://([^/]+)/')
   local short = host and host:lower():match('^[^.]*')
   if short and short ~= '' and short ~= 'localhost' and short ~= local_host and short ~= distro:lower() then
-    return host
+    return canonical(host)
   end
 end
 
@@ -346,6 +391,36 @@ end
 
 -- Actions -------------------------------------------------------------------------------
 local launcher = act.ShowLauncherArgs({ flags = 'FUZZY|LAUNCH_MENU_ITEMS|DOMAINS' })
+
+-- Where a new tab or split from this pane starts: WezTerm's default (the pane's domain and
+-- directory), except that a WSL pane whose directory isn't one in the distro starts in
+-- its home. Before the shell's first OSC 7, and inside zellij (which keeps OSC 7 to
+-- itself), WezTerm knows only wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux);
+-- after an ssh the OSC 7 path is on the other host, which wsl.exe can't enter (it prints
+-- an error and starts in /).
+local function spawn_from(pane)
+  local domain = pane:get_domain_name() or ''
+  if domain:find('^WSL:') then
+    local cwd = pane:get_current_working_dir()
+    local path = cwd and cwd.file_path or ''
+    if path == '' or path:find('^/%a:') or wsl_remote(cwd, (domain:gsub('^WSL:', ''))) then
+      return { domain = { DomainName = domain }, cwd = '~' }
+    end
+  end
+  return { domain = 'CurrentPaneDomain' }
+end
+
+-- Ctrl+Shift+T and the tab bar's + (left-click).
+local new_tab = wezterm.action_callback(function(window, pane)
+  window:perform_action(act.SpawnCommandInNewTab(spawn_from(pane)), pane)
+end)
+
+-- Alt+Shift+D / R: `how` is SplitVertical (down) or SplitHorizontal (right).
+local function split(how)
+  return wezterm.action_callback(function(window, pane)
+    window:perform_action(act[how](spawn_from(pane)), pane)
+  end)
+end
 
 -- Copy only when something is selected, so the notice never claims an empty copy.
 local copy = wezterm.action_callback(function(window, pane)
@@ -519,7 +594,6 @@ local bindings -- set below the cheatsheet, which reads it when it opens
 
 -- WezTerm defaults worth knowing, mouse gestures and what the footer and tabs show.
 local reference = {
-  { 'Ctrl+Shift+T', 'New tab' },
   { 'Ctrl+Tab', 'Next tab (Ctrl+Shift+Tab: previous)' },
   { 'Ctrl+Shift+N', 'New window' },
   { 'Ctrl+Shift+Z', 'Toggle pane zoom' },
@@ -539,9 +613,10 @@ local reference = {
   { 'Shift+click', 'Open a link, also inside zellij and helix' },
   { 'Ctrl+triple-click', "Select one command's whole output and copy it" },
   { 'Ctrl+Shift+drag', 'Move the window (Win+drag too)' },
+  { '+ on the tab bar', 'Click: new tab; middle-click: tab list; right-click: launcher' },
   { 'select', 'Selecting with the mouse copies (Copied in the footer)' },
-  { 'footer', 'SSH host, lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
-  { 'tab colours', 'An SSH tab takes its host colour and name' },
+  { 'footer', 'SSH host (zellij session), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
+  { 'tab colours', 'An SSH tab takes its host colour and name (its ~/.ssh/config.local alias)' },
   { 'tab marks', "Bell rang, % progress, dot: output you haven't seen" },
 }
 
@@ -558,7 +633,7 @@ end
 local function cheatsheet_rows()
   local rows = {}
   local function row(left, right, id)
-    table.insert(rows, { label = string.format('%-24s %s', left, right), id = id })
+    table.insert(rows, { label = string.format('%-26s %s', left, right), id = id })
   end
   for _, b in ipairs(bindings) do
     if b[4] then
@@ -597,18 +672,23 @@ end)
 -- The pane keys are Warp's and Windows Terminal's (README's tables).
 bindings = {
   { 'CTRL|ALT', 'l', launcher, 'Launcher: shells, WSL, SSH hosts (zellij)' },
-  { 'ALT|SHIFT', 'D', act.SplitVertical({ domain = 'CurrentPaneDomain' }), 'Split pane down' },
-  { 'ALT|SHIFT', 'R', act.SplitHorizontal({ domain = 'CurrentPaneDomain' }), 'Split pane right' },
+  { 'CTRL|SHIFT', 't', new_tab, "New tab, in this tab's domain and directory" },
+  { 'ALT|SHIFT', 'D', split('SplitVertical'), 'Split pane down' },
+  { 'ALT|SHIFT', 'R', split('SplitHorizontal'), 'Split pane right' },
   { 'ALT|SHIFT', 'LeftArrow', act.ActivatePaneDirection('Left'), 'Move between panes', chord = 'Alt+Shift+arrows' },
   { 'ALT|SHIFT', 'RightArrow', act.ActivatePaneDirection('Right') },
   { 'ALT|SHIFT', 'UpArrow', act.ActivatePaneDirection('Up') },
   { 'ALT|SHIFT', 'DownArrow', act.ActivatePaneDirection('Down') },
-  { 'CTRL', 'UpArrow', act.ScrollToPrompt(-1), 'Previous / next prompt', chord = 'Ctrl+Up / Down' },
+  -- Ctrl+Shift too, as the retired config had them (WezTerm binds those to pane moves).
+  { 'CTRL', 'UpArrow', act.ScrollToPrompt(-1), 'Previous / next prompt', chord = 'Ctrl(+Shift)+Up / Down' },
   { 'CTRL', 'DownArrow', act.ScrollToPrompt(1) },
+  { 'CTRL|SHIFT', 'UpArrow', act.ScrollToPrompt(-1) },
+  { 'CTRL|SHIFT', 'DownArrow', act.ScrollToPrompt(1) },
   -- WezTerm binds these to pane moves, which swallowed zsh's select-by-word.
   { 'CTRL|SHIFT', 'LeftArrow', act.DisableDefaultAssignment, 'Reach the shell (zsh selects by word)', chord = 'Ctrl+Shift+Left / Right' },
   { 'CTRL|SHIFT', 'RightArrow', act.DisableDefaultAssignment },
-  { 'CTRL|SHIFT', 'c', copy, 'Copy the selection' },
+  { 'CTRL|SHIFT', 'c', copy, 'Copy the selection', chord = 'Ctrl+Shift+C / Ctrl+Insert' },
+  { 'CTRL', 'Insert', copy },
   { 'CTRL|SHIFT', 'a', copy_scrollback, 'Copy the whole scrollback' },
   { 'CTRL|SHIFT', 'e', rename_tab, 'Rename the tab' },
   { 'CTRL|SHIFT', 'g', open_in_helix, 'Quick select a file:line, open it in helix' },
@@ -658,8 +738,8 @@ config.mouse_bindings = {
 
 -- Status footer ---------------------------------------------------------------------------
 -- Right of the tab bar, refreshed every second: COPY / SEARCH / RESIZE while those modes
--- run, an SSH tab's host in its colour, the pane's line count, battery, time. Parts drop
--- out as the pane narrows.
+-- run, an SSH tab's host in its colour (and the zellij session it attached), the pane's
+-- line count, battery, time. Parts drop out as the pane narrows.
 
 local function thousands(n)
   local s = tostring(math.floor(n)):reverse():gsub('(%d%d%d)', '%1,'):reverse()
@@ -727,6 +807,9 @@ render_status = function(window, pane)
   local s = ssh_of(pane)
   if s then
     table.insert(parts, { text = s.host, fg = accent(s.host) })
+    if s.zellij and cols >= 130 then
+      table.insert(parts, { text = 'zellij:' .. s.zellij })
+    end
   end
   local lines = line_count(pane, dims)
   if lines then
@@ -845,7 +928,7 @@ local function tab_info(tab)
     glyph, title, host = glyphs.ssh, s.host, s.host
   elseif domain:find('^WSL:') then
     local distro = domain:gsub('^WSL:', '')
-    host = wsl_remote(p, distro)
+    host = wsl_remote(p.current_working_dir, distro)
     glyph, title = host and glyphs.ssh or glyphs.wsl, host or distro
   else
     glyph = glyphs.shell
@@ -941,6 +1024,17 @@ end)
 -- Events --------------------------------------------------------------------------------
 wezterm.on('copied-scrollback', function(window, pane)
   flash(window, pane, 'Copied the scrollback')
+end)
+
+-- The tab bar's +: a click is Ctrl+Shift+T (WezTerm's own skips the WSL rule in
+-- spawn_from), a middle-click the tab list (Ctrl+Shift+S, where WezTerm does nothing), a
+-- right-click this config's launcher (Ctrl+Alt+L, fuzzy, rather than the plain one).
+wezterm.on('new-tab-button-click', function(window, pane, button)
+  local action = ({ Left = new_tab, Middle = switch_tab, Right = launcher })[button]
+  if action then
+    window:perform_action(action, pane)
+    return false
+  end
 end)
 
 -- A green "Config reloaded" confirms a save (or Ctrl+Shift+R) took; a Lua error opens
