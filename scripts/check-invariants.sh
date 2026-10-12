@@ -1397,7 +1397,7 @@ check_wezterm_config() {
     return 0
   fi
   tmp=$(mktemp -d)
-  mkdir -p "$tmp/.ssh"
+  mkdir -p "$tmp/.ssh" "$tmp/t"
   printf 'Host alpha beta\nHost *.corp\nHost !bad\n  HostName x.example\n  host = gamma # comment\nHost bad"quote\n' >"$tmp/.ssh/config.local"
   # The config builds the Windows shim path with backslashes; on Linux that is one file name.
   : >"$tmp/la\\mise\\shims\\nu.exe"
@@ -1407,7 +1407,7 @@ check_wezterm_config() {
 local path, triple, home, localappdata = arg[1], arg[2], arg[3], arg[4]
 local real_getenv = os.getenv
 os.getenv = function(k) if k == 'LOCALAPPDATA' then return localappdata end return real_getenv(k) end
-local handlers, battery = {}, {}
+local handlers, battery, live = {}, {}, {}
 local function named(name)
   return setmetatable({ action = name }, { __call = function(_, args) return { action = name, args = args } end })
 end
@@ -1418,7 +1418,25 @@ local wezterm = {
   nerdfonts = {},
   config_builder = function() return {} end,
   font_with_fallback = function(list) return { fallback = list } end,
-  color = { get_builtin_schemes = function() return { ['Catppuccin Mocha'] = { background = '#1e1e2e' } } end },
+  color = {
+    get_builtin_schemes = function() return { ['Catppuccin Mocha'] = { background = '#1e1e2e' } } end,
+    -- A colour whose adjustments return a darker marker, so a test can tell them apart.
+    parse = function(hex)
+      local c = { hex = hex }
+      local function dim() return setmetatable({ hex = 'dim' .. hex }, getmetatable(c)) end
+      return setmetatable(c, { __index = { desaturate = dim, darken = dim }, __tostring = function(x) return x.hex end })
+    end,
+  },
+  hostname = function() return 'PC.corp' end,
+  default_wsl_domains = function() return { { name = 'WSL:Alma', distribution = 'Alma' } } end,
+  mux = { get_pane = function(id) return live[id] end },
+  url = {
+    parse = function(u)
+      local scheme, host, path = u:match('^(%a+)://([^/]*)(/.*)$')
+      if not scheme then error('not a URL: ' .. u) end
+      return { scheme = scheme, host = host, file_path = path:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end) }
+    end,
+  },
   action = setmetatable({}, { __index = function(_, name) return named(name) end }),
   action_callback = function(fn) return { callback = fn } end,
   on = function(event, fn) handlers[event] = fn end,
@@ -1454,6 +1472,8 @@ check(c.front_end == 'WebGpu' and c.webgpu_power_preference == 'HighPerformance'
 check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use_fancy_tab_bar == false, 'chrome: not RESIZE with the retro tab bar at the bottom')
 check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
 check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
+check(c.window_close_confirmation == 'NeverPrompt' and c.enable_kitty_keyboard == true, 'closing prompts, or the kitty keyboard protocol is off')
+check(c.key_tables and c.key_tables.resize_pane and #c.key_tables.resize_pane == 6, 'no resize_pane key table (arrows, Esc, Enter)')
 check(type(c.ssh_domains) == 'table' and #c.ssh_domains == 0, 'ssh_domains is not empty')
 check(has(c.hyperlink_rules[#c.hyperlink_rules].format, 'ArrushC/workstation/issues/$1') and #c.hyperlink_rules == 2, 'no #123 hyperlink rule after the defaults')
 
@@ -1470,16 +1490,26 @@ key('CTRL|SHIFT+LeftArrow', 'DisableDefaultAssignment')
 key('CTRL|SHIFT+RightArrow', 'DisableDefaultAssignment')
 local scroll = key('CTRL|SHIFT+a', 'Multiple')
 check(scroll.args[#scroll.args - 1].action == 'ScrollToBottom', 'Ctrl+Shift+A does not scroll back to the bottom')
-for _, k in ipairs({ 'c', 'e', 'h' }) do key('CTRL|SHIFT+' .. k, 'callback') end
+for _, k in ipairs({ 'c', 'e', 'h', 's', 'o', 'F5' }) do key('CTRL|SHIFT+' .. k, 'callback') end
+check(key('CTRL|SHIFT+w', 'CloseCurrentTab').args.confirm == false, 'Ctrl+Shift+W still asks before closing')
+key('CTRL|SHIFT+q', 'PaneSelect')
+check(key('ALT|SHIFT+S', 'ActivateKeyTable').args.name == 'resize_pane', 'Alt+Shift+S does not enter resize mode')
 local helix, sha = key('CTRL|SHIFT+g', 'QuickSelectArgs'), key('CTRL|SHIFT+y', 'QuickSelectArgs')
 local mouse = {}
 for _, m in ipairs(c.mouse_bindings) do
   local kind, ev = next(m.event)
-  mouse[m.mods .. '+' .. kind] = m.action
+  mouse[m.mods .. '+' .. kind .. ev.streak] = m.action
 end
-check(mouse['SHIFT+Up'] and mouse['SHIFT+Up'].action == 'CompleteSelectionOrOpenLinkAtMouseCursor', 'Shift+click does not open links')
-check(mouse['SHIFT+Down'] and mouse['SHIFT+Down'].action == 'SelectTextAtMouseCursor', 'Shift+press still extends the selection, so Shift+click never opens a link')
-check(mouse['SUPER+Drag'] and mouse['SUPER+Drag'].action == 'StartWindowDrag', 'Win+drag does not move the window')
+local shift_up = mouse['SHIFT+Up1']
+check(shift_up and shift_up.action == 'Multiple' and shift_up.args[1].action == 'CompleteSelectionOrOpenLinkAtMouseCursor', 'Shift+click does not open links')
+check(mouse['SHIFT+Down1'] and mouse['SHIFT+Down1'].action == 'SelectTextAtMouseCursor', 'Shift+press still extends the selection, so Shift+click never opens a link')
+check(mouse['SUPER+Drag1'] and mouse['SUPER+Drag1'].action == 'StartWindowDrag', 'Win+drag does not move the window')
+for n = 1, 3 do
+  local up = mouse['NONE+Up' .. n]
+  check(up and up.action == 'Multiple' and up.args[1].action == 'CompleteSelection' and up.args[2].callback, 'releasing a ' .. n .. '-click selection does not copy it and say so')
+end
+check(mouse['CTRL+Up1'] and mouse['CTRL+Up1'].action == 'OpenLinkAtMouseCursor' and mouse['CTRL+Down1'].action == 'Nop', 'Ctrl+click does not open links')
+check(mouse['CTRL+Down3'] and mouse['CTRL+Down3'].args == 'SemanticZone' and mouse['CTRL+Up3'], "Ctrl+triple-click does not select a command's output")
 
 local labels = {}
 for _, item in ipairs(c.launch_menu) do
@@ -1488,6 +1518,7 @@ for _, item in ipairs(c.launch_menu) do
 end
 local got = table.concat(labels, ',')
 if triple:find('windows') then
+  check(c.wsl_domains and c.wsl_domains[1].default_cwd == '~', 'Windows: WSL tabs do not start in ~')
   check(c.default_prog and c.default_prog[1] == localappdata .. '\\mise\\shims\\nu.exe', 'Windows: default_prog is not the Nushell shim')
   check(got == 'Nushell,PowerShell,Windows PowerShell,SSH: alpha,SSH: beta,SSH: gamma', 'Windows launch menu: ' .. got)
 else
@@ -1498,31 +1529,40 @@ local ssh = c.launch_menu[#c.launch_menu].args
 check(ssh[1] == 'ssh' and ssh[2] == '-t' and ssh[3] == 'gamma' and #ssh == 4, 'SSH entries do not run ssh -t <host> <command>')
 check(has(ssh[4], 'infocmp wezterm') and has(ssh[4], 'TERM=xterm-256color') and has(ssh[4], 'exec zellij attach --create main'), 'SSH entries do not fall back to xterm-256color before zellij: ' .. ssh[4])
 
-for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config-reloaded', 'augment-command-palette', 'copied-scrollback' }) do
+for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config-reloaded', 'augment-command-palette', 'copied-scrollback', 'open-uri' }) do
   check(type(handlers[e]) == 'function', 'no ' .. e .. ' handler')
 end
 
 -- Footer.
 local status, performed, pasted, sent
-local function window(key_table)
+local function window(key_table, id)
   return {
-    window_id = function() return 1 end,
+    window_id = function() return id or 1 end,
     active_key_table = function() return key_table end,
     set_right_status = function(_, s) status = s end,
     get_selection_text_for_pane = function() return 'src/a.rs:12' end,
     perform_action = function(_, a) performed = a end,
   }
 end
-local function pane(dims, alt, cursor_y)
+-- A pane: `opts` sets its id, domain and foreground process ({ name, argv }; false once it
+-- has exited). Registered with the stand-in wezterm.mux.get_pane.
+local function pane(dims, alt, cursor_y, opts)
+  opts = opts or {}
   pasted, sent = {}, {}
-  return {
+  local p = {
     get_dimensions = function() return dims end,
     is_alt_screen_active = function() return alt end,
     get_cursor_position = function() return { y = cursor_y } end,
-    pane_id = function() return 7 end,
+    pane_id = function() return opts.id or 7 end,
+    get_domain_name = function() return opts.domain or 'local' end,
+    get_foreground_process_info = function(self) return self.proc or nil end,
+    get_lines_as_text = function() return 'line 1\nline 2\n' end,
     paste = function(_, t) pasted[#pasted + 1] = t end,
     send_text = function(_, t) sent[#sent + 1] = t end,
+    proc = opts.proc == nil and { name = 'nu.exe', argv = { 'nu.exe' } } or opts.proc,
   }
+  live[opts.id or 7] = p
+  return p
 end
 local wide = { cols = 140, viewport_rows = 38, scrollback_rows = 10234, scrollback_top = 0 }
 battery = { { state_of_charge = 0.42, state = 'Discharging' } }
@@ -1534,6 +1574,8 @@ handlers['update-status'](window('copy_mode'), pane(wide, true, 0))
 check(has(status, 'COPY') and not has(status, 'rows'), 'footer in copy mode over a full-screen app: ' .. status)
 handlers['update-status'](window('search_mode'), pane(wide, false, 0))
 check(has(status, 'SEARCH'), 'footer has no SEARCH badge: ' .. status)
+handlers['update-status'](window('resize_pane'), pane(wide, false, 0))
+check(has(status, 'RESIZE'), 'footer has no RESIZE badge: ' .. status)
 battery = { { state_of_charge = 1, state = 'Full' } }
 handlers['update-status'](window(nil), pane({ cols = 70, viewport_rows = 38, scrollback_rows = 500, scrollback_top = 0 }, false, 499))
 check(not has(status, 'rows') and not has(status, '%') and has(status, os.date('%H:%M')), 'narrow footer: ' .. status)
@@ -1563,25 +1605,100 @@ local function title(tab, tabs)
   end
   return table.concat(out)
 end
-local ssh_pane = { pane_id = 7, title = 'me@host:~', domain_name = 'local', foreground_process_name = 'C:\\Windows\\System32\\OpenSSH\\ssh.exe', progress = 'None' }
+local ssh_argv = { 'C:\\Windows\\System32\\OpenSSH\\ssh.exe', '-p', '2222', '-t', 'me@dev10', 'exec zellij attach --create main' }
+local sp = pane(wide, true, 0, { id = 7, proc = { name = 'ssh.exe', argv = ssh_argv } })
+local ssh_pane = { pane_id = 7, title = 'Zellij (main)', domain_name = 'local', progress = 'None' }
 local first = { tab_id = 1, tab_index = 0, is_active = true, tab_title = '', active_pane = { pane_id = 1, title = 'x', progress = 'None' }, panes = {} }
 local bg = { tab_id = 2, tab_index = 5, is_active = false, tab_title = '', active_pane = ssh_pane, panes = { { pane_id = 7, has_unseen_output = true } } }
-handlers['bell'](w, p)
-check(title(bg, { first, bg }) == ' ! > 2: host:~ ', 'background tab after a bell: [' .. title(bg, { first, bg }) .. ']')
+handlers['bell'](w, sp)
+check(title(bg, { first, bg }) == ' ! > 2: dev10 ', 'background SSH tab after a bell: [' .. title(bg, { first, bg }) .. ']')
+local function tab_bg(tab)
+  for _, it in ipairs(handlers['format-tab-title'](tab, { tab }, nil, nil, false, 32)) do
+    if it.Background then return it.Background.Color end
+  end
+end
 bg.is_active = true
-title(bg)
+local host_colour = tab_bg(bg)
 check(not wezterm.GLOBAL.bell_panes['7'], 'viewing the tab does not clear its bell mark')
+check(host_colour ~= '#cba6f7' and host_colour:match('^#%x+$'), 'an active SSH tab is not filled with its host colour: ' .. tostring(host_colour))
+handlers['update-status'](window(nil, 2), sp)
+check(has(status, 'dev10'), 'the footer does not name the SSH host: ' .. status)
 bg.is_active = false
-check(title(bg) == ' ● > 1: host:~ ', 'unseen output: [' .. title(bg) .. ']')
+check(title(bg) == ' ● > 1: dev10 ', 'unseen output: [' .. title(bg) .. ']')
+check(tab_bg(bg) == '#1e1e2e', 'an inactive SSH tab is not on the bar colour')
+bg.tab_title = 'build'
+check(title(bg) == ' ● > 1: build ', 'a name set with Ctrl+Shift+E does not win: [' .. title(bg) .. ']')
+bg.tab_title = ''
 ssh_pane.progress = { Percentage = 42 }
 check(has(title(bg), '42%'), 'no progress mark: ' .. title(bg))
 ssh_pane.progress = 'Indeterminate'
 check(title(bg):sub(1, 3) == ' ~ ', 'no busy mark: ' .. title(bg))
+pane(wide, false, 0, { id = 8, proc = { name = 'pwsh.exe', argv = { 'pwsh.exe' } } })
+local win = { tab_id = 4, tab_index = 0, is_active = false, tab_title = '', panes = {},
+  active_pane = { pane_id = 8, title = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', domain_name = 'local', progress = 'None' } }
+check(title(win) == ' > 1: pwsh ', '.exe trimming: [' .. title(win) .. ']')
+pane(wide, false, 0, { id = 9, domain = 'WSL:AlmaLinux-9', proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } })
 local wsl = { tab_id = 3, tab_index = 0, is_active = false, tab_title = '', panes = {},
-  active_pane = { pane_id = 9, title = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', domain_name = 'WSL:AlmaLinux-9', progress = 'None' } }
-check(title(wsl) == ' $ 1: pwsh ', 'WSL glyph or .exe trimming: [' .. title(wsl) .. ']')
+  active_pane = { pane_id = 9, title = 'wsl.exe', domain_name = 'WSL:AlmaLinux-9', progress = 'None', current_working_dir = 'file://PC/home/me' } }
+check(title(wsl) == ' $ 1: AlmaLinux-9 ', 'a WSL tab is not named after its distro: [' .. title(wsl) .. ']')
+wsl.active_pane.current_working_dir = 'file://build01.corp/home/me'
+check(title(wsl) == ' > 1: build01.corp ', "a WSL tab that ssh'd elsewhere is not named after that host: [" .. title(wsl) .. ']')
 wsl.tab_title = string.rep('n', 60)
 check(#title(wsl) <= 32, 'a long name overflows max_width: ' .. #title(wsl))
+
+-- Reconnect: reruns the ssh seen in the pane after it has exited; elsewhere it says why not.
+sp.proc = false
+keys['CTRL|SHIFT+F5'].callback(w, sp)
+check(performed.action == 'SpawnCommandInNewTab' and performed.args.args == ssh_argv and performed.args.domain.DomainName == 'local', 'Ctrl+Shift+F5 does not rerun the exited ssh')
+keys['CTRL|SHIFT+F5'].callback(w, pane(wide, false, 0, { id = 20 }))
+check(has(status, 'nothing to reconnect'), 'Ctrl+Shift+F5 in a local shell says nothing: ' .. tostring(status))
+
+-- File links: over the same ssh with -t; inside the WSL distro; a remote host's from WSL
+-- says so; anything else falls through to WezTerm.
+check(handlers['open-uri'](w, sp, 'file://dev10/home/me/it%27s%20here.c') == false, 'a file link in an SSH tab falls through')
+local a = performed.args.args
+check(table.concat(a, ' ', 2) == "-t -p 2222 -t me@dev10 hx '/home/me/it'\\''s here.c'", 'SSH file link: ' .. table.concat(a, ' '))
+sp.proc = { name = 'nu.exe', argv = { 'nu.exe' } }
+check(not has(title(bg), 'dev10'), 'a shell back from ssh still shows the old host: [' .. title(bg) .. ']')
+local wp = pane(wide, false, 0, { id = 21, domain = 'WSL:AlmaLinux-9', proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } })
+check(handlers['open-uri'](w, wp, 'file://PC/home/me/a%20b.txt') == false, 'a WSL file link falls through')
+check(performed.args.domain.DomainName == 'WSL:AlmaLinux-9' and performed.args.args[1] == 'sh' and performed.args.args[5] == '/home/me/a b.txt', 'WSL file link does not open hx in the distro')
+check(handlers['open-uri'](w, wp, 'file://build01/home/me/x') == false and has(status, 'build01'), 'a remote file link in a WSL tab is not explained')
+check(handlers['open-uri'](w, wp, 'https://example.com/') == nil, 'an https link does not fall through to WezTerm')
+check(handlers['open-uri'](w, pane(wide, false, 0, { id = 22 }), 'file://PC/C:/x.txt') == nil, 'a Windows file link does not fall through to WezTerm')
+
+-- Scrollback in helix: a temp file, opened on the pane's machine; an SSH tab is refused.
+keys['CTRL|SHIFT+o'].callback(w, pane(wide, false, 0, { id = 23 }))
+local file = performed.args.args[#performed.args.args]
+local fh = io.open(file, 'r')
+check(fh and fh:read('*a') == 'line 1\nline 2\n', 'Ctrl+Shift+O did not write the scrollback to ' .. tostring(file))
+if fh then fh:close() end
+check(performed.args.domain.DomainName == 'local' and has(performed.args.args[1], 'hx'), 'Ctrl+Shift+O does not open helix locally')
+keys['CTRL|SHIFT+o'].callback(w, pane(wide, false, 0, { id = 24, domain = 'WSL:AlmaLinux-9', proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } }))
+check(performed.args.domain.DomainName == 'WSL:AlmaLinux-9' and performed.args.args[1] == 'sh' and not performed.args.args[5]:find('\\', 1, true), 'Ctrl+Shift+O does not open helix in the WSL distro on a Linux path')
+keys['CTRL|SHIFT+o'].callback(w, pane(wide, true, 0, { id = 25, proc = { name = 'ssh', argv = { 'ssh', 'dev10' } } }))
+check(has(status, 'zellij'), 'Ctrl+Shift+O in an SSH tab does not point at zellij: ' .. tostring(status))
+
+-- Mouse release: says Copied only when something was selected.
+mouse['NONE+Up1'].args[2].callback(w, p)
+check(has(status, 'Copied'), 'a mouse selection does not say Copied')
+
+-- Tab switcher: real numbers, the host beside an SSH tab, activates the pick.
+local activated
+local function mtab(id, title, p)
+  return { tab_id = function() return id end, get_title = function() return title end, active_pane = function() return p end, activate = function() activated = id end }
+end
+local sw = window(nil)
+sw.active_tab = function() return { tab_id = function() return 31 end } end
+local tp = pane(wide, false, 0, { id = 30, proc = { name = 'ssh', argv = { 'ssh', 'dev10' } } })
+tp.get_title = function() return 'zellij' end
+sw.mux_window = function() return { tabs = function() return { mtab(31, 'notes', pane(wide, false, 0, { id = 32 })), mtab(33, '', tp) } end } end
+keys['CTRL|SHIFT+s'].callback(sw, p)
+local labels = {}
+for _, ch in ipairs(performed.args.choices) do labels[#labels + 1] = ch.label end
+check(labels[1] == '● 1: notes' and labels[2] == '  2: zellij  [dev10]', 'tab switcher rows: ' .. table.concat(labels, ' | '))
+performed.args.action.callback(sw, p, '33')
+check(activated == 33, 'the tab switcher does not activate the pick')
 
 -- Cheatsheet: the custom keys, WezTerm's defaults, and launch rows that open their entry.
 keys['CTRL|SHIFT+h'].callback(w, p)
@@ -1592,20 +1709,21 @@ for _, r in ipairs(performed.args.choices) do
   if r.id then launch = launch + 1 end
 end
 local text = table.concat(rows, '\n')
-for _, k in ipairs({ 'Ctrl+Alt+L', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Shift+click', 'Ctrl+Shift+F' }) do
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F' }) do
   check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
 end
 check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')
 performed.args.action.callback(w, p, '1')
 check(performed.action == 'SpawnCommandInNewTab' and performed.args == c.launch_menu[1], 'a launch row does not open its entry')
 local palette = handlers['augment-command-palette']()
-check(#palette == 5 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
+check(#palette == 10 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
 io.write('ok')
 LUA
   for triple in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu; do
-    out=$("${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
+    # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
+    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg runs as $triple: theme, chrome, TERM, keys, launcher, footer, notices, tab marks, cheatsheet"
+      ok "$cfg runs as $triple: theme, chrome, TERM, keys, mouse, launcher, footer, notices, SSH tabs, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi

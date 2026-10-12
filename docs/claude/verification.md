@@ -177,7 +177,11 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   `%TEMP%` (a UNC cwd breaks junction cleanup); its toast-id key is a throwaway HKCU path.
 - On a host after a full bootstrap: `infocmp wezterm | head -1` exits 0; in a WezTerm WSL tab
   `echo $TERM` prints `wezterm`, `sudo env | grep ^TERM=` prints `xterm-256color`, and `ls` is
-  coloured. Nushell and PowerShell tabs show `xterm-256color`.
+  coloured. Nushell and PowerShell tabs show `xterm-256color`. `mise run health`'s wezterm rows
+  cover the entry and, from WSL, the Windows nightly and toast id (via `winterop`).
+- GUI-only (no headless check): the footer, tab colours/marks, notices, toasts, Ctrl+click and
+  file links, Ctrl+triple-click. In a launcher SSH tab: the host's colour and name, Ctrl+Shift+F5
+  after `exit`, and `ll` then Ctrl+click on a file (helix opens over ssh).
 
 ## mise 2026.9.9 behaviour this setup relies on
 

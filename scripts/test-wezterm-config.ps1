@@ -34,7 +34,14 @@ try {
                 'CTRL\s+A\s+->\s+Multiple\(\[ActivateCopyMode',
                 'CTRL\s+UpArrow\s+->\s+ScrollToPrompt\(-1\)',
                 'SUPER\s+Drag \{ streak: 1, button: Left \}\s+->\s+StartWindowDrag',
-                'SHIFT\s+Down \{ streak: 1, button: Left \}\s+->\s+SelectTextAtMouseCursor\(Cell\)'
+                'SHIFT\s+Down \{ streak: 1, button: Left \}\s+->\s+SelectTextAtMouseCursor\(Cell\)',
+                'CTRL\s+W\s+->\s+CloseCurrentTab \{ confirm: false \}',
+                'CTRL\s+Q\s+->\s+PaneSelect',
+                'ALT\s+S\s+->\s+ActivateKeyTable \{ name: "resize_pane"',
+                'Key Table: resize_pane',
+                'CTRL\s+Up \{ streak: 1, button: Left \}\s+->\s+OpenLinkAtMouseCursor',
+                'CTRL\s+Down \{ streak: 3, button: Left \}\s+->\s+SelectTextAtMouseCursor\(SemanticZone\)',
+                '\n\s+Up \{ streak: 1, button: Left \}\s+->\s+Multiple\(\[CompleteSelection\(ClipboardAndPrimarySelection\)'
             )) {
             Assert ($keys -match $want) "show-keys lacks /$want/ (did the config fail to load?)`n$keys"
         }

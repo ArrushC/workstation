@@ -30,8 +30,10 @@ local mocha = {
   surface2 = '#585b70',
   overlay0 = '#6c7086',
   text = '#cdd6f4',
+  blue = '#89b4fa',
   mauve = '#cba6f7',
   sky = '#89dceb',
+  teal = '#94e2d5',
   green = '#a6e3a1',
   yellow = '#f9e2af',
   peach = '#fab387',
@@ -148,6 +150,17 @@ config.term = 'wezterm'
 config.notification_handling = 'SuppressFromFocusedPane'
 config.switch_to_last_active_tab_when_closing_tab = true
 config.unzoom_on_switch_pane = true
+-- Closing a tab (Ctrl+Shift+W) or the window never asks: an SSH tab's zellij session
+-- survives and reattaches (launcher, Ctrl+Shift+F5), and a local shell holds nothing a
+-- prompt would save.
+config.window_close_confirmation = 'NeverPrompt'
+-- Kitty's keyboard protocol for the apps that ask for it (helix gets unambiguous keys,
+-- zellij passes it on); the rest are untouched. On Windows, ConPTY panes keep
+-- win32-input-mode. If a TUI misbehaves after an update, turn this off first.
+config.enable_kitty_keyboard = true
+-- The pane picker's (Ctrl+Shift+Q) letters.
+config.pane_select_fg_color = mocha.mauve
+config.pane_select_bg_color = mocha.crust
 -- Dropped files paste as a quoted path, which parentheses in Windows paths need.
 config.quote_dropped_files = 'WindowsAlwaysQuoted'
 -- Inline images (yazi previews, wezterm imgcat) in local, WSL and plain SSH panes; zellij
@@ -156,8 +169,8 @@ config.enable_kitty_graphics = true
 
 -- Links: WezTerm's defaults, plus #123 to this repository's issues and pull requests
 -- (GitHub redirects an issue URL to the PR). \B# skips word#12; the trailing \b skips hex
--- colours such as #1e1e2e. A plain click opens a link; Shift+click also works inside
--- zellij, helix and other apps that take the mouse.
+-- colours such as #1e1e2e. Ctrl+click opens a link (a plain click ends a selection, which
+-- is copied); Shift+click also works inside zellij, helix and other apps that take the mouse.
 config.hyperlink_rules = wezterm.default_hyperlink_rules()
 table.insert(config.hyperlink_rules, {
   regex = [[\B#(\d+)\b]],
@@ -208,6 +221,14 @@ if windows then
   end
   table.insert(config.launch_menu, { label = 'PowerShell', args = { 'pwsh.exe', '-NoLogo' }, domain = here })
   table.insert(config.launch_menu, { label = 'Windows PowerShell', args = { 'powershell.exe', '-NoLogo' }, domain = here })
+  -- WSL tabs start in the distro's home: wsl.exe expands this '~' inside Linux. (A '~' cwd
+  -- on a spawn is expanded on Windows first, to C:\Users\<you>, which WSL opens as
+  -- /mnt/c/Users/<you>.) New tabs and splits then follow the shell's OSC 7.
+  local wsl = wezterm.default_wsl_domains()
+  for _, d in ipairs(wsl) do
+    d.default_cwd = '~'
+  end
+  config.wsl_domains = wsl
 end
 -- ssh sends TERM=wezterm with the pty; a host without that terminfo entry starts zellij
 -- with xterm-256color instead.
@@ -220,15 +241,106 @@ end
 -- The entries above use the system's ssh, as the other terminals do.
 config.ssh_domains = {}
 
+-- SSH tabs ----------------------------------------------------------------------------
+-- The host an SSH tab is on: the destination of the ssh in front, read from its arguments
+-- (the launcher's ssh, or one typed in Nushell or PowerShell), or for a WSL tab the host in
+-- the OSC 7 that zshrc/bashrc send over ssh. It colours the tab, names it, shows in the
+-- footer and drives Ctrl+Shift+F5 and file links. The last ssh seen in a pane is kept in
+-- wezterm.GLOBAL, so Ctrl+Shift+F5 can rerun it once it has exited (and a reload keeps it).
+
+-- ssh's options that take a value, as zshrc/bashrc's ssh wrapper skips them.
+local ssh_value_flags = 'BbcDEeFIiJLlmOoPpQRSWw'
+
+-- The destination argument and its index in argv, or nil.
+local function ssh_dest(argv)
+  local want = false
+  for i = 2, #argv do
+    local a = argv[i]
+    if want then
+      want = false
+    elseif a:sub(1, 1) == '-' and #a > 1 then
+      local rest = a:sub(2)
+      for j = 1, #rest do
+        if a ~= '--' and ssh_value_flags:find(rest:sub(j, j), 1, true) then
+          want = j == #rest
+          break
+        end
+      end
+    else
+      return a, i
+    end
+  end
+end
+
+-- { host, argv, dest } for a pane whose foreground program is ssh, or the last one seen in
+-- it once ssh has exited; nil for a live local shell. `pane` is a Pane object.
+local function ssh_of(pane)
+  local id = tostring(pane:pane_id())
+  local seen = wezterm.GLOBAL.ssh_panes or {}
+  local info = pane:get_foreground_process_info()
+  if not info then
+    return seen[id]
+  end
+  local name = (info.name or ''):lower():gsub('%.exe$', '')
+  local dest = name == 'ssh' and info.argv and ssh_dest(info.argv)
+  if dest then
+    local host = dest:gsub('^ssh://', ''):gsub('^.*@', ''):gsub(':%d+$', '')
+    if not seen[id] or seen[id].host ~= host then
+      seen[id] = { host = host, argv = info.argv, dest = dest }
+      wezterm.GLOBAL.ssh_panes = seen
+    end
+    return seen[id]
+  end
+  if seen[id] then
+    seen[id] = nil
+    wezterm.GLOBAL.ssh_panes = seen
+  end
+end
+
+local local_host = (wezterm.hostname() or ''):lower():match('^[^.]*')
+
+-- A WSL pane's remote host: the OSC 7 host when it is neither this machine nor the distro.
+local function wsl_remote(pane_info, distro)
+  local cwd = pane_info.current_working_dir
+  local host = cwd and tostring(cwd):match('^file://([^/]+)/')
+  local short = host and host:lower():match('^[^.]*')
+  if short and short ~= '' and short ~= 'localhost' and short ~= local_host and short ~= distro:lower() then
+    return host
+  end
+end
+
+-- A stable Mocha accent per host name, so each machine keeps its colour.
+local accents = { mocha.blue, mocha.mauve, mocha.sky, mocha.green, mocha.yellow, mocha.peach, mocha.red, mocha.teal }
+local function accent(host)
+  local h = 0
+  for i = 1, #host do
+    h = (h * 131 + host:byte(i)) % 65521
+  end
+  return accents[h % #accents + 1]
+end
+
+-- Single-quoted for a POSIX shell on the far side of ssh.
+local function shq(s)
+  return "'" .. s:gsub("'", "'\\''") .. "'"
+end
+
+-- helix in a WSL distro: wsl.exe runs a spawned program without a login shell, so mise's
+-- shims aren't on PATH yet.
+local function wsl_hx(path)
+  return { 'sh', '-c', 'PATH="${XDG_DATA_HOME:-$HOME/.local/share}/mise/shims:$PATH"; exec hx "$1"', 'hx', path }
+end
+
 -- Notices -------------------------------------------------------------------------------
 -- A short coloured message in the status footer ("Copied", "Config reloaded"): WezTerm's
 -- Lua has no overlay that neither takes focus nor writes into the pane. Seconds-long, so
 -- they live in this VM; a reload only drops one that was about to expire anyway.
 local notices = {}
+local levels = { info = { fg = mocha.green, secs = 2 }, warn = { fg = mocha.peach, secs = 4 } }
 local render_status
 
-local function flash(window, pane, text)
-  notices[window:window_id()] = { text = text, expires = os.time() + 2 }
+local function flash(window, pane, text, level)
+  local lv = levels[level] or levels.info
+  notices[window:window_id()] = { text = text, fg = lv.fg, expires = os.time() + lv.secs }
   render_status(window, pane)
 end
 
@@ -240,6 +352,14 @@ local copy = wezterm.action_callback(function(window, pane)
   local sel = window:get_selection_text_for_pane(pane)
   if sel and sel ~= '' then
     window:perform_action(act.CopyTo('Clipboard'), pane)
+    flash(window, pane, 'Copied')
+  end
+end)
+
+-- After a mouse selection completes (it copies): say so, unless it was a plain click.
+local copied_notice = wezterm.action_callback(function(window, pane)
+  local sel = window:get_selection_text_for_pane(pane)
+  if sel and sel ~= '' then
     flash(window, pane, 'Copied')
   end
 end)
@@ -272,6 +392,99 @@ local rename_tab = wezterm.action_callback(function(window, pane)
     pane
   )
 end)
+
+-- Ctrl+Shift+F5: rerun a dead (or hung) SSH tab's ssh in a new tab; zellij reattaches
+-- its session. The old tab stays for its scrollback.
+local reconnect = wezterm.action_callback(function(window, pane)
+  local s = ssh_of(pane)
+  if not s then
+    flash(window, pane, 'Not an SSH tab: nothing to reconnect', 'warn')
+    return
+  end
+  window:perform_action(act.SpawnCommandInNewTab({ args = s.argv, domain = here }), pane)
+end)
+
+-- Ctrl+Shift+O: the pane's scrollback in helix, in a new tab on the same machine (a temp
+-- file, one per pane). An SSH tab's history is in zellij, which WezTerm only sees a screen
+-- of; zellij's own edit-scrollback key opens it there.
+local scrollback_in_helix = wezterm.action_callback(function(window, pane)
+  if ssh_of(pane) then
+    flash(window, pane, "zellij holds this tab's scrollback: use its edit-scrollback key", 'warn')
+    return
+  end
+  local dims = pane:get_dimensions()
+  local text = pane:get_lines_as_text(dims.scrollback_rows)
+  local dir = os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp'
+  local file = dir .. (windows and '\\' or '/') .. 'wezterm-scrollback-' .. pane:pane_id() .. '.txt'
+  local f, err = io.open(file, 'w')
+  if not f then
+    flash(window, pane, 'Could not write the scrollback: ' .. tostring(err), 'warn')
+    return
+  end
+  f:write(text)
+  f:close()
+  local domain = pane:get_domain_name() or ''
+  if domain:find('^WSL:') then
+    -- C:\Users\me\...\x.txt is /mnt/c/Users/me/.../x.txt inside the distro.
+    local linux = file:gsub('\\', '/'):gsub('^(%a):', function(d)
+      return '/mnt/' .. d:lower()
+    end)
+    window:perform_action(act.SpawnCommandInNewTab({ args = wsl_hx(linux), domain = { DomainName = domain } }), pane)
+  else
+    local hx = windows and (os.getenv('LOCALAPPDATA') or '') .. '\\mise\\shims\\hx.exe' or 'hx'
+    window:perform_action(act.SpawnCommandInNewTab({ args = { hx, file }, domain = here }), pane)
+  end
+end)
+
+-- Ctrl+Shift+S: a fuzzy tab list that keeps each tab's real number (the launcher renumbers
+-- what it filters), with the host or domain beside it.
+local switch_tab = wezterm.action_callback(function(window, pane)
+  local active = window:active_tab():tab_id()
+  local choices = {}
+  for i, tab in ipairs(window:mux_window():tabs()) do
+    local p = tab:active_pane()
+    local s = ssh_of(p)
+    local where = s and s.host or (p:get_domain_name() or ''):gsub('^local$', '')
+    local title = tab:get_title()
+    if title == '' then
+      title = p:get_title()
+    end
+    table.insert(choices, {
+      id = tostring(tab:tab_id()),
+      label = string.format('%s %d: %s%s', tab:tab_id() == active and '●' or ' ', i, title, where ~= '' and ('  [' .. where .. ']') or ''),
+    })
+  end
+  window:perform_action(
+    act.InputSelector({
+      title = 'Switch tab',
+      fuzzy = true,
+      choices = choices,
+      action = wezterm.action_callback(function(win, _, id)
+        for _, t in ipairs(id and win:mux_window():tabs() or {}) do
+          if tostring(t:tab_id()) == id then
+            t:activate()
+            return
+          end
+        end
+      end),
+    }),
+    pane
+  )
+end)
+
+-- Alt+Shift+S: resize mode. Arrows move the split 3 cells at a time until Esc or Enter;
+-- the footer says RESIZE meanwhile. (Ctrl+Shift+Alt+arrows still move it by one.)
+local resize_mode = act.ActivateKeyTable({ name = 'resize_pane', one_shot = false })
+config.key_tables = {
+  resize_pane = {
+    { key = 'LeftArrow', action = act.AdjustPaneSize({ 'Left', 3 }) },
+    { key = 'RightArrow', action = act.AdjustPaneSize({ 'Right', 3 }) },
+    { key = 'UpArrow', action = act.AdjustPaneSize({ 'Up', 3 }) },
+    { key = 'DownArrow', action = act.AdjustPaneSize({ 'Down', 3 }) },
+    { key = 'Escape', action = act.PopKeyTable },
+    { key = 'Enter', action = act.PopKeyTable },
+  },
+}
 
 -- Quick selects that act on the pick. Both type into the pane as a paste, so the pane's
 -- own shell does the work wherever it runs (Nushell, WSL zsh, a host through ssh and
@@ -306,11 +519,11 @@ local bindings -- set below the cheatsheet, which reads it when it opens
 
 -- WezTerm defaults worth knowing, mouse gestures and what the footer and tabs show.
 local reference = {
-  { 'Ctrl+Shift+T / W', 'New tab / close tab' },
+  { 'Ctrl+Shift+T', 'New tab' },
   { 'Ctrl+Tab', 'Next tab (Ctrl+Shift+Tab: previous)' },
   { 'Ctrl+Shift+N', 'New window' },
   { 'Ctrl+Shift+Z', 'Toggle pane zoom' },
-  { 'Ctrl+Shift+Alt+arrows', 'Resize the pane' },
+  { 'Ctrl+Shift+Alt+arrows', 'Resize the pane by one cell' },
   { 'Ctrl+Shift+F', 'Search the scrollback' },
   { 'Ctrl+Shift+X', 'Copy mode (COPY in the footer)' },
   { 'Ctrl+Shift+Space', 'Quick select: URLs, paths, hashes, IPs, #123' },
@@ -322,10 +535,13 @@ local reference = {
   { 'Ctrl+Shift+R', 'Reload this config' },
   { 'Ctrl+Shift+L', 'Debug overlay (Lua console, logs)' },
   { 'Alt+Enter', 'Full screen' },
+  { 'Ctrl+click', 'Open a link (a file:// one in helix, on the machine it came from)' },
   { 'Shift+click', 'Open a link, also inside zellij and helix' },
+  { 'Ctrl+triple-click', "Select one command's whole output and copy it" },
   { 'Ctrl+Shift+drag', 'Move the window (Win+drag too)' },
-  { 'select', 'Selecting with the mouse copies' },
-  { 'footer', 'Lines in the pane, battery, time; COPY / SEARCH while those modes run' },
+  { 'select', 'Selecting with the mouse copies (Copied in the footer)' },
+  { 'footer', 'SSH host, lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
+  { 'tab colours', 'An SSH tab takes its host colour and name' },
   { 'tab marks', "Bell rang, % progress, dot: output you haven't seen" },
 }
 
@@ -397,6 +613,12 @@ bindings = {
   { 'CTRL|SHIFT', 'e', rename_tab, 'Rename the tab' },
   { 'CTRL|SHIFT', 'g', open_in_helix, 'Quick select a file:line, open it in helix' },
   { 'CTRL|SHIFT', 'y', paste_sha, 'Quick select a commit SHA, paste it at the prompt' },
+  { 'CTRL|SHIFT', 'w', act.CloseCurrentTab({ confirm = false }), 'Close the tab (no prompt)' },
+  { 'CTRL|SHIFT', 's', switch_tab, 'Switch tab (fuzzy, real numbers)' },
+  { 'CTRL|SHIFT', 'q', act.PaneSelect({}), 'Pick a pane by letter' },
+  { 'ALT|SHIFT', 'S', resize_mode, 'Resize mode: arrows, Esc or Enter ends it' },
+  { 'CTRL|SHIFT', 'F5', reconnect, 'Reconnect an SSH tab (new tab; zellij reattaches)' },
+  { 'CTRL|SHIFT', 'o', scrollback_in_helix, 'The scrollback in helix' },
   { 'CTRL|SHIFT', 'h', cheatsheet, 'This cheatsheet' },
 }
 
@@ -405,28 +627,39 @@ for _, b in ipairs(bindings) do
   table.insert(config.keys, { mods = b[1], key = b[2], action = b[3] })
 end
 
--- Shift+click opens the link under the mouse. Shift is the modifier WezTerm keeps for
--- itself in apps that take the mouse, so this is the one link gesture that works inside
--- zellij and helix. The default Shift+press extends a selection, which made the release
--- always complete that selection; starting a fresh one lets the release open the link.
+-- Mouse. Releasing a selection copies it and says "Copied" (a plain click selects nothing
+-- and says nothing). That replaces the default release, which also opened a link under the
+-- mouse, so Ctrl+click opens links; its press does nothing, so it starts no selection and
+-- never reaches an app that takes the mouse.
+local copy_on_release = act.Multiple({ act.CompleteSelection('ClipboardAndPrimarySelection'), copied_notice })
 config.mouse_bindings = {
-  {
-    event = { Down = { streak = 1, button = 'Left' } },
-    mods = 'SHIFT',
-    action = act.SelectTextAtMouseCursor('Cell'),
-  },
+  { event = { Up = { streak = 1, button = 'Left' } }, mods = 'NONE', action = copy_on_release },
+  { event = { Up = { streak = 2, button = 'Left' } }, mods = 'NONE', action = copy_on_release },
+  { event = { Up = { streak = 3, button = 'Left' } }, mods = 'NONE', action = copy_on_release },
+  { event = { Down = { streak = 1, button = 'Left' } }, mods = 'CTRL', action = act.Nop },
+  { event = { Up = { streak = 1, button = 'Left' } }, mods = 'CTRL', action = act.OpenLinkAtMouseCursor },
+  -- Shift is the modifier WezTerm keeps for itself in apps that take the mouse, so
+  -- Shift+click is the link gesture inside zellij and helix. The default Shift+press
+  -- extends a selection, so the release always completed it; starting a fresh one lets
+  -- the release open the link.
+  { event = { Down = { streak = 1, button = 'Left' } }, mods = 'SHIFT', action = act.SelectTextAtMouseCursor('Cell') },
   {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'SHIFT',
-    action = act.CompleteSelectionOrOpenLinkAtMouseCursor('ClipboardAndPrimarySelection'),
+    action = act.Multiple({ act.CompleteSelectionOrOpenLinkAtMouseCursor('ClipboardAndPrimarySelection'), copied_notice }),
   },
+  -- Ctrl+triple-click: one command's whole output, from the prompt marks the shells send
+  -- (zsh, bash and Nushell; not inside zellij).
+  { event = { Down = { streak = 3, button = 'Left' } }, mods = 'CTRL', action = act.SelectTextAtMouseCursor('SemanticZone') },
+  { event = { Up = { streak = 3, button = 'Left' } }, mods = 'CTRL', action = copy_on_release },
   -- Ctrl+Shift+drag moves the window by default; Win+drag too, with no title bar to grab.
   { event = { Drag = { streak = 1, button = 'Left' } }, mods = 'SUPER', action = act.StartWindowDrag },
 }
 
 -- Status footer ---------------------------------------------------------------------------
--- Right of the tab bar, refreshed every second: COPY / SEARCH while those modes run, the
--- pane's line count, battery, time. Parts drop out as the pane narrows.
+-- Right of the tab bar, refreshed every second: COPY / SEARCH / RESIZE while those modes
+-- run, an SSH tab's host in its colour, the pane's line count, battery, time. Parts drop
+-- out as the pane narrows.
 
 local function thousands(n)
   local s = tostring(math.floor(n)):reverse():gsub('(%d%d%d)', '%1,'):reverse()
@@ -488,6 +721,12 @@ render_status = function(window, pane)
     table.insert(parts, { text = 'COPY', fg = mocha.yellow, bold = true })
   elseif mode == 'search_mode' then
     table.insert(parts, { text = 'SEARCH', fg = mocha.sky, bold = true })
+  elseif mode == 'resize_pane' then
+    table.insert(parts, { text = 'RESIZE', fg = mocha.teal, bold = true })
+  end
+  local s = ssh_of(pane)
+  if s then
+    table.insert(parts, { text = s.host, fg = accent(s.host) })
   end
   local lines = line_count(pane, dims)
   if lines then
@@ -522,7 +761,7 @@ render_status = function(window, pane)
     local left = math.floor(pad / 2)
     items = {
       { Text = string.rep(' ', left) },
-      { Foreground = { Color = mocha.green } },
+      { Foreground = { Color = n.fg } },
       { Attribute = { Intensity = 'Bold' } },
       { Text = n.text },
       { Attribute = { Intensity = 'Normal' } },
@@ -591,25 +830,32 @@ local function tab_mark(tab)
   end
 end
 
-local function tab_glyph(pane)
-  if (pane.domain_name or ''):find('^WSL:') then
-    return glyphs.wsl
+-- What a tab shows: its glyph, its title and, for an SSH tab, its host. An SSH tab is named
+-- after its host and takes the host's colour; a WSL tab after its distro, or the host it
+-- has ssh'd to; any other tab after its pane's title without a "user@" prefix, a Windows
+-- program's path cut to its name (C:\...\pwsh.exe becomes pwsh). A name set with
+-- Ctrl+Shift+E wins over all of them.
+local function tab_info(tab)
+  local p = tab.active_pane or {}
+  local domain = p.domain_name or ''
+  local live = p.pane_id and wezterm.mux.get_pane(p.pane_id)
+  local s = live and ssh_of(live)
+  local glyph, title, host
+  if s then
+    glyph, title, host = glyphs.ssh, s.host, s.host
+  elseif domain:find('^WSL:') then
+    local distro = domain:gsub('^WSL:', '')
+    host = wsl_remote(p, distro)
+    glyph, title = host and glyphs.ssh or glyphs.wsl, host or distro
+  else
+    glyph = glyphs.shell
+    title = (p.title or ''):gsub('^[%w%._%-]+@', '')
+    title = title:gsub('^.*[\\/]([^\\/]+)%.[Ee][Xx][Ee]$', '%1')
   end
-  local proc = (pane.foreground_process_name or ''):match('([^/\\]+)$') or ''
-  if proc:lower():gsub('%.exe$', '') == 'ssh' then
-    return glyphs.ssh
-  end
-  return glyphs.shell
-end
-
--- A name set with Ctrl+Shift+E wins; otherwise the pane's title without a "user@" prefix,
--- and a Windows program's path cut to its name (C:\...\pwsh.exe becomes pwsh).
-local function tab_title(tab)
   if tab.tab_title and tab.tab_title ~= '' then
-    return tab.tab_title
+    title = tab.tab_title
   end
-  local title = ((tab.active_pane or {}).title or ''):gsub('^[%w%._%-]+@', '')
-  return (title:gsub('^.*[\\/]([^\\/]+)%.[Ee][Xx][Ee]$', '%1'))
+  return glyph, title, host
 end
 
 wezterm.on('format-tab-title', function(tab, tabs, _, _, hover, max_width)
@@ -621,15 +867,30 @@ wezterm.on('format-tab-title', function(tab, tabs, _, _, hover, max_width)
       break
     end
   end
+  local glyph, title, host = tab_info(tab)
+  -- Nothing, muted, full: an inactive SSH tab shows its host colour in the text, hover a
+  -- dark block of it, the active tab the full colour. Other tabs use mauve the same way.
   local bg, fg = mocha.base, mocha.overlay0
-  if tab.is_active then
+  if host then
+    local c = wezterm.color.parse(accent(host))
+    if tab.is_active then
+      bg, fg = accent(host), mocha.crust
+    elseif hover then
+      bg, fg = tostring(c:desaturate(0.5):darken(0.5)), mocha.text
+    else
+      fg = tostring(c:desaturate(0.4):darken(0.1))
+    end
+  elseif tab.is_active then
     bg, fg = mocha.mauve, mocha.crust
   elseif hover then
     bg, fg = mocha.surface1, mocha.text
   end
   local mark, mark_fg = tab_mark(tab)
+  if mark == '●' and host then
+    mark_fg = accent(host)
+  end
   local lead = mark and (' ' .. mark .. ' ') or ' '
-  local prefix = string.format('%s %d: ', tab_glyph(tab.active_pane or {}), n)
+  local prefix = string.format('%s %d: ', glyph, n)
   local room = math.max(1, max_width - wezterm.column_width(lead) - wezterm.column_width(prefix) - 1)
   local items = { { Background = { Color = bg } } }
   if mark then
@@ -640,8 +901,41 @@ wezterm.on('format-tab-title', function(tab, tabs, _, _, hover, max_width)
   if tab.is_active then
     table.insert(items, { Attribute = { Intensity = 'Bold' } })
   end
-  table.insert(items, { Text = prefix .. wezterm.truncate_right(tab_title(tab), room) .. ' ' })
+  table.insert(items, { Text = prefix .. wezterm.truncate_right(title, room) .. ' ' })
   return items
+end)
+
+-- file:// links (eza --hyperlink in the l/ll/lt aliases) open in helix, in a new tab on the
+-- machine that printed them: a WSL distro's in that distro, an SSH tab's over the same ssh
+-- (its options and destination, plus -t). A WSL tab that has ssh'd elsewhere can't reach
+-- the file, so it says so. Other links, and Windows paths, go to WezTerm's default.
+wezterm.on('open-uri', function(window, pane, uri)
+  local ok, url = pcall(wezterm.url.parse, uri)
+  if not ok or url.scheme ~= 'file' then
+    return
+  end
+  local s = ssh_of(pane)
+  if s then
+    local _, at = ssh_dest(s.argv)
+    local args = { s.argv[1], '-t' }
+    for i = 2, at do
+      table.insert(args, s.argv[i])
+    end
+    table.insert(args, 'hx ' .. shq(url.file_path))
+    window:perform_action(act.SpawnCommandInNewTab({ args = args, domain = here }), pane)
+    return false
+  end
+  local domain = pane:get_domain_name() or ''
+  if not domain:find('^WSL:') then
+    return
+  end
+  local host = (url.host or ''):lower():match('^[^.]*') or ''
+  if host ~= '' and host ~= 'localhost' and host ~= local_host and host ~= domain:gsub('^WSL:', ''):lower() then
+    flash(window, pane, 'That file is on ' .. url.host .. ': open it from an SSH tab there', 'warn')
+    return false
+  end
+  window:perform_action(act.SpawnCommandInNewTab({ args = wsl_hx(url.file_path), domain = { DomainName = domain } }), pane)
+  return false
 end)
 
 -- Events --------------------------------------------------------------------------------
@@ -671,6 +965,11 @@ wezterm.on('augment-command-palette', function()
     { brief = 'Copy the whole scrollback', action = copy_scrollback },
     { brief = 'Quick select: file:line into helix', action = open_in_helix },
     { brief = 'Quick select: commit SHA into the prompt', action = paste_sha },
+    { brief = 'Reconnect the SSH tab', action = reconnect },
+    { brief = 'Open the scrollback in helix', action = scrollback_in_helix },
+    { brief = 'Switch tab (fuzzy)', action = switch_tab },
+    { brief = 'Pick a pane by letter', action = act.PaneSelect({}) },
+    { brief = 'Resize panes (arrows; Esc or Enter ends it)', action = resize_mode },
   }
 end)
 

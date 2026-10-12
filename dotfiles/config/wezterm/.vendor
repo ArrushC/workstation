@@ -1,12 +1,14 @@
 file:           wezterm.terminfo (only; wezterm.lua beside it is first-party)
 upstream:       https://github.com/wezterm/wezterm
 path:           termwiz/data/wezterm.terminfo
-commit:         e2a98e1b8af156988ad0ac778658ac27b60a55fb (the nightly installed 2026-10-10;
-                the file last changed upstream in 52c3515037518b826f32609179383948217d5a33)
+commit:         e2a98e1b8af156988ad0ac778658ac27b60a55fb
 license:        MIT
 vendored:       2026-10-12
 deployed as:    nothing; tasks/wezterm-terminfo (the Linux final hook) compiles it with
                 `tic -x` into ~/.terminfo, re-running when this file's SHA256 changes.
 note:           wezterm.lua sets TERM=wezterm. -x keeps the extended capabilities (Tc,
                 Smulx, Setulc, Ms) that make it worth more than xterm-256color.
-                Bump: re-download at the new commit, update commit here. Never hand-edit.
+                Tracks upstream main, which every nightly builds from (commit is main's
+                when vendored): scripts/bump-versions.sh re-vendors it when main's copy
+                changes, after a tic -x check, and updates commit and vendored here.
+                Never hand-edit.
