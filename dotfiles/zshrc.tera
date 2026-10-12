@@ -307,40 +307,52 @@ if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; t
   unset _ws_starship_cfg
 fi
 
-# --- Windows Terminal and WezTerm shell integration ----------------------------
-# Emits the FTCS/ConEmu sequences Windows Terminal turns into UI: OSC 133 A/C/D
-# prompt marks (scrollbar marks + ctrl+up/down prompt jumps, exit-code colored),
-# OSC 9;9 cwd (duplicate-tab/split reopens the current directory — WT needs a
-# WINDOWS path, hence wslpath -w), and OSC 9;4 taskbar progress (indeterminate
-# while a curated long-runner executes; cleared at the next prompt). WezTerm
-# reads the same marks (Ctrl+Up/Down) and progress (a tab mark), but the cwd from
-# OSC 7, a file:// URL with this host's name: TERM_PROGRAM=WezTerm crosses into
-# WSL (WezTerm adds it to WSLENV) and TERM=wezterm crosses ssh. Gated hard:
-# WT_SESSION crosses WSL interop only in local Windows Terminal tabs (unset over
-# SSH), and $ZELLIJ excludes multiplexed shells — zellij composites panes, so
-# the sequences would be swallowed there. _wt_precmd is PREPENDED to
-# precmd_functions so it reads the real $? before other hooks run, and it
-# returns that status so starship's exit-code module still sees it. bash gets
-# the prompt-side half only (see the PARITY NOTE in bashrc.tera).
-if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+# --- Terminal shell integration (prompt marks, cwd, progress) -----------------
+# Every terminal gets OSC 133 prompt marks (A prompt, B input, C output, D;<exit>:
+# Windows Terminal's scrollbar marks and Ctrl+Up/Down jumps, exit-code colored;
+# WezTerm's prompt jumps and Ctrl+triple-click output selection) and OSC 7, the cwd
+# as a file:// URL with this host's name (WezTerm opens new tabs and splits there,
+# and names a WSL tab after the host it has ssh'd to). Terminals that don't know
+# them drop them, and over ssh they reach the local terminal, even where TERM fell
+# back to xterm-256color. Not under Warp (its own integration renders the prompt),
+# nor for TERM=dumb or linux (an Emacs TRAMP shell, the console).
+# Windows Terminal and WezTerm outside zellij (which keeps these to itself) also get
+# ConEmu's OSC 9 sequences, which other terminals would show as notifications:
+# 9;4 taskbar progress (indeterminate while a curated long-runner executes, cleared
+# at the next prompt; a tab mark in WezTerm), and for WT the 9;9 cwd (WT needs a
+# Windows path, hence wslpath -w). WT_SESSION crosses WSL interop only in local WT
+# tabs, TERM_PROGRAM=WezTerm crosses into WSL (WezTerm adds it to WSLENV), and
+# TERM=wezterm crosses ssh. _wt_precmd is PREPENDED to precmd_functions so it reads
+# the real $? before other hooks run, and returns it so starship's exit-code module
+# still sees it; _wt_prompt_end is appended, after starship has set PROMPT. bash
+# has the same marks; see its PARITY NOTE in bashrc.tera.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && $TERM != (dumb|linux) ]]; then
+  if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+    _wt_osc9=1
+  else
+    _wt_osc9=
+  fi
   _wt_precmd() {
     local _wt_status=$?
     # Previous command's mark: D;<exit> colors it green/red on the scrollbar.
     printf '\e]133;D;%s\a' "$_wt_status"
-    # CWD for a new tab or split: WezTerm's OSC 7, or WT's 9;9 (Windows path form).
-    if [[ $TERM_PROGRAM == WezTerm || $TERM == wezterm ]]; then
-      printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD"
-    elif command -v wslpath &>/dev/null; then
+    printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD"
+    if [[ -n $_wt_osc9 && $TERM_PROGRAM != WezTerm && $TERM != wezterm ]] && command -v wslpath &>/dev/null; then
       printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
     fi
     # Prompt-start mark, then clear any taskbar progress.
     printf '\e]133;A\a'
-    printf '\e]9;4;0;0\a'
+    [[ -n $_wt_osc9 ]] && printf '\e]9;4;0;0\a'
     return "$_wt_status"
+  }
+  # Prompt-end mark: what follows the prompt is the typed command.
+  _wt_prompt_end() {
+    [[ $PROMPT == *']133;B'* ]] || PROMPT+=$'%{\e]133;B\a%}'
   }
   _wt_preexec() {
     # Output-start mark for the command about to run.
     printf '\e]133;C\a'
+    [[ -n $_wt_osc9 ]] || return 0
     # Indeterminate taskbar progress for curated long-runners.
     case "${1%% *}" in
       make | mise | wsa | wsu | dnf | cargo | npm | uv) printf '\e]9;4;3;0\a' ;;
@@ -352,7 +364,9 @@ if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z
     esac
   }
   # Re-source guard: don't register twice (matches zoxide/starship convention).
-  (( ${precmd_functions[(I)_wt_precmd]} )) || precmd_functions=(_wt_precmd "${precmd_functions[@]}")
+  # Unquoted: with no hooks yet, "${precmd_functions[@]}" would add an empty name.
+  (( ${precmd_functions[(I)_wt_precmd]} )) || precmd_functions=(_wt_precmd $precmd_functions)
+  (( ${precmd_functions[(I)_wt_prompt_end]} )) || precmd_functions+=(_wt_prompt_end)
   (( ${preexec_functions[(I)_wt_preexec]} )) || preexec_functions+=(_wt_preexec)
 fi
 

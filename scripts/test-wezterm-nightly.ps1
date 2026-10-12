@@ -2,8 +2,9 @@
 # a fresh install, an up-to-date run that downloads no zip, a new nightly (the junction
 # moves, the old build goes), a build a running process still uses (kept), a checksum
 # mismatch (the installed build stays, exit 0), a root given as an 8.3 short path, and
-# an unreachable URL (exit 0, the toast id still registered). The toast id goes to a
-# throwaway HKCU key, never the real one.
+# an unreachable URL (exit 0, the toast id still registered), and the User environment
+# (WEZTERM_CONFIG_FILE, the PATH entry once, PATH's REG_EXPAND_SZ kept). The toast id and
+# the environment go to throwaway HKCU keys, never the real ones.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,8 @@ $base = 'file:///' + ($src -replace '\\', '/')
 $zip = Join-Path $src 'WezTerm-windows-nightly.zip'
 $toastRoot = "HKCU:\Software\workstation-test-$([guid]::NewGuid())"
 $toastKey = "$toastRoot\org.wezfurlong.wezterm"
+$envKey = "$toastRoot\Environment"
+$config = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\dotfiles\config\wezterm\wezterm.lua'))
 
 # A fake nightly: WezTerm-windows-<tag>\wezterm-gui.exe (text), its zip and .sha256.
 function New-Nightly([string]$Tag, [string]$Sha) {
@@ -32,17 +35,29 @@ function New-Nightly([string]$Tag, [string]$Sha) {
     return $hash
 }
 function Invoke-Nightly([string]$Base = $base) {
-    $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $Base -Root $root -ShortcutDir $menu -ToastKey $toastKey 2>&1 | Out-String
+    $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $Base -Root $root -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey 2>&1 | Out-String
     return [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 function Get-Current { (Get-Item -LiteralPath (Join-Path $root 'current')).Target }
 function Get-ToastName { (Get-ItemProperty -LiteralPath $toastKey -ErrorAction SilentlyContinue).DisplayName }
+# The raw User PATH (unexpanded) and its kind, and WEZTERM_CONFIG_FILE, from the test key.
+function Get-Env {
+    $k = Get-Item -LiteralPath $envKey
+    [pscustomobject]@{
+        Path = $k.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+        Kind = "$($k.GetValueKind('Path'))"
+        Config = $k.GetValue('WEZTERM_CONFIG_FILE')
+    }
+}
 function Get-ShortcutTarget {
     $wsh = New-Object -ComObject WScript.Shell
     try { $wsh.CreateShortcut((Join-Path $menu 'WezTerm.lnk')).TargetPath } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) }
 }
 
 try {
+    # A User PATH as Windows keeps it: REG_EXPAND_SZ, with a %variable% entry.
+    New-Item -Path $envKey -Force | Out-Null
+    New-ItemProperty -LiteralPath $envKey -Name Path -Value '%USERPROFILE%\bin;C:\tools' -PropertyType ExpandString | Out-Null
     $first = New-Nightly 'a'
     $firstDir = Join-Path $root $first.Substring(0, 12)
 
@@ -57,12 +72,21 @@ try {
         Assert ((Get-ToastName) -eq 'WezTerm') "toast id not registered: $($r.Out)"
     }
 
+    Test-Case 'the User environment: WEZTERM_CONFIG_FILE, and current\ on PATH with its kind kept' {
+        $e = Get-Env
+        Assert ($e.Config -eq $config -and (Test-Path -LiteralPath $e.Config)) "WEZTERM_CONFIG_FILE: $($e.Config)"
+        Assert ($e.Path -eq "%USERPROFILE%\bin;C:\tools;$(Join-Path $root 'current')") "PATH: $($e.Path)"
+        Assert ($e.Kind -eq 'ExpandString') "PATH became $($e.Kind)"
+    }
+
     Test-Case 'up to date: no zip download, nothing changes' {
         Remove-Item -LiteralPath $zip
         $r = Invoke-Nightly
         Assert ($r.Code -eq 0) "exit $($r.Code)"
         Assert ($r.Out -match 'up to date') "no 'up to date': $($r.Out)"
         Assert (@(Get-ChildItem -LiteralPath $root -Directory).Count -eq 2) 'a build directory appeared or went'
+        Assert ((Get-Env).Path -eq "%USERPROFILE%\bin;C:\tools;$(Join-Path $root 'current')") "PATH changed: $((Get-Env).Path)"
+        Assert ($r.Out -notmatch 'WEZTERM_CONFIG_FILE|User PATH') "the environment was rewritten: $($r.Out)"
     }
 
     $second = New-Nightly 'b'
@@ -111,7 +135,7 @@ try {
         $fso = New-Object -ComObject Scripting.FileSystemObject
         $short = $fso.GetFolder($root).ShortPath
         $null = New-Nightly 'e'
-        $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu -ToastKey $toastKey 2>&1 | Out-String
+        $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey 2>&1 | Out-String
         Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
         Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui e') "current\ is not build e`n$out"
     }
