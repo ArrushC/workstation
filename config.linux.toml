@@ -228,10 +228,10 @@ GRAFT_NO_STATUSLINE = "1"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
 # installed with dnf's strict=0 so a missing one is skipped, not fatal.
 "post-packages" = "mise run --skip-tools optional-packages"
-# `final` runs vcpkg, claude, fonts, broot-skin and nvim-plugins, and only on a full `mise bootstrap`,
-# never on `--only dotfiles` (wsa).
+# `final` runs vcpkg, claude, fonts, broot-skin, nvim-plugins and wezterm-terminfo, and only on a
+# full `mise bootstrap`, never on `--only dotfiles` (wsa).
 # fonts skips itself under WSL (the Windows terminal resolves fonts there).
-"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin ::: nvim-plugins"
+"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin ::: nvim-plugins ::: wezterm-terminfo"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
 # it. systemd expands %h in ExecStart; the shim picks its config set from

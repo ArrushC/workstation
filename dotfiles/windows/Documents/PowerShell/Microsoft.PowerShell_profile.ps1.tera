@@ -20,6 +20,12 @@ $OutputEncoding           = [Text.UTF8Encoding]::new($false)
 # helix so (without it bat falls back to 256 colours). PARITY: config.nu and the Linux
 # zshrc/bashrc set it too.
 $env:COLORTERM = 'truecolor'
+# WezTerm sets TERM=wezterm for every pane it starts. Windows has no terminfo database, so a
+# program that reads TERM (Neovim) falls back to a bare 'ansi' entry for a name it doesn't
+# know: xterm-256color (WezTerm's default TERM) keeps it on its full built-in entry.
+# ssh from here sends it too; WezTerm's SSH launch entries keep wezterm where the host has
+# the entry. PARITY: config.nu does the same.
+if ($env:TERM -eq 'wezterm') { $env:TERM = 'xterm-256color' }
 $env:EDITOR = 'hx'
 # fzf: the look and file list config.nu and the zsh side use (PARITY: config.nu).
 $env:FZF_DEFAULT_OPTS = '--height 40% --layout=reverse --border --info=inline --bind=ctrl-/:toggle-preview --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8 --color=selected-bg:#45475a,border:#6c7086,label:#cdd6f4'

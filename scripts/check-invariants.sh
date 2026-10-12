@@ -996,9 +996,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -1083,8 +1083,10 @@ check_warp_guards() {
   fi
 
   # Depth-track if/fi and report any plugin source inside a Warp guard; one-line
-  # `if ...; fi` bodies never open a block (the close pattern matches only a bare `fi`).
+  # `if ...; fi` bodies never open a block (the close pattern matches only a bare `fi`),
+  # and an `elif ...; then` continues the open one.
   out=$(awk '
+    /^[[:space:]]*elif[[:space:]]/ { next }
     /WarpTerminal/ && /;[[:space:]]*then[[:space:]]*$/ { warp[depth+1] = 1 }
     /;[[:space:]]*then[[:space:]]*$/                   { depth++; next }
     /^[[:space:]]*fi([[:space:]]|$)/ { if (depth > 0) { warp[depth] = 0; depth-- } ; next }
@@ -1383,10 +1385,15 @@ PY
 # LuaJIT with a stand-in wezterm module, as Windows and as Linux, against a fake
 # ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
 check_wezterm_config() {
-  hdr "WezTerm config (runs with a stand-in wezterm module)"
-  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out
-  if ! command -v nvim >/dev/null 2>&1; then
-    note "nvim not on PATH — skipped running $cfg"
+  hdr "WezTerm config (runs with a stand-in wezterm module, handlers included)"
+  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua
+  # LuaJIT either way: plain luajit (CI installs it) or the one inside nvim.
+  if command -v luajit >/dev/null 2>&1; then
+    lua=(luajit)
+  elif command -v nvim >/dev/null 2>&1; then
+    lua=(nvim --clean --headless -l)
+  else
+    note "neither luajit nor nvim on PATH — skipped running $cfg"
     return 0
   fi
   tmp=$(mktemp -d)
@@ -1394,29 +1401,91 @@ check_wezterm_config() {
   printf 'Host alpha beta\nHost *.corp\nHost !bad\n  HostName x.example\n  host = gamma # comment\nHost bad"quote\n' >"$tmp/.ssh/config.local"
   # The config builds the Windows shim path with backslashes; on Linux that is one file name.
   : >"$tmp/la\\mise\\shims\\nu.exe"
+  # The stand-in records what the config hands WezTerm: actions as { action, args } tables
+  # (callable, as WezTerm's are), callbacks as { callback }, event handlers by name.
   cat >"$tmp/check.lua" <<'LUA'
 local path, triple, home, localappdata = arg[1], arg[2], arg[3], arg[4]
 local real_getenv = os.getenv
 os.getenv = function(k) if k == 'LOCALAPPDATA' then return localappdata end return real_getenv(k) end
-package.loaded.wezterm = {
+local handlers, battery = {}, {}
+local function named(name)
+  return setmetatable({ action = name }, { __call = function(_, args) return { action = name, args = args } end })
+end
+local wezterm = {
   target_triple = triple,
   home_dir = home,
+  GLOBAL = {},
+  nerdfonts = {},
   config_builder = function() return {} end,
   font_with_fallback = function(list) return { fallback = list } end,
   color = { get_builtin_schemes = function() return { ['Catppuccin Mocha'] = { background = '#1e1e2e' } } end },
-  action = setmetatable({}, { __index = function(_, name) return function(args) return { action = name, args = args } end end }),
+  action = setmetatable({}, { __index = function(_, name) return named(name) end }),
+  action_callback = function(fn) return { callback = fn } end,
+  on = function(event, fn) handlers[event] = fn end,
+  default_hyperlink_rules = function() return { { regex = 'default' } } end,
+  strftime = function(fmt) return os.date(fmt) end,
+  battery_info = function() return battery end,
+  column_width = function(s) local _, n = s:gsub('[^\128-\191]', '') return n end,
+  truncate_right = function(s, n) return s:sub(1, n) end,
+  format = function(items)
+    local out = {}
+    for _, it in ipairs(items) do if it.Text then out[#out + 1] = it.Text end end
+    return table.concat(out)
+  end,
 }
+package.loaded.wezterm = wezterm
 local c = dofile(path)
 local function check(cond, msg) if not cond then error(msg, 0) end end
+local function has(s, sub) return s ~= nil and s:find(sub, 1, true) ~= nil end
+
 check(type(c) == 'table', 'the file does not return the config table')
-check(c.color_schemes and c.color_schemes[c.color_scheme], 'color_scheme names no scheme in color_schemes')
-check(c.color_schemes[c.color_scheme].tab_bar.active_tab.bg_color == '#cba6f7', 'the active tab is not mauve')
+local scheme = c.color_schemes and c.color_schemes[c.color_scheme]
+check(scheme, 'color_scheme names no scheme in color_schemes')
+check(scheme.tab_bar.active_tab.bg_color == '#cba6f7' and scheme.cursor_bg == '#cba6f7', 'the active tab and the cursor are not mauve')
+for _, k in ipairs({ 'launcher_label_bg', 'input_selector_label_bg', 'quick_select_label_bg', 'copy_mode_active_highlight_bg' }) do
+  check(type(scheme[k]) == 'table' and scheme[k].Color, 'scheme.' .. k .. ' is not a { Color = ... } spec')
+end
+check(c.command_palette_bg_color == '#11111b' and c.char_select_bg_color == '#11111b', 'the command palette or char select is not Mocha crust')
 check(c.font and c.font.fallback[1] == 'JetBrainsMono NFM' and c.font_size == 10.5, 'font is not JetBrainsMono NFM 10.5')
-check(c.check_for_updates == false, 'check_for_updates is not false (winget updates WezTerm)')
-check(c.keys[1].mods == 'CTRL|ALT' and c.keys[1].action.action == 'ShowLauncherArgs', 'Ctrl+Alt+L does not open the launcher')
+check(c.check_for_updates == false, 'check_for_updates is not false (wezterm-nightly.ps1 updates WezTerm)')
+check(c.term == 'wezterm', 'term is not wezterm')
+check(c.scrollback_lines == 1000000, 'scrollback_lines is not 1,000,000')
+check(c.front_end == 'WebGpu' and c.webgpu_power_preference == 'HighPerformance' and c.max_fps == 120, 'rendering is not WebGpu + HighPerformance + 120 fps')
+check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use_fancy_tab_bar == false, 'chrome: not RESIZE with the retro tab bar at the bottom')
+check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
+check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
 check(type(c.ssh_domains) == 'table' and #c.ssh_domains == 0, 'ssh_domains is not empty')
+check(has(c.hyperlink_rules[#c.hyperlink_rules].format, 'ArrushC/workstation/issues/$1') and #c.hyperlink_rules == 2, 'no #123 hyperlink rule after the defaults')
+
+local keys = {}
+for _, k in ipairs(c.keys) do keys[k.mods .. '+' .. k.key] = k.action end
+local function key(chord, name)
+  local a = keys[chord]
+  check(a and (a.action == name or (name == 'callback' and a.callback)), chord .. ' is not ' .. name)
+  return a
+end
+key('CTRL|ALT+l', 'ShowLauncherArgs')
+key('CTRL+UpArrow', 'ScrollToPrompt')
+key('CTRL|SHIFT+LeftArrow', 'DisableDefaultAssignment')
+key('CTRL|SHIFT+RightArrow', 'DisableDefaultAssignment')
+local scroll = key('CTRL|SHIFT+a', 'Multiple')
+check(scroll.args[#scroll.args - 1].action == 'ScrollToBottom', 'Ctrl+Shift+A does not scroll back to the bottom')
+for _, k in ipairs({ 'c', 'e', 'h' }) do key('CTRL|SHIFT+' .. k, 'callback') end
+local helix, sha = key('CTRL|SHIFT+g', 'QuickSelectArgs'), key('CTRL|SHIFT+y', 'QuickSelectArgs')
+local mouse = {}
+for _, m in ipairs(c.mouse_bindings) do
+  local kind, ev = next(m.event)
+  mouse[m.mods .. '+' .. kind] = m.action
+end
+check(mouse['SHIFT+Up'] and mouse['SHIFT+Up'].action == 'CompleteSelectionOrOpenLinkAtMouseCursor', 'Shift+click does not open links')
+check(mouse['SHIFT+Down'] and mouse['SHIFT+Down'].action == 'SelectTextAtMouseCursor', 'Shift+press still extends the selection, so Shift+click never opens a link')
+check(mouse['SUPER+Drag'] and mouse['SUPER+Drag'].action == 'StartWindowDrag', 'Win+drag does not move the window')
+
 local labels = {}
-for _, item in ipairs(c.launch_menu) do labels[#labels + 1] = item.label end
+for _, item in ipairs(c.launch_menu) do
+  labels[#labels + 1] = item.label
+  check(item.domain and item.domain.DomainName == 'local', item.label .. ': not pinned to the local domain')
+end
 local got = table.concat(labels, ',')
 if triple:find('windows') then
   check(c.default_prog and c.default_prog[1] == localappdata .. '\\mise\\shims\\nu.exe', 'Windows: default_prog is not the Nushell shim')
@@ -1425,17 +1494,157 @@ else
   check(c.default_prog == nil, 'Linux: default_prog is set')
   check(got == 'SSH: alpha,SSH: beta,SSH: gamma', 'Linux launch menu: ' .. got)
 end
-check(c.launch_menu[#c.launch_menu].args[3] == 'gamma' and c.launch_menu[#c.launch_menu].args[4] == 'zellij', 'SSH entries do not run ssh -t <host> zellij ...')
+local ssh = c.launch_menu[#c.launch_menu].args
+check(ssh[1] == 'ssh' and ssh[2] == '-t' and ssh[3] == 'gamma' and #ssh == 4, 'SSH entries do not run ssh -t <host> <command>')
+check(has(ssh[4], 'infocmp wezterm') and has(ssh[4], 'TERM=xterm-256color') and has(ssh[4], 'exec zellij attach --create main'), 'SSH entries do not fall back to xterm-256color before zellij: ' .. ssh[4])
+
+for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config-reloaded', 'augment-command-palette', 'copied-scrollback' }) do
+  check(type(handlers[e]) == 'function', 'no ' .. e .. ' handler')
+end
+
+-- Footer.
+local status, performed, pasted, sent
+local function window(key_table)
+  return {
+    window_id = function() return 1 end,
+    active_key_table = function() return key_table end,
+    set_right_status = function(_, s) status = s end,
+    get_selection_text_for_pane = function() return 'src/a.rs:12' end,
+    perform_action = function(_, a) performed = a end,
+  }
+end
+local function pane(dims, alt, cursor_y)
+  pasted, sent = {}, {}
+  return {
+    get_dimensions = function() return dims end,
+    is_alt_screen_active = function() return alt end,
+    get_cursor_position = function() return { y = cursor_y } end,
+    pane_id = function() return 7 end,
+    paste = function(_, t) pasted[#pasted + 1] = t end,
+    send_text = function(_, t) sent[#sent + 1] = t end,
+  }
+end
+local wide = { cols = 140, viewport_rows = 38, scrollback_rows = 10234, scrollback_top = 0 }
+battery = { { state_of_charge = 0.42, state = 'Discharging' } }
+handlers['update-status'](window(nil), pane(wide, false, 10233))
+check(has(status, '10,234 · 38 rows') and has(status, '42%') and has(status, os.date('%a')), 'footer: ' .. tostring(status))
+handlers['update-status'](window(nil), pane(wide, false, 9799))
+check(has(status, '9,800/10,234'), 'footer does not show the cursor line once a program moves it up: ' .. status)
+handlers['update-status'](window('copy_mode'), pane(wide, true, 0))
+check(has(status, 'COPY') and not has(status, 'rows'), 'footer in copy mode over a full-screen app: ' .. status)
+handlers['update-status'](window('search_mode'), pane(wide, false, 0))
+check(has(status, 'SEARCH'), 'footer has no SEARCH badge: ' .. status)
+battery = { { state_of_charge = 1, state = 'Full' } }
+handlers['update-status'](window(nil), pane({ cols = 70, viewport_rows = 38, scrollback_rows = 500, scrollback_top = 0 }, false, 499))
+check(not has(status, 'rows') and not has(status, '%') and has(status, os.date('%H:%M')), 'narrow footer: ' .. status)
+
+-- Notices.
+local w, p = window(nil), pane(wide, false, 10233)
+handlers['window-config-reloaded'](w, p)
+check(not has(status, 'reloaded'), 'a window opening flashed "Config reloaded"')
+handlers['window-config-reloaded'](w, p)
+check(has(status, 'Config reloaded'), 'a reload shows no notice: ' .. tostring(status))
+keys['CTRL|SHIFT+c'].callback(w, p)
+check(performed.action == 'CopyTo' and has(status, 'Copied'), 'Ctrl+Shift+C does not copy and say so')
+
+-- Quick selects type into the pane; Enter only when no full-screen app holds it.
+helix.args.action.callback(w, pane(wide, false, 0))
+check(pasted[1] == 'hx src/a.rs:12' and sent[1] == '\r', 'Ctrl+Shift+G does not run hx <file:line> at the prompt')
+helix.args.action.callback(w, pane(wide, true, 0))
+check(pasted[1] == 'hx src/a.rs:12' and #sent == 0, 'Ctrl+Shift+G presses Enter inside a full-screen app')
+sha.args.action.callback(w, pane(wide, false, 0))
+check(pasted[1] == 'src/a.rs:12' and #sent == 0, 'Ctrl+Shift+Y does not paste the pick')
+
+-- Tab titles: marks, glyphs and names.
+local function title(tab, tabs)
+  local out = {}
+  for _, it in ipairs(handlers['format-tab-title'](tab, tabs or { tab }, nil, nil, false, 32)) do
+    if it.Text then out[#out + 1] = it.Text end
+  end
+  return table.concat(out)
+end
+local ssh_pane = { pane_id = 7, title = 'me@host:~', domain_name = 'local', foreground_process_name = 'C:\\Windows\\System32\\OpenSSH\\ssh.exe', progress = 'None' }
+local first = { tab_id = 1, tab_index = 0, is_active = true, tab_title = '', active_pane = { pane_id = 1, title = 'x', progress = 'None' }, panes = {} }
+local bg = { tab_id = 2, tab_index = 5, is_active = false, tab_title = '', active_pane = ssh_pane, panes = { { pane_id = 7, has_unseen_output = true } } }
+handlers['bell'](w, p)
+check(title(bg, { first, bg }) == ' ! > 2: host:~ ', 'background tab after a bell: [' .. title(bg, { first, bg }) .. ']')
+bg.is_active = true
+title(bg)
+check(not wezterm.GLOBAL.bell_panes['7'], 'viewing the tab does not clear its bell mark')
+bg.is_active = false
+check(title(bg) == ' ● > 1: host:~ ', 'unseen output: [' .. title(bg) .. ']')
+ssh_pane.progress = { Percentage = 42 }
+check(has(title(bg), '42%'), 'no progress mark: ' .. title(bg))
+ssh_pane.progress = 'Indeterminate'
+check(title(bg):sub(1, 3) == ' ~ ', 'no busy mark: ' .. title(bg))
+local wsl = { tab_id = 3, tab_index = 0, is_active = false, tab_title = '', panes = {},
+  active_pane = { pane_id = 9, title = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', domain_name = 'WSL:AlmaLinux-9', progress = 'None' } }
+check(title(wsl) == ' $ 1: pwsh ', 'WSL glyph or .exe trimming: [' .. title(wsl) .. ']')
+wsl.tab_title = string.rep('n', 60)
+check(#title(wsl) <= 32, 'a long name overflows max_width: ' .. #title(wsl))
+
+-- Cheatsheet: the custom keys, WezTerm's defaults, and launch rows that open their entry.
+keys['CTRL|SHIFT+h'].callback(w, p)
+check(performed.action == 'InputSelector', 'Ctrl+Shift+H does not open the cheatsheet')
+local rows, launch = {}, 0
+for _, r in ipairs(performed.args.choices) do
+  rows[#rows + 1] = r.label
+  if r.id then launch = launch + 1 end
+end
+local text = table.concat(rows, '\n')
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Shift+click', 'Ctrl+Shift+F' }) do
+  check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
+end
+check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')
+performed.args.action.callback(w, p, '1')
+check(performed.action == 'SpawnCommandInNewTab' and performed.args == c.launch_menu[1], 'a launch row does not open its entry')
+local palette = handlers['augment-command-palette']()
+check(#palette == 5 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
 io.write('ok')
 LUA
   for triple in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu; do
-    out=$(nvim --clean --headless -l "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
+    out=$("${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg runs as $triple: theme, font, launcher, SSH hosts from ~/.ssh/config.local"
+      ok "$cfg runs as $triple: theme, chrome, TERM, keys, launcher, footer, notices, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi
   done
+  rm -rf "$tmp"
+}
+
+# TERM=wezterm needs its whole chain, or a host shows "unknown terminal" / loses colour:
+# the vendored entry must compile with its extended capabilities, the final hook must
+# compile it, dircolors must match the name, and the Windows shells must drop it (Windows
+# has no terminfo database). The rc-file fallbacks run in scripts/test-term-fallback.sh.
+check_wezterm_term() {
+  hdr "TERM=wezterm chain (terminfo, final hook, dircolors, Windows shells)"
+  local src=dotfiles/config/wezterm/wezterm.terminfo tmp caps missing=()
+  grep -qx 'TERM wezterm' dotfiles/dircolors || missing+=("dotfiles/dircolors has no 'TERM wezterm' line (ls loses its colours)")
+  grep -qE '^"final" = ".*::: wezterm-terminfo' config.linux.toml || missing+=("config.linux.toml's final hook doesn't run wezterm-terminfo")
+  grep -qF 'if ($env.TERM? == "wezterm") { $env.TERM = "xterm-256color" }' dotfiles/windows/AppData/Roaming/nushell/config.nu.tera ||
+    missing+=("config.nu.tera doesn't switch TERM=wezterm to xterm-256color")
+  grep -qF "if (\$env:TERM -eq 'wezterm') { \$env:TERM = 'xterm-256color' }" dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera ||
+    missing+=("the PowerShell profile doesn't switch TERM=wezterm to xterm-256color")
+  if [ "${#missing[@]}" -eq 0 ]; then
+    ok "final hook compiles it; dircolors matches it; Nushell and PowerShell switch it to xterm-256color"
+  else
+    for m in "${missing[@]}"; do bad "$m"; done
+  fi
+  if ! command -v tic >/dev/null 2>&1 || ! command -v infocmp >/dev/null 2>&1; then
+    note "tic/infocmp not on PATH — skipped compiling $src"
+    return 0
+  fi
+  tmp=$(mktemp -d)
+  if tic -x -o "$tmp" "$src" 2>"$tmp/err" && caps=$(TERMINFO="$tmp" infocmp -x wezterm 2>&1); then
+    if grep -qw Tc <<<"$caps" && grep -q 'Smulx=' <<<"$caps" && grep -q 'Setulc=' <<<"$caps"; then
+      ok "$src compiles with tic -x and keeps Tc, Smulx and Setulc"
+    else
+      bad "$src compiled without Tc / Smulx / Setulc"
+    fi
+  else
+    bad "$src does not compile: $(cat "$tmp/err")"
+  fi
   rm -rf "$tmp"
 }
 
@@ -1625,6 +1834,7 @@ check_colorterm
 check_debugger_config
 check_helix_config
 check_wezterm_config
+check_wezterm_term
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.

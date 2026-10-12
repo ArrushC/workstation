@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#MISE description="Compile WezTerm's terminfo entry into ~/.terminfo (the final hook)"
+set -euo pipefail
+# WezTerm sets TERM=wezterm (dotfiles/config/wezterm/wezterm.lua), and EL ships no such
+# entry system-wide. Its panes reach this host through WSL or ssh, so every Linux host gets
+# the vendored entry in ~/.terminfo (no sudo). Until it exists, zshrc/bashrc fall back to
+# xterm-256color. Re-compiles when the vendored file changes (a SHA256 stamp beside it).
+# Every failure warns and exits 0: a failing hook would stop `mise bootstrap`.
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+src="$root/dotfiles/config/wezterm/wezterm.terminfo"
+dest="$HOME/.terminfo"
+stamp="$dest/.wezterm.sha256"
+if ! command -v tic >/dev/null 2>&1; then
+  echo "  ! tic not on PATH (dnf install ncurses): WezTerm panes here use TERM=xterm-256color" >&2
+  exit 0
+fi
+want="$(sha256sum "$src" | cut -d' ' -f1)"
+if infocmp wezterm >/dev/null 2>&1 && [ "$(cat "$stamp" 2>/dev/null || true)" = "$want" ]; then
+  echo "  WezTerm terminfo up to date"
+  exit 0
+fi
+mkdir -p "$dest"
+if tic -x -o "$dest" "$src"; then
+  printf '%s\n' "$want" >"$stamp"
+  echo "  compiled WezTerm's terminfo into $dest"
+else
+  echo "  ! tic could not compile $src: WezTerm panes here use TERM=xterm-256color" >&2
+fi

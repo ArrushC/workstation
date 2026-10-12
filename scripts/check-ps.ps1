@@ -18,6 +18,7 @@ $targets = @(
     'scripts/test-python-fonts.ps1',
     'scripts/wezterm-nightly.ps1',
     'scripts/test-wezterm-nightly.ps1',
+    'scripts/test-wezterm-config.ps1',
     'scripts/lib/test-helpers.ps1',
     'scripts/check-ps.ps1'
 ) | ForEach-Object { Join-Path $repoRoot $_ }
