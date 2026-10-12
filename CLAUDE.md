@@ -55,8 +55,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   or it installs every tool before dnf (node needs dnf's libatomic). A hook name in several loaded
   files runs every one. Exception: the literal `post-dotfiles` chmod line, each command with its
   own `|| true` (`sh -o errexit`).
-- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, claude, fonts, broot-skin,
-  nvim-plugins): a full `mise bootstrap` only, never `--only dotfiles`.
+- Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, fonts, wezterm-terminfo…):
+  a full `mise bootstrap` only, never `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
   and EL9; one some releases lack goes in `tasks/optional-packages`. `ShellCheck` is capitalised;
   `fswatch`, `entr` and `cockpit-networkmanager` don't resolve.
@@ -78,7 +78,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - After `git pull`, `bootstrap.sh`, `bootstrap.ps1` and `tasks/update` re-exec the pulled copy of
   themselves (guard: `WORKSTATION_BOOTSTRAP_PULLED` / `WORKSTATION_UPDATE_PULLED`), so no old code
   runs against the new tree. Keep the pull before anything a change could affect.
-- WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks call it (and `config_get`) through `scripts/lib/bootstrap-fn.sh`.
+- WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks reach it (and `config_get`) via `scripts/lib/bootstrap-fn.sh`.
 
 **`MISE_ENV` and sudo**
 - One setup for every host; no mode. `scripts/lib/mise-env.sh --write` writes the git-ignored
@@ -121,7 +121,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - zsh plugin order in `dotfiles/zshrc.tera`: fzf-tab after `compinit` → autosuggestions →
   syntax-highlighting → history-substring-search last. `bashrc.tera` carries PARITY NOTEs for what
   bash can't do.
-- The fleet runs `TERM=xterm-256color` on purpose.
+- Only WezTerm sends `TERM=wezterm` (fallbacks: `check_wezterm_term`, `test-term-fallback.sh`).
 
 **Windows**
 - Never render Windows targets with Linux mise (`os()` is its OS).
@@ -185,12 +185,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 
 ## Hooks
 
-Repo hooks (`.claude/settings.json`) source `lib.sh` (JSON in/out; fail open). `mise run lint` runs `test-hooks.sh`.
+Repo hooks (`.claude/settings.json`) source `lib.sh` (JSON in/out; fail open). Lint runs `test-hooks.sh`.
 - `post-edit-guard.sh` repairs CRLF, exec bits and `.ps1` BOMs.
 - `parity-reminder.sh` names the other half of zshrc/bashrc or the Nushell/PowerShell profiles.
 - `memory-routing-guard.sh` denies home-dir memory writes.
 - `sync-tool-memory.sh` regenerates the TOOLS block after a `config*.toml` edit.
-- `session-context.sh` (SessionStart) reports dotfiles drift, host, miserc tokens, a saved `sudo=no`, an exported `MISE_ENV`, WSL interop, tools.
+- `session-context.sh` (SessionStart) reports drift, host, miserc tokens, `sudo=no`, exported `MISE_ENV`, WSL interop, tools.
 - `session-end-notify.sh` (SessionEnd) notifies when the repo or dotfiles are dirty.
 
 Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enforced.json`):

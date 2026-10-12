@@ -2,7 +2,8 @@
 # a fresh install, an up-to-date run that downloads no zip, a new nightly (the junction
 # moves, the old build goes), a build a running process still uses (kept), a checksum
 # mismatch (the installed build stays, exit 0), a root given as an 8.3 short path, and
-# an unreachable URL (exit 0).
+# an unreachable URL (exit 0, the toast id still registered). The toast id goes to a
+# throwaway HKCU key, never the real one.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -16,6 +17,8 @@ $root = Join-Path $tmp 'root'
 $menu = Join-Path $tmp 'menu'
 $base = 'file:///' + ($src -replace '\\', '/')
 $zip = Join-Path $src 'WezTerm-windows-nightly.zip'
+$toastRoot = "HKCU:\Software\workstation-test-$([guid]::NewGuid())"
+$toastKey = "$toastRoot\org.wezfurlong.wezterm"
 
 # A fake nightly: WezTerm-windows-<tag>\wezterm-gui.exe (text), its zip and .sha256.
 function New-Nightly([string]$Tag, [string]$Sha) {
@@ -29,10 +32,11 @@ function New-Nightly([string]$Tag, [string]$Sha) {
     return $hash
 }
 function Invoke-Nightly([string]$Base = $base) {
-    $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $Base -Root $root -ShortcutDir $menu 2>&1 | Out-String
+    $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $Base -Root $root -ShortcutDir $menu -ToastKey $toastKey 2>&1 | Out-String
     return [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 function Get-Current { (Get-Item -LiteralPath (Join-Path $root 'current')).Target }
+function Get-ToastName { (Get-ItemProperty -LiteralPath $toastKey -ErrorAction SilentlyContinue).DisplayName }
 function Get-ShortcutTarget {
     $wsh = New-Object -ComObject WScript.Shell
     try { $wsh.CreateShortcut((Join-Path $menu 'WezTerm.lnk')).TargetPath } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) }
@@ -50,6 +54,7 @@ try {
         Assert ("$(Get-Current)" -like "*$($first.Substring(0, 12))") "current points at $(Get-Current)"
         Assert ((Read-Text (Join-Path $root 'current.sha256')) -eq $first) 'stamp is not the published sha256'
         Assert ((Get-ShortcutTarget) -eq (Join-Path $root 'current\wezterm-gui.exe')) "shortcut target: $(Get-ShortcutTarget)"
+        Assert ((Get-ToastName) -eq 'WezTerm') "toast id not registered: $($r.Out)"
     }
 
     Test-Case 'up to date: no zip download, nothing changes' {
@@ -106,19 +111,22 @@ try {
         $fso = New-Object -ComObject Scripting.FileSystemObject
         $short = $fso.GetFolder($root).ShortPath
         $null = New-Nightly 'e'
-        $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu 2>&1 | Out-String
+        $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu -ToastKey $toastKey 2>&1 | Out-String
         Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
         Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui e') "current\ is not build e`n$out"
     }
 
-    Test-Case 'unreachable URL: a warning, exit 0' {
+    Test-Case 'unreachable URL: a warning, exit 0, the toast id still registered' {
+        Remove-Item -LiteralPath $toastKey -Recurse -Force
         $r = Invoke-Nightly ('file:///' + (($tmp -replace '\\', '/') + '/missing'))
         Assert ($r.Code -eq 0) "exit $($r.Code)"
         Assert ($r.Out -match 'not updated') "no warning: $($r.Out)"
+        Assert ((Get-ToastName) -eq 'WezTerm') "toast id not registered again: $($r.Out)"
     }
 } finally {
     $current = Join-Path $root 'current'
     if (Test-Path -LiteralPath $current) { [IO.Directory]::Delete($current) }
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $toastRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 Complete-Test 'wezterm-nightly'

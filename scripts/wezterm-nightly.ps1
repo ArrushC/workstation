@@ -16,6 +16,7 @@
 #      <Root>\current\wezterm-gui.exe, so the shortcut and a taskbar pin survive updates;
 #   5. delete older builds no running process uses (a running WezTerm keeps its own
 #      directory; the next run deletes it).
+# Every run also registers WezTerm's toast id (Register-ToastId), whatever the download does.
 # Every failure warns and exits 0: a failing hook would stop `mise bootstrap`.
 # ASCII only: Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page.
 # scripts/test-wezterm-nightly.ps1 tests it against file:// URLs (-BaseUrl).
@@ -25,7 +26,8 @@
 param(
     [string]$BaseUrl = 'https://github.com/wezterm/wezterm/releases/download/nightly',
     [string]$Root = (Join-Path $env:LOCALAPPDATA 'workstation\wezterm'),
-    [string]$ShortcutDir = [Environment]::GetFolderPath('Programs')
+    [string]$ShortcutDir = [Environment]::GetFolderPath('Programs'),
+    [string]$ToastKey = 'HKCU:\Software\Classes\AppUserModelId\org.wezfurlong.wezterm'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -68,6 +70,22 @@ function Set-Shortcut([string]$Target) {
     }
 }
 
+# WezTerm raises its toasts (OSC 9 / 777 from programs, ~/.claude/notify.sh) under the
+# AppUserModelId org.wezfurlong.wezterm, and Windows silently drops a toast from an id
+# nobody registered. WezTerm's installer registers it; a zip can't, so this does, per user
+# (DisplayName is all Windows needs), on every run so a deleted key comes back.
+function Register-ToastId {
+    try {
+        $cur = Get-ItemProperty -LiteralPath $ToastKey -ErrorAction SilentlyContinue
+        if ($cur -and $cur.PSObject.Properties['DisplayName'] -and $cur.DisplayName -eq 'WezTerm') { return }
+        New-Item -Path $ToastKey -Force | Out-Null
+        New-ItemProperty -LiteralPath $ToastKey -Name DisplayName -Value 'WezTerm' -PropertyType String -Force | Out-Null
+        Write-Step 'registered the toast id, so WezTerm notifications can show'
+    } catch {
+        Write-Step "! could not register the toast id: $($_.Exception.Message)"
+    }
+}
+
 # True when a running process's image lives under $Dir.
 function Test-InUse([string]$Dir) {
     $prefix = $Dir.TrimEnd('\') + '\'
@@ -79,6 +97,7 @@ function Test-InUse([string]$Dir) {
     return $false
 }
 
+Register-ToastId
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("wezterm-nightly-" + [guid]::NewGuid())
 try {
     New-Item -ItemType Directory -Force -Path $Root, $tmp | Out-Null

@@ -94,6 +94,65 @@ export COLORTERM=truecolor   # the fleet's terminals support 24-bit RGB; apps ho
 export K9S_SKIN=catppuccin-mocha-transparent
 [[ -r "$HOME/.config/glow/catppuccin-mocha.json" ]] && alias glow='glow -s ~/.config/glow/catppuccin-mocha.json'
 
+# --- TERM=wezterm fallbacks ----------------------------------------------------
+# WezTerm sets TERM=wezterm (dotfiles/config/wezterm/wezterm.lua) and ssh carries it to
+# the host. Its terminfo entry adds truecolour (Tc), undercurl (Smulx) and the OSC 52
+# clipboard (Ms); tasks/wezterm-terminfo compiles it into ~/.terminfo, as EL ships none
+# system-wide. xterm-256color stands in wherever the entry is missing: on this host until
+# that task has run, under sudo (root's lookup never sees ~/.terminfo), and over ssh to a
+# host without it, which ssh probes first. The probe never prompts (BatchMode), so a host
+# that asks for a password gets xterm-256color unless ~/.ssh/config's ControlMaster
+# already holds a connection to it. `command ssh` / `command sudo` skip these.
+# PARITY: the same block, byte for byte, in the other rc file (check_wezterm_term).
+if [[ $TERM == wezterm ]] && ! infocmp wezterm &>/dev/null; then
+  export TERM=xterm-256color
+fi
+if [[ $TERM == wezterm ]]; then
+  if ! env -u TERMINFO -u TERMINFO_DIRS HOME=/nonexistent infocmp wezterm &>/dev/null; then
+    sudo() { TERM=xterm-256color command sudo "$@"; }
+  fi
+  # Probes only for a session that gets a pty: no remote command, or -t. Options that take
+  # a value are skipped (with it), and -G/-N/-O/-Q/-T/-V/-W/-f never start a shell.
+  ssh() {
+    local a c rest dest='' want=0 tty=0 cmd=0 plain=0 term=xterm-256color
+    for a in "$@"; do
+      if ((want)); then
+        want=0
+        continue
+      fi
+      if [[ -n $dest ]]; then
+        cmd=1
+        break
+      fi
+      case $a in
+      --) ;;
+      -?*)
+        rest=${a#-}
+        while [[ -n $rest ]]; do
+          c=${rest:0:1}
+          rest=${rest:1}
+          case $c in
+          t) tty=1 ;;
+          [GNTVf]) plain=1 ;;
+          [BbcDEeFIiJLlmOoPpQRSWw])
+            [[ $c == [OQW] ]] && plain=1
+            [[ -z $rest ]] && want=1
+            break
+            ;;
+          esac
+        done
+        ;;
+      *) dest=$a ;;
+      esac
+    done
+    if ((!plain && (!cmd || tty))) && [[ -n $dest ]] &&
+      command ssh -o BatchMode=yes -o ConnectTimeout=5 -n -T "$dest" 'infocmp wezterm' >/dev/null 2>&1; then
+      term=wezterm
+    fi
+    TERM=$term command ssh "$@"
+  }
+fi
+
 # --- History -----------------------------------------------------------------
 # HISTSIZE = lines kept in memory; HISTFILESIZE = lines kept on disk.
 export HISTSIZE=10000
@@ -257,23 +316,25 @@ if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; t
   eval "$(starship init bash)"
 fi
 
-# --- Windows Terminal shell integration (WSL tabs) ---------------------------
+# --- Windows Terminal and WezTerm shell integration ----------------------------
 # Prompt-side half of the zsh block (see zshrc.tera): OSC 133 A/D marks
-# (scrollbar marks + ctrl+up/down jumps, exit-code colored), OSC 9;9 cwd
-# (duplicate-tab reopens here — Windows path via wslpath -w), OSC 9;4;0
-# progress clear. Runs FIRST in PROMPT_COMMAND and returns the original $? so
-# starship's exit-code module still sees the real status.
+# (scrollbar marks + ctrl+up/down jumps, exit-code colored), the cwd (WezTerm's
+# OSC 7 URL with $HOSTNAME, zsh's $HOST; else WT's OSC 9;9, a Windows path via
+# wslpath -w), OSC 9;4;0 progress clear. Runs FIRST in PROMPT_COMMAND and returns
+# the original $? so starship's exit-code module still sees the real status.
 # PARITY NOTE (WT preexec): zsh additionally emits OSC 133;C + OSC 9;4;3
 # (output-start mark, in-flight taskbar progress) from a preexec hook. bash has
 # no preexec without bash-preexec, and starship owns bash's DEBUG trap — so
 # this fallback shell deliberately skips the preexec half (same precedent as
 # atuin above). Marks still appear and color by exit code; there is just no
 # in-flight taskbar progress.
-if [[ -n "$WT_SESSION" && -z "$ZELLIJ" ]]; then
+if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
   _wt_prompt_cmd() {
     local _wt_status=$?
     printf '\e]133;D;%s\a' "$_wt_status"
-    if command -v wslpath &>/dev/null; then
+    if [[ $TERM_PROGRAM == WezTerm || $TERM == wezterm ]]; then
+      printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
+    elif command -v wslpath &>/dev/null; then
       printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
     fi
     printf '\e]133;A\a'

@@ -19,8 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      # luajit runs dotfiles/config/wezterm/wezterm.lua (check_wezterm_config); zsh runs the rc
+      # files' TERM fallbacks (scripts/test-term-fallback.sh) under zsh as well as bash.
+      - name: Install shellcheck, luajit, zsh
+        run: sudo apt-get update && sudo apt-get install -y shellcheck luajit zsh
       - uses: jdx/mise-action@v4
         with:
           version: 2026.9.9
@@ -115,6 +117,12 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-wezterm-nightly.ps1
+      # Downloads today's nightly: a red step with no change here means WezTerm renamed or
+      # dropped something wezterm.lua uses, which the next wsu would install.
+      - name: Load wezterm.lua in the real WezTerm nightly
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-wezterm-config.ps1
   templates:
     runs-on: ubuntu-latest
     steps:

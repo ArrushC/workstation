@@ -162,6 +162,23 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   Windows "Show animations"). `$env:WT_SESSION` is non-empty in pwsh; scroll a long output to confirm
   the effective historySize (record the real ceiling in CLAUDE.md if WT clamps below 100000).
 
+## WezTerm (nightly, `~/.wezterm.lua`)
+
+- Lint: `check_wezterm_config` runs the config and its handlers (footer, notices, tab marks,
+  cheatsheet, quick selects) under LuaJIT with a stand-in `wezterm` module; a new `wezterm.*` call
+  needs a stand-in there. `check_wezterm_term` compiles the terminfo; `scripts/test-term-fallback.sh`
+  runs the rc fallbacks under bash and zsh.
+- Against the real nightly, from WSL (no GUI): copy the config to a Windows path, then
+  `cd /mnt/c && <LOCALAPPDATA>/workstation/wezterm/current/wezterm.exe --config-file '<win path>' show-keys`.
+  It exits 0 and prints the default keys even when the config fails to load (an unknown field
+  included: `config_builder` turns it into an error), so check that a custom binding is listed
+  (`ALT | CTRL l -> ShowLauncherArgs`) and that `SHIFT | CTRL LeftArrow` is not.
+- Installer: `scripts/test-wezterm-nightly.ps1` under `powershell.exe` and pwsh, from a copy under
+  `%TEMP%` (a UNC cwd breaks junction cleanup); its toast-id key is a throwaway HKCU path.
+- On a host after a full bootstrap: `infocmp wezterm | head -1` exits 0; in a WezTerm WSL tab
+  `echo $TERM` prints `wezterm`, `sudo env | grep ^TERM=` prints `xterm-256color`, and `ls` is
+  coloured. Nushell and PowerShell tabs show `xterm-256color`.
+
 ## mise 2026.9.9 behaviour this setup relies on
 
 Verified against the installed binary in a scratch `HOME` (2026-09-29 simplification; the design

@@ -26,3 +26,5 @@
 - [omp self-install shadows mise](project-omp-self-install-shadows-mise.md) — oh-my-pi put %LOCALAPPDATA%\omp on the Windows User PATH ahead of the shims; removed 2026-10-01; check PATH order first if a mise tool resolves elsewhere.
 - [No migration code](feedback-no-migration-code.md) — no one-time cleanups or stale-state tidy-ups in the repo; leave inert leftovers or hand the user a one-off command.
 - [Directory (SSSD) accounts](project-directory-accounts-sssd.md) — atc-cache-dev10 users come from SSSD: shell via sss_override, and musl static tools cannot resolve the username (pueued, fixed by conda:pueue).
+- [WezTerm: no wezterm.gui.* at load](project-wezterm-no-gui-calls-at-load.md) — it deadlocks WezTerm before the GUI exists; pcall and the lint stand-in can't catch it.
+- [WezTerm: WebGpu + 120 fps](project-wezterm-render-webgpu-120fps.md) — a 60 fps cap and OpenGL were each measured slower on this Intel laptop; don't re-add them.
