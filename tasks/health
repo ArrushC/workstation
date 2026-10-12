@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Read-only health report: config set, system steps, bootstrap state, mise tools, free disk, pueued, python-env, extras"
+#MISE description="Read-only health report: config set, system steps, bootstrap state, mise tools, free disk, pueued, python-env, extras, WezTerm"
 # Report shape: hdr/row_ok/row_warn/row_bad/row_skip. READ-ONLY: no installs,
 # no sudo, but exits 1 if any row_bad fired — this is the
 # gate CI / a human runs post-bootstrap, not just a report.
@@ -232,7 +232,37 @@ else
 fi
 echo ""
 
-# 7. shell and dotfiles
+# 7. WezTerm — every Linux host compiles its terminfo entry (the final hook's
+# wezterm-terminfo). Under WSL, winterop also reads the Windows side: the nightly that
+# scripts/wezterm-nightly.ps1 installs, and the toast id it registers.
+hdr "wezterm"
+if infocmp wezterm >/dev/null 2>&1; then
+  row_ok "terminfo" "wezterm entry present"
+else
+  row_warn "terminfo" "no wezterm entry, so WezTerm panes here fall back to xterm-256color — mise run wezterm-terminfo"
+fi
+if "$root/scripts/lib/bootstrap-fn.sh" is_wsl && command -v winterop >/dev/null 2>&1; then
+  lad=$(winterop env LOCALAPPDATA 2>/dev/null)
+  gui=""
+  [ -n "$lad" ] && gui=$(winterop path -u "$lad\\workstation\\wezterm\\current\\wezterm-gui.exe" 2>/dev/null)
+  if [ -n "$gui" ] && [ -f "$gui" ]; then
+    row_ok "nightly (win)" "$gui"
+  else
+    row_warn "nightly (win)" "WezTerm's nightly isn't installed on Windows — run wsu there (or mise run wezterm-nightly-win)"
+  fi
+  # Captured first: under pipefail, grep -q exiting early would fail the pipeline (SIGPIPE).
+  toast=$(winterop reg 'HKCU\Software\Classes\AppUserModelId\org.wezfurlong.wezterm' 2>/dev/null)
+  if grep -q DisplayName <<<"$toast"; then
+    row_ok "toasts (win)" "WezTerm's toast id is registered"
+  else
+    row_warn "toasts (win)" "WezTerm's toast id isn't registered, so Windows drops its notifications — run wsu on Windows"
+  fi
+else
+  row_skip "windows side" "checked from a WSL host (winterop)"
+fi
+echo ""
+
+# 8. shell and dotfiles
 hdr "shell and dotfiles"
 login_shell=$(getent passwd "$USER" | cut -d: -f7)
 if [ "$(basename "$login_shell")" = zsh ]; then
