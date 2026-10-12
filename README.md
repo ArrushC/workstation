@@ -430,7 +430,7 @@ Some PowerShell quoting variants strip the empty-passphrase argument. Re-run int
 
 ### Copying inside a remote Zellij session doesn't reach the Windows clipboard
 
-Zellij runs remotely, so the only path to your clipboard is the OSC 52 escape sequence, which it uses only while `copy_command` is unset in `~/.config/zellij/config.kdl`. Setting it (xclip, wl-copy, pbcopy) runs a program on the remote box, where there is no display, and every yank silently goes nowhere; the tracked config leaves it unset on purpose. Both terminals accept OSC 52 (Warp via `osc52_clipboard_access = "write_only"` in its tracked settings). If copy still fails, reconnect (zellij reads its config at session creation: `zellij kill-session main`) and check the config parsed with `zellij setup --check` (must say `Well defined`; KDL comments are `//`, and a single `#` line invalidates the file so zellij silently uses defaults).
+Zellij runs remotely, so the only path to your clipboard is the OSC 52 escape sequence, which it uses only while `copy_command` is unset in `~/.config/zellij/config.kdl`. Setting it (xclip, wl-copy, pbcopy) runs a program on the remote box, where there is no display, and every yank silently goes nowhere; the tracked config leaves it unset on purpose. All three Windows terminals accept OSC 52 (Warp via `osc52_clipboard_access = "write_only"` in its tracked settings). If copy still fails, reconnect (zellij reads its config at session creation: `zellij kill-session main`) and check the config parsed with `zellij setup --check` (must say `Well defined`; KDL comments are `//`, and a single `#` line invalidates the file so zellij silently uses defaults).
 
 ### Zellij's tabs and pane borders are green, not mauve
 
