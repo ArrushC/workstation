@@ -10,12 +10,15 @@
 # asset, and its installer raises UAC). So, Scoop-style:
 #   1. fetch WezTerm-windows-nightly.zip.sha256, which WezTerm publishes beside the zip;
 #   2. stop there when <Root>\current.sha256 already holds it (a few bytes per run);
-#   3. else download the zip, refuse it unless its SHA256 matches, and unpack it into
-#      <Root>\<first 12 hex of the sha256>\ (per-user, no admin);
+#   3. else download the zip and refuse it unless its SHA256 matches. WezTerm rebuilds
+#      the nightly daily even without a new commit, so when its top folder
+#      (WezTerm-windows-<version>) names the version in <Root>\current.version, only
+#      record the new SHA256; else unpack it into <Root>\<first 12 hex of the sha256>\
+#      (per-user, no admin);
 #   4. point the junction <Root>\current at it, and the Start Menu shortcut at
 #      <Root>\current\wezterm-gui.exe, so the shortcut and a taskbar pin survive updates;
-#   5. delete older builds no running process uses (a running WezTerm keeps its own
-#      directory; the next run deletes it).
+#   5. on every run, delete the other builds no running process uses (a running
+#      WezTerm keeps its own directory; a later run deletes it).
 # Every run also registers WezTerm's toast id (Register-ToastId) and sets the User
 # environment (Set-UserEnvironment): WEZTERM_CONFIG_FILE at this checkout's
 # dotfiles\config\wezterm\wezterm.lua, and <Root>\current on PATH for the wezterm CLI;
@@ -39,6 +42,7 @@ $ErrorActionPreference = 'Stop'
 $zipName = 'WezTerm-windows-nightly.zip'
 $current = Join-Path $Root 'current'
 $stamp = Join-Path $Root 'current.sha256'
+$versionStamp = Join-Path $Root 'current.version'
 
 function Write-Step([string]$Message) { Write-Host "  wezterm: $Message" }
 
@@ -138,15 +142,29 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
     [void][Workstation.EnvironmentChange]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, 'Environment', 0x0002, 5000, [ref]$res)
 }
 
-# True when a running process's image lives under $Dir.
+# True when a running process has one of $Dir's programs or libraries loaded: Windows
+# refuses to open a loaded image for writing (nothing is written). A process's own path
+# can't tell: WezTerm started from the shortcut runs as <Root>\current\wezterm-gui.exe,
+# whichever build current pointed at then.
 function Test-InUse([string]$Dir) {
-    $prefix = $Dir.TrimEnd('\') + '\'
-    foreach ($p in Get-Process -ErrorAction SilentlyContinue) {
-        $path = $null
-        try { $path = $p.Path } catch { $path = $null }
-        if ($path -and $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    foreach ($f in Get-ChildItem -LiteralPath $Dir -Recurse -File -Include *.exe, *.dll) {
+        try { [IO.File]::Open($f.FullName, 'Open', 'ReadWrite', 'ReadWrite').Dispose() } catch { return $true }
     }
     return $false
+}
+
+# Deletes every build but the one current points at, unless it is in use. By name: a
+# listing gives long paths, and $Root may be an 8.3 short one (%TEMP%).
+function Remove-OldBuilds {
+    $keep = Split-Path -Leaf ([string]@((Get-Item -LiteralPath $current).Target)[0])
+    foreach ($old in Get-ChildItem -LiteralPath $Root -Directory) {
+        if ($old.Name -eq $keep -or ($old.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+        if (Test-InUse $old.FullName) {
+            Write-Step "kept $($old.Name): a running WezTerm uses it (a later run removes it)"
+            continue
+        }
+        try { Remove-Item -LiteralPath $old.FullName -Recurse -Force } catch { Write-Step "could not remove $($old.Name): $($_.Exception.Message)" }
+    }
 }
 
 Register-ToastId
@@ -160,47 +178,44 @@ try {
     $exe = Join-Path $current 'wezterm-gui.exe'
     $have = if (Test-Path -LiteralPath $stamp) { ([IO.File]::ReadAllText($stamp)).Trim() } else { '' }
     if ($have -eq $want -and (Test-Path -LiteralPath $exe)) {
-        Set-Shortcut $exe
         Write-Step "nightly up to date ($($want.Substring(0, 12)))"
-        exit 0
-    }
-
-    $zip = Join-Path $tmp $zipName
-    Get-Url "$BaseUrl/$zipName" $zip
-    $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($got -ne $want) {
-        # A new nightly can land between the two downloads; the next run gets a matching pair.
-        throw "$zipName SHA256 $got does not match the published $want; kept the installed build"
-    }
-    $unpacked = Join-Path $tmp 'x'
-    Expand-Archive -LiteralPath $zip -DestinationPath $unpacked -Force
-    # The zip holds one top-level folder (WezTerm-windows-<version>).
-    $top = @(Get-ChildItem -LiteralPath $unpacked)
-    $content = if ($top.Count -eq 1 -and $top[0].PSIsContainer) { $top[0].FullName } else { $unpacked }
-    if (-not (Test-Path -LiteralPath (Join-Path $content 'wezterm-gui.exe'))) { throw "$zipName has no wezterm-gui.exe" }
-
-    $build = $want.Substring(0, 12)
-    $dest = Join-Path $Root $build
-    if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
-    Move-Item -LiteralPath $content -Destination $dest
-    # A non-recursive delete removes the junction itself (RemoveDirectory), never what it
-    # points to. No cmd /c rmdir: 5.1 turns cmd's stderr into a terminating error.
-    if (Test-Path -LiteralPath $current) { [IO.Directory]::Delete($current) }
-    New-Item -ItemType Junction -Path $current -Target $dest | Out-Null
-    [IO.File]::WriteAllText($stamp, $want)
-    $version = try { (& (Join-Path $dest 'wezterm.exe') --version 2>$null | Select-Object -First 1) } catch { $null }
-    Write-Step "installed nightly $build $(if ($version) { "($version)" })"
-    Set-Shortcut $exe
-
-    # By name: a listing gives long paths, and $Root may be an 8.3 short one (%TEMP%).
-    foreach ($old in Get-ChildItem -LiteralPath $Root -Directory) {
-        if ($old.Name -eq $build -or ($old.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
-        if (Test-InUse $old.FullName) {
-            Write-Step "kept $($old.Name): a running WezTerm uses it (the next run removes it)"
-            continue
+    } else {
+        $zip = Join-Path $tmp $zipName
+        Get-Url "$BaseUrl/$zipName" $zip
+        $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($got -ne $want) {
+            # A new nightly can land between the two downloads; the next run gets a matching pair.
+            throw "$zipName SHA256 $got does not match the published $want; kept the installed build"
         }
-        try { Remove-Item -LiteralPath $old.FullName -Recurse -Force } catch { Write-Step "could not remove $($old.Name): $($_.Exception.Message)" }
+        $unpacked = Join-Path $tmp 'x'
+        Expand-Archive -LiteralPath $zip -DestinationPath $unpacked -Force
+        # The zip holds one top-level folder (WezTerm-windows-<version>).
+        $top = @(Get-ChildItem -LiteralPath $unpacked)
+        $content = if ($top.Count -eq 1 -and $top[0].PSIsContainer) { $top[0].FullName } else { $unpacked }
+        if (-not (Test-Path -LiteralPath (Join-Path $content 'wezterm-gui.exe'))) { throw "$zipName has no wezterm-gui.exe" }
+        $version = if ($content -ne $unpacked) { $top[0].Name -replace '^WezTerm-windows-', '' } else { '' }
+        $installed = if (Test-Path -LiteralPath $versionStamp) { ([IO.File]::ReadAllText($versionStamp)).Trim() } else { '' }
+
+        if ($version -and $version -eq $installed -and (Test-Path -LiteralPath $exe)) {
+            [IO.File]::WriteAllText($stamp, $want)
+            Write-Step "nightly up to date ($version, rebuilt unchanged)"
+        } else {
+            $build = $want.Substring(0, 12)
+            $dest = Join-Path $Root $build
+            if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+            Move-Item -LiteralPath $content -Destination $dest
+            # A non-recursive delete removes the junction itself (RemoveDirectory), never what it
+            # points to. No cmd /c rmdir: 5.1 turns cmd's stderr into a terminating error.
+            if (Test-Path -LiteralPath $current) { [IO.Directory]::Delete($current) }
+            New-Item -ItemType Junction -Path $current -Target $dest | Out-Null
+            [IO.File]::WriteAllText($stamp, $want)
+            [IO.File]::WriteAllText($versionStamp, $version)
+            $reported = try { (& (Join-Path $dest 'wezterm.exe') --version 2>$null | Select-Object -First 1) } catch { $null }
+            Write-Step "installed nightly $build $(if ($reported) { "($reported)" })"
+        }
     }
+    Set-Shortcut $exe
+    Remove-OldBuilds
 } catch {
     Write-Step "! $($_.Exception.Message)"
     Write-Step "! WezTerm nightly not updated; re-run: mise run wezterm-nightly-win"

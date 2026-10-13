@@ -1,10 +1,12 @@
 # Tests scripts/wezterm-nightly.ps1 against fake nightly builds served over file://:
 # a fresh install, an up-to-date run that downloads no zip, a new nightly (the junction
-# moves, the old build goes), a build a running process still uses (kept), a checksum
-# mismatch (the installed build stays, exit 0), a root given as an 8.3 short path, and
-# an unreachable URL (exit 0, the toast id still registered), and the User environment
-# (WEZTERM_CONFIG_FILE, the PATH entry once, PATH's REG_EXPAND_SZ kept). The toast id and
-# the environment go to throwaway HKCU keys, never the real ones.
+# moves, the old build goes), a build a running process started through current\ still
+# uses (kept whole, then removed by a later up-to-date run), a rebuild of the installed
+# version (not reinstalled), a checksum mismatch (the installed build stays, exit 0), a
+# root given as an 8.3 short path, and an unreachable URL (exit 0, the toast id still
+# registered), and the User environment (WEZTERM_CONFIG_FILE, the PATH entry once,
+# PATH's REG_EXPAND_SZ kept). The toast id and the environment go to throwaway HKCU
+# keys, never the real ones.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -23,11 +25,13 @@ $toastKey = "$toastRoot\org.wezfurlong.wezterm"
 $envKey = "$toastRoot\Environment"
 $config = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\dotfiles\config\wezterm\wezterm.lua'))
 
-# A fake nightly: WezTerm-windows-<tag>\wezterm-gui.exe (text), its zip and .sha256.
-function New-Nightly([string]$Tag, [string]$Sha) {
+# A fake nightly of version <tag>: WezTerm-windows-<tag>\wezterm-gui.exe (text) and
+# friends, its zip and .sha256. -Rebuild changes the zip but not the version.
+function New-Nightly([string]$Tag, [string]$Sha, [string]$Rebuild) {
     $stage = Join-Path $tmp "stage-$Tag"
     New-TestFile (Join-Path $stage "WezTerm-windows-$Tag\wezterm-gui.exe") "gui $Tag"
     New-TestFile (Join-Path $stage "WezTerm-windows-$Tag\wezterm.exe") "cli $Tag"
+    New-TestFile (Join-Path $stage "WezTerm-windows-$Tag\mesa\opengl32.dll") "mesa $Tag$Rebuild"
     New-Item -ItemType Directory -Force -Path $src | Out-Null
     Compress-Archive -Path (Join-Path $stage "WezTerm-windows-$Tag") -DestinationPath $zip -Force
     $hash = if ($Sha) { $Sha } else { (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant() }
@@ -68,6 +72,7 @@ try {
         Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui a') 'current\ is not the new build'
         Assert ("$(Get-Current)" -like "*$($first.Substring(0, 12))") "current points at $(Get-Current)"
         Assert ((Read-Text (Join-Path $root 'current.sha256')) -eq $first) 'stamp is not the published sha256'
+        Assert ((Read-Text (Join-Path $root 'current.version')) -eq 'a') 'current.version is not the zip folder version'
         Assert ((Get-ShortcutTarget) -eq (Join-Path $root 'current\wezterm-gui.exe')) "shortcut target: $(Get-ShortcutTarget)"
         Assert ((Get-ToastName) -eq 'WezTerm') "toast id not registered: $($r.Out)"
     }
@@ -100,22 +105,42 @@ try {
         Assert ((Get-ShortcutTarget) -eq (Join-Path $root 'current\wezterm-gui.exe')) 'shortcut moved off current\'
     }
 
-    Test-Case 'a build a running process uses is kept' {
-        # A copy of ping.exe started from build b's directory stands in for a running WezTerm.
-        $fake = Join-Path $secondDir 'wezterm-gui-running.exe'
-        Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\PING.EXE') -Destination $fake
-        $proc = Start-Process -FilePath $fake -ArgumentList '-n', '60', '127.0.0.1' -PassThru -WindowStyle Hidden
+    $third = New-Nightly 'c'
+    Test-Case 'a build a running process uses is kept whole' {
+        # A copy of ping.exe in build b stands in for a running WezTerm. Started through
+        # current\ as the shortcut starts WezTerm, so its path names no build.
+        Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\PING.EXE') -Destination (Join-Path $secondDir 'wezterm-gui-running.exe')
+        $proc = Start-Process -FilePath (Join-Path $root 'current\wezterm-gui-running.exe') -ArgumentList '-n', '60', '127.0.0.1' -PassThru -WindowStyle Hidden
         try {
-            $null = New-Nightly 'c'
             $r = Invoke-Nightly
             Assert ($r.Code -eq 0) "exit $($r.Code)"
             Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui c') 'current\ is not build c'
-            Assert (Test-Path -LiteralPath (Join-Path $secondDir 'wezterm-gui.exe')) 'build b was removed while in use'
+            Assert (Test-Path -LiteralPath (Join-Path $secondDir 'mesa\opengl32.dll')) "build b lost files while in use`n$($r.Out)"
             Assert ($r.Out -match 'kept') "no 'kept' message: $($r.Out)"
         } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             $proc.WaitForExit()
         }
+    }
+
+    Test-Case 'a later run removes the kept build, even with nothing new' {
+        Start-Sleep -Milliseconds 500
+        $r = Invoke-Nightly
+        Assert ($r.Code -eq 0) "exit $($r.Code)"
+        Assert ($r.Out -match 'up to date') "no 'up to date': $($r.Out)"
+        Assert (-not (Test-Path -LiteralPath $secondDir)) "build b is still there`n$($r.Out)"
+    }
+
+    Test-Case 'a rebuild of the installed version: the new checksum is recorded, nothing reinstalled' {
+        $rebuilt = New-Nightly 'c' '' ' rebuilt'
+        Assert ($rebuilt -ne $third) 'the rebuild has the same SHA256'
+        $r = Invoke-Nightly
+        Assert ($r.Code -eq 0) "exit $($r.Code)"
+        Assert ($r.Out -match 'rebuilt unchanged' -and $r.Out -notmatch 'installed nightly') "reinstalled: $($r.Out)"
+        Assert ("$(Get-Current)" -like "*$($third.Substring(0, 12))") "current moved to $(Get-Current)"
+        Assert ((Read-Text (Join-Path $root 'current\mesa\opengl32.dll')) -eq 'mesa c') 'the build was replaced'
+        Assert ((Read-Text (Join-Path $root 'current.sha256')) -eq $rebuilt) 'the new SHA256 was not recorded'
+        Assert (@(Get-ChildItem -LiteralPath $root -Directory).Count -eq 2) 'a build directory appeared'
     }
 
     Test-Case 'checksum mismatch: the installed build stays, exit 0' {
