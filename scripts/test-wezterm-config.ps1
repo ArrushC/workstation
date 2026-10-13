@@ -39,7 +39,7 @@ try {
                 'ALT\s+D\s+->\s+EmitEvent',
                 'SUPER\s+Drag \{ streak: 1, button: Left \}\s+->\s+StartWindowDrag',
                 'SHIFT\s+Down \{ streak: 1, button: Left \}\s+->\s+SelectTextAtMouseCursor\(Cell\)',
-                'CTRL\s+W\s+->\s+CloseCurrentTab \{ confirm: false \}',
+                'CTRL\s+W\s+->\s+CloseCurrentTab \{ confirm: true \}',
                 'CTRL\s+Q\s+->\s+PaneSelect',
                 'ALT\s+S\s+->\s+ActivateKeyTable \{ name: "resize_pane"',
                 'Key Table: resize_pane',

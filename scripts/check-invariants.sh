@@ -1473,7 +1473,13 @@ check(c.front_end == 'WebGpu' and c.webgpu_power_preference == 'HighPerformance'
 check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use_fancy_tab_bar == false, 'chrome: not RESIZE with the retro tab bar at the bottom')
 check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
 check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
-check(c.window_close_confirmation == 'NeverPrompt' and c.enable_kitty_keyboard == true, 'closing prompts, or the kitty keyboard protocol is off')
+check(c.window_close_confirmation == 'AlwaysPrompt' and c.enable_kitty_keyboard == true, 'closing never asks, or the kitty keyboard protocol is off')
+local idle = {}
+for _, name in ipairs(c.skip_close_confirmation_for_processes_named or {}) do idle[name] = true end
+for _, name in ipairs({ 'bash', 'zsh', 'nu.exe', 'cmd.exe', 'pwsh.exe', 'powershell.exe', 'mise.exe' }) do
+  check(idle[name], 'closing a tab running only ' .. name .. ' asks (skip_close_confirmation_for_processes_named)')
+end
+check(not (idle['wsl.exe'] or idle['ssh.exe']), 'closing a WSL or SSH tab never asks')
 check(c.key_tables and c.key_tables.resize_pane and #c.key_tables.resize_pane == 6, 'no resize_pane key table (arrows, Esc, Enter)')
 check(type(c.ssh_domains) == 'table' and #c.ssh_domains == 0, 'ssh_domains is not empty')
 check(has(c.hyperlink_rules[#c.hyperlink_rules].format, 'ArrushC/workstation/issues/$1') and #c.hyperlink_rules == 2, 'no #123 hyperlink rule after the defaults')
@@ -1496,7 +1502,7 @@ for _, k in ipairs({ 'c', 'e', 'h', 's', 'o', 'F5', 't' }) do key('CTRL|SHIFT+' 
 check(keys['CTRL+Insert'] == keys['CTRL|SHIFT+c'], 'Ctrl+Insert is not the Ctrl+Shift+C copy')
 key('ALT|SHIFT+D', 'callback')
 key('ALT|SHIFT+R', 'callback')
-check(key('CTRL|SHIFT+w', 'CloseCurrentTab').args.confirm == false, 'Ctrl+Shift+W still asks before closing')
+check(key('CTRL|SHIFT+w', 'CloseCurrentTab').args.confirm == true, 'Ctrl+Shift+W closes without asking')
 key('CTRL|SHIFT+q', 'PaneSelect')
 check(key('ALT|SHIFT+S', 'ActivateKeyTable').args.name == 'resize_pane', 'Alt+Shift+S does not enter resize mode')
 local helix, sha = key('CTRL|SHIFT+g', 'QuickSelectArgs'), key('CTRL|SHIFT+y', 'QuickSelectArgs')

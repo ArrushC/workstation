@@ -152,10 +152,14 @@ config.term = 'wezterm'
 config.notification_handling = 'SuppressFromFocusedPane'
 config.switch_to_last_active_tab_when_closing_tab = true
 config.unzoom_on_switch_pane = true
--- Closing a tab (Ctrl+Shift+W) or the window never asks: an SSH tab's zellij session
--- survives and reattaches (launcher, Ctrl+Shift+F5), and a local shell holds nothing a
--- prompt would save.
-config.window_close_confirmation = 'NeverPrompt'
+-- Closing a tab (Ctrl+Shift+W) or the window asks first, unless every process in it is
+-- on this list (an idle shell). WezTerm can't see inside wsl.exe or ssh.exe, so WSL and
+-- SSH tabs always ask. WezTerm's own list plus mise.exe: Nushell runs through mise's
+-- shim (nu.exe, then mise.exe, then the real nu.exe).
+config.window_close_confirmation = 'AlwaysPrompt'
+config.skip_close_confirmation_for_processes_named = {
+  'bash', 'sh', 'zsh', 'fish', 'tmux', 'nu', 'nu.exe', 'cmd.exe', 'pwsh.exe', 'powershell.exe', 'mise.exe',
+}
 -- Kitty's keyboard protocol for the apps that ask for it (helix gets unambiguous keys,
 -- zellij passes it on); the rest are untouched. On Windows, ConPTY panes keep
 -- win32-input-mode. If a TUI misbehaves after an update, turn this off first.
@@ -693,7 +697,7 @@ bindings = {
   { 'CTRL|SHIFT', 'e', rename_tab, 'Rename the tab' },
   { 'CTRL|SHIFT', 'g', open_in_helix, 'Quick select a file:line, open it in helix' },
   { 'CTRL|SHIFT', 'y', paste_sha, 'Quick select a commit SHA, paste it at the prompt' },
-  { 'CTRL|SHIFT', 'w', act.CloseCurrentTab({ confirm = false }), 'Close the tab (no prompt)' },
+  { 'CTRL|SHIFT', 'w', act.CloseCurrentTab({ confirm = true }), 'Close the tab (asks unless only a shell runs)' },
   { 'CTRL|SHIFT', 's', switch_tab, 'Switch tab (fuzzy, real numbers)' },
   { 'CTRL|SHIFT', 'q', act.PaneSelect({}), 'Pick a pane by letter' },
   { 'ALT|SHIFT', 'S', resize_mode, 'Resize mode: arrows, Esc or Enter ends it' },
