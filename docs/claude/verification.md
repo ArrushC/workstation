@@ -187,16 +187,17 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   (no Windows-side expansion), and a split or `SpawnTab` inherits the pane's cwd only within its
   domain; `wsl.exe --cd <missing dir>` prints an error and starts in `/`. A close asks
   unless every exe name in the pane's process tree is in
-  `skip_close_confirmation_for_processes_named`: a Nushell tab is `nu.exe` (mise's shim),
-  `mise.exe`, `nu.exe`; a WSL tab `wsl.exe` twice, `wslhost.exe`, `conhost.exe` (always asks).
+  `skip_close_confirmation_for_processes_named`, which is empty so every close asks (an idle
+  Nushell tab is `nu.exe` (mise's shim), `mise.exe`, `nu.exe`). Every tab and window close
+  path (key, the tab's x, middle-click, the window's close) goes through that check.
 - On a host after a full bootstrap: `infocmp wezterm | head -1` exits 0; in a WezTerm WSL tab
   `echo $TERM` prints `wezterm`, `sudo env | grep ^TERM=` prints `xterm-256color`, and `ls` is
   coloured. Nushell and PowerShell tabs show `xterm-256color`. `mise run health`'s wezterm rows
   cover the entry and, from WSL, the Windows nightly, toast id, `WEZTERM_CONFIG_FILE` and PATH
   entry (via `winterop`).
 - GUI-only (no headless check): the footer, tab colours/marks, notices, toasts, Ctrl+click and
-  file links, Ctrl+triple-click, the + button's three clicks, the close prompt (an idle
-  Nushell tab closes at once; `hx` there, or any WSL tab, asks). In a launcher SSH tab: the host's
+  file links, Ctrl+triple-click, the + button's three clicks, the close prompt (Ctrl+Shift+W
+  on an idle Nushell tab asks). In a launcher SSH tab: the host's
   colour and name, `zellij:main` in a wide footer, Ctrl+Shift+F5 after `exit`, and `ll` then
   Ctrl+click on a file (helix opens over ssh). In a WSL tab: `ssh` to a host, then Ctrl+Shift+T
   opens WSL in `~`.

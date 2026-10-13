@@ -1474,12 +1474,7 @@ check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use
 check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
 check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
 check(c.window_close_confirmation == 'AlwaysPrompt' and c.enable_kitty_keyboard == true, 'closing never asks, or the kitty keyboard protocol is off')
-local idle = {}
-for _, name in ipairs(c.skip_close_confirmation_for_processes_named or {}) do idle[name] = true end
-for _, name in ipairs({ 'bash', 'zsh', 'nu.exe', 'cmd.exe', 'pwsh.exe', 'powershell.exe', 'mise.exe' }) do
-  check(idle[name], 'closing a tab running only ' .. name .. ' asks (skip_close_confirmation_for_processes_named)')
-end
-check(not (idle['wsl.exe'] or idle['ssh.exe']), 'closing a WSL or SSH tab never asks')
+check(type(c.skip_close_confirmation_for_processes_named) == 'table' and next(c.skip_close_confirmation_for_processes_named) == nil, 'closing a tab running only an idle shell never asks (skip_close_confirmation_for_processes_named is not empty)')
 check(c.key_tables and c.key_tables.resize_pane and #c.key_tables.resize_pane == 6, 'no resize_pane key table (arrows, Esc, Enter)')
 check(type(c.ssh_domains) == 'table' and #c.ssh_domains == 0, 'ssh_domains is not empty')
 check(has(c.hyperlink_rules[#c.hyperlink_rules].format, 'ArrushC/workstation/issues/$1') and #c.hyperlink_rules == 2, 'no #123 hyperlink rule after the defaults')
