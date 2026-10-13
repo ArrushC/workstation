@@ -179,6 +179,10 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   `%TEMP%` (a UNC cwd breaks junction cleanup) with `dotfiles/config/wezterm` beside `scripts/`;
   its toast-id and environment keys (`-ToastKey`, `-EnvKey`) are throwaway HKCU paths. Never run
   it with the defaults from an agent: it writes the real User PATH and `WEZTERM_CONFIG_FILE`.
+  A process started through a junction reports the junction path (Get-Process, CIM), so the
+  in-use check opens each `.exe`/`.dll` for writing instead (a loaded image refuses); renaming
+  the directory doesn't tell (it succeeds). The nightly zip's top folder is
+  `WezTerm-windows-<version>`, and WezTerm re-uploads the same commit's build daily.
 - Source-checked on the nightly (e2a98e1b): a spawn's `cwd = '~'` reaches `wsl.exe --cd ~` as is
   (no Windows-side expansion), and a split or `SpawnTab` inherits the pane's cwd only within its
   domain; `wsl.exe --cd <missing dir>` prints an error and starts in `/`. A close asks
