@@ -1521,6 +1521,7 @@ key('ALT|SHIFT+D', 'callback')
 key('ALT|SHIFT+R', 'callback')
 check(key('CTRL|SHIFT+w', 'CloseCurrentTab').args.confirm == true, 'Ctrl+Shift+W closes without asking')
 key('CTRL|SHIFT+q', 'PaneSelect')
+key('ALT+0', 'ActivateLastTab')
 check(key('ALT|SHIFT+S', 'ActivateKeyTable').args.name == 'resize_pane', 'Alt+Shift+S does not enter resize mode')
 local helix, sha = key('CTRL|SHIFT+g', 'QuickSelectArgs'), key('CTRL|SHIFT+y', 'QuickSelectArgs')
 local mouse = {}
@@ -1677,10 +1678,37 @@ pane(wide, false, 0, { id = 8, proc = { name = 'pwsh.exe', argv = { 'pwsh.exe' }
 local win = { tab_id = 4, tab_index = 0, is_active = false, tab_title = '', panes = {},
   active_pane = { pane_id = 8, title = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', domain_name = 'local', progress = 'None' } }
 check(title(win) == ' > 1: pwsh ', '.exe trimming: [' .. title(win) .. ']')
+-- The previous tab (Alt+0's, and where closing this one lands) is underlined; the active one never is.
+local function underlined(tab)
+  for _, it in ipairs(handlers['format-tab-title'](tab, { tab }, nil, nil, false, 32)) do
+    if it.Attribute and it.Attribute.Underline == 'Single' then return true end
+  end
+  return false
+end
+win.is_last_active = true
+check(underlined(win), 'the previous tab is not underlined')
+win.is_active = true
+check(not underlined(win), 'the active tab is underlined')
+win.is_active, win.is_last_active = false, false
+check(not underlined(win), 'a tab other than the previous one is underlined')
 pane(wide, false, 0, { id = 9, domain = 'WSL:AlmaLinux-9', proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } })
 local wsl = { tab_id = 3, tab_index = 0, is_active = false, tab_title = '', panes = {},
   active_pane = { pane_id = 9, title = 'wsl.exe', domain_name = 'WSL:AlmaLinux-9', progress = 'None', current_working_dir = 'file://PC/home/me' } }
 check(title(wsl) == ' $ 1: AlmaLinux-9 ', 'a WSL tab is not named after its distro: [' .. title(wsl) .. ']')
+-- At rest a WSL tab takes its distro's colour, as an SSH tab takes its host's: muted in the
+-- name when inactive, the fill when active.
+local alma = package.loaded.appearance.accent('AlmaLinux-9')
+local function name_fg(tab)
+  local fg
+  for _, it in ipairs(handlers['format-tab-title'](tab, { tab }, nil, nil, false, 32)) do
+    if it.Foreground then fg = it.Foreground.Color end
+    if it.Text and it.Text:find(':', 1, true) then return fg end
+  end
+end
+check(alma ~= '#cba6f7' and name_fg(wsl) == 'dim' .. alma, "an inactive WSL tab's name is not in its distro's colour: " .. tostring(name_fg(wsl)))
+wsl.is_active = true
+check(tab_bg(wsl) == alma, "an active WSL tab is not filled with its distro's colour: " .. tostring(tab_bg(wsl)))
+wsl.is_active = false
 wsl.active_pane.current_working_dir = 'file://build01.corp/home/me'
 check(title(wsl) == ' > 1: build01.corp ', "a WSL tab that ssh'd elsewhere is not named after that host: [" .. title(wsl) .. ']')
 -- A host's real name maps to its ~/.ssh/config.local alias: same name, same colour.
@@ -1811,7 +1839,7 @@ for _, r in ipairs(performed.args.choices) do
   if r.id then launch = launch + 1 end
 end
 local text = table.concat(rows, '\n')
-for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Alt+0', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
   check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
 end
 check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')

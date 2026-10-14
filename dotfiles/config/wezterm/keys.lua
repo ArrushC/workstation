@@ -35,7 +35,7 @@ local reference = {
   { 'images', 'Show inline (yazi, wezterm imgcat), except inside zellij' },
   { '#123', "Links to this repository's issue or pull request 123" },
   { 'footer', 'SSH host (zellij session), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
-  { 'tab colours', "An SSH tab, or a WSL tab that ran ssh, takes its host's colour and name (its ~/.ssh/config.local alias)" },
+  { 'tab colours', "An SSH tab, or a WSL tab that ran ssh, takes its host's colour and name (its ~/.ssh/config.local alias); a WSL tab otherwise its distro's colour" },
   { 'tab marks', "Bell rang, % progress, dot: output you haven't seen" },
 }
 
@@ -89,7 +89,8 @@ function M.apply(config)
     )
   end)
 
-  -- WezTerm's own bindings use Ctrl+Shift, so zellij keeps Ctrl and Alt. Each entry carries
+  -- WezTerm's own bindings use Ctrl+Shift, so zellij keeps Ctrl and Alt (Alt+0 aside: zellij
+  -- binds Alt+1-9 to its tabs, not Alt+0). Each entry carries
   -- its cheatsheet line (Ctrl+Shift+H), so the two can't drift; `chord` names a group.
   -- The pane keys are Warp's and Windows Terminal's (README's tables).
   bindings = {
@@ -117,6 +118,7 @@ function M.apply(config)
     { 'CTRL|SHIFT', 'y', actions.paste_sha, 'Quick select a commit SHA, paste it at the prompt' },
     { 'CTRL|SHIFT', 'w', act.CloseCurrentTab({ confirm = true }), 'Close the tab (asks first)' },
     { 'CTRL|SHIFT', 's', actions.switch_tab, 'Switch tab (fuzzy, real numbers)' },
+    { 'ALT', '0', act.ActivateLastTab, 'Back to the previous tab (underlined in the tab bar)' },
     { 'CTRL|SHIFT', 'q', act.PaneSelect({}), 'Pick a pane by letter' },
     { 'ALT|SHIFT', 'S', actions.resize_mode, 'Resize mode: arrows, Esc or Enter ends it' },
     { 'CTRL|SHIFT', 'F5', actions.reconnect, 'Reconnect an SSH tab (new tab; zellij reattaches)' },
