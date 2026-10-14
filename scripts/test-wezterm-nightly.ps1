@@ -3,10 +3,13 @@
 # moves, the old build goes), a build a running process started through current\ still
 # uses (kept whole, then removed by a later up-to-date run), a rebuild of the installed
 # version (not reinstalled), a checksum mismatch (the installed build stays, exit 0), a
-# root given as an 8.3 short path, and an unreachable URL (exit 0, the toast id still
-# registered), and the User environment (WEZTERM_CONFIG_FILE, the PATH entry once,
+# new build that doesn't load the config (refused, not downloaded again; on a first
+# install, installed with a warning), a root given as an 8.3 short path, and an
+# unreachable URL (exit 0, the toast id registered and a deleted shortcut restored),
+# %APPDATA%\wezterm, and the User environment (WEZTERM_CONFIG_FILE, the PATH entry once,
 # PATH's REG_EXPAND_SZ kept). The toast id and the environment go to throwaway HKCU
-# keys, never the real ones.
+# keys, never the real ones. The fake builds can't run, so every run but the config-check
+# cases passes -NoConfigCheck, and with the check on, they never load the config.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -23,6 +26,7 @@ $zip = Join-Path $src 'WezTerm-windows-nightly.zip'
 $toastRoot = "HKCU:\Software\workstation-test-$([guid]::NewGuid())"
 $toastKey = "$toastRoot\org.wezfurlong.wezterm"
 $envKey = "$toastRoot\Environment"
+$dataDir = Join-Path $tmp 'appdata\wezterm'
 $config = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\dotfiles\config\wezterm\wezterm.lua'))
 
 # A fake nightly of version <tag>: WezTerm-windows-<tag>\wezterm-gui.exe (text) and
@@ -38,8 +42,9 @@ function New-Nightly([string]$Tag, [string]$Sha, [string]$Rebuild) {
     [IO.File]::WriteAllText("$zip.sha256", "$hash  WezTerm-windows-nightly.zip`n")
     return $hash
 }
-function Invoke-Nightly([string]$Base = $base) {
-    $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $Base -Root $root -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey 2>&1 | Out-String
+function Invoke-Nightly([string]$Base = $base, [string]$At = $root, [switch]$CheckConfig) {
+    $check = @(if (-not $CheckConfig) { '-NoConfigCheck' })
+    $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $Base -Root $At -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey -DataDir $dataDir @check 2>&1 | Out-String
     return [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 function Get-Current { (Get-Item -LiteralPath (Join-Path $root 'current')).Target }
@@ -75,6 +80,7 @@ try {
         Assert ((Read-Text (Join-Path $root 'current.version')) -eq 'a') 'current.version is not the zip folder version'
         Assert ((Get-ShortcutTarget) -eq (Join-Path $root 'current\wezterm-gui.exe')) "shortcut target: $(Get-ShortcutTarget)"
         Assert ((Get-ToastName) -eq 'WezTerm') "toast id not registered: $($r.Out)"
+        Assert ((Test-Path -LiteralPath $dataDir) -and $r.Out -match 'created') "no $dataDir (the palette's recents): $($r.Out)"
     }
 
     Test-Case 'the User environment: WEZTERM_CONFIG_FILE, and current\ on PATH with its kind kept' {
@@ -91,7 +97,7 @@ try {
         Assert ($r.Out -match 'up to date') "no 'up to date': $($r.Out)"
         Assert (@(Get-ChildItem -LiteralPath $root -Directory).Count -eq 2) 'a build directory appeared or went'
         Assert ((Get-Env).Path -eq "%USERPROFILE%\bin;C:\tools;$(Join-Path $root 'current')") "PATH changed: $((Get-Env).Path)"
-        Assert ($r.Out -notmatch 'WEZTERM_CONFIG_FILE|User PATH') "the environment was rewritten: $($r.Out)"
+        Assert ($r.Out -notmatch 'WEZTERM_CONFIG_FILE|User PATH|created') "the environment or data folder was redone: $($r.Out)"
     }
 
     $second = New-Nightly 'b'
@@ -153,6 +159,32 @@ try {
         Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui c') 'current\ changed'
     }
 
+    Test-Case "a new build that doesn't load the config is refused, then not downloaded again" {
+        $refused = New-Nightly 'f'
+        $r = Invoke-Nightly -CheckConfig
+        Assert ($r.Code -eq 0) "exit $($r.Code)"
+        Assert ($r.Out -match "doesn't load wezterm.lua" -and $r.Out -match 'kept the installed build') "no refusal: $($r.Out)"
+        Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui c') 'current\ moved to the refused build'
+        Assert (-not (Test-Path -LiteralPath (Join-Path $root $refused.Substring(0, 12)))) 'the refused build was unpacked into the root'
+        Assert ((Read-Text (Join-Path $root 'rejected.sha256')) -eq $refused) 'the refused SHA256 was not noted'
+        Remove-Item -LiteralPath $zip
+        $r = Invoke-Nightly -CheckConfig
+        Assert ($r.Code -eq 0 -and $r.Out -match 'was refused' -and $r.Out -notmatch 'not updated') "it tried the refused build again: $($r.Out)"
+    }
+
+    Test-Case "a first install that doesn't load the config still installs, with a warning" {
+        $fresh = Join-Path $tmp 'fresh'
+        $null = New-Nightly 'g'
+        $r = Invoke-Nightly -At $fresh -CheckConfig
+        try {
+            Assert ($r.Code -eq 0) "exit $($r.Code)"
+            Assert ((Read-Text (Join-Path $fresh 'current\wezterm-gui.exe')) -eq 'gui g') "nothing installed: $($r.Out)"
+            Assert ($r.Out -match 'runs on its defaults') "no warning: $($r.Out)"
+        } finally {
+            if (Test-Path -LiteralPath (Join-Path $fresh 'current')) { [IO.Directory]::Delete((Join-Path $fresh 'current')) }
+        }
+    }
+
     Test-Case 'a root given as an 8.3 short path keeps the new build' {
         # %TEMP% is often a short path while listings give long ones; the cleanup must
         # still recognise the build it just installed. (Where 8.3 names are off, the
@@ -160,17 +192,19 @@ try {
         $fso = New-Object -ComObject Scripting.FileSystemObject
         $short = $fso.GetFolder($root).ShortPath
         $null = New-Nightly 'e'
-        $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey 2>&1 | Out-String
+        $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey -DataDir $dataDir -NoConfigCheck 2>&1 | Out-String
         Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
         Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui e') "current\ is not build e`n$out"
     }
 
-    Test-Case 'unreachable URL: a warning, exit 0, the toast id still registered' {
+    Test-Case 'unreachable URL: a warning, exit 0, the toast id and a deleted shortcut restored' {
         Remove-Item -LiteralPath $toastKey -Recurse -Force
+        Remove-Item -LiteralPath (Join-Path $menu 'WezTerm.lnk')
         $r = Invoke-Nightly ('file:///' + (($tmp -replace '\\', '/') + '/missing'))
         Assert ($r.Code -eq 0) "exit $($r.Code)"
         Assert ($r.Out -match 'not updated') "no warning: $($r.Out)"
         Assert ((Get-ToastName) -eq 'WezTerm') "toast id not registered again: $($r.Out)"
+        Assert ((Get-ShortcutTarget) -eq (Join-Path $root 'current\wezterm-gui.exe')) "the shortcut was not restored offline: $($r.Out)"
     }
 } finally {
     $current = Join-Path $root 'current'

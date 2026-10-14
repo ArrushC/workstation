@@ -70,7 +70,7 @@ local function tab_info(tab)
     glyph, title, host = glyphs.ssh, s.host, s.host
   elseif domain:find('^WSL:') then
     local distro = domain:gsub('^WSL:', '')
-    host = domains.wsl_remote(p.current_working_dir, distro)
+    host = domains.wsl_remote(p.current_working_dir, distro, p.title)
     glyph, title = host and glyphs.ssh or glyphs.wsl, host or distro
   else
     glyph = glyphs.shell
@@ -129,7 +129,9 @@ function M.apply(_)
     local room = math.max(1, max_width - wezterm.column_width(lead) - wezterm.column_width(prefix) - 1)
     local items = { { Background = { Color = bg } } }
     if mark then
-      table.insert(items, { Foreground = { Color = tab.is_active and fg or mark_fg } })
+      -- In its own colour on the active tab too, so an error % doesn't pass for progress;
+      -- in the text colour only where that colour is the tab's fill.
+      table.insert(items, { Foreground = { Color = (tab.is_active and mark_fg == bg) and fg or mark_fg } })
     end
     table.insert(items, { Text = lead })
     table.insert(items, { Foreground = { Color = fg } })

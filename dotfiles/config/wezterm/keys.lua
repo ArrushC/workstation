@@ -31,8 +31,11 @@ local reference = {
   { 'Ctrl+Shift+drag', 'Move the window (Win+drag too)' },
   { '+ on the tab bar', 'Click: new tab; middle-click: tab list; right-click: launcher' },
   { 'select', 'Selecting with the mouse copies (Copied in the footer)' },
+  { 'drop a file', 'Pastes its path, quoted' },
+  { 'images', 'Show inline (yazi, wezterm imgcat), except inside zellij' },
+  { '#123', "Links to this repository's issue or pull request 123" },
   { 'footer', 'SSH host (zellij session), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
-  { 'tab colours', 'An SSH tab takes its host colour and name (its ~/.ssh/config.local alias)' },
+  { 'tab colours', "An SSH tab, or a WSL tab that ran ssh, takes its host's colour and name (its ~/.ssh/config.local alias)" },
   { 'tab marks', "Bell rang, % progress, dot: output you haven't seen" },
 }
 
@@ -91,7 +94,7 @@ function M.apply(config)
   -- The pane keys are Warp's and Windows Terminal's (README's tables).
   bindings = {
     { 'CTRL|ALT', 'l', actions.launcher, 'Launcher: shells, WSL, SSH hosts (zellij)' },
-    { 'CTRL|SHIFT', 't', actions.new_tab, "New tab, in this tab's domain and directory" },
+    { 'CTRL|SHIFT', 't', actions.new_tab, "New tab: this tab's domain and directory, or its SSH host again" },
     { 'ALT|SHIFT', 'D', actions.split_down, 'Split pane down' },
     { 'ALT|SHIFT', 'R', actions.split_right, 'Split pane right' },
     { 'ALT|SHIFT', 'LeftArrow', act.ActivatePaneDirection('Left'), 'Move between panes', chord = 'Alt+Shift+arrows' },
@@ -166,6 +169,8 @@ function M.apply(config)
       { brief = 'Reconnect the SSH tab', action = actions.reconnect },
       { brief = 'Open the scrollback in helix', action = actions.scrollback_in_helix },
       { brief = 'Switch tab (fuzzy)', action = actions.switch_tab },
+      { brief = 'Split pane down', action = actions.split_down },
+      { brief = 'Split pane right', action = actions.split_right },
       { brief = 'Pick a pane by letter', action = act.PaneSelect({}) },
       { brief = 'Resize panes (arrows; Esc or Enter ends it)', action = actions.resize_mode },
     }

@@ -13,20 +13,25 @@
 #   3. else download the zip and refuse it unless its SHA256 matches. WezTerm rebuilds
 #      the nightly daily even without a new commit, so when its top folder
 #      (WezTerm-windows-<version>) names the version in <Root>\current.version, only
-#      record the new SHA256; else unpack it into <Root>\<first 12 hex of the sha256>\
-#      (per-user, no admin);
-#   4. point the junction <Root>\current at it, and the Start Menu shortcut at
-#      <Root>\current\wezterm-gui.exe, so the shortcut and a taskbar pin survive updates;
+#      record the new SHA256;
+#   4. else check that the new build loads this checkout's config (Test-LoadsConfig). One
+#      that doesn't is refused while a working build is installed, and its SHA256 goes to
+#      <Root>\rejected.sha256 so later runs don't download it again; the next nightly is
+#      tried. Otherwise unpack it into <Root>\<first 12 hex of the sha256>\ (per-user, no
+#      admin) and point the junction <Root>\current at it;
 #   5. on every run, delete the other builds no running process uses (a running
 #      WezTerm keeps its own directory; a later run deletes it).
-# Every run also registers WezTerm's toast id (Register-ToastId) and sets the User
-# environment (Set-UserEnvironment): WEZTERM_CONFIG_FILE at this checkout's
-# dotfiles\config\wezterm\wezterm.lua, and <Root>\current on PATH for the wezterm CLI;
-# whatever the download does.
+# Every run also, whatever the download does: registers WezTerm's toast id
+# (Register-ToastId); creates %APPDATA%\wezterm (New-DataDir); sets the User environment
+# (Set-UserEnvironment): WEZTERM_CONFIG_FILE at this checkout's
+# dotfiles\config\wezterm\wezterm.lua, and <Root>\current on PATH for the wezterm CLI; and
+# points the Start Menu shortcut at <Root>\current\wezterm-gui.exe, so the shortcut and a
+# taskbar pin survive updates (and a deleted shortcut comes back, even offline).
 # Every failure warns and exits 0: a failing hook would stop `mise bootstrap`.
 # ASCII only: Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page.
 # scripts/test-wezterm-nightly.ps1 tests it against file:// URLs (-BaseUrl), with
-# throwaway registry keys (-ToastKey, -EnvKey).
+# throwaway registry keys (-ToastKey, -EnvKey) and folders (-Root, -ShortcutDir, -DataDir);
+# its fake builds can't run, so -NoConfigCheck skips step 4's check for them.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-nightly.ps1
 # =============================================================================
 [CmdletBinding()]
@@ -35,7 +40,9 @@ param(
     [string]$Root = (Join-Path $env:LOCALAPPDATA 'workstation\wezterm'),
     [string]$ShortcutDir = [Environment]::GetFolderPath('Programs'),
     [string]$ToastKey = 'HKCU:\Software\Classes\AppUserModelId\org.wezfurlong.wezterm',
-    [string]$EnvKey = 'HKCU:\Environment'
+    [string]$EnvKey = 'HKCU:\Environment',
+    [string]$DataDir = (Join-Path $env:APPDATA 'wezterm'),
+    [switch]$NoConfigCheck
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -43,6 +50,9 @@ $zipName = 'WezTerm-windows-nightly.zip'
 $current = Join-Path $Root 'current'
 $stamp = Join-Path $Root 'current.sha256'
 $versionStamp = Join-Path $Root 'current.version'
+$rejectStamp = Join-Path $Root 'rejected.sha256'
+$exe = Join-Path $current 'wezterm-gui.exe'
+$config = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\dotfiles\config\wezterm\wezterm.lua'))
 
 function Write-Step([string]$Message) { Write-Host "  wezterm: $Message" }
 
@@ -96,6 +106,18 @@ function Register-ToastId {
     }
 }
 
+# WezTerm keeps the command palette's recent commands in %APPDATA%\wezterm but never
+# creates that folder, so without it every palette pick logs "Error while saving recents".
+function New-DataDir {
+    if (Test-Path -LiteralPath $DataDir) { return }
+    try {
+        New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
+        Write-Step "created $DataDir (the command palette's recent commands)"
+    } catch {
+        Write-Step "! could not create ${DataDir}: $($_.Exception.Message)"
+    }
+}
+
 # WezTerm loads its config straight from this checkout, so a save there or a wsu pull
 # reloads it and no copy is deployed; <Root>\current on PATH gives the wezterm CLI
 # (wezterm imgcat, wezterm cli) to every shell. Written to the registry with PATH's kind
@@ -142,6 +164,21 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
     [void][Workstation.EnvironmentChange]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, 'Environment', 0x0002, 5000, [ref]$res)
 }
 
+# True when the wezterm.exe in $Build loads this checkout's config (no window opens). A
+# config that fails to load still exits 0 and lists WezTerm's default keys, so the test is
+# that show-keys lists this config's Ctrl+Alt+L launcher; scripts/test-wezterm-config.ps1
+# checks the rest of its bindings.
+function Test-LoadsConfig([string]$Build) {
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    try {
+        $keys = & (Join-Path $Build 'wezterm.exe') --config-file $config show-keys 2>&1 | Out-String
+        return ($LASTEXITCODE -eq 0 -and $keys -match 'ALT \| CTRL\s+l\s+->\s+ShowLauncherArgs')
+    } catch {
+        return $false
+    }
+}
+
 # True when a running process has one of $Dir's programs or libraries loaded: Windows
 # refuses to open a loaded image for writing (nothing is written). A process's own path
 # can't tell: WezTerm started from the shortcut runs as <Root>\current\wezterm-gui.exe,
@@ -168,17 +205,20 @@ function Remove-OldBuilds {
 }
 
 Register-ToastId
-Set-UserEnvironment ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\dotfiles\config\wezterm\wezterm.lua'))) $current
+New-DataDir
+Set-UserEnvironment $config $current
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("wezterm-nightly-" + [guid]::NewGuid())
 try {
     New-Item -ItemType Directory -Force -Path $Root, $tmp | Out-Null
     Get-Url "$BaseUrl/$zipName.sha256" (Join-Path $tmp 'sha256')
     $want = (([IO.File]::ReadAllText((Join-Path $tmp 'sha256'))).Trim() -split '\s+')[0].ToLowerInvariant()
     if ($want -notmatch '^[0-9a-f]{64}$') { throw "unexpected $zipName.sha256 contents" }
-    $exe = Join-Path $current 'wezterm-gui.exe'
     $have = if (Test-Path -LiteralPath $stamp) { ([IO.File]::ReadAllText($stamp)).Trim() } else { '' }
+    $rejected = if (Test-Path -LiteralPath $rejectStamp) { ([IO.File]::ReadAllText($rejectStamp)).Trim() } else { '' }
     if ($have -eq $want -and (Test-Path -LiteralPath $exe)) {
         Write-Step "nightly up to date ($($want.Substring(0, 12)))"
+    } elseif ($want -eq $rejected -and -not $NoConfigCheck -and (Test-Path -LiteralPath $exe)) {
+        Write-Step "nightly $($want.Substring(0, 12)) was refused (it doesn't load wezterm.lua); kept the installed build until the next nightly (delete $rejectStamp to try it again)"
     } else {
         $zip = Join-Path $tmp $zipName
         Get-Url "$BaseUrl/$zipName" $zip
@@ -195,10 +235,17 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $content 'wezterm-gui.exe'))) { throw "$zipName has no wezterm-gui.exe" }
         $version = if ($content -ne $unpacked) { $top[0].Name -replace '^WezTerm-windows-', '' } else { '' }
         $installed = if (Test-Path -LiteralPath $versionStamp) { ([IO.File]::ReadAllText($versionStamp)).Trim() } else { '' }
+        $unchanged = $version -and $version -eq $installed -and (Test-Path -LiteralPath $exe)
+        $loads = $unchanged -or $NoConfigCheck -or (Test-LoadsConfig $content)
 
-        if ($version -and $version -eq $installed -and (Test-Path -LiteralPath $exe)) {
+        if ($unchanged) {
             [IO.File]::WriteAllText($stamp, $want)
             Write-Step "nightly up to date ($version, rebuilt unchanged)"
+        } elseif (-not $loads -and (Test-Path -LiteralPath $exe)) {
+            # The installed build keeps working with the config; this one would start on
+            # WezTerm's defaults.
+            [IO.File]::WriteAllText($rejectStamp, $want)
+            Write-Step "! nightly $version doesn't load wezterm.lua (a WezTerm regression, or an error in the config); kept the installed build"
         } else {
             $build = $want.Substring(0, 12)
             $dest = Join-Path $Root $build
@@ -212,14 +259,17 @@ try {
             [IO.File]::WriteAllText($versionStamp, $version)
             $reported = try { (& (Join-Path $dest 'wezterm.exe') --version 2>$null | Select-Object -First 1) } catch { $null }
             Write-Step "installed nightly $build $(if ($reported) { "($reported)" })"
+            if (-not $loads) { Write-Step "! it doesn't load wezterm.lua, so WezTerm runs on its defaults (a WezTerm regression, or an error in the config)" }
         }
     }
-    Set-Shortcut $exe
     Remove-OldBuilds
 } catch {
     Write-Step "! $($_.Exception.Message)"
     Write-Step "! WezTerm nightly not updated; re-run: mise run wezterm-nightly-win"
 } finally {
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path -LiteralPath $exe) {
+    try { Set-Shortcut $exe } catch { Write-Step "! could not write the Start Menu shortcut: $($_.Exception.Message)" }
 }
 exit 0

@@ -25,8 +25,9 @@ end
 
 -- Status footer ---------------------------------------------------------------------------
 -- Right of the tab bar, refreshed every second: COPY / SEARCH / RESIZE while those modes
--- run, an SSH tab's host in its colour (and the zellij session it attached), the pane's
--- line count, battery, time. Parts drop out as the pane narrows.
+-- run, an SSH tab's host in its colour (and the zellij session it attached) or the host a
+-- WSL tab has ssh'd to, the pane's line count, battery, time. Parts drop out as the pane
+-- narrows.
 
 local function thousands(n)
   local s = tostring(math.floor(n)):reverse():gsub('(%d%d%d)', '%1,'):reverse()
@@ -92,9 +93,14 @@ render_status = function(window, pane)
     table.insert(parts, { text = 'RESIZE', fg = mocha.teal, bold = true })
   end
   local s = domains.ssh_of(pane)
-  if s then
-    table.insert(parts, { text = s.host, fg = appearance.accent(s.host) })
-    if s.zellij and cols >= 130 then
+  local host = s and s.host
+  local domain = pane:get_domain_name() or ''
+  if not host and domain:find('^WSL:') then
+    host = domains.wsl_remote(pane:get_current_working_dir(), (domain:gsub('^WSL:', '')), pane:get_title())
+  end
+  if host then
+    table.insert(parts, { text = host, fg = appearance.accent(host) })
+    if s and s.zellij and cols >= 130 then
       table.insert(parts, { text = 'zellij:' .. s.zellij })
     end
   end

@@ -14,18 +14,23 @@ local M = {}
 
 M.launcher = act.ShowLauncherArgs({ flags = 'FUZZY|LAUNCH_MENU_ITEMS|DOMAINS' })
 
--- Where a new tab or split from this pane starts: WezTerm's default (the pane's domain and
--- directory), except that a WSL pane whose directory isn't one in the distro starts in
--- its home. Before the shell's first OSC 7, and inside zellij (which keeps OSC 7 to
--- itself), WezTerm knows only wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux);
--- after an ssh the OSC 7 path is on the other host, which wsl.exe can't enter (it prints
--- an error and starts in /).
+-- Where a new tab or split from this pane starts. An SSH tab's runs its ssh again, so it
+-- opens on the same host (the launcher's attaches the same zellij session, as another
+-- client). Otherwise WezTerm's default (the pane's domain and directory), except that a
+-- WSL pane whose directory isn't one in the distro starts in its home. Before the shell's
+-- first OSC 7, and inside zellij (which keeps OSC 7 to itself), WezTerm knows only
+-- wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux); after an ssh the OSC 7 path
+-- is on the other host, which wsl.exe can't enter (it prints an error and starts in /).
 local function spawn_from(pane)
+  local s = domains.ssh_of(pane)
+  if s then
+    return { args = s.argv, domain = here }
+  end
   local domain = pane:get_domain_name() or ''
   if domain:find('^WSL:') then
     local cwd = pane:get_current_working_dir()
     local path = cwd and cwd.file_path or ''
-    if path == '' or path:find('^/%a:') or domains.wsl_remote(cwd, (domain:gsub('^WSL:', ''))) then
+    if path == '' or path:find('^/%a:') or domains.wsl_remote(cwd, (domain:gsub('^WSL:', '')), pane:get_title()) then
       return { domain = { DomainName = domain }, cwd = '~' }
     end
   end

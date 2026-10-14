@@ -60,10 +60,12 @@ end
 
 -- SSH tabs ----------------------------------------------------------------------------
 -- The host an SSH tab is on: the destination of the ssh in front, read from its arguments
--- (the launcher's ssh, or one typed in Nushell or PowerShell), or for a WSL tab the host in
--- the OSC 7 that zshrc/bashrc send over ssh. It colours the tab, names it, shows in the
--- footer and drives Ctrl+Shift+F5 and file links. The last ssh seen in a pane is kept in
--- wezterm.GLOBAL, so Ctrl+Shift+F5 can rerun it once it has exited (and a reload keeps it).
+-- (the launcher's ssh, or one typed in Nushell or PowerShell). It colours the tab, names
+-- it, shows in the footer, and drives new tabs and splits (another ssh to it),
+-- Ctrl+Shift+F5 and file links. The last ssh seen in a pane is kept in wezterm.GLOBAL, so
+-- Ctrl+Shift+F5 can rerun it once it has exited (and a reload keeps it). A WSL tab that has
+-- run ssh itself (wsl_remote, below) gets the colour, name and footer only: its ssh runs
+-- inside Linux, out of WezTerm's sight.
 
 -- ssh's options that take a value, as zshrc/bashrc's ssh wrapper skips them.
 local ssh_value_flags = 'BbcDEeFIiJLlmOoPpQRSWw'
@@ -131,14 +133,19 @@ end
 
 M.local_host = (wezterm.hostname() or ''):lower():match('^[^.]*')
 
--- A WSL pane's remote host: the OSC 7 host when it is neither this machine nor the distro.
--- `cwd` is a pane's current_working_dir (a Url, or a string in PaneInformation).
-function M.wsl_remote(cwd, distro)
-  local host = cwd and tostring(cwd):match('^file://([^/]+)/')
-  local short = host and host:lower():match('^[^.]*')
-  if short and short ~= '' and short ~= 'localhost' and short ~= M.local_host and short ~= distro:lower() then
-    return canonical(host)
+-- A WSL pane's remote host, or nil: the host in its OSC 7 (zshrc/bashrc send it over ssh),
+-- else the one in a user@host[:dir] title (a host without this repo's rc files usually sets
+-- one; zshrc/bashrc set this machine's back at each prompt under WezTerm), when that host
+-- is neither this machine nor the distro. `cwd` is a pane's current_working_dir (a Url, or a
+-- string in PaneInformation), `title` its title.
+function M.wsl_remote(cwd, distro, title)
+  local function remote(host)
+    local short = host and host:lower():match('^[^.]*')
+    if short and short ~= '' and short ~= 'localhost' and short ~= M.local_host and short ~= distro:lower() then
+      return canonical(host)
+    end
   end
+  return remote(cwd and tostring(cwd):match('^file://([^/]+)/')) or remote((title or ''):match('^[%w%._%-]+@([%w%._%-]+)'))
 end
 
 -- Single-quoted for a POSIX shell on the far side of ssh.

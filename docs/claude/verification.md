@@ -164,11 +164,19 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
 
 ## WezTerm (nightly; `WEZTERM_CONFIG_FILE` loads the checkout's `wezterm.lua`)
 
+- Layout: `wezterm.lua` is the entry file; it prepends its own folder to `package.path`
+  (WezTerm searches only `~/.config/wezterm` and `~/.wezterm`, config/src/lua.rs) and
+  applies the modules beside it in order. WezTerm watches every `require`d file, so a module
+  save reloads. A refactor that should change nothing: dump the returned config under the
+  lint's stand-in before and after (same tables, same event names), and diff `show-keys`
+  with `user-defined-N` masked (callback numbers follow creation order).
 - Lint: `check_wezterm_config` runs the config and its handlers (footer, notices, tab marks,
   cheatsheet, quick selects, new tabs and splits, host aliases) under LuaJIT with a stand-in
-  `wezterm` module; a new `wezterm.*` call or Pane method needs a stand-in there.
+  `wezterm` module; a new `wezterm.*` call or Pane method needs a stand-in there. It fails on
+  a `.lua` beside `wezterm.lua` that nothing requires.
   `check_wezterm_term` compiles the terminfo; `scripts/test-term-fallback.sh` runs the rc
-  fallbacks and `scripts/test-shell-marks.sh` the OSC 133/7/9 block, under bash and zsh.
+  fallbacks and `scripts/test-shell-marks.sh` the OSC 133/7/9/2 block (and bash's zellij
+  tab-name hook keeping `$?`), under bash and zsh.
 - Against the real nightly, from WSL (no GUI): copy the config to a Windows path, then
   `cd /mnt/c && <LOCALAPPDATA>/workstation/wezterm/current/wezterm.exe --config-file '<win path>' show-keys`.
   It exits 0 and prints the default keys even when the config fails to load (an unknown field
@@ -183,6 +191,11 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   in-use check opens each `.exe`/`.dll` for writing instead (a loaded image refuses); renaming
   the directory doesn't tell (it succeeds). The nightly zip's top folder is
   `WezTerm-windows-<version>`, and WezTerm re-uploads the same commit's build daily.
+  The fake builds can't run, so the tests pass `-NoConfigCheck` except in the config-check
+  cases; the check's pass path needs a real build: run the installer from a `%TEMP%` copy of
+  `scripts/` and `dotfiles/config/wezterm` with throwaway `-Root`/`-ShortcutDir`/`-DataDir`
+  and keys, over a fake older install (a `current` junction, `current.version` = `old`):
+  this config installs; one with an unknown field is refused and `rejected.sha256` written.
 - Source-checked on the nightly (e2a98e1b): a spawn's `cwd = '~'` reaches `wsl.exe --cd ~` as is
   (no Windows-side expansion), and a split or `SpawnTab` inherits the pane's cwd only within its
   domain; `wsl.exe --cd <missing dir>` prints an error and starts in `/`. A close asks
@@ -193,14 +206,17 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
 - On a host after a full bootstrap: `infocmp wezterm | head -1` exits 0; in a WezTerm WSL tab
   `echo $TERM` prints `wezterm`, `sudo env | grep ^TERM=` prints `xterm-256color`, and `ls` is
   coloured. Nushell and PowerShell tabs show `xterm-256color`. `mise run health`'s wezterm rows
-  cover the entry and, from WSL, the Windows nightly, toast id, `WEZTERM_CONFIG_FILE` and PATH
-  entry (via `winterop`).
+  cover the entry and, from WSL, the Windows nightly, Start Menu shortcut, toast id,
+  `%APPDATA%\wezterm`, `WEZTERM_CONFIG_FILE` and PATH entry (via `winterop`).
 - GUI-only (no headless check): the footer, tab colours/marks, notices, toasts, Ctrl+click and
   file links, Ctrl+triple-click, the + button's three clicks, the close prompt (Ctrl+Shift+W
   on an idle Nushell tab asks). In a launcher SSH tab: the host's
   colour and name, `zellij:main` in a wide footer, Ctrl+Shift+F5 after `exit`, and `ll` then
-  Ctrl+click on a file (helix opens over ssh). In a WSL tab: `ssh` to a host, then Ctrl+Shift+T
-  opens WSL in `~`.
+  Ctrl+click on a file (helix opens over ssh), and Ctrl+Shift+T / Alt+Shift+D open another
+  ssh to the host. In a WSL tab: `ssh` to a host (also one without this setup), and the tab
+  and footer name it, then Ctrl+Shift+T opens WSL in `~`; after `exit` the tab is the
+  distro again. Ctrl+Shift+P lists "Split pane down / right"; a palette pick no longer logs
+  "Error while saving recents".
 
 ## mise 2026.9.9 behaviour this setup relies on
 

@@ -3,7 +3,9 @@
 # send OSC 133 prompt marks (A, B, C, D;<exit>) and the OSC 7 cwd in every terminal but
 # Warp and TERM=dumb/linux, keep the exit status for starship, and add ConEmu's OSC 9
 # sequences (9;4 progress, WT's 9;9 cwd) only under Windows Terminal or WezTerm outside
-# zellij. Each block runs in its own shell (zsh's in zsh, bash's in bash) with a wslpath stub.
+# zellij, and the user@host:dir title (OSC 2) only under WezTerm outside zellij. Each block
+# runs in its own shell (zsh's in zsh, bash's in bash) with a wslpath stub. bash's zellij
+# tab-name hook, first in PROMPT_COMMAND, keeps the exit status for the marks.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -75,13 +77,14 @@ else
 fi
 host="$(uname -n)"
 osc7=$'\e]7;file://'"$host$T/home"$'\e\\'
+title=$'\e]2;me@'"${host%%.*}"$':~\a'
 
 for sh in "${shells[@]}"; do
   echo "$sh:"
   # Under WezTerm: marks, OSC 7, progress; no 9;9 (WezTerm reads OSC 7).
-  run "$sh" TERM=wezterm TERM_PROGRAM=WezTerm
-  check "$sh: WezTerm: D;3 then OSC 7 then A, and the status survives" \
-    has $'\e]133;D;3\a'"$osc7"$'\e]133;A\a'
+  run "$sh" TERM=wezterm TERM_PROGRAM=WezTerm USER=me
+  check "$sh: WezTerm: D;3 then OSC 7, the user@host:~ title, then A; the status survives" \
+    has $'\e]133;D;3\a'"$osc7$title"$'\e]133;A\a'
   check "$sh: WezTerm: rc=3 after the hook" has 'rc=3'
   check "$sh: WezTerm: progress cleared at the prompt" has $'\e]9;4;0;0\a'
   check "$sh: WezTerm: no 9;9 (WezTerm reads OSC 7)" lacks $'\e]9;9'
@@ -98,6 +101,7 @@ for sh in "${shells[@]}"; do
   run "$sh" TERM=xterm-256color
   check "$sh: other terminal: marks and OSC 7" has $'\e]133;D;3\a'"$osc7"$'\e]133;A\a'
   check "$sh: other terminal: no OSC 9" lacks $'\e]9;'
+  check "$sh: other terminal: no title" lacks $'\e]2;'
   if [ "$sh" = zsh ]; then
     check "zsh: other terminal: preexec sends C" has $'\e]133;C\a'
     check "zsh: other terminal: no progress for make" lacks '9;4;3'
@@ -107,11 +111,13 @@ for sh in "${shells[@]}"; do
   run "$sh" TERM=xterm-256color WT_SESSION=x
   check "$sh: Windows Terminal: 9;9 from wslpath -w, then A and the progress clear" \
     has $'\e]9;9;C:\\wsl'"$T/home"$'\a\e]133;A\a\e]9;4;0;0\a'
+  check "$sh: Windows Terminal: no title" lacks $'\e]2;'
 
   # Inside zellij: marks and OSC 7 still go out (zellij drops them); OSC 9 doesn't.
   run "$sh" TERM=wezterm TERM_PROGRAM=WezTerm ZELLIJ=0
   check "$sh: zellij: marks and OSC 7" has $'\e]133;A\a' "$osc7"
   check "$sh: zellij: no OSC 9" lacks $'\e]9;'
+  check "$sh: zellij: no title" lacks $'\e]2;'
 
   # Warp, dumb and the console: nothing defined, nothing sent.
   for env in TERM_PROGRAM=WarpTerminal TERM=dumb TERM=linux; do
@@ -120,6 +126,17 @@ for sh in "${shells[@]}"; do
     check "$sh: $env: no hooks" has 'not found'
   done
 done
+
+# bash inside zellij: the tab-name hook runs first in PROMPT_COMMAND (renaming on a new
+# directory, returning early on the same one) and must leave $? for the D mark.
+awk '/^# --- zellij: name the tab/ { p = 1 } /^# --- nb \(notes\)/ { p = 0 } p' "$ROOT/dotfiles/bashrc.tera" >"$T/bash-zj.sh"
+printf '#!/bin/sh\nexit 0\n' >"$T/bin/zellij"
+chmod +x "$T/bin/zellij"
+OUT="$(cd "$T/home" && env -i PATH="$T/bin:/usr/bin:/bin" HOME="$T/home" TERM=wezterm ZELLIJ=0 bash --norc --noprofile -c \
+  ". '$T/bash.sh'; . '$T/bash-zj.sh'; (exit 3); eval \"\$PROMPT_COMMAND\"; (exit 4); eval \"\$PROMPT_COMMAND\"" 2>&1)"
+echo "bash in zellij:"
+check "bash: zellij: the tab-name hook keeps \$? (D;3 on a new directory, D;4 on the same one)" \
+  has $'\e]133;D;3\a' $'\e]133;D;4\a'
 
 echo
 if [ "$fail" -eq 0 ]; then
