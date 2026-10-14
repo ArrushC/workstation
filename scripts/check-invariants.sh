@@ -1380,13 +1380,13 @@ else:
 PY
 }
 
-# WezTerm's config (dotfiles/config/wezterm/wezterm.lua, deployed on Windows) runs in WezTerm's
-# Lua at startup, and an error there leaves WezTerm on its defaults. Run it under Neovim's
-# LuaJIT with a stand-in wezterm module, as Windows and as Linux, against a fake
-# ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
+# WezTerm's config (dotfiles/config/wezterm/wezterm.lua and the modules it requires, loaded on
+# Windows) runs in WezTerm's Lua at startup, and an error there leaves WezTerm on its defaults.
+# Run it under Neovim's LuaJIT with a stand-in wezterm module, as Windows and as Linux, against
+# a fake ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
 check_wezterm_config() {
   hdr "WezTerm config (runs with a stand-in wezterm module, handlers included)"
-  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua
+  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua modules
   # LuaJIT either way: plain luajit (CI installs it) or the one inside nvim.
   if command -v luajit >/dev/null 2>&1; then
     lua=(luajit)
@@ -1404,7 +1404,7 @@ check_wezterm_config() {
   # The stand-in records what the config hands WezTerm: actions as { action, args } tables
   # (callable, as WezTerm's are), callbacks as { callback }, event handlers by name.
   cat >"$tmp/check.lua" <<'LUA'
-local path, triple, home, localappdata = arg[1], arg[2], arg[3], arg[4]
+local path, triple, home, localappdata, modules = arg[1], arg[2], arg[3], arg[4], arg[5]
 local real_getenv = os.getenv
 os.getenv = function(k) if k == 'LOCALAPPDATA' then return localappdata end return real_getenv(k) end
 local handlers, battery, live = {}, {}, {}
@@ -1413,6 +1413,7 @@ local function named(name)
 end
 local wezterm = {
   target_triple = triple,
+  config_file = path,
   home_dir = home,
   GLOBAL = {},
   nerdfonts = {},
@@ -1458,6 +1459,7 @@ local function check(cond, msg) if not cond then error(msg, 0) end end
 local function has(s, sub) return s ~= nil and s:find(sub, 1, true) ~= nil end
 
 check(type(c) == 'table', 'the file does not return the config table')
+for m in modules:gmatch('[^,]+') do check(package.loaded[m], m .. '.lua is never required, so WezTerm ignores it') end
 local scheme = c.color_schemes and c.color_schemes[c.color_scheme]
 check(scheme, 'color_scheme names no scheme in color_schemes')
 check(scheme.tab_bar.active_tab.bg_color == '#cba6f7' and scheme.cursor_bg == '#cba6f7', 'the active tab and the cursor are not mauve')
@@ -1770,11 +1772,13 @@ local palette = handlers['augment-command-palette']()
 check(#palette == 10 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
 io.write('ok')
 LUA
+  # Every other .lua beside it is a module wezterm.lua links (require), checked as loaded.
+  modules=$(find "${cfg%/*}" -maxdepth 1 -name '*.lua' ! -name wezterm.lua -printf '%f\n' | sed 's/\.lua$//' | sort | paste -sd, -)
   for triple in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu; do
     # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
-    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
+    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" "$modules" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg runs as $triple: theme, chrome, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
+      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi
