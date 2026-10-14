@@ -16,14 +16,20 @@ M.launcher = act.ShowLauncherArgs({ flags = 'FUZZY|LAUNCH_MENU_ITEMS|DOMAINS' })
 
 -- Where a new tab or split from this pane starts. An SSH tab's runs its ssh again, so it
 -- opens on the same host (the launcher's attaches the same zellij session, as another
--- client). Otherwise WezTerm's default (the pane's domain and directory), except that a
--- WSL pane whose directory isn't one in the distro starts in its home. Before the shell's
--- first OSC 7, and inside zellij (which keeps OSC 7 to itself), WezTerm knows only
--- wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux); after an ssh the OSC 7 path
--- is on the other host, which wsl.exe can't enter (it prints an error and starts in /).
-local function spawn_from(pane)
+-- client); with `no_ssh` it is the default shell here instead, in the directory its ssh
+-- started from (home once ssh has exited). Otherwise WezTerm's default (the pane's domain
+-- and directory), except that a WSL pane whose directory isn't one in the distro starts
+-- in its home. Before the shell's first OSC 7, and inside zellij (which keeps OSC 7 to
+-- itself), WezTerm knows only wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux);
+-- after an ssh the OSC 7 path is on the other host, which wsl.exe can't enter (it prints
+-- an error and starts in /).
+local function spawn_from(pane, no_ssh)
   local s = domains.ssh_of(pane)
-  if s then
+  if s and no_ssh then
+    local info = pane:get_foreground_process_info()
+    local cwd = info and info.cwd
+    return { domain = here, cwd = (cwd and cwd ~= '') and cwd or wezterm.home_dir }
+  elseif s then
     return { args = s.argv, domain = here }
   end
   local domain = pane:get_domain_name() or ''
@@ -40,6 +46,11 @@ end
 -- Ctrl+Shift+T and the tab bar's + (left-click).
 M.new_tab = wezterm.action_callback(function(window, pane)
   window:perform_action(act.SpawnCommandInNewTab(spawn_from(pane)), pane)
+end)
+
+-- Ctrl+Alt+T: the same, except that an SSH tab's is a local shell, not another ssh.
+M.new_local_tab = wezterm.action_callback(function(window, pane)
+  window:perform_action(act.SpawnCommandInNewTab(spawn_from(pane, true)), pane)
 end)
 
 -- Alt+Shift+D / R: `how` is SplitVertical (down) or SplitHorizontal (right).

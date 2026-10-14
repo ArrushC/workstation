@@ -213,7 +213,7 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   on an idle Nushell tab asks). In a launcher SSH tab: the host's
   colour and name, `zellij:main` in a wide footer, Ctrl+Shift+F5 after `exit`, and `ll` then
   Ctrl+click on a file (helix opens over ssh), and Ctrl+Shift+T / Alt+Shift+D open another
-  ssh to the host. In a WSL tab: `ssh` to a host (also one without this setup), and the tab
+  ssh to the host, while Ctrl+Alt+T opens Nushell locally in ssh's directory. In a WSL tab: `ssh` to a host (also one without this setup), and the tab
   and footer name it, then Ctrl+Shift+T opens WSL in `~`; after `exit` the tab is the
   distro again. Ctrl+Shift+P lists "Split pane down / right"; a palette pick no longer logs
   "Error while saving recents". A WSL tab at rest is its distro's colour (AlmaLinux-9: sky),

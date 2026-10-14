@@ -1516,6 +1516,7 @@ key('CTRL|SHIFT+RightArrow', 'DisableDefaultAssignment')
 local scroll = key('CTRL|SHIFT+a', 'Multiple')
 check(scroll.args[#scroll.args - 1].action == 'ScrollToBottom', 'Ctrl+Shift+A does not scroll back to the bottom')
 for _, k in ipairs({ 'c', 'e', 'h', 's', 'o', 'F5', 't' }) do key('CTRL|SHIFT+' .. k, 'callback') end
+key('CTRL|ALT+t', 'callback')
 check(keys['CTRL+Insert'] == keys['CTRL|SHIFT+c'], 'Ctrl+Insert is not the Ctrl+Shift+C copy')
 key('ALT|SHIFT+D', 'callback')
 key('ALT|SHIFT+R', 'callback')
@@ -1771,6 +1772,17 @@ t = spawned('CTRL|SHIFT+t', ssh_tab)
 check(t.action == 'SpawnCommandInNewTab' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Ctrl+Shift+T in an SSH tab does not open another ssh to its host')
 t = spawned('ALT|SHIFT+D', ssh_tab)
 check(t.action == 'SplitVertical' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
+-- Ctrl+Alt+T: never another ssh. An SSH tab's is the default shell here, in the directory
+-- its ssh started from (home once ssh has exited); any other tab's is Ctrl+Shift+T's.
+t = spawned('CTRL|ALT+t', { id = 48, proc = { name = 'ssh.exe', argv = ssh_argv, cwd = 'C:\\src' } })
+check(t.action == 'SpawnCommandInNewTab' and t.args.args == nil and t.args.domain.DomainName == 'local' and t.args.cwd == 'C:\\src',
+  "Ctrl+Alt+T in an SSH tab is not a local shell in ssh's directory: " .. tostring(t.args.args and t.args.args[1]) .. ' ' .. tostring(t.args.cwd))
+t = spawned('CTRL|ALT+t', { id = 48, proc = false })
+check(t.args.args == nil and t.args.domain.DomainName == 'local' and t.args.cwd == wezterm.home_dir, 'Ctrl+Alt+T in an SSH tab whose ssh has exited does not start at home: ' .. tostring(t.args.cwd))
+t = spawned('CTRL|ALT+t', wsl_at('file://build01.corp/home/me'))
+check(t.args.domain.DomainName == 'WSL:AlmaLinux-9' and t.args.cwd == '~', "Ctrl+Alt+T in a WSL tab that ssh'd elsewhere is not Ctrl+Shift+T's ~")
+t = spawned('CTRL|ALT+t', { id = 41, cwd = 'file://PC/C:/src' })
+check(t.args.domain == 'CurrentPaneDomain' and t.args.args == nil, 'Ctrl+Alt+T in a local tab is not the default new tab')
 for button, k in pairs({ Left = 'CTRL|SHIFT+t', Middle = 'CTRL|SHIFT+s', Right = 'CTRL|ALT+l' }) do
   performed = nil
   check(handlers['new-tab-button-click'](w, p, button) == false and performed == keys[k], button .. '-click on + is not ' .. k)
@@ -1839,7 +1851,7 @@ for _, r in ipairs(performed.args.choices) do
   if r.id then launch = launch + 1 end
 end
 local text = table.concat(rows, '\n')
-for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Alt+0', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Ctrl+Alt+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Alt+0', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
   check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
 end
 check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')

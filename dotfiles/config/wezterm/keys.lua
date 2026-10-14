@@ -96,6 +96,7 @@ function M.apply(config)
   bindings = {
     { 'CTRL|ALT', 'l', actions.launcher, 'Launcher: shells, WSL, SSH hosts (zellij)' },
     { 'CTRL|SHIFT', 't', actions.new_tab, "New tab: this tab's domain and directory, or its SSH host again" },
+    { 'CTRL|ALT', 't', actions.new_local_tab, 'New tab, never over ssh: from an SSH tab, a local shell' },
     { 'ALT|SHIFT', 'D', actions.split_down, 'Split pane down' },
     { 'ALT|SHIFT', 'R', actions.split_right, 'Split pane right' },
     { 'ALT|SHIFT', 'LeftArrow', act.ActivatePaneDirection('Left'), 'Move between panes', chord = 'Alt+Shift+arrows' },
