@@ -442,7 +442,8 @@ function Invoke-CloneRepo {
         Write-Ok "Repo cloned"
     } else {
         Write-Log "Repo already at $RepoPath — pulling latest..."
-        git -C $RepoPath pull --ff-only
+        # --prune drops the origin/* branches GitHub no longer has (a merged PR's).
+        git -C $RepoPath pull --ff-only --prune
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "Could not fast-forward — continuing with current state"
         } else {

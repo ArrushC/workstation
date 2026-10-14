@@ -377,6 +377,26 @@ check_ps_mise_comma_lists() {
   [ "$allgood" -eq 1 ] && ok "no bare a,b argument to mise in $n tracked PowerShell files"
 }
 
+# Every pull of this checkout passes --prune, so the origin/* branches GitHub has deleted
+# (a merged PR's) don't pile up on the hosts. Each file must still have its pull.
+check_git_pull_prune() {
+  hdr "git pull of this checkout passes --prune"
+  local f hits allgood=1
+  for f in bootstrap.sh bootstrap.ps1 tasks/update \
+    dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera \
+    dotfiles/windows/AppData/Roaming/nushell/config.nu.tera; do
+    hits=$(grep -nE '^[^#]*git[[:space:]]+-C[[:space:]]+[^[:space:]]+[[:space:]]+pull([[:space:]]|$)' "$f")
+    if [ -z "$hits" ]; then
+      allgood=0
+      bad "$f: no \`git -C <repo> pull\` found (moved? update check_git_pull_prune)"
+    elif grep -v -- '--prune' <<<"$hits" | grep -q .; then
+      allgood=0
+      bad "$f: a pull without --prune: $(grep -v -- '--prune' <<<"$hits" | head -1)"
+    fi
+  done
+  [ "$allgood" -eq 1 ] && ok "bootstrap.sh, bootstrap.ps1, tasks/update and both Windows wsu pull with --prune"
+}
+
 check_sentinels() {
   hdr "sentinel blocks matched"
   local s e
@@ -2021,6 +2041,7 @@ check_dotfiles_mode
 check_bom
 check_ps_variable_drive_refs
 check_ps_mise_comma_lists
+check_git_pull_prune
 check_sentinels
 check_tools_block
 check_mise_config_files

@@ -299,7 +299,7 @@ mkdir -p "$V/repo/tasks" "$V/bin"
 cp "$root/tasks/update" "$V/repo/tasks/update"
 cat >"$V/bin/git" <<'EOF'
 #!/usr/bin/env bash
-# git -C <repo> pull --ff-only: "pull" a new tasks/update.
+# git -C <repo> pull --ff-only --prune: "pull" a new tasks/update.
 if [ "$3" = pull ]; then
   printf '#!/usr/bin/env bash\necho "PULLED-COPY ${WORKSTATION_UPDATE_PULLED:-}"\n' >"$2/tasks/update"
   chmod +x "$2/tasks/update"

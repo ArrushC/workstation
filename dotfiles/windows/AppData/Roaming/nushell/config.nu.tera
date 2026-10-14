@@ -237,9 +237,10 @@ def wsa [...args] {
 # Windows-safe equivalent directly: fast-forward pull, then the same
 # `--only dotfiles,tools` scope bootstrap.ps1 itself uses. The git pull is
 # already pinned via -C $env.WORKSTATION_REPO (a fixed path, not cwd-derived)
-# -- only the mise bootstrap call needed the -C fix.
+# -- only the mise bootstrap call needed the -C fix. --prune drops the
+# origin/* branches GitHub no longer has (a merged PR's).
 def wsu [...args] {
-    git -C $env.WORKSTATION_REPO pull --ff-only
+    git -C $env.WORKSTATION_REPO pull --ff-only --prune
     if $env.LAST_EXIT_CODE == 0 {
         mise -C $env.USERPROFILE bootstrap --only dotfiles,tools --yes ...$args
     }
