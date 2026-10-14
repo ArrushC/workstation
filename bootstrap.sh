@@ -251,7 +251,8 @@ Install via your distro's package manager, e.g.
 
 # =============================================================================
 # CLONE OR UPDATE REPO — clone the workstation repo into $REPO_DIR, or
-# `git pull --ff-only` if it's already there.
+# `git pull --ff-only --prune` if it's already there (--prune drops the origin/*
+# branches GitHub no longer has, such as a merged PR's; local branches stay).
 # =============================================================================
 clone_or_update_repo() {
   # The repo is public: a plain HTTPS clone, no token.
@@ -264,7 +265,7 @@ clone_or_update_repo() {
     log "Repo already present at $REPO_DIR — pulling latest..."
     # A failed pull means we'd run mise bootstrap against a stale-or-broken tree —
     # better to bail out and let the user inspect.
-    if ! git -C "$REPO_DIR" pull --ff-only; then
+    if ! git -C "$REPO_DIR" pull --ff-only --prune; then
       fail "git pull --ff-only failed in $REPO_DIR.
 This usually means local commits or conflicts.
 Inspect with:
