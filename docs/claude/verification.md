@@ -216,7 +216,8 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   ssh to the host. In a WSL tab: `ssh` to a host (also one without this setup), and the tab
   and footer name it, then Ctrl+Shift+T opens WSL in `~`; after `exit` the tab is the
   distro again. Ctrl+Shift+P lists "Split pane down / right"; a palette pick no longer logs
-  "Error while saving recents".
+  "Error while saving recents". A WSL tab at rest is its distro's colour (AlmaLinux-9: sky),
+  not mauve; the previously active tab is underlined and Alt+0 returns to it.
 
 ## mise 2026.9.9 behaviour this setup relies on
 

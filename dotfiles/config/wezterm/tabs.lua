@@ -1,5 +1,6 @@
 -- tabs.lua: the tab bar's titles. Each tab shows a mark (bell, progress, unseen output), a
--- glyph, its number and a name; an SSH tab takes its host's name and colour.
+-- glyph, its number and a name; an SSH tab takes its host's name and colour, a WSL tab its
+-- distro's colour, and the previous tab (Alt+0's) is underlined.
 
 local wezterm = require 'wezterm'
 local appearance = require 'appearance'
@@ -55,23 +56,24 @@ local function tab_mark(tab)
   end
 end
 
--- What a tab shows: its glyph, its title and, for an SSH tab, its host. An SSH tab is named
--- after its host and takes the host's colour; a WSL tab after its distro, or the host it
--- has ssh'd to; any other tab after its pane's title without a "user@" prefix, a Windows
--- program's path cut to its name (C:\...\pwsh.exe becomes pwsh). A name set with
--- Ctrl+Shift+E wins over all of them.
+-- What a tab shows: its glyph, its title and the name its colour comes from. An SSH tab is
+-- named after its host and takes the host's colour; a WSL tab after its distro, in the
+-- distro's colour, or the host it has ssh'd to, in that host's; any other tab after its
+-- pane's title without a "user@" prefix, a Windows program's path cut to its name
+-- (C:\...\pwsh.exe becomes pwsh), in mauve. A name set with Ctrl+Shift+E wins over all of
+-- them.
 local function tab_info(tab)
   local p = tab.active_pane or {}
   local domain = p.domain_name or ''
   local live = p.pane_id and wezterm.mux.get_pane(p.pane_id)
   local s = live and domains.ssh_of(live)
-  local glyph, title, host
+  local glyph, title, tint
   if s then
-    glyph, title, host = glyphs.ssh, s.host, s.host
+    glyph, title, tint = glyphs.ssh, s.host, s.host
   elseif domain:find('^WSL:') then
     local distro = domain:gsub('^WSL:', '')
-    host = domains.wsl_remote(p.current_working_dir, distro, p.title)
-    glyph, title = host and glyphs.ssh or glyphs.wsl, host or distro
+    local host = domains.wsl_remote(p.current_working_dir, distro, p.title)
+    glyph, title, tint = host and glyphs.ssh or glyphs.wsl, host or distro, host or distro
   else
     glyph = glyphs.shell
     title = (p.title or ''):gsub('^[%w%._%-]+@', '')
@@ -80,7 +82,7 @@ local function tab_info(tab)
   if tab.tab_title and tab.tab_title ~= '' then
     title = tab.tab_title
   end
-  return glyph, title, host
+  return glyph, title, tint
 end
 
 function M.apply(_)
@@ -102,14 +104,14 @@ function M.apply(_)
         break
       end
     end
-    local glyph, title, host = tab_info(tab)
-    -- Nothing, muted, full: an inactive SSH tab shows its host colour in the text, hover a
+    local glyph, title, tint = tab_info(tab)
+    -- Nothing, muted, full: an inactive SSH or WSL tab shows its colour in the text, hover a
     -- dark block of it, the active tab the full colour. Other tabs use mauve the same way.
     local bg, fg = mocha.base, mocha.overlay0
-    if host then
-      local c = wezterm.color.parse(appearance.accent(host))
+    if tint then
+      local c = wezterm.color.parse(appearance.accent(tint))
       if tab.is_active then
-        bg, fg = appearance.accent(host), mocha.crust
+        bg, fg = appearance.accent(tint), mocha.crust
       elseif hover then
         bg, fg = tostring(c:desaturate(0.5):darken(0.5)), mocha.text
       else
@@ -121,8 +123,8 @@ function M.apply(_)
       bg, fg = mocha.surface1, mocha.text
     end
     local mark, mark_fg = tab_mark(tab)
-    if mark == '●' and host then
-      mark_fg = appearance.accent(host)
+    if mark == '●' and tint then
+      mark_fg = appearance.accent(tint)
     end
     local lead = mark and (' ' .. mark .. ' ') or ' '
     local prefix = string.format('%s %d: ', glyph, n)
@@ -137,6 +139,9 @@ function M.apply(_)
     table.insert(items, { Foreground = { Color = fg } })
     if tab.is_active then
       table.insert(items, { Attribute = { Intensity = 'Bold' } })
+    elseif tab.is_last_active then
+      -- The tab Alt+0 goes back to, and closing this one returns to.
+      table.insert(items, { Attribute = { Underline = 'Single' } })
     end
     table.insert(items, { Text = prefix .. wezterm.truncate_right(title, room) .. ' ' })
     return items
