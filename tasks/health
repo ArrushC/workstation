@@ -234,8 +234,9 @@ echo ""
 
 # 7. WezTerm — every Linux host compiles its terminfo entry (the final hook's
 # wezterm-terminfo). Under WSL, winterop also reads the Windows side: the nightly that
-# scripts/wezterm-nightly.ps1 installs, the toast id it registers, and the User
-# environment it sets (WEZTERM_CONFIG_FILE, the CLI on PATH).
+# scripts/wezterm-nightly.ps1 installs, its Start Menu shortcut, the toast id it
+# registers, the %APPDATA%\wezterm folder it creates, and the User environment it sets
+# (WEZTERM_CONFIG_FILE, the CLI on PATH).
 hdr "wezterm"
 if infocmp wezterm >/dev/null 2>&1; then
   row_ok "terminfo" "wezterm entry present"
@@ -250,6 +251,23 @@ if "$root/scripts/lib/bootstrap-fn.sh" is_wsl && command -v winterop >/dev/null 
     row_ok "nightly (win)" "$gui"
   else
     row_warn "nightly (win)" "WezTerm's nightly isn't installed on Windows — run wsu there (or mise run wezterm-nightly-win)"
+  fi
+  appdata=$(winterop env APPDATA 2>/dev/null)
+  lnk="" data=""
+  if [ -n "$appdata" ]; then
+    lnk=$(winterop path -u "$appdata\\Microsoft\\Windows\\Start Menu\\Programs\\WezTerm.lnk" 2>/dev/null)
+    data=$(winterop path -u "$appdata\\wezterm" 2>/dev/null)
+  fi
+  # A .lnk keeps its target as plain text too.
+  if [ -n "$lnk" ] && [ -f "$lnk" ] && LC_ALL=C grep -qaF 'workstation\wezterm\current\wezterm-gui.exe' "$lnk"; then
+    row_ok "shortcut (win)" "the Start Menu's WezTerm opens current\\wezterm-gui.exe"
+  else
+    row_warn "shortcut (win)" "no Start Menu WezTerm shortcut on current\\wezterm-gui.exe — run wsu on Windows"
+  fi
+  if [ -n "$data" ] && [ -d "$data" ]; then
+    row_ok "data (win)" "%APPDATA%\\wezterm exists (the command palette's recent commands)"
+  else
+    row_warn "data (win)" "no %APPDATA%\\wezterm, so the command palette can't save its recent commands — run wsu on Windows"
   fi
   # Captured first: under pipefail, grep -q exiting early would fail the pipeline (SIGPIPE).
   toast=$(winterop reg 'HKCU\Software\Classes\AppUserModelId\org.wezfurlong.wezterm' 2>/dev/null)

@@ -1,0 +1,282 @@
+-- actions.lua: what the keys, the mouse, the + button and the command palette do (keys.lua
+-- binds them), links and quick-select patterns, and file links opening in helix. Exports
+-- every action keys.lua binds.
+
+local wezterm = require 'wezterm'
+local wsl = require 'wsl'
+local domains = require 'domains'
+local status = require 'status'
+
+local act = wezterm.action
+local here, flash = wsl.here, status.flash
+
+local M = {}
+
+M.launcher = act.ShowLauncherArgs({ flags = 'FUZZY|LAUNCH_MENU_ITEMS|DOMAINS' })
+
+-- Where a new tab or split from this pane starts. An SSH tab's runs its ssh again, so it
+-- opens on the same host (the launcher's attaches the same zellij session, as another
+-- client). Otherwise WezTerm's default (the pane's domain and directory), except that a
+-- WSL pane whose directory isn't one in the distro starts in its home. Before the shell's
+-- first OSC 7, and inside zellij (which keeps OSC 7 to itself), WezTerm knows only
+-- wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux); after an ssh the OSC 7 path
+-- is on the other host, which wsl.exe can't enter (it prints an error and starts in /).
+local function spawn_from(pane)
+  local s = domains.ssh_of(pane)
+  if s then
+    return { args = s.argv, domain = here }
+  end
+  local domain = pane:get_domain_name() or ''
+  if domain:find('^WSL:') then
+    local cwd = pane:get_current_working_dir()
+    local path = cwd and cwd.file_path or ''
+    if path == '' or path:find('^/%a:') or domains.wsl_remote(cwd, (domain:gsub('^WSL:', '')), pane:get_title()) then
+      return { domain = { DomainName = domain }, cwd = '~' }
+    end
+  end
+  return { domain = 'CurrentPaneDomain' }
+end
+
+-- Ctrl+Shift+T and the tab bar's + (left-click).
+M.new_tab = wezterm.action_callback(function(window, pane)
+  window:perform_action(act.SpawnCommandInNewTab(spawn_from(pane)), pane)
+end)
+
+-- Alt+Shift+D / R: `how` is SplitVertical (down) or SplitHorizontal (right).
+local function split(how)
+  return wezterm.action_callback(function(window, pane)
+    window:perform_action(act[how](spawn_from(pane)), pane)
+  end)
+end
+M.split_down = split('SplitVertical')
+M.split_right = split('SplitHorizontal')
+
+-- Copy only when something is selected, so the notice never claims an empty copy.
+M.copy = wezterm.action_callback(function(window, pane)
+  local sel = window:get_selection_text_for_pane(pane)
+  if sel and sel ~= '' then
+    window:perform_action(act.CopyTo('Clipboard'), pane)
+    flash(window, pane, 'Copied')
+  end
+end)
+
+-- After a mouse selection completes (it copies): say so, unless it was a plain click.
+M.copied_notice = wezterm.action_callback(function(window, pane)
+  local sel = window:get_selection_text_for_pane(pane)
+  if sel and sel ~= '' then
+    flash(window, pane, 'Copied')
+  end
+end)
+
+-- The whole scrollback, through copy mode. CopyMode 'Close' no longer scrolls to the
+-- bottom on the nightly, hence the explicit ScrollToBottom.
+M.copy_scrollback = act.Multiple({
+  act.ActivateCopyMode,
+  act.CopyMode('MoveToScrollbackTop'),
+  act.CopyMode({ SetSelectionMode = 'Cell' }),
+  act.CopyMode('MoveToScrollbackBottom'),
+  act.CopyTo('Clipboard'),
+  act.CopyMode('Close'),
+  act.ScrollToBottom,
+  act.EmitEvent('copied-scrollback'),
+})
+
+-- Prefilled with the current name; an empty name goes back to the automatic title.
+M.rename_tab = wezterm.action_callback(function(window, pane)
+  window:perform_action(
+    act.PromptInputLine({
+      description = 'Tab name (empty for the automatic title)',
+      initial_value = window:active_tab():get_title(),
+      action = wezterm.action_callback(function(win, _, line)
+        if line then
+          win:active_tab():set_title(line)
+        end
+      end),
+    }),
+    pane
+  )
+end)
+
+-- Ctrl+Shift+F5: rerun a dead (or hung) SSH tab's ssh in a new tab; zellij reattaches
+-- its session. The old tab stays for its scrollback.
+M.reconnect = wezterm.action_callback(function(window, pane)
+  local s = domains.ssh_of(pane)
+  if not s then
+    flash(window, pane, 'Not an SSH tab: nothing to reconnect', 'warn')
+    return
+  end
+  window:perform_action(act.SpawnCommandInNewTab({ args = s.argv, domain = here }), pane)
+end)
+
+-- Ctrl+Shift+O: the pane's scrollback in helix, in a new tab on the same machine (a temp
+-- file, one per pane). An SSH tab's history is in zellij, which WezTerm only sees a screen
+-- of; zellij's own edit-scrollback key opens it there.
+M.scrollback_in_helix = wezterm.action_callback(function(window, pane)
+  if domains.ssh_of(pane) then
+    flash(window, pane, "zellij holds this tab's scrollback: use its edit-scrollback key", 'warn')
+    return
+  end
+  local dims = pane:get_dimensions()
+  local text = pane:get_lines_as_text(dims.scrollback_rows)
+  local dir = os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp'
+  local file = dir .. (wsl.windows and '\\' or '/') .. 'wezterm-scrollback-' .. pane:pane_id() .. '.txt'
+  local f, err = io.open(file, 'w')
+  if not f then
+    flash(window, pane, 'Could not write the scrollback: ' .. tostring(err), 'warn')
+    return
+  end
+  f:write(text)
+  f:close()
+  local domain = pane:get_domain_name() or ''
+  if domain:find('^WSL:') then
+    -- C:\Users\me\...\x.txt is /mnt/c/Users/me/.../x.txt inside the distro.
+    local linux = file:gsub('\\', '/'):gsub('^(%a):', function(d)
+      return '/mnt/' .. d:lower()
+    end)
+    window:perform_action(act.SpawnCommandInNewTab({ args = wsl.wsl_hx(linux), domain = { DomainName = domain } }), pane)
+  else
+    local hx = wsl.windows and (os.getenv('LOCALAPPDATA') or '') .. '\\mise\\shims\\hx.exe' or 'hx'
+    window:perform_action(act.SpawnCommandInNewTab({ args = { hx, file }, domain = here }), pane)
+  end
+end)
+
+-- Ctrl+Shift+S: a fuzzy tab list that keeps each tab's real number (the launcher renumbers
+-- what it filters), with the host or domain beside it.
+M.switch_tab = wezterm.action_callback(function(window, pane)
+  local active = window:active_tab():tab_id()
+  local choices = {}
+  for i, tab in ipairs(window:mux_window():tabs()) do
+    local p = tab:active_pane()
+    local s = domains.ssh_of(p)
+    local where = s and s.host or (p:get_domain_name() or ''):gsub('^local$', '')
+    local title = tab:get_title()
+    if title == '' then
+      title = p:get_title()
+    end
+    table.insert(choices, {
+      id = tostring(tab:tab_id()),
+      label = string.format('%s %d: %s%s', tab:tab_id() == active and '●' or ' ', i, title, where ~= '' and ('  [' .. where .. ']') or ''),
+    })
+  end
+  window:perform_action(
+    act.InputSelector({
+      title = 'Switch tab',
+      fuzzy = true,
+      choices = choices,
+      action = wezterm.action_callback(function(win, _, id)
+        for _, t in ipairs(id and win:mux_window():tabs() or {}) do
+          if tostring(t:tab_id()) == id then
+            t:activate()
+            return
+          end
+        end
+      end),
+    }),
+    pane
+  )
+end)
+
+-- Alt+Shift+S: resize mode. Arrows move the split 3 cells at a time until Esc or Enter;
+-- the footer says RESIZE meanwhile. (Ctrl+Shift+Alt+arrows still move it by one.)
+M.resize_mode = act.ActivateKeyTable({ name = 'resize_pane', one_shot = false })
+
+-- Quick selects that act on the pick. Both type into the pane as a paste, so the pane's
+-- own shell does the work wherever it runs (Nushell, WSL zsh, a host through ssh and
+-- zellij) and relative paths resolve against its directory. A pane showing a full-screen
+-- app (zellij, an editor) gets the text without Enter, for you to check first.
+M.open_in_helix = act.QuickSelectArgs({
+  label = 'open in helix',
+  patterns = { [[[\w./~-]+:\d+(?::\d+)?]] },
+  action = wezterm.action_callback(function(window, pane)
+    local sel = window:get_selection_text_for_pane(pane)
+    if sel and sel ~= '' then
+      pane:paste('hx ' .. sel)
+      if not pane:is_alt_screen_active() then
+        pane:send_text('\r')
+      end
+    end
+  end),
+})
+M.paste_sha = act.QuickSelectArgs({
+  label = 'paste into the prompt',
+  patterns = { [[\b[0-9a-f]{7,40}\b]] },
+  action = wezterm.action_callback(function(window, pane)
+    local sel = window:get_selection_text_for_pane(pane)
+    if sel and sel ~= '' then
+      pane:paste(sel)
+    end
+  end),
+})
+
+function M.apply(config)
+  -- Links: WezTerm's defaults, plus #123 to this repository's issues and pull requests
+  -- (GitHub redirects an issue URL to the PR). \B# skips word#12; the trailing \b skips hex
+  -- colours such as #1e1e2e. Ctrl+click opens a link (a plain click ends a selection, which
+  -- is copied); Shift+click also works inside zellij, helix and other apps that take the mouse.
+  config.hyperlink_rules = wezterm.default_hyperlink_rules()
+  table.insert(config.hyperlink_rules, {
+    regex = [[\B#(\d+)\b]],
+    format = 'https://github.com/ArrushC/workstation/issues/$1',
+  })
+  -- Quick select (Ctrl+Shift+Space) adds IPv4 addresses and #123 references to its URLs,
+  -- paths and hashes, and greys the pane out so the labels stand out.
+  config.quick_select_patterns = { [[\b\d{1,3}(?:\.\d{1,3}){3}\b]], [[\B#\d+\b]] }
+  config.quick_select_remove_styling = true
+
+  config.key_tables = {
+    resize_pane = {
+      { key = 'LeftArrow', action = act.AdjustPaneSize({ 'Left', 3 }) },
+      { key = 'RightArrow', action = act.AdjustPaneSize({ 'Right', 3 }) },
+      { key = 'UpArrow', action = act.AdjustPaneSize({ 'Up', 3 }) },
+      { key = 'DownArrow', action = act.AdjustPaneSize({ 'Down', 3 }) },
+      { key = 'Escape', action = act.PopKeyTable },
+      { key = 'Enter', action = act.PopKeyTable },
+    },
+  }
+
+  -- file:// links (eza --hyperlink in the l/ll/lt aliases) open in helix, in a new tab on the
+  -- machine that printed them: a WSL distro's in that distro, an SSH tab's over the same ssh
+  -- (its options and destination, plus -t). A WSL tab that has ssh'd elsewhere can't reach
+  -- the file, so it says so. Other links, and Windows paths, go to WezTerm's default.
+  wezterm.on('open-uri', function(window, pane, uri)
+    local ok, url = pcall(wezterm.url.parse, uri)
+    if not ok or url.scheme ~= 'file' then
+      return
+    end
+    local s = domains.ssh_of(pane)
+    if s then
+      local _, at = domains.ssh_dest(s.argv)
+      local args = { s.argv[1], '-t' }
+      for i = 2, at do
+        table.insert(args, s.argv[i])
+      end
+      table.insert(args, 'hx ' .. domains.shq(url.file_path))
+      window:perform_action(act.SpawnCommandInNewTab({ args = args, domain = here }), pane)
+      return false
+    end
+    local domain = pane:get_domain_name() or ''
+    if not domain:find('^WSL:') then
+      return
+    end
+    local host = (url.host or ''):lower():match('^[^.]*') or ''
+    if host ~= '' and host ~= 'localhost' and host ~= domains.local_host and host ~= domain:gsub('^WSL:', ''):lower() then
+      flash(window, pane, 'That file is on ' .. url.host .. ': open it from an SSH tab there', 'warn')
+      return false
+    end
+    window:perform_action(act.SpawnCommandInNewTab({ args = wsl.wsl_hx(url.file_path), domain = { DomainName = domain } }), pane)
+    return false
+  end)
+
+  -- The tab bar's +: a click is Ctrl+Shift+T (WezTerm's own skips the WSL rule in
+  -- spawn_from), a middle-click the tab list (Ctrl+Shift+S, where WezTerm does nothing), a
+  -- right-click this config's launcher (Ctrl+Alt+L, fuzzy, rather than the plain one).
+  wezterm.on('new-tab-button-click', function(window, pane, button)
+    local action = ({ Left = M.new_tab, Middle = M.switch_tab, Right = M.launcher })[button]
+    if action then
+      window:perform_action(action, pane)
+      return false
+    end
+  end)
+end
+
+return M

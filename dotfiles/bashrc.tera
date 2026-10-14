@@ -329,16 +329,23 @@ fi
 # progress) from a preexec hook. bash has no preexec without bash-preexec, and
 # starship owns bash's DEBUG trap, so this fallback shell skips it (same precedent
 # as atuin above): there is no in-flight taskbar progress.
+# WezTerm outside zellij also gets zsh's user@host:dir title (OSC 2) at each prompt.
 if [[ ${TERM_PROGRAM:-} != WarpTerminal && $TERM != dumb && $TERM != linux ]]; then
   if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
     _wt_osc9=1
   else
     _wt_osc9=
   fi
+  if [[ ( $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+    _wt_title=1
+  else
+    _wt_title=
+  fi
   _wt_prompt_cmd() {
     local _wt_status=$?
     printf '\e]133;D;%s\a' "$_wt_status"
     printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
+    [[ -n $_wt_title ]] && printf '\e]2;%s@%s:%s\a' "$USER" "${HOSTNAME%%.*}" "${PWD/#"$HOME"/\~}"
     if [[ -n $_wt_osc9 && $TERM_PROGRAM != WezTerm && $TERM != wezterm ]] && command -v wslpath &>/dev/null; then
       printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
     fi
@@ -361,13 +368,17 @@ fi
 # Behaviour and opt-out (WORKSTATION_ZELLIJ_TAB_NAMES=0) are identical; see the
 # fuller comment in zshrc.tera.
 if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
+  # It runs first in PROMPT_COMMAND, so it hands $? on to the prompt marks and starship.
   _zj_tab_name() {
-    [[ "$PWD" == "$_ZJ_LAST_PWD" ]] && return
-    _ZJ_LAST_PWD="$PWD"
-    local n="${PWD##*/}"
-    [[ "$PWD" == "$HOME" ]] && n="~"
-    [[ -z "$n" ]] && n="/"
-    zellij action rename-tab "$n" 2>/dev/null
+    local s=$?
+    if [[ "$PWD" != "$_ZJ_LAST_PWD" ]]; then
+      _ZJ_LAST_PWD="$PWD"
+      local n="${PWD##*/}"
+      [[ "$PWD" == "$HOME" ]] && n="~"
+      [[ -z "$n" ]] && n="/"
+      zellij action rename-tab "$n" 2>/dev/null
+    fi
+    return "$s"
   }
   # Re-source guard: don't register twice (matches the _wt_prompt_cmd convention).
   [[ $PROMPT_COMMAND == *_zj_tab_name* ]] || PROMPT_COMMAND="_zj_tab_name${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
@@ -554,6 +565,21 @@ pins `-C "$HOME"`):
        <that directory>` instead; --changed skips directory copies)
   wss  mise dot status            list managed files + their state
   wsu  mise run update            git pull + mise install + mise bootstrap
+
+Shell shortcuts:
+  l / la / ll / lt   eza listings (ll: long + git; lt: tree; lta: + hidden;
+                     ltl: tree + details); in WezTerm, Ctrl+click a name
+  gs ga gc gp gl gd gco gbr
+                     git status, add, commit, push, log, diff, checkout, branch
+  y                  yazi; on quit, cd to where you ended up
+  z <dir> / zi       zoxide: jump to / pick a visited directory
+  fh / fcd / fssh    fzf: rerun a history line / cd below here / ssh to a
+                     host from ~/.ssh/config
+  zs [name] [layout] start or attach a zellij session; zr <cmd>: a floating pane
+  n [text] / nf      list notes or add one (nb) / browse them with a preview
+  hide / clear       clear the screen, keeping / dropping the scrollback
+  Ctrl-R history (fzf, or atuin if ~/.bashrc.local starts it), Ctrl-T insert
+  a file, Alt-C cd into a directory (fzf)
 
 Common flow:
   wse ~/.bashrc       (edit in source state)

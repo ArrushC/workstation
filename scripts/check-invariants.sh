@@ -1380,13 +1380,13 @@ else:
 PY
 }
 
-# WezTerm's config (dotfiles/config/wezterm/wezterm.lua, deployed on Windows) runs in WezTerm's
-# Lua at startup, and an error there leaves WezTerm on its defaults. Run it under Neovim's
-# LuaJIT with a stand-in wezterm module, as Windows and as Linux, against a fake
-# ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
+# WezTerm's config (dotfiles/config/wezterm/wezterm.lua and the modules it requires, loaded on
+# Windows) runs in WezTerm's Lua at startup, and an error there leaves WezTerm on its defaults.
+# Run it under Neovim's LuaJIT with a stand-in wezterm module, as Windows and as Linux, against
+# a fake ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
 check_wezterm_config() {
   hdr "WezTerm config (runs with a stand-in wezterm module, handlers included)"
-  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua
+  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua modules
   # LuaJIT either way: plain luajit (CI installs it) or the one inside nvim.
   if command -v luajit >/dev/null 2>&1; then
     lua=(luajit)
@@ -1404,7 +1404,7 @@ check_wezterm_config() {
   # The stand-in records what the config hands WezTerm: actions as { action, args } tables
   # (callable, as WezTerm's are), callbacks as { callback }, event handlers by name.
   cat >"$tmp/check.lua" <<'LUA'
-local path, triple, home, localappdata = arg[1], arg[2], arg[3], arg[4]
+local path, triple, home, localappdata, modules = arg[1], arg[2], arg[3], arg[4], arg[5]
 local real_getenv = os.getenv
 os.getenv = function(k) if k == 'LOCALAPPDATA' then return localappdata end return real_getenv(k) end
 local handlers, battery, live = {}, {}, {}
@@ -1413,6 +1413,7 @@ local function named(name)
 end
 local wezterm = {
   target_triple = triple,
+  config_file = path,
   home_dir = home,
   GLOBAL = {},
   nerdfonts = {},
@@ -1458,6 +1459,7 @@ local function check(cond, msg) if not cond then error(msg, 0) end end
 local function has(s, sub) return s ~= nil and s:find(sub, 1, true) ~= nil end
 
 check(type(c) == 'table', 'the file does not return the config table')
+for m in modules:gmatch('[^,]+') do check(package.loaded[m], m .. '.lua is never required, so WezTerm ignores it') end
 local scheme = c.color_schemes and c.color_schemes[c.color_scheme]
 check(scheme, 'color_scheme names no scheme in color_schemes')
 check(scheme.tab_bar.active_tab.bg_color == '#cba6f7' and scheme.cursor_bg == '#cba6f7', 'the active tab and the cursor are not mauve')
@@ -1550,7 +1552,7 @@ local function window(key_table, id)
     perform_action = function(_, a) performed = a end,
   }
 end
--- A pane: `opts` sets its id, domain, OSC 7 cwd and foreground process ({ name, argv };
+-- A pane: `opts` sets its id, domain, OSC 7 cwd, title and foreground process ({ name, argv };
 -- false once it has exited). Registered with the stand-in wezterm.mux.get_pane.
 local function pane(dims, alt, cursor_y, opts)
   opts = opts or {}
@@ -1562,6 +1564,7 @@ local function pane(dims, alt, cursor_y, opts)
     pane_id = function() return opts.id or 7 end,
     get_domain_name = function() return opts.domain or 'local' end,
     get_current_working_dir = function() return opts.cwd and wezterm.url.parse(opts.cwd) or nil end,
+    get_title = function() return opts.title or 'x' end,
     get_foreground_process_info = function(self) return self.proc or nil end,
     get_lines_as_text = function() return 'line 1\nline 2\n' end,
     paste = function(_, t) pasted[#pasted + 1] = t end,
@@ -1645,6 +1648,11 @@ ssh_pane.progress = { Percentage = 42 }
 check(has(title(bg), '42%'), 'no progress mark: ' .. title(bg))
 ssh_pane.progress = 'Indeterminate'
 check(title(bg):sub(1, 3) == ' ~ ', 'no busy mark: ' .. title(bg))
+-- On the active tab a mark keeps its colour, so an error % reads as one.
+first.active_pane.progress = { Error = 13 }
+local mark_item = handlers['format-tab-title'](first, { first }, nil, nil, false, 32)[2]
+check(mark_item and mark_item.Foreground and mark_item.Foreground.Color == '#f38ba8', 'an error mark on the active tab is not red')
+first.active_pane.progress = 'None'
 pane(wide, false, 0, { id = 8, proc = { name = 'pwsh.exe', argv = { 'pwsh.exe' } } })
 local win = { tab_id = 4, tab_index = 0, is_active = false, tab_title = '', panes = {},
   active_pane = { pane_id = 8, title = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', domain_name = 'local', progress = 'None' } }
@@ -1672,11 +1680,27 @@ pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', 'y.exampl
 check(title(to_alpha) == ' > 1: y.example ', "a Match block's HostName was mapped to the Host above it: [" .. title(to_alpha) .. ']')
 pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', '10.0.0.10' } } })
 check(title(to_alpha) == ' > 1: 10.0.0.10 ', 'an address HostName gave its first number as a short name: [' .. title(to_alpha) .. ']')
+-- A host sending no OSC 7 but its own user@host title names the tab; this machine's
+-- title (zshrc/bashrc set it at each prompt under WezTerm) puts it back.
+wsl.active_pane.current_working_dir = 'file://PC/home/me'
+wsl.active_pane.title = 'me@cache-apl:~'
+check(title(wsl) == ' > 1: cache-apl ', 'a WSL tab on a host that sets only its title is not named after it: [' .. title(wsl) .. ']')
+wsl.active_pane.title = 'me@PC:~/src'
+check(title(wsl) == ' $ 1: AlmaLinux-9 ', 'a WSL tab back from ssh is not named after its distro: [' .. title(wsl) .. ']')
 wsl.tab_title = string.rep('n', 60)
 check(#title(wsl) <= 32, 'a long name overflows max_width: ' .. #title(wsl))
 
+-- The footer names the host a WSL tab has ssh'd to (OSC 7, else a user@host title).
+local wsl_proc = { name = 'wsl.exe', argv = { 'wsl.exe' } }
+handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 44, domain = 'WSL:AlmaLinux-9', cwd = 'file://build01.corp/home/me', proc = wsl_proc }))
+check(has(status, 'build01.corp'), "the footer does not name the host a WSL tab has ssh'd to: " .. status)
+handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 45, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@cache-apl:~', proc = wsl_proc }))
+check(has(status, 'cache-apl'), 'the footer does not name a host known only from its title: ' .. status)
+handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 46, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@PC:~', proc = wsl_proc }))
+check(not has(status, 'PC'), 'the footer names this machine as a WSL tab\'s host: ' .. status)
+
 -- New tabs and splits: WezTerm's default, except a WSL pane whose directory isn't in the
--- distro starts in ~ (wsl.exe --cd ~).
+-- distro starts in ~ (wsl.exe --cd ~), and an SSH tab's run its ssh again.
 local function spawned(k, opts)
   keys[k].callback(w, pane(wide, false, 0, opts))
   return performed
@@ -1692,6 +1716,13 @@ t = spawned('ALT|SHIFT+D', wsl_at('file://build01.corp/home/me'))
 check(t.action == 'SplitVertical' and t.args.cwd == '~', "Alt+Shift+D in a WSL tab that ssh'd elsewhere does not start in ~")
 t = spawned('ALT|SHIFT+R', { id = 41, cwd = 'file://PC/C:/src' })
 check(t.action == 'SplitHorizontal' and t.args.domain == 'CurrentPaneDomain', 'Alt+Shift+R in a local tab is not the default split')
+t = spawned('CTRL|SHIFT+t', { id = 43, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@cache-apl:~', proc = wsl_proc })
+check(t.args.cwd == '~', "Ctrl+Shift+T in a WSL tab on a host known from its title does not start in ~")
+local ssh_tab = { id = 47, proc = { name = 'ssh.exe', argv = ssh_argv } }
+t = spawned('CTRL|SHIFT+t', ssh_tab)
+check(t.action == 'SpawnCommandInNewTab' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Ctrl+Shift+T in an SSH tab does not open another ssh to its host')
+t = spawned('ALT|SHIFT+D', ssh_tab)
+check(t.action == 'SplitVertical' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
 for button, k in pairs({ Left = 'CTRL|SHIFT+t', Middle = 'CTRL|SHIFT+s', Right = 'CTRL|ALT+l' }) do
   performed = nil
   check(handlers['new-tab-button-click'](w, p, button) == false and performed == keys[k], button .. '-click on + is not ' .. k)
@@ -1760,21 +1791,26 @@ for _, r in ipairs(performed.args.choices) do
   if r.id then launch = launch + 1 end
 end
 local text = table.concat(rows, '\n')
-for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F' }) do
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
   check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
 end
 check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')
 performed.args.action.callback(w, p, '1')
 check(performed.action == 'SpawnCommandInNewTab' and performed.args == c.launch_menu[1], 'a launch row does not open its entry')
 local palette = handlers['augment-command-palette']()
-check(#palette == 10 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
+check(#palette == 12 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
+local briefs = {}
+for _, e in ipairs(palette) do briefs[e.brief] = e.action end
+check(briefs['Split pane down'] == keys['ALT|SHIFT+D'] and briefs['Split pane right'] == keys['ALT|SHIFT+R'], 'the command palette has no Alt+Shift+D/R splits')
 io.write('ok')
 LUA
+  # Every other .lua beside it is a module wezterm.lua links (require), checked as loaded.
+  modules=$(find "${cfg%/*}" -maxdepth 1 -name '*.lua' ! -name wezterm.lua -printf '%f\n' | sed 's/\.lua$//' | sort | paste -sd, -)
   for triple in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu; do
     # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
-    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
+    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" "$modules" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg runs as $triple: theme, chrome, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
+      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi

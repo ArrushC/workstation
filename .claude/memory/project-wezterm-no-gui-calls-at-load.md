@@ -1,11 +1,11 @@
 ---
 name: project-wezterm-no-gui-calls-at-load
-description: Never call wezterm.gui.* (screens, enumerate_gpus) in wezterm.lua's top-level body; it deadlocks WezTerm before the GUI exists, and pcall can't catch a hang.
+description: Never call wezterm.gui.* (screens, enumerate_gpus) in code that runs at config load (wezterm.lua or a module); it deadlocks WezTerm before the GUI exists, and pcall can't catch a hang.
 metadata:
   type: project
 ---
 
-In `dotfiles/config/wezterm/wezterm.lua`, never call `wezterm.gui.*` (e.g. `wezterm.gui.screens()`,
+In `dotfiles/config/wezterm/` (`wezterm.lua` and the modules it requires), never call `wezterm.gui.*` (e.g. `wezterm.gui.screens()`,
 `wezterm.gui.enumerate_gpus()`) in the code that runs when the config loads. Those need a GUI that
 doesn't exist yet and deadlock WezTerm into an unresponsive window that only a force-kill of
 `wezterm-gui.exe` recovers.
