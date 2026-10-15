@@ -17,6 +17,6 @@ adding an opt-in "keep the shape when unfocused" setting (recommended; public, f
 a self-built patched WezTerm (rejected: a rebuild pipeline for one line), or hiding the box with
 `cursor_border` = background. They chose to leave it as it is for now.
 
-**How to apply:** don't re-investigate a config-only fix. If they raise it again, offer the
-upstream PR (needs their go-ahead) and nothing else. Related:
+**How to apply:** don't re-investigate a config-only fix. If they raise it again, start from the
+upstream PR (it needs their go-ahead); the other two routes were already weighed. Related:
 [[project-wezterm-render-webgpu-120fps]], [[project-wezterm-no-gui-calls-at-load]].
