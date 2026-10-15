@@ -179,6 +179,29 @@ function Test-LoadsConfig([string]$Build) {
     }
 }
 
+# Moves the unpacked build into the root, trying for 5 s. Windows refuses to move a folder
+# while another process has a file in it open, and a program that has just run can be held
+# for a moment: on GitHub's Windows runners, their provjobd.exe agent opens each new
+# program (wezterm-gui.exe, run by Test-LoadsConfig) for up to 250 ms, measured; an
+# antivirus can do the same. A rename, not Move-Item: when the rename fails, Move-Item falls
+# back to copying and leaves an empty $To, and moving again would nest the build inside it.
+# The same volume only (%TEMP% and %LOCALAPPDATA%), as Windows PowerShell's Move-Item was.
+function Move-Build([string]$From, [string]$To, [int]$Tries = 20, [int]$DelayMs = 250) {
+    for ($try = 1; ; $try++) {
+        try {
+            [IO.Directory]::Move($From, $To)
+            return
+        } catch {
+            if ($try -ge $Tries) {
+                $e = $_.Exception
+                while ($e.InnerException) { $e = $e.InnerException }
+                throw "could not move the new build to $To in $($Tries * $DelayMs / 1000) s: $($e.Message)"
+            }
+            Start-Sleep -Milliseconds $DelayMs
+        }
+    }
+}
+
 # True when a running process has one of $Dir's programs or libraries loaded: Windows
 # refuses to open a loaded image for writing (nothing is written). A process's own path
 # can't tell: WezTerm started from the shortcut runs as <Root>\current\wezterm-gui.exe,
@@ -250,7 +273,7 @@ try {
             $build = $want.Substring(0, 12)
             $dest = Join-Path $Root $build
             if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
-            Move-Item -LiteralPath $content -Destination $dest
+            Move-Build $content $dest
             # A non-recursive delete removes the junction itself (RemoveDirectory), never what it
             # points to. No cmd /c rmdir: 5.1 turns cmd's stderr into a terminating error.
             if (Test-Path -LiteralPath $current) { [IO.Directory]::Delete($current) }
