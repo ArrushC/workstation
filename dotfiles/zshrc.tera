@@ -405,6 +405,49 @@ if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
   _zj_tab_name
 fi
 
+# --- Editing keys (zsh ZLE) ----------------------------------------------------
+# zsh's emacs keymap binds none of these, so Delete, Home/End and Ctrl+arrows did
+# nothing or typed a stray `~`. bash gets them from /etc/inputrc (and the twin
+# block in bashrc.tera, a parity pair), Nushell from reedline. Each key is bound
+# in every form a terminal sends it: xterm's normal and application cursor modes
+# (WezTerm, zellij, Windows Terminal, tmux) and the linux console's and rxvt's
+# Home/End, so it works over SSH whatever TERM ends up as. Inside zellij,
+# Alt+arrows move between panes and never reach the shell.
+#
+# Words stop at punctuation, as in bash and Nushell: Ctrl/Alt+arrows, Alt+B/F,
+# Alt+Backspace and Ctrl+Shift+arrow selection stop at each `/`, `-` and `.`
+# (`_` stays inside a word). Ctrl+W still deletes back to a space, as bash's does.
+bindkey -e
+WORDCHARS='_'
+autoload -Uz backward-kill-word-match
+zle -N backward-kill-space-word backward-kill-word-match
+zstyle ':zle:backward-kill-space-word' word-style space
+() {
+  local seq widget
+  for seq widget (
+    '^[[3~'   delete-char                        # Delete
+    '^[[3;5~' kill-word                          # Ctrl+Delete
+    '^[[2~'   overwrite-mode                     # Insert
+    '^[[H'    beginning-of-line                  # Home
+    '^[OH'    beginning-of-line
+    '^[[1~'   beginning-of-line
+    '^[[7~'   beginning-of-line
+    '^[[F'    end-of-line                        # End
+    '^[OF'    end-of-line
+    '^[[4~'   end-of-line
+    '^[[8~'   end-of-line
+    '^[[1;5D' backward-word                      # Ctrl+Left
+    '^[[1;3D' backward-word                      # Alt+Left
+    '^[[1;5C' forward-word                       # Ctrl+Right
+    '^[[1;3C' forward-word                       # Alt+Right
+    '^[[5~'   history-beginning-search-backward  # PageUp: history starting with the line so far
+    '^[[6~'   history-beginning-search-forward   # PageDown
+    '^W'      backward-kill-space-word           # Ctrl+W
+  ); do
+    bindkey -M emacs "$seq" "$widget"
+  done
+}
+
 # --- Shift+Arrow selection (zsh ZLE) -----------------------------------------
 # Editor-style text selection at the prompt: Shift+arrows (and Shift+Ctrl+arrows
 # / Shift+Home/End) extend a visible highlight; typing replaces it; Backspace/
