@@ -117,7 +117,7 @@ function M.apply(config)
     { 'CTRL|SHIFT', 'e', actions.rename_tab, 'Rename the tab' },
     { 'CTRL|SHIFT', 'g', actions.open_in_helix, 'Quick select a file:line, open it in helix' },
     { 'CTRL|SHIFT', 'y', actions.paste_sha, 'Quick select a commit SHA, paste it at the prompt' },
-    { 'CTRL|SHIFT', 'w', act.CloseCurrentTab({ confirm = true }), 'Close the tab (asks first)' },
+    { 'CTRL|SHIFT', 'w', act.CloseCurrentTab({ confirm = false }), 'Close the tab' },
     { 'CTRL|SHIFT', 's', actions.switch_tab, 'Switch tab (fuzzy, real numbers)' },
     { 'ALT', '0', act.ActivateLastTab, 'Back to the previous tab (underlined in the tab bar)' },
     { 'CTRL|SHIFT', 'q', act.PaneSelect({}), 'Pick a pane by letter' },

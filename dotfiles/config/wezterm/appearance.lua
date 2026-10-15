@@ -161,11 +161,13 @@ function M.apply(config)
   config.notification_handling = 'SuppressFromFocusedPane'
   config.switch_to_last_active_tab_when_closing_tab = true
   config.unzoom_on_switch_pane = true
-  -- Closing a tab (Ctrl+Shift+W, its x, a middle-click) or the window always asks first,
-  -- even when only an idle shell runs in it: WezTerm skips the prompt only when every
-  -- process in the tab is on this list, so the list is empty.
-  config.window_close_confirmation = 'AlwaysPrompt'
-  config.skip_close_confirmation_for_processes_named = {}
+  -- Closing a tab (Ctrl+Shift+W, keys.lua, or a middle-click on it) or the window never
+  -- asks. A middle-click has no setting of its own: WezTerm asks unless this hook calls
+  -- every process in the tab safe to close, and the window close uses the same check.
+  config.window_close_confirmation = 'NeverPrompt'
+  wezterm.on('mux-is-process-stateful', function()
+    return false
+  end)
   -- Kitty's keyboard protocol for the apps that ask for it (helix gets unambiguous keys,
   -- zellij passes it on); the rest are untouched. On Windows, ConPTY panes keep
   -- win32-input-mode. If a TUI misbehaves after an update, turn this off first.
