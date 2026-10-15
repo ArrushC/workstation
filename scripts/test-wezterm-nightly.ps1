@@ -4,8 +4,9 @@
 # uses (kept whole, then removed by a later up-to-date run), a rebuild of the installed
 # version (not reinstalled), a checksum mismatch (the installed build stays, exit 0), a
 # new build that doesn't load the config (refused, not downloaded again; on a first
-# install, installed with a warning), a root given as an 8.3 short path, and an
-# unreachable URL (exit 0, the toast id registered and a deleted shortcut restored),
+# install, installed with a warning), a root given as an 8.3 short path, an unpacked build
+# another process holds a file of (Move-Build waits for it, or gives up moving nothing), and
+# an unreachable URL (exit 0, the toast id registered and a deleted shortcut restored),
 # %APPDATA%\wezterm, and the User environment (WEZTERM_CONFIG_FILE, the PATH entry once,
 # PATH's REG_EXPAND_SZ kept). The toast id and the environment go to throwaway HKCU
 # keys, never the real ones. The fake builds can't run, so every run but the config-check
@@ -195,6 +196,53 @@ try {
         $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root $short -ShortcutDir $menu -ToastKey $toastKey -EnvKey $envKey -DataDir $dataDir -NoConfigCheck 2>&1 | Out-String
         Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
         Assert ((Read-Text (Join-Path $root 'current\wezterm-gui.exe')) -eq 'gui e') "current\ is not build e`n$out"
+    }
+
+    # Move-Build on its own: another process holds a file in the folder open, as GitHub's
+    # runner agent (provjobd.exe) holds the wezterm-gui.exe Test-LoadsConfig has just run.
+    . (Import-AstFunction (Read-ScriptAst $script) 'Move-Build')
+    function Start-Holder([string]$File, [int]$Ms) {
+        $ready = "$File.held"
+        $p = Start-Process -FilePath $shell -ArgumentList '-NoProfile', '-Command', "`$h = [IO.File]::Open('$File', 'Open', 'Read', 'Read'); [IO.File]::WriteAllText('$ready', 'x'); Start-Sleep -Milliseconds $Ms; `$h.Dispose()" -PassThru -WindowStyle Hidden
+        $deadline = (Get-Date).AddSeconds(30)
+        while (-not (Test-Path -LiteralPath $ready)) {
+            if ((Get-Date) -gt $deadline) { throw "the holder never opened $File" }
+            Start-Sleep -Milliseconds 20
+        }
+        Remove-Item -LiteralPath $ready
+        return $p
+    }
+
+    Test-Case 'a build folder held open for a moment still moves into place' {
+        $from = Join-Path $tmp 'held-briefly'
+        $to = Join-Path $tmp 'moved-briefly'
+        New-TestFile (Join-Path $from 'wezterm-gui.exe') 'gui held'
+        $p = Start-Holder (Join-Path $from 'wezterm-gui.exe') 1000
+        try {
+            $blocked = try { Move-Build $from $to -Tries 1; $false } catch { $true }
+            Assert $blocked 'a single try worked while the file was held (the hold reproduces nothing)'
+            Assert (-not (Test-Path -LiteralPath $to)) 'a failed try left the destination behind (the next would nest the build in it)'
+            Move-Build $from $to
+            Assert ((Read-Text (Join-Path $to 'wezterm-gui.exe')) -eq 'gui held') 'the build is not at its destination'
+            Assert (-not (Test-Path -LiteralPath $from)) 'the unpacked folder is still there'
+        } finally {
+            $p.WaitForExit()
+        }
+    }
+
+    Test-Case 'a build folder held open too long: it gives up, says where, and moves nothing' {
+        $from = Join-Path $tmp 'held-long'
+        $to = Join-Path $tmp 'moved-long'
+        New-TestFile (Join-Path $from 'wezterm-gui.exe') 'gui held'
+        $p = Start-Holder (Join-Path $from 'wezterm-gui.exe') 5000
+        try {
+            $err = try { Move-Build $from $to -Tries 3 -DelayMs 100; '' } catch { "$($_.Exception.Message)" }
+            Assert ($err -like "*could not move*$to*") "no error naming the destination: '$err'"
+            Assert (Test-Path -LiteralPath (Join-Path $from 'wezterm-gui.exe')) 'the unpacked build was lost'
+            Assert (-not (Test-Path -LiteralPath $to)) 'a partial build reached the destination'
+        } finally {
+            $p.WaitForExit()
+        }
     }
 
     Test-Case 'unreachable URL: a warning, exit 0, the toast id and a deleted shortcut restored' {
