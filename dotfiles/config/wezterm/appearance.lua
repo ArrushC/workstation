@@ -81,8 +81,18 @@ function M.apply(config)
   -- cover a host without it.
   config.font = wezterm.font_with_fallback({ 'JetBrainsMono NFM', 'JetBrains Mono' })
   config.font_size = 10.5
+
+  -- A soft blink: the bar holds, fades out late in its 500 ms, stays dark, then fades back.
+  -- WezTerm reads a CubicBezier's four numbers as the weights of a one-dimensional cubic,
+  -- not CSS's handles, so { 0, 0, 0, 1 } is t^3 (the default, 'Linear', is 3t^2 - 2t^3: a
+  -- constant pulse), and 'Ease', 'EaseIn' and 'EaseInOut' start each fade a quarter or more
+  -- of the way in, a visible jump. Every cursor move restarts the cycle, so the bar stays
+  -- solid while you type. Nushell asks for this blinking bar too (config.nu.tera); an app
+  -- that asks for a steady shape (helix in insert mode) gets one.
   config.default_cursor_style = 'BlinkingBar'
   config.cursor_blink_rate = 500
+  config.cursor_blink_ease_in = { CubicBezier = { 0.0, 0.0, 0.0, 1.0 } }
+  config.cursor_blink_ease_out = { CubicBezier = { 0.0, 0.0, 0.0, 1.0 } }
   config.cursor_thickness = '1.5pt'
 
   -- No title bar. RESIZE keeps the thin resize frame, so Win+arrow snap, drag-to-edge snap

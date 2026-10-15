@@ -40,7 +40,9 @@ $env.COLORTERM = "truecolor"
 # ssh from here sends it too; WezTerm's SSH launch entries keep wezterm where the host has
 # the entry. PARITY: the PowerShell profile does the same.
 if ($env.TERM? == "wezterm") { $env.TERM = "xterm-256color" }
-$env.config.cursor_shape.emacs = "line"
+# A blinking bar, as WezTerm's default_cursor_style: reedline sets the shape at every prompt,
+# so a steady one ("line") here would stop the cursor blinking in Nushell tabs.
+$env.config.cursor_shape.emacs = "blink_line"
 # Deletes go to the Recycle Bin; `rm --permanent` skips it.
 $env.config.rm.always_trash = true
 # Fuzzy, case-insensitive matching in the completion menu (gco -> git checkout).
