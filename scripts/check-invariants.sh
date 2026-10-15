@@ -1494,6 +1494,14 @@ check(c.scrollback_lines == 1000000, 'scrollback_lines is not 1,000,000')
 check(c.front_end == 'WebGpu' and c.webgpu_power_preference == 'HighPerformance' and c.max_fps == 120, 'rendering is not WebGpu + HighPerformance + 120 fps')
 check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use_fancy_tab_bar == false, 'chrome: not RESIZE with the retro tab bar at the bottom')
 check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
+check(c.default_cursor_style == 'BlinkingBar' and c.cursor_blink_rate > 0, 'the cursor is not a blinking bar')
+-- WezTerm reads an easing's four numbers as a one-dimensional cubic: one whose first isn't 0
+-- (Ease, EaseIn, EaseInOut) starts each blink fade part-way, a visible jump.
+for _, k in ipairs({ 'cursor_blink_ease_in', 'cursor_blink_ease_out' }) do
+  local e = c[k]
+  local from_0 = e == nil or e == 'Linear' or e == 'EaseOut' or e == 'Constant' or (type(e) == 'table' and e.CubicBezier and e.CubicBezier[1] == 0)
+  check(from_0, k .. ' starts its fade part-way (a CubicBezier must start with 0)')
+end
 check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
 check(c.window_close_confirmation == 'AlwaysPrompt' and c.enable_kitty_keyboard == true, 'closing never asks, or the kitty keyboard protocol is off')
 check(type(c.skip_close_confirmation_for_processes_named) == 'table' and next(c.skip_close_confirmation_for_processes_named) == nil, 'closing a tab running only an idle shell never asks (skip_close_confirmation_for_processes_named is not empty)')
@@ -1870,12 +1878,18 @@ LUA
     # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
     out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" "$modules" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
+      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, cursor, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi
   done
   rm -rf "$tmp"
+  # reedline sets the cursor at every prompt, so a steady shape there stops the blink in Nushell tabs.
+  if grep -qxF '$env.config.cursor_shape.emacs = "blink_line"' dotfiles/windows/AppData/Roaming/nushell/config.nu.tera; then
+    ok "Nushell asks for WezTerm's blinking bar"
+  else
+    bad "config.nu.tera's cursor_shape.emacs isn't \"blink_line\": a steady shape stops the cursor blinking in Nushell tabs"
+  fi
 }
 
 # TERM=wezterm needs its whole chain, or a host shows "unknown terminal" / loses colour:
