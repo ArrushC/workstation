@@ -1502,6 +1502,10 @@ for _, k in ipairs({ 'cursor_blink_ease_in', 'cursor_blink_ease_out' }) do
   local from_0 = e == nil or e == 'Linear' or e == 'EaseOut' or e == 'Constant' or (type(e) == 'table' and e.CubicBezier and e.CubicBezier[1] == 0)
   check(from_0, k .. ' starts its fade part-way (a CubicBezier must start with 0)')
 end
+-- An unfocused cursor is a hollow box with sides 1.5x this thickness: 2 px or more at 100%
+-- scaling fills JetBrainsMono 10.5's 8 px cell, and the box looks like a split bar.
+local pt = c.cursor_thickness == nil and 0 or tonumber(tostring(c.cursor_thickness):match('^([%d.]+)pt$'))
+check(pt and math.floor(pt * 96 / 72) <= 1, 'cursor_thickness is not below 1.5pt (an unfocused cursor would look like a split bar)')
 check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
 check(c.window_close_confirmation == 'AlwaysPrompt' and c.enable_kitty_keyboard == true, 'closing never asks, or the kitty keyboard protocol is off')
 check(type(c.skip_close_confirmation_for_processes_named) == 'table' and next(c.skip_close_confirmation_for_processes_named) == nil, 'closing a tab running only an idle shell never asks (skip_close_confirmation_for_processes_named is not empty)')

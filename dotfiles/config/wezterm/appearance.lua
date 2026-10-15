@@ -93,7 +93,11 @@ function M.apply(config)
   config.cursor_blink_rate = 500
   config.cursor_blink_ease_in = { CubicBezier = { 0.0, 0.0, 0.0, 1.0 } }
   config.cursor_blink_ease_out = { CubicBezier = { 0.0, 0.0, 0.0, 1.0 } }
-  config.cursor_thickness = '1.5pt'
+  -- In a window that isn't focused, or a pane that isn't active, WezTerm draws a hollow box
+  -- instead, with sides 1.5 times this thickness (rounded down to whole pixels). 1.5pt is
+  -- 2 px at 100% scaling, so the box's sides took 6 of the 8 px cell and it looked like a
+  -- bar split by a black line. 1pt keeps it a box at 100%, and is 2 px from 150%.
+  config.cursor_thickness = '1pt'
 
   -- No title bar. RESIZE keeps the thin resize frame, so Win+arrow snap, drag-to-edge snap
   -- and minimize still work ('NONE' loses them). Move the window with Ctrl+Shift+drag
