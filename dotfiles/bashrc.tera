@@ -229,6 +229,30 @@ bind 'set colored-completion-prefix on'
 bind 'set completion-ignore-case on'
 bind 'set completion-map-case on'
 
+# --- Editing keys (readline) ---------------------------------------------------
+# The twin of zshrc.tera's block (a parity pair). EL9's /etc/inputrc binds most of
+# these already, but EL8's readline 7 leaves Alt+arrows and Ctrl+Delete unbound and
+# makes Insert a quoted-insert, and a host without those /etc/inputrc lines has
+# none of them. readline's words already stop at punctuation (and at `_`, which
+# zsh keeps inside a word), and Ctrl+W deletes back to a space, as zsh's does.
+bind '"\e[3~": delete-char'                       # Delete
+bind '"\e[3;5~": kill-word'                       # Ctrl+Delete
+bind '"\e[2~": overwrite-mode'                    # Insert
+bind '"\e[H": beginning-of-line'                  # Home
+bind '"\eOH": beginning-of-line'
+bind '"\e[1~": beginning-of-line'
+bind '"\e[7~": beginning-of-line'
+bind '"\e[F": end-of-line'                        # End
+bind '"\eOF": end-of-line'
+bind '"\e[4~": end-of-line'
+bind '"\e[8~": end-of-line'
+bind '"\e[1;5D": backward-word'                   # Ctrl+Left
+bind '"\e[1;3D": backward-word'                   # Alt+Left
+bind '"\e[1;5C": forward-word'                    # Ctrl+Right
+bind '"\e[1;3C": forward-word'                    # Alt+Right
+bind '"\e[5~": history-search-backward'           # PageUp: history starting with the line so far
+bind '"\e[6~": history-search-forward'            # PageDown
+
 # --- Shift+Arrow movement (readline) -----------------------------------------
 # Terminals send ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
 # so the tail (";2D") leaks into the line. Bind them to plain movement so the

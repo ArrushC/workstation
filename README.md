@@ -220,7 +220,7 @@ Starship draws the prompt. At the zsh prompt, SHIFT+arrows select text (SHIFT+�
 | zsh-history-substring-search | Type part of a command, ↑ / ↓ walk matches |
 | zsh-you-should-use | Reminds you of an alias after you type the long form |
 
-Key map: Ctrl-R atuin history · ↑/↓ substring search · → accept suggestion · Tab fzf completion · Shift+arrows select. Directory navigation: `z`/`zi` (zoxide), `br` (broot), `y` (yazi), `nn` (nnn). atuin and the plugins are zsh-only; bash keeps system completion and readline history search on ↑/↓, and `br`/`y`/`nn` work in both.
+Key map: Ctrl-R atuin history · ↑/↓ substring search · → accept suggestion · Tab fzf completion · Shift+arrows select · Ctrl/Alt+←/→ by word · Delete, Insert, Home/End · PageUp/PageDown history starting with what's typed, in bash too. Words stop at `/`, `-` and `.`, as in bash and Nushell; Ctrl-W deletes back to a space. Directory navigation: `z`/`zi` (zoxide), `br` (broot), `y` (yazi), `nn` (nnn). atuin and the plugins are zsh-only; bash keeps system completion and readline history search on ↑/↓, and `br`/`y`/`nn` work in both.
 
 The repo's own scripts complete their flags: `bootstrap.sh` in zsh and bash, `bootstrap.ps1` in Nushell (kept in step by `scripts/check-invariants.sh`).
 
