@@ -67,21 +67,27 @@ EOF
 # The driver starts the shell on a pty and waits for its prompt. For each argument it types
 # the keys, then Ctrl+E and "; echo '@'@END" and Enter, and waits for @@END (printed only
 # by the command, never echoed as typed) and the next prompt, so every line is typed while
-# the line editor reads raw keys. It prints what the pty shows as it goes, so a case that
-# hangs until the timeout still shows how far it got.
+# the line editor reads raw keys. It prints what the pty shows, and gives up on a wait after
+# 20 s, so a shell stuck on a question still shows it.
 cat >"$T/drive.zsh" <<'EOF'
-zmodload zsh/zpty || exit 2
+zmodload zsh/zpty zsh/datetime zsh/zselect || exit 2
 zpty S "$1" || exit 2
 shift
 read_until() {
-  local chunk
-  zpty -r S chunk "$1" || return 1
-  print -rn -- "$chunk"
+  local chunk buf='' end=$((EPOCHREALTIME + 20))
+  until [[ $buf == ${~1} ]]; do
+    if ((EPOCHREALTIME > end)); then
+      print -r -- "${buf}[gave up waiting for $1]"
+      return 1
+    fi
+    if zpty -r -t S chunk; then buf+=$chunk; else zselect -t 2; fi
+  done
+  print -rn -- "$buf"
 }
-read_until '*READY> '
+read_until '*READY> *' || exit 1
 for keys in "$@"; do
   zpty -w -n S "$keys"$'\x05'"; echo '@'@END"$'\r'
-  read_until '*@@END*READY> '
+  read_until '*@@END*READY> *' || exit 1
 done
 zpty -w -n S $'exit\r'
 zpty -d S
@@ -91,10 +97,13 @@ EOF
 run() {
   local cmd
   case "$1" in
-  zsh) cmd="env -i HOME='$T/home' ZDOTDIR='$T/zdot' TERM=xterm-256color PATH=/usr/bin:/bin zsh -i" ;;
+  # -d skips the distro's global rc files, as INPUTRC=/dev/null does /etc/inputrc for bash:
+  # Ubuntu's /etc/zsh/zshrc runs compinit, which on GitHub's runner stops to ask about
+  # insecure directories, and binds keys of its own.
+  zsh) cmd="env -i HOME='$T/home' ZDOTDIR='$T/zdot' TERM=xterm-256color PATH=/usr/bin:/bin zsh -d -i" ;;
   bash) cmd="env -i HOME='$T/home' INPUTRC=/dev/null TERM=xterm-256color PATH=/usr/bin:/bin bash --noprofile --rcfile '$T/bashrc' -i" ;;
   esac
-  OUT="$(timeout 60 zsh -f "$T/drive.zsh" "$cmd" \
+  OUT="$(timeout 120 zsh -f "$T/drive.zsh" "$cmd" \
     $'t abc/def\e[1;5DX' \
     $'t abc/dee\e[1;3DY' \
     $'t abcd\e[D\e[D\e[3~' \
