@@ -196,6 +196,20 @@ describe('the sync band', () => {
     })
   })
 
+  test('it looks again as soon as a slash command finishes', async ($, on) => {
+    const w: World = { windowsHead: OLD }
+    const { clock } = world(on, w)
+    // Whatever answers the command (say /ship) is beneath the band's hook.
+    on('command.run', () => ({ text: 'merged' }))
+    const { text } = await band($, clock)
+    expect(await text()).toContain('! Windows 5dc752c')
+    w.windowsHead = MAIN
+    const ran = await $.command.run({ command: 'ship', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
+    expect(ran.text).toBe('merged')
+    await clock.advance(1)
+    expect(await text()).toContain('✓ Windows')
+  })
+
   test('it looks again every minute', async ($, on) => {
     const w: World = { windowsHead: OLD }
     const { clock } = world(on, w)

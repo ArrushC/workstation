@@ -7,7 +7,7 @@ import type { Sync, SyncChecks, SyncPr } from '../types'
 // %USERPROFILE%\.config\mise), and nowhere else: is this host's checkout at origin/main
 // (else `wsu`), are its dotfiles applied, is the Windows checkout at origin/main (from
 // WSL, read from /mnt/c), and how do the branch's PR checks stand. It looks when the
-// session starts, every minute after, and when a turn ends. A probe that fails shows a ?
+// session starts, every minute after, and when a turn or a slash command ends. A probe that fails shows a ?
 // and the rest still draws.
 
 const sync = atom({ plugin: 'workstation-sync', key: 'sync' } as const, null)
@@ -138,6 +138,8 @@ async function look($: $) {
     const snapshot: Sync = { branch, head, origin, drift, pr }
     if (windows !== undefined) snapshot.windows = windows
     await update($, sync, () => snapshot)
+  } catch {
+    // A call refused because a pull just reloaded this mod: the reloaded copy looks again.
   } finally {
     isLooking = false
   }
@@ -171,6 +173,15 @@ export const register: Register = on => {
     void look($)
     return done
   })
+
+  // Any slash command (a /ship that merged and pulled, say): look once it has finished,
+  // passing its answer on as it came. This sits in every command's chain, so a failure here
+  // hands the command's own answer on (a called next replays, never runs it twice).
+  on('command.run', async ($, e, next) => {
+    const ran = await next(e)
+    void look($)
+    return ran
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (home === undefined || e.props.hasSurvey) return next(e)
