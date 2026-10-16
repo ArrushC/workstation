@@ -229,7 +229,13 @@ function Invoke-Starship-PreCommand {
 # ~/.zshrc/~/.bashrc from a stale clone and made seven dotfiles executable.
 function wse { mise -C $env:USERPROFILE dot edit @args }
 function wsd { mise -C $env:USERPROFILE dot diff @args }
-function wss { mise -C $env:USERPROFILE dot status @args }
+# wss: objects to filter (wss | Where-Object state -eq differs), from the JSON wsa reads; any
+# argument goes to mise's own text output instead (wss --json). PARITY: config.nu's wss
+# returns the same columns.
+function wss {
+    if ($args.Count -gt 0) { mise -C $env:USERPROFILE dot status @args; return }
+    (mise -C $env:USERPROFILE dot status --json | ConvertFrom-Json).files | Select-Object target, mode, state
+}
 function wsr { mise -C $env:USERPROFILE dot add --changed @args }
 # wsa — apply, but SURFACE drift first. Every [dotfiles] entry is `copy` or
 # `template`, so a live edit under $HOME doesn't reach this checkout on its
@@ -306,7 +312,7 @@ command pins `mise -C $env:USERPROFILE`):
        (a DIRECTORY entry -- ~/.claude/agents, ~/.claude/commands,
        ~/.claude/hooks, ~/.claude/skills -- needs `mise dot add <that
        directory>` instead; --changed skips directory copies)
-  wss  mise dot status          list managed files and their state
+  wss  mise dot status          managed files as objects (wss | ? state -eq differs)
   wsu  git pull + mise bootstrap --only dotfiles,tools
        (every CLI tool -- gh, opencode, omp, nu, ... -- is a mise tool,
        so wsu updates it; .\bootstrap.ps1 updates mise and installs
@@ -341,6 +347,7 @@ Push tracked changes upstream:
   cd ~\.config\mise; git add -A; git commit -m '...'; git push
 
 Per-machine overrides (untracked):
+  %APPDATA%\nushell\autoload\*.nu                               (Nushell)
   Microsoft.PowerShell_profile.local.ps1 next to this profile   (PowerShell)
   ~/.ssh/config.local                                           (ssh)
 '@
@@ -403,12 +410,24 @@ function ssh-copy-id {
 }
 
 # fssh: pick a Host from ~/.ssh/config with fzf, then ssh to it (zsh's and config.nu's fssh).
+# The files its Include lines name are read too (relative to ~/.ssh, as ssh resolves them;
+# the per-machine hosts live in config.local); glob patterns aren't followed. Host patterns
+# (*, ?, !) are left out, and a `Host a b` line gives both names.
 function fssh {
-    $cfg = Join-Path $HOME '.ssh\config'
+    $dir = Join-Path $HOME '.ssh'
+    $cfg = Join-Path $dir 'config'
     if (-not (Test-Path $cfg)) { return }
-    $h = Select-String -Path $cfg -Pattern '^Host\s+(\S+)' |
-        ForEach-Object { $_.Matches[0].Groups[1].Value } |
-        Where-Object { $_ -notmatch '[*?]' } | fzf
+    $files = @($cfg)
+    foreach ($m in @(Select-String -Path $cfg -Pattern '^\s*Include\s+(.+?)\s*$')) {
+        foreach ($f in ($m.Matches[0].Groups[1].Value -split '\s+')) {
+            $p = $f -replace '^~', $HOME
+            if (-not [IO.Path]::IsPathRooted($p)) { $p = Join-Path $dir $p }
+            if (Test-Path $p) { $files += $p }
+        }
+    }
+    $h = Select-String -Path $files -Pattern '^\s*Host\s+(.+?)\s*$' |
+        ForEach-Object { $_.Matches[0].Groups[1].Value -split '\s+' } |
+        Where-Object { $_ -notmatch '[*?!]' } | Select-Object -Unique | fzf
     if ($h) { ssh $h }
 }
 

@@ -874,6 +874,7 @@ Push tracked changes upstream:
 Per-machine overrides (untracked):
   ~/.zshrc.local                                               (Linux)
   ...PowerShell\Microsoft.PowerShell_profile.local.ps1         (Windows)
+  %APPDATA%\nushell\autoload\*.nu                              (Windows, Nushell)
 EOF
 }
 
@@ -893,10 +894,21 @@ fcd() {
   [[ -n "$dir" ]] && cd "$dir"
 }
 
-# fzf ssh — pick from ~/.ssh/config hosts
+# fzf ssh — pick from ~/.ssh/config's hosts, and from the files its Include lines name
+# (relative to ~/.ssh, as ssh resolves them; the per-machine hosts live in config.local;
+# glob patterns aren't followed). Host patterns (*, ?, !) are left out, and a `Host a b`
+# line gives both names. PARITY: identical body in bashrc.tera.
 fssh() {
-  local host
-  host=$(grep -E "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}' | fzf)
+  local host f files=("$HOME/.ssh/config")
+  for f in $(awk '/^[[:space:]]*Include[[:space:]]/ { $1 = ""; print }' "$HOME/.ssh/config" 2>/dev/null); do
+    case $f in
+      '~'*) f=$HOME${f#\~} ;;
+      /*) ;;
+      *) f=$HOME/.ssh/$f ;;
+    esac
+    [[ -r $f ]] && files+=("$f")
+  done
+  host=$(cat "${files[@]}" 2>/dev/null | awk '/^[[:space:]]*Host[[:space:]]/ { for (i = 2; i <= NF; i++) if ($i !~ /[*?!]/) print $i }' | awk '!seen[$0]++' | fzf)
   [[ -n "$host" ]] && ssh "$host"
 }
 
