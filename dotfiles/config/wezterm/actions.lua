@@ -5,6 +5,7 @@
 local wezterm = require 'wezterm'
 local wsl = require 'wsl'
 local domains = require 'domains'
+local sshconfig = require 'sshconfig'
 local status = require 'status'
 
 local act = wezterm.action
@@ -117,6 +118,194 @@ M.reconnect = wezterm.action_callback(function(window, pane)
     return
   end
   window:perform_action(act.SpawnCommandInNewTab({ args = s.argv, domain = here }), pane)
+end)
+
+-- Ctrl+Alt+S: the SSH hosts in ~/.ssh/config.local (sshconfig.lua), the launcher's SSH
+-- entries. Pick one to connect to it, edit it or delete it, or add one. Adding and editing
+-- ask in turn for its name, its address ([user@]host[:port]) and a note (the comment under
+-- its Host line), each prefilled; a bad answer is asked for again with the reason, and Esc
+-- at any point saves nothing. Its block's other settings stay. A save reloads the config,
+-- so the launcher lists the change at once; Warp's and Windows Terminal's SSH entries
+-- follow at the next bootstrap.ps1.
+
+local function trim(s)
+  return s:match('^%s*(.-)%s*$')
+end
+
+-- Asks each step's question in turn (PromptInputLine), then calls done(window, pane, got)
+-- with the answers. A step's check turns the line typed into its answer, or returns nil
+-- and why not, which asks again with the line kept. Esc at any step ends it all.
+local function ask(window, pane, steps, done, got, why, typed)
+  got = got or {}
+  local step = steps[#got + 1]
+  if not step then
+    return done(window, pane, got)
+  end
+  local description = step.ask(got)
+  window:perform_action(
+    act.PromptInputLine({
+      description = why and (why .. '. ' .. description) or description,
+      initial_value = typed or step.initial or '',
+      action = wezterm.action_callback(function(win, p, line)
+        if not line then
+          return
+        end
+        local value, reason = step.check(line)
+        if value == nil then
+          return ask(win, p, steps, done, got, reason, line)
+        end
+        local more = {}
+        for i, v in ipairs(got) do
+          more[i] = v
+        end
+        table.insert(more, value)
+        ask(win, p, steps, done, more)
+      end),
+    }),
+    pane
+  )
+end
+
+-- Writes the hosts file and reloads, so the launcher lists the change; the reload's notice
+-- says what changed.
+local function save_hosts(window, pane, old, new, notice)
+  if new == old then
+    flash(window, pane, 'No change')
+    return
+  end
+  local ok, err = sshconfig.write(new)
+  if not ok then
+    flash(window, pane, 'Could not write ~/.ssh/config.local: ' .. tostring(err), 'warn')
+    return
+  end
+  status.after_reload(notice)
+  window:perform_action(act.ReloadConfiguration, pane)
+end
+
+-- Adds a host, or edits h.
+local function edit_host(window, pane, h)
+  local old = h and h.name
+  local shared = h and #h.shared > 0 and (' (its block is also ' .. table.concat(h.shared, ', ') .. "'s)") or ''
+  ask(window, pane, {
+    {
+      ask = function()
+        return (old and ('Edit ' .. old) or 'New host') .. ': its name, typed after ssh and listed in the launcher as SSH: <name>'
+      end,
+      initial = old,
+      check = function(line)
+        local name = trim(line)
+        local why = sshconfig.check_name(sshconfig.read(), name, old)
+        if why then
+          return nil, why
+        end
+        return name
+      end,
+    },
+    {
+      ask = function(got)
+        return got[1] .. ': its address, [user@]host[:port], such as me@build01.corp or 10.0.0.9:2222' .. shared
+      end,
+      initial = h and sshconfig.address(h),
+      check = sshconfig.parse_address,
+    },
+    {
+      ask = function(got)
+        return got[1] .. ': a note, shown beside it in this list (optional)'
+      end,
+      initial = h and h.note,
+      check = trim,
+    },
+  }, function(win, p, got)
+    local a = got[2]
+    local fields = { name = got[1], hostname = a.hostname, user = a.user, port = a.port, note = got[3] }
+    local text = sshconfig.read()
+    local new, err
+    if old then
+      new, err = sshconfig.change(text, old, fields)
+    else
+      new, err = sshconfig.add(text, fields)
+    end
+    if not new then
+      flash(win, p, err, 'warn')
+      return
+    end
+    save_hosts(win, p, text, new, (old and 'Saved ' or 'Added ') .. got[1] .. ': ' .. sshconfig.address(fields))
+  end)
+end
+
+local function delete_host(window, pane, h)
+  local also = #h.shared > 0 and (' (' .. table.concat(h.shared, ', ') .. ' keeps its settings)') or ''
+  window:perform_action(
+    act.InputSelector({
+      title = 'Delete ' .. h.name .. ' from ~/.ssh/config.local?' .. also,
+      choices = { { id = 'no', label = 'No, keep it' }, { id = 'yes', label = 'Yes, delete ' .. h.name } },
+      action = wezterm.action_callback(function(win, p, id)
+        if id ~= 'yes' then
+          return
+        end
+        local text = sshconfig.read()
+        local new, err = sshconfig.remove(text, h.name)
+        if not new then
+          flash(win, p, err, 'warn')
+          return
+        end
+        save_hosts(win, p, text, new, 'Deleted ' .. h.name)
+      end),
+    }),
+    pane
+  )
+end
+
+local function host_menu(window, pane, h)
+  window:perform_action(
+    act.InputSelector({
+      title = h.name .. ': ' .. sshconfig.address(h),
+      choices = {
+        { id = 'connect', label = 'Connect, in a new tab' },
+        { id = 'edit', label = 'Edit its name, address or note' },
+        { id = 'delete', label = 'Delete it' },
+      },
+      action = wezterm.action_callback(function(win, p, id)
+        if id == 'connect' then
+          win:perform_action(act.SpawnCommandInNewTab({ args = domains.ssh_launch(h.name), domain = here }), p)
+        elseif id == 'edit' then
+          edit_host(win, p, h)
+        elseif id == 'delete' then
+          delete_host(win, p, h)
+        end
+      end),
+    }),
+    pane
+  )
+end
+
+M.ssh_hosts = wezterm.action_callback(function(window, pane)
+  local hosts = sshconfig.hosts(sshconfig.read())
+  local width = 0
+  for _, h in ipairs(hosts) do
+    width = math.max(width, #h.name)
+  end
+  local choices = { { id = 'add', label = '+ Add a host' } }
+  for i, h in ipairs(hosts) do
+    local note = h.note and h.note ~= '' and ('  · ' .. h.note) or ''
+    table.insert(choices, { id = tostring(i), label = h.name .. string.rep(' ', width - #h.name + 2) .. sshconfig.address(h) .. note })
+  end
+  window:perform_action(
+    act.InputSelector({
+      title = 'SSH hosts (~/.ssh/config.local)',
+      fuzzy = true,
+      fuzzy_description = 'A host to connect to, edit or delete, or Add: ',
+      choices = choices,
+      action = wezterm.action_callback(function(win, p, id)
+        if id == 'add' then
+          edit_host(win, p)
+        elseif id then
+          host_menu(win, p, hosts[tonumber(id)])
+        end
+      end),
+    }),
+    pane
+  )
 end)
 
 -- Ctrl+Shift+O: the pane's scrollback in helix, in a new tab on the same machine (a temp
