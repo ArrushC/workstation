@@ -17,6 +17,7 @@ type World = {
   branchBefore?: string
   branchAfter?: string
   files?: string[]
+  noPr?: boolean
 }
 
 const pass = (name: string, started_at = '2026-10-16T13:16:42Z'): Check => ({
@@ -59,7 +60,9 @@ function world(on: On, w: World = {}) {
       ...w.pr,
     }
     if (line === 'git status --porcelain --untracked-files=no') return ok(w.dirty ?? '')
-    if (line.startsWith('gh pr view')) return ok(pr)
+    if (line.startsWith('gh pr view')) {
+      return w.noPr ? ok('', 1, 'no pull requests found for branch "main"') : ok(pr)
+    }
     if (line === `gh api repos/{owner}/{repo}/commits/${HEAD}/check-runs?per_page=100`) {
       const runs = w.checks ?? ['invariants', 'templates', 'powershell', 'windows-http'].map(n => pass(n))
       return ok({ total_count: runs.length, check_runs: runs })
@@ -113,6 +116,13 @@ describe('/ship', () => {
     expect(merged(calls)).toEqual([])
     expect(calls).toEqual([])
     expect(text).toContain('only when you type it')
+  })
+
+  test('no PR for the branch: says how to name one', async ($, on) => {
+    const calls = world(on, { noPr: true })
+    const { text } = await ship($)
+    expect(merged(calls)).toEqual([])
+    expect(text).toBe("/ship\n✗ not merged: no open PR for main; switch to a PR's branch or use /ship <number>")
   })
 
   test('a tree with uncommitted changes: nothing merged', async ($, on) => {
