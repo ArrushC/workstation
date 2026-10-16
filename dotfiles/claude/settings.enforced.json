@@ -54,9 +54,6 @@
     "github@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "workstation-lsp@skills-dir": true,
-    "workstation-sync@skills-dir": true,
-    "workstation-ship@skills-dir": true,
-    "workstation-lint-fold@skills-dir": true,
     "clangd-lsp@claude-plugins-official": false
   }
 }

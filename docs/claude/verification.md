@@ -242,18 +242,20 @@ and plans are in git history before this section). Re-check one before relying o
 
 ## Claude Code mods
 
-- Tests: `claude plugin test dotfiles/claude/skills/<mod>`; `claude plugin validate --strict` lists
+- Tests: `claude plugin test .claude/skills/<mod>`; `claude plugin validate --strict` lists
   what a mod hooks and calls. Lint runs both on a copy (`check_claude_mods`).
 - Types: the API's declarations are written beside a mod only when an interactive session loads it
   (`--plugin-dir`), as `.claude-plugin/types/` plus a `tsconfig.json` (git-ignored here); then
   `tsc -p <mod>`. Without them, type-check with the tsconfig in the header of the
   `plugin-authoring` skill's `types/claude-code.d.ts`, kept outside the mod folder.
-- Headless: `claude -p "/ship" --plugin-dir dotfiles/claude/skills/workstation-ship` must refuse
+- Headless: `claude -p "/ship"` in the checkout (or with `--plugin-dir .claude/skills/workstation-ship`) must refuse
   (origin `sdk`). Lint-fold end to end: `claude -p "<run bash scripts/check-invariants.sh and
   repeat the tool result verbatim>" --model haiku --plugin-dir …/workstation-lint-fold
   "--allowedTools=Bash(bash scripts/check-invariants.sh)"` (the `=` keeps `--allowedTools` from
   swallowing the prompt); the session's JSONL keeps the whole run in `toolUseResult.stdout`.
 - The band: `COLORTERM=truecolor TERM=xterm-256color timeout 20 script -qfc "stty cols 200 rows 50;
   claude --plugin-dir …/workstation-sync" <log>`, then strip the escapes and look for `workstation `.
-- A skills-dir copy loads without an `enabledPlugins` entry (`CLAUDE_CONFIG_DIR=<tmp>` with the mod
-  under `<tmp>/skills/`, then `claude plugin list`); the enforced entry re-enables one a host disabled.
+- Project scope: a repo's `.claude/skills/<mod>` loads as `Scope: project` with no `enabledPlugins`
+  entry, but only in a trusted workspace. To check in a scratch repo, give a throwaway
+  `CLAUDE_CONFIG_DIR` a `.claude.json` of `{"projects":{"<repo>":{"hasTrustDialogAccepted":true}}}`,
+  then `claude plugin list` there.

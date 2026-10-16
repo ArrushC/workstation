@@ -28,5 +28,5 @@ mise.local.lock
 
 # What Claude Code writes beside a mod it loads with --plugin-dir (its API's types, and a
 # tsconfig.json that extends them); generated per build, never committed
-dotfiles/claude/skills/*/tsconfig.json
-dotfiles/claude/skills/*/.claude-plugin/types/
+.claude/skills/*/tsconfig.json
+.claude/skills/*/.claude-plugin/types/

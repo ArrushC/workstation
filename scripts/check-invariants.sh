@@ -897,18 +897,27 @@ check_lsp_plugin() {
   rm -rf "$tmp"
 }
 
-# Claude Code mods: plugins of function hooks under dotfiles/claude/skills (a hooks/hooks.json
-# beside .claude-plugin/plugin.json), loaded from ~/.claude/skills as <name>@skills-dir. A
-# module that fails to load, or a hook that throws, is skipped without a word in a session
-# that isn't hot-reloading it, so each mod is held here: its manifest names its folder, every
-# module hooks.json lists exists, it has tests, settings.enforced.json enables it, and where
+# Claude Code mods: plugins of function hooks (a hooks/hooks.json beside
+# .claude-plugin/plugin.json) in this repo's .claude/skills, which Claude Code loads as
+# project-scope <name>@skills-dir plugins in a session in this checkout (once the folder is
+# trusted) and nowhere else. They stay project-level: none under dotfiles/claude/skills (the
+# ~/.claude/skills copy would load them in every session) and none named in
+# settings.enforced.json. A module that fails to load, or a hook that throws, is skipped
+# without a word in a session that isn't hot-reloading it, so each mod is held here: its
+# manifest names its folder, every module hooks.json lists exists, it has tests, and where
 # claude is installed it passes `claude plugin validate --strict` and `claude plugin test`
 # (each run on a copy, so neither can write into the checkout). CI has no claude.
 check_claude_mods() {
-  hdr "Claude Code mods (dotfiles/claude/skills/*/hooks)"
+  hdr "Claude Code mods (.claude/skills/*/hooks, project scope)"
   local hooks dir name tmp n=0 module
-  local enforced=dotfiles/claude/settings.enforced.json
   for hooks in dotfiles/claude/skills/*/hooks/hooks.json; do
+    [ -f "$hooks" ] && bad "${hooks%/hooks/hooks.json} is a mod under dotfiles/claude/skills: it would load in every session; mods live in .claude/skills"
+  done
+  if jq -e '.enabledPlugins // {} | keys[] | select(startswith("workstation-") and . != "workstation-lsp@skills-dir")' \
+    dotfiles/claude/settings.enforced.json >/dev/null 2>&1; then
+    bad "dotfiles/claude/settings.enforced.json names a workstation mod: project-scope mods load without it"
+  fi
+  for hooks in .claude/skills/*/hooks/hooks.json; do
     [ -f "$hooks" ] || continue
     dir=${hooks%/hooks/hooks.json}
     n=$((n + 1))
@@ -921,8 +930,6 @@ check_claude_mods() {
       [ -f "$dir/hooks/$module" ] || bad "$hooks lists $module, which $dir/hooks/ doesn't have"
     done < <(jq -r '.modules[]?' "$hooks")
     compgen -G "$dir/tests/*.test.ts*" >/dev/null || bad "$dir has no tests/*.test.ts"
-    [ "$(jq -r --arg k "$name@skills-dir" '.enabledPlugins[$k] // empty' "$enforced")" = true ] ||
-      bad "$enforced doesn't enable $name@skills-dir"
     if command -v claude >/dev/null 2>&1; then
       tmp=$(mktemp -d)
       cp -r "$dir/." "$tmp/"
@@ -936,8 +943,9 @@ check_claude_mods() {
       rm -rf "$tmp" "$tmp.log"
     fi
   done
+  [ "$n" -gt 0 ] || bad "no mods under .claude/skills (workstation-sync, workstation-ship, workstation-lint-fold)"
   command -v claude >/dev/null 2>&1 || note "claude not installed — skipped the mods' validate and tests (CI has no claude)"
-  [ "$fails" -eq 0 ] && ok "$n mod(s): manifests, modules and tests present, enabled in settings.enforced.json$(command -v claude >/dev/null 2>&1 && echo ', validated --strict, tests pass')"
+  [ "$fails" -eq 0 ] && ok "$n project-scope mod(s) in .claude/skills, none under dotfiles or in settings.enforced.json: manifests, modules and tests present$(command -v claude >/dev/null 2>&1 && echo ', validated --strict, tests pass')"
 }
 
 # Claude Code's theme, keybindings and plugin list (dotfiles/claude). Claude Code ignores

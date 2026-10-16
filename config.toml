@@ -142,7 +142,7 @@ nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (W
 # a live addition with `mise dot add <dir>` (see CLAUDE.md).
 "~/.claude/agents" = { source = "dotfiles/claude/agents", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 "~/.claude/commands" = { source = "dotfiles/claude/commands", mode = "copy", exclude = [".vendor", ".gitkeep"] }
-"~/.claude/skills" = { source = "dotfiles/claude/skills", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # workstation-lsp/ (.claude-plugin/plugin.json, .lsp.json, SKILL.md) and the mods workstation-sync/, workstation-ship/, workstation-lint-fold/ (hooks/, tests/); copy so unmanaged skill dirs (e.g. computer-use, orca-cli, orchestration) survive
+"~/.claude/skills" = { source = "dotfiles/claude/skills", mode = "copy", exclude = [".vendor", ".gitkeep"] }   # workstation-lsp/ (.claude-plugin/plugin.json, .lsp.json, SKILL.md); copy so unmanaged skill dirs (e.g. computer-use, orca-cli, orchestration) survive
 # Claude Code's theme (selected by settings.enforced.json's "theme") and keybindings. Copy on
 # the directory so a theme made in /theme survives; a live keybindings edit goes back with wsr.
 "~/.claude/themes" = { source = "dotfiles/claude/themes", mode = "copy", exclude = [".vendor", ".gitkeep"] }
