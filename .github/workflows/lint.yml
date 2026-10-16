@@ -157,3 +157,5 @@ jobs:
         run: bash scripts/check-templates.sh
       - name: Test nu-init (generated Nushell init files)
         run: bash scripts/test-nu-init.sh
+      - name: Test config.nu (completion, ws* commands, fssh, hooks; zsh and bash fssh)
+        run: bash scripts/test-config-nu.sh

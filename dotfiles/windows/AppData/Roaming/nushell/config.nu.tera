@@ -47,6 +47,14 @@ $env.config.cursor_shape.emacs = "blink_line"
 $env.config.rm.always_trash = true
 # Fuzzy, case-insensitive matching in the completion menu (gco -> git checkout).
 $env.config.completions.algorithm = "fuzzy"
+# History in SQLite, not the plaintext file: every tab sees the others' commands as they
+# run (the plaintext file is read once, at startup), and `history --long` keeps each
+# command's cwd, duration and exit code. atuin owns Ctrl-R either way; this is Up/Down and
+# `history`. The store starts empty: the plaintext history is in atuin (nu-init imported it).
+$env.config.history.file_format = "sqlite"
+# A table's datetimes (ls's modified column) as `ll` prints them (--time-style=long-iso),
+# not "2 hours ago".
+$env.config.datetime_format.table = "%Y-%m-%d %H:%M"
 
 # Tab opens an IDE-style menu at the cursor, with carapace's description of each
 # candidate beside it (zsh's fzf-tab shows the same), in Catppuccin Mocha with the
@@ -179,7 +187,37 @@ if ($env.TERM_PROGRAM? == "WezTerm") {
     )
 }
 
-# --- workstation aliases (mise dotfiles; mirror the PowerShell profile) -----
+# --- Transient prompt -------------------------------------------------------
+# Once a line is entered, its prompt shrinks to the clock and the arrow, so the scrollback
+# keeps when each command started and whether the one before it failed, not the directory
+# and duration. Drawn here in starship.toml's [time] and [character] forms rather than
+# with `starship module` (two more process starts per Enter on Windows). Nushell-only:
+# zsh has no transient prompt.
+$env.TRANSIENT_PROMPT_COMMAND = {||
+    let arrow = (if ($env.LAST_EXIT_CODE? | default 0) == 0 { ansi green_bold } else { ansi red_bold })
+    $"(ansi white_dimmed)[(date now | format date '%H:%M:%S')](ansi reset) ($arrow)❯(ansi reset) "
+}
+$env.TRANSIENT_PROMPT_INDICATOR = ""
+$env.TRANSIENT_PROMPT_COMMAND_RIGHT = ""
+
+# --- Command not found ------------------------------------------------------
+# A missing command asks mise whether it installs it (one mise start, on that error only).
+# A tool mise installed but this session's PATH lacks wants a new tab or `mise reshim`; a
+# mise older than config.toml's min_version refuses this config and every shim with it
+# (README: a mise version bump reaches Windows through wsu's pull; re-run bootstrap.ps1).
+$env.config.hooks.command_not_found = {|cmd|
+    if (which mise | is-empty) { return null }
+    let r = (do { ^mise -C $env.USERPROFILE which $cmd } | complete)
+    if $r.exit_code == 0 {
+        $"mise installs ($cmd) at ($r.stdout | str trim), but it isn't on this session's PATH: open a new tab, or run `mise reshim`."
+    } else if ($r.stderr | str contains "min_version") {
+        "mise is older than config.toml's min_version, so it refuses this config and its shims: re-run .\\bootstrap.ps1 from Windows PowerShell."
+    } else {
+        null
+    }
+}
+
+# --- workstation commands (mise dotfiles; mirror the PowerShell profile) ----
 # Every ws* command pins `-C $env.USERPROFILE`: mise resolves its config root
 # by walking UP from the current directory, and this checkout IS
 # %USERPROFILE%\.config\mise -- so an unpinned ws* run from any directory
@@ -188,9 +226,23 @@ if ($env.TERM_PROGRAM? == "WezTerm") {
 # WRONG checkout instead of erroring. Confirmed live on this same class of
 # bug on Linux: an unpinned `wsa` run from a Windows drive mount rewrote
 # ~/.zshrc/~/.bashrc from a stale clone and made seven dotfiles executable.
-alias wse = mise -C $env.USERPROFILE dot edit
-alias wsd = mise -C $env.USERPROFILE dot diff
-alias wss = mise -C $env.USERPROFILE dot status
+# wse, wsd and wss are defs (wsr stays an alias): Tab on wse and wsd offers the tracked
+# targets, and wss returns a table to filter (`wss | where state == differs`); any argument
+# to wss goes to mise's own text output instead (`wss --json`). ws-targets and wss read the
+# JSON wsa reads (one mise start). --wrapped hands mise's flags through (wse --apply).
+# PARITY: the PowerShell wss returns the same columns as objects.
+def ws-targets [] {
+    try { mise -C $env.USERPROFILE dot status --json | from json | get files.target } catch { [] }
+}
+def --wrapped wse [...args: string@ws-targets] { mise -C $env.USERPROFILE dot edit ...$args }
+def --wrapped wsd [...args: string@ws-targets] { mise -C $env.USERPROFILE dot diff ...$args }
+def --wrapped wss [...args: string] {
+    if ($args | is-empty) {
+        mise -C $env.USERPROFILE dot status --json | from json | get files | select target mode state
+    } else {
+        mise -C $env.USERPROFILE dot status ...$args
+    }
+}
 alias wsr = mise -C $env.USERPROFILE dot add --changed
 # wsa is a def (below) — it checks for un-recorded drift before applying,
 # since copy mode has no built-in prompt. Every [dotfiles] entry is `copy` or
@@ -249,9 +301,9 @@ def wsu [...args] {
 }
 # wsh -- workstation cheatsheet, the Windows twin of the bash/zsh wsh (and
 # of the PowerShell profile's). Same ASCII text as the PowerShell one apart
-# from the -C pin's spelling and the override line's wording. Only the ~/.claude/* directory entries load on
+# from the -C pin's spelling, the wss filter's spelling and the override line's wording. Only the ~/.claude/* directory entries load on
 # Windows (config.toml); the Linux-only ones (zellij, zsh completions,
-# gdb, ~/.local/bin) don't. Nushell has no per-machine override file.
+# gdb, ~/.local/bin) don't.
 def wsh [] {
     # str trim: drop the newlines just inside the raw string's delimiters, so
     # the output matches the PowerShell here-string (no leading blank line).
@@ -266,7 +318,7 @@ command pins `mise -C $env.USERPROFILE`):
        (a DIRECTORY entry -- ~/.claude/agents, ~/.claude/commands,
        ~/.claude/hooks, ~/.claude/skills -- needs `mise dot add <that
        directory>` instead; --changed skips directory copies)
-  wss  mise dot status          list managed files and their state
+  wss  mise dot status          managed files as a table (wss | where state == differs)
   wsu  git pull + mise bootstrap --only dotfiles,tools
        (every CLI tool -- gh, opencode, omp, nu, ... -- is a mise tool,
        so wsu updates it; .\bootstrap.ps1 updates mise and installs
@@ -301,6 +353,7 @@ Push tracked changes upstream:
   cd ~\.config\mise; git add -A; git commit -m '...'; git push
 
 Per-machine overrides (untracked):
+  %APPDATA%\nushell\autoload\*.nu                                 (Nushell)
   Microsoft.PowerShell_profile.local.ps1 next to the PS profile   (PowerShell)
   ~/.ssh/config.local                                             (ssh)
 '# | str trim)
@@ -384,11 +437,24 @@ def ssh-copy-id [target: string] {
     open --raw $key | ssh $target "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 }
 
-# fssh — pick a Host from ~/.ssh/config with fzf, then ssh to it (zsh's fssh).
+# fssh — pick a Host from ~/.ssh/config with fzf, then ssh to it (zsh's fssh). The files its
+# Include lines name are read too (relative to ~/.ssh, as ssh resolves them; the per-machine
+# hosts live in config.local); glob patterns aren't followed. Host patterns (*, ?, !) are
+# left out, and a `Host a b` line gives both names.
 def fssh [] {
-    let cfg = ($env.USERPROFILE | path join ".ssh" "config")
+    let dir = ($env.USERPROFILE | path join ".ssh")
+    let cfg = ($dir | path join "config")
     if not ($cfg | path exists) { return }
-    let hosts = (open --raw $cfg | decode utf-8 | lines | parse --regex '^Host\s+(?<h>\S+)' | get h | where {|h| $h !~ '[*?]' })
+    let main = (open --raw $cfg | decode utf-8)
+    let included = ($main | lines | parse --regex '^\s*Include\s+(?<f>.+?)\s*$' | get f
+        | each {|l| $l | split row --regex '\s+' } | flatten
+        | each {|f| if ($f =~ '^(~|/|[A-Za-z]:)') { $f | path expand } else { $dir | path join $f } }
+        | where {|p| $p | path exists }
+        | each {|p| open --raw $p | decode utf-8 })
+    let hosts = ([$main] | append $included | str join "\n" | lines
+        | parse --regex '^\s*Host\s+(?<h>.+?)\s*$' | get h
+        | each {|l| $l | split row --regex '\s+' } | flatten
+        | where {|h| $h !~ '[*?!]' } | uniq)
     # Esc in fzf exits non-zero, which Nushell (pipefail since 0.111) would raise.
     let host = (try { $hosts | str join "\n" | fzf | str trim } catch { "" })
     if ($host | is-not-empty) { ssh $host }
@@ -423,16 +489,18 @@ let workstation_bootstrap_flags = [
     { value: "-Yes", description: "skip the reinstall confirmation prompt" }
 ]
 
-# carapace's own completer (its `_carapace nushell` snippet): an alias completes as
-# its first word (gs -> git), as carapace's own snippet does, and Windows' .exe suffix is dropped.
+# carapace's own completer (its `_carapace nushell` snippet), except that an alias completes
+# as its whole expansion (gco ma -> git checkout ma, so Tab offers branches) where carapace's
+# snippet keeps the first word only. Windows' .exe suffix is dropped from the command.
 let carapace_completer = {|spans|
     if (which carapace | is-empty) { return null }
     let expanded_alias = (scope aliases | where name == $spans.0 | $in.0?.expansion?)
-    let spans = (if $expanded_alias != null {
-        $spans | skip 1 | prepend ($expanded_alias | split row " " | take 1 | str replace --regex '\.exe$' '')
+    let words = (if $expanded_alias != null {
+        $expanded_alias | split row --regex '\s+' | where {|w| $w != "" }
     } else {
-        $spans | skip 1 | prepend ($spans.0 | str replace --regex '\.exe$' '')
+        [$spans.0]
     })
+    let spans = ($spans | skip 1 | prepend ($words | skip 1) | prepend ($words.0 | str replace --regex '\.exe$' ''))
     if ($spans | length) == 1 { return null }
     with-env { CARAPACE_SHELL: "nushell" } { carapace $spans.0 nushell ...$spans | from json }
 }

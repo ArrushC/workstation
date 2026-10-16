@@ -127,10 +127,10 @@ What `bootstrap.ps1` does:
 10. Prompt for an SSH key, then print [docs/windows/application_list.md](docs/windows/application_list.md) as a hand-install checklist.
 
 Restart the shell afterwards so the new profile loads. Nushell is the default local shell (in Windows Terminal and Zed, both through mise's shim, `%LOCALAPPDATA%\mise\shims\nu.exe`); PowerShell stays for .NET/COM/registry tasks. Zed's SSH remote terminals use the remote's login shell instead: Zed sends its settings to the remote, so the Nushell setting sits under its `"windows"` key. Nushell's command-line colours match zsh's on the Linux hosts (commands green, unknown commands red, quoted strings yellow, flags peach, paths underlined): `autoload/syntax-highlight.nu` overrides the vendored Catppuccin theme's, and lint keeps the two in step. One gap: Nushell gives every argument of an external command (`ssh`, `git`) one colour, so its flags and quoted strings stay plain where zsh colours them. atuin's own background jobs don't light starship's jobs gear (`scripts/nu-init.nu` labels them). Both shells carry the zsh toolbelt (`wsh` lists it):
-- `z`/`zi` (zoxide), `l`/`la`/`ll`/`lt`/`lta`/`ltl` (eza), `y` (yazi), `fssh` (pick an SSH host) and `hide`
-- Ctrl-R history search (atuin, local only; each shell's earlier history is imported once), Up/Down for history starting with what's typed, Alt-. for the previous line's last word
+- `z`/`zi` (zoxide), `l`/`la`/`ll`/`lt`/`lta`/`ltl` (eza), `y` (yazi), `fssh` (pick an SSH host from `~/.ssh/config` and the files it `Include`s, so `config.local`'s too; the same on Linux) and `hide`
+- Ctrl-R history search (atuin, local only; each shell's earlier history is imported once), Up/Down for history starting with what's typed (in Nushell that includes what other tabs ran: its own history is SQLite), Alt-. for the previous line's last word
 - Ctrl-T to insert a file and Alt-C to cd into a directory (fzf, with bat/eza previews)
-- Nushell: Tab opens a completion menu with descriptions for about 1,000 CLIs (carapace, after `bootstrap.ps1`'s own flags); Ctrl-O edits the command line in Helix
+- Nushell: Tab opens a completion menu with descriptions for about 1,000 CLIs (carapace, after `bootstrap.ps1`'s own flags); an alias completes as its expansion, so `gco <Tab>` offers branches, and `wse`/`wsd` complete the tracked targets; Ctrl-O edits the command line in Helix; once a line is entered its prompt shrinks to the clock and the arrow; a command that isn't found but mise installs is named, with the way out; `ls` shows timestamps as `ll` does
 - Speed: `nu-init` writes both shells' tool init after every tools phase, and mise's prompt hook runs only when a config file, an installed tool or a `MISE_*` variable changes (`WORKSTATION_MISE_GATE=0` turns that check off), so a prompt costs milliseconds rather than a `mise.exe` start
 - PowerShell: `gc`/`gp`/`gl` run git (PowerShell's built-in aliases are removed first), and the prompt shows a failed command's exit code
 
@@ -238,7 +238,7 @@ The same workflow commands exist in bash and zsh on Linux and in Nushell and Pow
 | `wsd` | `mise dot diff`: preview pending changes to `$HOME` |
 | `wsa` | Apply tracked state to `$HOME`. First checks `mise dot status` for an un-recorded live edit (`differs`); if found, prints the diff and asks (refuses when non-interactive). The raw `mise bootstrap --only dotfiles --yes` skips that check and overwrites silently. |
 | `wsr` | `mise dot add --changed`: record an edited copy-mode file back to its source |
-| `wss` | `mise dot status`: every managed file and its state |
+| `wss` | `mise dot status`: every managed file and its state. In Nushell and PowerShell it is a table of `target`, `mode` and `state` to filter (`wss \| where state == differs`); an argument goes to mise's text output instead (`wss --json`) |
 | `wsu` | `mise run update`: `git pull --ff-only --prune` (dropping the `origin/*` branches GitHub no longer has, such as a merged PR's), then `mise bootstrap`, which installs the tools too (system steps per the saved `sudo`) |
 | `wsh` | Print the workstation cheatsheet (the `ws*` commands and the shell shortcuts) |
 
