@@ -1,0 +1,6 @@
+{
+  "name": "workstation-ship",
+  "version": "0.1.0",
+  "description": "/ship: squash-merges the branch's PR once its checks passed on its head after the base last moved and GitHub calls it mergeable, then pulls the base. Merges only when you type it.",
+  "author": { "name": "Arrush Chaturvedi" }
+}

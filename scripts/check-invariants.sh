@@ -897,6 +897,57 @@ check_lsp_plugin() {
   rm -rf "$tmp"
 }
 
+# Claude Code mods: plugins of function hooks (a hooks/hooks.json beside
+# .claude-plugin/plugin.json) in this repo's .claude/skills, which Claude Code loads as
+# project-scope <name>@skills-dir plugins in a session in this checkout (once the folder is
+# trusted) and nowhere else. They stay project-level: none under dotfiles/claude/skills (the
+# ~/.claude/skills copy would load them in every session) and none named in
+# settings.enforced.json. A module that fails to load, or a hook that throws, is skipped
+# without a word in a session that isn't hot-reloading it, so each mod is held here: its
+# manifest names its folder, every module hooks.json lists exists, it has tests, and where
+# claude is installed it passes `claude plugin validate --strict` and `claude plugin test`
+# (each run on a copy, so neither can write into the checkout). CI has no claude.
+check_claude_mods() {
+  hdr "Claude Code mods (.claude/skills/*/hooks, project scope)"
+  local hooks dir name tmp n=0 module
+  for hooks in dotfiles/claude/skills/*/hooks/hooks.json; do
+    [ -f "$hooks" ] && bad "${hooks%/hooks/hooks.json} is a mod under dotfiles/claude/skills: it would load in every session; mods live in .claude/skills"
+  done
+  if jq -e '.enabledPlugins // {} | keys[] | select(startswith("workstation-") and . != "workstation-lsp@skills-dir")' \
+    dotfiles/claude/settings.enforced.json >/dev/null 2>&1; then
+    bad "dotfiles/claude/settings.enforced.json names a workstation mod: project-scope mods load without it"
+  fi
+  for hooks in .claude/skills/*/hooks/hooks.json; do
+    [ -f "$hooks" ] || continue
+    dir=${hooks%/hooks/hooks.json}
+    n=$((n + 1))
+    name=$(jq -r '.name // empty' "$dir/.claude-plugin/plugin.json" 2>/dev/null)
+    if [ "$name" != "${dir##*/}" ]; then
+      bad "$dir: .claude-plugin/plugin.json's name is '${name}', not its folder's (${dir##*/})"
+      continue
+    fi
+    while IFS= read -r module; do
+      [ -f "$dir/hooks/$module" ] || bad "$hooks lists $module, which $dir/hooks/ doesn't have"
+    done < <(jq -r '.modules[]?' "$hooks")
+    compgen -G "$dir/tests/*.test.ts*" >/dev/null || bad "$dir has no tests/*.test.ts"
+    if command -v claude >/dev/null 2>&1; then
+      tmp=$(mktemp -d)
+      cp -r "$dir/." "$tmp/"
+      if ! claude plugin validate "$tmp" --strict >/dev/null 2>&1; then
+        bad "$name failed claude plugin validate --strict:"
+        claude plugin validate "$tmp" --strict 2>&1 | sed 's/^/       /' | head -20
+      elif ! claude plugin test "$tmp" >"$tmp.log" 2>&1; then
+        bad "$name's tests failed (claude plugin test):"
+        grep -E '^\(fail\)|^ +[0-9]+ (pass|fail)$' "$tmp.log" | sed 's/^/       /' | head -20
+      fi
+      rm -rf "$tmp" "$tmp.log"
+    fi
+  done
+  [ "$n" -gt 0 ] || bad "no mods under .claude/skills (workstation-sync, workstation-ship, workstation-lint-fold)"
+  command -v claude >/dev/null 2>&1 || note "claude not installed — skipped the mods' validate and tests (CI has no claude)"
+  [ "$fails" -eq 0 ] && ok "$n project-scope mod(s) in .claude/skills, none under dotfiles or in settings.enforced.json: manifests, modules and tests present$(command -v claude >/dev/null 2>&1 && echo ', validated --strict, tests pass')"
+}
+
 # Claude Code's theme, keybindings and plugin list (dotfiles/claude). Claude Code ignores
 # an unknown colour token, a bad colour or a bad keybinding without a word, so a typo would
 # just not show: the enforced theme must name a theme file here, a theme must set only the
@@ -2327,7 +2378,7 @@ check_claude_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.
-run_parallel check_lsp_plugin check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
+run_parallel check_lsp_plugin check_claude_mods check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
 echo
 if [ "$fails" -eq 0 ]; then
   printf '%s✓ all invariant checks passed%s\n' "$GREEN" "$RESET"

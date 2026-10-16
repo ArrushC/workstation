@@ -1,0 +1,7 @@
+{
+  "name": "workstation-sync",
+  "version": "0.1.0",
+  "description": "A band above the prompt, in the workstation checkout only: whether this host, its dotfiles and (from WSL) the Windows checkout are at origin/main, and the branch's PR checks.",
+  "author": { "name": "Arrush Chaturvedi" },
+  "types": "./types/index.d.ts"
+}

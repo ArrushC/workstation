@@ -1,0 +1,6 @@
+{
+  "name": "workstation-lint-fold",
+  "version": "0.1.0",
+  "description": "Folds a passing run of the workstation lint (scripts/check-invariants.sh) in a Bash result to one line before Claude reads it; a failing run stays whole.",
+  "author": { "name": "Arrush Chaturvedi" }
+}
