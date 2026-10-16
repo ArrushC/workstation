@@ -198,11 +198,11 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   this config installs; one with an unknown field is refused and `rejected.sha256` written.
 - Source-checked on the nightly (e2a98e1b): a spawn's `cwd = '~'` reaches `wsl.exe --cd ~` as is
   (no Windows-side expansion), and a split or `SpawnTab` inherits the pane's cwd only within its
-  domain; `wsl.exe --cd <missing dir>` prints an error and starts in `/`. A close asks
-  unless every exe name in the pane's process tree is in
-  `skip_close_confirmation_for_processes_named`, which is empty so every close asks (an idle
-  Nushell tab is `nu.exe` (mise's shim), `mise.exe`, `nu.exe`). Every tab and window close
-  path (key, the tab's x, middle-click, the window's close) goes through that check.
+  domain; `wsl.exe --cd <missing dir>` prints an error and starts in `/`. A close with
+  confirm asks unless the `mux-is-process-stateful` hook returns false, or (with no hook) every
+  exe name in the pane's process tree is in `skip_close_confirmation_for_processes_named`. A
+  middle-click on a tab always confirms, and `AlwaysPrompt` runs the same check for the window,
+  so the hook returning false is the only way a middle-click closes without asking.
 - On a host after a full bootstrap: `infocmp wezterm | head -1` exits 0; in a WezTerm WSL tab
   `echo $TERM` prints `wezterm`, `sudo env | grep ^TERM=` prints `xterm-256color`, and `ls` is
   coloured. Nushell and PowerShell tabs show `xterm-256color`. `mise run health`'s wezterm rows
