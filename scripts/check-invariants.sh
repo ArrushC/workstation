@@ -1924,6 +1924,13 @@ check(has(slurp(), 'atc-alpha.corp\nHost delta\n  # the db box\n  HostName delta
 check(performed.action == 'ReloadConfiguration', 'a save does not reload the config, so the launcher would not list it')
 handlers['window-config-reloaded'](w, p)
 check(has(status, 'delta'), 'the reload after a save does not name the host: ' .. tostring(status))
+-- Columns: name, address, note, each padded to its longest, no separator glyph, no
+-- trailing spaces on a row without a note.
+keys['CTRL|ALT+s'].callback(w, p)
+rows = {}
+for _, ch in ipairs(performed.args.choices) do rows[#rows + 1] = ch.label end
+check(rows[4] == 'delta  me@delta.corp:2200  the db box' and rows[2] == 'alpha  atc-alpha.corp' and rows[5] == 'gamma  10.0.0.9',
+  'the host list is not in aligned columns: ' .. table.concat(rows, ' | '))
 -- Esc at any prompt leaves the file as it was.
 local before = slurp()
 keys['CTRL|ALT+s'].callback(w, p)
