@@ -12,23 +12,23 @@ witr = "0.3.4"
 lazydocker = "0.25.2"
 dive = "0.13.1"
 lnav = "0.14.1"
-gopass = "1.17.3"
+gopass = "1.17.4"
 age = "1.3.2"
 gitui = "0.28.1"
-lazygit = "0.65.1"
-jj = "0.45.1"
+lazygit = "0.66.1"
+jj = "0.46.0"
 xh = "0.26.2"
 micro = "2.0.15"
 ctop = "0.7.7"
 k9s = "0.51.0"
-rclone = "1.75.1"
+rclone = "1.75.2"
 croc = "11.5.4"
-hyperfine = "1.20.0"
+hyperfine = "2.0.0"
 sops = "3.13.3"
 systemctl-tui = "0.8.0"
 lazyjournal = "0.8.6"
 cheat = "5.1.0"
-fx = "39.2.0"
+fx = "40.0.0"
 miller = "6.22.0"
 doggo = "1.4.0"
 miniserve = "0.35.0"
@@ -47,7 +47,7 @@ herdr = "0.9.3"
 # and it exposes only `zig`, so the host's cc/gcc/g++/ld are never shadowed (tasks/verify-tools
 # fails on a mise binary named like them). Neovim's parser builds fall back to it
 # (lua/ws/treesitter.lua); in the shell, zcc/zc++ (~/.local/bin) wrap it for glibc 2.28.
-zig = "0.16.0"
+zig = "0.17.0"
 # --- github: (registry entry absent, or its asset needs a glibc newer than EL8's 2.28) ---
 "github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir; its bin/ also holds gdb 17 + gdbserver, first on PATH, so plain `gdb` is this one (GEF via ~/.gdbinit)
 "github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38
@@ -70,8 +70,8 @@ zig = "0.16.0"
 "github:ClementTsang/bottom" = { version = "0.14.9", asset_pattern = "bottom_x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29; binary is `btm`
 "github:bootandy/dust" = { version = "1.2.6", asset_pattern = "dust-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
 "github:chmln/sd" = { version = "1.1.0", asset_pattern = "sd-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
-"github:watchexec/watchexec" = { version = "2.7.4", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
-"github:dathere/qsv" = { version = "23.0.1", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
+"github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
+"github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
 "github:neovim/neovim-releases" = { version = "0.12.5", asset_pattern = "nvim-linux-x86_64.tar.gz" }   # neovim's own glibc-2.17 build (LuaJIT); the main repo's tarball and appimage (aqua) need glibc 2.34; releases trail upstream by days to weeks
 # --- conda: (the project ships only glibc builds newer than EL8's 2.28, or only static musl ones; conda-forge builds against glibc 2.17/2.28) ---
@@ -84,7 +84,7 @@ zig = "0.16.0"
 # /etc/passwd alone: for a directory (SSSD/LDAP) account pueued can't name its
 # socket and exits. The glibc build looks the user up through NSS.
 "conda:pueue" = "4.0.4"
-"conda:tree-sitter-cli" = "0.27.0"   # nvim-treesitter (main) builds parsers with it; upstream's asset needs glibc 2.39 and there is no musl build
+"conda:tree-sitter-cli" = "0.27.1"   # nvim-treesitter (main) builds parsers with it; upstream's asset needs glibc 2.39 and there is no musl build
 # --- http: (no GitHub release, bare assets, or scripts) ---
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
 "http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }

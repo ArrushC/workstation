@@ -210,16 +210,16 @@ conda_deps = [
 ]
 
 [[tools."conda:tree-sitter-cli"]]
-version = "0.27.0"
+version = "0.27.1"
 backend = "conda:tree-sitter-cli"
-specifiers = ["0.27.0"]
+specifiers = ["0.27.1"]
 
 [tools."conda:tree-sitter-cli".options]
 channel = "conda-forge"
 
 [tools."conda:tree-sitter-cli"."platforms.linux-x64"]
-checksum = "sha256:b7fa9523db9091171f9d8e6c4f6aeef10ab9a6fdec5f63a5ad97f2bb8d3f40d1"
-url = "https://conda.anaconda.org/conda-forge/linux-64/tree-sitter-cli-0.27.0-hc7555a6_0.conda"
+checksum = "sha256:dd98cca00f70c120ed431c1a036888a6d07cb9f45ea32cf37bcd6ee0623db912"
+url = "https://conda.anaconda.org/conda-forge/linux-64/tree-sitter-cli-0.27.1-hc7555a6_0.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -267,14 +267,14 @@ url = "https://github.com/mr-karan/doggo/releases/download/v1.4.0/doggo-linux-x8
 url_api = "https://api.github.com/repos/mr-karan/doggo/releases/assets/539320012"
 
 [[tools.fx]]
-version = "39.2.0"
+version = "40.0.0"
 backend = "aqua:antonmedv/fx"
-specifiers = ["39.2.0"]
+specifiers = ["40.0.0"]
 
 [tools.fx."platforms.linux-x64"]
-checksum = "sha256:17ea6549c7cf0b8be5ec109d04da7fbf1d5de9f7b99d957a6215081933528afe"
-url = "https://github.com/antonmedv/fx/releases/download/39.2.0/fx_linux_amd64"
-url_api = "https://api.github.com/repos/antonmedv/fx/releases/assets/315468989"
+checksum = "sha256:c5cf146137d3d1819384356366913f1f98bcf5b334e5f100e4705c081f65ed8e"
+url = "https://github.com/antonmedv/fx/releases/download/40.0.0/fx_linux_amd64"
+url_api = "https://api.github.com/repos/antonmedv/fx/releases/assets/613037517"
 
 [[tools."github:Canop/broot"]]
 version = "1.61.0"
@@ -408,17 +408,17 @@ url = "https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.1
 url_api = "https://api.github.com/repos/dalance/procs/releases/assets/457525859"
 
 [[tools."github:dathere/qsv"]]
-version = "23.0.1"
+version = "24.0.0"
 backend = "github:dathere/qsv"
-specifiers = ["23.0.1"]
+specifiers = ["24.0.0"]
 
 [tools."github:dathere/qsv".options]
 asset_pattern = "qsv-{version}-x86_64-unknown-linux-musl.zip"
 
 [tools."github:dathere/qsv"."platforms.linux-x64"]
-checksum = "sha256:e4175df7ecb74b91b5b481ffb96f5adbd7e9ea129c1954bfb280b21cba325433"
-url = "https://github.com/dathere/qsv/releases/download/23.0.1/qsv-23.0.1-x86_64-unknown-linux-musl.zip"
-url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/560347953"
+checksum = "sha256:0079acb8542af8b243fa861259746a6a88cef1aefc07214aaaf0f0a1b0593738"
+url = "https://github.com/dathere/qsv/releases/download/24.0.0/qsv-24.0.0-x86_64-unknown-linux-musl.zip"
+url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/611523906"
 
 [[tools."github:dj95/zjstatus"]]
 version = "0.25.0"
@@ -577,17 +577,17 @@ url = "https://github.com/tummychow/git-absorb/releases/download/0.9.0/git-absor
 url_api = "https://api.github.com/repos/tummychow/git-absorb/releases/assets/355709221"
 
 [[tools."github:watchexec/watchexec"]]
-version = "2.7.4"
+version = "2.8.0"
 backend = "github:watchexec/watchexec"
-specifiers = ["2.7.4"]
+specifiers = ["2.8.0"]
 
 [tools."github:watchexec/watchexec".options]
 asset_pattern = "watchexec-{version}-x86_64-unknown-linux-musl.tar.xz"
 
 [tools."github:watchexec/watchexec"."platforms.linux-x64"]
-checksum = "sha256:00a4be01add74acfaa37978081b331d60f4691f7e39b2028e5301242d61a464b"
-url = "https://github.com/watchexec/watchexec/releases/download/v2.7.4/watchexec-2.7.4-x86_64-unknown-linux-musl.tar.xz"
-url_api = "https://api.github.com/repos/watchexec/watchexec/releases/assets/605904457"
+checksum = "sha256:35ea667cbe4bc96c23ba2a1f46c94c46bc385b67165e3bf621c0e7e4959aa99b"
+url = "https://github.com/watchexec/watchexec/releases/download/v2.8.0/watchexec-2.8.0-x86_64-unknown-linux-musl.tar.xz"
+url_api = "https://api.github.com/repos/watchexec/watchexec/releases/assets/616138798"
 
 [[tools."github:xo/usql"]]
 version = "0.21.6"
@@ -634,14 +634,14 @@ url_api = "https://api.github.com/repos/charmbracelet/glow/releases/assets/51046
 provenance = "cosign"
 
 [[tools.gopass]]
-version = "1.17.3"
+version = "1.17.4"
 backend = "aqua:gopasspw/gopass"
-specifiers = ["1.17.3"]
+specifiers = ["1.17.4"]
 
 [tools.gopass."platforms.linux-x64"]
-checksum = "sha256:a9646cdd28a2a9e5503407f10823df6761e036e04657a488ab6160c67fa1e1c8"
-url = "https://github.com/gopasspw/gopass/releases/download/v1.17.3/gopass-1.17.3-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/gopasspw/gopass/releases/assets/581984090"
+checksum = "sha256:fe63584ba2275409c54d060d7f601de24d03ca980b11e617cd30cd9c4814597a"
+url = "https://github.com/gopasspw/gopass/releases/download/v1.17.4/gopass-1.17.4-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/gopasspw/gopass/releases/assets/627494795"
 provenance = "cosign"
 
 [[tools.grex]]
@@ -731,24 +731,24 @@ checksum = "blake3:a608d8ca6863c74eb1d32a57886e7c459313fed80c8473abce1dccf42a408
 url = "https://raw.githubusercontent.com/joehillen/sysz/1.4.3/sysz"
 
 [[tools.hyperfine]]
-version = "1.20.0"
+version = "2.0.0"
 backend = "aqua:sharkdp/hyperfine"
-specifiers = ["1.20.0"]
+specifiers = ["2.0.0"]
 
 [tools.hyperfine."platforms.linux-x64"]
-checksum = "sha256:63ad53934062118f5b0be11785e0bb1603d4b91667d1921f2fd8df9a8712040a"
-url = "https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/sharkdp/hyperfine/releases/assets/317831911"
+checksum = "sha256:ae2beda2ac99c098427e4f755244552daf20e514422889cca6d44421e2d93c87"
+url = "https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/sharkdp/hyperfine/releases/assets/619831673"
 
 [[tools.jj]]
-version = "0.45.1"
+version = "0.46.0"
 backend = "aqua:jj-vcs/jj"
-specifiers = ["0.45.1"]
+specifiers = ["0.46.0"]
 
 [tools.jj."platforms.linux-x64"]
-checksum = "sha256:f35438350b5d61963aac5dd74ede510b31d6b9690769d1a6268cf058cc825f72"
-url = "https://github.com/jj-vcs/jj/releases/download/v0.45.1/jj-v0.45.1-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jj-vcs/jj/releases/assets/543032052"
+checksum = "sha256:fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08"
+url = "https://github.com/jj-vcs/jj/releases/download/v0.46.0/jj-v0.46.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jj-vcs/jj/releases/assets/619869961"
 
 [[tools.k9s]]
 version = "0.51.0"
@@ -771,14 +771,14 @@ url = "https://github.com/jesseduffield/lazydocker/releases/download/v0.25.2/laz
 url_api = "https://api.github.com/repos/jesseduffield/lazydocker/releases/assets/399711577"
 
 [[tools.lazygit]]
-version = "0.65.1"
+version = "0.66.1"
 backend = "aqua:jesseduffield/lazygit"
-specifiers = ["0.65.1"]
+specifiers = ["0.66.1"]
 
 [tools.lazygit."platforms.linux-x64"]
-checksum = "sha256:02beacbcda0fa342e50ae3480ba8147307353af3fb28e1d5f790e02329c201a6"
-url = "https://github.com/jesseduffield/lazygit/releases/download/v0.65.1/lazygit_0.65.1_linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/jesseduffield/lazygit/releases/assets/560658266"
+checksum = "sha256:7b3f30c2c06a42cf575280f907e58d7ea08411408b6b62bc926bc91cbc6c3f46"
+url = "https://github.com/jesseduffield/lazygit/releases/download/v0.66.1/lazygit_0.66.1_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/jesseduffield/lazygit/releases/assets/630328438"
 
 [[tools.lazyjournal]]
 version = "0.8.6"
@@ -878,14 +878,14 @@ specifiers = ["latest"]
 uv = { path = "locks/mise.linux/pypi-harlequin/2.14.0", digest = "sha256:45e3a3cb2b13902ff80ffb00e9620b3e547c6b50dce45db91eee7ad3335f313b" }
 
 [[tools.rclone]]
-version = "1.75.1"
+version = "1.75.2"
 backend = "aqua:rclone/rclone"
-specifiers = ["1.75.1"]
+specifiers = ["1.75.2"]
 
 [tools.rclone."platforms.linux-x64"]
-checksum = "sha256:982b5aa772841168f8e380f139e9e787b2a105403e32b94da8676a0e1c0a13ab"
-url = "https://github.com/rclone/rclone/releases/download/v1.75.1/rclone-v1.75.1-linux-amd64.zip"
-url_api = "https://api.github.com/repos/rclone/rclone/releases/assets/544638482"
+checksum = "sha256:349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702"
+url = "https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip"
+url_api = "https://api.github.com/repos/rclone/rclone/releases/assets/624695998"
 
 [[tools.rust-analyzer]]
 version = "2026-10-05"
@@ -982,10 +982,10 @@ url = "https://github.com/zellij-org/zellij/releases/download/v0.45.1/zellij-x86
 url_api = "https://api.github.com/repos/zellij-org/zellij/releases/assets/533538763"
 
 [[tools.zig]]
-version = "0.16.0"
+version = "0.17.0"
 backend = "core:zig"
-specifiers = ["0.16.0"]
+specifiers = ["0.17.0"]
 
 [tools.zig."platforms.linux-x64"]
-checksum = "sha256:70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
+checksum = "sha256:1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"

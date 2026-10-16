@@ -48,7 +48,7 @@ ninja = { version = "1.13.2", os = ["windows"] }  # CMake's generator (Linux: dn
 jq = "1.8.2"
 gh = "2.102.0"
 # The zsh toolbelt Nushell on Windows shares (pickers, z/zi, Ctrl-R history, eza listings, delta pager).
-fzf = "0.74.4"
+fzf = "0.74.5"
 zoxide = "0.10.0"
 fd = "10.5.0"
 bat = "0.26.1"
@@ -60,7 +60,7 @@ ripgrep = "15.2.0"
 "github:atuinsh/atuin" = { version = "18.23.0", platforms = { linux-x64 = { asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "atuin-x86_64-pc-windows-msvc.zip" } } }
 # uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
-uv = "0.12.23"
+uv = "0.13.0"
 # python: interpreter for the dependency-locked pypi: tools (without it mise
 # falls back to the system 3.9 and glances/harlequin refuse to install) and
 # for python-env's venv (tasks/python-env; bootstrap.ps1 on Windows). It shadows
@@ -73,12 +73,12 @@ python = "3.14.8"
 # finds typescript as a global sibling (separate npm: trees would break that). A
 # changed postinstall only re-runs when node reinstalls; scripts/lib/mise-install.sh
 # forces it. --allow-scripts=core-js silences npm 11's install-scripts warning.
-node = { version = "26.10.0", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.1 typescript@5.9.3 bash-language-server@5.8.1 yaml-language-server@1.24.0 vscode-langservers-extracted@4.10.0" }
-go = "1.27.1"
+node = { version = "26.11.1", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.2 typescript@5.9.3 bash-language-server@5.8.1 yaml-language-server@1.25.0 vscode-langservers-extracted@4.10.0" }
+go = "1.27.2"
 "go:golang.org/x/tools/gopls" = "0.23.0"
 lua-language-server = "3.19.1"
 "pypi:basedpyright" = "1.40.2"
-"npm:ccstatusline" = "2.2.30"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
+"npm:ccstatusline" = "2.2.32"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
 # oh-my-mermaid (`omm`): architecture docs as Mermaid diagrams in a repo's .omm/, written by
 # its Claude Code plugin's /omm-scan (tasks/claude installs the plugin on Linux; Windows:
 # `omm setup claude`). aube refuses it on weekly downloads (<1000): 0.2.0's npm provenance
@@ -90,8 +90,8 @@ lua-language-server = "3.19.1"
 # (Windows) copies it there. Its update reminder is off (settings.enforced.json env).
 "github:tt-a1i/archify" = { version = "3.0.1", asset_pattern = "archify.zip" }
 "github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font, the only pin: tasks/fonts (Linux) and bootstrap.ps1 (Windows, via scripts/install-nerd-fonts.ps1) install its TTFs
-opencode = "1.18.34"
-"github:can1357/oh-my-pi" = "18.6.1"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
+opencode = "1.19.0"
+"github:can1357/oh-my-pi" = "18.9.1"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", platforms = { linux-x64 = { asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }, windows-x64 = { asset_pattern = "devtoys.cli_win_x64_portable.zip" } } }   # CLI only; per-platform assets
 nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (WT); launched via %LOCALAPPDATA%\mise\shims\nu.exe
 "github:carapace-sh/carapace-bin" = { version = "1.8.0", os = ["windows"], asset_pattern = "carapace-bin_{{version}}_windows_amd64.zip" }   # Nushell's Tab completion for ~1000 CLIs (config.nu's external completer)
