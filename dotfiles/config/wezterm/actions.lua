@@ -280,15 +280,20 @@ local function host_menu(window, pane, h)
 end
 
 M.ssh_hosts = wezterm.action_callback(function(window, pane)
+  -- Columns: name, address, note, each padded to its longest.
   local hosts = sshconfig.hosts(sshconfig.read())
-  local width = 0
+  local names, addrs = 0, 0
   for _, h in ipairs(hosts) do
-    width = math.max(width, #h.name)
+    names, addrs = math.max(names, #h.name), math.max(addrs, #sshconfig.address(h))
   end
   local choices = { { id = 'add', label = '+ Add a host' } }
   for i, h in ipairs(hosts) do
-    local note = h.note and h.note ~= '' and ('  · ' .. h.note) or ''
-    table.insert(choices, { id = tostring(i), label = h.name .. string.rep(' ', width - #h.name + 2) .. sshconfig.address(h) .. note })
+    local addr = sshconfig.address(h)
+    local label = h.name .. string.rep(' ', names - #h.name + 2) .. addr
+    if h.note and h.note ~= '' then
+      label = label .. string.rep(' ', addrs - #addr + 2) .. h.note
+    end
+    table.insert(choices, { id = tostring(i), label = label })
   end
   window:perform_action(
     act.InputSelector({
