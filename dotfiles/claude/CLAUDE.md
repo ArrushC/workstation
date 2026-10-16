@@ -41,8 +41,8 @@ equivalents:
 
 - search/files: `rg` (not grep), `fd` (not find), `ast-grep`/`sg` (structural)
 - view: `bat` (not cat), `eza` (not ls), `delta` / `difft` (diffs)
-- data: `jq` / `yq` / `fx` (JSON/YAML), `mlr` / `qsv` (CSV), `usql` (SQL)
-- system: `btop` / `procs` (processes), `dust` / `ncdu` (disk), `sd` (simple sed)
+- data: `jq` / `yq` / `fx` (JSON/YAML), `mlr` / `qsv` (CSV), `usql` (SQL), `choose` (fields, not cut/awk)
+- system: `btop` / `procs` (processes), `dust` / `ncdu` / `gdu` (disk usage), `dysk` (free space, not df), `sd` (simple sed)
 - dev: `gh` (GitHub), `hyperfine` (benchmark), `gitui` / `lazygit`, `jj` (VCS)
 
 The full, always-current inventory of what's installed (with versions) is below.
@@ -153,7 +153,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `difftastic` 0.71.0
 - `bottom` 0.14.9
 - `dust` 1.2.6
+- `dysk` 3.7.1
+- `gdu` 5.38.0
 - `sd` 1.1.0
+- `choose` 1.3.7
 - `watchexec` 2.8.0
 - `qsv` 24.0.0
 - `zjstatus` 0.25.0
