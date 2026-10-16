@@ -900,10 +900,13 @@ check_lsp_plugin() {
 # Claude Code's theme, keybindings and plugin list (dotfiles/claude). Claude Code ignores
 # an unknown colour token, a bad colour or a bad keybinding without a word, so a typo would
 # just not show: the enforced theme must name a theme file here, a theme must set only the
-# documented tokens (code.claude.com/docs/en/terminal-config) with colours Claude Code
-# accepts, and keybindings.json must use known contexts, action names and keys it can
-# rebind. clangd is registered once, by workstation-lsp: the official clangd-lsp plugin
-# would start a second clangd for the same files, so the enforced file turns it off.
+# documented tokens (code.claude.com/docs/en/terminal-config) or the two undocumented ones
+# below, with colours Claude Code accepts, and keybindings.json must use known contexts,
+# action names and keys it can rebind. A token left out keeps the base theme's colour, so
+# a theme that sets a colour sets its shimmer too (or the animation flashes the base's
+# colour), and one that sets the accent sets the logo's (or the logo stays orange). clangd
+# is registered once, by workstation-lsp: the official clangd-lsp plugin would start a
+# second clangd for the same files, so the enforced file turns it off.
 check_claude_config() {
   hdr "Claude Code theme, keybindings and plugins (dotfiles/claude)"
   if [ -z "$PY" ]; then
@@ -927,6 +930,9 @@ diffAdded diffRemoved diffAddedDimmed diffRemovedDimmed diffAddedWord diffRemove
 userMessageBackground userMessageBackgroundHover bashMessageBackgroundColor memoryBackgroundColor selectionBg
 rate_limit_fill rate_limit_empty briefLabelYou briefLabelClaude claudeShimmer warningShimmer
 permissionShimmer promptBorderShimmer inactiveShimmer fastModeShimmer""".split())
+# Undocumented, but every built-in theme in 2.1.301 sets them: the logo's colour, and the
+# accept-edits shimmer.
+tokens |= {"clawd_body", "autoAcceptShimmer"}
 tokens |= {f"{c}_FOR_SUBAGENTS_ONLY" for c in "red blue green yellow purple orange pink cyan".split()}
 for c in "red orange yellow green blue indigo violet".split():
     tokens |= {f"rainbow_{c}", f"rainbow_{c}_shimmer"}
@@ -939,11 +945,17 @@ for p in themes:
         bad.append(f"{p}: unknown field {k}")
     if t.get("base", "dark") not in "dark light dark-daltonized light-daltonized dark-ansi light-ansi".split():
         bad.append(f"{p}: base {t.get('base')!r} is not a built-in theme")
-    for k, v in (t.get("overrides") or {}).items():
+    over = t.get("overrides") or {}
+    for k, v in over.items():
         if k not in tokens:
-            bad.append(f"{p}: {k} is not a documented colour token")
+            bad.append(f"{p}: {k} is not a colour token Claude Code reads")
         elif not isinstance(v, str) or not colour.fullmatch(v):
             bad.append(f"{p}: {k} = {v!r} is not a colour Claude Code accepts")
+        for shimmer in (k + "Shimmer", k + "_shimmer"):
+            if shimmer in tokens and shimmer not in over:
+                bad.append(f"{p}: sets {k} but not {shimmer}, so its shimmer keeps the base theme's colour")
+    if "claude" in over and "clawd_body" not in over:
+        bad.append(f"{p}: sets claude but not clawd_body, so the logo keeps the base theme's orange")
 enforced = load(f"{d}/settings.enforced.json") or {}
 theme = enforced.get("theme", "")
 if theme.startswith("custom:") and not os.path.isfile(f"{d}/themes/{theme[7:]}.json"):
@@ -979,7 +991,7 @@ if any(s.get("command") == "clangd" for s in lsp.values()) and enforced.get("ena
 for b in bad:
     print("BAD " + b)
 if not bad:
-    print(f"OK {len(themes)} theme(s) with documented tokens and valid colours, the enforced {theme or 'default'} theme present, {binds} keybindings in known contexts, clangd registered once")
+    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, {binds} keybindings in known contexts, clangd registered once")
 PY
   )
   while IFS= read -r line; do
