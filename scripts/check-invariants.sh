@@ -904,11 +904,13 @@ check_lsp_plugin() {
 # below, with colours Claude Code accepts, and keybindings.json must use known contexts,
 # action names and keys it can rebind. A token left out keeps the base theme's colour, so
 # a theme that sets a colour sets its shimmer too (or the animation flashes the base's
-# colour), and one that sets the accent sets the logo's (or the logo stays orange). clangd
+# colour), and one that sets the accent sets the logo's (or the logo stays orange). The
+# status line matches: ccstatusline's built-in catppuccin powerline theme, at colorLevel 3,
+# whose row is Mocha's own hex colours (levels 1 and 2 are ANSI approximations). clangd
 # is registered once, by workstation-lsp: the official clangd-lsp plugin would start a
 # second clangd for the same files, so the enforced file turns it off.
 check_claude_config() {
-  hdr "Claude Code theme, keybindings and plugins (dotfiles/claude)"
+  hdr "Claude Code theme, status line, keybindings and plugins (dotfiles/claude, ccstatusline)"
   if [ -z "$PY" ]; then
     note "no python with tomllib on PATH — skipped"
     return 0
@@ -985,13 +987,17 @@ if kb is not None:
                 *m, key = s.split("+")
                 if not key or set(m) - mods:
                     bad.append(f"{kb_path}: {keys!r} is not a keystroke Claude Code reads")
+ccs_path = "dotfiles/config/ccstatusline/settings.json"
+ccs = load(ccs_path) or {}
+if (ccs.get("powerline") or {}).get("theme") != "catppuccin" or ccs.get("colorLevel") != 3:
+    bad.append(f"{ccs_path}: the status line wants powerline.theme \"catppuccin\" at colorLevel 3 (Mocha's hex colours)")
 lsp = load(f"{d}/skills/workstation-lsp/.lsp.json") or {}
 if any(s.get("command") == "clangd" for s in lsp.values()) and enforced.get("enabledPlugins", {}).get("clangd-lsp@claude-plugins-official") is not False:
     bad.append("workstation-lsp registers clangd, so settings.enforced.json must set clangd-lsp@claude-plugins-official to false")
 for b in bad:
     print("BAD " + b)
 if not bad:
-    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, {binds} keybindings in known contexts, clangd registered once")
+    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, the status line in catppuccin, {binds} keybindings in known contexts, clangd registered once")
 PY
   )
   while IFS= read -r line; do
