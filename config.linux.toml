@@ -69,7 +69,10 @@ zig = "0.17.0"
 "github:Wilfred/difftastic" = { version = "0.71.0", asset_pattern = "difft-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); the gnu build needs glibc 2.29
 "github:ClementTsang/bottom" = { version = "0.14.9", asset_pattern = "bottom_x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29; binary is `btm`
 "github:bootandy/dust" = { version = "1.2.6", asset_pattern = "dust-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
+"github:Canop/dysk" = { version = "3.7.1", asset_pattern = "dysk_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }   # filesystems and their free space (a clearer df); the zip holds every target, as broot's does
+"github:dundee/gdu" = { version = "5.38.0", asset_pattern = "gdu_linux_amd64_static.tgz", rename_exe = { "gdu_linux_amd64_static" = "gdu" } }   # ncdu-style disk usage, parallel; aqua's default build is dynamically linked
 "github:chmln/sd" = { version = "1.1.0", asset_pattern = "sd-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
+"github:theryangeary/choose" = { version = "1.3.7", asset_pattern = "choose-x86_64-unknown-linux-musl", bin = "choose" }   # fields by index (cut/awk '{print $N}'); aqua's gnu build needs glibc 2.34
 "github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
 "github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
