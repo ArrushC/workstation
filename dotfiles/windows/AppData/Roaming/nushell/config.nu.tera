@@ -187,19 +187,6 @@ if ($env.TERM_PROGRAM? == "WezTerm") {
     )
 }
 
-# --- Transient prompt -------------------------------------------------------
-# Once a line is entered, its prompt shrinks to the clock and the arrow, so the scrollback
-# keeps when each command started and whether the one before it failed, not the directory
-# and duration. Drawn here in starship.toml's [time] and [character] forms rather than
-# with `starship module` (two more process starts per Enter on Windows). Nushell-only:
-# zsh has no transient prompt.
-$env.TRANSIENT_PROMPT_COMMAND = {||
-    let arrow = (if ($env.LAST_EXIT_CODE? | default 0) == 0 { ansi green_bold } else { ansi red_bold })
-    $"(ansi white_dimmed)[(date now | format date '%H:%M:%S')](ansi reset) ($arrow)❯(ansi reset) "
-}
-$env.TRANSIENT_PROMPT_INDICATOR = ""
-$env.TRANSIENT_PROMPT_COMMAND_RIGHT = ""
-
 # --- Command not found ------------------------------------------------------
 # A missing command asks mise whether it installs it (one mise start, on that error only).
 # A tool mise installed but this session's PATH lacks wants a new tab or `mise reshim`; a
