@@ -74,7 +74,13 @@ export const register: Register = on => {
       }
       const which = e.args.trim().replace(/^#/, '')
       if (which && !/^\d+$/.test(which)) throw new Stop(`"${e.args.trim()}" is not a PR number`)
-      const pr = await json<Pr>(['gh', 'pr', 'view', ...(which ? [which] : []), '--json', PR_FIELDS])
+      const view = await $.process.run(['gh', 'pr', 'view', ...(which ? [which] : []), '--json', PR_FIELDS], { timeoutMs: 60_000 })
+      if (view.exitCode !== 0) {
+        const none = /no pull requests found for branch "([^"]+)"/.exec(view.stderr)
+        if (none) throw new Stop(`no open PR for ${none[1]}; switch to a PR's branch or use /ship <number>`)
+        throw new Stop(`gh pr view failed: ${(view.stderr || view.stdout).trim()}`)
+      }
+      const pr = JSON.parse(view.stdout) as Pr
       const { number, headRefOid: head, baseRefName: base } = pr
       header = `/ship #${number} ${pr.title}`
       if (pr.state !== 'OPEN') throw new Stop(`#${number} is ${pr.state.toLowerCase()}`)
