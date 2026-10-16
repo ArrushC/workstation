@@ -4,6 +4,7 @@
     "command": "ccstatusline",
     "refreshInterval": 10
   },
+  "theme": "custom:catppuccin-mocha",
   "skipAutoPermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "remoteControlAtStartup": true,
@@ -46,11 +47,13 @@
     "superpowers@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
     "microsoft-docs@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "github@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "workstation-lsp@skills-dir": true
+    "workstation-lsp@skills-dir": true,
+    "clangd-lsp@claude-plugins-official": false
   }
 }

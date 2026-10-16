@@ -1,0 +1,23 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    {
+      "context": "Global",
+      "bindings": {
+        "ctrl+x t": "app:toggleTodos",
+        "ctrl+x o": "app:toggleTranscript",
+        "ctrl+x l": "app:redraw"
+      }
+    },
+    {
+      "context": "Chat",
+      "bindings": {
+        "ctrl+x s": "chat:stash",
+        "ctrl+x m": "chat:modelPicker",
+        "ctrl+x f": "chat:fastMode",
+        "ctrl+x u": "chat:undo"
+      }
+    }
+  ]
+}

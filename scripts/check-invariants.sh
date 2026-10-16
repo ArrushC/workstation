@@ -897,6 +897,100 @@ check_lsp_plugin() {
   rm -rf "$tmp"
 }
 
+# Claude Code's theme, keybindings and plugin list (dotfiles/claude). Claude Code ignores
+# an unknown colour token, a bad colour or a bad keybinding without a word, so a typo would
+# just not show: the enforced theme must name a theme file here, a theme must set only the
+# documented tokens (code.claude.com/docs/en/terminal-config) with colours Claude Code
+# accepts, and keybindings.json must use known contexts, action names and keys it can
+# rebind. clangd is registered once, by workstation-lsp: the official clangd-lsp plugin
+# would start a second clangd for the same files, so the enforced file turns it off.
+check_claude_config() {
+  hdr "Claude Code theme, keybindings and plugins (dotfiles/claude)"
+  if [ -z "$PY" ]; then
+    note "no python with tomllib on PATH — skipped"
+    return 0
+  fi
+  local out line
+  out=$(
+    "$PY" - <<'PY' 2>&1
+import glob, json, os, re
+d = "dotfiles/claude"
+bad = []
+def load(p):
+    try:
+        return json.load(open(p, encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        bad.append(f"{p}: {e}")
+tokens = set("""claude text inverseText inactive subtle suggestion permission remember
+success error warning merged promptBorder planMode autoAccept bashBorder ide fastMode effortUltra
+diffAdded diffRemoved diffAddedDimmed diffRemovedDimmed diffAddedWord diffRemovedWord
+userMessageBackground userMessageBackgroundHover bashMessageBackgroundColor memoryBackgroundColor selectionBg
+rate_limit_fill rate_limit_empty briefLabelYou briefLabelClaude claudeShimmer warningShimmer
+permissionShimmer promptBorderShimmer inactiveShimmer fastModeShimmer""".split())
+tokens |= {f"{c}_FOR_SUBAGENTS_ONLY" for c in "red blue green yellow purple orange pink cyan".split()}
+for c in "red orange yellow green blue indigo violet".split():
+    tokens |= {f"rainbow_{c}", f"rainbow_{c}_shimmer"}
+colour = re.compile(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)|ansi256\(\d{1,3}\)"
+                    r"|ansi:(black|red|green|yellow|blue|magenta|cyan|white)(Bright)?")
+themes = sorted(glob.glob(f"{d}/themes/*.json"))
+for p in themes:
+    t = load(p) or {}
+    for k in set(t) - {"name", "base", "overrides"}:
+        bad.append(f"{p}: unknown field {k}")
+    if t.get("base", "dark") not in "dark light dark-daltonized light-daltonized dark-ansi light-ansi".split():
+        bad.append(f"{p}: base {t.get('base')!r} is not a built-in theme")
+    for k, v in (t.get("overrides") or {}).items():
+        if k not in tokens:
+            bad.append(f"{p}: {k} is not a documented colour token")
+        elif not isinstance(v, str) or not colour.fullmatch(v):
+            bad.append(f"{p}: {k} = {v!r} is not a colour Claude Code accepts")
+enforced = load(f"{d}/settings.enforced.json") or {}
+theme = enforced.get("theme", "")
+if theme.startswith("custom:") and not os.path.isfile(f"{d}/themes/{theme[7:]}.json"):
+    bad.append(f"settings.enforced.json's theme {theme} has no {d}/themes/{theme[7:]}.json")
+contexts = set("""Global Chat Autocomplete Confirmation Help Transcript HistorySearch Task ThemePicker Settings
+Tabs Attachments Footer AbovePrompt AbovePromptInput AbovePromptSelect Pane PaneField MessageSelector
+DiffDialog DiffPanel ModelPicker EffortSlider Select Plugin Scroll Agents""".split())
+mods = {"ctrl", "control", "alt", "opt", "option", "shift", "meta", "cmd", "command", "super", "win"}
+fixed = {"ctrl+c", "ctrl+d", "ctrl+m", "ctrl+[", "ctrl+i", "ctrl+h"}
+kb_path = f"{d}/keybindings.json"
+kb = load(kb_path) if os.path.exists(kb_path) else bad.append(f"no {kb_path}")
+binds = 0
+if kb is not None:
+    if not isinstance(kb.get("bindings"), list):
+        bad.append(f'{kb_path}: no "bindings" array')
+    for block in kb.get("bindings") or []:
+        if block.get("context") not in contexts:
+            bad.append(f"{kb_path}: unknown context {block.get('context')!r}")
+        for keys, action in (block.get("bindings") or {}).items():
+            binds += 1
+            if action is not None and not (isinstance(action, str) and re.fullmatch(r"[a-zA-Z]+:[a-zA-Z]+", action)):
+                bad.append(f"{kb_path}: {keys} -> {action!r} is not an action name")
+            strokes = keys.split(" ")
+            if len(strokes) == 1 and keys in fixed:
+                bad.append(f"{kb_path}: {keys} can't be rebound")
+            for s in strokes:
+                *m, key = s.split("+")
+                if not key or set(m) - mods:
+                    bad.append(f"{kb_path}: {keys!r} is not a keystroke Claude Code reads")
+lsp = load(f"{d}/skills/workstation-lsp/.lsp.json") or {}
+if any(s.get("command") == "clangd" for s in lsp.values()) and enforced.get("enabledPlugins", {}).get("clangd-lsp@claude-plugins-official") is not False:
+    bad.append("workstation-lsp registers clangd, so settings.enforced.json must set clangd-lsp@claude-plugins-official to false")
+for b in bad:
+    print("BAD " + b)
+if not bad:
+    print(f"OK {len(themes)} theme(s) with documented tokens and valid colours, the enforced {theme or 'default'} theme present, {binds} keybindings in known contexts, clangd registered once")
+PY
+  )
+  while IFS= read -r line; do
+    case "$line" in
+    OK\ *) ok "${line#OK }" ;;
+    BAD\ *) bad "${line#BAD }" ;;
+    *) [ -n "$line" ] && bad "$line" ;;
+    esac
+  done <<<"$out"
+}
+
 # --- flag-parity: repo-script flags == completion-surface flags --------------
 # Three pairs: bootstrap.sh's long flags against its zsh and bash completions, and
 # bootstrap.ps1's parameters against config.nu's flag record.
@@ -2211,6 +2305,7 @@ check_debugger_config
 check_helix_config
 check_wezterm_config
 check_wezterm_term
+check_claude_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.
