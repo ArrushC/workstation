@@ -112,7 +112,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `~/.ssh/config`: 600
   - source `dotfiles/ssh/config.tera`: 600, so mise stops reporting a mode diff
 - `~/.claude/settings.json` isn't a dotfile. `scripts/lib/claude-settings-merge.sh` (Windows:
-  `Invoke-ClaudeSettingsMerge`, same jq filter) merges three layers:
+  `scripts/claude-settings-merge.ps1`, same jq filter, from the post-tools hook) merges three layers:
   `settings.seed.json` (only where a key is absent) → the live file → `settings.enforced.json`
   (always wins). Change cross-host keys in the enforced file.
 - `/etc` files come from `configs/` via `[bootstrap.files]`. Today that is only `/etc/wsl.conf`, which

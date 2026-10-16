@@ -82,6 +82,7 @@
   | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); the `config.windows.toml` guard; `-C` pinning; the node marker |
   | `test-winget-apps.ps1` | `Install-WingetApps` (`mise bootstrap --only packages`, pinned `-C`) and `Install-SshfsWin` (presence by `winget list`, no `--silent`, the UAC warning, `-SkipElevated`, exit codes) |
   | `test-python-fonts.ps1` | `Invoke-PythonEnv`, `Invoke-InstallNerdFonts`, and `install-nerd-fonts.ps1` on fake TTFs |
+  | `test-claude-settings-merge.ps1` | `claude-settings-merge.ps1` against the real seed and enforced files (non-ASCII, bad JSON, no jq), `Invoke-ClaudeSettingsMerge`, the post-tools wiring |
 - From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `scripts/python-env.txt` under
   `%TEMP%` (keep the `scripts\` layout: tests find the repo as their parent dir), `cd` to
   `%USERPROFILE%` and run each with `-NoProfile -ExecutionPolicy Bypass -File` under `powershell.exe`
@@ -90,6 +91,11 @@
   "[Environment]::GetEnvironmentVariable('PSModulePath','Machine')" | tr -d '\r')"
   WSLENV=PSModulePath/w powershell.exe ...`): the inherited pwsh 7 path makes 5.1 report
   "Get-FileHash is not recognized" (a false failure; CI is unaffected).
+  Tests that need no `PSModulePath` run straight from `$(wslpath -w scripts/test-x.ps1)`. The
+  WindowsApps `pwsh.exe` alias won't start from WSL; use `powershell.exe -NoProfile -Command "& pwsh
+  -NoProfile -ExecutionPolicy Bypass -File '<path>' 2>&1 | Out-String -Width 300"`. PSScriptAnalyzer
+  isn't installed on the laptop: in pwsh, `Save-PSResource -Name PSScriptAnalyzer -Path <%TEMP% dir>
+  -TrustRepository`, prepend that dir to `$env:PSModulePath`, run `scripts/check-ps.ps1`, delete it.
 - Live checks (the user runs `.\bootstrap.ps1`; then, in a new PowerShell window):
   - `$env:MISE_ENV` is empty and `miserc.toml` holds `env = ["windows"]`.
   - `Get-Command starship, jq, hx, nu, omp, opencode, DevToys.CLI, gh` resolve under

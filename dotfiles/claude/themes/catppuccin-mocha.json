@@ -3,6 +3,7 @@
   "base": "dark",
   "overrides": {
     "claude": "#cba6f7",
+    "clawd_body": "#cba6f7",
     "text": "#cdd6f4",
     "inverseText": "#11111b",
     "inactive": "#7f849c",
@@ -42,6 +43,7 @@
     "promptBorderShimmer": "#9fa2b0",
     "inactiveShimmer": "#acafbf",
     "fastModeShimmer": "#fcceb1",
+    "autoAcceptShimmer": "#f9d7ef",
     "red_FOR_SUBAGENTS_ONLY": "#f38ba8",
     "blue_FOR_SUBAGENTS_ONLY": "#89b4fa",
     "green_FOR_SUBAGENTS_ONLY": "#a6e3a1",

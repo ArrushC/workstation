@@ -109,6 +109,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-python-fonts.ps1
+      - name: Test Claude Code settings merge (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-claude-settings-merge.ps1
+      - name: Test Claude Code settings merge (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-claude-settings-merge.ps1
       - name: Test WezTerm nightly installer (Windows PowerShell 5.1)
         if: always()
         shell: powershell

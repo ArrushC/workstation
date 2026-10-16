@@ -1062,61 +1062,10 @@ function Invoke-InstallBurntToast {
 }
 
 function Invoke-ClaudeSettingsMerge {
-    # seed (set-if-absent) -> live -> enforced (always wins), the jq filter of
-    # scripts/lib/claude-settings-merge.sh. A failure warns; it never aborts the bootstrap.
-    $seed     = Join-Path $RepoPath "dotfiles\claude\settings.seed.json"
-    $enforced = Join-Path $RepoPath "dotfiles\claude\settings.enforced.json"
-    $dest     = Join-Path $env:USERPROFILE ".claude\settings.json"
-
-    if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
-        Write-Warn "jq not found on PATH -- skipping Claude settings merge ($dest left as-is)"
-        return
-    }
-    if (-not (Test-Path -LiteralPath $seed)) {
-        Write-Warn "missing $seed -- skipping Claude settings merge"
-        return
-    }
-    if (-not (Test-Path -LiteralPath $enforced)) {
-        Write-Warn "missing $enforced -- skipping Claude settings merge"
-        return
-    }
-
-    $destDir = Split-Path $dest -Parent
-    if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
-
-    # jq.exe writes UTF-8: read it as UTF-8 whatever the console code page.
-    $prevOutputEncoding = $OutputEncoding
-    $OutputEncoding = [System.Text.Encoding]::UTF8
-    $currentTmp = Join-Path $destDir ".settings.json.current.$PID.tmp"
-    $outTmp     = Join-Path $destDir ".settings.json.$PID.tmp"
-    try {
-        if (Test-Path -LiteralPath $dest) {
-            $currentOut = & jq -c '.' $dest 2>$null
-            if ($LASTEXITCODE -ne 0 -or -not $currentOut) {
-                Write-Warn "$dest is not valid JSON -- leaving it untouched"
-                return
-            }
-            Write-Utf8NoBom $currentTmp ($currentOut -join "`n")
-        } else {
-            Write-Utf8NoBom $currentTmp '{}'
-        }
-
-        $mergedOut = & jq -s '.[0] * .[1] * .[2]' $seed $currentTmp $enforced 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $mergedOut) {
-            Write-Warn "jq merge failed -- leaving $dest untouched"
-            return
-        }
-
-        Write-Utf8NoBom $outTmp ($mergedOut -join "`n")
-        Move-Item -Force -LiteralPath $outTmp -Destination $dest
-        Write-Ok "merged seed + live + enforced -> $dest"
-    } catch {
-        Write-Warn "Claude settings merge failed: $_"
-    } finally {
-        $OutputEncoding = $prevOutputEncoding
-        Remove-Item -Force -ErrorAction SilentlyContinue $currentTmp
-        Remove-Item -Force -ErrorAction SilentlyContinue $outTmp
-    }
+    # seed (set-if-absent) -> live -> enforced (always wins): scripts\claude-settings-merge.ps1,
+    # which the post-tools hook (claude-settings-win) also runs, so wsu merges too. This call
+    # covers -SkipToolInstall, which runs no hook. A failure warns; it never aborts the bootstrap.
+    & (Join-Path $RepoPath 'scripts\claude-settings-merge.ps1')
 }
 
 function Invoke-ClaudeSettingsLocalSeed {
