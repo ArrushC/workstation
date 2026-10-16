@@ -7,6 +7,10 @@ import type { Register } from 'claude-code'
 // base's last commit unless the head already holds it; `--match-head-commit` then refuses
 // the merge if the head moved meanwhile. Only a /ship the person typed merges: a command
 // the model or another plugin runs is refused.
+// /ship loads from this checkout's .claude/skills/workstation-ship, so a PR that changes
+// that folder changes /ship itself: once the checkout has the merge (gh pr merge switches
+// to the base and pulls it when run on the PR's branch), Claude Code reloads /ship and any
+// call it makes after that is refused. For such a PR it runs nothing after the merge.
 
 type Pr = {
   number: number
@@ -17,10 +21,11 @@ type Pr = {
   headRefOid: string
   baseRefName: string
   mergeStateStatus: string
+  files?: { path: string }[]
 }
 type CheckRun = { name: string; status: string; conclusion: string | null; started_at: string }
 
-const PR_FIELDS = 'number,title,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus'
+const PR_FIELDS = 'number,title,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,files'
 const PASSED = new Set(['success', 'neutral', 'skipped'])
 const MERGEABLE = new Set(['CLEAN', 'HAS_HOOKS'])
 const WHY_NOT: Record<string, string> = {
@@ -112,6 +117,10 @@ export const register: Register = on => {
       }
       done.push(`✓ GitHub says it can merge (${pr.mergeStateStatus})`)
 
+      const ownFolder = `.claude/skills/${$.plugin.name}/`
+      const changesShip = (pr.files ?? []).some(f => f.path.startsWith(ownFolder))
+      const branchBefore = (await must(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+
       const merge = await $.process.run(
         ['gh', 'pr', 'merge', String(number), '--squash', '--delete-branch', '--match-head-commit', head],
         { timeoutMs: 120_000 },
@@ -125,6 +134,15 @@ export const register: Register = on => {
       } else {
         isMerged = true
         done.push('✓ squash-merged; branch deleted')
+      }
+
+      if (changesShip) {
+        done.push(
+          branchBefore === pr.headRefName
+            ? `✓ gh switched to ${base} and pulled it; the PR changes /ship, so Claude Code reloads it`
+            : `! the PR changes /ship, so ${base} wasn't pulled (that reloads /ship mid-command): git pull --ff-only --prune`,
+        )
+        return { text: [header, ...done].join('\n') }
       }
 
       const branch = (await must(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])).trim()
