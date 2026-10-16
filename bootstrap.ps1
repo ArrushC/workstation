@@ -442,7 +442,8 @@ function Invoke-CloneRepo {
         Write-Ok "Repo cloned"
     } else {
         Write-Log "Repo already at $RepoPath — pulling latest..."
-        git -C $RepoPath pull --ff-only
+        # --prune drops the origin/* branches GitHub no longer has (a merged PR's).
+        git -C $RepoPath pull --ff-only --prune
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "Could not fast-forward — continuing with current state"
         } else {
@@ -546,9 +547,13 @@ function Invoke-WslConfigReminder {
 # still counts as installed. The budget is what a fresh Windows install writes, as
 # measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what is
 # already installed, plus 1 GB for the new versions an update installs before the prune.
+# Nothing to install needs no room (the budget counts caches that `installs` doesn't).
 # $env:WORKSTATION_SKIP_DISK_CHECK = '1' goes ahead anyway; a missing budget or an
 # unreadable drive skips it.
 function Assert-ToolsDiskSpace {
+    # Exit 1 when something would install (or mise fails), which keeps the check.
+    Invoke-Native { & mise -C $env:USERPROFILE install --dry-run-code *> $null }
+    if ($LASTEXITCODE -eq 0) { return }
     $budgetFile = Join-Path $RepoPath 'disk-budget.toml'
     $line = if (Test-Path -LiteralPath $budgetFile) { Select-String -LiteralPath $budgetFile -Pattern '^windows *= *(\d+) *$' | Select-Object -First 1 }
     if (-not $line) {

@@ -229,6 +229,30 @@ bind 'set colored-completion-prefix on'
 bind 'set completion-ignore-case on'
 bind 'set completion-map-case on'
 
+# --- Editing keys (readline) ---------------------------------------------------
+# The twin of zshrc.tera's block (a parity pair). EL9's /etc/inputrc binds most of
+# these already, but EL8's readline 7 leaves Alt+arrows and Ctrl+Delete unbound and
+# makes Insert a quoted-insert, and a host without those /etc/inputrc lines has
+# none of them. readline's words already stop at punctuation (and at `_`, which
+# zsh keeps inside a word), and Ctrl+W deletes back to a space, as zsh's does.
+bind '"\e[3~": delete-char'                       # Delete
+bind '"\e[3;5~": kill-word'                       # Ctrl+Delete
+bind '"\e[2~": overwrite-mode'                    # Insert
+bind '"\e[H": beginning-of-line'                  # Home
+bind '"\eOH": beginning-of-line'
+bind '"\e[1~": beginning-of-line'
+bind '"\e[7~": beginning-of-line'
+bind '"\e[F": end-of-line'                        # End
+bind '"\eOF": end-of-line'
+bind '"\e[4~": end-of-line'
+bind '"\e[8~": end-of-line'
+bind '"\e[1;5D": backward-word'                   # Ctrl+Left
+bind '"\e[1;3D": backward-word'                   # Alt+Left
+bind '"\e[1;5C": forward-word'                    # Ctrl+Right
+bind '"\e[1;3C": forward-word'                    # Alt+Right
+bind '"\e[5~": history-search-backward'           # PageUp: history starting with the line so far
+bind '"\e[6~": history-search-forward'            # PageDown
+
 # --- Shift+Arrow movement (readline) -----------------------------------------
 # Terminals send ESC[1;2D etc. for Shift+Arrow; readline has no default binding,
 # so the tail (";2D") leaks into the line. Bind them to plain movement so the
@@ -316,33 +340,49 @@ if [[ ${TERM_PROGRAM:-} != WarpTerminal ]] && command -v starship &>/dev/null; t
   eval "$(starship init bash)"
 fi
 
-# --- Windows Terminal and WezTerm shell integration ----------------------------
-# Prompt-side half of the zsh block (see zshrc.tera): OSC 133 A/D marks
-# (scrollbar marks + ctrl+up/down jumps, exit-code colored), the cwd (WezTerm's
-# OSC 7 URL with $HOSTNAME, zsh's $HOST; else WT's OSC 9;9, a Windows path via
-# wslpath -w), OSC 9;4;0 progress clear. Runs FIRST in PROMPT_COMMAND and returns
-# the original $? so starship's exit-code module still sees the real status.
-# PARITY NOTE (WT preexec): zsh additionally emits OSC 133;C + OSC 9;4;3
-# (output-start mark, in-flight taskbar progress) from a preexec hook. bash has
-# no preexec without bash-preexec, and starship owns bash's DEBUG trap — so
-# this fallback shell deliberately skips the preexec half (same precedent as
-# atuin above). Marks still appear and color by exit code; there is just no
-# in-flight taskbar progress.
-if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+# --- Terminal shell integration (prompt marks, cwd, progress) -----------------
+# The zsh block's marks and cwd (see zshrc.tera), in every terminal but Warp and
+# TERM=dumb/linux: OSC 133 A/B/C/D and OSC 7 (with $HOSTNAME, zsh's $HOST), plus
+# the OSC 9 progress clear and WT's 9;9 cwd under Windows Terminal and WezTerm
+# outside zellij. _wt_prompt_cmd runs FIRST in PROMPT_COMMAND and returns the
+# original $? so starship's exit-code module still sees the real status;
+# _wt_prompt_end runs LAST and appends B to PS1, which starship rebuilds every
+# prompt (the guard keeps a static PS1 from growing). C comes from PS0, which bash
+# prints after Enter, before the command runs.
+# PARITY NOTE (WT preexec): zsh additionally emits OSC 9;4;3 (in-flight taskbar
+# progress) from a preexec hook. bash has no preexec without bash-preexec, and
+# starship owns bash's DEBUG trap, so this fallback shell skips it (same precedent
+# as atuin above): there is no in-flight taskbar progress.
+# WezTerm outside zellij also gets zsh's user@host:dir title (OSC 2) at each prompt.
+if [[ ${TERM_PROGRAM:-} != WarpTerminal && $TERM != dumb && $TERM != linux ]]; then
+  if [[ ( -n "$WT_SESSION" || $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+    _wt_osc9=1
+  else
+    _wt_osc9=
+  fi
+  if [[ ( $TERM_PROGRAM == WezTerm || $TERM == wezterm ) && -z "$ZELLIJ" ]]; then
+    _wt_title=1
+  else
+    _wt_title=
+  fi
   _wt_prompt_cmd() {
     local _wt_status=$?
     printf '\e]133;D;%s\a' "$_wt_status"
-    if [[ $TERM_PROGRAM == WezTerm || $TERM == wezterm ]]; then
-      printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
-    elif command -v wslpath &>/dev/null; then
+    printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
+    [[ -n $_wt_title ]] && printf '\e]2;%s@%s:%s\a' "$USER" "${HOSTNAME%%.*}" "${PWD/#"$HOME"/\~}"
+    if [[ -n $_wt_osc9 && $TERM_PROGRAM != WezTerm && $TERM != wezterm ]] && command -v wslpath &>/dev/null; then
       printf '\e]9;9;%s\a' "$(wslpath -w "$PWD" 2>/dev/null)"
     fi
     printf '\e]133;A\a'
-    printf '\e]9;4;0;0\a'
+    [[ -n $_wt_osc9 ]] && printf '\e]9;4;0;0\a'
     return "$_wt_status"
   }
+  _wt_prompt_end() {
+    [[ ${PS1-} == *']133;B'* ]] || PS1+='\[\e]133;B\a\]'
+  }
   # Re-source guard: don't register twice (matches starship's own convention).
-  [[ $PROMPT_COMMAND == *_wt_prompt_cmd* ]] || PROMPT_COMMAND="_wt_prompt_cmd${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
+  [[ $PROMPT_COMMAND == *_wt_prompt_cmd* ]] || PROMPT_COMMAND="_wt_prompt_cmd${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}; _wt_prompt_end"
+  [[ ${PS0-} == *']133;C'* ]] || PS0+='\e]133;C\a'
 fi
 
 # --- zellij: name the tab after the current directory -------------------------
@@ -352,13 +392,17 @@ fi
 # Behaviour and opt-out (WORKSTATION_ZELLIJ_TAB_NAMES=0) are identical; see the
 # fuller comment in zshrc.tera.
 if [[ -n "$ZELLIJ" && ${WORKSTATION_ZELLIJ_TAB_NAMES:-1} == 1 ]]; then
+  # It runs first in PROMPT_COMMAND, so it hands $? on to the prompt marks and starship.
   _zj_tab_name() {
-    [[ "$PWD" == "$_ZJ_LAST_PWD" ]] && return
-    _ZJ_LAST_PWD="$PWD"
-    local n="${PWD##*/}"
-    [[ "$PWD" == "$HOME" ]] && n="~"
-    [[ -z "$n" ]] && n="/"
-    zellij action rename-tab "$n" 2>/dev/null
+    local s=$?
+    if [[ "$PWD" != "$_ZJ_LAST_PWD" ]]; then
+      _ZJ_LAST_PWD="$PWD"
+      local n="${PWD##*/}"
+      [[ "$PWD" == "$HOME" ]] && n="~"
+      [[ -z "$n" ]] && n="/"
+      zellij action rename-tab "$n" 2>/dev/null
+    fi
+    return "$s"
   }
   # Re-source guard: don't register twice (matches the _wt_prompt_cmd convention).
   [[ $PROMPT_COMMAND == *_zj_tab_name* ]] || PROMPT_COMMAND="_zj_tab_name${PROMPT_COMMAND:+; ${PROMPT_COMMAND}}"
@@ -546,6 +590,21 @@ pins `-C "$HOME"`):
   wss  mise dot status            list managed files + their state
   wsu  mise run update            git pull + mise install + mise bootstrap
 
+Shell shortcuts:
+  l / la / ll / lt   eza listings (ll: long + git; lt: tree; lta: + hidden;
+                     ltl: tree + details); in WezTerm, Ctrl+click a name
+  gs ga gc gp gl gd gco gbr
+                     git status, add, commit, push, log, diff, checkout, branch
+  y                  yazi; on quit, cd to where you ended up
+  z <dir> / zi       zoxide: jump to / pick a visited directory
+  fh / fcd / fssh    fzf: rerun a history line / cd below here / ssh to a
+                     host from ~/.ssh/config
+  zs [name] [layout] start or attach a zellij session; zr <cmd>: a floating pane
+  n [text] / nf      list notes or add one (nb) / browse them with a preview
+  hide / clear       clear the screen, keeping / dropping the scrollback
+  Ctrl-R history (fzf, or atuin if ~/.bashrc.local starts it), Ctrl-T insert
+  a file, Alt-C cd into a directory (fzf)
+
 Common flow:
   wse ~/.bashrc       (edit in source state)
   wsd                 (preview the change)
@@ -563,6 +622,7 @@ Push tracked changes upstream:
 Per-machine overrides (untracked):
   ~/.bashrc.local                                              (Linux)
   ...PowerShell\Microsoft.PowerShell_profile.local.ps1         (Windows)
+  %APPDATA%\nushell\autoload\*.nu                              (Windows, Nushell)
 EOF
 }
 
@@ -580,10 +640,21 @@ fcd() {
   [[ -n "$dir" ]] && cd "$dir"
 }
 
-# fzf ssh — pick from ~/.ssh/config hosts
+# fzf ssh — pick from ~/.ssh/config's hosts, and from the files its Include lines name
+# (relative to ~/.ssh, as ssh resolves them; the per-machine hosts live in config.local;
+# glob patterns aren't followed). Host patterns (*, ?, !) are left out, and a `Host a b`
+# line gives both names. PARITY: identical body in zshrc.tera.
 fssh() {
-  local host
-  host=$(grep -E "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}' | fzf)
+  local host f files=("$HOME/.ssh/config")
+  for f in $(awk '/^[[:space:]]*Include[[:space:]]/ { $1 = ""; print }' "$HOME/.ssh/config" 2>/dev/null); do
+    case $f in
+      '~'*) f=$HOME${f#\~} ;;
+      /*) ;;
+      *) f=$HOME/.ssh/$f ;;
+    esac
+    [[ -r $f ]] && files+=("$f")
+  done
+  host=$(cat "${files[@]}" 2>/dev/null | awk '/^[[:space:]]*Host[[:space:]]/ { for (i = 2; i <= NF; i++) if ($i !~ /[*?!]/) print $i }' | awk '!seen[$0]++' | fzf)
   [[ -n "$host" ]] && ssh "$host"
 }
 

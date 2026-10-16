@@ -281,7 +281,8 @@ try {
         Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 0) 'marker written after a failed reinstall'
     }
 
-    $script:miseReply = @{ 'config ls' = @{ Out = $winLs; Exit = 0 } }
+    # Something to install, so the check runs (mise exits 0 when there is nothing).
+    $script:miseReply = @{ 'config ls' = @{ Out = $winLs; Exit = 0 }; 'install --dry-run-code' = @{ Exit = 1 } }
     Test-Case 'disk: too little room stops before mise bootstrap installs anything' {
         $script:freeMB = 1024; $script:usedMB = 0
         $msg = Invoke-Bootstrap
@@ -293,6 +294,15 @@ try {
         $script:freeMB = 2048; $script:usedMB = 2800
         $msg = Invoke-Bootstrap
         Assert ($msg -eq '') "failed: $msg"
+        Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
+    }
+
+    Test-Case 'disk: nothing to install needs no room (1 GB free, every tool installed)' {
+        $script:freeMB = 1024; $script:usedMB = 0
+        $script:miseReply['install --dry-run-code'] = @{ Exit = 0 }
+        try { $msg = Invoke-Bootstrap } finally { $script:miseReply['install --dry-run-code'] = @{ Exit = 1 } }
+        Assert ($msg -eq '') "failed: $msg"
+        Assert (@(Get-MiseCall 'install --dry-run-code').Count -eq 1) 'mise was not asked what would install'
         Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
     }
 

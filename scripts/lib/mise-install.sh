@@ -28,11 +28,16 @@ export MISE_YES=1
 # sources). The budget is what a fresh install writes on Linux, as
 # measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what
 # is already installed, plus 1 GB for the new versions an update installs before
-# `mise prune` drops the old ones. WORKSTATION_SKIP_DISK_CHECK=1 goes ahead
-# anyway; a missing budget or an unreadable df skips the check.
+# `mise prune` drops the old ones. Nothing to install needs no room: the budget
+# also counts the caches, which `installs` doesn't, so a host with every tool
+# already installed would otherwise still need about 2 GB free for an update that
+# writes nothing. WORKSTATION_SKIP_DISK_CHECK=1 goes ahead anyway; a missing
+# budget or an unreadable df skips the check.
 gb() { awk -v mb="$1" 'BEGIN { printf "%.1f GB", mb / 1024 }'; }
 check_disk() {
   local data budget used=0 kb need probe have
+  # Exit 1 when something would install (or mise fails), which keeps the check.
+  if mise install --dry-run-code >/dev/null 2>&1; then return 0; fi
   data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
   budget="$(tr -d '\r' <"$repo/disk-budget.toml" 2>/dev/null | sed -n 's/^linux *= *\([0-9][0-9]*\) *$/\1/p' || true)"
   if [ -z "$budget" ]; then

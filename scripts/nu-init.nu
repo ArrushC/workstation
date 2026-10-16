@@ -253,8 +253,9 @@ def main [--dir: path, --state-dir: path, --ps-dir: path] {
             try { put ($ps_dir | path join "ls_colors.ps1") $"$env:LS_COLORS = '($ls_colors)'\n" } catch {|e| print $"nu-init: warning: ls_colors.ps1 failed: (why $e)" }
         }
     }
-    # atuin's database starts empty: import Nushell's existing history once. With no
-    # history file there is nothing from before atuin to bring over.
+    # atuin's database starts empty: import Nushell's existing plaintext history once (this
+    # script runs without config.nu, so $nu.history-path is the plaintext file, not the SQLite
+    # store config.nu switches to). With no history file there is nothing to bring over.
     try {
         let marker = ($state | path join ".atuin-nu-imported")
         if (which atuin | is-not-empty) and not ($marker | path exists) {

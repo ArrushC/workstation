@@ -5,7 +5,7 @@
 # scripts/check-invariants.sh (check_wezterm_config) runs the event handlers; this catches
 # what its stand-in can't: a field or action the nightly renamed or dropped.
 # -WezTerm takes an installed wezterm.exe. Without it, scripts/wezterm-nightly.ps1 installs
-# the nightly into a temp root (no Start Menu entry, a throwaway toast-id key).
+# the nightly into a temp root (no Start Menu entry, throwaway toast-id and environment keys).
 # Windows PowerShell 5.1 and pwsh; ASCII only.
 param([string]$WezTerm)
 Set-StrictMode -Version Latest
@@ -20,7 +20,7 @@ try {
         $shell = (Get-Process -Id $PID).Path
         & $shell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'wezterm-nightly.ps1') `
             -Root (Join-Path $tmp 'wezterm') -ShortcutDir (Join-Path $tmp 'menu') `
-            -ToastKey "$toastRoot\org.wezfurlong.wezterm" | Out-Host
+            -ToastKey "$toastRoot\org.wezfurlong.wezterm" -EnvKey "$toastRoot\Environment" | Out-Host
         $WezTerm = Join-Path $tmp 'wezterm\current\wezterm.exe'
     }
     if (-not (Test-Path -LiteralPath $WezTerm)) { throw "no $WezTerm (the nightly download failed?)" }
@@ -30,9 +30,14 @@ try {
     Test-Case "WezTerm ($version) loads wezterm.lua: its keys and mouse bindings are listed" {
         foreach ($want in @(
                 'ALT \| CTRL\s+l\s+->\s+ShowLauncherArgs',
+                'ALT \| CTRL\s+s\s+->\s+EmitEvent',
                 'CTRL\s+G\s+->\s+QuickSelectArgs',
                 'CTRL\s+A\s+->\s+Multiple\(\[ActivateCopyMode',
                 'CTRL\s+UpArrow\s+->\s+ScrollToPrompt\(-1\)',
+                'SHIFT \| CTRL\s+UpArrow\s+->\s+ScrollToPrompt\(-1\)',
+                'CTRL\s+Insert\s+->\s+EmitEvent',
+                'CTRL\s+T\s+->\s+EmitEvent',
+                'ALT\s+D\s+->\s+EmitEvent',
                 'SUPER\s+Drag \{ streak: 1, button: Left \}\s+->\s+StartWindowDrag',
                 'SHIFT\s+Down \{ streak: 1, button: Left \}\s+->\s+SelectTextAtMouseCursor\(Cell\)',
                 'CTRL\s+W\s+->\s+CloseCurrentTab \{ confirm: false \}',

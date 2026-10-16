@@ -13,7 +13,8 @@
 # is already installed lowers the need; (12) 4.5 GB is short of the 5000 + 1024 MB
 # need; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
 # an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
-# file is still read. tasks/optional-packages (fake rpm/sudo): (17) nothing
+# file is still read; (28) nothing to install skips the check, however little room.
+# tasks/optional-packages (fake rpm/sudo): (17) nothing
 # missing means no sudo; (18) a missing package goes to dnf with strict=0 and an
 # absent one is reported as skipped, exit 0. (19) verify-binary.sh honours
 # WORKSTATION_GLIBC_FLOOR. enable-el-repos.sh (fake os-release/rpm/dnf/sudo):
@@ -32,6 +33,7 @@ cat >"$T/bin/mise" <<'EOF'
 log="${FAKE_LOG:?}"
 case "$1 ${2:-}" in
 "where node") [ -f "$FAKE_NODE" ] && exit 0 || exit 1 ;;
+"install --dry-run-code") [ -n "${FAKE_NOTHING_MISSING:-}" ] && exit 0 || exit 1 ;;
 "install --force") echo "install --force $3" >>"$log"; exit 0 ;;
 "install ") echo "install" >>"$log"; : >"$FAKE_NODE"; exit 0 ;;
 "config get") [ -n "${FAKE_DECL_FAIL:-}" ] && { echo "mise ERROR Key not found: tools.node" >&2; exit 1; }; printf '%s\n' "$FAKE_DECL"; exit 0 ;;
@@ -165,6 +167,13 @@ printf 'linux = 5000\r\nwindows = 3000\r\n' >"$R/disk-budget.toml"
 rc16=0
 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || rc16=$?
 [ "$rc16" = 1 ] || fail "disk check: a CRLF disk-budget.toml must still be read (expected exit 1 at 1 GB free, got $rc16)"
+# 28. nothing to install (every tool installed, the caches outside `installs`):
+# 1 GB free is enough, as mise install writes nothing.
+: >"$FAKE_LOG"
+out28="$(FAKE_NOTHING_MISSING=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" ||
+  fail "disk check: nothing to install must not stop the run: $out28"
+grep -qx install "$FAKE_LOG" || fail "disk check (nothing to install): mise install did not run"
+printf '%s\n' "$out28" | grep -q 'disk space' && fail "disk check (nothing to install): still warned: $out28"
 
 # 17-18. tasks/optional-packages (fake rpm/sudo): installs only what is missing,
 # with dnf's strict=0, and a package this release lacks is skipped, not fatal.
@@ -264,4 +273,4 @@ if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; the
   printf '%s\n' "$out19" | grep -q 'checked against glibc 2.0 (WORKSTATION_GLIBC_FLOOR)' || fail "verify-binary floor: $out19"
 fi
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped); optional-packages installs only what's missing with strict=0 and skips what the release lacks; enable-el-repos installs EPEL (by URL on RHEL) and picks CRB per host (RHEL subscription-manager, EL8 powertools, EL9 crb), stopping with the error when it can't; optional-packages skips a package below its first EL release without sudo; verify-binary honours WORKSTATION_GLIBC_FLOOR"
+echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped, nothing to install never blocked); optional-packages installs only what's missing with strict=0 and skips what the release lacks; enable-el-repos installs EPEL (by URL on RHEL) and picks CRB per host (RHEL subscription-manager, EL8 powertools, EL9 crb), stopping with the error when it can't; optional-packages skips a package below its first EL release without sudo; verify-binary honours WORKSTATION_GLIBC_FLOOR"

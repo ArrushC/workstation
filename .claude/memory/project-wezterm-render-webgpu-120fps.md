@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-`dotfiles/config/wezterm/wezterm.lua` sets `front_end = 'WebGpu'`, `webgpu_power_preference =
+`dotfiles/config/wezterm/appearance.lua` sets `front_end = 'WebGpu'`, `webgpu_power_preference =
 'HighPerformance'` and `max_fps = 120` unconditionally (`animation_fps = 60` only paces blinks and
 bell fades).
 

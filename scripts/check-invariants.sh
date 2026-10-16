@@ -377,6 +377,26 @@ check_ps_mise_comma_lists() {
   [ "$allgood" -eq 1 ] && ok "no bare a,b argument to mise in $n tracked PowerShell files"
 }
 
+# Every pull of this checkout passes --prune, so the origin/* branches GitHub has deleted
+# (a merged PR's) don't pile up on the hosts. Each file must still have its pull.
+check_git_pull_prune() {
+  hdr "git pull of this checkout passes --prune"
+  local f hits allgood=1
+  for f in bootstrap.sh bootstrap.ps1 tasks/update \
+    dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera \
+    dotfiles/windows/AppData/Roaming/nushell/config.nu.tera; do
+    hits=$(grep -nE '^[^#]*git[[:space:]]+-C[[:space:]]+[^[:space:]]+[[:space:]]+pull([[:space:]]|$)' "$f")
+    if [ -z "$hits" ]; then
+      allgood=0
+      bad "$f: no \`git -C <repo> pull\` found (moved? update check_git_pull_prune)"
+    elif grep -v -- '--prune' <<<"$hits" | grep -q .; then
+      allgood=0
+      bad "$f: a pull without --prune: $(grep -v -- '--prune' <<<"$hits" | head -1)"
+    fi
+  done
+  [ "$allgood" -eq 1 ] && ok "bootstrap.sh, bootstrap.ps1, tasks/update and both Windows wsu pull with --prune"
+}
+
 check_sentinels() {
   hdr "sentinel blocks matched"
   local s e
@@ -996,9 +1016,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -1071,15 +1091,15 @@ check_warp_guards() {
   local n_zsh n_bash out
   n_zsh=$(grep -c 'TERM_PROGRAM:-.* != WarpTerminal' "$zsh" || true)
   n_bash=$(grep -c 'TERM_PROGRAM:-.* != WarpTerminal' "$bash" || true)
-  if [ "$n_zsh" -eq 6 ]; then
-    ok "zshrc.tera: 6 Warp guards (fzf, atuin, starship, shift-select, zstyles, fzf-tab)"
+  if [ "$n_zsh" -eq 7 ]; then
+    ok "zshrc.tera: 7 Warp guards (fzf, atuin, starship, shift-select, zstyles, fzf-tab, prompt marks)"
   else
-    bad "zshrc.tera: $n_zsh Warp guards, want 6 — a guard was added, dropped, or reworded"
+    bad "zshrc.tera: $n_zsh Warp guards, want 7 — a guard was added, dropped, or reworded"
   fi
-  if [ "$n_bash" -eq 2 ]; then
-    ok "bashrc.tera: 2 Warp guards (fzf, starship)"
+  if [ "$n_bash" -eq 3 ]; then
+    ok "bashrc.tera: 3 Warp guards (fzf, starship, prompt marks)"
   else
-    bad "bashrc.tera: $n_bash Warp guards, want 2 — parity pair with zshrc.tera"
+    bad "bashrc.tera: $n_bash Warp guards, want 3 — parity pair with zshrc.tera"
   fi
 
   # Depth-track if/fi and report any plugin source inside a Warp guard; one-line
@@ -1380,13 +1400,13 @@ else:
 PY
 }
 
-# WezTerm's config (dotfiles/config/wezterm/wezterm.lua, deployed on Windows) runs in WezTerm's
-# Lua at startup, and an error there leaves WezTerm on its defaults. Run it under Neovim's
-# LuaJIT with a stand-in wezterm module, as Windows and as Linux, against a fake
-# ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
+# WezTerm's config (dotfiles/config/wezterm/wezterm.lua and the modules it requires, loaded on
+# Windows) runs in WezTerm's Lua at startup, and an error there leaves WezTerm on its defaults.
+# Run it under Neovim's LuaJIT with a stand-in wezterm module, as Windows and as Linux, against
+# a fake ~/.ssh/config.local and Nushell shim. Soft-skipped without nvim (CI's lint job).
 check_wezterm_config() {
   hdr "WezTerm config (runs with a stand-in wezterm module, handlers included)"
-  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua
+  local cfg=dotfiles/config/wezterm/wezterm.lua tmp out lua modules
   # LuaJIT either way: plain luajit (CI installs it) or the one inside nvim.
   if command -v luajit >/dev/null 2>&1; then
     lua=(luajit)
@@ -1398,13 +1418,13 @@ check_wezterm_config() {
   fi
   tmp=$(mktemp -d)
   mkdir -p "$tmp/.ssh" "$tmp/t"
-  printf 'Host alpha beta\nHost *.corp\nHost !bad\n  HostName x.example\n  host = gamma # comment\nHost bad"quote\n' >"$tmp/.ssh/config.local"
+  printf 'Host alpha beta\n  HostName atc-alpha.corp\nHost *.corp\nHost !bad\n  HostName x.example\n  host = gamma # comment\n  HostName = 10.0.0.9\nMatch host foo\n  HostName y.example\nHost bad"quote\n' >"$tmp/.ssh/config.local"
   # The config builds the Windows shim path with backslashes; on Linux that is one file name.
   : >"$tmp/la\\mise\\shims\\nu.exe"
   # The stand-in records what the config hands WezTerm: actions as { action, args } tables
   # (callable, as WezTerm's are), callbacks as { callback }, event handlers by name.
   cat >"$tmp/check.lua" <<'LUA'
-local path, triple, home, localappdata = arg[1], arg[2], arg[3], arg[4]
+local path, triple, home, localappdata, modules = arg[1], arg[2], arg[3], arg[4], arg[5]
 local real_getenv = os.getenv
 os.getenv = function(k) if k == 'LOCALAPPDATA' then return localappdata end return real_getenv(k) end
 local handlers, battery, live = {}, {}, {}
@@ -1413,6 +1433,7 @@ local function named(name)
 end
 local wezterm = {
   target_triple = triple,
+  config_file = path,
   home_dir = home,
   GLOBAL = {},
   nerdfonts = {},
@@ -1434,7 +1455,8 @@ local wezterm = {
     parse = function(u)
       local scheme, host, path = u:match('^(%a+)://([^/]*)(/.*)$')
       if not scheme then error('not a URL: ' .. u) end
-      return { scheme = scheme, host = host, file_path = path:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end) }
+      local url = { scheme = scheme, host = host, file_path = path:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end) }
+      return setmetatable(url, { __tostring = function() return u end })
     end,
   },
   action = setmetatable({}, { __index = function(_, name) return named(name) end }),
@@ -1457,6 +1479,7 @@ local function check(cond, msg) if not cond then error(msg, 0) end end
 local function has(s, sub) return s ~= nil and s:find(sub, 1, true) ~= nil end
 
 check(type(c) == 'table', 'the file does not return the config table')
+for m in modules:gmatch('[^,]+') do check(package.loaded[m], m .. '.lua is never required, so WezTerm ignores it') end
 local scheme = c.color_schemes and c.color_schemes[c.color_scheme]
 check(scheme, 'color_scheme names no scheme in color_schemes')
 check(scheme.tab_bar.active_tab.bg_color == '#cba6f7' and scheme.cursor_bg == '#cba6f7', 'the active tab and the cursor are not mauve')
@@ -1471,8 +1494,22 @@ check(c.scrollback_lines == 1000000, 'scrollback_lines is not 1,000,000')
 check(c.front_end == 'WebGpu' and c.webgpu_power_preference == 'HighPerformance' and c.max_fps == 120, 'rendering is not WebGpu + HighPerformance + 120 fps')
 check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use_fancy_tab_bar == false, 'chrome: not RESIZE with the retro tab bar at the bottom')
 check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
+check(c.default_cursor_style == 'BlinkingBar' and c.cursor_blink_rate > 0, 'the cursor is not a blinking bar')
+-- WezTerm reads an easing's four numbers as a one-dimensional cubic: one whose first isn't 0
+-- (Ease, EaseIn, EaseInOut) starts each blink fade part-way, a visible jump.
+for _, k in ipairs({ 'cursor_blink_ease_in', 'cursor_blink_ease_out' }) do
+  local e = c[k]
+  local from_0 = e == nil or e == 'Linear' or e == 'EaseOut' or e == 'Constant' or (type(e) == 'table' and e.CubicBezier and e.CubicBezier[1] == 0)
+  check(from_0, k .. ' starts its fade part-way (a CubicBezier must start with 0)')
+end
+-- An unfocused cursor is a hollow box with sides 1.5x this thickness: 2 px or more at 100%
+-- scaling fills JetBrainsMono 10.5's 8 px cell, and the box looks like a split bar.
+local pt = c.cursor_thickness == nil and 0 or tonumber(tostring(c.cursor_thickness):match('^([%d.]+)pt$'))
+check(pt and math.floor(pt * 96 / 72) <= 1, 'cursor_thickness is not below 1.5pt (an unfocused cursor would look like a split bar)')
 check(c.notification_handling == 'SuppressFromFocusedPane', 'notification_handling is not SuppressFromFocusedPane')
-check(c.window_close_confirmation == 'NeverPrompt' and c.enable_kitty_keyboard == true, 'closing prompts, or the kitty keyboard protocol is off')
+check(c.window_close_confirmation == 'NeverPrompt' and c.enable_kitty_keyboard == true, 'closing the window asks, or the kitty keyboard protocol is off')
+-- A middle-click on a tab always confirms, so only this hook stops it asking.
+check(handlers['mux-is-process-stateful'] and handlers['mux-is-process-stateful']({ name = 'hx', executable = 'hx' }) == false, 'a middle-click on a tab asks before closing it (mux-is-process-stateful does not return false)')
 check(c.key_tables and c.key_tables.resize_pane and #c.key_tables.resize_pane == 6, 'no resize_pane key table (arrows, Esc, Enter)')
 check(type(c.ssh_domains) == 'table' and #c.ssh_domains == 0, 'ssh_domains is not empty')
 check(has(c.hyperlink_rules[#c.hyperlink_rules].format, 'ArrushC/workstation/issues/$1') and #c.hyperlink_rules == 2, 'no #123 hyperlink rule after the defaults')
@@ -1486,13 +1523,19 @@ local function key(chord, name)
 end
 key('CTRL|ALT+l', 'ShowLauncherArgs')
 key('CTRL+UpArrow', 'ScrollToPrompt')
+check(key('CTRL|SHIFT+UpArrow', 'ScrollToPrompt').args == -1 and key('CTRL|SHIFT+DownArrow', 'ScrollToPrompt').args == 1, 'Ctrl+Shift+Up/Down do not jump between prompts')
 key('CTRL|SHIFT+LeftArrow', 'DisableDefaultAssignment')
 key('CTRL|SHIFT+RightArrow', 'DisableDefaultAssignment')
 local scroll = key('CTRL|SHIFT+a', 'Multiple')
 check(scroll.args[#scroll.args - 1].action == 'ScrollToBottom', 'Ctrl+Shift+A does not scroll back to the bottom')
-for _, k in ipairs({ 'c', 'e', 'h', 's', 'o', 'F5' }) do key('CTRL|SHIFT+' .. k, 'callback') end
-check(key('CTRL|SHIFT+w', 'CloseCurrentTab').args.confirm == false, 'Ctrl+Shift+W still asks before closing')
+for _, k in ipairs({ 'c', 'e', 'h', 's', 'o', 'F5', 't' }) do key('CTRL|SHIFT+' .. k, 'callback') end
+key('CTRL|ALT+t', 'callback')
+check(keys['CTRL+Insert'] == keys['CTRL|SHIFT+c'], 'Ctrl+Insert is not the Ctrl+Shift+C copy')
+key('ALT|SHIFT+D', 'callback')
+key('ALT|SHIFT+R', 'callback')
+check(key('CTRL|SHIFT+w', 'CloseCurrentTab').args.confirm == false, 'Ctrl+Shift+W asks before closing the tab')
 key('CTRL|SHIFT+q', 'PaneSelect')
+key('ALT+0', 'ActivateLastTab')
 check(key('ALT|SHIFT+S', 'ActivateKeyTable').args.name == 'resize_pane', 'Alt+Shift+S does not enter resize mode')
 local helix, sha = key('CTRL|SHIFT+g', 'QuickSelectArgs'), key('CTRL|SHIFT+y', 'QuickSelectArgs')
 local mouse = {}
@@ -1520,7 +1563,7 @@ local got = table.concat(labels, ',')
 if triple:find('windows') then
   check(c.wsl_domains and c.wsl_domains[1].default_cwd == '~', 'Windows: WSL tabs do not start in ~')
   check(c.default_prog and c.default_prog[1] == localappdata .. '\\mise\\shims\\nu.exe', 'Windows: default_prog is not the Nushell shim')
-  check(got == 'Nushell,PowerShell,Windows PowerShell,SSH: alpha,SSH: beta,SSH: gamma', 'Windows launch menu: ' .. got)
+  check(got == 'Nushell,PowerShell,Windows PowerShell,cmd,SSH: alpha,SSH: beta,SSH: gamma', 'Windows launch menu: ' .. got)
 else
   check(c.default_prog == nil, 'Linux: default_prog is set')
   check(got == 'SSH: alpha,SSH: beta,SSH: gamma', 'Linux launch menu: ' .. got)
@@ -1529,7 +1572,7 @@ local ssh = c.launch_menu[#c.launch_menu].args
 check(ssh[1] == 'ssh' and ssh[2] == '-t' and ssh[3] == 'gamma' and #ssh == 4, 'SSH entries do not run ssh -t <host> <command>')
 check(has(ssh[4], 'infocmp wezterm') and has(ssh[4], 'TERM=xterm-256color') and has(ssh[4], 'exec zellij attach --create main'), 'SSH entries do not fall back to xterm-256color before zellij: ' .. ssh[4])
 
-for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config-reloaded', 'augment-command-palette', 'copied-scrollback', 'open-uri' }) do
+for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config-reloaded', 'augment-command-palette', 'copied-scrollback', 'open-uri', 'new-tab-button-click' }) do
   check(type(handlers[e]) == 'function', 'no ' .. e .. ' handler')
 end
 
@@ -1544,8 +1587,8 @@ local function window(key_table, id)
     perform_action = function(_, a) performed = a end,
   }
 end
--- A pane: `opts` sets its id, domain and foreground process ({ name, argv }; false once it
--- has exited). Registered with the stand-in wezterm.mux.get_pane.
+-- A pane: `opts` sets its id, domain, OSC 7 cwd, title and foreground process ({ name, argv };
+-- false once it has exited). Registered with the stand-in wezterm.mux.get_pane.
 local function pane(dims, alt, cursor_y, opts)
   opts = opts or {}
   pasted, sent = {}, {}
@@ -1555,6 +1598,8 @@ local function pane(dims, alt, cursor_y, opts)
     get_cursor_position = function() return { y = cursor_y } end,
     pane_id = function() return opts.id or 7 end,
     get_domain_name = function() return opts.domain or 'local' end,
+    get_current_working_dir = function() return opts.cwd and wezterm.url.parse(opts.cwd) or nil end,
+    get_title = function() return opts.title or 'x' end,
     get_foreground_process_info = function(self) return self.proc or nil end,
     get_lines_as_text = function() return 'line 1\nline 2\n' end,
     paste = function(_, t) pasted[#pasted + 1] = t end,
@@ -1622,7 +1667,12 @@ local host_colour = tab_bg(bg)
 check(not wezterm.GLOBAL.bell_panes['7'], 'viewing the tab does not clear its bell mark')
 check(host_colour ~= '#cba6f7' and host_colour:match('^#%x+$'), 'an active SSH tab is not filled with its host colour: ' .. tostring(host_colour))
 handlers['update-status'](window(nil, 2), sp)
-check(has(status, 'dev10'), 'the footer does not name the SSH host: ' .. status)
+check(has(status, 'dev10 · zellij:main'), 'the footer does not name the SSH host and its zellij session: ' .. status)
+local sp_dims = sp.get_dimensions
+sp.get_dimensions = function() return { cols = 120, viewport_rows = 38, scrollback_rows = 10, scrollback_top = 0 } end
+handlers['update-status'](window(nil, 2), sp)
+check(has(status, 'dev10') and not has(status, 'zellij'), 'a narrower footer keeps the zellij session: ' .. status)
+sp.get_dimensions = sp_dims
 bg.is_active = false
 check(title(bg) == ' ● > 1: dev10 ', 'unseen output: [' .. title(bg) .. ']')
 check(tab_bg(bg) == '#1e1e2e', 'an inactive SSH tab is not on the bar colour')
@@ -1633,18 +1683,123 @@ ssh_pane.progress = { Percentage = 42 }
 check(has(title(bg), '42%'), 'no progress mark: ' .. title(bg))
 ssh_pane.progress = 'Indeterminate'
 check(title(bg):sub(1, 3) == ' ~ ', 'no busy mark: ' .. title(bg))
+-- On the active tab a mark keeps its colour, so an error % reads as one.
+first.active_pane.progress = { Error = 13 }
+local mark_item = handlers['format-tab-title'](first, { first }, nil, nil, false, 32)[2]
+check(mark_item and mark_item.Foreground and mark_item.Foreground.Color == '#f38ba8', 'an error mark on the active tab is not red')
+first.active_pane.progress = 'None'
 pane(wide, false, 0, { id = 8, proc = { name = 'pwsh.exe', argv = { 'pwsh.exe' } } })
 local win = { tab_id = 4, tab_index = 0, is_active = false, tab_title = '', panes = {},
   active_pane = { pane_id = 8, title = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', domain_name = 'local', progress = 'None' } }
 check(title(win) == ' > 1: pwsh ', '.exe trimming: [' .. title(win) .. ']')
+-- The previous tab (Alt+0's, and where closing this one lands) is underlined; the active one never is.
+local function underlined(tab)
+  for _, it in ipairs(handlers['format-tab-title'](tab, { tab }, nil, nil, false, 32)) do
+    if it.Attribute and it.Attribute.Underline == 'Single' then return true end
+  end
+  return false
+end
+win.is_last_active = true
+check(underlined(win), 'the previous tab is not underlined')
+win.is_active = true
+check(not underlined(win), 'the active tab is underlined')
+win.is_active, win.is_last_active = false, false
+check(not underlined(win), 'a tab other than the previous one is underlined')
 pane(wide, false, 0, { id = 9, domain = 'WSL:AlmaLinux-9', proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } })
 local wsl = { tab_id = 3, tab_index = 0, is_active = false, tab_title = '', panes = {},
   active_pane = { pane_id = 9, title = 'wsl.exe', domain_name = 'WSL:AlmaLinux-9', progress = 'None', current_working_dir = 'file://PC/home/me' } }
 check(title(wsl) == ' $ 1: AlmaLinux-9 ', 'a WSL tab is not named after its distro: [' .. title(wsl) .. ']')
+-- At rest a WSL tab takes its distro's colour, as an SSH tab takes its host's: muted in the
+-- name when inactive, the fill when active.
+local alma = package.loaded.appearance.accent('AlmaLinux-9')
+local function name_fg(tab)
+  local fg
+  for _, it in ipairs(handlers['format-tab-title'](tab, { tab }, nil, nil, false, 32)) do
+    if it.Foreground then fg = it.Foreground.Color end
+    if it.Text and it.Text:find(':', 1, true) then return fg end
+  end
+end
+check(alma ~= '#cba6f7' and name_fg(wsl) == 'dim' .. alma, "an inactive WSL tab's name is not in its distro's colour: " .. tostring(name_fg(wsl)))
+wsl.is_active = true
+check(tab_bg(wsl) == alma, "an active WSL tab is not filled with its distro's colour: " .. tostring(tab_bg(wsl)))
+wsl.is_active = false
 wsl.active_pane.current_working_dir = 'file://build01.corp/home/me'
 check(title(wsl) == ' > 1: build01.corp ', "a WSL tab that ssh'd elsewhere is not named after that host: [" .. title(wsl) .. ']')
+-- A host's real name maps to its ~/.ssh/config.local alias: same name, same colour.
+wsl.active_pane.current_working_dir = 'file://atc-alpha/home/me'
+check(title(wsl) == ' > 1: alpha ', "a WSL tab on alpha's HostName is not named alpha: [" .. title(wsl) .. ']')
+wsl.is_active = true
+local wsl_colour = tab_bg(wsl)
+wsl.is_active = false
+pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', 'me@atc-alpha.corp' } } })
+local to_alpha = { tab_id = 5, tab_index = 0, is_active = true, tab_title = '', panes = {}, active_pane = { pane_id = 10, title = 'x', domain_name = 'local', progress = 'None' } }
+check(title(to_alpha) == ' > 1: alpha ' and tab_bg(to_alpha) == wsl_colour, 'ssh to a HostName is not the alias tab in its colour: [' .. title(to_alpha) .. ']')
+pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', '10.0.0.9' } } })
+check(title(to_alpha) == ' > 1: gamma ', 'ssh to an address HostName is not its alias: [' .. title(to_alpha) .. ']')
+pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', 'x.example' } } })
+check(title(to_alpha) == ' > 1: x.example ', 'a HostName in a block with no alias was mapped: [' .. title(to_alpha) .. ']')
+pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', 'y.example' } } })
+check(title(to_alpha) == ' > 1: y.example ', "a Match block's HostName was mapped to the Host above it: [" .. title(to_alpha) .. ']')
+pane(wide, false, 0, { id = 10, proc = { name = 'ssh', argv = { 'ssh', '10.0.0.10' } } })
+check(title(to_alpha) == ' > 1: 10.0.0.10 ', 'an address HostName gave its first number as a short name: [' .. title(to_alpha) .. ']')
+-- A host sending no OSC 7 but its own user@host title names the tab; this machine's
+-- title (zshrc/bashrc set it at each prompt under WezTerm) puts it back.
+wsl.active_pane.current_working_dir = 'file://PC/home/me'
+wsl.active_pane.title = 'me@cache-apl:~'
+check(title(wsl) == ' > 1: cache-apl ', 'a WSL tab on a host that sets only its title is not named after it: [' .. title(wsl) .. ']')
+wsl.active_pane.title = 'me@PC:~/src'
+check(title(wsl) == ' $ 1: AlmaLinux-9 ', 'a WSL tab back from ssh is not named after its distro: [' .. title(wsl) .. ']')
 wsl.tab_title = string.rep('n', 60)
 check(#title(wsl) <= 32, 'a long name overflows max_width: ' .. #title(wsl))
+
+-- The footer names the host a WSL tab has ssh'd to (OSC 7, else a user@host title).
+local wsl_proc = { name = 'wsl.exe', argv = { 'wsl.exe' } }
+handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 44, domain = 'WSL:AlmaLinux-9', cwd = 'file://build01.corp/home/me', proc = wsl_proc }))
+check(has(status, 'build01.corp'), "the footer does not name the host a WSL tab has ssh'd to: " .. status)
+handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 45, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@cache-apl:~', proc = wsl_proc }))
+check(has(status, 'cache-apl'), 'the footer does not name a host known only from its title: ' .. status)
+handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 46, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@PC:~', proc = wsl_proc }))
+check(not has(status, 'PC'), 'the footer names this machine as a WSL tab\'s host: ' .. status)
+
+-- New tabs and splits: WezTerm's default, except a WSL pane whose directory isn't in the
+-- distro starts in ~ (wsl.exe --cd ~), and an SSH tab's run its ssh again.
+local function spawned(k, opts)
+  keys[k].callback(w, pane(wide, false, 0, opts))
+  return performed
+end
+local function wsl_at(cwd) return { id = 40, domain = 'WSL:AlmaLinux-9', cwd = cwd, proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } } end
+local t = spawned('CTRL|SHIFT+t', wsl_at('file://PC/home/me/src'))
+check(t.action == 'SpawnCommandInNewTab' and t.args.domain == 'CurrentPaneDomain' and t.args.cwd == nil, 'Ctrl+Shift+T in a WSL tab does not follow its OSC 7')
+for _, cwd in ipairs({ false, 'file:///C:/Users/me/', 'file://build01.corp/home/me' }) do
+  t = spawned('CTRL|SHIFT+t', wsl_at(cwd or nil))
+  check(t.args.domain.DomainName == 'WSL:AlmaLinux-9' and t.args.cwd == '~', 'Ctrl+Shift+T in a WSL tab at ' .. tostring(cwd) .. ' does not start in ~')
+end
+t = spawned('ALT|SHIFT+D', wsl_at('file://build01.corp/home/me'))
+check(t.action == 'SplitVertical' and t.args.cwd == '~', "Alt+Shift+D in a WSL tab that ssh'd elsewhere does not start in ~")
+t = spawned('ALT|SHIFT+R', { id = 41, cwd = 'file://PC/C:/src' })
+check(t.action == 'SplitHorizontal' and t.args.domain == 'CurrentPaneDomain', 'Alt+Shift+R in a local tab is not the default split')
+t = spawned('CTRL|SHIFT+t', { id = 43, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@cache-apl:~', proc = wsl_proc })
+check(t.args.cwd == '~', "Ctrl+Shift+T in a WSL tab on a host known from its title does not start in ~")
+local ssh_tab = { id = 47, proc = { name = 'ssh.exe', argv = ssh_argv } }
+t = spawned('CTRL|SHIFT+t', ssh_tab)
+check(t.action == 'SpawnCommandInNewTab' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Ctrl+Shift+T in an SSH tab does not open another ssh to its host')
+t = spawned('ALT|SHIFT+D', ssh_tab)
+check(t.action == 'SplitVertical' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
+-- Ctrl+Alt+T: never another ssh. An SSH tab's is the default shell here, in the directory
+-- its ssh started from (home once ssh has exited); any other tab's is Ctrl+Shift+T's.
+t = spawned('CTRL|ALT+t', { id = 48, proc = { name = 'ssh.exe', argv = ssh_argv, cwd = 'C:\\src' } })
+check(t.action == 'SpawnCommandInNewTab' and t.args.args == nil and t.args.domain.DomainName == 'local' and t.args.cwd == 'C:\\src',
+  "Ctrl+Alt+T in an SSH tab is not a local shell in ssh's directory: " .. tostring(t.args.args and t.args.args[1]) .. ' ' .. tostring(t.args.cwd))
+t = spawned('CTRL|ALT+t', { id = 48, proc = false })
+check(t.args.args == nil and t.args.domain.DomainName == 'local' and t.args.cwd == wezterm.home_dir, 'Ctrl+Alt+T in an SSH tab whose ssh has exited does not start at home: ' .. tostring(t.args.cwd))
+t = spawned('CTRL|ALT+t', wsl_at('file://build01.corp/home/me'))
+check(t.args.domain.DomainName == 'WSL:AlmaLinux-9' and t.args.cwd == '~', "Ctrl+Alt+T in a WSL tab that ssh'd elsewhere is not Ctrl+Shift+T's ~")
+t = spawned('CTRL|ALT+t', { id = 41, cwd = 'file://PC/C:/src' })
+check(t.args.domain == 'CurrentPaneDomain' and t.args.args == nil, 'Ctrl+Alt+T in a local tab is not the default new tab')
+for button, k in pairs({ Left = 'CTRL|SHIFT+t', Middle = 'CTRL|SHIFT+s', Right = 'CTRL|ALT+l' }) do
+  performed = nil
+  check(handlers['new-tab-button-click'](w, p, button) == false and performed == keys[k], button .. '-click on + is not ' .. k)
+end
 
 -- Reconnect: reruns the ssh seen in the pane after it has exited; elsewhere it says why not.
 sp.proc = false
@@ -1709,26 +1864,128 @@ for _, r in ipairs(performed.args.choices) do
   if r.id then launch = launch + 1 end
 end
 local text = table.concat(rows, '\n')
-for _, k in ipairs({ 'Ctrl+Alt+L', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F' }) do
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Alt+S', 'Ctrl+Shift+T', 'Ctrl+Alt+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Alt+0', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
   check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
 end
 check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')
 performed.args.action.callback(w, p, '1')
 check(performed.action == 'SpawnCommandInNewTab' and performed.args == c.launch_menu[1], 'a launch row does not open its entry')
 local palette = handlers['augment-command-palette']()
-check(#palette == 10 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
+check(#palette == 13 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
+local briefs = {}
+for _, e in ipairs(palette) do briefs[e.brief] = e.action end
+check(briefs['Split pane down'] == keys['ALT|SHIFT+D'] and briefs['Split pane right'] == keys['ALT|SHIFT+R'], 'the command palette has no Alt+Shift+D/R splits')
+check(briefs['SSH hosts: connect, add, edit or delete'] == keys['CTRL|ALT+s'], 'the command palette has no SSH host editor')
+
+-- Ctrl+Alt+S: the SSH host editor over ~/.ssh/config.local (sshconfig.lua's own cases are
+-- scripts/test-wezterm-sshconfig.sh). Each pick or answer goes to the callback WezTerm
+-- would call; the file is put back at the end, for the next triple's run.
+local conf = home .. '/.ssh/config.local'
+local function slurp()
+  local fh = io.open(conf, 'rb')
+  local s = fh:read('*a')
+  fh:close()
+  return s
+end
+local original = slurp()
+local function pick(match)
+  for _, ch in ipairs(performed.args.choices) do
+    if has(ch.label, match) then return performed.args.action.callback(w, p, ch.id, ch.label) end
+  end
+  error('no "' .. match .. '" row in: ' .. tostring(performed.args.title), 0)
+end
+local function answer(line) performed.args.action.callback(w, p, line) end
+local function open_host(name, item)
+  keys['CTRL|ALT+s'].callback(w, p)
+  pick(name .. ' ')
+  if item then pick(item) end
+end
+keys['CTRL|ALT+s'].callback(w, p)
+check(performed.action == 'InputSelector', 'Ctrl+Alt+S does not open the host list')
+local rows = {}
+for _, ch in ipairs(performed.args.choices) do rows[#rows + 1] = ch.label end
+check(#rows == 4 and has(rows[1], 'Add') and has(rows[2], 'alpha ') and has(rows[2], 'atc-alpha.corp') and has(rows[4], 'gamma ') and has(rows[4], '10.0.0.9'),
+  'the host list is not Add, then each host and its address: ' .. table.concat(rows, ' | '))
+-- Add: a name (a taken one is asked again, saying why), an address, a note; the save
+-- reloads the config, and the reload's notice names the host.
+pick('Add')
+check(performed.action == 'PromptInputLine' and performed.args.initial_value == '', 'Add does not ask for a name')
+answer('Alpha')
+check(performed.action == 'PromptInputLine' and has(performed.args.description, 'already') and performed.args.initial_value == 'Alpha',
+  'a taken name is not asked for again with the reason: ' .. tostring(performed.args.description))
+answer('delta')
+check(performed.action == 'PromptInputLine' and has(performed.args.description, 'delta'), 'Add does not ask for the address')
+answer('me@delta.corp:99999')
+check(performed.action == 'PromptInputLine' and has(performed.args.description, 'port') and performed.args.initial_value == 'me@delta.corp:99999', 'a bad port is not asked for again with the reason')
+answer('me@delta.corp:2200')
+check(performed.action == 'PromptInputLine' and performed.args.initial_value == '', 'Add does not ask for a note')
+answer('the db box')
+check(has(slurp(), 'atc-alpha.corp\nHost delta\n  # the db box\n  HostName delta.corp\n  User me\n  Port 2200\nHost *.corp\n'), 'Add did not write the block before Host *.corp: ' .. slurp())
+check(performed.action == 'ReloadConfiguration', 'a save does not reload the config, so the launcher would not list it')
+handlers['window-config-reloaded'](w, p)
+check(has(status, 'delta'), 'the reload after a save does not name the host: ' .. tostring(status))
+-- Columns: name, address, note, each padded to its longest, no separator glyph, no
+-- trailing spaces on a row without a note.
+keys['CTRL|ALT+s'].callback(w, p)
+rows = {}
+for _, ch in ipairs(performed.args.choices) do rows[#rows + 1] = ch.label end
+check(rows[4] == 'delta  me@delta.corp:2200  the db box' and rows[2] == 'alpha  atc-alpha.corp' and rows[5] == 'gamma  10.0.0.9',
+  'the host list is not in aligned columns: ' .. table.concat(rows, ' | '))
+-- Esc at any prompt leaves the file as it was.
+local before = slurp()
+keys['CTRL|ALT+s'].callback(w, p)
+pick('Add')
+answer('epsilon')
+answer(nil)
+check(slurp() == before and performed.action == 'PromptInputLine', 'Esc at a prompt saved something')
+-- A host: connect (the launcher's command), edit (prefilled), delete (asks first).
+open_host('alpha', 'Connect')
+check(performed.action == 'SpawnCommandInNewTab' and performed.args.domain.DomainName == 'local' and table.concat(performed.args.args, ' ') == table.concat(c.launch_menu[#c.launch_menu - 2].args, ' '),
+  "Connect does not run the launcher's ssh: " .. table.concat(performed.args.args or {}, ' '))
+open_host('gamma', 'Edit')
+check(performed.args.initial_value == 'gamma', 'Edit does not start from the name: ' .. tostring(performed.args.initial_value))
+answer('gamma')
+check(performed.args.initial_value == '10.0.0.9', 'Edit does not start from the address: ' .. tostring(performed.args.initial_value))
+answer('root@10.0.0.9')
+answer('')
+check(has(slurp(), '  host = gamma # comment\n  HostName = 10.0.0.9\n  User root\nMatch host foo\n'), 'Edit did not add User in place: ' .. slurp())
+open_host('delta', 'Delete')
+check(performed.action == 'InputSelector' and has(performed.args.choices[1].label, 'No'), 'Delete does not ask first, with No first')
+pick('No')
+check(has(slurp(), 'Host delta'), 'No deleted the host')
+open_host('delta', 'Delete')
+pick('Yes')
+check(not has(slurp(), 'delta') and performed.action == 'ReloadConfiguration', 'Yes did not delete the host and reload: ' .. slurp())
+-- A file it can't write: the footer says so, nothing reloads.
+os.execute('chmod 444 "' .. conf .. '"')
+performed = nil
+open_host('beta', 'Delete')
+pick('Yes')
+os.execute('chmod 644 "' .. conf .. '"')
+check(has(status, 'Could not write') and performed.action ~= 'ReloadConfiguration', 'a failed write is not reported: ' .. tostring(status))
+local fh = io.open(conf, 'wb')
+fh:write(original)
+fh:close()
 io.write('ok')
 LUA
+  # Every other .lua beside it is a module wezterm.lua links (require), checked as loaded.
+  modules=$(find "${cfg%/*}" -maxdepth 1 -name '*.lua' ! -name wezterm.lua -printf '%f\n' | sed 's/\.lua$//' | sort | paste -sd, -)
   for triple in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu; do
     # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
-    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" 2>&1)
+    out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" "$modules" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg runs as $triple: theme, chrome, TERM, keys, mouse, launcher, footer, notices, SSH tabs, file links, scrollback, tab marks, cheatsheet"
+      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, cursor, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, the SSH host editor, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi
   done
   rm -rf "$tmp"
+  # reedline sets the cursor at every prompt, so a steady shape there stops the blink in Nushell tabs.
+  if grep -qxF '$env.config.cursor_shape.emacs = "blink_line"' dotfiles/windows/AppData/Roaming/nushell/config.nu.tera; then
+    ok "Nushell asks for WezTerm's blinking bar"
+  else
+    bad "config.nu.tera's cursor_shape.emacs isn't \"blink_line\": a steady shape stops the cursor blinking in Nushell tabs"
+  fi
 }
 
 # TERM=wezterm needs its whole chain, or a host shows "unknown terminal" / loses colour:
@@ -1934,6 +2191,7 @@ check_dotfiles_mode
 check_bom
 check_ps_variable_drive_refs
 check_ps_mise_comma_lists
+check_git_pull_prune
 check_sentinels
 check_tools_block
 check_mise_config_files
