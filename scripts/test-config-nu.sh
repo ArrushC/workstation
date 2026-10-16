@@ -3,7 +3,7 @@
 # pinned nu and stubs on PATH: an alias completes as its whole expansion, wse/wsd/wss
 # are defs (tracked-target completion, wss as a table, arguments passed through), fssh
 # follows ~/.ssh/config's Include lines (in zsh and bash too), the command-not-found
-# hook asks mise, the transient prompt, and the history and timestamp settings.
+# hook asks mise, no transient prompt, and the history and timestamp settings.
 # shellcheck disable=SC2016,SC2088  # nu code in single quotes; ~/... are mise target strings
 set -u
 
@@ -159,12 +159,9 @@ MISE_WHICH_RC=1 MISE_WHICH_ERR='mise ERROR mise 2026.9.9 is older than min_versi
 check "a mise older than min_version points at bootstrap.ps1" has "bootstrap.ps1"
 
 echo "-- prompt and settings"
-run_nu '$env.LAST_EXIT_CODE = 0; let p = (do $env.TRANSIENT_PROMPT_COMMAND); [($p =~ "\\[\\d\\d:\\d\\d:\\d\\d\\]") ($p | str contains (ansi green_bold)) ($p | str contains "❯")] | str join ","'
-check "the transient prompt is the clock and a green arrow after success" is "true,true,true"
-run_nu '$env.LAST_EXIT_CODE = 1; do $env.TRANSIENT_PROMPT_COMMAND | str contains (ansi red_bold)'
-check "...and a red arrow after a failure" is "true"
-run_nu '$env.TRANSIENT_PROMPT_COMMAND_RIGHT | describe'
-check "the transient prompt has no right side" is "string"
+# #84 added a transient prompt; the user dropped it as not worth having. Every prompt stays whole.
+run_nu '$env.TRANSIENT_PROMPT_COMMAND? | describe'
+check "no transient prompt: an entered line keeps its full prompt" is "nothing"
 run_nu '$env.config.history.file_format'
 check "history is kept in SQLite" is "sqlite"
 run_nu '$env.config.datetime_format.table'
