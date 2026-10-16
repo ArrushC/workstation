@@ -95,6 +95,7 @@ function M.apply(config)
   -- The pane keys are Warp's and Windows Terminal's (README's tables).
   bindings = {
     { 'CTRL|ALT', 'l', actions.launcher, 'Launcher: shells, WSL, SSH hosts (zellij)' },
+    { 'CTRL|ALT', 's', actions.ssh_hosts, 'SSH hosts: connect, add, edit or delete one (~/.ssh/config.local)' },
     { 'CTRL|SHIFT', 't', actions.new_tab, "New tab: this tab's domain and directory, or its SSH host again" },
     { 'CTRL|ALT', 't', actions.new_local_tab, 'New tab, never over ssh: from an SSH tab, a local shell' },
     { 'ALT|SHIFT', 'D', actions.split_down, 'Split pane down' },
@@ -170,6 +171,7 @@ function M.apply(config)
       { brief = 'Quick select: file:line into helix', action = actions.open_in_helix },
       { brief = 'Quick select: commit SHA into the prompt', action = actions.paste_sha },
       { brief = 'Reconnect the SSH tab', action = actions.reconnect },
+      { brief = 'SSH hosts: connect, add, edit or delete', action = actions.ssh_hosts },
       { brief = 'Open the scrollback in helix', action = actions.scrollback_in_helix },
       { brief = 'Switch tab (fuzzy)', action = actions.switch_tab },
       { brief = 'Split pane down', action = actions.split_down },

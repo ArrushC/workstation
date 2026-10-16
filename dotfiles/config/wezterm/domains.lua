@@ -1,51 +1,34 @@
 -- domains.lua: SSH. The launcher's SSH entries (one per ~/.ssh/config.local host, attaching
 -- zellij), no built-in SSH domains, and how a tab's host is found and named. Exports
--- M.ssh_of, M.ssh_dest, M.wsl_remote, M.local_host and M.shq.
+-- M.ssh_launch, M.ssh_of, M.ssh_dest, M.wsl_remote, M.local_host and M.shq.
 
 local wezterm = require 'wezterm'
 local here = require('wsl').here
+local sshconfig = require 'sshconfig'
 
 local M = {}
 
--- ~/.ssh/config.local's concrete Host aliases (patterns, negations and names that would
--- need quoting skipped), as bootstrap.ps1's Get-SshLauncherHosts reads them, and a map
--- from each name a host goes by (the alias; its HostName, and that name's short form) to
--- its block's first alias.
+-- ~/.ssh/config.local's concrete Host aliases (sshconfig.lua reads them, as bootstrap.ps1's
+-- Get-SshLauncherHosts does), and a map from each name a host goes by (the alias; its
+-- HostName, and that name's short form) to the alias.
 local function ssh_config()
   local hosts, aliases, real = {}, {}, {}
-  local f = io.open(wezterm.home_dir .. '/.ssh/config.local', 'r')
-  if not f then
-    return hosts, aliases, real
+  local list = sshconfig.hosts(sshconfig.read())
+  for _, h in ipairs(list) do
+    table.insert(hosts, h.name)
+    aliases[h.name:lower()] = h.name
   end
-  local block = {}
-  for line in f:lines() do
-    line = line:gsub('%s#.*$', '')
-    local list = line:match('^%s*[Hh][Oo][Ss][Tt]%s*=%s*(.+)$') or line:match('^%s*[Hh][Oo][Ss][Tt]%s+(.+)$')
-    local name = line:match('^%s*[Hh][Oo][Ss][Tt][Nn][Aa][Mm][Ee]%s*=%s*(%S+)') or line:match('^%s*[Hh][Oo][Ss][Tt][Nn][Aa][Mm][Ee]%s+(%S+)')
-    if list then
-      block = {}
-      for token in list:gmatch('%S+') do
-        if not token:find('[%*%?!]') and token:match('^[%w%._@%-]+$') then
-          table.insert(block, token)
-          if not aliases[token:lower()] then
-            aliases[token:lower()] = token
-            table.insert(hosts, token)
-          end
-        end
-      end
-    elseif line:find('^%s*[Mm][Aa][Tt][Cc][Hh][%s=]') then
-      block = {}
-    elseif name and block[1] and not name:find('%%') then
-      name = name:lower()
-      real[name] = real[name] or block[1]
+  for _, h in ipairs(list) do
+    local name = h.hostname and h.hostname:lower()
+    if name and not name:find('%%') then
+      real[name] = real[name] or h.name
       -- An address has no short form (10.0.0.9 isn't host "10").
       if name:find('%a') and not name:find(':') then
         local short = name:match('^[^.]*')
-        real[short] = real[short] or block[1]
+        real[short] = real[short] or h.name
       end
     end
   end
-  f:close()
   return hosts, aliases, real
 end
 local ssh_hosts, ssh_aliases, ssh_real = ssh_config()
@@ -153,12 +136,16 @@ function M.shq(s)
   return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
+-- The launcher's command for a host (Ctrl+Alt+S's Connect too): ssh -t, attaching zellij's
+-- main session. ssh sends TERM=wezterm with the pty; a host without that terminfo entry
+-- starts zellij with xterm-256color instead.
+function M.ssh_launch(host)
+  return { 'ssh', '-t', host, 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color; exec zellij attach --create main' }
+end
+
 function M.apply(config)
-  -- ssh sends TERM=wezterm with the pty; a host without that terminfo entry starts zellij
-  -- with xterm-256color instead.
-  local attach = 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color; exec zellij attach --create main'
   for _, host in ipairs(ssh_hosts) do
-    table.insert(config.launch_menu, { label = 'SSH: ' .. host, args = { 'ssh', '-t', host, attach }, domain = here })
+    table.insert(config.launch_menu, { label = 'SSH: ' .. host, args = M.ssh_launch(host), domain = here })
   end
   -- No built-in SSH domains: by default WezTerm lists SSH: and SSHMUX: domains for every
   -- ~/.ssh/config host, with its own SSH client, and SSHMUX: needs WezTerm on the server.

@@ -1016,9 +1016,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -1864,17 +1864,101 @@ for _, r in ipairs(performed.args.choices) do
   if r.id then launch = launch + 1 end
 end
 local text = table.concat(rows, '\n')
-for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Shift+T', 'Ctrl+Alt+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Alt+0', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
+for _, k in ipairs({ 'Ctrl+Alt+L', 'Ctrl+Alt+S', 'Ctrl+Shift+T', 'Ctrl+Alt+T', 'Alt+Shift+D', 'Alt+Shift+arrows', 'Ctrl(+Shift)+Up / Down', 'Ctrl+Shift+Left / Right', 'Ctrl+Shift+A', 'Ctrl+Shift+C', 'Ctrl+Insert', '+ on the tab bar', 'Ctrl+Shift+E', 'Ctrl+Shift+G', 'Ctrl+Shift+Y', 'Ctrl+Shift+H', 'Ctrl+Shift+W', 'Ctrl+Shift+S', 'Alt+0', 'Ctrl+Shift+Q', 'Alt+Shift+S', 'Ctrl+Shift+F5', 'Ctrl+Shift+O', 'Ctrl+click', 'Shift+click', 'Ctrl+triple-click', 'Ctrl+Shift+F', 'drop a file', 'images', '#123' }) do
   check(has(text, k .. ' '), 'the cheatsheet has no ' .. k .. ' row')
 end
 check(launch == #c.launch_menu, 'the cheatsheet lists ' .. launch .. ' launch rows for ' .. #c.launch_menu .. ' entries')
 performed.args.action.callback(w, p, '1')
 check(performed.action == 'SpawnCommandInNewTab' and performed.args == c.launch_menu[1], 'a launch row does not open its entry')
 local palette = handlers['augment-command-palette']()
-check(#palette == 12 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
+check(#palette == 13 and palette[1].action == keys['CTRL|SHIFT+h'], 'the command palette does not list the custom actions')
 local briefs = {}
 for _, e in ipairs(palette) do briefs[e.brief] = e.action end
 check(briefs['Split pane down'] == keys['ALT|SHIFT+D'] and briefs['Split pane right'] == keys['ALT|SHIFT+R'], 'the command palette has no Alt+Shift+D/R splits')
+check(briefs['SSH hosts: connect, add, edit or delete'] == keys['CTRL|ALT+s'], 'the command palette has no SSH host editor')
+
+-- Ctrl+Alt+S: the SSH host editor over ~/.ssh/config.local (sshconfig.lua's own cases are
+-- scripts/test-wezterm-sshconfig.sh). Each pick or answer goes to the callback WezTerm
+-- would call; the file is put back at the end, for the next triple's run.
+local conf = home .. '/.ssh/config.local'
+local function slurp()
+  local fh = io.open(conf, 'rb')
+  local s = fh:read('*a')
+  fh:close()
+  return s
+end
+local original = slurp()
+local function pick(match)
+  for _, ch in ipairs(performed.args.choices) do
+    if has(ch.label, match) then return performed.args.action.callback(w, p, ch.id, ch.label) end
+  end
+  error('no "' .. match .. '" row in: ' .. tostring(performed.args.title), 0)
+end
+local function answer(line) performed.args.action.callback(w, p, line) end
+local function open_host(name, item)
+  keys['CTRL|ALT+s'].callback(w, p)
+  pick(name .. ' ')
+  if item then pick(item) end
+end
+keys['CTRL|ALT+s'].callback(w, p)
+check(performed.action == 'InputSelector', 'Ctrl+Alt+S does not open the host list')
+local rows = {}
+for _, ch in ipairs(performed.args.choices) do rows[#rows + 1] = ch.label end
+check(#rows == 4 and has(rows[1], 'Add') and has(rows[2], 'alpha ') and has(rows[2], 'atc-alpha.corp') and has(rows[4], 'gamma ') and has(rows[4], '10.0.0.9'),
+  'the host list is not Add, then each host and its address: ' .. table.concat(rows, ' | '))
+-- Add: a name (a taken one is asked again, saying why), an address, a note; the save
+-- reloads the config, and the reload's notice names the host.
+pick('Add')
+check(performed.action == 'PromptInputLine' and performed.args.initial_value == '', 'Add does not ask for a name')
+answer('Alpha')
+check(performed.action == 'PromptInputLine' and has(performed.args.description, 'already') and performed.args.initial_value == 'Alpha',
+  'a taken name is not asked for again with the reason: ' .. tostring(performed.args.description))
+answer('delta')
+check(performed.action == 'PromptInputLine' and has(performed.args.description, 'delta'), 'Add does not ask for the address')
+answer('me@delta.corp:99999')
+check(performed.action == 'PromptInputLine' and has(performed.args.description, 'port') and performed.args.initial_value == 'me@delta.corp:99999', 'a bad port is not asked for again with the reason')
+answer('me@delta.corp:2200')
+check(performed.action == 'PromptInputLine' and performed.args.initial_value == '', 'Add does not ask for a note')
+answer('the db box')
+check(has(slurp(), 'atc-alpha.corp\nHost delta\n  # the db box\n  HostName delta.corp\n  User me\n  Port 2200\nHost *.corp\n'), 'Add did not write the block before Host *.corp: ' .. slurp())
+check(performed.action == 'ReloadConfiguration', 'a save does not reload the config, so the launcher would not list it')
+handlers['window-config-reloaded'](w, p)
+check(has(status, 'delta'), 'the reload after a save does not name the host: ' .. tostring(status))
+-- Esc at any prompt leaves the file as it was.
+local before = slurp()
+keys['CTRL|ALT+s'].callback(w, p)
+pick('Add')
+answer('epsilon')
+answer(nil)
+check(slurp() == before and performed.action == 'PromptInputLine', 'Esc at a prompt saved something')
+-- A host: connect (the launcher's command), edit (prefilled), delete (asks first).
+open_host('alpha', 'Connect')
+check(performed.action == 'SpawnCommandInNewTab' and performed.args.domain.DomainName == 'local' and table.concat(performed.args.args, ' ') == table.concat(c.launch_menu[#c.launch_menu - 2].args, ' '),
+  "Connect does not run the launcher's ssh: " .. table.concat(performed.args.args or {}, ' '))
+open_host('gamma', 'Edit')
+check(performed.args.initial_value == 'gamma', 'Edit does not start from the name: ' .. tostring(performed.args.initial_value))
+answer('gamma')
+check(performed.args.initial_value == '10.0.0.9', 'Edit does not start from the address: ' .. tostring(performed.args.initial_value))
+answer('root@10.0.0.9')
+answer('')
+check(has(slurp(), '  host = gamma # comment\n  HostName = 10.0.0.9\n  User root\nMatch host foo\n'), 'Edit did not add User in place: ' .. slurp())
+open_host('delta', 'Delete')
+check(performed.action == 'InputSelector' and has(performed.args.choices[1].label, 'No'), 'Delete does not ask first, with No first')
+pick('No')
+check(has(slurp(), 'Host delta'), 'No deleted the host')
+open_host('delta', 'Delete')
+pick('Yes')
+check(not has(slurp(), 'delta') and performed.action == 'ReloadConfiguration', 'Yes did not delete the host and reload: ' .. slurp())
+-- A file it can't write: the footer says so, nothing reloads.
+os.execute('chmod 444 "' .. conf .. '"')
+performed = nil
+open_host('beta', 'Delete')
+pick('Yes')
+os.execute('chmod 644 "' .. conf .. '"')
+check(has(status, 'Could not write') and performed.action ~= 'ReloadConfiguration', 'a failed write is not reported: ' .. tostring(status))
+local fh = io.open(conf, 'wb')
+fh:write(original)
+fh:close()
 io.write('ok')
 LUA
   # Every other .lua beside it is a module wezterm.lua links (require), checked as loaded.
@@ -1883,7 +1967,7 @@ LUA
     # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
     out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" "$modules" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, cursor, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, file links, scrollback, tab marks, cheatsheet"
+      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, cursor, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, the SSH host editor, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi

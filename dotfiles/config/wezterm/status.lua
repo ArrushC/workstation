@@ -1,5 +1,5 @@
 -- status.lua: the status footer right of the tab bar and the notices that briefly replace it
--- ("Copied", "Config reloaded"). Exports M.flash.
+-- ("Copied", "Config reloaded"). Exports M.flash and M.after_reload.
 
 local wezterm = require 'wezterm'
 local appearance = require 'appearance'
@@ -21,6 +21,13 @@ function M.flash(window, pane, text, level)
   local lv = levels[level] or levels.info
   notices[window:window_id()] = { text = text, fg = lv.fg, expires = os.time() + lv.secs }
   render_status(window, pane)
+end
+
+-- The notice for the reload a change is about to cause (Ctrl+Alt+S saving
+-- ~/.ssh/config.local), shown in place of "Config reloaded" for the next few seconds. In
+-- wezterm.GLOBAL, as the reload starts a new Lua VM.
+function M.after_reload(text)
+  wezterm.GLOBAL.reload_notice = { text = text, expires = os.time() + 5 }
 end
 
 -- Status footer ---------------------------------------------------------------------------
@@ -167,7 +174,8 @@ function M.apply(_)
       wezterm.GLOBAL.reload_seen = seen
       return
     end
-    M.flash(window, pane, 'Config reloaded')
+    local n = wezterm.GLOBAL.reload_notice
+    M.flash(window, pane, n and n.expires >= os.time() and n.text or 'Config reloaded')
   end)
 end
 

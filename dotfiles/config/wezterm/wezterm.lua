@@ -15,10 +15,12 @@
 -- applied in this order (a later one uses an earlier one's exports):
 --   appearance.lua  colours, font, chrome, rendering, scrollback, TERM, one-line behaviour
 --   wsl.lua         Nushell, the launcher's shell entries, WSL domains
+--   sshconfig.lua   ~/.ssh/config.local's hosts, read and edited in place (no settings)
 --   domains.lua     SSH: the launcher's host entries, finding and naming a tab's host
 --   status.lua      the status footer and its notices (flash)
 --   tabs.lua        tab titles: marks, glyphs, names, host colours
---   actions.lua     what keys, mouse, + and the palette do; links; file links in helix
+--   actions.lua     what keys, mouse, + and the palette do (the SSH host editor too); links;
+--                   file links in helix
 --   keys.lua        key and mouse bindings, the cheatsheet, the command palette
 --
 -- WezTerm runs Lua 5.4; scripts/check-invariants.sh (check_wezterm_config) runs these files

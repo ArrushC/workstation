@@ -30,6 +30,7 @@ try {
     Test-Case "WezTerm ($version) loads wezterm.lua: its keys and mouse bindings are listed" {
         foreach ($want in @(
                 'ALT \| CTRL\s+l\s+->\s+ShowLauncherArgs',
+                'ALT \| CTRL\s+s\s+->\s+EmitEvent',
                 'CTRL\s+G\s+->\s+QuickSelectArgs',
                 'CTRL\s+A\s+->\s+Multiple\(\[ActivateCopyMode',
                 'CTRL\s+UpArrow\s+->\s+ScrollToPrompt\(-1\)',
