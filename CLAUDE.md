@@ -198,3 +198,14 @@ Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enf
 - `dangerous-command-guard.sh` denies fork bombs, raw-device writes, `mkfs`. It asks before
   `rm -rf` of `/` or `~`, `curl | bash`, force-push.
 - Both match command *text*, so a commit message naming a pattern is screened.
+
+Mods (function-hook plugins, `dotfiles/claude/skills/workstation-{sync,ship,lint-fold}/` →
+`~/.claude/skills/`, loaded as `<name>@skills-dir`, enabled in `settings.enforced.json`):
+- `workstation-sync`: the band above the prompt in this checkout (host/Windows vs `origin/main`, drift, PR checks).
+- `workstation-ship`: `/ship`, which merges only from the person's own prompt (`origin.kind` composer/bridge).
+- `workstation-lint-fold`: folds a passing `check-invariants.sh` run in a Bash result; the transcript keeps it whole.
+- The engine reads a module's source: `$` may only be passed to functions declared at the top of the
+  file, so module state that hooks share lives at module level and resets in `session.start`.
+- `check_claude_mods` runs `claude plugin validate --strict` and `claude plugin test` on a copy of
+  each; tests answer `$.process.run`/`$.fs.read` hooks with `{ value }` and stand in for
+  `session.start` and the `AbovePrompt` bottom. Recipe: `docs/claude/verification.md`.

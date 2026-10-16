@@ -897,6 +897,49 @@ check_lsp_plugin() {
   rm -rf "$tmp"
 }
 
+# Claude Code mods: plugins of function hooks under dotfiles/claude/skills (a hooks/hooks.json
+# beside .claude-plugin/plugin.json), loaded from ~/.claude/skills as <name>@skills-dir. A
+# module that fails to load, or a hook that throws, is skipped without a word in a session
+# that isn't hot-reloading it, so each mod is held here: its manifest names its folder, every
+# module hooks.json lists exists, it has tests, settings.enforced.json enables it, and where
+# claude is installed it passes `claude plugin validate --strict` and `claude plugin test`
+# (each run on a copy, so neither can write into the checkout). CI has no claude.
+check_claude_mods() {
+  hdr "Claude Code mods (dotfiles/claude/skills/*/hooks)"
+  local hooks dir name tmp n=0 module
+  local enforced=dotfiles/claude/settings.enforced.json
+  for hooks in dotfiles/claude/skills/*/hooks/hooks.json; do
+    [ -f "$hooks" ] || continue
+    dir=${hooks%/hooks/hooks.json}
+    n=$((n + 1))
+    name=$(jq -r '.name // empty' "$dir/.claude-plugin/plugin.json" 2>/dev/null)
+    if [ "$name" != "${dir##*/}" ]; then
+      bad "$dir: .claude-plugin/plugin.json's name is '${name}', not its folder's (${dir##*/})"
+      continue
+    fi
+    while IFS= read -r module; do
+      [ -f "$dir/hooks/$module" ] || bad "$hooks lists $module, which $dir/hooks/ doesn't have"
+    done < <(jq -r '.modules[]?' "$hooks")
+    compgen -G "$dir/tests/*.test.ts*" >/dev/null || bad "$dir has no tests/*.test.ts"
+    [ "$(jq -r --arg k "$name@skills-dir" '.enabledPlugins[$k] // empty' "$enforced")" = true ] ||
+      bad "$enforced doesn't enable $name@skills-dir"
+    if command -v claude >/dev/null 2>&1; then
+      tmp=$(mktemp -d)
+      cp -r "$dir/." "$tmp/"
+      if ! claude plugin validate "$tmp" --strict >/dev/null 2>&1; then
+        bad "$name failed claude plugin validate --strict:"
+        claude plugin validate "$tmp" --strict 2>&1 | sed 's/^/       /' | head -20
+      elif ! claude plugin test "$tmp" >"$tmp.log" 2>&1; then
+        bad "$name's tests failed (claude plugin test):"
+        grep -E '^\(fail\)|^ +[0-9]+ (pass|fail)$' "$tmp.log" | sed 's/^/       /' | head -20
+      fi
+      rm -rf "$tmp" "$tmp.log"
+    fi
+  done
+  command -v claude >/dev/null 2>&1 || note "claude not installed — skipped the mods' validate and tests (CI has no claude)"
+  [ "$fails" -eq 0 ] && ok "$n mod(s): manifests, modules and tests present, enabled in settings.enforced.json$(command -v claude >/dev/null 2>&1 && echo ', validated --strict, tests pass')"
+}
+
 # Claude Code's theme, keybindings and plugin list (dotfiles/claude). Claude Code ignores
 # an unknown colour token, a bad colour or a bad keybinding without a word, so a typo would
 # just not show: the enforced theme must name a theme file here, a theme must set only the
@@ -2327,7 +2370,7 @@ check_claude_config
 check_disk_budget
 check_layout
 # The test suites and linters take most of the time and share nothing.
-run_parallel check_lsp_plugin check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
+run_parallel check_lsp_plugin check_claude_mods check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
 echo
 if [ "$fails" -eq 0 ]; then
   printf '%s✓ all invariant checks passed%s\n' "$GREEN" "$RESET"
