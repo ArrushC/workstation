@@ -55,7 +55,7 @@
     ],
     "startCaps": [],
     "endCaps": [],
-    "theme": "nord-aurora",
+    "theme": "catppuccin",
     "autoAlign": true,
     "continueThemeAcrossLines": true
   }
