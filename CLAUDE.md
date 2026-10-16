@@ -204,6 +204,8 @@ Mods (function-hook plugins in `.claude/skills/workstation-{sync,ship,lint-fold}
 (that copy loads in every session) or in `settings.enforced.json` (`check_claude_mods`):
 - `workstation-sync`: the band above the prompt in this checkout (host/Windows vs `origin/main`, drift, PR checks).
 - `workstation-ship`: `/ship`, which merges only from the person's own prompt (`origin.kind` composer/bridge).
+  A checkout switch or pull that changes a mod's folder reloads that mod mid-command and refuses its
+  later `$` calls, so `/ship` runs nothing after merging a PR that changes `.claude/skills/workstation-ship/`.
 - `workstation-lint-fold`: folds a passing `check-invariants.sh` run in a Bash result; the transcript keeps it whole.
 - The engine reads a module's source: `$` may only be passed to functions declared at the top of the
   file, so module state that hooks share lives at module level and resets in `session.start`.

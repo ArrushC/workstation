@@ -13,7 +13,10 @@ type World = {
   behindBy?: number
   mainDate?: string
   mergeExit?: number
+  // The checkout's branch before the merge (the PR's own, unless set) and after it
+  branchBefore?: string
   branchAfter?: string
+  files?: string[]
 }
 
 const pass = (name: string, started_at = '2026-10-16T13:16:42Z'): Check => ({
@@ -24,9 +27,11 @@ const pass = (name: string, started_at = '2026-10-16T13:16:42Z'): Check => ({
 })
 
 // A repo whose PR #92 is open, its four checks green on its head, started after main's
-// last commit (13:10), and GitHub calling it mergeable; each case changes one thing.
+// last commit (13:10), GitHub calling it mergeable, and the checkout on the PR's branch
+// until gh pr merge switches it to main; each case changes one thing.
 function world(on: On, w: World = {}) {
   const calls: string[] = []
+  let isMerged = false
   // A hook on a call of $ answers { value }: what the call resolves to.
   const ok = (stdout: unknown, exitCode = 0, stderr = ''): { value: ProcessRunResult } => ({
     value: {
@@ -50,6 +55,7 @@ function world(on: On, w: World = {}) {
       baseRefName: 'main',
       mergeStateStatus: 'CLEAN',
       url: 'https://github.com/o/r/pull/92',
+      files: (w.files ?? ['README.md']).map(path => ({ path })),
       ...w.pr,
     }
     if (line === 'git status --porcelain --untracked-files=no') return ok(w.dirty ?? '')
@@ -62,8 +68,13 @@ function world(on: On, w: World = {}) {
     if (line === `gh api repos/{owner}/{repo}/compare/main...${HEAD}`) return ok({ behind_by: w.behindBy ?? 0 })
     if (line === 'gh api repos/{owner}/{repo}/commits/main')
       return ok({ sha: MAIN, commit: { committer: { date: w.mainDate ?? '2026-10-16T13:10:00Z' } } })
-    if (line.startsWith('gh pr merge')) return ok('', w.mergeExit ?? 0, w.mergeExit ? 'GraphQL: Head branch was modified' : '')
-    if (line === 'git rev-parse --abbrev-ref HEAD') return ok(`${w.branchAfter ?? 'main'}\n`)
+    if (line.startsWith('gh pr merge')) {
+      isMerged = !w.mergeExit
+      return ok('', w.mergeExit ?? 0, w.mergeExit ? 'GraphQL: Head branch was modified' : '')
+    }
+    if (line === 'git rev-parse --abbrev-ref HEAD') {
+      return ok(`${isMerged ? (w.branchAfter ?? 'main') : (w.branchBefore ?? 'ccstatusline-catppuccin')}\n`)
+    }
     if (line === 'git pull --ff-only --prune') return ok('')
     if (line === 'git fetch --prune') return ok('')
     if (line === 'git rev-parse --short HEAD') return ok('cafe863\n')
@@ -176,6 +187,30 @@ describe('/ship', () => {
     const { text } = await ship($)
     expect(text).toContain('Head branch was modified')
     expect(calls).not.toContain('git pull --ff-only --prune')
+  })
+
+  // Run from this checkout, /ship loads from .claude/skills/workstation-ship: once main has
+  // a PR that changes it, Claude Code reloads it, and a call after that is refused.
+  test('a PR that changes /ship, shipped from its branch: nothing runs after gh switches and pulls', async ($, on) => {
+    const calls = world(on, { files: ['README.md', '.claude/skills/workstation-ship/hooks/register.ts'] })
+    const { text } = await ship($)
+    expect(calls[calls.length - 1]).toMatch(/^gh pr merge 92 /)
+    expect(text).toContain('✓ squash-merged; branch deleted')
+    expect(text).toContain('✓ gh switched to main and pulled it; the PR changes /ship, so Claude Code reloads it')
+    expect(text).not.toContain('merged, but')
+  })
+
+  test('a PR that changes /ship, shipped from main: main is left for you to pull', async ($, on) => {
+    const calls = world(on, { files: ['.claude/skills/workstation-ship/tests/ship.test.ts'], branchBefore: 'main' })
+    const { text } = await ship($)
+    expect(calls[calls.length - 1]).toMatch(/^gh pr merge 92 /)
+    expect(text).toContain("! the PR changes /ship, so main wasn't pulled (that reloads /ship mid-command): git pull --ff-only --prune")
+  })
+
+  test('a PR that changes another mod is shipped as usual', async ($, on) => {
+    const calls = world(on, { files: ['.claude/skills/workstation-sync/hooks/register.tsx'] })
+    await ship($)
+    expect(calls).toContain('git pull --ff-only --prune')
   })
 
   test('on another branch afterwards: fetch, not pull', async ($, on) => {
