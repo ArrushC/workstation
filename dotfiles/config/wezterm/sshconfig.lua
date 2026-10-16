@@ -76,7 +76,7 @@ end
 -- The Host and Match blocks: { first = its Host line, last = its own last line, tokens =
 -- the Host line's patterns, match = a Match block }. A block's own lines stop before the
 -- next Host or Match line, and before the blank lines and unindented comments that head
--- whatever follows (`# --- shared ---`).
+-- whatever follows (`# --- QA ---`).
 local function blocks(lines)
   local out = {}
   for i, line in ipairs(lines) do

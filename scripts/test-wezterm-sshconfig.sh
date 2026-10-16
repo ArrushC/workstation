@@ -48,7 +48,7 @@ local function lines(t) return table.concat(t, '\n') .. '\n' end
 local F = lines({
   '# Per-host SSH config: untracked.',
   '',
-  '# --- owned ---',
+  '# --- build boxes ---',
   'Host dev10',
   '    # dev10.corp, the build box',
   '    HostName 10.0.0.10',
@@ -58,7 +58,7 @@ local F = lines({
   '    HostName 10.0.0.9',
   '    User me',
   '',
-  '# --- shared ---',
+  '# --- QA ---',
   'Host qa1 qa1-alt',
   '    # qa1.corp',
   '    HostName "qa1.corp"',
