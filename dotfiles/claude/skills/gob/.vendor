@@ -1,0 +1,13 @@
+skill:          gob (SKILL.md; LICENSE.md is the project's, beside it)
+upstream:       https://github.com/juanibiapina/gob
+path:           skills/gob/SKILL.md
+tag:            v3.9.0
+license:        MIT (LICENSE.md beside it)
+vendored:       2026-10-19
+deployed as:    ~/.claude/skills/gob (copy; config.linux.toml). Linux only, like gob itself:
+                config.toml's ~/.claude/skills entry excludes this directory, so Windows,
+                which has no gob build, never gets a skill that points at a missing binary.
+note:           The tag is the gob pin's (config.linux.toml, github:juanibiapina/gob), so the
+                skill describes the CLI that is installed; check_pins holds the two equal.
+                scripts/bump-versions.sh re-vendors SKILL.md and LICENSE.md at the new tag
+                when it bumps the pin, and updates tag and vendored here. Never hand-edit.

@@ -601,6 +601,19 @@ checksum = "sha256:ba36a4013f6bea3150e27c6ecfd550ce77abb6c90d6aa376466ec60d17ac3
 url = "https://github.com/jarun/nnn/releases/download/v5.3/nnn-musl-static-5.3.x86_64.tar.gz"
 url_api = "https://api.github.com/repos/jarun/nnn/releases/assets/515762610"
 
+[[tools."github:juanibiapina/gob"]]
+version = "3.9.0"
+backend = "github:juanibiapina/gob"
+specifiers = ["3.9.0"]
+
+[tools."github:juanibiapina/gob".options]
+asset_pattern = "gob_{version}_linux_amd64.tar.gz"
+
+[tools."github:juanibiapina/gob"."platforms.linux-x64"]
+checksum = "sha256:2d2ebfa584f42d63d3043b6a355ce61aaf5fae1d96a8e8ee6a85a848fcf9e790"
+url = "https://github.com/juanibiapina/gob/releases/download/v3.9.0/gob_3.9.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/juanibiapina/gob/releases/assets/627864727"
+
 [[tools."github:multiprocessio/dsq"]]
 version = "0.23.0"
 backend = "github:multiprocessio/dsq"
