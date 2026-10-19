@@ -50,5 +50,8 @@
       "WebSearch",
       "WebFetch(domain:zellij.dev)"
     ]
+  },
+  "enabledPlugins": {
+    "lua-lsp@claude-plugins-official": false
   }
 }
