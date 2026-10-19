@@ -72,7 +72,9 @@ zig = "0.17.0"
 "github:Canop/dysk" = { version = "3.7.1", asset_pattern = "dysk_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }   # filesystems and their free space (a clearer df); the zip holds every target, as broot's does
 "github:dundee/gdu" = { version = "5.38.0", asset_pattern = "gdu_linux_amd64_static.tgz", rename_exe = { "gdu_linux_amd64_static" = "gdu" } }   # ncdu-style disk usage, parallel; aqua's default build is dynamically linked
 "github:chmln/sd" = { version = "1.1.0", asset_pattern = "sd-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
+"github:ynqa/jnv" = { version = "0.7.1", asset_pattern = "jnv-x86_64-unknown-linux-musl.tar.xz" }   # interactive jq filter; the pinned mise's aqua registry picks the gnu build
 "github:theryangeary/choose" = { version = "1.3.7", asset_pattern = "choose-x86_64-unknown-linux-musl", bin = "choose" }   # fields by index (cut/awk '{print $N}'); aqua's gnu build needs glibc 2.34
+"github:walles/moor" = { version = "2.19.5", asset_pattern = "moor-v{{version}}-linux-amd64", bin = "moor" }   # a pager (formerly moar); static Go binary
 "github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
 "github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
@@ -83,6 +85,11 @@ zig = "0.17.0"
 "conda:jless" = "0.9.0"
 "conda:gitlogue" = "0.12.0"
 "conda:htmlq" = "0.4.0"
+"conda:ugrep" = "7.8.5"   # provides `ugrep` and `ug`; upstream ships Windows binaries only, EPEL 9 has 3.x and EL8 none
+"conda:datamash" = "1.9"   # EPEL has 1.5 (EL8) / 1.7 (EL9) behind sudo
+# entr isn't packaged for EL8 or EL9 and upstream ships source only. conda-forge trails
+# upstream (5.5 from 2023; upstream 5.9 adds Linux symlink watching, ENTR_RESTART_SIGNAL).
+"conda:entr" = "5.5"
 # pueue + pueued. Upstream ships only static musl builds, whose user lookup reads
 # /etc/passwd alone: for a directory (SSSD/LDAP) account pueued can't name its
 # socket and exits. The glibc build looks the user up through NSS.
@@ -251,9 +258,9 @@ state = "running"
 [bootstrap.packages]
 # ONE `sudo dnf install -y <every missing name>` per run: a single unresolvable name
 # fails the whole batch, so every name is verified on EL8 and EL9. Names that must not
-# come back (check_bootstrap_config rejects them): fswatch/entr (not packaged),
-# shellcheck (the package is ShellCheck), cockpit-networkmanager and python3 (no
-# package of that name, so `rpm -q` never sees it installed and it drifts forever),
+# come back (check_bootstrap_config rejects them): fswatch/entr (not packaged; entr is a
+# conda: pin above), shellcheck (the package is ShellCheck), cockpit-networkmanager and
+# python3 (no package of that name, so `rpm -q` never sees it installed and it drifts forever),
 # and curl: EL9 ships curl-minimal, which conflicts with curl in a plain `dnf install`,
 # and bootstrap.sh needs a curl before any of this runs anyway.
 # `make` stays as a C-toolchain dependency.
@@ -306,6 +313,7 @@ state = "running"
 "dnf:man-db" = "latest"
 "dnf:man-pages" = "latest"
 "dnf:meson" = "latest"
+"dnf:moreutils" = "latest"          # sponge, ts, chronic, ifne, vipe (EPEL; GNU parallel stays its own package)
 "dnf:mtr" = "latest"
 "dnf:multitail" = "latest"
 "dnf:ninja-build" = "latest"
@@ -316,6 +324,7 @@ state = "running"
 "dnf:rlwrap" = "latest"
 "dnf:rsync" = "latest"
 "dnf:rsyslog" = "latest"
+"dnf:socat" = "latest"
 "dnf:strace" = "latest"
 "dnf:tcpdump" = "latest"
 "dnf:time" = "latest"
