@@ -15,7 +15,7 @@ lnav = "0.14.1"
 gopass = "1.17.4"
 age = "1.3.2"
 gitui = "0.28.1"
-lazygit = "0.66.1"
+lazygit = "0.66.2"
 jj = "0.46.0"
 xh = "0.26.2"
 micro = "2.0.15"
@@ -30,7 +30,7 @@ lazyjournal = "0.8.6"
 cheat = "5.1.0"
 fx = "40.0.0"
 miller = "6.22.0"
-doggo = "1.4.0"
+doggo = "1.4.1"
 miniserve = "0.35.0"
 numbat = "1.24.0"
 grex = "1.4.6"
@@ -38,10 +38,10 @@ shfmt = "3.14.1"
 gitleaks = "8.30.1"
 hexyl = "0.17.0"
 gum = "2.0.2"
-rust-analyzer = "2026-10-05"
+rust-analyzer = "2026-10-12"
 marksman = "2026-02-08"
 taplo = "0.10.0"
-herdr = "0.9.3"
+herdr = "0.9.5"
 # --- core: ---
 # zig: the C/C++ compiler of last resort, for a host without the dnf gcc (no sudo). Static,
 # and it exposes only `zig`, so the host's cc/gcc/g++/ld are never shadowed (tasks/verify-tools
@@ -51,7 +51,7 @@ zig = "0.17.0"
 # --- github: (registry entry absent, or its asset needs a glibc newer than EL8's 2.28) ---
 "github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir; its bin/ also holds gdb 17 + gdbserver, first on PATH, so plain `gdb` is this one (GEF via ~/.gdbinit)
 "github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38
-"github:fastfetch-cli/fastfetch" = { version = "2.69.0", asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz" }   # plain build's loader fails on EL9
+"github:fastfetch-cli/fastfetch" = { version = "2.70.0", asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz" }   # plain build's loader fails on EL9
 "github:dalance/procs" = { version = "0.14.12", asset_pattern = "procs-v{{version}}-x86_64-linux.zip" }
 "github:imsnif/bandwhich" = { version = "0.23.1", asset_pattern = "bandwhich-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }
 "github:tealdeer-rs/tealdeer" = { version = "1.9.0", asset_pattern = "tealdeer-linux-x86_64-musl", bin = "tldr" }
@@ -69,19 +69,19 @@ zig = "0.17.0"
 "github:Wilfred/difftastic" = { version = "0.71.0", asset_pattern = "difft-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); the gnu build needs glibc 2.29
 "github:ClementTsang/bottom" = { version = "0.14.9", asset_pattern = "bottom_x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29; binary is `btm`
 "github:bootandy/dust" = { version = "1.2.6", asset_pattern = "dust-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
-"github:Canop/dysk" = { version = "3.7.1", asset_pattern = "dysk_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }   # filesystems and their free space (a clearer df); the zip holds every target, as broot's does
+"github:Canop/dysk" = { version = "3.8.1", asset_pattern = "dysk_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }   # filesystems and their free space (a clearer df); the zip holds every target, as broot's does
 "github:dundee/gdu" = { version = "5.38.0", asset_pattern = "gdu_linux_amd64_static.tgz", rename_exe = { "gdu_linux_amd64_static" = "gdu" } }   # ncdu-style disk usage, parallel; aqua's default build is dynamically linked
 "github:chmln/sd" = { version = "1.1.0", asset_pattern = "sd-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
 "github:theryangeary/choose" = { version = "1.3.7", asset_pattern = "choose-x86_64-unknown-linux-musl", bin = "choose" }   # fields by index (cut/awk '{print $N}'); aqua's gnu build needs glibc 2.34
 "github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
-"github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
+"github:dathere/qsv" = { version = "25.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
 "github:neovim/neovim-releases" = { version = "0.12.5", asset_pattern = "nvim-linux-x86_64.tar.gz" }   # neovim's own glibc-2.17 build (LuaJIT); the main repo's tarball and appimage (aqua) need glibc 2.34; releases trail upstream by days to weeks
 # --- conda: (the project ships only glibc builds newer than EL8's 2.28, or only static musl ones; conda-forge builds against glibc 2.17/2.28) ---
 "conda:helix" = "25.07.1"   # glibc 2.17, runtime bundled (no HELIX_RUNTIME); Windows keeps aqua's helix (config.toml)
-"conda:ast-grep" = "0.45.3"   # provides `ast-grep` and `sg`
+"conda:ast-grep" = "0.51.0"   # provides `ast-grep` and `sg`
 "conda:jless" = "0.9.0"
-"conda:gitlogue" = "0.12.0"
+"conda:gitlogue" = "0.12.1"
 "conda:htmlq" = "0.4.0"
 # pueue + pueued. Upstream ships only static musl builds, whose user lookup reads
 # /etc/passwd alone: for a directory (SSSD/LDAP) account pueued can't name its
@@ -109,7 +109,7 @@ zig = "0.17.0"
 # tree-sitter-kotlin ships none, so it builds at install (allow_builds) with the host's g++.
 # Lazy, so an EL8 host never fails the tools phase on it. Windows needs MSVC (graft #323).
 # The postinstall saves graft's telemetry opt-out; DO_NOT_TRACK keeps that run itself quiet.
-"npm:@nanonets/graft" = { version = "0.21.1", lazy = true, lazy_bins = ["graft"], allow_builds = ["tree-sitter-kotlin"], postinstall = "DO_NOT_TRACK=1 graft telemetry disable" }
+"npm:@nanonets/graft" = { version = "0.23.0", lazy = true, lazy_bins = ["graft"], allow_builds = ["tree-sitter-kotlin"], postinstall = "DO_NOT_TRACK=1 graft telemetry disable" }
 
 # `graft init` otherwise writes a project statusLine, which hides the enforced ccstatusline
 # (dotfiles/claude/settings.enforced.json) in that repo.
