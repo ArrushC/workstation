@@ -159,6 +159,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `jnv` 0.7.1
 - `choose` 1.3.7
 - `moor` 2.19.5
+- `gob` 3.9.0
 - `watchexec` 2.8.0
 - `qsv` 24.0.0
 - `zjstatus` 0.25.0

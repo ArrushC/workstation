@@ -164,6 +164,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `dotfiles/local/bin/batpipe`: re-apply the 2-line patch recorded in its `.vendor`
   - `gef.py`: stay on GEF 2024.06 (`/usr/bin/gdb` has Python 3.6 on EL8; newer needs 3.10)
   - Catppuccin themes in `dotfiles/config/<tool>/` (see each `.vendor`)
+  - `dotfiles/claude/skills/gob/`: gob's skill at the gob pin's tag; `bump-versions.sh` re-vendors it
+    with the pin. Linux only: `config.toml`'s `~/.claude/skills` entry excludes it.
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
@@ -178,6 +180,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - mise: `bootstrap.sh`, `bootstrap.ps1` `$MiseVersion`, `min_version`
   - `VCPKG_ROOT`: the rc files ↔ `tasks/vcpkg`
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5
+  - the gob pin ↔ the `tag:` in `dotfiles/claude/skills/gob/.vendor`
   - `scripts/bump-versions.sh` covers each via `COUPLED_AUTO` or `EXCLUDE`.
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`

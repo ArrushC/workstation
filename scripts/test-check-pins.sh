@@ -9,7 +9,7 @@ files=(bootstrap.sh bootstrap.ps1 config.toml config.linux.toml
   scripts/bump-versions.sh scripts/gen-tool-memory.sh scripts/check-invariants.sh
   .github/workflows/lint.yml .github/workflows/version-bumps.yml
   .github/workflows/disk-budget.yml dotfiles/config/nvim/lua/ws/treesitter.lua
-  dotfiles/local/bin/zcc dotfiles/local/bin/zc++)
+  dotfiles/local/bin/zcc dotfiles/local/bin/zc++ dotfiles/claude/skills/gob/.vendor)
 pass=0
 fail=0
 T=""
@@ -97,6 +97,16 @@ fresh
 sed -i -E 's/^(COUPLED_AUTO=".*) node"/\1"/' "$T/scripts/bump-versions.sh"
 pins
 case_ "node missing from COUPLED_AUTO fails" 1 "node"
+
+fresh
+sed -i -E 's/^(tag: +v)[0-9.]+/\10.0.1/' "$T/dotfiles/claude/skills/gob/.vendor"
+pins
+case_ "gob skill vendored at another tag fails" 1 "gob (its vendored Claude Code skill) drift"
+
+fresh
+sed -i -E '/^COUPLED_AUTO=/s# github:juanibiapina/gob##' "$T/scripts/bump-versions.sh"
+pins
+case_ "gob missing from COUPLED_AUTO fails" 1 "github:juanibiapina/gob"
 
 fresh
 sed -i '/^\[vars\]/a foo_version = "1.0"' "$T/config.toml"

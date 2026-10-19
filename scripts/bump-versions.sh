@@ -7,9 +7,10 @@
 #   (2) the one host pin config.toml [vars] bumps (vcpkg_version), via
 #       scripts/lib/latest-tag.sh (the lookup tasks/check-updates reports) + set_pin.
 #       zjstatus_zellij_floor is a coupling floor, never bumped.
-#   (3) vendored files that follow upstream main: WezTerm's terminfo entry.
+#   (3) vendored files: WezTerm's terminfo entry (follows upstream main) and
+#       gob's Claude Code skill (follows the gob pin).
 #
-# Coupled tool pins (go+gopls, node's postinstall LSP servers) are bumped by
+# Coupled tool pins (go+gopls, node's postinstall LSP servers, gob's skill) are bumped by
 # dedicated code that keeps every paired edit in step. Only the pins in the EXCLUDE list below
 # are reported and never edited: those need a coupling floor read from release
 # notes, a download check, or a wheel-coverage check the bumper can't do.
@@ -69,6 +70,9 @@ exit_code=0
 #    (check_pins). A changed postinstall string makes
 #    scripts/lib/mise-install.sh reinstall node on each host, so the
 #    servers are actually refreshed.
+#  - github:juanibiapina/gob bumps freely; its Claude Code skill
+#    (dotfiles/claude/skills/gob, vendored at the pin's tag) is re-vendored at
+#    the new tag in layer 3, after mise lock has had its say on the pin.
 # Still EXCLUDED (reported, never auto-edited):
 #  - github:dj95/zjstatus is ABI-coupled to zellij: every zjstatus release
 #    states its zellij floor, recorded as vars.zjstatus_zellij_floor in
@@ -87,7 +91,7 @@ EXCLUDE="github:dj95/zjstatus http:ncdu python"
 # Coupled pins bumped by dedicated code instead of EXCLUDE. check_pins
 # requires every dual-edit/coupled pin to be in EXCLUDE or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here
-COUPLED_AUTO="go go:golang.org/x/tools/gopls node"
+COUPLED_AUTO="go go:golang.org/x/tools/gopls github:juanibiapina/gob node"
 
 # Run a mise subcommand against this checkout as mise's GLOBAL config dir,
 # from OUTSIDE the checkout, via a throwaway XDG_CONFIG_HOME symlink dir.
@@ -407,8 +411,8 @@ if [ -n "$vcpkg_new" ] && version_gt "$vcpkg_new" "$vcpkg_cur"; then
 fi
 
 # -----------------------------------------------------------------------------
-# Layer 3: vendored files that follow upstream main, not a release: WezTerm's terminfo
-# entry. Every nightly builds from wezterm's main and scripts/wezterm-nightly.ps1
+# Layer 3: vendored files. WezTerm's terminfo entry follows upstream main, not a
+# release (gob's skill, below, follows its pin). Every nightly builds from wezterm's main and scripts/wezterm-nightly.ps1
 # installs the latest, so the entry follows main's copy. When that differs, it is
 # re-vendored at main's commit, if it still compiles with tic -x, and its .vendor
 # records the commit and date; hosts re-compile it on their next full bootstrap
@@ -433,6 +437,28 @@ if [[ $ti_main =~ ^[0-9a-f]{40}$ ]] &&
   fi
 fi
 rm -rf "$ti_tmp"
+
+# gob's Claude Code skill follows the gob pin, not main: it is vendored at the pin's tag
+# so it describes the installed CLI (check_pins holds the two equal). When layer 1 moved
+# the pin (and mise lock kept it), SKILL.md and its LICENSE.md are re-vendored at the new
+# tag. If upstream drops or moves the skill, the old copy stays and check_pins fails the
+# weekly run (version-bumps.yml checks invariants before it opens the PR).
+gob_dir=dotfiles/claude/skills/gob
+gob_pin="$(sed -nE 's#^"github:juanibiapina/gob" = \{ version = "([^"]+)".*#\1#p' config.linux.toml)"
+gob_tag="$(sed -nE 's/^tag: +v([^ ]+)$/\1/p' "$gob_dir/.vendor")"
+if [ -n "$gob_pin" ] && [ "$gob_pin" != "$gob_tag" ]; then
+  gob_raw="https://raw.githubusercontent.com/juanibiapina/gob/v$gob_pin"
+  gob_tmp="$(mktemp -d)"
+  if $DRY || { curl -fsSL --retry 3 "$gob_raw/skills/gob/SKILL.md" -o "$gob_tmp/SKILL.md" &&
+    curl -fsSL --retry 3 "$gob_raw/LICENSE.md" -o "$gob_tmp/LICENSE.md" &&
+    cp "$gob_tmp/SKILL.md" "$gob_tmp/LICENSE.md" "$gob_dir/" &&
+    sed -i -E "s/^(tag: +)v[^ ]+$/\1v$gob_pin/; s/^(vendored: +).*/\1$(date -u +%F)/" "$gob_dir/.vendor"; }; then
+    revendored="${revendored}- \`$gob_dir\`: re-vendored at juanibiapina/gob@v$gob_pin (it follows the gob pin); hosts get it on their next \`wsu\`\n"
+  else
+    failed="${failed}- \`$gob_dir\`: could not re-vendor it at v$gob_pin; check_pins fails until it matches the pin (manual)\n"
+  fi
+  rm -rf "$gob_tmp"
+fi
 
 # Keep the generated machine-memory TOOLS block (dotfiles/claude/CLAUDE.md)
 # in sync with the pins we just bumped, in either layer. This

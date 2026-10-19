@@ -193,8 +193,13 @@ check_pins() {
     bad "typescript-language-server@ missing from node's postinstall in config.toml"
   fi
   # Pins the bumper must skip or bump as a pair: zjstatus (its zellij floor), ncdu (URL
-  # 404s on some releases), go + gopls, node (its postinstall pins the LSP servers).
-  pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node
+  # 404s on some releases), go + gopls, node (its postinstall pins the LSP servers), gob
+  # (its vendored skill).
+  pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node github:juanibiapina/gob
+  # gob's Claude Code skill is vendored at the pin's tag, so it describes the installed CLI.
+  pin_equal "gob (its vendored Claude Code skill)" \
+    "config.linux.toml=$(sed -nE 's#^"github:juanibiapina/gob" = \{ version = "([^"]+)".*#\1#p' config.linux.toml)" \
+    "skills/gob/.vendor=$(sed -nE 's/^tag: +v([^ ]+)$/\1/p' dotfiles/claude/skills/gob/.vendor)"
   if [ -z "$PY" ]; then
     note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
     return

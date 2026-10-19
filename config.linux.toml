@@ -75,6 +75,7 @@ zig = "0.17.0"
 "github:ynqa/jnv" = { version = "0.7.1", asset_pattern = "jnv-x86_64-unknown-linux-musl.tar.xz" }   # interactive jq filter; the pinned mise's aqua registry picks the gnu build
 "github:theryangeary/choose" = { version = "1.3.7", asset_pattern = "choose-x86_64-unknown-linux-musl", bin = "choose" }   # fields by index (cut/awk '{print $N}'); aqua's gnu build needs glibc 2.34
 "github:walles/moor" = { version = "2.19.5", asset_pattern = "moor-v{{version}}-linux-amd64", bin = "moor" }   # a pager (formerly moar); static Go binary
+"github:juanibiapina/gob" = { version = "3.9.0", asset_pattern = "gob_{{version}}_linux_amd64.tar.gz" }   # background jobs an agent (or you) starts and checks later; the CLI starts its own daemon
 "github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
 "github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
@@ -136,6 +137,10 @@ GRAFT_NO_STATUSLINE = "1"
 "~/.zshenv" = { source = "dotfiles/zshenv.tera", mode = "template" }
 "~/.dircolors" = { source = "dotfiles/dircolors", mode = "copy" }
 "~/.nbrc" = { source = "dotfiles/nbrc", mode = "copy" }
+# gob's own Claude Code skill (vendored at the gob pin's tag; see its .vendor), so agents run
+# dev servers and long builds as gob jobs. Linux only, like gob: config.toml's ~/.claude/skills
+# entry excludes gob/.
+"~/.claude/skills/gob" = { source = "dotfiles/claude/skills/gob", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 
 "~/.config/bash/completions.bash" = { source = "dotfiles/config/bash/completions.bash", mode = "copy" }
 "~/.config/cheat/conf.yml" = { source = "dotfiles/config/cheat/conf.yml.tera", mode = "template" }
