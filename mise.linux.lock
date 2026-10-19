@@ -10,9 +10,25 @@ checksum = "sha256:1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb
 url = "https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda"
 checksum = "sha256:1a0d382c515ebf55f8ee1f38c8b81bc95af5c2acc42ad53b66bc5df932032f96"
 
+[conda-packages.linux-x64."bzip3-1.5.4-hebe6cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/bzip3-1.5.4-hebe6cf0_0.conda"
+checksum = "sha256:6817dc060c0c4bb5c3f03fb008a2d128675e18034deeeb5900671268dc236a86"
+
 [conda-packages.linux-x64."ca-certificates-2026.7.22-hbd8a1cb_0"]
 url = "https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda"
 checksum = "sha256:0a0544cf95f64394fe4959286f5c71f5444ad58feb0602e53becb27448d24da6"
+
+[conda-packages.linux-x64."libbrotlicommon-1.2.0-h39a168f_4"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlicommon-1.2.0-h39a168f_4.conda"
+checksum = "sha256:c4e9854c585f3ee1785f651287ecdf8c28f30a2ea1b159a513005f8a0f6453a3"
+
+[conda-packages.linux-x64."libbrotlidec-1.2.0-ha411449_4"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlidec-1.2.0-ha411449_4.conda"
+checksum = "sha256:d5ed24da3e583a92227fe77280978b7933f07a39a2b60156c5ad95e5c76733fa"
+
+[conda-packages.linux-x64."libbrotlienc-1.2.0-h018ffa1_4"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlienc-1.2.0-h018ffa1_4.conda"
+checksum = "sha256:b9f3cb510337655485c2e79ce5f7dd468991b19ad29723ffa1175a0aed1b69ae"
 
 [conda-packages.linux-x64."libgcc-16.2.0-ha9f2e26_7"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgcc-16.2.0-ha9f2e26_7.conda"
@@ -25,6 +41,10 @@ checksum = "sha256:5b213ad90ba7eb0ba3a23c32f413fe9a1163d492e218e7283a9f5ade67fa4
 [conda-packages.linux-x64."libgomp-16.2.0-he0feb66_7"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda"
 checksum = "sha256:92a0bb350c7be6a4eedcb4e111c60aefd176018e6b1c009a6e025dbe9bbcd758"
+
+[conda-packages.linux-x64."liblzma-5.8.3-hb03c661_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda"
+checksum = "sha256:9787df8c22a59c9a70d3e5a10db9ad663485e75e9ccc3f09bd092cb7b95e0dab"
 
 [conda-packages.linux-x64."libssh2-1.11.1-h6154650_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-h6154650_1.conda"
@@ -41,6 +61,10 @@ checksum = "sha256:7b49e6fd2a584b7f072943e6adf4149677af5121246975278804782d37752
 [conda-packages.linux-x64."libzlib-1.3.2-h25fd6f3_3"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda"
 checksum = "sha256:eb8a0db0aa570124f7d2a93d7c7f596e3390df5e047818d873baad32985fc736"
+
+[conda-packages.linux-x64."lz4-c-1.10.0-hee9eb32_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.10.0-hee9eb32_2.conda"
+checksum = "sha256:b8c0e930183e6b7f83cd35ace102f2b8c2f0faae41dc05255dc72f247dfc556a"
 
 [conda-packages.linux-x64."openssl-3.6.5-h781a0a9_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
@@ -61,6 +85,10 @@ checksum = "sha256:3ec065b94554dc48a4ca582a960a5484bc166b26e83ce0954653e08d17e8b
 [conda-packages.linux-x64."xorg-libxdmcp-1.1.5-h7cc23a3_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-h7cc23a3_2.conda"
 checksum = "sha256:8a095df9bc1d2e50f2504ce8858a047ae29ea634aad6cc0b43298c63361da6d9"
+
+[conda-packages.linux-x64."zstd-1.5.7-hb78ec9c_7"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_7.conda"
+checksum = "sha256:47d682b9f6d6ec9eb1a6e6c3e75ea6273e899e78fb7fc59f81d39745009fbc60"
 
 [[tools.age]]
 version = "1.3.2"
@@ -106,6 +134,40 @@ checksum = "sha256:5f4cdbd6007a44a6f4573a020c5c40a105bada1cea934f9bd1c5fa97cb833
 url = "https://conda.anaconda.org/conda-forge/linux-64/ast-grep-0.45.3-he17df78_0.conda"
 conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
+    "libgcc-16.2.0-ha9f2e26_7",
+    "_openmp_mutex-4.5-20_gnu",
+    "libgomp-16.2.0-he0feb66_7",
+]
+
+[[tools."conda:datamash"]]
+version = "1.9"
+backend = "conda:datamash"
+specifiers = ["1.9"]
+
+[tools."conda:datamash".options]
+channel = "conda-forge"
+
+[tools."conda:datamash"."platforms.linux-x64"]
+checksum = "sha256:e4d4d3418955bd79873419d27488b05c8544756132d543be975702748e3ed253"
+url = "https://conda.anaconda.org/conda-forge/linux-64/datamash-1.9-hb9d3cd8_0.conda"
+conda_deps = [
+    "libgcc-16.2.0-ha9f2e26_7",
+    "_openmp_mutex-4.5-20_gnu",
+    "libgomp-16.2.0-he0feb66_7",
+]
+
+[[tools."conda:entr"]]
+version = "5.5"
+backend = "conda:entr"
+specifiers = ["5.5"]
+
+[tools."conda:entr".options]
+channel = "conda-forge"
+
+[tools."conda:entr"."platforms.linux-x64"]
+checksum = "sha256:376d269e4b1b430db6b730704ae1375a8584d34c1d00395f34cd49b5d3a8b100"
+url = "https://conda.anaconda.org/conda-forge/linux-64/entr-5.5-h280c20c_1.conda"
+conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
@@ -222,6 +284,34 @@ checksum = "sha256:dd98cca00f70c120ed431c1a036888a6d07cb9f45ea32cf37bcd6ee0623db
 url = "https://conda.anaconda.org/conda-forge/linux-64/tree-sitter-cli-0.27.1-hc7555a6_0.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
+    "_openmp_mutex-4.5-20_gnu",
+    "libgomp-16.2.0-he0feb66_7",
+]
+
+[[tools."conda:ugrep"]]
+version = "7.8.5"
+backend = "conda:ugrep"
+specifiers = ["7.8.5"]
+
+[tools."conda:ugrep".options]
+channel = "conda-forge"
+
+[tools."conda:ugrep"."platforms.linux-x64"]
+checksum = "sha256:6797edffa3ee57e35c6e0479d900ac46afd8a2b1a7644033ffedde56d6a55680"
+url = "https://conda.anaconda.org/conda-forge/linux-64/ugrep-7.8.5-h725a760_0.conda"
+conda_deps = [
+    "bzip3-1.5.4-hebe6cf0_0",
+    "libgcc-16.2.0-ha9f2e26_7",
+    "libstdcxx-16.2.0-h934c35e_7",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "pcre2-10.47-h8b3dc9c_1",
+    "liblzma-5.8.3-hb03c661_1",
+    "lz4-c-1.10.0-hee9eb32_2",
+    "bzip2-1.0.8-hda65f42_10",
+    "zstd-1.5.7-hb78ec9c_7",
+    "libbrotlicommon-1.2.0-h39a168f_4",
+    "libbrotlidec-1.2.0-ha411449_4",
+    "libbrotlienc-1.2.0-h018ffa1_4",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
 ]
@@ -615,6 +705,19 @@ checksum = "sha256:517b442260a38617b05df0078b9e659b95068fabe8d0a83a33589d15f198d
 url = "https://github.com/tummychow/git-absorb/releases/download/0.9.0/git-absorb-0.9.0-x86_64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/tummychow/git-absorb/releases/assets/355709221"
 
+[[tools."github:walles/moor"]]
+version = "2.19.5"
+backend = "github:walles/moor"
+specifiers = ["2.19.5"]
+
+[tools."github:walles/moor".options]
+asset_pattern = "moor-v{version}-linux-amd64"
+
+[tools."github:walles/moor"."platforms.linux-x64"]
+checksum = "sha256:0d0ce5ca95f3e9e208a9900898b9ec9465938a5abf2fa22f4c716a8573f90887"
+url = "https://github.com/walles/moor/releases/download/v2.19.5/moor-v2.19.5-linux-amd64"
+url_api = "https://api.github.com/repos/walles/moor/releases/assets/647837932"
+
 [[tools."github:watchexec/watchexec"]]
 version = "2.8.0"
 backend = "github:watchexec/watchexec"
@@ -640,6 +743,19 @@ asset_pattern = "usql_static-{version}-linux-amd64.tar.bz2"
 checksum = "sha256:046b25a4ce8d16b200d38a47e85c45c5eb694eb5ae071a21436d39fe08a897bc"
 url = "https://github.com/xo/usql/releases/download/v0.21.6/usql_static-0.21.6-linux-amd64.tar.bz2"
 url_api = "https://api.github.com/repos/xo/usql/releases/assets/582302124"
+
+[[tools."github:ynqa/jnv"]]
+version = "0.7.1"
+backend = "github:ynqa/jnv"
+specifiers = ["0.7.1"]
+
+[tools."github:ynqa/jnv".options]
+asset_pattern = "jnv-x86_64-unknown-linux-musl.tar.xz"
+
+[tools."github:ynqa/jnv"."platforms.linux-x64"]
+checksum = "sha256:43bc90e8875f10790e2e69adba5dcc48cff393d0ebc59b9947449feb349b42e8"
+url = "https://github.com/ynqa/jnv/releases/download/v0.7.1/jnv-x86_64-unknown-linux-musl.tar.xz"
+url_api = "https://api.github.com/repos/ynqa/jnv/releases/assets/386275051"
 
 [[tools.gitleaks]]
 version = "8.30.1"

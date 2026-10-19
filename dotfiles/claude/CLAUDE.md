@@ -39,9 +39,9 @@ Coverage on this host:
 This box installs a large modern toolbelt. Default to these over their classic
 equivalents:
 
-- search/files: `rg` (not grep), `fd` (not find), `ast-grep`/`sg` (structural)
+- search/files: `rg` (not grep), `fd` (not find), `ast-grep`/`sg` (structural), `ug -z` (inside archives and compressed files)
 - view: `bat` (not cat), `eza` (not ls), `delta` / `difft` (diffs)
-- data: `jq` / `yq` / `fx` (JSON/YAML), `mlr` / `qsv` (CSV), `usql` (SQL), `choose` (fields, not cut/awk)
+- data: `jq` / `yq` / `fx` (JSON/YAML), `mlr` / `qsv` (CSV), `usql` (SQL), `choose` (fields, not cut/awk), `datamash` (column stats, group-by), `sponge` (rewrite a file from a pipeline that reads it)
 - system: `btop` / `procs` (processes), `dust` / `ncdu` / `gdu` (disk usage), `dysk` (free space, not df), `sd` (simple sed)
 - dev: `gh` (GitHub), `hyperfine` (benchmark), `gitui` / `lazygit`, `jj` (VCS)
 
@@ -156,7 +156,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `dysk` 3.7.1
 - `gdu` 5.38.0
 - `sd` 1.1.0
+- `jnv` 0.7.1
 - `choose` 1.3.7
+- `moor` 2.19.5
 - `watchexec` 2.8.0
 - `qsv` 24.0.0
 - `zjstatus` 0.25.0
@@ -166,6 +168,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `conda:jless` 0.9.0
 - `conda:gitlogue` 0.12.0
 - `conda:htmlq` 0.4.0
+- `conda:ugrep` 7.8.5
+- `conda:datamash` 1.9
+- `conda:entr` 5.5
 - `conda:pueue` 4.0.4
 - `conda:tree-sitter-cli` 0.27.1
 - `ncdu` 2.9.1
@@ -183,6 +188,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `claude` latest
 
 ### System packages (dnf, Linux; skipped without sudo)
-- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rsync rsyslog strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
+- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson moreutils mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rsync rsyslog socat strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
 
 <!-- TOOLS:END -->
