@@ -195,11 +195,13 @@ if [[ -z ${BASH_COMPLETION_VERSINFO:-} && -r /usr/share/bash-completion/bash_com
 fi
 
 # First-party completions for the repo's own script (bootstrap.sh — its
-# flag words), deployed
+# flag words) and for ws, deployed
 # by mise dotfiles to ~/.config/bash/completions.bash. PARITY NOTE: zsh gets
 # richer versions (descriptions + exclusions) via
 # ~/.config/zsh/completions/_* (see zshrc.tera); all surfaces are kept
 # in lockstep with the scripts by check-invariants.sh's flag-parity check.
+# bash reads this file at every start, so it needs nothing like zshrc.tera's
+# .zcompdump invalidation for a newly deployed completion.
 [[ -f "$HOME/.config/bash/completions.bash" ]] && source "$HOME/.config/bash/completions.bash"
 
 # PARITY NOTE (cht.sh): cht.sh ships completions for zsh/fish/emacs but NOT bash
@@ -572,58 +574,39 @@ wsa() {
   mise -C "$HOME" bootstrap --only dotfiles --yes "$@"
 }
 
-# wsh — workstation cheatsheet. Single source of truth for the ws* aliases +
-# the common edit→diff→apply flow + how to push tracked changes upstream.
+# ws — the workstation palette (`ws [words]`: search every action by what you want to
+# do), dotfile reconciliation (`ws reconcile`) and project workspaces (`ws open
+# [project]`): scripts/ws/ws.py on mise's Python (python-cli), one program for every
+# shell on both OSes. Its actions come from scripts/ws/actions.toml, so `wsh` is the
+# same catalogue printed as a cheatsheet. A child process can't change this shell, so it
+# hands back a `cd` (the checkout action, ws open --cd) or a command to put on the prompt
+# (a shell function such as wsa, which only this shell can run) in the WS_OUT file.
+# PARITY: the same body in zshrc.tera, but for the prompt insert.
+ws() {
+  local out rc kind value dir='' cmd=''
+  out=$(mktemp "${TMPDIR:-/tmp}/ws-out.XXXXXX") || return 1
+  WS_OUT="$out" WS_SHELL=bash python-cli "$HOME/.config/mise/scripts/ws/ws.py" "$@"
+  rc=$?
+  while IFS=$'\t' read -r kind value; do
+    case $kind in
+    cd) dir=$value ;;
+    insert) cmd=$value ;;
+    esac
+  done <"$out"
+  command rm -f -- "$out"
+  if [ -n "$dir" ]; then builtin cd -- "$dir" || rc=1; fi
+  # bash has no print -z: an editable line instead, so Enter runs it (and it is in history).
+  if [ -n "$cmd" ] && IFS= read -r -e -i "$cmd" -p '$ ' cmd; then
+    history -s "$cmd"
+    eval "$cmd"
+  fi
+  return "$rc"
+}
+
+# wsh — the workstation cheatsheet: the ws* commands, shell shortcuts and per-host files,
+# printed from scripts/ws/actions.toml (the catalogue `ws` searches).
 wsh() {
-  cat <<'EOF'
-workstation aliases (mise dotfiles — always act on this host's own checkout
-at ~/.config/mise, regardless of the current directory: every command below
-pins `-C "$HOME"`):
-  wse  mise dot edit <path>       edit a tracked file's source
-  wsd  mise dot diff              preview pending changes to ~
-  wsa  apply — warns + asks if $HOME has an un-recorded edit first
-  wsr  mise dot add --changed     record FILE-entry edits back to source
-       (a DIRECTORY entry — ~/.claude/agents, ~/.claude/commands,
-       ~/.claude/hooks, ~/.claude/skills, ~/.config/zellij, ~/.config/zsh/
-       completions, ~/.config/gdb, ~/.local/bin — needs `mise dot add
-       <that directory>` instead; --changed skips directory copies)
-  wss  mise dot status            list managed files + their state
-  wsu  mise run update            git pull + mise install + mise bootstrap
-
-Shell shortcuts:
-  l / la / ll / lt   eza listings (ll: long + git; lt: tree; lta: + hidden;
-                     ltl: tree + details); in WezTerm, Ctrl+click a name
-  gs ga gc gp gl gd gco gbr
-                     git status, add, commit, push, log, diff, checkout, branch
-  y                  yazi; on quit, cd to where you ended up
-  z <dir> / zi       zoxide: jump to / pick a visited directory
-  fh / fcd / fssh    fzf: rerun a history line / cd below here / ssh to a
-                     host from ~/.ssh/config
-  zs [name] [layout] start or attach a zellij session; zr <cmd>: a floating pane
-  n [text] / nf      list notes or add one (nb) / browse them with a preview
-  hide / clear       clear the screen, keeping / dropping the scrollback
-  Ctrl-R history (fzf, or atuin if ~/.bashrc.local starts it), Ctrl-T insert
-  a file, Alt-C cd into a directory (fzf)
-
-Common flow:
-  wse ~/.bashrc       (edit in source state)
-  wsd                 (preview the change)
-  wsa                 (apply to ~)
-
-Common flow for a live edit under $HOME (e.g. Claude Code editing
-~/.claude/CLAUDE.md directly):
-  wsr                              (file entries)
-  mise dot add ~/.claude/agents    (a directory entry, by exact target path)
-  wsa                              (apply — now a no-op for what you just recorded)
-
-Push tracked changes upstream:
-  cd ~/.config/mise && git add -A && git commit -m '...' && git push
-
-Per-machine overrides (untracked):
-  ~/.bashrc.local                                              (Linux)
-  ...PowerShell\Microsoft.PowerShell_profile.local.ps1         (Windows)
-  %APPDATA%\nushell\autoload\*.nu                              (Windows, Nushell)
-EOF
+  ws help
 }
 
 # fzf-powered history search (Ctrl+R enhanced)

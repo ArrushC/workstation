@@ -126,7 +126,31 @@ check "wse passes mise's flags through" bash -c '[[ "$1" =~ dot\ edit\ .*\.zshrc
 run_nu 'wsd'
 check "wsd with no argument diffs everything" has "dot diff"
 run_nu 'wsh'
-check "wsh names Nushell's per-machine override dir" has 'nushell\autoload'
+check "without mise's Python, wsh says how to get it" has "mise's Python isn't installed"
+
+echo "-- ws (scripts/ws/ws.py, as the stubbed mise's python)"
+WSPY=""
+for p in wpy python3; do
+  if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import tomllib' 2>/dev/null; then
+    WSPY="$(command -v "$p")"
+    break
+  fi
+done
+if [ -n "$WSPY" ]; then
+  mkdir -p "$HOMEDIR/.config" "$T/proj dir/.git"
+  ln -sfn "$ROOT" "$HOMEDIR/.config/mise" # WORKSTATION_REPO, as on Windows
+  export MISE_WHICH_OUT="$WSPY"
+  run_nu 'wsh'
+  check "wsh prints the catalogue for Nushell (its per-machine override dir)" has 'nushell\autoload'
+  check "...and no other shell's" bash -c '[[ "$1" != *".zshrc.local"* ]]' _ "$OUT"
+  run_nu "ws open --cd '$T/proj dir'; pwd"
+  check "ws open --cd changes Nushell's directory (def --env)" has "$T/proj dir"
+  run_nu "ws-complete 'ws re'"
+  check "ws completes its subcommands" has "reconcile"
+  unset MISE_WHICH_OUT
+else
+  echo "  (no python with tomllib: skipped)"
+fi
 
 echo "-- fssh"
 run_nu 'fssh'

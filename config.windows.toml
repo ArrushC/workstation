@@ -127,8 +127,25 @@ description = "Install or update WezTerm's nightly build (the post-tools hook)"
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-nightly.ps1 || exit /b 0"
 
+# ws reconcile's baseline and pre-apply backups (scripts/ws; tasks/dotfiles-baseline and
+# tasks/dotfiles-snapshot on Linux). Before the tools phase has installed mise's Python (a
+# fresh host) `python` fails, and `|| exit /b 0` keeps the bootstrap going.
+[tasks.dotfiles-baseline-win]
+description = "post-dotfiles hook: record what each managed dotfile now agrees on, ws reconcile's baseline"
+hide = true
+dir = "{{ xdg_config_home }}/mise"
+run = "python scripts/ws/ws.py baseline record || exit /b 0"
+
+[tasks.dotfiles-snapshot-win]
+description = "pre-dotfiles hook: back up each local dotfile edit an apply would overwrite (ws reconcile --backups)"
+hide = true
+dir = "{{ xdg_config_home }}/mise"
+run = "python scripts/ws/ws.py baseline snapshot || exit /b 0"
+
 [bootstrap.hooks]
 post-tools = "mise run nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win"
+pre-dotfiles = "mise run --skip-tools dotfiles-snapshot-win"
+post-dotfiles = "mise run --skip-tools dotfiles-baseline-win"
 
 # GUI apps, installed by `mise bootstrap --only packages` (bootstrap.ps1 runs it after
 # the dotfiles, so winget's scope preference above is already in place). An app counts

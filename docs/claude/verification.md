@@ -225,6 +225,26 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   "Error while saving recents". A WSL tab at rest is its distro's colour (AlmaLinux-9: sky),
   not mauve; the previously active tab is underlined and Alt+0 returns to it.
 
+## ws (palette, reconcile, workspaces)
+
+- `bash scripts/test-ws.sh` (lint runs it): unit tests on scratch-home fixtures, one end-to-end run
+  against the real mise in a scratch `HOME` (its own global config with the pre/post-dotfiles
+  hooks), pty runs of the real fzf pickers, and the zsh/bash wrappers. `WS_STATE_DIR`,
+  `WS_CONFIG_DIR` and `WS_REPO` redirect every path ws writes; tests set all three.
+- Against the real home, read-only: `WS_STATE_DIR=$(mktemp -d) python3 scripts/ws/ws.py reconcile --list`
+  (a fresh state dir: every difference reads `?`, nothing is written to the real state).
+  `ws actions` lists every action with the exact command; `ws open --list` the workspaces found.
+- Nushell's `ws`: `scripts/test-config-nu.sh` with the pinned nu on PATH (CI's templates job; locally,
+  unpack `nu-0.113.1-x86_64-unknown-linux-musl.tar.gz` into a temp dir). An interactive nu under a pty
+  waits for a reply to its cursor query (`ESC[6n`): answer `ESC[5;1R` or it reads no input.
+- PowerShell's `ws`: render the profile into a scratch home (`MISE_ENV=windows`, as
+  check-templates.sh does), copy it under `%TEMP%`, and parse it with `powershell.exe` (the
+  Windows section's recipe). On Windows itself, run `ws.py help`/`actions`/`reconcile --list` with
+  mise's Windows `python.exe` and `WS_STATE_DIR` set to a temp dir.
+- A layout with startup commands: `wslib.workspace.inject()` on `~/.config/zellij/layouts/dev.kdl`, then
+  `zellij attach --create-background <throwaway> options --default-layout <file>`; `action dump-layout`
+  shows the `cwd` and the commands; kill and delete the session after.
+
 ## mise 2026.9.9 behaviour this setup relies on
 
 Verified against the installed binary in a scratch `HOME` (2026-09-29 simplification; the design
