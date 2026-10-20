@@ -591,23 +591,36 @@ def boot(f):
 hook_re = re.compile(r"^mise run (--skip-tools )?[a-z-]+( ::: [a-z-]+)*$")
 AFTER_TOOLS_HOOKS = {"post-tools", "final"}
 toml_tasks = {t for d in loaded.values() for t in d.get("tasks", {})}
-# post-dotfiles is the raw chmod line restoring ~/.ssh and ~/.claude modes, pinned to an
-# exact literal: mise runs hooks as `sh -o errexit`, so each command needs its own `|| true`
-# (where ~/.claude doesn't exist yet the first chmod would abort the bootstrap).
+# config.linux.toml's post-dotfiles is the raw chmod line restoring ~/.ssh and ~/.claude
+# modes, then ws reconcile's baseline, pinned to an exact literal: mise runs hooks as
+# `sh -o errexit`, so each command needs its own `|| true` (where ~/.claude doesn't exist
+# yet the first chmod would abort the bootstrap). Windows' is an ordinary `mise run` hook.
 EXPECTED_POST_DOTFILES_HOOK = (
     "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; "
     "chmod 600 ~/.ssh/config 2>/dev/null || true; "
-    "chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
+    "chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true; "
+    "mise run --skip-tools dotfiles-baseline || true"
 )
+# Both OSes keep ws reconcile's baseline (post-dotfiles) and back up local edits before an
+# apply (pre-dotfiles): a hook that went missing would leave reconcile guessing again.
+WS_HOOKS = {
+    "config.linux.toml": {"pre-dotfiles": "mise run --skip-tools dotfiles-snapshot",
+                          "post-dotfiles": EXPECTED_POST_DOTFILES_HOOK},
+    "config.windows.toml": {"pre-dotfiles": "mise run --skip-tools dotfiles-snapshot-win",
+                            "post-dotfiles": "mise run --skip-tools dotfiles-baseline-win"},
+}
 bad_hooks = []
 n_hooks = 0
+for f, want in WS_HOOKS.items():
+    have = loaded.get(f, {}).get("bootstrap", {}).get("hooks", {})
+    for name, val in want.items():
+        if have.get(name) != val:
+            bad_hooks.append(f"{f}:{name} must be {val!r} (got {have.get(name)!r})")
 for f, d in loaded.items():
     for name, val in d.get("bootstrap", {}).get("hooks", {}).items():
         n_hooks += 1
-        if name == "post-dotfiles":
-            if val != EXPECTED_POST_DOTFILES_HOOK:
-                bad_hooks.append(f"{f}:post-dotfiles != the verified-safe literal (got {val!r})")
-            continue
+        if name == "post-dotfiles" and f == "config.linux.toml":
+            continue  # the pinned literal, checked above
         if not hook_re.match(val):
             bad_hooks.append(f"{f}:{name}={val!r} (want 'mise run <task>')")
             continue
@@ -1184,9 +1197,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-ws.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-ws.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -2334,6 +2347,67 @@ if [ "${1:-}" = --only ]; then
 fi
 # run_parallel <check>...: run the checks concurrently, then print each one's buffered
 # output in this order and add up its failures (each runs in its own subshell).
+# --- ws (scripts/ws): compiles, and every shell reaches it the same way ----------
+# One program behind every shell's `ws` and `wsh`, so the four wrappers must call it (and
+# wsh must be `ws help`, the catalogue, not a heredoc that drifts from it). The bash and zsh
+# bodies are the same but for WS_SHELL and the prompt insert. ws.py itself must stay
+# parseable by EL8's python3.6, so a hook that reaches it early prints a message.
+check_ws() {
+  hdr "ws (scripts/ws: compiles; zsh, bash, Nushell and PowerShell wrappers)"
+  local f out n=0 errs=0 zsh_body bash_body
+  if [ -n "$PY" ]; then
+    if out=$(
+      "$PY" - <<'PY' 2>&1
+import ast, pathlib, sys
+bad = []
+for p in sorted(pathlib.Path("scripts/ws").rglob("*.py")):
+    try:
+        compile(p.read_text(encoding="utf-8"), str(p), "exec")
+    except SyntaxError as e:
+        bad.append(f"{p}: {e}")
+tree = ast.parse(pathlib.Path("scripts/ws/ws.py").read_text(), feature_version=(3, 6))
+print("\n".join(bad))
+sys.exit(1 if bad else 0)
+PY
+    ); then
+      ok "scripts/ws: every .py compiles; ws.py parses as Python 3.6"
+    else
+      bad "scripts/ws doesn't compile: $out"
+    fi
+  else
+    note "no python with tomllib — skipped compiling scripts/ws (CI enforces)"
+  fi
+  for f in dotfiles/zshrc.tera dotfiles/bashrc.tera; do
+    grep -q 'python-cli "$HOME/.config/mise/scripts/ws/ws.py" "$@"' "$f" || {
+      bad "$f: ws() doesn't run scripts/ws/ws.py through python-cli"
+      errs=$((errs + 1))
+    }
+    n=$((n + 1))
+  done
+  grep -q 'join scripts ws ws.py) \.\.\.\$args' dotfiles/windows/AppData/Roaming/nushell/config.nu.tera || {
+    bad "config.nu.tera: ws doesn't run scripts/ws/ws.py"
+    errs=$((errs + 1))
+  }
+  grep -qF "Join-Path \$env:WORKSTATION_REPO 'scripts\\ws\\ws.py') @args" dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera || {
+    bad "PowerShell profile: ws doesn't run scripts\\ws\\ws.py"
+    errs=$((errs + 1))
+  }
+  for f in dotfiles/zshrc.tera dotfiles/bashrc.tera dotfiles/windows/AppData/Roaming/nushell/config.nu.tera dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera; do
+    if ! grep -qE '^(wsh\(\) \{$|def wsh \[\] \{ ws help \}$|function wsh \{ ws help \}$)' "$f" || grep -q "^workstation aliases\|^workstation commands" "$f"; then
+      bad "$f: wsh must be \`ws help\` (the catalogue), not its own text"
+      errs=$((errs + 1))
+    fi
+  done
+  zsh_body=$(sed -n '/^ws() {/,/^}/p' dotfiles/zshrc.tera | grep -v -e 'WS_SHELL=' -e 'print -z')
+  bash_body=$(sed -n '/^ws() {/,/^}/p' dotfiles/bashrc.tera | grep -v -e 'WS_SHELL=' -e 'read -r -e' -e 'history -s' -e 'eval "$cmd"' -e '^  fi$' -e 'bash has no print -z')
+  if [ "$zsh_body" != "$bash_body" ]; then
+    bad "ws() in zshrc.tera and bashrc.tera differ beyond WS_SHELL and the prompt insert:"
+    diff <(printf '%s\n' "$zsh_body") <(printf '%s\n' "$bash_body") | sed 's/^/       /' | head -20
+    errs=$((errs + 1))
+  fi
+  [ "$errs" -eq 0 ] && ok "ws and wsh in zshrc/bashrc (same body), config.nu and the PowerShell profile call scripts/ws/ws.py"
+}
+
 run_parallel() {
   local d c
   d=$(mktemp -d)
@@ -2377,6 +2451,7 @@ check_shell_highlight_parity
 check_colorterm
 check_debugger_config
 check_helix_config
+check_ws
 check_wezterm_config
 check_wezterm_term
 check_claude_config

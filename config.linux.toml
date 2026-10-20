@@ -232,8 +232,13 @@ GRAFT_NO_STATUSLINE = "1"
 # command carries its own `|| true`. The third chmod sets the SOURCE to 0600 too:
 # mise compares target mode to source mode, so a 0644 source leaves ~/.ssh/config
 # permanently "differs (permissions differ)". mise has no per-entry mode key, and
-# `private = true` is ignored.
-"post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true; chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true"
+# `private = true` is ignored. The last command records ws reconcile's baseline (what each
+# managed file now agrees on; tasks/dotfiles-baseline), after the modes are restored.
+"post-dotfiles" = "chmod 700 ~/.ssh ~/.claude 2>/dev/null || true; chmod 600 ~/.ssh/config 2>/dev/null || true; chmod 600 ~/.config/mise/dotfiles/ssh/config.tera 2>/dev/null || true; mise run --skip-tools dotfiles-baseline || true"
+# Before every dotfiles apply: an apply overwrites a target that differs without asking (wsu's
+# full bootstrap too), so tasks/dotfiles-snapshot backs up each local edit the baseline doesn't
+# hold (ws reconcile --backups lists them). It never fails, so it can't stop a bootstrap.
+"pre-dotfiles" = "mise run --skip-tools dotfiles-snapshot"
 
 # EPEL + CRB must exist before the dnf batch resolves (htop/heaptrack/ccache are
 # EPEL, meson/ninja-build are CRB; cppcheck is EPEL on EL9, CRB on EL8). mise has

@@ -240,7 +240,8 @@ The same workflow commands exist in bash and zsh on Linux and in Nushell and Pow
 | `wsr` | `mise dot add --changed`: record an edited copy-mode file back to its source |
 | `wss` | `mise dot status`: every managed file and its state. In Nushell and PowerShell it is a table of `target`, `mode` and `state` to filter (`wss \| where state == differs`); an argument goes to mise's text output instead (`wss --json`) |
 | `wsu` | `mise run update`: `git pull --ff-only --prune` (dropping the `origin/*` branches GitHub no longer has, such as a merged PR's), then `mise bootstrap`, which installs the tools too (system steps per the saved `sudo`) |
-| `wsh` | Print the workstation cheatsheet (the `ws*` commands and the shell shortcuts) |
+| `wsh` | Print the workstation cheatsheet (the `ws*` commands, shell shortcuts and per-host files), from the same catalogue `ws` searches |
+| `ws` | The searchable palette, `ws reconcile` (review dotfile changes) and `ws open` (project workspaces): see [below](#ws-the-palette-dotfile-reconciliation-and-project-workspaces) |
 
 Every `ws*` command pins `mise -C` to the host's own home, so it acts on this host's checkout from any directory. (mise finds its config root by walking up from the current directory, and a stray `.config/mise` on that path, such as a Windows drive mount under WSL, would otherwise be managed instead.) `wsa` also refuses if mise resolves a different config root. The Windows versions cover what differs there: `wsu` is the same pull plus a dotfiles-and-tools bootstrap, and mise itself and the GUI apps are left to `bootstrap.ps1`.
 
@@ -250,7 +251,7 @@ Every `ws*` command pins `mise -C` to the host's own home, so it acts on this ho
 mise dot add ~/.claude/agents
 ```
 
-`mise dot add <directory>` replaces the source directory's contents (a source-only `.gitkeep` drops out, which is harmless once the directory has real files). Then commit and push:
+`mise dot add <directory>` replaces the source directory's contents (a source-only `.gitkeep` drops out, which is harmless once the directory has real files). `ws reconcile` records one file inside a directory entry instead, and says which side changed. Then commit and push:
 
 ```bash
 cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
@@ -260,7 +261,7 @@ cd ~/.config/mise && git add -A && git commit -m "update zshrc" && git push
 
 Example: `export GOPATH="/opt/go"` in `~/.zshrc.local`.
 
-**Health and updates.** `mise run health` prints one row per check with the exact repair command: the config set and the system steps, `mise bootstrap status --missing`, toolbelt completeness (cht.sh and graft are lazy: `mise install` skips them and their first run installs them, so a cht.sh outage can't stop a bootstrap), free disk space where mise installs tools (a warning below 2 GB), `miserc.toml`, pueued, python-env, extras (Claude Code, vcpkg, fonts), the zjstatus plugin, WezTerm (the terminfo entry; from WSL, the Windows nightly and its toast id), the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t`, since dnf and `/etc` files can prompt for sudo) and run `wsu` there.
+**Health and updates.** `mise run health` prints one row per check with the exact repair command: the config set and the system steps, `mise bootstrap status --missing`, toolbelt completeness (cht.sh and graft are lazy: `mise install` skips them and their first run installs them, so a cht.sh outage can't stop a bootstrap), free disk space where mise installs tools (a warning below 2 GB), `miserc.toml`, pueued, python-env, extras (Claude Code, vcpkg, fonts), the zjstatus plugin, WezTerm (the terminfo entry; from WSL, the Windows nightly and its toast id), the login shell, dotfiles drift, and a dirty checkout (which would block the next `wsu`). `ws health` runs the same report, then offers the repair action for each failing or warning row (it asks before changing anything). `mise run check-updates` is the update scan. To update another host, SSH in (`ssh -t`, since dnf and `/etc` files can prompt for sudo) and run `wsu` there.
 
 **Re-provisioning by hand.** `mise bootstrap` works from any directory because this checkout is mise's global config:
 
@@ -281,7 +282,7 @@ mise bootstrap --only packages --yes   # narrow to one phase
 mise run python-env --rebuild   # runs on every host; upgrades to latest libs
 ```
 
-**Zellij.** Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
+**Zellij.** Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `ws open` does this per project, in the project's directory, with a session of its own for each worktree (below). `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
 
 | Bind | Action |
 |---|---|
@@ -344,6 +345,93 @@ Plugins install only from the `nvim-plugins` task (the `final` hook, so `wsu` to
 **Diagrams and a code graph for Claude Code.** [oh-my-mermaid](https://ohmymermaid.com) (`omm`) keeps a repo's architecture as Mermaid diagrams in `.omm/`. In Claude Code, `/omm-scan` writes them and `/omm-push` shares them (`tasks/claude` installs the plugin on Linux; on Windows run `omm setup claude` once). `omm view` serves them on port 3000 on every network interface, so stop it on a shared host. [archify](https://github.com/tt-a1i/archify) is a Claude Code skill that draws architecture, workflow, sequence, data-flow and state diagrams as interactive HTML (ask Claude for a diagram; the files land in `.archify/`). mise installs its release, and `wsu` links it into `~/.claude/skills` (Windows: copies it). Its update reminder is off, because the pin moves with the weekly version bumps. [Graft](https://github.com/trailhq/graft) (`graft`) builds a graph of a repo's code that Claude Code reads instead of exploring: `graft init` in a repo adds its hooks, MCP server and skill, and a git-ignored `graft/`. It runs on Linux hosts from EL9 up (EL8's libstdc++ is too old for its parser, and Windows needs MSVC). It is a lazy mise tool: the first `graft` installs it, taking about 30 s to compile one parser. Its telemetry is turned off at install, and `GRAFT_NO_STATUSLINE=1` (`config.linux.toml`) keeps `graft init` from replacing ccstatusline with its own status line. Update both through their pins; `omm update` and `graft upgrade` would install a second copy with npm.
 
 **winterop** (in `~/.local/bin` on Linux and WSL, WSL-only) talks to the Windows host: no arguments shows the detected environment and live channels, and `winterop run <cmd>`, `path <p>`, `clip [get|set]`, `open <path|url>`, `host` cover the common cases (`winterop help` lists the rest). In a plain VM it points you at SSH, shared folders or RDP.
+
+## ws: the palette, dotfile reconciliation and project workspaces
+
+`ws` is one program, `scripts/ws/ws.py` on mise's Python, behind a small `ws` function in zsh, bash, Nushell and PowerShell. Its actions come from one catalogue, `scripts/ws/actions.toml`, which `wsh` prints as the cheatsheet. Add an action there and both pick it up.
+
+| Command | What it does |
+|---|---|
+| `ws [words]` | The palette: search every workstation action by what you want to do (`ws python`, `ws rebuild`, `ws ssh`, `ws clipboard`, `ws update`, `ws dotfiles`) |
+| `ws reconcile` | Review each managed file that differs from the repo, and record, apply, merge, edit or skip it |
+| `ws reconcile --list` (`--json`) | Print what differs and which side changed, without acting |
+| `ws reconcile --record`/`--apply`/`--merge <path>...` | Act on files from the command line (it shows the diff and asks; `--yes` doesn't ask) |
+| `ws reconcile --backups` | Every backup ws made, with the command that restores each file |
+| `ws open [project]` | Attach to a project's zellij session, resurrect it, or create it (Windows: change to the project) |
+| `ws open --list` / `--prefs` | Known workspaces and their session state / edit the per-host preferences |
+| `ws health` | The health report, then the repair for a failing row |
+| `ws actions [words]` | Every action and the exact command it runs, without a picker |
+
+**The palette.** Every row says what kind of action it is. *read* changes nothing and runs at once. *change* writes files or host state: it prints the exact command and runs it only after you answer `y`. *open* starts an editor, picker, pager or session, and *info* only shows text. The preview pane shows the command, where the action is defined and the words it matches (synonyms included, so `rebuild` finds `repair` and `fix`). Actions are filtered to the OS, the shell and the tools on `PATH`.
+
+Besides the catalogue, the palette lists this checkout's mise tasks and, when the current directory is inside a project, that project's own tasks. A project task runs only when you pick it and confirm. Listing it executes nothing, and mise refuses to read an untrusted config that could (`mise trust` there first).
+
+The picker returns only an action's id, and the command comes from the catalogue, so nothing the picker shows is ever run as typed. Shell functions (`wsa`, `zs`, `fssh`, `y`) can only run in your shell, so the palette puts them on the prompt for you to run with Enter: in zsh the prompt itself, in bash an editable line, in Nushell the next prompt. PowerShell prints them. Esc at any point leaves everything as it was.
+
+**Reconciling dotfiles.** A deployed dotfile is a copy, so a file that differs from the repo doesn't say which side changed. ws keeps a *baseline*: the content each file had the last time the live copy and the repo agreed. The `post-dotfiles` hook records it after every apply (`wsa`, `wsu`, `bootstrap.sh`, `bootstrap.ps1`, `mise dot apply`), and `ws reconcile` refreshes it whenever it finds a file in sync. With it, each file is one of:
+
+| Shown as | Meaning | First choice |
+|---|---|---|
+| `local` | Edited here since the last deploy; the repo is unchanged | record (copy entries), edit (templates) |
+| `repo` | The repo changed; the live file is as deployed | apply |
+| `both` | Both changed since the last deploy | merge |
+| `?` | They differ and there is no baseline, so ws can't tell which side moved | your call: edit, apply or record |
+| `new` | In the repo, never deployed here | apply |
+| `deleted` | Deleted here; the repo still has it | apply (restore), or record the deletion (files in directory entries) |
+| `removed` | The repo dropped a file a directory entry deployed | apply (remove the live copy), or record (restore it to the repo) |
+| `mode` | Same content, different executable bit | apply |
+| `render?` | mise's render of the template couldn't be rebuilt to compare | edit, or apply through mise |
+
+- **record** copies the live file into `dotfiles/`.
+- **apply** writes the repo's version over the live file. A single-file entry goes through `mise dot apply --force -- <target>`, so mise renders it; a file inside a directory entry is copied on its own.
+- **merge** is a three-way merge of the live file, the repo and the baseline (`git merge-file`). A clean merge goes to both sides. Conflicts open in your editor, and nothing is written until no conflict markers are left.
+- **edit** opens the live file beside its source.
+- **skip** changes nothing.
+
+Every action shows the diff it will make and asks first. Before it overwrites a file, the old content goes to a backup. Nothing is committed or pushed: review a record or merge with `git -C ~/.config/mise diff`.
+
+- **Templates** (`.tera` sources) are never recorded. The rendered file has this host's values in it, so copying it over the template would push them to every host. Their *edit* opens the template beside a diff of the live changes to port by hand, then renders the template again and compares. A template's merge writes the merged result to the live file only, and the remaining local part shows as `local` until it's in the template.
+- **Directory entries** (`~/.claude/skills`, `~/.config/zellij`, ...) are reconciled one file at a time. Recording one never replaces the source directory, unlike `mise dot add <dir>`. A file only the live directory has was never deployed and is never imported. Excluded files, such as a nested entry's directory or `.vendor`, stay out.
+- **Line and block edit entries** (the theme lines and blocks) are listed when they aren't applied: apply them, or open the config that declares them.
+
+Before every apply, the `pre-dotfiles` hook backs up each local edit the apply would overwrite and the baseline doesn't hold. A plain apply overwrites a differing copy without asking, and `wsu`'s bootstrap does too. `ws reconcile` mentions the newest such backup once. It says how many files were local edits, and how many differed with no baseline to tell. Those are often just the previous deploy: on a host's first apply after ws arrives, every file the repo changed is one.
+
+Recovery: `ws reconcile --backups` lists every backup set, newest first, each file with its restore command (`cp -- <backup> <original>`; on Windows `Copy-Item`). A record or merge in the repo is undone with `git -C ~/.config/mise checkout -- <path>`. The 50 newest backup sets are kept. Baselines, blobs and backups are host state, in `~/.local/state/workstation/dotfiles/` (Windows: `%LOCALAPPDATA%\workstation\dotfiles\`), never in the checkout.
+
+Limits:
+- A baseline exists from the first apply after this feature reaches a host. Until then, and for any file that already differed, reconcile says `?` rather than guessing.
+- The hooks need mise's Python, so on a fresh host's first bootstrap (dotfiles before tools) they skip with a message, and the next apply or `ws reconcile` records.
+- A store written for a different `$HOME` is read-only, so scratch homes can't change your baselines.
+- mise's `track`-mode entries aren't reconciled (mise's own `history` covers them); this repo has none.
+
+**Project workspaces.** `ws open` lists projects from zoxide's history (a directory counts when it is in a git worktree or has a project file such as `mise.toml` or `package.json`), two levels under the configured roots (`PROJECT_ROOT`, `~/projects` by default), the workspaces you opened before, and each repository's linked git worktrees, read from `.git/worktrees` without a scan of your home.
+
+`ws open <name>` takes a name as listed, a session name or a path, and picks when more than one matches. Running sessions sort first, then the ones you opened most recently.
+
+Each worktree is its own workspace. The session is named for the project plus six hex digits of a hash of its resolved path (`app-feature-2fddff`), so it is stable and two checkouts with the same name never share one. What `ws open` does depends on the session:
+- **running:** it attaches, and panes and processes are as you left them.
+- **exited** (after a reboot, or `zellij kill-session`): zellij resurrects it, rebuilding its tabs and panes from its last save in the project directory. Command panes wait for Enter, and no other process comes back.
+- **none:** it creates one in the project directory with the `dev` layout (editor, terminal and run panes).
+
+Inside zellij it switches sessions instead of nesting. `ws open --run <task>` starts a mise task in the run pane of a new session.
+
+Preferences are per host, in `~/.config/workstation/projects.toml` (`ws open --prefs` creates it from a commented template):
+
+```toml
+roots = ["~/projects", "~/src"]
+editor = "hx"                 # EDITOR/VISUAL inside new workspace sessions
+layout = "dev"
+
+[project."~/projects/app"]
+editor = "nvim"
+layout = "ops"
+startup = { editor = "nvim .", run = "mise run dev" }   # opt-in; pane name = command
+suspended = true                                        # startup commands wait for Enter
+```
+
+Startup commands come only from this file or `--run`, never from the project, and run only when a session is created. Nothing a project carries is executed by `ws open`. The picker previews each project's branch, worktree, session state, preferences and mise tasks.
+
+On Windows there is no zellij: `ws open` changes the current Nushell or PowerShell to the project and lists its tasks, and `ws open --tab` opens it in a new WezTerm or Windows Terminal tab. Warp has no tab command, so there it changes directory. Renaming or moving a project changes its session name; `ws open --list` shows the sessions known for each path.
 
 ## Adding things
 
@@ -521,11 +609,11 @@ git add -A && git commit -m '...' && git push   # keep the edit (or: git stash)
 
 ### A copy-mode file (Warp / Windows Terminal / Zed / VS Code settings) reverts after wsa
 
-Expected: those apps rewrite their file in place from their UI, so the copy in `$HOME` and the tracked source drift apart, and the next `wsa` overwrites your UI edit with the stale source (`wsa` warns first if it notices). Record the live file back to source before the next `wsa`/`wsu` with `wsr` (every changed tracked file) or `mise dot add --changed -- "<target>"` (just the one you edited), then commit the updated source.
+Expected: those apps rewrite their file in place from their UI, so the copy in `$HOME` and the tracked source drift apart, and the next `wsa` overwrites your UI edit with the stale source (`wsa` warns first if it notices). Record the live file back to source before the next `wsa`/`wsu` with `ws reconcile` (one file at a time, and it says whether the repo changed too) or `wsr` (every changed file entry), then commit the updated source. If an apply already overwrote it, the pre-apply backup has it: `ws reconcile --backups`.
 
 ### I edited a file in $HOME directly (e.g. ~/.claude/CLAUDE.md) and wsa reverted it
 
-Deployed targets are independent copies, so a direct edit never reaches `dotfiles/`. `wsa` prints the diff and asks before overwriting; a silent overwrite means it went through the raw `mise bootstrap --only dotfiles --yes` form, which overwrites by design. Record the edit before re-running `wsa`: `wsr` records FILE entries; for a DIRECTORY entry use `mise dot add <the directory>`, e.g. `mise dot add ~/.claude/agents`; then commit.
+Deployed targets are independent copies, so a direct edit never reaches `dotfiles/`. `wsa` prints the diff and asks before overwriting; a silent overwrite means it went through the raw `mise bootstrap --only dotfiles --yes` form, which overwrites by design. Record the edit before re-running `wsa`: `ws reconcile` records any file, including one inside a directory entry; `wsr` records FILE entries; `mise dot add <the directory>` replaces a whole directory entry's source. Then commit. If `wsu` or a raw apply already overwrote the edit, the `pre-dotfiles` hook backed it up first: `ws reconcile --backups` lists it with its restore command.
 
 ### mise bootstrap plan / status asks for a sudo password and hangs (no TTY)
 

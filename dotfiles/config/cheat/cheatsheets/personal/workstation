@@ -8,6 +8,11 @@ wsd          # diff pending changes
 wss          # status
 wsr          # record changed copy-mode files back to source
 wsu          # update: pull repo + mise install + mise bootstrap
+ws [words]   # palette: search every action (ws python, ws rebuild, ws ssh)
+ws reconcile # review dotfile differences: record, apply, merge, edit, skip
+ws reconcile --backups   # what ws backed up before overwriting, with restore commands
+ws open [project]        # attach to / resurrect / create a project's zellij session
+ws health    # health report, then run the repair of a failing row
 
 # --- zellij (multiplexer) ---
 zj           # zellij

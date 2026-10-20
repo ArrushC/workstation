@@ -286,65 +286,42 @@ def wsu [...args] {
         mise -C $env.USERPROFILE bootstrap --only dotfiles,tools --yes ...$args
     }
 }
-# wsh -- workstation cheatsheet, the Windows twin of the bash/zsh wsh (and
-# of the PowerShell profile's). Same ASCII text as the PowerShell one apart
-# from the -C pin's spelling, the wss filter's spelling and the override line's wording. Only the ~/.claude/* directory entries load on
-# Windows (config.toml); the Linux-only ones (zellij, zsh completions,
-# gdb, ~/.local/bin) don't.
-def wsh [] {
-    # str trim: drop the newlines just inside the raw string's delimiters, so
-    # the output matches the PowerShell here-string (no leading blank line).
-    print (r#'
-workstation commands (mise dotfiles). Each one acts on this host's own
-checkout at ~\.config\mise, whatever the current directory (every ws*
-command pins `mise -C $env.USERPROFILE`):
-  wse  mise dot edit <path>     edit a tracked file's source
-  wsd  mise dot diff            preview pending changes to ~
-  wsa  apply; warns and asks first if ~ has an unrecorded local edit
-  wsr  mise dot add --changed   record FILE-entry edits back to the source
-       (a DIRECTORY entry -- ~/.claude/agents, ~/.claude/commands,
-       ~/.claude/hooks, ~/.claude/skills -- needs `mise dot add <that
-       directory>` instead; --changed skips directory copies)
-  wss  mise dot status          managed files as a table (wss | where state == differs)
-  wsu  git pull + mise bootstrap --only dotfiles,tools
-       (every CLI tool -- gh, opencode, omp, nu, ... -- is a mise tool,
-       so wsu updates it; .\bootstrap.ps1 updates mise and installs
-       missing GUI apps; mise bootstrap packages upgrade --manager winget
-       updates the GUI apps)
-  wsh  this help
-
-Shell shortcuts:
-  l / la / ll / lt   eza listings (ll: long + git; lt: tree; lta: + hidden;
-                     ltl: tree + details)
-  y                  yazi; on quit, cd to where you ended up
-  z <dir> / zi       zoxide: jump to / pick a visited directory
-  fssh               pick a host from ~/.ssh/config and ssh to it
-  hide               clear the screen, keep the scrollback
-  Ctrl-R history (atuin), Ctrl-T insert a file, Alt-C cd into a
-  directory (fzf), Up/Down history starting with what's typed,
-  Alt-. last word of the previous line
-  Nushell only: Ctrl-O edit the line in hx
-
-Common flow:
-  wse ~/.config/starship.toml   (edit the source)
-  wsd                           (preview the change)
-  wsa                           (apply to ~)
-
-When an app edits a deployed file itself (Zed, Warp or Windows Terminal
-saving their settings, or Claude Code editing ~/.claude/CLAUDE.md):
-  wsr                             (file entries)
-  mise dot add ~/.claude/agents   (a directory entry, by exact target path)
-  wsa                             (now a no-op for what you just recorded)
-
-Push tracked changes upstream:
-  cd ~\.config\mise; git add -A; git commit -m '...'; git push
-
-Per-machine overrides (untracked):
-  %APPDATA%\nushell\autoload\*.nu                                 (Nushell)
-  Microsoft.PowerShell_profile.local.ps1 next to the PS profile   (PowerShell)
-  ~/.ssh/config.local                                             (ssh)
-'# | str trim)
+# ws -- the workstation palette (`ws [words]`), dotfile reconciliation (`ws reconcile`) and
+# project workspaces (`ws open [project]`): scripts\ws\ws.py on mise's Python, the same
+# program as the bash/zsh ws. Windows has no zellij, so `ws open` changes this shell to the
+# project (--tab opens a WezTerm or Windows Terminal tab there). A child process can't change
+# this shell, so it hands back a `cd`, or a command to put on the prompt (a def such as wsa),
+# in the WS_OUT file. PARITY: the PowerShell profile's ws.
+def ws-python [] {
+    try { ^mise -C $env.USERPROFILE which python | str trim } catch { "" }
 }
+def ws-complete [context: string] {
+    let py = (ws-python)
+    if ($py | is-empty) { return [] }
+    let words = ($context | split row " " | skip 1)
+    try { ^$py ($env.WORKSTATION_REPO | path join scripts ws ws.py) complete ...$words | lines } catch { [] }
+}
+def --env --wrapped ws [...args: string@ws-complete] {
+    let py = (ws-python)
+    if ($py | is-empty) {
+        print -e "ws: mise's Python isn't installed yet (wsu installs it)"
+        return
+    }
+    let out = (mktemp -t ws-out.XXXXXX)
+    with-env { WS_OUT: $out, WS_SHELL: "nu" } {
+        ^$py ($env.WORKSTATION_REPO | path join scripts ws ws.py) ...$args
+    }
+    let todo = (open --raw $out | lines | each {|l| $l | split row -n 2 (char tab) })
+    rm -f $out
+    for t in $todo {
+        if ($t.0 == "cd") { cd $t.1 }
+        # The next prompt starts with it: Enter runs it (checked on 0.113.1 under a pty).
+        if ($t.0 == "insert") { commandline edit --replace $t.1 }
+    }
+}
+# wsh -- the workstation cheatsheet, printed from scripts\ws\actions.toml (the catalogue
+# `ws` searches; the bash/zsh and PowerShell wsh print the same, per shell).
+def wsh [] { ws help }
 
 # --- git aliases ------------------------------------------------------------
 alias gs  = git status

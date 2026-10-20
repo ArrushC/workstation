@@ -1,0 +1,7 @@
+#compdef ws
+# ws's completion (zshrc.tera's ws): subcommands, project names after `ws open`, and
+# flags, from `ws complete`, the same list bash (completions.bash) and Nushell
+# (config.nu's ws-complete) offer.
+local -a cands
+cands=("${(@f)$(python-cli "$HOME/.config/mise/scripts/ws/ws.py" complete "${(@)words[2,CURRENT]}" 2>/dev/null)}")
+compadd -a cands

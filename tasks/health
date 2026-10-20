@@ -21,21 +21,31 @@ n_bad=0
 n_skip=0
 
 hdr() { printf '%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"; }
+# WS_HEALTH_ROWS: a file `ws health` passes to get each row as status<TAB>name<TAB>detail,
+# so it can offer the repair action that scripts/ws/actions.toml maps to that row's name.
+row_file() {
+  [ -n "${WS_HEALTH_ROWS:-}" ] && printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$WS_HEALTH_ROWS"
+  return 0
+}
 row_ok() {
   printf ' %s✓%s %-16s %s\n' "$GREEN" "$RESET" "$1" "$2"
   n_ok=$((n_ok + 1))
+  row_file ok "$1" "$2"
 }
 row_warn() {
   printf ' %s!%s %-16s %s\n' "$YELLOW" "$RESET" "$1" "$2"
   n_warn=$((n_warn + 1))
+  row_file warn "$1" "$2"
 }
 row_bad() {
   printf ' %s✗%s %-16s %s\n' "$RED" "$RESET" "$1" "$2"
   n_bad=$((n_bad + 1))
+  row_file bad "$1" "$2"
 }
 row_skip() {
   printf ' · %-16s %s\n' "$1" "$2"
   n_skip=$((n_skip + 1))
+  row_file skip "$1" "$2"
 }
 
 cfg="$root/config.local.toml"
@@ -306,7 +316,7 @@ fi
 if [ "$dotfiles_line" = dotfiles:0 ]; then
   row_ok "dotfiles" "no drift (mise dot status)"
 else
-  row_warn "dotfiles" "drift — inspect: mise dot status · apply: mise dot apply"
+  row_warn "dotfiles" "drift — review each file (record, apply, merge): ws reconcile · inspect: mise dot status"
 fi
 # A dirty checkout (a hand-edited pin, a wse/wsr/`mise dot add` write to a
 # source under dotfiles/) makes the next wsu's `git pull --ff-only` fail.

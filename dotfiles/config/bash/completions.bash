@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # ~/.config/bash/completions.bash — first-party tab completion for the repo's
-# flag-bearing script (bootstrap.sh).
+# flag-bearing script (bootstrap.sh) and for ws (bashrc.tera).
 # Sourced from ~/.bashrc; mode 0644, no shebang — never executed.
 # PARITY NOTE: zsh gets richer versions (descriptions + mutual exclusions) via
 # ~/.config/zsh/completions/_bootstrap.sh; Nushell completes the Windows
@@ -16,3 +16,11 @@ _workstation_complete_bootstrap() {
 }
 
 complete -F _workstation_complete_bootstrap bootstrap.sh ./bootstrap.sh
+
+# ws: subcommands, project names after `ws open`, and flags, from `ws complete` (the same
+# list zsh's _ws and Nushell's ws-complete offer). python-cli is bashrc.tera's.
+_workstation_complete_ws() {
+  mapfile -t COMPREPLY < <(python-cli "$HOME/.config/mise/scripts/ws/ws.py" complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)
+}
+
+complete -F _workstation_complete_ws ws

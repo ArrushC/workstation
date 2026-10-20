@@ -1,0 +1,174 @@
+"""ws's command line: `ws [words]` is the palette, the rest are subcommands."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import traceback
+
+SUBCOMMANDS = ("reconcile", "open", "help", "health", "actions", "baseline", "complete")
+
+
+def _reconcile_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="ws reconcile", description=(
+        "Review each managed dotfile that differs from the repo, and record, apply, merge, edit "
+        "or skip it. Without options: an fzf picker with a diff preview."))
+    p.add_argument("--list", action="store_true", help="print what differs and why, then exit")
+    p.add_argument("--json", action="store_true", help="the same as JSON")
+    p.add_argument("--record", nargs="+", metavar="PATH", help="copy these live files into the repo (copy entries only)")
+    p.add_argument("--apply", nargs="+", metavar="PATH", help="replace these live files with the repo's version")
+    p.add_argument("--merge", nargs="+", metavar="PATH", help="three-way merge these (needs a baseline)")
+    p.add_argument("--yes", action="store_true", help="don't ask before each change (diffs still print)")
+    p.add_argument("--backups", action="store_true", help="list the backups and how to restore each file")
+    return p
+
+
+def _open_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="ws open", description=(
+        "Open a project workspace: attach to its zellij session if it is running, resurrect it if "
+        "it exited, or create it in the project with the dev layout. Windows: change to the project."))
+    p.add_argument("project", nargs="?", help="a name (as listed), a session name or a path; picks when ambiguous")
+    p.add_argument("--layout", help="layout for a new session (default: projects.toml, else dev)")
+    p.add_argument("--editor", help="EDITOR/VISUAL inside a new session (default: projects.toml)")
+    p.add_argument("--run", metavar="TASK", help="start this mise task in the layout's run pane (new sessions only)")
+    p.add_argument("--cd", action="store_true", help="just change this shell to the project")
+    p.add_argument("--tab", action="store_true", help="open it in a new WezTerm or Windows Terminal tab")
+    p.add_argument("--list", action="store_true", help="list known workspaces and their session state")
+    p.add_argument("--names", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--prefs", action="store_true", help="edit projects.toml (roots, editor, layout, startup)")
+    p.add_argument("--preview", action="store_true", help=argparse.SUPPRESS)
+    return p
+
+
+USAGE = """\
+usage: ws [words...]          the palette (search starts with the words)
+       ws reconcile [...]     review dotfiles that differ from the repo (ws reconcile -h)
+       ws open [project]      open a project workspace (ws open -h)
+       ws health              run the health report and fix a finding
+       ws help                the cheatsheet (wsh)
+       ws actions [--json]    list every action and what it runs
+"""
+
+
+def main(argv: list[str]) -> int:
+    try:
+        return _main(argv)
+    except KeyboardInterrupt:
+        print()
+        return 130
+    except BrokenPipeError:
+        return 0
+
+
+def _main(argv: list[str]) -> int:
+    if argv[:1] == ["_preview"]:  # fzf's preview: _preview <dir> [--safe] <id>
+        from .palette import preview_file
+
+        rest = [a for a in argv[2:] if a != "--safe"]
+        return preview_file(argv[1] if len(argv) > 1 else "", rest[0] if rest else "", "--safe" in argv[2:])
+    if argv[:1] in (["-h"], ["--help"]):
+        sys.stdout.write(USAGE)
+        return 0
+    cmd = argv[0] if argv and argv[0] in SUBCOMMANDS else ""
+    rest = argv[1:] if cmd else argv
+    if cmd == "baseline":
+        return baseline(rest)
+    if cmd == "reconcile":
+        from .reconcile import main as reconcile
+
+        return reconcile(_reconcile_parser().parse_args(rest))
+    if cmd == "open":
+        from .workspace import main as open_main
+
+        return open_main(_open_parser().parse_args(rest))
+    if cmd == "help":
+        from .catalog import help_text, load
+
+        sys.stdout.write(help_text(load()))
+        return 0
+    if cmd == "health":
+        from .palette import health
+
+        return health()
+    if cmd == "actions":
+        from .palette import main as palette
+
+        return palette([a for a in rest if not a.startswith("--")], list_only=True, as_json="--json" in rest)
+    if cmd == "complete":
+        return complete(rest)
+    from .palette import main as palette
+
+    return palette(rest)
+
+
+def baseline(args: list[str]) -> int:
+    """The bootstrap hooks: `record` after every dotfiles apply (post-dotfiles), `snapshot`
+    before it (pre-dotfiles). They never fail a bootstrap: any error is a warning."""
+    from .baseline import Store
+    from .dotfiles import load, record_agreed, snapshot
+
+    what = args[0] if args else "status"
+    try:
+        store = Store()
+        if what == "status":
+            print(f"{store.index_path}: {len(store.files)} file(s) recorded"
+                  + (" (written for another home: read-only here)" if store.foreign else ""))
+            return 0
+        model = load(store, render_templates=False)
+        if model.errors:
+            print(f"ws baseline: skipped ({model.errors[0]})", file=sys.stderr)
+            return 0
+        if what == "record":
+            n = record_agreed(model, store, "apply")
+            if n:
+                print(f"ws: dotfile baselines updated ({n})")
+        elif what == "snapshot":
+            if os.environ.get("WS_RECONCILE_APPLY") == "1":
+                return 0  # ws reconcile already backed up the one file it applies
+            b = snapshot(model, store)
+            if b.saved:
+                print(f"ws: backed up {snapshot_words(b.counts())} the apply may overwrite: {b.dir}")
+                print("    (ws reconcile --backups lists them with restore commands)")
+        else:
+            print(f"ws baseline: unknown action {what!r} (record, snapshot, status)", file=sys.stderr)
+            return 2
+    except Exception:  # noqa: BLE001 (a hook must never stop the bootstrap)
+        print("ws baseline: failed (the bootstrap carries on):", file=sys.stderr)
+        traceback.print_exc(limit=3)
+    return 0
+
+
+def snapshot_words(counts: dict[str, int]) -> str:
+    """What a pre-apply snapshot kept, without calling a file a local edit when there was no
+    baseline to say so: "2 local edit(s)", "4 file(s) with no baseline", or both."""
+    from .baseline import LOCAL_EDIT, NO_BASELINE
+
+    local, unknown = counts.get(LOCAL_EDIT, 0), counts.get(NO_BASELINE, 0) + counts.get("", 0)
+    parts = []
+    if local:
+        parts.append(f"{local} local edit(s)")
+    if unknown:
+        parts.append(f"{unknown} file(s) that differed from the repo with no baseline to tell whether they were edits")
+    return " and ".join(parts) or "0 files"
+
+
+def complete(words: list[str]) -> int:
+    """Candidates for the word being completed, for the zsh, bash and Nushell completers."""
+    if len(words) <= 1:
+        cur = words[0] if words else ""
+        print("\n".join(s for s in SUBCOMMANDS[:5] if s.startswith(cur)))
+        return 0
+    sub, cur = words[0], words[-1]
+    if sub == "open" and not cur.startswith("-"):
+        from .workspace import discover
+
+        names = sorted({p.label for p in discover()})
+        print("\n".join(n for n in names if n.startswith(cur)))
+    elif sub == "open":
+        print("\n".join(f for f in ["--layout", "--editor", "--run", "--cd", "--tab", "--list", "--prefs"] if f.startswith(cur)))
+    elif sub == "reconcile":
+        print("\n".join(f for f in ["--list", "--json", "--record", "--apply", "--merge", "--yes", "--backups"]
+                        if f.startswith(cur)))
+    return 0
+

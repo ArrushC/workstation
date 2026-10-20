@@ -37,6 +37,9 @@
 
 Token sets: Linux `linux`, Windows `windows` (from `scripts/lib/mise-env.sh` and `bootstrap.ps1`).
 
+`scripts/ws/`: `ws` (palette, `ws reconcile`, `ws open`), Python 3.11+ stdlib on mise's Python, one
+program behind each shell's `ws`; `actions.toml` is the one catalogue (palette and `wsh`).
+
 Locks: `mise.lock`, `mise.linux.lock`, plus `locks/**` sidecars. Tasks: files in `tasks/` carry logic; one-line wrappers are `[tasks]` in `config.toml`.
 mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirect them.
 
@@ -53,8 +56,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   in the file whose token gates it.
 - Hooks are `mise run <task>` (or `a ::: b`); before the tools phase `mise run --skip-tools <task>`,
   or it installs every tool before dnf (node needs dnf's libatomic). A hook name in several loaded
-  files runs every one. Exception: the literal `post-dotfiles` chmod line, each command with its
-  own `|| true` (`sh -o errexit`).
+  files runs every one. Exception: Linux's literal `post-dotfiles` line (the chmods, then
+  `mise run --skip-tools dotfiles-baseline`), each command with its own `|| true` (`sh -o errexit`).
+- Both OSes keep `pre-dotfiles` (`dotfiles-snapshot[-win]`) and `post-dotfiles`
+  (`dotfiles-baseline[-win]`): ws reconcile's backups and baseline (`check_bootstrap_config`
+  pins them). They never fail a bootstrap: before mise's Python exists they skip.
 - Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, fonts, wezterm-terminfo…):
   a full `mise bootstrap` only, never `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
@@ -140,6 +146,22 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - Never add `zellij-autolock` or an unmaintained plugin untested against the pinned zellij. Judge
   whether a plugin loaded from zellij's log, not `dump-layout`.
 
+**ws (`scripts/ws`)**
+- One catalogue: `actions.toml` feeds the palette and `wsh` (`ws help`) in all four shells; never
+  put a cheatsheet back in an rc file (`check_ws`). ASCII only (PowerShell 5.1 consoles).
+- The picker returns an action id; the argv comes from the catalogue or mise's task list. A `change`
+  action prints its command and asks. Shell functions are inserted on the prompt, never run by ws.
+- Reconcile never copies a rendered template over its `.tera` source, never `mise dot add`s a
+  directory, never imports a file only the live directory has, and backs up before it overwrites.
+  Without a baseline it says so instead of guessing. It never commits.
+- Baselines, backups and the workspace registry are host state (`core.state_dir()`); per-host
+  preferences are `~/.config/workstation/projects.toml`. Startup commands come only from there or
+  `--run`, never from a project.
+- `ws.py` stays parseable by EL8's python3.6 and imports `wslib` only after its version check
+  (`check_ws`), so an early hook prints a message instead of a SyntaxError.
+- Tests: `scripts/test-ws.sh` (lint runs it: fixtures in scratch homes, real mise and fzf when
+  present); `scripts/test-config-nu.sh` covers Nushell's `ws`.
+
 ## File care
 
 - **LF + git mode 100755:**
@@ -171,7 +193,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
   - `disk-budget.toml`, from `.github/workflows/disk-budget.yml`
 - **Parity pairs (change them together):**
-  - `zshrc.tera` ↔ `bashrc.tera`
+  - `zshrc.tera` ↔ `bashrc.tera` (their `ws()` bodies differ only in `WS_SHELL` and the prompt
+    insert: `check_ws`)
+  - config.nu's `ws` ↔ the PowerShell profile's `ws`
   - `zshenv.tera` ↔ the shims block in `bashrc.tera`
   - the Nushell `config.nu.tera` ↔ PowerShell profile `ws*`/`g*` aliases
   - script flags ↔ their completions (`_bootstrap.sh`, `completions.bash`, `config.nu.tera`'s flag

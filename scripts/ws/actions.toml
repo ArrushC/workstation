@@ -1,0 +1,818 @@
+# scripts/ws/actions.toml: the one curated catalogue behind `ws` (the searchable palette)
+# and `wsh` (the cheatsheet, `ws help`), in every shell on both OSes. The palette adds the
+# checkout's mise tasks and the current project's tasks to these; a curated entry with
+# `task = "<name>"` replaces that task's discovered one. ASCII only: PowerShell 5.1
+# consoles print the help. Checked by scripts/ws/tests (ids, kinds, one way to run each).
+#
+# Fields of an [[action]]:
+#   id        unique and stable: the palette hands back only this, never the text it shows
+#   title     what the palette lists       desc  one line on what it does
+#   group     its wsh section (the [groups] order below)
+#   kind      read    changes nothing (runs straight away)
+#             change  writes files or host state (shows the exact command, then asks)
+#             open    an interactive program: editor, picker, pager, session, ssh
+#             info    text only
+#   keywords  more search words; [synonyms] widens them (searching "rebuild" finds "fix")
+#   os        ["linux"] or ["windows"] (default both)   shells  zsh, bash, nu, pwsh (default all)
+#   requires  commands that must be on PATH for it to show
+#   alias     the command wsh lists it under; `wsh = false` keeps it out of the cheatsheet
+#   fixes     tasks/health row names it repairs (`ws health` offers it for those rows)
+# and exactly one way to run it:
+#   run       an argv, run without a shell; {home} {repo} {state} {arg} are filled in
+#   pick      with run: what {arg} is chosen from (dotfile-targets)
+#   task      a mise task of this checkout: mise -C ~ run <task> [args]
+#   ws        a ws subcommand's argv
+#   insert    a shell command (a shell function such as wsa) put on your prompt to run;
+#             where the shell can't take it (PowerShell), it is printed instead
+#   cd        a directory for your shell to change to
+#   edit      a file to open in the editor      doc  a repo file, optionally #a heading
+#   text      the lines to show (kind = "info")
+
+[groups]
+order = ["workstation", "projects", "health", "shell", "zellij", "ssh", "clipboard", "python", "config", "docs"]
+workstation = "Workstation (dotfiles; every ws* command pins mise -C to your home)"
+projects = "Project workspaces"
+health = "Health, updates and repairs"
+shell = "Shell shortcuts"
+zellij = "zellij"
+ssh = "SSH"
+clipboard = "Clipboard"
+python = "Python"
+config = "Configuration entry points (per host, untracked)"
+docs = "Documentation"
+
+[synonyms]
+python = ["py", "venv", "virtualenv", "uv", "pip", "wpy", "interpreter"]
+rebuild = ["reinstall", "regenerate", "refresh", "repair", "fix", "reset", "recreate"]
+update = ["upgrade", "pull", "latest", "bump", "refresh", "newer"]
+ssh = ["remote", "host", "hosts", "keys", "connect", "login", "server"]
+clipboard = ["copy", "paste", "yank", "osc52", "clip"]
+dotfiles = ["dotfile", "rc", "drift", "home", "deploy", "configs"]
+reconcile = ["merge", "conflict", "record", "sync", "drift", "review"]
+health = ["doctor", "check", "diagnose", "broken", "problem"]
+project = ["workspace", "repo", "worktree", "session", "code"]
+zellij = ["multiplexer", "tmux", "session", "pane", "layout"]
+docs = ["help", "manual", "readme", "documentation", "howto"]
+edit = ["change", "modify", "open"]
+tasks = ["build", "test", "run", "make", "script"]
+
+# --- workstation ----------------------------------------------------------------
+
+[[action]]
+id = "reconcile"
+title = "Reconcile dotfiles"
+desc = "review every managed file that differs from the repo: record, apply, merge, edit or skip each"
+group = "workstation"
+kind = "open"
+keywords = ["dotfiles", "reconcile", "local", "edit", "baseline"]
+alias = "ws reconcile"
+ws = ["reconcile"]
+fixes = ["dotfiles"]
+
+[[action]]
+id = "wse"
+title = "Edit a dotfile's source"
+desc = "mise dot edit <path>: edit a tracked file's source"
+group = "workstation"
+kind = "open"
+keywords = ["dotfiles", "edit", "source"]
+alias = "wse"
+run = ["mise", "-C", "{home}", "dot", "edit", "{arg}"]
+pick = "dotfile-targets"
+
+[[action]]
+id = "wsd"
+title = "Preview pending dotfile changes"
+desc = "mise dot diff: what an apply would change in your home"
+group = "workstation"
+kind = "read"
+keywords = ["dotfiles", "diff"]
+alias = "wsd"
+run = ["mise", "-C", "{home}", "dot", "diff"]
+
+[[action]]
+id = "wsa"
+title = "Apply the repo's dotfiles"
+desc = "apply; warns and asks first if your home has an unrecorded local edit"
+group = "workstation"
+kind = "change"
+keywords = ["dotfiles", "apply", "deploy"]
+alias = "wsa"
+insert = "wsa"
+
+[[action]]
+id = "wsr"
+title = "Record changed file entries"
+desc = "mise dot add --changed: copy edited FILE entries back to their source (ws reconcile also handles files inside directory entries)"
+group = "workstation"
+kind = "change"
+keywords = ["dotfiles", "record", "capture"]
+alias = "wsr"
+run = ["mise", "-C", "{home}", "dot", "add", "--changed"]
+
+[[action]]
+id = "wss"
+title = "Dotfile status"
+desc = "mise dot status: every managed file and its state"
+group = "workstation"
+kind = "read"
+keywords = ["dotfiles", "status", "list"]
+alias = "wss"
+run = ["mise", "-C", "{home}", "dot", "status"]
+
+[[action]]
+id = "wsu-linux"
+title = "Update this host"
+desc = "mise run update: git pull --ff-only, then mise bootstrap (tools, dotfiles, system steps)"
+group = "workstation"
+kind = "change"
+keywords = ["update", "pull", "bootstrap", "install"]
+os = ["linux"]
+alias = "wsu"
+task = "update"
+
+[[action]]
+id = "wsu-windows"
+title = "Update this host"
+desc = "git pull, then mise bootstrap --only dotfiles,tools (bootstrap.ps1 updates mise and the GUI apps)"
+group = "workstation"
+kind = "change"
+keywords = ["update", "pull", "bootstrap", "install"]
+os = ["windows"]
+alias = "wsu"
+insert = "wsu"
+
+[[action]]
+id = "backups"
+title = "Dotfile backups"
+desc = "what reconcile and the pre-apply snapshot saved before overwriting, with restore commands"
+group = "workstation"
+kind = "read"
+keywords = ["dotfiles", "backup", "restore", "undo", "recover", "lost"]
+alias = "ws reconcile --backups"
+ws = ["reconcile", "--backups"]
+
+[[action]]
+id = "palette"
+title = "This palette"
+desc = "search every workstation action by what you want to do (ws <words> starts with a search)"
+group = "workstation"
+kind = "info"
+alias = "ws"
+text = ["ws [words]: the palette; ws help (wsh): this cheatsheet"]
+wsh = true
+
+[[action]]
+id = "wsh"
+title = "Workstation cheatsheet"
+desc = "this help: the ws* commands, shell shortcuts and per-host files"
+group = "workstation"
+kind = "read"
+keywords = ["help", "cheatsheet", "aliases"]
+alias = "wsh"
+ws = ["help"]
+
+[[action]]
+id = "checkout"
+title = "Go to the workstation checkout"
+desc = "cd to ~/.config/mise, this host's checkout (commit and push from there)"
+group = "workstation"
+kind = "open"
+keywords = ["repo", "git", "commit", "push", "checkout"]
+cd = "{repo}"
+fixes = ["repo checkout"]
+wsh = false
+
+# --- projects -------------------------------------------------------------------
+
+[[action]]
+id = "open"
+title = "Open a project workspace"
+desc = "pick a project (zoxide history, project roots, running sessions) and attach to or create its zellij session"
+group = "projects"
+kind = "open"
+keywords = ["project", "workspace", "zellij", "worktree", "session", "repo"]
+alias = "ws open [project]"
+ws = ["open"]
+
+[[action]]
+id = "open-prefs"
+title = "Edit project workspace preferences"
+desc = "projects.toml: project roots, and per project the editor, layout and opt-in startup commands"
+group = "projects"
+kind = "open"
+keywords = ["project", "workspace", "editor", "layout", "startup", "settings"]
+alias = "ws open --prefs"
+ws = ["open", "--prefs"]
+
+[[action]]
+id = "sessions"
+title = "List project workspaces"
+desc = "known workspaces and whether their session is running, exited (resurrectable) or gone"
+group = "projects"
+kind = "read"
+keywords = ["project", "workspace", "zellij", "session", "list"]
+alias = "ws open --list"
+ws = ["open", "--list"]
+
+# --- health ---------------------------------------------------------------------
+
+[[action]]
+id = "health"
+title = "Health report"
+desc = "mise run health: one row per check with its repair command"
+group = "health"
+kind = "read"
+keywords = ["health", "check", "doctor", "status"]
+os = ["linux"]
+alias = "mise run health"
+task = "health"
+
+[[action]]
+id = "health-fix"
+title = "Check health and fix findings"
+desc = "run the health report, then pick a failing row to run its repair"
+group = "health"
+kind = "open"
+keywords = ["health", "fix", "repair", "doctor", "broken"]
+os = ["linux"]
+alias = "ws health"
+ws = ["health"]
+
+[[action]]
+id = "doctor"
+title = "mise doctor"
+desc = "mise's own diagnosis: activation, shims, config files"
+group = "health"
+kind = "read"
+keywords = ["health", "doctor", "mise", "shims"]
+run = ["mise", "-C", "{home}", "doctor"]
+wsh = false
+
+[[action]]
+id = "bootstrap-status"
+title = "What a bootstrap would still change"
+desc = "mise bootstrap status --missing (read-only, never needs sudo)"
+group = "health"
+kind = "read"
+keywords = ["bootstrap", "status", "drift", "plan"]
+run = ["mise", "-C", "{home}", "bootstrap", "status", "--missing"]
+wsh = false
+
+[[action]]
+id = "check-updates"
+title = "Check for updates"
+desc = "mise outdated, dnf check-update and the [vars] pins against upstream"
+group = "health"
+kind = "read"
+keywords = ["update", "outdated", "versions", "new"]
+os = ["linux"]
+task = "check-updates"
+wsh = false
+
+[[action]]
+id = "install-tools"
+title = "Install missing mise tools"
+desc = "mise install: every declared tool not installed yet"
+group = "health"
+kind = "change"
+keywords = ["tools", "install", "missing", "rebuild"]
+run = ["mise", "-C", "{home}", "install"]
+fixes = ["mise tools"]
+wsh = false
+
+[[action]]
+id = "python-env"
+title = "Update the Python env"
+desc = "mise run python-env: build wpy's venv on mise's Python if it changed"
+group = "python"
+kind = "change"
+keywords = ["python", "venv", "wpy", "textual"]
+os = ["linux"]
+task = "python-env"
+fixes = ["python-env"]
+wsh = false
+
+[[action]]
+id = "python-env-rebuild"
+title = "Rebuild the Python env"
+desc = "mise run python-env --rebuild: rebuild wpy's venv with the latest libraries"
+group = "python"
+kind = "change"
+keywords = ["python", "venv", "wpy", "rebuild", "upgrade"]
+os = ["linux"]
+alias = "mise run python-env --rebuild"
+run = ["mise", "-C", "{home}", "run", "python-env", "--rebuild"]
+fixes = ["python-env"]
+
+[[action]]
+id = "fonts"
+title = "Install the Nerd Font"
+desc = "mise run fonts: JetBrainsMono Nerd Font Mono into ~/.local/share/fonts (skipped on WSL)"
+group = "health"
+kind = "change"
+keywords = ["fonts", "icons", "tofu", "glyphs"]
+os = ["linux"]
+task = "fonts"
+fixes = ["fonts"]
+wsh = false
+
+[[action]]
+id = "vcpkg"
+title = "Install vcpkg"
+desc = "mise run vcpkg: the pinned vcpkg into ~/.local/share/vcpkg"
+group = "health"
+kind = "change"
+keywords = ["vcpkg", "c++", "packages"]
+os = ["linux"]
+task = "vcpkg"
+fixes = ["vcpkg"]
+wsh = false
+
+[[action]]
+id = "terminfo"
+title = "Compile WezTerm's terminfo"
+desc = "mise run wezterm-terminfo: so WezTerm panes here get TERM=wezterm"
+group = "health"
+kind = "change"
+keywords = ["wezterm", "terminfo", "term", "colors"]
+os = ["linux"]
+task = "wezterm-terminfo"
+fixes = ["terminfo"]
+wsh = false
+
+[[action]]
+id = "pueued"
+title = "Start pueued"
+desc = "mise bootstrap --only services: the per-user pueue daemon"
+group = "health"
+kind = "change"
+keywords = ["pueue", "daemon", "service", "systemd"]
+os = ["linux"]
+run = ["mise", "-C", "{home}", "bootstrap", "--only", "services", "--yes"]
+fixes = ["pueued"]
+wsh = false
+
+[[action]]
+id = "zjstatus"
+title = "Install the zjstatus plugin"
+desc = "mise install github:dj95/zjstatus (zellij's top bar)"
+group = "health"
+kind = "change"
+keywords = ["zellij", "zjstatus", "bar", "plugin"]
+os = ["linux"]
+run = ["mise", "-C", "{home}", "install", "github:dj95/zjstatus"]
+fixes = ["zjstatus"]
+wsh = false
+
+[[action]]
+id = "claude-task"
+title = "Install Claude Code and its plugins"
+desc = "mise run claude: Claude Code, its plugins and the settings merge"
+group = "health"
+kind = "change"
+keywords = ["claude", "plugins", "settings"]
+os = ["linux"]
+task = "claude"
+fixes = ["claude"]
+wsh = false
+
+[[action]]
+id = "bootstrap-sh"
+title = "Re-run bootstrap.sh"
+desc = "the full setup, system steps included (sudo); also sets the login shell"
+group = "health"
+kind = "change"
+keywords = ["bootstrap", "sudo", "dnf", "login", "shell", "provision"]
+os = ["linux"]
+insert = "~/.config/mise/bootstrap.sh"
+fixes = ["bootstrap state", "system steps", "login shell", "miserc"]
+wsh = false
+
+[[action]]
+id = "winget-upgrade"
+title = "Update the GUI apps"
+desc = "mise bootstrap packages upgrade --manager winget"
+group = "health"
+kind = "change"
+keywords = ["update", "winget", "apps", "gui"]
+os = ["windows"]
+run = ["mise", "-C", "{home}", "bootstrap", "packages", "upgrade", "--manager", "winget"]
+alias = "mise bootstrap packages upgrade --manager winget"
+
+[[action]]
+id = "lint"
+title = "Lint the checkout"
+desc = "mise run lint: the repo's invariant checks"
+group = "health"
+kind = "read"
+keywords = ["lint", "check", "invariants", "test"]
+os = ["linux"]
+task = "lint"
+wsh = false
+
+# --- shell shortcuts ----------------------------------------------------------------
+
+[[action]]
+id = "eza"
+title = "Listings: l, la, ll, lt"
+desc = "eza listings (ll: long + git; lt: tree; lta: + hidden; ltl: tree + details)"
+group = "shell"
+kind = "info"
+keywords = ["ls", "list", "files", "tree"]
+alias = "l / la / ll / lt"
+text = ["l, la, ll, lt, lta, ltl: eza listings; in WezTerm, Ctrl+click a name"]
+
+[[action]]
+id = "git-aliases"
+title = "git shortcuts"
+desc = "git status, add, commit, push, log, diff, checkout, branch"
+group = "shell"
+kind = "info"
+keywords = ["git", "status", "commit", "push"]
+alias = "gs ga gc gp gl gd gco gbr"
+text = ["gs ga gc gp gl gd gco gbr: git status, add, commit, push, log, diff, checkout, branch"]
+
+[[action]]
+id = "yazi"
+title = "File manager (yazi)"
+desc = "yazi; on quit, cd to where you ended up"
+group = "shell"
+kind = "open"
+keywords = ["files", "browse", "manager", "cd"]
+alias = "y"
+insert = "y"
+
+[[action]]
+id = "zoxide"
+title = "Jump to a visited directory"
+desc = "zoxide: z <dir> jumps, zi picks"
+group = "shell"
+kind = "open"
+keywords = ["cd", "jump", "directory", "recent"]
+alias = "z <dir> / zi"
+insert = "zi"
+
+[[action]]
+id = "fzf-shell"
+title = "fzf: history, cd below here"
+desc = "fh reruns a history line, fcd cds into a directory below here"
+group = "shell"
+kind = "open"
+keywords = ["history", "cd", "find"]
+shells = ["zsh", "bash"]
+alias = "fh / fcd"
+insert = "fh"
+
+[[action]]
+id = "notes"
+title = "Notes (nb)"
+desc = "n lists notes, n <text> adds one, nf browses them with a preview"
+group = "shell"
+kind = "open"
+keywords = ["notes", "nb", "notebook", "todo"]
+os = ["linux"]
+alias = "n [text] / nf"
+insert = "nf"
+
+[[action]]
+id = "hide"
+title = "Clear the screen"
+desc = "hide keeps the scrollback, clear drops it"
+group = "shell"
+kind = "info"
+keywords = ["clear", "screen", "scrollback"]
+alias = "hide / clear"
+text = ["hide: clear the screen and keep the scrollback; clear: drop it too"]
+
+[[action]]
+id = "keys-zsh"
+title = "Shell keys"
+desc = "Ctrl-R history (atuin), Ctrl-T insert a file, Alt-C cd into a directory (fzf)"
+group = "shell"
+kind = "info"
+keywords = ["keys", "history", "keyboard"]
+shells = ["zsh"]
+alias = "Ctrl-R / Ctrl-T / Alt-C"
+text = ["Ctrl-R history (atuin), Ctrl-T insert a file, Alt-C cd into a directory (fzf)"]
+
+[[action]]
+id = "keys-bash"
+title = "Shell keys"
+desc = "Ctrl-R history (fzf, or atuin if ~/.bashrc.local starts it), Ctrl-T insert a file, Alt-C cd into a directory"
+group = "shell"
+kind = "info"
+keywords = ["keys", "history", "keyboard"]
+shells = ["bash"]
+alias = "Ctrl-R / Ctrl-T / Alt-C"
+text = ["Ctrl-R history (fzf, or atuin if ~/.bashrc.local starts it), Ctrl-T insert a file, Alt-C cd into a directory (fzf)"]
+
+[[action]]
+id = "keys-windows"
+title = "Shell keys"
+desc = "Ctrl-R history (atuin), Ctrl-T insert a file, Alt-C cd (fzf), Up/Down prefix history, Alt-. last word"
+group = "shell"
+kind = "info"
+keywords = ["keys", "history", "keyboard"]
+os = ["windows"]
+alias = "Ctrl-R / Ctrl-T / Alt-C"
+text = ["Ctrl-R history (atuin), Ctrl-T insert a file, Alt-C cd into a directory (fzf), Up/Down history starting with what's typed, Alt-. last word of the previous line"]
+
+[[action]]
+id = "keys-nu"
+title = "Edit the line in hx"
+desc = "Nushell only: Ctrl-O edits the command line in hx"
+group = "shell"
+kind = "info"
+shells = ["nu"]
+alias = "Ctrl-O"
+text = ["Ctrl-O: edit the command line in hx"]
+
+# --- zellij -----------------------------------------------------------------------
+
+[[action]]
+id = "zs"
+title = "zellij session"
+desc = "zs [name] [layout]: attach to or create a session (main by default; layouts dev, ops)"
+group = "zellij"
+kind = "open"
+keywords = ["zellij", "session", "attach", "tmux"]
+os = ["linux"]
+requires = ["zellij"]
+alias = "zs [name] [layout]"
+insert = "zs"
+
+[[action]]
+id = "zr"
+title = "Floating pane"
+desc = "zr <cmd>: run a command in a floating zellij pane (bare zr: a shell)"
+group = "zellij"
+kind = "info"
+keywords = ["zellij", "floating", "pane", "popup"]
+os = ["linux"]
+requires = ["zellij"]
+alias = "zr <cmd>"
+text = ["zr lazygit, zr btop, or bare zr for a floating shell (inside zellij)"]
+
+[[action]]
+id = "zellij-sessions"
+title = "List zellij sessions"
+desc = "zellij list-sessions, exited (resurrectable) ones included"
+group = "zellij"
+kind = "read"
+keywords = ["zellij", "sessions", "list"]
+os = ["linux"]
+requires = ["zellij"]
+alias = "zjl"
+run = ["zellij", "list-sessions"]
+
+# --- ssh --------------------------------------------------------------------------
+
+[[action]]
+id = "fssh"
+title = "SSH to a host"
+desc = "fssh: pick a host from ~/.ssh/config (and its Include files) and connect"
+group = "ssh"
+kind = "open"
+keywords = ["ssh", "connect", "host"]
+alias = "fssh"
+insert = "fssh"
+
+[[action]]
+id = "ssh-hosts"
+title = "Edit this host's SSH hosts"
+desc = "~/.ssh/config.local: per-host Host entries (WT and WezTerm list them)"
+group = "ssh"
+kind = "open"
+keywords = ["ssh", "hosts", "config", "add"]
+edit = "{home}/.ssh/config.local"
+wsh = false
+
+[[action]]
+id = "ssh-copy-id"
+title = "Install your key on a host"
+desc = "ssh-copy-id user@host (a port on Windows: the profile's helper)"
+group = "ssh"
+kind = "info"
+keywords = ["ssh", "key", "password", "authorized"]
+alias = "ssh-copy-id user@host"
+text = ["ssh-copy-id user@host: copy your public key into the host's authorized_keys"]
+
+# --- clipboard ------------------------------------------------------------------------
+
+[[action]]
+id = "clip-get"
+title = "Show the Windows clipboard"
+desc = "winterop clip get (WSL)"
+group = "clipboard"
+kind = "read"
+keywords = ["clipboard", "paste", "windows", "wsl"]
+os = ["linux"]
+requires = ["winterop"]
+alias = "winterop clip [get|set]"
+run = ["winterop", "clip", "get"]
+
+[[action]]
+id = "osc52"
+title = "Copy over SSH"
+desc = "zellij, helix and nvim copy with OSC 52, so a copy in a remote pane reaches your local clipboard"
+group = "clipboard"
+kind = "info"
+keywords = ["clipboard", "copy", "remote", "osc52", "yank"]
+text = ["Copy inside zellij, helix (y) or nvim (<leader>y): OSC 52 sends it to the local terminal's clipboard, over SSH too.",
+        "Paste with the terminal's paste key. zellij's copy_command stays unset on purpose (README: Troubleshooting)."]
+wsh = false
+
+# --- python -----------------------------------------------------------------------
+
+[[action]]
+id = "wpy"
+title = "Python scripting env"
+desc = "wpy script.py: mise's Python with Textual, rich, httpx, pydantic, typer, polars, duckdb"
+group = "python"
+kind = "info"
+keywords = ["python", "wpy", "venv", "script"]
+alias = "wpy"
+text = ["wpy script.py (or #!/usr/bin/env wpy): the python-env venv on mise's Python"]
+
+[[action]]
+id = "py"
+title = "mise's Python"
+desc = "py / python-cli: mise's Python from any shell, never a download (python3 stays the system one)"
+group = "python"
+kind = "info"
+keywords = ["python", "interpreter", "py"]
+shells = ["zsh", "bash"]
+alias = "py"
+text = ["py (python-cli): mise's Python; python3 stays the platform interpreter for dnf"]
+
+# --- configuration entry points --------------------------------------------------------
+
+[[action]]
+id = "config-local"
+title = "Edit this host's settings"
+desc = "config.local.toml: [vars] name, email, sudo, project_root and per-host overrides"
+group = "config"
+kind = "open"
+keywords = ["config", "settings", "vars", "local", "host"]
+alias = "~/.config/mise/config.local.toml"
+edit = "{repo}/config.local.toml"
+
+[[action]]
+id = "zshrc-local"
+title = "Edit ~/.zshrc.local"
+desc = "per-host zsh overrides, sourced last"
+group = "config"
+kind = "open"
+keywords = ["zsh", "rc", "local", "overrides", "env"]
+shells = ["zsh"]
+alias = "~/.zshrc.local"
+edit = "{home}/.zshrc.local"
+
+[[action]]
+id = "bashrc-local"
+title = "Edit ~/.bashrc.local"
+desc = "per-host bash overrides, sourced last"
+group = "config"
+kind = "open"
+keywords = ["bash", "rc", "local", "overrides", "env"]
+shells = ["bash"]
+alias = "~/.bashrc.local"
+edit = "{home}/.bashrc.local"
+
+[[action]]
+id = "nu-local"
+title = "Nushell per-host files"
+desc = "%APPDATA%\\nushell\\autoload\\*.nu, loaded after config.nu"
+group = "config"
+kind = "info"
+keywords = ["nushell", "local", "overrides"]
+os = ["windows"]
+alias = "%APPDATA%\\nushell\\autoload\\*.nu"
+text = ["Put per-host Nushell settings in %APPDATA%\\nushell\\autoload\\*.nu"]
+
+[[action]]
+id = "pwsh-local"
+title = "PowerShell per-host profile"
+desc = "Microsoft.PowerShell_profile.local.ps1 next to the PowerShell profile"
+group = "config"
+kind = "info"
+keywords = ["powershell", "profile", "local", "overrides"]
+os = ["windows"]
+alias = "Microsoft.PowerShell_profile.local.ps1"
+text = ["Put per-host PowerShell settings in Microsoft.PowerShell_profile.local.ps1 beside $PROFILE"]
+
+[[action]]
+id = "ssh-local"
+title = "Per-host SSH config"
+desc = "~/.ssh/config.local, included by the managed ~/.ssh/config"
+group = "config"
+kind = "info"
+keywords = ["ssh", "local", "hosts"]
+alias = "~/.ssh/config.local"
+text = ["~/.ssh/config.local holds this host's Host entries"]
+
+[[action]]
+id = "projects-toml"
+title = "Project workspace preferences"
+desc = "~/.config/workstation/projects.toml (ws open --prefs creates and opens it)"
+group = "config"
+kind = "info"
+alias = "~/.config/workstation/projects.toml"
+text = ["ws open --prefs"]
+
+# --- docs -----------------------------------------------------------------------------
+
+[[action]]
+id = "doc-daily"
+title = "README: daily use"
+desc = "the ws* commands, editing dotfiles, health and updates, zellij, nvim, Claude Code"
+group = "docs"
+kind = "open"
+keywords = ["docs", "readme", "daily", "usage"]
+doc = "README.md#Daily use"
+wsh = false
+
+[[action]]
+id = "doc-ws"
+title = "README: ws (palette, reconcile, workspaces)"
+desc = "how reconcile decides which side changed, backups and recovery, workspace preferences"
+group = "docs"
+kind = "open"
+keywords = ["docs", "readme", "reconcile", "workspace", "palette", "backup", "recover"]
+doc = "README.md#ws: the palette, dotfile reconciliation and project workspaces"
+wsh = false
+
+[[action]]
+id = "doc-troubleshooting"
+title = "README: troubleshooting"
+desc = "known failures and their fixes"
+group = "docs"
+kind = "open"
+keywords = ["docs", "readme", "troubleshooting", "error", "broken", "fix"]
+doc = "README.md#Troubleshooting"
+wsh = false
+
+[[action]]
+id = "doc-adding"
+title = "README: adding tools, dotfiles and packages"
+desc = "how to add a tool, a dotfile or a dnf package"
+group = "docs"
+kind = "open"
+keywords = ["docs", "readme", "add", "tool", "package", "install"]
+doc = "README.md#Adding things"
+wsh = false
+
+[[action]]
+id = "cheat"
+title = "Personal cheat sheet"
+desc = "cheat workstation: the quick reference (cheat -e workstation edits it)"
+group = "docs"
+kind = "read"
+keywords = ["docs", "cheat", "cheatsheet", "reference"]
+os = ["linux"]
+requires = ["cheat"]
+alias = "cheat workstation"
+run = ["cheat", "workstation"]
+
+# --- notes: the cheatsheet's closing sections ----------------------------------------
+
+[[note]]
+title = "Common flow"
+text = ["wse <file>   edit the source", "wsd          preview the change", "wsa          apply to ~"]
+
+[[note]]
+title = "When something edits a deployed file itself (Claude Code, Zed, Warp, WT)"
+text = ["ws reconcile                      review each one: record, apply, merge, edit, skip",
+        "wsr                               (file entries)",
+        "mise dot add ~/.claude/agents     (a whole directory entry, by exact target path)"]
+
+[[note]]
+title = "Push tracked changes upstream"
+os = ["linux"]
+text = ["cd ~/.config/mise && git add -A && git commit -m '...' && git push"]
+
+[[note]]
+title = "Push tracked changes upstream"
+os = ["windows"]
+text = ["cd ~\\.config\\mise; git add -A; git commit -m '...'; git push"]
+
+[[note]]
+title = "Per-machine overrides (untracked)"
+shells = ["zsh"]
+text = ["~/.zshrc.local, ~/.ssh/config.local, ~/.config/mise/config.local.toml"]
+
+[[note]]
+title = "Per-machine overrides (untracked)"
+shells = ["bash"]
+text = ["~/.bashrc.local, ~/.ssh/config.local, ~/.config/mise/config.local.toml"]
+
+[[note]]
+title = "Per-machine overrides (untracked)"
+shells = ["nu"]
+text = ["%APPDATA%\\nushell\\autoload\\*.nu (Nushell), ~/.ssh/config.local, ~\\.config\\mise\\config.local.toml"]
+
+[[note]]
+title = "Per-machine overrides (untracked)"
+shells = ["pwsh"]
+text = ["Microsoft.PowerShell_profile.local.ps1 next to this profile, ~/.ssh/config.local, ~\\.config\\mise\\config.local.toml"]

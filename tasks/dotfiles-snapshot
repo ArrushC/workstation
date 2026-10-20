@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="pre-dotfiles hook: back up each local dotfile edit an apply would overwrite (ws reconcile --backups)"
+#MISE hide=true
+# Runs before every dotfiles apply. An apply overwrites a copy or template target that
+# differs without asking (wsu's bootstrap included), so a local edit the baseline doesn't
+# hold is copied aside first. Never stops a bootstrap (see tasks/dotfiles-baseline).
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+py=$(command -v python3) || {
+  echo "ws snapshot: no python3 yet: skipped" >&2
+  exit 0
+}
+"$py" "$root/scripts/ws/ws.py" baseline snapshot || true
