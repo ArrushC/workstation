@@ -92,11 +92,26 @@ lua-language-server = "3.19.1"
 "github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font, the only pin: tasks/fonts (Linux) and bootstrap.ps1 (Windows, via scripts/install-nerd-fonts.ps1) install its TTFs
 opencode = "1.19.0"
 "github:can1357/oh-my-pi" = "18.9.1"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
+# jcode: a Rust coding-agent harness (not in mise's registry). The Linux build needs glibc 2.17;
+# its archive holds the binary and a launcher script that runs it by name, so the launcher
+# becomes `jcode`. Release builds update themselves and send usage telemetry (an install
+# event on first run; provider OAuth account emails since 2026-10-14): [env] below and the
+# ~/.jcode/no_telemetry marker ([dotfiles]) turn both off, and the weekly bump moves the pin.
+# Its Claude subscription login reuses Claude Code's OAuth client, which Anthropic's terms
+# restrict for third-party tools: give it an API key or another provider instead.
+"github:1jehuang/jcode" = { version = "0.99.0", platforms = { linux-x64 = { asset_pattern = "jcode-linux-x86_64.tar.gz", rename_exe = { "jcode-linux-x86_64" = "jcode" } }, windows-x64 = { asset_pattern = "jcode-windows-x86_64.tar.gz", rename_exe = { "jcode-windows-x86_64.exe" = "jcode.exe" } } } }
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", platforms = { linux-x64 = { asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }, windows-x64 = { asset_pattern = "devtoys.cli_win_x64_portable.zip" } } }   # CLI only; per-platform assets
 nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (WT); launched via %LOCALAPPDATA%\mise\shims\nu.exe
 "github:carapace-sh/carapace-bin" = { version = "1.8.0", os = ["windows"], asset_pattern = "carapace-bin_{{version}}_windows_amd64.zip" }   # Nushell's Tab completion for ~1000 CLIs (config.nu's external completer)
 "github:dnGrep/dnGrep" = { version = "5.0.30.0", os = ["windows"], asset_pattern = "dnGrep.{{version}}.x64.zip" }   # GUI grep; Start Menu shortcut + settings seed by bootstrap.ps1
 "github:LogExperts/LogExpert" = { version = "1.41.0", os = ["windows"], asset_pattern = "LogExpert.{{version}}.zip" }   # GUI log viewer (needs the .NET 10 Desktop Runtime); Start Menu shortcut by bootstrap.ps1
+
+# jcode (above) checks only that each is set (telemetry: to anything but 0/false/no/off), and
+# reads them in every shell mise activates and through its shims, on both OSes. A launch
+# outside mise's environment still finds the telemetry marker; mise owns the version.
+[env]
+JCODE_NO_AUTO_UPDATE = "1"
+JCODE_NO_TELEMETRY = "1"
 
 # ---------------------------------------------------------------------------
 # [dotfiles]: `template` for .tera sources, `copy` for everything else, never
@@ -147,6 +162,10 @@ nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (W
 # the directory so a theme made in /theme survives; a live keybindings edit goes back with wsr.
 "~/.claude/themes" = { source = "dotfiles/claude/themes", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 "~/.claude/keybindings.json" = { source = "dotfiles/claude/keybindings.json", mode = "copy" }
+# jcode's file opt-out from telemetry ([env]'s JCODE_NO_TELEMETRY covers what mise launches):
+# jcode only checks that ~/.jcode/no_telemetry exists. `jcode telemetry enable` deletes it,
+# which `wss` then reports and the next `wsa` restores.
+"~/.jcode/no_telemetry" = { source = "dotfiles/jcode/no_telemetry", mode = "copy" }
 
 # Repo-maintenance tasks, run from this checkout. Tasks with real logic are
 # files in tasks/.

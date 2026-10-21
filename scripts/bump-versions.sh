@@ -92,6 +92,15 @@ EXCLUDE="github:dj95/zjstatus http:ncdu python"
 # requires every dual-edit/coupled pin to be in EXCLUDE or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here
 COUPLED_AUTO="go go:golang.org/x/tools/gopls github:juanibiapina/gob node"
+# Tools that publish no provenance but whose releases carry a file mise mistakes for SLSA
+# provenance: jcode's release-provenance.json is its own record of the build, not in-toto.
+# mise's lock-time check then fails on every new version, so each weekly bump would be
+# refused. lock_platform locks such a tool alone first with the SLSA check off (GitHub
+# attestations stay on), which gives it what every release without provenance gets (nnd,
+# gob): a pinned checksum. The full lock then keeps that entry. This is not the ouch case
+# below: there is no real provenance here to downgrade. A tool that starts publishing real
+# provenance leaves the list. check_pins requires each name to be pinned.
+NO_SLSA="github:1jehuang/jcode"
 
 # Run a mise subcommand against this checkout as mise's GLOBAL config dir,
 # from OUTSIDE the checkout, via a throwaway XDG_CONFIG_HOME symlink dir.
@@ -231,6 +240,12 @@ refused="" # bumps reverted because `mise lock` refused the new version
 lock_platform() {
   local mise_env="$1" platform="$2" err tool reason tries=0
   err="$(mktemp)"
+  for tool in $NO_SLSA; do
+    [ -n "${bump_cur["$tool"]+x}" ] || continue
+    # A tool that doesn't install on this platform makes mise say so; the full lock decides.
+    mise_global "$mise_env" env MISE_LOCKED=0 MISE_GITHUB_SLSA=false \
+      mise lock --global --platform "$platform" "$tool" || true
+  done
   while :; do
     if mise_global "$mise_env" env MISE_LOCKED=0 mise lock --global --platform "$platform" 2>"$err"; then
       rm -f "$err"
