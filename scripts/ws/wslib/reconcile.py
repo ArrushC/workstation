@@ -255,7 +255,7 @@ def _report_backup(backup: Backup) -> None:
     if backup.saved:
         print(f"  backup: {backup.dir}")
         for orig, dest in backup.saved:
-            print(core.paint(f"    restore: {restore_hint(dest, orig)}", "dim"))
+            print(core.paint(f"    restore: {restore_hint(dest, orig, backup.modes.get(orig, ''))}", "dim"))
 
 
 # --- resolving merge conflicts and editing --------------------------------------
@@ -365,7 +365,7 @@ def _recent_snapshot_note(days: int = 7) -> str:
         if dt.datetime.now() - when > dt.timedelta(days=days):
             continue
         counts: dict[str, int] = {}
-        for _, _, why in entries:
+        for _, _, why, _ in entries:
             counts[why] = counts.get(why, 0) + 1
         try:
             (d / ".seen").touch()
@@ -547,8 +547,8 @@ def main(args) -> int:
             print("no backups yet")
         for d, entries in sets:
             print(d)
-            for orig, dest, why in entries:
-                print(f"  {orig}" + (f"  ({why})" if why else "") + f"\n    {restore_hint(Path(dest), Path(orig))}")
+            for orig, dest, why, mode in entries:
+                print(f"  {orig}" + (f"  ({why})" if why else "") + f"\n    {restore_hint(Path(dest), Path(orig), mode)}")
         return 0
     direct = [(a, getattr(args, a)) for a in ("record", "apply", "merge") if getattr(args, a)]
     if args.list or args.json or direct or not core.interactive() or not core.which("fzf"):

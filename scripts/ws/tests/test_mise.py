@@ -108,6 +108,15 @@ post-dotfiles = "{py} baseline record"
         self.assertEqual((self.home / ".greeting").read_text(), "hello Scratch Host\nline 2\n")
         self.assertEqual(self.listing(), {})
 
+        # mise's diff of "-- old" -> "-- new" removes a line that reads "--- old": still a change.
+        for line in ("-- old", "-- new"):
+            self.write(self.repo / "dotfiles/greeting.tera", f"hello {{{{ vars.name }}}}\n{line}\n")
+            self.assertEqual(self.listing(), {"~/.greeting": "repo change"})
+            p = self.ws("reconcile", "--apply", "~/.greeting", "--yes")
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            self.assertEqual((self.home / ".greeting").read_text(), f"hello Scratch Host\n{line}\n")
+        self.assertEqual(self.listing(), {})
+
 
 if __name__ == "__main__":
     unittest.main()

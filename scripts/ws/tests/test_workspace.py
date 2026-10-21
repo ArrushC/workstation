@@ -7,6 +7,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import shutil
 import subprocess
 import unittest
 from contextlib import redirect_stdout
@@ -49,9 +50,18 @@ class Workspaces(Scratch):
         self.log = self.root / "zellij.log"
         self.sessions = self.root / "sessions.txt"
         self.sessions.write_text("")
+        # Each call also starts a pane's shell as zellij would, with the env it was given: the
+        # rc templates' own EDITOR/VISUAL lines, then what they leave.
+        self.panes = self.root / "panes.log"
+        for sh in ("zsh", "bash"):
+            env = re.findall(r"^export (?:EDITOR|VISUAL)=.*$", (REPO / f"dotfiles/{sh}rc.tera").read_text(), re.M)
+            self.assertEqual(len(env), 2, sh)
+            self.write(self.root / f"env.{sh}", "\n".join(env) + "\n")
         self.fake("zellij", f"""case "$1" in
   list-sessions) cat "{self.sessions}" ;;
-  *) printf '%s|%s|%s\\n' "$PWD" "${{EDITOR:-}}" "$*" >>"{self.log}" ;;
+  *) printf '%s|%s|%s\\n' "$PWD" "${{EDITOR:-}}" "$*" >>"{self.log}"
+     ! command -v zsh >/dev/null || zsh -f -c '. "$1"; print -r -- "zsh|$EDITOR $VISUAL"' _ "{self.root}/env.zsh" >>"{self.panes}"
+     bash --norc --noprofile -c '. "$1"; echo "bash|$EDITOR $VISUAL"' _ "{self.root}/env.bash" >>"{self.panes}" ;;
 esac""")
         os.environ["WS_NO_EXEC"] = "1"
         os.environ["ZELLIJ_CONFIG_DIR"] = str(REPO / "dotfiles/config/zellij")  # the deployed layouts
@@ -107,6 +117,10 @@ esac""")
     def zellij_calls(self) -> list[tuple[str, ...]]:
         return [tuple(line.split("|", 2)) for line in self.log.read_text().splitlines()]
 
+    def pane_editors(self) -> dict[str, str]:
+        """Each shell's "EDITOR VISUAL" after its startup in the last zellij call's panes."""
+        return dict(line.split("|", 1) for line in self.panes.read_text().splitlines())
+
     def open(self, path: Path, **kw: object) -> str:
         proj = workspace.describe(path.resolve())
         with redirect_stdout(io.StringIO()) as buf:
@@ -161,6 +175,18 @@ startup = {{ editor = "nvim .", run = "mise run dev" }}
         self.open(self.wt)
         cwd, editor, args = self.zellij_calls()[-1]
         self.assertEqual((editor, args.endswith(" dev")), ("hx", True))
+
+    def test_the_editor_survives_the_panes_shell_startup(self) -> None:
+        self.write(self.root / "cfg/projects.toml", f'roots = ["{self.projects}"]\n[project."{self.app}"]\neditor = "nvim"\n')
+        shells = ("zsh", "bash") if shutil.which("zsh") else ("bash",)
+        self.open(self.app)
+        self.assertEqual(self.pane_editors(), dict.fromkeys(shells, "nvim nvim"))
+        self.open(self.wt, editor="micro")
+        self.assertEqual(self.pane_editors(), dict.fromkeys(shells, "micro micro"))
+        self.write(self.root / "cfg/projects.toml", f'roots = ["{self.projects}"]\n')
+        self.sessions.write_text("")
+        self.open(self.app)  # no editor anywhere: helix
+        self.assertEqual(self.pane_editors(), dict.fromkeys(shells, "hx hx"))
 
     def test_project_config_is_never_run(self) -> None:
         # A project's own files can't add startup commands: only projects.toml and --run do.

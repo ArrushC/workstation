@@ -61,52 +61,62 @@ def apply_unified(old: bytes, patch: str) -> bytes | None:
     without rendering it anywhere else: the render stays mise's own, in the real home,
     with the real variables. Every context and removed line must match `old`; a
     mismatch returns None, so a misparse is never mistaken for the repo's intent.
+
+    A hunk is as long as its header's line counts say, whatever its lines look like:
+    removing a line "-- x" gives "--- x", which reads as a file header. A patch that ends
+    inside a hunk, or a line in one that is no hunk line, returns None.
     """
     old_lines = lines(text(old))
     out: list[str] = []
     pos = 0
     hunks = 0
     patch_lines = patch.split("\n")
+    if patch_lines[-1] == "":
+        del patch_lines[-1]  # the split's trailing empty string, not an empty context line
     i = 0
     while i < len(patch_lines):
         m = HUNK.match(patch_lines[i])
+        i += 1
         if not m:
-            i += 1
-            continue
+            continue  # file headers and mise's own lines, between hunks
         hunks += 1
-        a_start, a_len = int(m.group(1)), int(m.group(2) or "1")
-        start = a_start - 1 if a_len > 0 else a_start
+        a_start, a_left = int(m.group(1)), int(m.group(2) or "1")
+        b_start, b_left = int(m.group(3)), int(m.group(4) or "1")
+        start = a_start - 1 if a_left > 0 else a_start
         if start < pos or start > len(old_lines):
             return None
         out.extend(old_lines[pos:start])
         pos = start
-        i += 1
+        if b_start != len(out) + (1 if b_left > 0 else 0):
+            return None
         last = ""
-        while i < len(patch_lines):
+        while a_left or b_left or (i < len(patch_lines) and patch_lines[i].startswith("\\")):
+            if i == len(patch_lines):
+                return None  # the patch stops inside the hunk
             line = patch_lines[i]
-            if HUNK.match(line) or line.startswith(("--- ", "+++ ", "dotfile ")):
-                break
+            i += 1
             tag, body = (line[:1], line[1:]) if line else (" ", "")
             if tag == "\\":
                 # "\ No newline at end of file" applies to the line just before it.
                 if last == "+" and out and out[-1].endswith("\n"):
                     out[-1] = out[-1][:-1]
-                i += 1
                 continue
             if tag in (" ", "-"):
+                if not a_left or (tag == " " and not b_left):
+                    return None
                 if pos >= len(old_lines) or old_lines[pos].rstrip("\n") != body:
-                    if line == "" and i == len(patch_lines) - 1:
-                        break  # the split's trailing empty string
                     return None
                 if tag == " ":
                     out.append(old_lines[pos])
+                    b_left -= 1
+                a_left -= 1
                 pos += 1
-            elif tag == "+":
+            elif tag == "+" and b_left:
                 out.append(body + "\n")
+                b_left -= 1
             else:
-                break  # mise's next section ("  content differs: ...") or the end
+                return None
             last = tag
-            i += 1
     if hunks == 0:
         return None
     out.extend(old_lines[pos:])
