@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # test-config-nu.sh: the Windows Nushell config's own behaviour, run on Linux with the
-# pinned nu and stubs on PATH: an alias completes as its whole expansion, wse/wsd/wss
-# are defs (tracked-target completion, wss as a table, arguments passed through), fssh
-# follows ~/.ssh/config's Include lines (in zsh and bash too), the command-not-found
-# hook asks mise, no transient prompt, and the history and timestamp settings.
+# pinned nu and stubs on PATH: an alias completes as its whole expansion, Tab's menu grows
+# to the terminal's width, wse/wsd/wss are defs (tracked-target completion, wss as a table,
+# arguments passed through), fssh follows ~/.ssh/config's Include lines (in zsh and bash
+# too), the command-not-found hook asks mise, no transient prompt, and the history and
+# timestamp settings.
 # shellcheck disable=SC2016,SC2088  # nu code in single quotes; ~/... are mise target strings
 set -u
 
@@ -81,9 +82,10 @@ EOF
 write_ssh_config
 
 # run_nu <nu code>: sources the rendered config.nu, then runs the code.
+# NU_PRELUDE, when set, runs first (a def there shadows a builtin the config calls).
 run_nu() {
   OUT="$(cd "$T" && PATH="$BIN:/usr/bin:/bin" HOME="$HOMEDIR" USERPROFILE="$HOMEDIR" \
-    "$NU" --no-config-file --commands "source '$CFG'; $1" 2>&1)"
+    "$NU" --no-config-file --commands "${NU_PRELUDE:-}source '$CFG'; $1" 2>&1)"
   RC=$?
 }
 check() {
@@ -112,6 +114,12 @@ run_nu 'do $env.config.completions.external.completer ["git" "sta"] | get value.
 check "a plain command is passed as typed" is "git nushell git sta"
 run_nu 'ws-targets | str join ","'
 check "ws-targets lists the tracked targets" is "~/.gitconfig,~/.zshrc"
+# The menu-width hook, picked out by its source; it reports the menu's limit after it runs.
+MENU_HOOK='do --env ($env.config.hooks.pre_prompt | where {|h| view source $h | str contains max_completion_width } | first); $env.config.menus | where name == ide_completion_menu | get 0.type.max_completion_width'
+NU_PRELUDE='def "term size" [] { {columns: 140, rows: 40} }; ' run_nu "$MENU_HOOK"
+check "Tab's menu may grow to the terminal's width less a description's (140 -> 124)" is "124"
+NU_PRELUDE='def "term size" [] { {columns: 30, rows: 40} }; ' run_nu "$MENU_HOOK"
+check "...but never below 20 columns" is "20"
 
 echo "-- ws* commands"
 run_nu 'wss | columns | str join ","'

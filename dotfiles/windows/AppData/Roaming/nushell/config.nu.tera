@@ -86,6 +86,21 @@ $env.config.menus = ($env.config.menus | append {
         selected_match_text: { fg: "#1e1e2e" bg: "#cba6f7" attr: u }
     }
 })
+# A path completes as everything typed so far (SVN\...\spring\images\), and reedline cuts a
+# candidate's end to fit max_completion_width, so in a deep tree a 50-column menu showed every
+# candidate as the same prefix. Before each prompt the limit becomes the terminal's width less
+# room for a description (reedline draws one at least min_description_width wide, and a menu
+# wider than the terminal wraps and garbles). The menu stays as narrow as its longest candidate.
+$env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt? | default [] | append {||
+    let cols = (try { (term size).columns } catch { return })
+    let i = ($env.config.menus | enumerate | where item.name == ide_completion_menu | get 0?.index)
+    if $i == null { return }
+    let menu = ($env.config.menus | get $i)
+    let width = ([($cols - $menu.type.min_description_width - $menu.type.description_offset) 20] | math max)
+    if $menu.type.max_completion_width != $width {
+        $env.config.menus = ($env.config.menus | update $i ($menu | update type.max_completion_width $width))
+    }
+})
 
 # Tables: icons beside paths (ls), as eza draws them; wide terminals expand nested data.
 $env.config.hooks.display_output = "if (term size).columns >= 100 { table --expand --icons } else { table --icons }"
