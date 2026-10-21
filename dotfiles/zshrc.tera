@@ -95,8 +95,10 @@ if (( $+functions[_mise_hook] && $+functions[_mise_hook_precmd] && $+functions[_
 fi
 
 # --- Core env ----------------------------------------------------------------
-export EDITOR="hx"
-export VISUAL="hx"
+# helix unless the shell inherits an editor: a `ws open` workspace's panes get the
+# project's (projects.toml, --editor) this way.
+export EDITOR="${EDITOR:-hx}"
+export VISUAL="${VISUAL:-$EDITOR}"
 # vcpkg (Microsoft C/C++ package manager), cloned by `mise run vcpkg` on every Linux host.
 # It (tasks/vcpkg) clones + bootstraps vcpkg into this dir (= $VCPKG_ROOT) and
 # symlinks the `vcpkg` binary onto PATH. KEEP IN SYNC with tasks/vcpkg's

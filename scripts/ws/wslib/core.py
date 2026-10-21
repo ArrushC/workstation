@@ -118,13 +118,24 @@ def read_bytes(path: Path) -> bytes | None:
 
 
 def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:
-    """Write via a sibling temp file and a rename, so a crash never leaves half a file."""
+    """Write via a sibling temp file and a rename, so a crash never leaves half a file. The
+    temp file is created with `mode`, so a private file is never readable on the way."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.ws-tmp-{os.getpid()}")
-    tmp.write_bytes(data)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+    with os.fdopen(os.open(tmp, flags, 0o666 if mode is None else mode), "wb") as fh:
+        fh.write(data)
     if mode is not None and not IS_WINDOWS:
         os.chmod(tmp, mode)  # noqa
     os.replace(tmp, path)
+
+
+def private_dir(path: Path) -> Path:
+    """`path` as a directory only its owner can enter (0700): created so, or tightened."""
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not IS_WINDOWS and path.stat().st_mode & 0o077:
+        os.chmod(path, 0o700)
+    return path
 
 
 def is_executable(path: Path) -> bool:

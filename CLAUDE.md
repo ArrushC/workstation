@@ -153,7 +153,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   action prints its command and asks. Shell functions are inserted on the prompt, never run by ws.
 - Reconcile never copies a rendered template over its `.tera` source, never `mise dot add`s a
   directory, never imports a file only the live directory has, and backs up before it overwrites.
-  Without a baseline it says so instead of guessing. It never commits.
+  Without a baseline it says so instead of guessing. It never commits. A template's render is
+  `mise dot diff` applied to the live file, each hunk read by its header's line counts (content
+  can look like a `---` header); a patch that doesn't apply exactly is "can't render".
+- The baseline store copies private files (`~/.ssh/config`): its directories 0700, its files
+  0600 (`core.private_dir`, `atomic_write(..., PRIVATE)`); `baseline.secure` tightens an old one.
 - Baselines, backups and the workspace registry are host state (`core.state_dir()`); per-host
   preferences are `~/.config/workstation/projects.toml`. Startup commands come only from there or
   `--run`, never from a project.

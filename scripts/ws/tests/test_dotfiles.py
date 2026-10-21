@@ -7,8 +7,11 @@ from __future__ import annotations
 import io
 import os
 import random
+import stat
+import subprocess
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 
 from helpers import Scratch
 
@@ -16,21 +19,25 @@ from wslib import baseline, diffs, dotfiles, reconcile
 from wslib.dotfiles import BOTH, DELETED, LOCAL, MISSING, NOBASE, REMOVED, REPO, SYNC, UNKNOWN
 
 
+# Content lines that look like a diff's own once tagged: "-- x" removed is "--- x".
+TRICKY = ["-- x\n", "++ y\n", "--- z\n", "+++ w\n", "@@ -1 +1 @@\n", "dotfile differs: q\n", "\n", " \n"]
+
+
 class Diffs(unittest.TestCase):
     def test_apply_unified_round_trips(self) -> None:
         rnd = random.Random(7)
-        for _ in range(200):
-            old = [f"line {rnd.randint(0, 9)}\n" for _ in range(rnd.randint(0, 12))]
+        for _ in range(400):
+            old = [rnd.choice([f"line {rnd.randint(0, 9)}\n"] * 3 + TRICKY) for _ in range(rnd.randint(0, 12))]
             new = list(old)
             for _ in range(rnd.randint(1, 4)):
                 op = rnd.choice("aid")
                 pos = rnd.randint(0, len(new))
                 if op == "a" or not new:
-                    new.insert(pos, f"added {rnd.randint(0, 99)}\n")
+                    new.insert(pos, rnd.choice([f"added {rnd.randint(0, 99)}\n", *TRICKY]))
                 elif op == "d":
                     del new[min(pos, len(new) - 1)]
                 else:
-                    new[min(pos, len(new) - 1)] = "changed\n"
+                    new[min(pos, len(new) - 1)] = rnd.choice(["changed\n", *TRICKY])
             a, b = "".join(old).encode(), "".join(new).encode()
             if rnd.random() < 0.3 and b:
                 b = b.rstrip(b"\n")
@@ -47,6 +54,28 @@ class Diffs(unittest.TestCase):
         bad = "--- a\n+++ b\n@@ -1,1 +1,1 @@\n-not this\n+x\n"
         self.assertIsNone(diffs.apply_unified(b"something else\n", bad))
         self.assertIsNone(diffs.apply_unified(b"x\n", "no hunks here"))
+
+    def test_header_like_content(self) -> None:
+        # mise's own output for a template changed from "-- old" to "-- new": the removal
+        # reads "--- old", which once ended the hunk and left the old line in the render.
+        patch = ("dotfile differs: ~/.conf\n  content differs: src -> ~/.conf\n--- ~/.conf (current)\n"
+                 "+++ src (desired)\n@@ -1,3 +1,3 @@\n a\n--- old\n+-- new\n b\n")
+        self.assertEqual(diffs.apply_unified(b"a\n-- old\nb\n", patch), b"a\n-- new\nb\n")
+        for a, b in ((b"a\n", b"a\n++ added\n+++ more\n"),
+                     (b"--- x\n+++ y\n@@ -1 +1 @@\ndotfile differs: z\n", b"kept\n"),
+                     (b"x\n", b"--- x\n+++ y\n@@ -1 +1 @@\ndotfile differs: z\n")):
+            patch = diffs.unified(a, b, "current", "desired")
+            self.assertEqual(diffs.apply_unified(a, patch), b, patch)
+
+    def test_incomplete_patches_are_refused(self) -> None:
+        a, b = b"a\n-- old\nb\nc\n", b"a\n-- new\nb\nc\n"
+        patch = diffs.unified(a, b, "current", "desired")
+        whole = patch.splitlines(keepends=True)
+        for cut in range(len(whole) - 1, 2, -1):  # every truncation inside the hunk
+            self.assertIsNone(diffs.apply_unified(a, "".join(whole[:cut])), whole[:cut])
+        self.assertIsNone(diffs.apply_unified(a, patch.replace("@@ -1,4 +1,4 @@", "@@ -1,5 +1,5 @@")))
+        self.assertIsNone(diffs.apply_unified(a, patch.replace("@@ -1,4 +1,4 @@", "@@ -1,4 +2,4 @@")))
+        self.assertIsNone(diffs.apply_unified(a, patch.replace(" b\n", "junk\n")))
 
     def test_crlf_lines_survive(self) -> None:
         a, b = b"one\r\ntwo\r\n", b"one\r\n2\r\n"
@@ -156,7 +185,7 @@ class Model(Scratch):
         self.assertEqual((app / "a.toml").read_text(), "a local\n")  # the sibling's edit survives
         sets = baseline.backup_sets()
         self.assertEqual(len(sets), 1)
-        (orig, dest, why), = sets[0][1]
+        (orig, dest, why, _), = sets[0][1]
         self.assertEqual(why, "")  # reconcile's own backup: the user chose to overwrite
         self.assertEqual(orig, str(app / "sub dir/b file.kdl"))
         self.assertEqual(open(dest).read(), "b\n")
@@ -331,6 +360,48 @@ class Model(Scratch):
         self.assertFalse(other.record("a", b"2", "~/a", "t"))
         os.environ["HOME"] = str(self.home)
         self.assertEqual(baseline.Store().content("a"), b"1")
+
+    def readable(self, root: Path) -> dict[str, str]:
+        """Everything under root that anyone but its owner could open, with its mode."""
+        return {p.relative_to(root).as_posix(): f"{stat.S_IMODE(p.stat().st_mode):04o}"
+                for p in (root, *root.rglob("*")) if p.stat().st_mode & 0o077}
+
+    @unittest.skipIf(os.name == "nt", "POSIX permissions")
+    def test_store_and_backups_are_private(self) -> None:
+        # Blobs and backups copy files such as ~/.ssh/config: whatever the umask, nothing in
+        # the store is readable by others, and a restore puts the original's mode back.
+        self.addCleanup(os.umask, os.umask(0o022))
+        secret = self.write(self.home / ".ssh/config", "Host x\n", 0o600)
+        tool = self.write(self.home / ".local/bin/tool", "#!/bin/sh\n", 0o755)
+        store = baseline.Store()
+        store.record(".ssh/config", secret.read_bytes(), "~/.ssh/config", "test")
+        store.save()
+        backup = baseline.Backup("test", store.root)
+        backup.save(secret)
+        backup.save(tool)
+        self.assertEqual(self.readable(store.root), {})
+        entries = baseline.backup_sets()[0][1]
+        self.assertEqual([(Path(o).name, m) for o, _, _, m in entries], [("config", "0600"), ("tool", "0755")])
+        tool.unlink()
+        hint = baseline.restore_hint(Path(entries[1][1]), tool, entries[1][3])
+        subprocess.run(hint, shell=True, check=True)
+        self.assertEqual((tool.read_text(), stat.S_IMODE(tool.stat().st_mode)), ("#!/bin/sh\n", 0o755))
+
+    @unittest.skipIf(os.name == "nt", "POSIX permissions")
+    def test_a_readable_store_is_tightened(self) -> None:
+        # What an older ws wrote: 0755 directories, 0644 copies, a MANIFEST without modes.
+        root = self.state / "dotfiles"
+        self.write(root / "baseline.json", "{}", 0o644)
+        self.write(root / "blobs/abc", "Host x\n", 0o644)
+        self.write(root / "backups/20260101-000000-pre-apply/home/.ssh/config", "Host x\n", 0o644)
+        self.write(root / "backups/20260101-000000-pre-apply/MANIFEST.tsv",
+                   f"{self.home}/.ssh/config\t{root}/backups/20260101-000000-pre-apply/home/.ssh/config\tlocal edit\n", 0o644)
+        for d in (root, *[p for p in root.rglob("*") if p.is_dir()]):
+            d.chmod(0o755)
+        baseline.Store()
+        self.assertEqual(self.readable(root), {})
+        (orig, _, why, mode), = baseline.backup_sets()[0][1]
+        self.assertEqual((orig, why, mode), (f"{self.home}/.ssh/config", "local edit", ""))
 
     def test_cancelled_picker_changes_nothing(self) -> None:
         st = self.entries({"target": "~/.rc", "source": "dotfiles/rc"})

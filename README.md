@@ -14,7 +14,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
 | zellij | Persistent sessions; runs on the remote host so a dropped SSH tab loses nothing. |
-| helix | Modal editor and `$EDITOR` (`dotfiles/config/helix`). It uses Catppuccin Mocha with the mauve accent and the same clangd flags as Neovim. clang-format runs on save only where the project has a `.clang-format`. Files auto-save 3 s after an edit, and yanks copy over OSC 52 on Linux (the Windows clipboard on Windows). |
+| helix | Modal editor and `$EDITOR`, unless the shell inherits one, as a `ws open` workspace's panes do (`dotfiles/config/helix`). It uses Catppuccin Mocha with the mauve accent and the same clangd flags as Neovim. clang-format runs on save only where the project has a `.clang-format`. Files auto-save 3 s after an edit, and yanks copy over OSC 52 on Linux (the Windows clipboard on Windows). |
 | Warp, Windows Terminal, WezTerm | The Windows terminals (see [Terminals](#terminals-warp-windows-terminal-and-wezterm)). |
 
 Nothing is pushed anywhere and there is no host list: each host keeps itself current with `wsu`.
@@ -401,7 +401,7 @@ Every action shows the diff it will make and asks first. Before it overwrites a 
 
 Before every apply, the `pre-dotfiles` hook backs up each local edit the apply would overwrite and the baseline doesn't hold. A plain apply overwrites a differing copy without asking, and `wsu`'s bootstrap does too. `ws reconcile` mentions the newest such backup once. It says how many files were local edits, and how many differed with no baseline to tell. Those are often just the previous deploy: on a host's first apply after ws arrives, every file the repo changed is one.
 
-Recovery: `ws reconcile --backups` lists every backup set, newest first, each file with its restore command (`cp -- <backup> <original>`; on Windows `Copy-Item`). A record or merge in the repo is undone with `git -C ~/.config/mise checkout -- <path>`. The 50 newest backup sets are kept. Baselines, blobs and backups are host state, in `~/.local/state/workstation/dotfiles/` (Windows: `%LOCALAPPDATA%\workstation\dotfiles\`), never in the checkout.
+Recovery: `ws reconcile --backups` lists every backup set, newest first, each file with its restore command (`cp -- <backup> <original> && chmod <mode> -- <original>`, the mode the file had; on Windows `Copy-Item`). A record or merge in the repo is undone with `git -C ~/.config/mise checkout -- <path>`. The 50 newest backup sets are kept. Baselines, blobs and backups are host state, in `~/.local/state/workstation/dotfiles/` (Windows: `%LOCALAPPDATA%\workstation\dotfiles\`), never in the checkout. They copy private files such as `~/.ssh/config`, so on Linux only you can read them: the directory is 700 and every file 600, and a store an older ws left readable is tightened the next time ws opens it.
 
 Limits:
 - A baseline exists from the first apply after this feature reaches a host. Until then, and for any file that already differed, reconcile says `?` rather than guessing.
