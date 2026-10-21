@@ -87,6 +87,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `nerd-fonts` 3.5.1
 - `opencode` 1.19.0
 - `oh-my-pi` 18.9.1
+- `jcode` 0.99.0
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1
 - `carapace-bin` 1.8.0

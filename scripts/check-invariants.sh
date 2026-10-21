@@ -200,6 +200,15 @@ check_pins() {
   pin_equal "gob (its vendored Claude Code skill)" \
     "config.linux.toml=$(sed -nE 's#^"github:juanibiapina/gob" = \{ version = "([^"]+)".*#\1#p' config.linux.toml)" \
     "skills/gob/.vendor=$(sed -nE 's/^tag: +v([^ ]+)$/\1/p' dotfiles/claude/skills/gob/.vendor)"
+  # The bumper locks NO_SLSA tools with mise's SLSA check off: only ever tools this repo pins.
+  local t no_slsa_bad=0
+  for t in $(sed -n 's/^NO_SLSA="\(.*\)"$/\1/p' scripts/bump-versions.sh); do
+    if ! grep -qF "\"$t\" = " config.toml config.linux.toml config.windows.toml; then
+      bad "bump-versions.sh NO_SLSA names $t, which no config*.toml pins"
+      no_slsa_bad=1
+    fi
+  done
+  [ "$no_slsa_bad" -eq 0 ] && ok "bump-versions.sh NO_SLSA names only pinned tools"
   if [ -z "$PY" ]; then
     note "no python with tomllib — the TOML rows are skipped locally (CI enforces)"
     return

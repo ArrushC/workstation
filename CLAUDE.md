@@ -206,6 +206,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - zellij ≥ `zjstatus_zellij_floor`; TypeScript major ≤ 5
   - the gob pin ↔ the `tag:` in `dotfiles/claude/skills/gob/.vendor`
   - `scripts/bump-versions.sh` covers each via `COUPLED_AUTO` or `EXCLUDE`.
+  - Its `NO_SLSA` lists tools that publish no provenance but carry a file mise misreads as SLSA
+    (jcode's `release-provenance.json`); they are locked alone with `MISE_GITHUB_SLSA=false`. A
+    real provenance refusal (ouch's) is never bypassed this way.
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`
   - `/etc` copies
