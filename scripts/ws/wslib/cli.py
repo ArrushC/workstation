@@ -126,7 +126,8 @@ def baseline(args: list[str]) -> int:
         store = Store()
         if what == "status":
             print(f"{store.index_path}: {len(store.files)} file(s) recorded"
-                  + (" (written for another home: read-only here)" if store.foreign else ""))
+                  + (f" ({store.problem}: read-only here)" if store.read_only else "")
+                  + (f" (damaged: {store.problem})" if store.problem and not store.read_only else ""))
             return 0
         model = load(store, render_templates=False)
         if model.errors:

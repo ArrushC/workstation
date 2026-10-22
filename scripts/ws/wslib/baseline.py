@@ -9,27 +9,46 @@ core.state_dir()/dotfiles, never in the checkout:
 
   baseline.json        {"version": 1, "home": ..., "files": {key: {sha256, entry, at, how}}}
   blobs/<sha256>       the content itself (three-way merges need the base, not a hash)
+  baseline.lock        held only while save() reads, merges and writes the index
   backups/<stamp>-<why>/home/<key>, .../repo/<path>, MANIFEST.tsv (original, backup, why, mode)
 
 Blobs and backups are copies of files such as ~/.ssh/config, so the store is private on
 Linux: its directories 0700, its files 0600, a store an older ws left readable tightened
 when it is next opened. A backup records the original's mode, which the restore puts back.
+
+Several ws processes can share the store (a hook during wsu, a reconcile in another tab).
+A Store keeps its changes in memory; save() takes the lock, reads the index as it is now,
+applies just those changes, writes the blobs they need and the index, removes unreferenced
+blobs, and lets go. No lock is held between load and save, so none waits on a prompt.
+
+An index ws can't use is never overwritten unseen. A damaged one (not JSON, the wrong shape)
+reads as no baselines and is reported; the next save keeps it as baseline.json.damaged-<time>
+and starts a new index, and blobs are kept while such a file exists. One written in another
+format version, or for another home, is read-only here. A blob that is missing, or whose
+content no longer matches its name, is no baseline.
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
+import sys
+import time
 from pathlib import Path
+from typing import Iterator
 
 from . import core
 
 VERSION = 1
 KEEP_BACKUPS = 50
 PRIVATE = 0o600
+LOCK_TIMEOUT = 30.0
+SHA = re.compile(r"^[0-9a-f]{64}$")
 # Why the pre-apply snapshot kept a file: it changed since the last deploy, or it differed
 # from the repo with no baseline to say which side moved (often an older deployed copy).
 LOCAL_EDIT = "local edit"
@@ -55,6 +74,10 @@ def secure(root: Path) -> None:
                 pass  # never fail a hook over this; the next open tries again
 
 
+def _warn(msg: str) -> None:
+    print(core.paint(f"ws: {msg}", "yellow", on=core.color_on(sys.stderr)), file=sys.stderr)
+
+
 class Store:
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or core.state_dir() / "dotfiles"
@@ -63,61 +86,155 @@ class Store:
         self.home = str(core.home())
         self.files: dict[str, dict[str, str]] = {}
         self.dirty = False
-        # A store written for another home (a scratch HOME sharing XDG_STATE_HOME) is
-        # left alone: its keys are relative to a different tree.
-        self.foreign = False
+        self._changes: dict[str, dict[str, str] | None] = {}  # key -> new record, None: forgotten
+        self._pending: dict[str, bytes] = {}                 # sha256 -> content not yet written
+        self.foreign = False   # written for another home (a scratch HOME sharing XDG_STATE_HOME)
+        self.problem = ""      # why the index can't be used as it is, when it can't
+        self.read_only = False
+        state, files, why = self._load()
+        if state == "ok":
+            self.files = files
+        elif state != "missing":
+            self.problem = why
+            self.read_only = state != "damaged"
+            self.foreign = state == "foreign"
+            if state == "damaged":
+                _warn(f"{self.index_path} can't be used ({why}). Until it is replaced every file reads as having "
+                      "no baseline (?). The next baseline update keeps it as baseline.json.damaged-<time> and "
+                      "starts a new index; blobs are kept while that file exists.")
+            elif state == "version":
+                _warn(f"{self.index_path} {why}, so baselines are read-only here: nothing is recorded or "
+                      "removed until this checkout is updated (wsu).")
+            elif state == "unreadable":
+                _warn(f"can't read {self.index_path} ({why}); baselines are read-only until it can be read.")
+
+    def _load(self) -> tuple[str, dict[str, dict[str, str]], str]:
+        """_read under the lock, so it never meets a save halfway; on Windows an open index
+        would also make that save's rename fail. Unlocked when the lock can't be had."""
+        if not self.index_path.exists():
+            return self._read()
         try:
-            data = json.loads(self.index_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, ValueError):
-            data = {}
+            with self._locked():
+                return self._read()
+        except (OSError, TimeoutError):
+            return self._read()
+
+    def _read(self) -> tuple[str, dict[str, dict[str, str]], str]:
+        """The index as it is on disk: (state, files, why). state is ok, missing, damaged,
+        version (another format), foreign (another home) or unreadable."""
+        try:
+            raw = self.index_path.read_bytes()
+        except FileNotFoundError:
+            return "missing", {}, ""
+        except OSError as e:
+            return "unreadable", {}, e.strerror or str(e)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except ValueError as e:  # UnicodeDecodeError is one
+            return "damaged", {}, f"not JSON: {e}"
+        if not isinstance(data, dict):
+            return "damaged", {}, "not a JSON object"
         if data.get("home") not in (None, self.home):
-            self.foreign = True
-        elif data.get("version") == VERSION:
-            self.files = data.get("files", {})
+            return "foreign", {}, f"written for another home ({data.get('home')})"
+        version = data.get("version")
+        if not isinstance(version, int) or isinstance(version, bool):
+            return "damaged", {}, "no format version"
+        if version != VERSION:
+            return "version", {}, f"is format version {version}, and this ws reads version {VERSION}"
+        files = data.get("files")
+        if not isinstance(files, dict):
+            return "damaged", {}, "no files table"
+        for key, rec in files.items():
+            if not (isinstance(rec, dict) and isinstance(rec.get("sha256"), str) and SHA.match(rec["sha256"])
+                    and isinstance(rec.get("entry"), str)):
+                return "damaged", {}, f"a bad record for {key!r}"
+        return "ok", files, ""
 
     def get(self, key: str) -> dict[str, str] | None:
         return self.files.get(key)
 
     def content(self, key: str) -> bytes | None:
+        """The baseline's content, or None: no record, or its blob is missing or no longer
+        matches its sha256 (then there is no baseline to trust)."""
         rec = self.files.get(key)
         if not rec:
             return None
-        return core.read_bytes(self.root / "blobs" / rec["sha256"])
+        digest = rec["sha256"]
+        if digest in self._pending:
+            return self._pending[digest]
+        data = core.read_bytes(self.root / "blobs" / digest)
+        return data if data is not None and sha(data) == digest else None
 
     def record(self, key: str, data: bytes, entry: str, how: str) -> bool:
-        """Remember `data` as what `key` last agreed on. False when nothing changed."""
-        if self.foreign:
+        """Remember `data` as what `key` last agreed on (written by save). False when
+        nothing changed."""
+        if self.read_only:
             return False
         digest = sha(data)
         old = self.files.get(key)
-        if old and old.get("sha256") == digest and old.get("entry") == entry:
+        if old and old.get("sha256") == digest and old.get("entry") == entry and self.content(key) is not None:
             return False
-        blob = self.root / "blobs" / digest
-        if not blob.exists():
-            core.private_dir(core.private_dir(self.root) / "blobs")
-            core.atomic_write(blob, data, PRIVATE)
-        self.files[key] = {"sha256": digest, "entry": entry, "at": core.now_iso(), "how": how}
+        rec = {"sha256": digest, "entry": entry, "at": core.now_iso(), "how": how}
+        self.files[key] = self._changes[key] = rec
+        self._pending[digest] = data
         self.dirty = True
         return True
 
     def forget(self, key: str) -> None:
-        if not self.foreign and self.files.pop(key, None) is not None:
+        if not self.read_only and self.files.pop(key, None) is not None:
+            self._changes[key] = None
             self.dirty = True
 
     def keys_for(self, entry: str) -> list[str]:
         return [k for k, v in self.files.items() if v.get("entry") == entry]
 
-    def save(self) -> None:
-        if not self.dirty or self.foreign:
-            return
-        doc = {"version": VERSION, "home": self.home, "files": dict(sorted(self.files.items()))}
-        core.private_dir(self.root)
-        core.atomic_write(self.index_path, (json.dumps(doc, indent=1) + "\n").encode(), PRIVATE)
+    def save(self) -> bool:
+        """Write this Store's changes over the index as it is now, under the lock. False when
+        they couldn't be written (they stay pending, for a later save)."""
+        if not self.dirty or self.read_only:
+            return not self.dirty
+        try:
+            with self._locked():
+                state, files, why = self._read()
+                if state in ("version", "foreign", "unreadable"):
+                    _warn(f"baselines not saved: {self.index_path} {why if state != 'unreadable' else 'is unreadable: ' + why}")
+                    return False
+                if state == "damaged":
+                    kept, n = self.root / f"baseline.json.damaged-{core.stamp()}", 1
+                    while kept.exists():
+                        n += 1
+                        kept = self.root / f"baseline.json.damaged-{core.stamp()}-{n}"
+                    os.replace(self.index_path, kept)
+                    _warn(f"kept the damaged baseline index as {kept} and started a new one")
+                for key, rec in self._changes.items():
+                    if rec is None:
+                        files.pop(key, None)
+                    else:
+                        files[key] = rec
+                blobs = core.private_dir(self.root / "blobs")
+                used = {rec["sha256"] for rec in files.values()}
+                for digest, data in self._pending.items():
+                    on_disk = core.read_bytes(blobs / digest)
+                    if digest in used and (on_disk is None or sha(on_disk) != digest):
+                        core.atomic_write(blobs / digest, data, PRIVATE)  # missing, or altered
+                doc = {"version": VERSION, "home": self.home, "files": dict(sorted(files.items()))}
+                core.atomic_write(self.index_path, (json.dumps(doc, indent=1) + "\n").encode(), PRIVATE)
+                self._gc(files)
+        except TimeoutError as e:
+            _warn(f"baselines not saved: {e}")
+            return False
+        self.files = files
+        self._changes.clear()
+        self._pending.clear()
         self.dirty = False
-        self._gc()
+        return True
 
-    def _gc(self) -> None:
-        live = {v["sha256"] for v in self.files.values()}
+    def _gc(self, files: dict[str, dict[str, str]]) -> None:
+        """Remove blobs no record uses, unless a damaged index is kept beside the store (its
+        records can't be read, so any blob may be one of them)."""
+        if any(self.root.glob("baseline.json.damaged-*")):
+            return
+        live = {v["sha256"] for v in files.values()}
         blobs = self.root / "blobs"
         if blobs.is_dir():
             for p in blobs.iterdir():
@@ -126,6 +243,52 @@ class Store:
                         p.unlink()
                     except OSError:
                         pass
+
+    @contextlib.contextmanager
+    def _locked(self) -> Iterator[None]:
+        """baseline.lock, exclusively: flock on Linux, a one-byte msvcrt lock on Windows. Both
+        go when the process does, so a crash never leaves the store locked."""
+        fd = os.open(core.private_dir(self.root) / "baseline.lock", os.O_RDWR | os.O_CREAT, PRIVATE)
+        try:
+            deadline = time.monotonic() + LOCK_TIMEOUT
+            while not _try_lock(fd):
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"another ws held {self.root / 'baseline.lock'} for {LOCK_TIMEOUT:.0f}s")
+                time.sleep(0.05)
+            try:
+                yield
+            finally:
+                _unlock(fd)
+        finally:
+            os.close(fd)
+
+
+if core.IS_WINDOWS:
+    import msvcrt
+
+    def _try_lock(fd: int) -> bool:
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            return False
+
+    def _unlock(fd: int) -> None:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _try_lock(fd: int) -> bool:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            return False
+
+    def _unlock(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 class Backup:

@@ -260,6 +260,115 @@ class Model(Scratch):
         self.write(self.repo / "dotfiles/zshrc.tera", "# {{ vars.name }}\nalias a=b\n")
         return self.entries({"target": "~/.zshrc", "source": "dotfiles/zshrc.tera", "mode": "template", "state": state})
 
+    # --- a plan made from files that changed before it ran --------------------------------
+
+    def refused(self, p: reconcile.Plan) -> str:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertFalse(reconcile.execute(p, baseline.Store(), quiet=True))
+        self.assertIn("changed after this plan was made", err.getvalue())
+        self.assertEqual(baseline.backup_sets(), [])  # refused before anything, backups too
+        return err.getvalue()
+
+    def test_a_file_changed_between_planning_and_execution(self) -> None:
+        # An editor's auto-save while the prompt waits: the plan would record the old edit.
+        st = self.entries({"target": "~/.rc", "source": "dotfiles/rc"})
+        src, live = self.repo / "dotfiles/rc", self.home / ".rc"
+        self.write(src, "one\n")
+        self.write(live, "one\n")
+        self.record_all(st)
+        self.write(live, "one\nlocal\n")
+        p = reconcile.plan(self.item(st, ".rc"), "record")
+        self.write(live, "one\nlocal\nsaved while the prompt waited\n")
+        self.assertIn("~/.rc", self.refused(p))
+        self.assertEqual(src.read_text(), "one\n")
+        self.assertEqual(live.read_text(), "one\nlocal\nsaved while the prompt waited\n")
+        self.assertEqual(baseline.Store().content(".rc"), b"one\n")  # the baseline is untouched too
+
+    def test_every_file_a_plan_reads_is_checked(self) -> None:
+        st = self.dir_status()
+        app, src = self.home / ".config/app", self.repo / "dotfiles/conf/sub dir/b file.kdl"
+        changes = {
+            "the live file rewritten": lambda: self.write(app / "sub dir/b file.kdl", "b\nnew\n"),
+            "the live file deleted": lambda: (app / "sub dir/b file.kdl").unlink(),
+            "the live file's mode": lambda: (app / "sub dir/b file.kdl").chmod(0o755),
+            "the source rewritten": lambda: self.write(src, "b repo, again\n"),
+            "the source deleted": lambda: src.unlink(),
+        }
+        for what, change in changes.items():
+            with self.subTest(what):
+                self.write(app / "a.toml", "a\n")
+                self.write(app / "sub dir/b file.kdl", "b\n", 0o644)
+                self.write(src, "b\n")
+                self.record_all(st)
+                self.write(src, "b repo\n")
+                p = reconcile.plan(self.item(st, ".config/app/sub dir/b file.kdl"), "apply")
+                change()
+                before = (app / "sub dir/b file.kdl").read_bytes() if (app / "sub dir/b file.kdl").exists() else None
+                self.refused(p)
+                after = (app / "sub dir/b file.kdl").read_bytes() if (app / "sub dir/b file.kdl").exists() else None
+                self.assertEqual(after, before)
+
+    def test_a_file_created_while_the_prompt_waits(self) -> None:
+        st = self.dir_status()
+        app = self.home / ".config/app"
+        it = self.item(st, ".config/app/a.toml")
+        self.assertEqual(it.cls, MISSING)
+        p = reconcile.plan(it, "apply")
+        self.write(app / "a.toml", "made meanwhile\n")
+        self.refused(p)
+        self.assertEqual((app / "a.toml").read_text(), "made meanwhile\n")
+
+    def test_a_template_changed_before_mise_applies_it(self) -> None:
+        st = self.template_status()
+        self.write(self.home / ".zshrc", "# me\nalias a=b\nalias local=1\n")
+        diff = ("dotfile differs: ~/.zshrc\n--- ~/.zshrc (current)\n+++ src (desired)\n"
+                "@@ -1,3 +1,2 @@\n # me\n alias a=b\n-alias local=1\n")
+        log = self.root / "mise.log"
+        self.fake_mise(st, diff, log)
+        p = reconcile.plan(self.item(st, ".zshrc"), "apply")
+        self.assertEqual(p.mise_apply, "~/.zshrc")
+        self.write(self.repo / "dotfiles/zshrc.tera", "# {{ vars.name }}\nalias a=c\n")
+        self.refused(p)
+        self.assertNotIn("dot apply", log.read_text())
+
+    def test_an_edit_during_the_confirmation_is_caught(self) -> None:
+        # The interactive path: the file changes while ws asks "apply ~/.rc?".
+        st = self.entries({"target": "~/.config/app", "source": "dotfiles/conf"})
+        self.dir_status()
+        app = self.home / ".config/app"
+        self.write(app / "a.toml", "a\n")
+        self.write(app / "sub dir/b file.kdl", "b\n")
+        self.record_all(st)
+        self.write(app / "a.toml", "a local\n")
+        it = self.item(st, ".config/app/a.toml")
+
+        def answer(_question: str, _default: bool = False) -> bool:
+            self.write(app / "a.toml", "a local, saved again\n")
+            return True
+
+        from unittest import mock
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("wslib.ui.confirm", side_effect=answer), mock.patch("wslib.ui.pause"), \
+                redirect_stdout(out), redirect_stderr(err):
+            reconcile.Session(baseline.Store())._act(it, "apply")
+        self.assertIn("changed after this plan was made", err.getvalue())
+        self.assertEqual((app / "a.toml").read_text(), "a local, saved again\n")
+        self.assertEqual(baseline.backup_sets(), [])
+
+    def test_the_backup_is_what_was_checked(self) -> None:
+        st = self.dir_status()
+        app = self.home / ".config/app"
+        self.write(app / "a.toml", "a\n")
+        self.write(app / "sub dir/b file.kdl", "b\n")
+        self.record_all(st)
+        self.write(app / "a.toml", "a local\n")
+        p = reconcile.plan(self.item(st, ".config/app/a.toml"), "apply")
+        self.assertTrue(reconcile.execute(p, baseline.Store(), quiet=True))
+        (_, dest, _, _), = baseline.backup_sets()[0][1]
+        self.assertEqual(Path(dest).read_text(), "a local\n")
+        self.assertEqual((app / "a.toml").read_text(), "a\n")
+
     def test_template_rendered_from_mises_diff(self) -> None:
         st = self.template_status()
         live = self.write(self.home / ".zshrc", "# me\nalias a=b\nalias local=1\n")
@@ -391,7 +500,7 @@ class Model(Scratch):
     def test_a_readable_store_is_tightened(self) -> None:
         # What an older ws wrote: 0755 directories, 0644 copies, a MANIFEST without modes.
         root = self.state / "dotfiles"
-        self.write(root / "baseline.json", "{}", 0o644)
+        self.write(root / "baseline.json", '{"version": 1, "files": {}}', 0o644)
         self.write(root / "blobs/abc", "Host x\n", 0o644)
         self.write(root / "backups/20260101-000000-pre-apply/home/.ssh/config", "Host x\n", 0o644)
         self.write(root / "backups/20260101-000000-pre-apply/MANIFEST.tsv",

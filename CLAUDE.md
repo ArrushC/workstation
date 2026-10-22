@@ -164,6 +164,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   can look like a `---` header); a patch that doesn't apply exactly is "can't render".
 - The baseline store copies private files (`~/.ssh/config`): its directories 0700, its files
   0600 (`core.private_dir`, `atomic_write(..., PRIVATE)`); `baseline.secure` tightens an old one.
+- A Store keeps changes (and their blobs) in memory; only `save()` writes, holding `baseline.lock`
+  (flock / msvcrt) while it re-reads, merges, writes and cleans up, never across a prompt. An index
+  ws can't use is never overwritten unseen: damaged is kept as `baseline.json.damaged-*` at the
+  next save (blob cleanup pauses while one exists), another version or home is read-only.
+- A reconcile Plan carries the fingerprints (`core.fingerprint`: sha256 + st_mode, or missing) of
+  every file its Item read; `execute` refuses if any changed, and backs up the bytes it checked.
 - Baselines, backups and the workspace registry are host state (`core.state_dir()`); per-host
   preferences are `~/.config/workstation/projects.toml`. Startup commands come only from there or
   `--run`, never from a project.

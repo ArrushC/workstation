@@ -79,6 +79,9 @@ class Item:
     has_base: bool
     exec_diff: bool = False
     note: str = ""
+    # Each file this item was read from, as it was then (core.fingerprint): a plan made from
+    # the item writes nothing if any of them has changed since (reconcile.execute).
+    seen: dict[Path, tuple[str, int] | None] = field(default_factory=dict)
 
     @property
     def template(self) -> bool:
@@ -235,14 +238,16 @@ def load(store: Store, *, render_templates: bool = True, status_doc: dict[str, o
 
 def _file_item(entry: Entry, store: Store, render_templates: bool) -> Item:
     live = core.read_bytes(entry.path)
+    src = core.read_bytes(entry.source)
     key = _key(entry.path)
+    base = store.content(key)
     item = Item(entry=entry, live=entry.path, source=entry.source, key=key, live_data=live,
-                intended=None, intended_known=False, base=store.content(key),
-                has_base=store.get(key) is not None)
+                intended=None, intended_known=False, base=base, has_base=base is not None,
+                seen={entry.path: core.fingerprint(entry.path, live), entry.source: core.fingerprint(entry.source, src)})
     if entry.state == "source_missing":
         return item
     if not entry.template:
-        item.intended, item.intended_known = core.read_bytes(entry.source), True
+        item.intended, item.intended_known = src, True
     elif entry.state == "applied":
         item.intended, item.intended_known = live, True
     elif render_templates:
@@ -277,9 +282,10 @@ def _dir_items(entry: Entry, store: Store) -> list[Item]:
         live = core.read_bytes(live_p)
         want = core.read_bytes(src_p)
         key = _key(live_p)
+        base = store.content(key)
         item = Item(entry=entry, live=live_p, source=src_p, key=key, live_data=live,
-                    intended=want, intended_known=True, base=store.content(key),
-                    has_base=store.get(key) is not None)
+                    intended=want, intended_known=True, base=base, has_base=base is not None,
+                    seen={live_p: core.fingerprint(live_p, live), src_p: core.fingerprint(src_p, want)})
         if live is not None and want is not None:
             item.exec_diff = core.is_executable(live_p) != core.is_executable(src_p)
         items.append(item)
@@ -295,7 +301,7 @@ def record_agreed(model: Model, store: Store, how: str) -> int:
     for item in model.items:
         if item.cls == SYNC and item.live_data is not None:
             n += store.record(item.key, item.live_data, item.entry.target, how)
-        elif item.cls == SYNC and item.live_data is None and item.has_base:
+        elif item.cls == SYNC and item.live_data is None and store.get(item.key) is not None:
             store.forget(item.key)
             n += 1
     if model.status_ok and model.entries:
