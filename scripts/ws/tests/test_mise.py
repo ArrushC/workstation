@@ -139,5 +139,72 @@ post-dotfiles = "{py} baseline record"
         self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")  # nothing applied
 
 
+    @unittest.skipIf(os.name == "nt", "a pty")
+    def test_wsa_yes_backs_up_once_then_applies(self) -> None:
+        # Answering y in a terminal: wsa backs the edit up itself and tells the hook, through
+        # mise bootstrap and its task, that it needn't take a second copy.
+        import pty
+        import select
+
+        p = self.mise("dot", "apply", "--force", "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.write(self.home / ".app conf", "a = local\n")
+        env = dict(os.environ)
+        env.pop("WS_NONINTERACTIVE", None)
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.chdir(self.home)
+            os.execve(sys.executable, [sys.executable, str(WS_PY), "apply"], env)
+        out = b""
+        while True:
+            r, _, _ = select.select([fd], [], [], 30)
+            if not r:
+                break
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+            if b"[y/N]" in out and b"y\r" not in out:
+                os.write(fd, b"y\r")
+        _, status = os.waitpid(pid, 0)
+        text = out.decode(errors="replace")
+        self.assertEqual(os.waitstatus_to_exitcode(status), 0, text)
+        self.assertIn("backed up 1 file(s) first", text)
+        self.assertNotIn("pre-apply backup: nothing to back up", text)  # the hook skipped
+        listing = self.ws("reconcile", "--backups").stdout
+        sets = [ln for ln in listing.splitlines() if ln and not ln.startswith(" ")]  # one line per set
+        self.assertEqual(len(sets), 1, listing)
+        self.assertTrue(sets[0].endswith("-pre-apply"), listing)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 1\n")
+
+    def test_a_backup_that_fails_stops_the_apply_only_when_something_needs_one(self) -> None:
+        # The pre-dotfiles hook exits 3 when a file the apply would overwrite can't be backed
+        # up, and mise stops before the dotfiles phase; with nothing at risk it goes ahead.
+        p = self.mise("dot", "apply", "--force", "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        backups = self.state / "dotfiles/backups"
+        shutil.rmtree(backups, ignore_errors=True)
+        self.write(backups, "a file where the backups directory goes")  # every backup now fails
+        self.write(self.repo / "dotfiles/app conf", "a = 2\n")             # a repo change: nothing at risk
+        p = self.mise("dot", "apply", "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("pre-apply backup: nothing to back up", p.stdout + p.stderr)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")
+        self.write(self.home / ".app conf", "a = local\n")                 # now a local edit is at risk
+        self.write(self.repo / "dotfiles/greeting.tera", "hey {{ vars.name }}\nline two\n")
+        p = self.mise("dot", "apply", "--yes")
+        self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("PRE-APPLY BACKUP FAILED: couldn't copy ~/.app conf", p.stdout + p.stderr)
+        self.assertIn("The apply is stopped", p.stdout + p.stderr)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = local\n")           # kept
+        self.assertEqual((self.home / ".greeting").read_text(), "hello Scratch Host\nline two\n")  # nothing applied
+        p = subprocess.run(["mise", "-C", str(self.home), "dot", "apply", "--yes"], capture_output=True, text=True,
+                           cwd=self.home, env=dict(os.environ, WS_BACKED_UP="1"))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)  # the documented way to overwrite anyway
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")
+
 if __name__ == "__main__":
     unittest.main()
