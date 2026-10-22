@@ -117,6 +117,27 @@ post-dotfiles = "{py} baseline record"
             self.assertEqual((self.home / ".greeting").read_text(), f"hello Scratch Host\n{line}\n")
         self.assertEqual(self.listing(), {})
 
+    def test_wsa(self) -> None:
+        # ws apply runs mise bootstrap --only dotfiles: its hooks baseline the deploy, and a
+        # repo change applies without asking where a local edit refuses (no terminal here).
+        p = self.ws("apply", "--force-dotfiles")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual((self.home / ".greeting").read_text(), "hello Scratch Host\nline two\n")
+        self.write(self.repo / "dotfiles/app conf", "a = 2\n")
+        self.write(self.repo / "dotfiles/greeting.tera", "hi {{ vars.name }}\nline two\n")
+        p = self.ws("apply")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")
+        self.assertEqual((self.home / ".greeting").read_text(), "hi Scratch Host\nline two\n")
+        self.write(self.home / ".greeting", "hi Scratch Host\nline two\nmine\n")
+        self.write(self.repo / "dotfiles/app conf", "a = 3\n")
+        p = self.ws("apply")
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("-mine", p.stdout)  # the template's local edit, from mise's own render
+        self.assertIn("refusing", p.stderr)
+        self.assertEqual((self.home / ".greeting").read_text(), "hi Scratch Host\nline two\nmine\n")
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")  # nothing applied
+
 
 if __name__ == "__main__":
     unittest.main()

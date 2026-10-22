@@ -93,7 +93,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `check-templates.sh` may pin one). `check_layout` holds the three-file, OS-token layout.
 - `vars.sudo` (`config.local.toml`) is written only by `bootstrap.sh`; missing means yes.
 - Every `ws*` command and `bootstrap.ps1` pin `mise -C` to the home directory. mise finds its config by walking up from
-  the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
+  the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` (`ws apply`) also refuses unless
   `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).
 
 **Dotfiles**
@@ -149,6 +149,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **ws (`scripts/ws`)**
 - One catalogue: `actions.toml` feeds the palette and `wsh` (`ws help`) in all four shells; never
   put a cheatsheet back in an rc file (`check_ws`). ASCII only (PowerShell 5.1 consoles).
+- Workflow logic lives in ws, not in the four profiles: every shell's `wsa` is one line calling
+  `ws apply` (`wslib/apply.py`; `check_ws`). A profile keeps only what a child process can't do:
+  change directory, fill the prompt, complete, bind keys. `ws apply` asks only when content
+  would be lost (`dotfiles.at_risk`, the same rule the pre-apply backup uses); a check that
+  can't run warns and applies. In nu 0.113 a failing external ends the def, so config.nu's
+  `ws` catches ws.py's failure, cleans up, then re-raises it (`$failed.raw`).
 - The picker returns an action id; the argv comes from the catalogue or mise's task list. A `change`
   action prints its command and asks. Shell functions are inserted on the prompt, never run by ws.
 - Reconcile never copies a rendered template over its `.tera` source, never `mise dot add`s a

@@ -236,7 +236,7 @@ The same workflow commands exist in bash and zsh on Linux and in Nushell and Pow
 |---|---|
 | `wse <path>` | `mise dot edit`: edit a dotfile's source (`wse ~/.zshrc`, `wse $PROFILE`) |
 | `wsd` | `mise dot diff`: preview pending changes to `$HOME` |
-| `wsa` | Apply tracked state to `$HOME`. First checks `mise dot status` for an un-recorded live edit (`differs`); if found, prints the diff and asks (refuses when non-interactive). The raw `mise bootstrap --only dotfiles --yes` skips that check and overwrites silently. |
+| `wsa` | Apply tracked state to `$HOME` (`ws apply`, the same program in every shell). A file the apply would overwrite that was edited here since the last deploy (whether or not the repo changed too), or that differs with no baseline to say which side changed, is shown with its diff first, and `wsa` asks; it refuses when it can't ask. A repo change you haven't edited past, a mode difference, a missing file or an entry whose source is missing (mise then stops the whole apply) applies without asking. It also refuses if mise resolved a config root other than your home. It says which way its check went: `checked N managed file(s): no local edit would be overwritten`, or a warning that the check couldn't run (`mise dot status` failed, a file couldn't be read), in which case it applies anyway, as `wsa` always has, and mise reports the real problem. A refusal exits 1 in every shell; otherwise `wsa` exits with mise's status. Before mise's Python is installed `wsa` can't run, and says so with the raw command. The raw `mise bootstrap --only dotfiles --yes` skips the check and overwrites without asking (the `pre-dotfiles` hook still backs up what it overwrites). |
 | `wsr` | `mise dot add --changed`: record an edited copy-mode file back to its source |
 | `wss` | `mise dot status`: every managed file and its state. In Nushell and PowerShell it is a table of `target`, `mode` and `state` to filter (`wss \| where state == differs`); an argument goes to mise's text output instead (`wss --json`) |
 | `wsu` | `mise run update`: `git pull --ff-only --prune` (dropping the `origin/*` branches GitHub no longer has, such as a merged PR's), then `mise bootstrap`, which installs the tools too (system steps per the saved `sudo`) |
@@ -362,6 +362,7 @@ Plugins install only from the `nvim-plugins` task (the `final` hook, so `wsu` to
 | `ws reconcile --list` (`--json`) | Print what differs and which side changed, without acting |
 | `ws reconcile --record`/`--apply`/`--merge <path>...` | Act on files from the command line (it shows the diff and asks; `--yes` doesn't ask) |
 | `ws reconcile --backups` | Every backup ws made, with the command that restores each file |
+| `ws apply` | What `wsa` runs: apply the repo's dotfiles, asking first when that would overwrite a local edit (options go to `mise bootstrap`) |
 | `ws open [project]` | Attach to a project's zellij session, resurrect it, or create it (Windows: change to the project) |
 | `ws open --list` / `--prefs` | Known workspaces and their session state / edit the per-host preferences |
 | `ws health` | The health report, then the repair for a failing row |
@@ -371,7 +372,7 @@ Plugins install only from the `nvim-plugins` task (the `final` hook, so `wsu` to
 
 Besides the catalogue, the palette lists this checkout's mise tasks and, when the current directory is inside a project, that project's own tasks. A project task runs only when you pick it and confirm. Listing it executes nothing, and mise refuses to read an untrusted config that could (`mise trust` there first).
 
-The picker returns only an action's id, and the command comes from the catalogue, so nothing the picker shows is ever run as typed. Shell functions (`wsa`, `zs`, `fssh`, `y`) can only run in your shell, so the palette puts them on the prompt for you to run with Enter: in zsh the prompt itself, in bash an editable line, in Nushell the next prompt. PowerShell prints them. Esc at any point leaves everything as it was.
+The picker returns only an action's id, and the command comes from the catalogue, so nothing the picker shows is ever run as typed. Shell functions (`zs`, `fssh`, `y`) can only run in your shell, so the palette puts them on the prompt for you to run with Enter: in zsh the prompt itself, in bash an editable line, in Nushell the next prompt. PowerShell prints them. Esc at any point leaves everything as it was.
 
 **Reconciling dotfiles.** A deployed dotfile is a copy, so a file that differs from the repo doesn't say which side changed. ws keeps a *baseline*: the content each file had the last time the live copy and the repo agreed. The `post-dotfiles` hook records it after every apply (`wsa`, `wsu`, `bootstrap.sh`, `bootstrap.ps1`, `mise dot apply`), and `ws reconcile` refreshes it whenever it finds a file in sync. With it, each file is one of:
 
@@ -614,11 +615,11 @@ git add -A && git commit -m '...' && git push   # keep the edit (or: git stash)
 
 ### A copy-mode file (Warp / Windows Terminal / Zed / VS Code settings) reverts after wsa
 
-Expected: those apps rewrite their file in place from their UI, so the copy in `$HOME` and the tracked source drift apart, and the next `wsa` overwrites your UI edit with the stale source (`wsa` warns first if it notices). Record the live file back to source before the next `wsa`/`wsu` with `ws reconcile` (one file at a time, and it says whether the repo changed too) or `wsr` (every changed file entry), then commit the updated source. If an apply already overwrote it, the pre-apply backup has it: `ws reconcile --backups`.
+Expected: those apps rewrite their file in place from their UI, so the copy in `$HOME` and the tracked source drift apart, and the next apply overwrites your UI edit with the stale source (`wsa` shows the diff and asks first; `wsu` doesn't). Record the live file back to source before the next `wsa`/`wsu` with `ws reconcile` (one file at a time, and it says whether the repo changed too) or `wsr` (every changed file entry), then commit the updated source. If an apply already overwrote it, the pre-apply backup has it: `ws reconcile --backups`.
 
 ### I edited a file in $HOME directly (e.g. ~/.claude/CLAUDE.md) and wsa reverted it
 
-Deployed targets are independent copies, so a direct edit never reaches `dotfiles/`. `wsa` prints the diff and asks before overwriting; a silent overwrite means it went through the raw `mise bootstrap --only dotfiles --yes` form, which overwrites by design. Record the edit before re-running `wsa`: `ws reconcile` records any file, including one inside a directory entry; `wsr` records FILE entries; `mise dot add <the directory>` replaces a whole directory entry's source. Then commit. If `wsu` or a raw apply already overwrote the edit, the `pre-dotfiles` hook backed it up first: `ws reconcile --backups` lists it with its restore command.
+Deployed targets are independent copies, so a direct edit never reaches `dotfiles/`. `wsa` prints the diff and asks before overwriting a local edit; a silent overwrite means it went through `wsu` or the raw `mise bootstrap --only dotfiles --yes` form, which overwrite by design. Record the edit before re-running `wsa`: `ws reconcile` records any file, including one inside a directory entry; `wsr` records FILE entries; `mise dot add <the directory>` replaces a whole directory entry's source. Then commit. If `wsu` or a raw apply already overwrote the edit, the `pre-dotfiles` hook backed it up first: `ws reconcile --backups` lists it with its restore command.
 
 ### mise bootstrap plan / status asks for a sudo password and hangs (no TTY)
 

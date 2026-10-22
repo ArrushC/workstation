@@ -7,7 +7,8 @@ import os
 import sys
 import traceback
 
-SUBCOMMANDS = ("reconcile", "open", "help", "health", "actions", "baseline", "complete")
+SUBCOMMANDS = ("reconcile", "open", "apply", "help", "health", "actions", "baseline", "complete")
+COMPLETED = SUBCOMMANDS[:6]  # the ones a user types
 
 
 def _reconcile_parser() -> argparse.ArgumentParser:
@@ -41,10 +42,18 @@ def _open_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _apply_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(prog="ws apply", description=(
+        "Apply the repo's dotfiles to this home (wsa). A file the apply would overwrite that was "
+        "edited here, or that differs with no baseline to tell, is shown with its diff first, and "
+        "ws asks (it refuses when it can't ask). Other options go to mise bootstrap."))
+
+
 USAGE = """\
 usage: ws [words...]          the palette (search starts with the words)
        ws reconcile [...]     review dotfiles that differ from the repo (ws reconcile -h)
        ws open [project]      open a project workspace (ws open -h)
+       ws apply [...]         apply the repo's dotfiles, asking before a local edit is lost (wsa)
        ws health              run the health report and fix a finding
        ws help                the cheatsheet (wsh)
        ws actions [--json]    list every action and what it runs
@@ -82,6 +91,10 @@ def _main(argv: list[str]) -> int:
         from .workspace import main as open_main
 
         return open_main(_open_parser().parse_args(rest))
+    if cmd == "apply":
+        from .apply import main as apply_main
+
+        return apply_main(_apply_parser().parse_known_args(rest)[1])
     if cmd == "help":
         from .catalog import help_text, load
 
@@ -157,7 +170,7 @@ def complete(words: list[str]) -> int:
     """Candidates for the word being completed, for the zsh, bash and Nushell completers."""
     if len(words) <= 1:
         cur = words[0] if words else ""
-        print("\n".join(s for s in SUBCOMMANDS[:5] if s.startswith(cur)))
+        print("\n".join(s for s in COMPLETED if s.startswith(cur)))
         return 0
     sub, cur = words[0], words[-1]
     if sub == "open" and not cur.startswith("-"):

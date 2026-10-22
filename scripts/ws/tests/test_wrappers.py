@@ -1,6 +1,7 @@
 """The zsh and bash `ws` wrappers (zshrc.tera, bashrc.tera): run with a stub ws.py, they
 apply a handed-back `cd` (paths with spaces), put a command on the prompt for the user
-(zsh's buffer stack; bash's editable line, under a pty), and pass ws's exit status through.
+(zsh's buffer stack; bash's editable line, under a pty), pass ws's exit status through, and
+hand wsa to `ws apply`.
 Nushell's wrapper is covered by scripts/test-config-nu.sh."""
 
 from __future__ import annotations
@@ -26,6 +27,9 @@ with open(out, "a") as fh:
     elif args[:1] == ["insert"]:
         fh.write("insert\\t" + args[1] + "\\n")
 print("shell=" + os.environ.get("WS_SHELL", ""))
+if args[:1] == ["apply"]:
+    print("apply " + repr(args[1:]))
+    sys.exit(7)  # a refusal or mise's own failure: the shell must see it
 sys.exit(int(args[1]) if args[:1] == ["exit"] else 0)
 """
 
@@ -35,7 +39,7 @@ def functions(rc: Path, names: tuple[str, ...]) -> str:
     text = rc.read_text(encoding="utf-8")
     out = []
     for n in names:
-        m = re.search(rf"^{re.escape(n)}\(\) \{{\n.*?^\}}\n", text, re.S | re.M)
+        m = re.search(rf"^{re.escape(n)}\(\) \{{(?: [^\n]*\}}\n|\n.*?^\}}\n)", text, re.S | re.M)  # one line, or a body
         assert m, f"{n} not in {rc}"
         out.append(m.group(0))
     return "\n".join(out)
@@ -51,7 +55,7 @@ class Wrappers(Scratch):
 
     def script(self, shell: str) -> Path:
         rc = REPO / "dotfiles" / f"{shell}rc.tera"
-        return self.write(self.root / f"funcs.{shell}", functions(rc, ("python-cli", "ws", "wsh")))
+        return self.write(self.root / f"funcs.{shell}", functions(rc, ("python-cli", "ws", "wsh", "wsa")))
 
     def run_shell(self, shell: str, body: str) -> subprocess.CompletedProcess[str]:
         argv = [shell, "-f", "-c"] if shell == "zsh" else [shell, "--norc", "--noprofile", "-c"]
@@ -62,6 +66,13 @@ class Wrappers(Scratch):
         p = self.run_shell("zsh", f"ws cd '{self.target}'; pwd; ws insert 'wsa --yes'; read -z line; print -r -- \"buffer=$line\"; ws exit 3; echo rc=$?")
         self.assertEqual(p.stdout.splitlines(), ["shell=zsh", str(self.target), "shell=zsh", "buffer=wsa --yes",
                                                  "shell=zsh", "rc=3"], p.stderr)
+
+    def test_wsa_is_ws_apply(self) -> None:
+        # One program behind every shell's wsa; its arguments reach it as given.
+        for shell in ("zsh", "bash") if shutil.which("zsh") else ("bash",):
+            p = self.run_shell(shell, "wsa --force-dotfiles 'two words'; echo rc=$?")
+            self.assertEqual(p.stdout.splitlines(), [f"shell={shell}", "apply ['--force-dotfiles', 'two words']", "rc=7"],
+                             p.stderr)
 
     def test_bash_cd_and_status(self) -> None:
         p = self.run_shell("bash", f"ws cd '{self.target}'; pwd; ws exit 4; echo rc=$?")

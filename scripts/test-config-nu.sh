@@ -2,9 +2,9 @@
 # test-config-nu.sh: the Windows Nushell config's own behaviour, run on Linux with the
 # pinned nu and stubs on PATH: an alias completes as its whole expansion, Tab's menu grows
 # to the terminal's width, wse/wsd/wss are defs (tracked-target completion, wss as a table,
-# arguments passed through), fssh follows ~/.ssh/config's Include lines (in zsh and bash
-# too), the command-not-found hook asks mise, no transient prompt, and the history and
-# timestamp settings.
+# arguments passed through), wsa is ws apply, fssh follows ~/.ssh/config's Include lines
+# (in zsh and bash too), the command-not-found hook asks mise, no transient prompt, and the
+# history and timestamp settings.
 # shellcheck disable=SC2016,SC2088  # nu code in single quotes; ~/... are mise target strings
 set -u
 
@@ -45,6 +45,7 @@ echo "mise \$*" >>"$LOG"
 case " \$* " in
   *" dot status --json "*) cat "$T/status.json" ;;
   *" which "*) printf '%s' "\${MISE_WHICH_OUT:-}"; printf '%s' "\${MISE_WHICH_ERR:-}" >&2; exit "\${MISE_WHICH_RC:-0}" ;;
+  *" bootstrap "*) echo "mise \$*"; exit "\${MISE_BOOTSTRAP_RC:-0}" ;;
   *) echo "mise \$*" ;;
 esac
 EOF
@@ -135,6 +136,8 @@ run_nu 'wsd'
 check "wsd with no argument diffs everything" has "dot diff"
 run_nu 'wsh'
 check "without mise's Python, wsh says how to get it" has "mise's Python isn't installed"
+run_nu 'wsa'
+check "...and so does wsa" has "mise's Python isn't installed"
 
 echo "-- ws (scripts/ws/ws.py, as the stubbed mise's python)"
 WSPY=""
@@ -155,6 +158,21 @@ if [ -n "$WSPY" ]; then
   check "ws open --cd changes Nushell's directory (def --env)" has "$T/proj dir"
   run_nu "ws-complete 'ws re'"
   check "ws completes its subcommands" has "reconcile"
+  run_nu 'wsa --force-dotfiles'
+  check "wsa is ws apply, which refuses a config root other than this home (exit 1)" \
+    bash -c '[ "$1" -eq 1 ] && [[ "$2" == *"would apply the wrong checkout"* ]]' _ "$RC" "$OUT"
+  sed "s|\"/h\"|\"$HOMEDIR\"|" "$T/status.json" >"$T/status.home.json" && mv "$T/status.json" "$T/status.h.json"
+  cp "$T/status.home.json" "$T/status.json"
+  : >"$LOG"
+  run_nu 'wsa --force-dotfiles'
+  check "...and otherwise applies, with wsa's flags" grep -q -- "bootstrap --only dotfiles --yes --force-dotfiles" "$LOG"
+  ls "${TMPDIR:-/tmp}"/ws-out.* >"$T/ws-out.before" 2>/dev/null
+  MISE_BOOTSTRAP_RC=4 run_nu 'wsa; print "not reached"'
+  check "...exiting with mise's status when the apply fails, and stopping there" \
+    bash -c '[ "$1" -eq 4 ] && [[ "$2" != *"not reached"* ]]' _ "$RC" "$OUT"
+  ls "${TMPDIR:-/tmp}"/ws-out.* >"$T/ws-out.after" 2>/dev/null
+  check "...and ws removes its WS_OUT file even then" cmp -s "$T/ws-out.before" "$T/ws-out.after"
+  mv "$T/status.h.json" "$T/status.json"
   unset MISE_WHICH_OUT
 else
   echo "  (no python with tomllib: skipped)"

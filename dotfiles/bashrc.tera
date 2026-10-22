@@ -469,8 +469,7 @@ alias wsr='mise -C "$HOME" dot add --changed'
 # same `Source: ~/.config/mise/tasks/update` as the unpinned form does from
 # inside the repo, so pinning changes nothing for a normal invocation.
 alias wsu='mise -C "$HOME" run update'
-# wsa is a function (below, near wsh) — it checks for un-recorded drift
-# before applying, since copy mode has no built-in prompt.
+# wsa is a function (below, near wsh): `ws apply`, which asks before a local edit is lost.
 
 # --- Functions ---------------------------------------------------------------
 
@@ -520,61 +519,11 @@ hide() {
   printf '\033[H\033[J' # home + clear the visible screen
 }
 
-# wsa — apply, but SURFACE drift first. Every [dotfiles] entry is `copy` or
-# `template`, so a live edit under $HOME doesn't reach this checkout on its own,
-# and an apply overwrites an un-recorded live edit with zero diff and zero
-# warning (mise has no built-in prompt; plain `mise bootstrap --only dotfiles
-# --yes` does not ask either). This checks for any entry in `differs` state (NOT
-# `missing` — a host's first-ever apply is expected to be all-missing, not a
-# drift warning) and shows its diff before doing anything. Interactive: asks.
-# Non-interactive (no tty): refuses rather than guessing — run
-# `mise bootstrap --only dotfiles --yes` directly for the old silent-overwrite
-# behavior. This is the one thing standing between an agent's un-recorded
-# `~/.claude/CLAUDE.md` edit and losing it on the next `wsa`.
-#
-# Belt and braces on top of the `-C "$HOME"` pin below: `.files[0].origin
-# .config_root` in the same `dot status --json` call names the config root
-# mise actually resolved. If it isn't exactly $HOME, refuse instead of
-# applying — this catches the pin ever silently failing (a future mise `-C`
-# semantics change, a stray env var) without re-deriving the pin's own logic.
-# If the probe can't find that field at all (jq missing, unexpected JSON
-# shape), PROCEED — a guard that false-positives on a healthy host is worse
-# than no guard.
-wsa() {
-  local status_json
-  status_json=$(mise -C "$HOME" dot status --json 2>/dev/null)
-  local resolved_root
-  resolved_root=$(printf '%s' "$status_json" | jq -r '.files[0].origin.config_root // empty' 2>/dev/null)
-  if [ -n "$resolved_root" ] && [ "$resolved_root" != "$HOME" ]; then
-    echo "wsa: refusing — mise resolved the dotfiles config root as '$resolved_root', not \$HOME ('$HOME'). This would apply the WRONG checkout. Not proceeding; investigate the -C pin before retrying." >&2
-    return 1
-  fi
-  local drifted
-  drifted=$(printf '%s' "$status_json" | jq -r '.files[]? | select(.state == "differs") | .target')
-  if [ -n "$drifted" ]; then
-    local -a targets=()
-    while IFS= read -r t; do targets+=("$t"); done <<<"$drifted"
-    echo "wsa: local edit(s) below differ from the repo and would be overwritten:" >&2
-    printf '  %s\n' "${targets[@]}" >&2
-    echo >&2
-    mise -C "$HOME" dot diff -- "${targets[@]}"
-    if [ -t 0 ] && [ -r /dev/tty ]; then
-      printf 'Apply anyway and overwrite the edit(s) above? [y/N] ' >/dev/tty
-      IFS= read -r reply </dev/tty
-      case "$reply" in
-      [Yy]*) ;;
-      *)
-        echo "wsa: aborted — nothing applied. Record the edit(s) first: wsr (a file entry), or 'mise dot add <path>' for a directory entry (e.g. ~/.claude/agents, ~/.claude/commands — wsr's --changed skips those) — then re-run wsa." >&2
-        return 1
-        ;;
-      esac
-    else
-      echo "wsa: refusing to overwrite non-interactively — inspect with 'mise dot diff', record with wsr / 'mise dot add <path>', or force with 'mise -C \"\$HOME\" bootstrap --only dotfiles --yes'." >&2
-      return 1
-    fi
-  fi
-  mise -C "$HOME" bootstrap --only dotfiles --yes "$@"
-}
+# wsa: apply the repo's dotfiles. `ws apply` (scripts/ws/wslib/apply.py) is the one
+# program behind every shell's wsa: it shows each local edit the apply would overwrite and
+# asks first (refusing when it can't ask), and refuses outright if mise resolved a config
+# root other than $HOME. PARITY: the same line in zshrc.tera.
+wsa() { ws apply "$@"; }
 
 # ws — the workstation palette (`ws [words]`: search every action by what you want to
 # do), dotfile reconciliation (`ws reconcile`) and project workspaces (`ws open

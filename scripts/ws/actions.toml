@@ -22,7 +22,7 @@
 #   pick      with run: what {arg} is chosen from (dotfile-targets)
 #   task      a mise task of this checkout: mise -C ~ run <task> [args]
 #   ws        a ws subcommand's argv
-#   insert    a shell command (a shell function such as wsa) put on your prompt to run;
+#   insert    a shell command (a shell function such as zs) put on your prompt to run;
 #             where the shell can't take it (PowerShell), it is printed instead
 #   cd        a directory for your shell to change to
 #   edit      a file to open in the editor      doc  a repo file, optionally #a heading
@@ -98,7 +98,7 @@ group = "workstation"
 kind = "change"
 keywords = ["dotfiles", "apply", "deploy"]
 alias = "wsa"
-insert = "wsa"
+ws = ["apply"]
 
 [[action]]
 id = "wsr"
