@@ -118,6 +118,7 @@ def _main(argv: list[str]) -> int:
 def baseline(args: list[str]) -> int:
     """The bootstrap hooks: `record` after every dotfiles apply (post-dotfiles), `snapshot`
     before it (pre-dotfiles). They never fail a bootstrap: any error is a warning."""
+    from . import core
     from .baseline import Store
     from .dotfiles import load, record_agreed, snapshot
 
@@ -129,28 +130,50 @@ def baseline(args: list[str]) -> int:
                   + (f" ({store.problem}: read-only here)" if store.read_only else "")
                   + (f" (damaged: {store.problem})" if store.problem and not store.read_only else ""))
             return 0
+        if what == "snapshot" and os.environ.get("WS_BACKED_UP") == "1":
+            return 0  # wsa or ws reconcile backed up what this apply overwrites, and stops if it can't
         model = load(store, render_templates=False)
         if model.errors:
-            print(f"ws baseline: skipped ({model.errors[0]})", file=sys.stderr)
+            if what == "snapshot":
+                _backup_failed(f"the check couldn't run: {model.errors[0]}")
+            else:
+                print(f"ws baseline: not recorded ({model.errors[0]})", file=sys.stderr)
             return 0
         if what == "record":
             n = record_agreed(model, store, "apply")
             if n:
                 print(f"ws: dotfile baselines updated ({n})")
         elif what == "snapshot":
-            if os.environ.get("WS_RECONCILE_APPLY") == "1":
-                return 0  # ws reconcile already backed up the one file it applies
-            b = snapshot(model, store)
+            b, failed = snapshot(model, store)
             if b.saved:
                 print(f"ws: backed up {snapshot_words(b.counts())} the apply may overwrite: {b.dir}")
                 print("    (ws reconcile --backups lists them with restore commands)")
+            if failed:
+                _backup_failed("couldn't copy " + "; ".join(f"{core.tilde(f)} ({why})" for f, why in failed))
+            elif not b.saved:
+                print(f"ws: pre-apply backup: nothing to back up ({len(model.items)} managed file(s) checked, "
+                      "no local edit the apply could overwrite)")
         else:
             print(f"ws baseline: unknown action {what!r} (record, snapshot, status)", file=sys.stderr)
             return 2
-    except Exception:  # noqa: BLE001 (a hook must never stop the bootstrap)
-        print("ws baseline: failed (the bootstrap carries on):", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 (a hook must never stop the bootstrap)
+        if what == "snapshot":
+            _backup_failed(f"{type(e).__name__}: {e}")
+        else:
+            print("ws baseline: failed (the bootstrap carries on):", file=sys.stderr)
         traceback.print_exc(limit=3)
     return 0
+
+
+def _backup_failed(why: str) -> None:
+    """The pre-apply backup didn't happen (or not for every file). The hook still exits 0, so
+    the apply goes ahead: say plainly that what it overwrites may be unrecoverable."""
+    from . import core
+
+    print(core.paint(f"ws: PRE-APPLY BACKUP FAILED: {why}. The apply goes ahead anyway (this hook never "
+                     "stops a bootstrap), so a local edit it overwrites may not be recoverable from a "
+                     "backup. wsa takes its own backup and stops instead.", "red", on=core.color_on(sys.stderr)),
+          file=sys.stderr)
 
 
 def snapshot_words(counts: dict[str, int]) -> str:

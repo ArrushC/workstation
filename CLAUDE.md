@@ -169,7 +169,14 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   ws can't use is never overwritten unseen: damaged is kept as `baseline.json.damaged-*` at the
   next save (blob cleanup pauses while one exists), another version or home is read-only.
 - A reconcile Plan carries the fingerprints (`core.fingerprint`: sha256 + st_mode, or missing) of
-  every file its Item read; `execute` refuses if any changed, and backs up the bytes it checked.
+  every file its Item read (live, source; a template's `.tera`, not its variables); `execute`
+  refuses if any changed, and backs up the bytes it checked. `ws apply` re-runs its whole check
+  after a yes (mise re-renders templates, so variables count there), backs up itself, and stops on
+  any change or failed backup; it then sets `WS_BACKED_UP=1` so the pre-dotfiles hook skips.
+- The pre-dotfiles hook (`ws baseline snapshot`) exits 0 whatever happens: mise abandons the whole
+  bootstrap on a failing hook. It prints the set it wrote, `nothing to back up`, or
+  `PRE-APPLY BACKUP FAILED`; never document its backup as guaranteed. Backup sets are claimed by
+  an exclusive `mkdir` (a `-N` suffix on collision), never a check-then-create.
 - Baselines, backups and the workspace registry are host state (`core.state_dir()`); per-host
   preferences are `~/.config/workstation/projects.toml`. Startup commands come only from there or
   `--run`, never from a project.

@@ -247,7 +247,7 @@ def execute(p: Plan, store: Store, *, quiet: bool = False) -> bool:
     if p.mise_apply:
         # ws backed the file up above; the pre-dotfiles hook needn't take a second copy.
         proc = core.run(core.mise_argv("dot", "apply", "--force", "--yes", "--", p.mise_apply), capture=quiet,
-                        env={"WS_RECONCILE_APPLY": "1"})
+                        env={"WS_BACKED_UP": "1"})
         if proc.returncode != 0:
             print(core.paint(f"mise dot apply failed (exit {proc.returncode})", "red"), file=sys.stderr)
             if quiet and proc.stderr:

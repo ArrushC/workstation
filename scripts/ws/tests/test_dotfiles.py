@@ -424,7 +424,8 @@ class Model(Scratch):
         self.write(app / "a.toml", "a local\n")                                # a local edit
         self.write(self.repo / "dotfiles/conf/sub dir/b file.kdl", "b repo\n")  # repo only
         store = baseline.Store()
-        b = dotfiles.snapshot(dotfiles.load(store, render_templates=False, status_doc=st), store)
+        b, failed = dotfiles.snapshot(dotfiles.load(store, render_templates=False, status_doc=st), store)
+        self.assertEqual(failed, [])
         self.assertEqual([p for p, _ in b.saved], [app / "a.toml"])
         self.assertEqual(b.counts(), {baseline.LOCAL_EDIT: 1})
 
@@ -435,7 +436,7 @@ class Model(Scratch):
         self.write(self.repo / "dotfiles/rc", "new\n")
         self.write(self.home / ".rc", "previous deploy\n")
         store = baseline.Store()
-        b = dotfiles.snapshot(dotfiles.load(store, render_templates=False, status_doc=st), store)
+        b, _ = dotfiles.snapshot(dotfiles.load(store, render_templates=False, status_doc=st), store)
         self.assertEqual(b.counts(), {baseline.NO_BASELINE: 1})
         note = reconcile._recent_snapshot_note()
         self.assertIn("1 file(s) that differed from the repo with no baseline", note)

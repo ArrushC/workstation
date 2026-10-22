@@ -139,5 +139,62 @@ post-dotfiles = "{py} baseline record"
         self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")  # nothing applied
 
 
+    @unittest.skipIf(os.name == "nt", "a pty")
+    def test_wsa_yes_backs_up_once_then_applies(self) -> None:
+        # Answering y in a terminal: wsa backs the edit up itself and tells the hook, through
+        # mise bootstrap and its task, that it needn't take a second copy.
+        import pty
+        import select
+
+        p = self.mise("dot", "apply", "--force", "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.write(self.home / ".app conf", "a = local\n")
+        env = dict(os.environ)
+        env.pop("WS_NONINTERACTIVE", None)
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.chdir(self.home)
+            os.execve(sys.executable, [sys.executable, str(WS_PY), "apply"], env)
+        out = b""
+        while True:
+            r, _, _ = select.select([fd], [], [], 30)
+            if not r:
+                break
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+            if b"[y/N]" in out and b"y\r" not in out:
+                os.write(fd, b"y\r")
+        _, status = os.waitpid(pid, 0)
+        text = out.decode(errors="replace")
+        self.assertEqual(os.waitstatus_to_exitcode(status), 0, text)
+        self.assertIn("backed up 1 file(s) first", text)
+        self.assertNotIn("pre-apply backup: nothing to back up", text)  # the hook skipped
+        listing = self.ws("reconcile", "--backups").stdout
+        sets = [ln for ln in listing.splitlines() if ln and not ln.startswith(" ")]  # one line per set
+        self.assertEqual(len(sets), 1, listing)
+        self.assertTrue(sets[0].endswith("-pre-apply"), listing)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 1\n")
+
+    @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "POSIX permissions, not root")
+    def test_a_failed_pre_apply_backup_doesnt_stop_the_apply(self) -> None:
+        # What wsu and a raw apply do when the hook can't back up: it says so, exits 0, and mise
+        # deploys anyway (a failing hook would stop the whole bootstrap). wsa stops instead.
+        p = self.mise("dot", "apply", "--force", "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.write(self.home / ".app conf", "a = local\n")
+        backups = self.state / "dotfiles/backups"
+        backups.mkdir(mode=0o700, parents=True, exist_ok=True)
+        backups.chmod(0o500)  # empty, so the scratch dir still cleans up
+        p = self.mise("dot", "apply", "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("PRE-APPLY BACKUP FAILED: couldn't copy ~/.app conf", p.stdout + p.stderr)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 1\n")  # overwritten, no backup
+
+
 if __name__ == "__main__":
     unittest.main()

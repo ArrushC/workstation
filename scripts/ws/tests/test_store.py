@@ -195,5 +195,84 @@ for i in range(40):
             self.assertEqual(final.content(key), f"{who} {i}".encode())
 
 
+@unittest.skipIf(os.name == "nt", "the hook is driven through bash stubs")
+class SnapshotHook(Scratch):
+    """`ws baseline snapshot`, the pre-dotfiles hook: three outcomes it never confuses, and an
+    exit status of 0 in each, because mise stops the whole bootstrap on a failing hook."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.status = self.entries({"target": "~/.rc", "source": "dotfiles/rc"})
+        self.write(self.repo / "dotfiles/rc", "one\n")
+        self.live = self.write(self.home / ".rc", "one\n")
+        self.fake_mise(self.status)
+        store = baseline.Store()
+        dotfiles.record_agreed(dotfiles.load(store, status_doc=self.status), store, "t")
+
+    def hook(self) -> subprocess.CompletedProcess[str]:
+        p = subprocess.run([sys.executable, str(WS / "ws.py"), "baseline", "snapshot"], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def test_nothing_to_back_up(self) -> None:
+        p = self.hook()
+        self.assertIn("pre-apply backup: nothing to back up (1 managed file(s) checked", p.stdout)
+        self.assertNotIn("FAILED", p.stderr)
+
+    def test_a_local_edit_backed_up(self) -> None:
+        self.write(self.live, "one\nlocal\n")
+        p = self.hook()
+        self.assertIn("backed up 1 local edit(s) the apply may overwrite", p.stdout)
+        self.assertNotIn("nothing to back up", p.stdout)
+
+    @unittest.skipIf(os.geteuid() == 0, "root can write anywhere")
+    def test_a_backup_that_fails_says_so_and_lets_the_apply_go_ahead(self) -> None:
+        self.write(self.live, "one\nlocal\n")
+        backups = baseline.core.private_dir(self.state / "dotfiles" / "backups")
+        backups.chmod(0o500)  # empty, so the scratch dir still cleans up
+        p = self.hook()
+        self.assertIn("PRE-APPLY BACKUP FAILED: couldn't copy ~/.rc (Permission denied)", p.stderr)
+        self.assertIn("The apply goes ahead anyway", p.stderr)
+        self.assertNotIn("nothing to back up", p.stdout)
+
+    def test_a_check_that_cant_run_is_a_failed_backup(self) -> None:
+        self.fake("mise", "echo 'not json'")
+        p = self.hook()
+        self.assertIn("PRE-APPLY BACKUP FAILED: the check couldn't run", p.stderr)
+
+    def test_a_caller_that_backed_up_skips_it(self) -> None:
+        self.write(self.live, "one\nlocal\n")
+        p = subprocess.run([sys.executable, str(WS / "ws.py"), "baseline", "snapshot"], capture_output=True,
+                           text=True, env=dict(os.environ, WS_BACKED_UP="1"))
+        self.assertEqual((p.returncode, p.stdout, p.stderr), (0, "", ""))
+        self.assertEqual(baseline.backup_sets(), [])
+
+
+class BackupSets(Scratch):
+    def test_sets_made_at_once_never_collide(self) -> None:
+        # Eight processes in the same second (the stamp pinned), all starting together: each
+        # gets a set of its own, holding just its file.
+        start = __import__("time").time() + 1.0
+        script = f"""import sys, time
+sys.path.insert(0, {str(WS)!r})
+from pathlib import Path
+from wslib import baseline, core
+core.stamp = lambda: "20260101-000000"
+time.sleep(max(0.0, {start!r} - time.time()))
+b = baseline.Backup("pre-apply")
+b.save(Path(sys.argv[1]), sys.argv[1].encode(), "t")
+print(b.dir)
+"""
+        procs = [subprocess.Popen([sys.executable, "-c", script, str(self.home / f"f{i}")], stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True) for i in range(8)]
+        results = [p.communicate(timeout=120) for p in procs]
+        self.assertEqual([p.returncode for p in procs], [0] * 8, [err for _, err in results])
+        dirs = {out.strip() for out, _ in results}
+        self.assertEqual(len(dirs), 8)
+        sets = baseline.backup_sets()
+        self.assertEqual(sorted(len(entries) for _, entries in sets), [1] * 8)
+        self.assertEqual(sorted(e[0] for _, entries in sets for e in entries), sorted(str(self.home / f"f{i}") for i in range(8)))
+
+
 if __name__ == "__main__":
     unittest.main()

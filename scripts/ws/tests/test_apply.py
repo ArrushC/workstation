@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 from helpers import Scratch
@@ -131,12 +132,85 @@ class Apply(Scratch):
                 mock.patch("wslib.ui.confirm", return_value=False) as ask:
             rc, _, err = self.wsa()
         self.assertEqual(rc, 1)
-        self.assertIn("backed up first", ask.call_args.args[0])
+        self.assertIn("backs each up first, and stops if it can't", ask.call_args.args[0])
         self.assertIn("nothing applied", err)
         self.assertEqual(self.bootstraps(), [])
-        with mock.patch("wslib.core.interactive", return_value=True), mock.patch("wslib.ui.confirm", return_value=True):
-            self.assertEqual(self.wsa()[0], 0)
+        rc, out, _ = self.confirmed()
+        self.assertEqual(rc, 0)
         self.assertEqual(self.bootstraps(), ["bootstrap --only dotfiles --yes"])
+        # wsa backed the edit up itself, before mise ran, and told the hook so.
+        (orig, dest, why, _), = baseline.backup_sets()[0][1]
+        self.assertEqual((orig, Path(dest).read_text(), why), (str(self.live), "one\nlocal\n", baseline.LOCAL_EDIT))
+        self.assertIn("backed up 1 file(s) first", out)
+        self.assertEqual(self.backed_up_env(), ["WS_BACKED_UP=1"])
+
+    def test_without_a_prompt_the_hook_backs_up(self) -> None:
+        self.write(self.src, "one\nrepo\n")
+        self.assertEqual(self.wsa()[0], 0)
+        self.assertEqual(self.backed_up_env(), ["WS_BACKED_UP="])
+
+    # --- the answer covers only what was shown --------------------------------------------
+
+    def confirmed(self, meanwhile: object = None) -> tuple[int, str, str]:
+        """wsa answered yes, with `meanwhile` run while the prompt waits."""
+        def answer(_question: str, _default: bool = False) -> bool:
+            if callable(meanwhile):
+                meanwhile()
+            return True
+        with mock.patch("wslib.core.interactive", return_value=True), mock.patch("wslib.ui.confirm", side_effect=answer):
+            return self.wsa()
+
+    def backed_up_env(self) -> list[str]:
+        log = self.root / "mise.log.env"
+        return log.read_text().splitlines() if log.exists() else []
+
+    def stopped(self, rc: int, err: str, why: str) -> None:
+        self.assertEqual(rc, 1)
+        self.assertIn(f"wsa: nothing applied: {why}", err)
+        self.assertEqual(self.bootstraps(), [])
+
+    def test_an_edit_while_the_prompt_waits_stops_the_apply(self) -> None:
+        self.write(self.live, "one\nlocal\n")
+        rc, _, err = self.confirmed(lambda: self.write(self.live, "one\nlocal\nsaved while you read the diff\n"))
+        self.stopped(rc, err, "~/.rc file changed while you were deciding")
+        self.assertIn("Run wsa again to review it", err)
+        self.assertEqual(baseline.backup_sets(), [])
+
+    def test_a_file_put_at_risk_while_the_prompt_waits_stops_it(self) -> None:
+        other_src, other = self.repo / "dotfiles/other", self.home / ".other"
+        self.write(other_src, "x\n")
+        self.write(other, "x\n")
+        st = self.entries({"target": "~/.rc file", "source": "dotfiles/rc file"},
+                          {"target": "~/.other", "source": "dotfiles/other"})
+        self.fake_mise(st)
+        store = baseline.Store()
+        dotfiles.record_agreed(dotfiles.load(store, status_doc=st), store, "test")
+        self.write(self.live, "one\nlocal\n")
+        rc, _, err = self.confirmed(lambda: self.write(other, "x\nedited meanwhile\n"))
+        self.stopped(rc, err, "~/.other changed while you were deciding")
+
+    def test_a_template_render_changed_while_the_prompt_waits_stops_it(self) -> None:
+        # The template file, or a variable it uses: either way mise's render moves.
+        self.write(self.repo / "dotfiles/zshrc.tera", "# {{ vars.name }}\n")
+        st = self.entries({"target": "~/.zshrc", "source": "dotfiles/zshrc.tera", "mode": "template"})
+        self.write(self.home / ".zshrc", "# me\nalias local=1\n")
+        self.fake_mise(st, "--- a\n+++ b\n@@ -1,2 +1 @@\n # me\n-alias local=1\n")
+        new_render = "--- a\n+++ b\n@@ -1,2 +1 @@\n-# me\n-alias local=1\n+# a new name\n"
+        rc, _, err = self.confirmed(lambda: self.fake_mise(st, new_render))
+        self.stopped(rc, err, "~/.zshrc changed while you were deciding")
+
+    def test_a_recheck_that_cant_run_stops_it(self) -> None:
+        self.write(self.live, "one\nlocal\n")
+        broken = f"""printf '%s\\n' "$*" >>"{self.root / 'mise.log'}"; echo 'mise broke' >&2; exit 1"""
+        rc, _, err = self.confirmed(lambda: self.fake("mise", broken))
+        self.stopped(rc, err, "couldn't check again after your answer (mise broke)")
+
+    def test_a_backup_that_fails_stops_it(self) -> None:
+        self.write(self.live, "one\nlocal\n")
+        with mock.patch("wslib.baseline.Backup.save", side_effect=OSError(28, "No space left on device")):
+            rc, _, err = self.confirmed()
+        self.stopped(rc, err, "couldn't back up ~/.rc file (No space left on device)")
+        self.assertEqual(self.live.read_text(), "one\nlocal\n")
 
     # --- refusals, and checks that can't run ----------------------------------------------
 
