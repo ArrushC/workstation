@@ -44,10 +44,10 @@ end
 -- SSH tabs ----------------------------------------------------------------------------
 -- The host an SSH tab is on: the destination of the ssh in front, read from its arguments
 -- (the launcher's ssh, or one typed in Nushell or PowerShell). It colours the tab, names
--- it, shows in the footer, and drives new tabs and splits (another ssh to it),
+-- it, shows in the status, and drives new tabs and splits (another ssh to it),
 -- Ctrl+Shift+F5 and file links. The last ssh seen in a pane is kept in wezterm.GLOBAL, so
 -- Ctrl+Shift+F5 can rerun it once it has exited (and a reload keeps it). A WSL tab that has
--- run ssh itself (wsl_remote, below) gets the colour, name and footer only: its ssh runs
+-- run ssh itself (wsl_remote, below) gets the colour, name and status only: its ssh runs
 -- inside Linux, out of WezTerm's sight.
 
 -- ssh's options that take a value, as zshrc/bashrc's ssh wrapper skips them.
