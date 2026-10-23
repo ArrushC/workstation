@@ -99,38 +99,14 @@ function M.apply(config)
   -- bar split by a black line. 1pt keeps it a box at 100%, and is 2 px from 150%.
   config.cursor_thickness = '1pt'
 
-  -- The tab bar is the title bar: at the top, terminal-font style, with the status on its
-  -- right, then minimize and close buttons. Its empty space and the status are the window's
-  -- caption (Windows' own drag, so Aero Snap works), and a double-click there maximizes or
-  -- restores; WezTerm checks for exactly 'INTEGRATED_BUTTONS|RESIZE' before it does that.
-  -- RESIZE keeps the thin resize frame, so Win+arrow snap and edge resizing still work
-  -- ('NONE' loses them). Ctrl+Shift+drag (WezTerm's default) and Win+drag (keys.lua's mouse
-  -- bindings) move the window from anywhere. The bar shows with one tab too (the default),
-  -- since the buttons live in it.
-  config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
-  config.integrated_title_buttons = { 'Hide', 'Close' }
-  config.integrated_title_button_alignment = 'Right'
+  -- No title bar. RESIZE keeps the thin resize frame, so Win+arrow snap, drag-to-edge snap
+  -- and minimize still work ('NONE' loses them). Move the window with Ctrl+Shift+drag
+  -- (WezTerm's default) or Win+drag (keys.lua's mouse bindings). The tab bar sits at the
+  -- bottom, terminal-font style, with the status footer on its right.
+  config.window_decorations = 'RESIZE'
   config.use_fancy_tab_bar = false
-  config.tab_bar_at_bottom = false
+  config.tab_bar_at_bottom = true
   config.tab_max_width = 32
-  -- The retro bar draws its buttons from these: codicons' caption glyphs, five cells wide
-  -- (40 px at 100% scaling, near Windows' 46) on the bar's colour; hovering lights minimize
-  -- surface1 and close red. A hover is the button's width: WezTerm hit-tests by the hover.
-  local nf = wezterm.nerdfonts or {}
-  local minimize, close = nf.cod_chrome_minimize or '-', nf.cod_chrome_close or 'x'
-  local function button(glyph, fg, bg)
-    return wezterm.format({
-      { Background = { Color = bg } },
-      { Foreground = { Color = fg } },
-      { Text = '  ' .. glyph .. '  ' },
-    })
-  end
-  config.tab_bar_style = {
-    window_hide = button(minimize, mocha.text, mocha.base),
-    window_hide_hover = button(minimize, mocha.text, mocha.surface1),
-    window_close = button(close, mocha.red, mocha.base),
-    window_close_hover = button(close, mocha.crust, mocha.red),
-  }
   config.enable_scroll_bar = true
   config.window_padding = { left = 8, right = 16, top = 6, bottom = 6 }
   -- Split the leftover pixels when the window isn't a whole number of cells (snapped or

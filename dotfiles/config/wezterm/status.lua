@@ -1,4 +1,4 @@
--- status.lua: the status on the tab bar's right, and the notices that briefly replace it
+-- status.lua: the status footer right of the tab bar and the notices that briefly replace it
 -- ("Copied", "Config reloaded"). Exports M.flash and M.after_reload.
 
 local wezterm = require 'wezterm'
@@ -10,7 +10,7 @@ local M = {}
 local mocha = appearance.mocha
 
 -- Notices -------------------------------------------------------------------------------
--- A short coloured message in the status ("Copied", "Config reloaded"): WezTerm's
+-- A short coloured message in the status footer ("Copied", "Config reloaded"): WezTerm's
 -- Lua has no overlay that neither takes focus nor writes into the pane. Seconds-long, so
 -- they live in this VM; a reload only drops one that was about to expire anyway.
 local notices = {}
@@ -30,11 +30,11 @@ function M.after_reload(text)
   wezterm.GLOBAL.reload_notice = { text = text, expires = os.time() + 5 }
 end
 
--- Status ----------------------------------------------------------------------------------
--- The tab bar's right end, before the window buttons, refreshed every second: COPY /
--- SEARCH / RESIZE while those modes run, an SSH tab's host in its colour (and the zellij
--- session it attached) or the host a WSL tab has ssh'd to, the pane's line count, battery,
--- time. Parts drop out as the pane narrows.
+-- Status footer ---------------------------------------------------------------------------
+-- Right of the tab bar, refreshed every second: COPY / SEARCH / RESIZE while those modes
+-- run, an SSH tab's host in its colour (and the zellij session it attached) or the host a
+-- WSL tab has ssh'd to, the pane's line count, battery, time. Parts drop out as the pane
+-- narrows.
 
 local function thousands(n)
   local s = tostring(math.floor(n)):reverse():gsub('(%d%d%d)', '%1,'):reverse()
@@ -137,7 +137,7 @@ render_status = function(window, pane)
   table.insert(items, { Text = ' ' })
   plain = plain .. ' '
 
-  -- A live notice replaces the status, centred in at least its width so the tabs don't shift.
+  -- A live notice replaces the footer, centred in at least its width so the tabs don't shift.
   local n = notices[window:window_id()]
   if n and os.time() < n.expires then
     local pad = math.max(0, wezterm.column_width(plain) - wezterm.column_width(n.text))
