@@ -2,8 +2,9 @@
 
 Every change is a Plan first: the files it writes or deletes, the diff of each, what is
 backed up, and the baseline it leaves. The picker previews plans before anything runs,
-and nothing is written until it is confirmed. Nothing is committed or pushed: a record
-or merge leaves the checkout dirty for you to review with git.
+and nothing is written until it is confirmed, and then only if every file the plan was
+made from is still as it was. Nothing is committed or pushed: a record or merge leaves the
+checkout dirty for you to review with git.
 
 Templates are never recorded: a rendered file copied over its .tera source would bake
 this host's values into every host's template. Their record step is `edit`, which opens
@@ -48,6 +49,12 @@ class Plan:
     baseline: bytes | None = None   # what the baseline becomes (None: forget it)
     keep_baseline: bool = False
     ok: bool = True                 # False: the plan can't run (the reason is in summary)
+    # Every file the plan was made from, as the item saw it: execute writes nothing if one
+    # has changed, appeared or gone since (an editor's auto-save while the prompt waits).
+    deps: dict[Path, tuple[str, int] | None] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.deps = dict(self.item.seen)
 
     def render(self, color: bool = False) -> str:
         out = []
@@ -208,13 +215,27 @@ def _merge_plan(p: Plan, merged: bytes, conflicts: int) -> Plan:
 
 
 def execute(p: Plan, store: Store, *, quiet: bool = False) -> bool:
-    """Back up, write, record the baseline. True on success."""
+    """Check nothing the plan was made from has changed, back up, write, record the baseline.
+    True on success; False writes nothing when the plan is stale."""
     item = p.item
+    now = {path: core.read_bytes(path) for path in p.deps}
+    moved = [path for path, seen in p.deps.items() if core.fingerprint(path, now[path]) != seen]
+    if moved:
+        print(core.paint(f"nothing written: {', '.join(core.tilde(m) for m in moved)} changed after this plan was "
+                         "made, so it no longer shows what would be written. Look at it again and choose afresh.",
+                         "red", on=core.color_on(sys.stderr)), file=sys.stderr)
+        return False
     backup = Backup(f"reconcile-{p.action}", store.root)
+
+    def keep(path: Path) -> None:  # the content just checked, which is what is overwritten
+        data = now[path] if path in now else core.read_bytes(path)
+        if data is not None:
+            backup.save(path, data)
+
     for w in p.writes:
-        backup.save(w.path)
+        keep(w.path)
     if p.mise_apply:
-        backup.save(item.live)
+        keep(item.live)
     for w in p.writes:
         if w.data is None:
             try:

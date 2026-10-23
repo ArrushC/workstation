@@ -135,7 +135,8 @@ def baseline(args: list[str]) -> int:
         store = Store()
         if what == "status":
             print(f"{store.index_path}: {len(store.files)} file(s) recorded"
-                  + (" (written for another home: read-only here)" if store.foreign else ""))
+                  + (f" ({store.problem}: read-only here)" if store.read_only else "")
+                  + (f" (damaged: {store.problem})" if store.problem and not store.read_only else ""))
             return 0
         if what == "snapshot" and os.environ.get("WS_BACKED_UP") == "1":
             return 0  # wsa or ws reconcile backed up what this apply overwrites, and stops if it can't

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import os
 import shlex
 import shutil
@@ -115,6 +116,16 @@ def read_bytes(path: Path) -> bytes | None:
         return path.read_bytes()
     except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
         return None
+
+
+def fingerprint(path: Path, data: bytes | None) -> tuple[str, int] | None:
+    """What a plan saw of a path: the sha256 of `data` (its content as read; "" when it isn't a
+    file) and its st_mode, or None when nothing was there."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None if data is None else (hashlib.sha256(data).hexdigest(), -1)
+    return (hashlib.sha256(data).hexdigest() if data is not None else "", st.st_mode)
 
 
 def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:

@@ -394,7 +394,7 @@ The picker returns only an action's id, and the command comes from the catalogue
 - **edit** opens the live file beside its source.
 - **skip** changes nothing.
 
-Every action shows the diff it will make and asks first. Before it overwrites a file, the old content goes to a backup. Nothing is committed or pushed: review a record or merge with `git -C ~/.config/mise diff`.
+Every action shows the diff it will make and asks first. If a file the action was worked out from changes before it runs (an editor's auto-save while ws asks, a file that appears or goes, a new mode), ws writes nothing and says so: look at it again and choose afresh. The files checked are the live file and its source; for a template that is the `.tera` file itself, so a change to a variable it uses (`config.local.toml`, the environment) between the look and the action isn't caught, and mise renders with the new value. Before it overwrites a file, the content it just checked goes to a backup. Nothing is committed or pushed: review a record or merge with `git -C ~/.config/mise diff`.
 
 - **Templates** (`.tera` sources) are never recorded. The rendered file has this host's values in it, so copying it over the template would push them to every host. Their *edit* opens the template beside a diff of the live changes to port by hand, then renders the template again and compares. A template's merge writes the merged result to the live file only, and the remaining local part shows as `local` until it's in the template.
 - **Directory entries** (`~/.claude/skills`, `~/.config/zellij`, ...) are reconciled one file at a time. Recording one never replaces the source directory, unlike `mise dot add <dir>`. A file only the live directory has was never deployed and is never imported. Excluded files, such as a nested entry's directory or `.vendor`, stay out.
@@ -408,6 +408,8 @@ Limits:
 - A baseline exists from the first apply after this feature reaches a host. Until then, and for any file that already differed, reconcile says `?` rather than guessing.
 - The hooks need mise's Python, so on a fresh host's first bootstrap (dotfiles before tools) they skip with a message, and the next apply or `ws reconcile` records.
 - A store written for a different `$HOME` is read-only, so scratch homes can't change your baselines.
+- A damaged `baseline.json` (cut off, not JSON, the wrong shape) is never overwritten unseen. ws names it and reads every file as `?` until it is replaced; the next baseline update keeps it as `baseline.json.damaged-<time>` and starts a new index. Blobs are kept while that file exists, so delete it once you don't need it. A `baseline.json` in another format version (a newer checkout wrote it) is read-only until this checkout is updated. A blob that is missing or no longer matches its hash counts as no baseline.
+- Several ws processes (a `wsu` hook, a reconcile in another tab) can update the store at once. Each saves only its own changes, under `baseline.lock`, held just while the index is read, merged and written, never while ws waits for you.
 - mise's `track`-mode entries aren't reconciled (mise's own `history` covers them); this repo has none.
 
 **Project workspaces.** `ws open` lists projects from zoxide's history (a directory counts when it is in a git worktree or has a project file such as `mise.toml` or `package.json`), two levels under the configured roots (`PROJECT_ROOT`, `~/projects` by default), the workspaces you opened before, and each repository's linked git worktrees, read from `.git/worktrees` without a scan of your home.
