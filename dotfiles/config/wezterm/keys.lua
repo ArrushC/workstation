@@ -8,14 +8,14 @@ local act = wezterm.action
 
 local M = {}
 
--- WezTerm defaults worth knowing, mouse gestures and what the footer and tabs show.
+-- WezTerm defaults worth knowing, mouse gestures and what the status and tabs show.
 local reference = {
   { 'Ctrl+Tab', 'Next tab (Ctrl+Shift+Tab: previous)' },
   { 'Ctrl+Shift+N', 'New window' },
   { 'Ctrl+Shift+Z', 'Toggle pane zoom' },
   { 'Ctrl+Shift+Alt+arrows', 'Resize the pane by one cell' },
   { 'Ctrl+Shift+F', 'Search the scrollback' },
-  { 'Ctrl+Shift+X', 'Copy mode (COPY in the footer)' },
+  { 'Ctrl+Shift+X', 'Copy mode (COPY in the status)' },
   { 'Ctrl+Shift+Space', 'Quick select: URLs, paths, hashes, IPs, #123' },
   { 'Ctrl+Shift+K', 'Clear the scrollback' },
   { 'Ctrl+Shift+V', 'Paste' },
@@ -29,12 +29,13 @@ local reference = {
   { 'Shift+click', 'Open a link, also inside zellij and helix' },
   { 'Ctrl+triple-click', "Select one command's whole output and copy it" },
   { 'Ctrl+Shift+drag', 'Move the window (Win+drag too)' },
+  { 'tab bar', "The title bar: drag its free space to move the window, double-click it to maximize; minimize and close on its right" },
   { '+ on the tab bar', 'Click: new tab; middle-click: tab list; right-click: launcher' },
-  { 'select', 'Selecting with the mouse copies (Copied in the footer)' },
+  { 'select', 'Selecting with the mouse copies (Copied in the status)' },
   { 'drop a file', 'Pastes its path, quoted' },
   { 'images', 'Show inline (yazi, wezterm imgcat), except inside zellij' },
   { '#123', "Links to this repository's issue or pull request 123" },
-  { 'footer', 'SSH host (zellij session), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
+  { 'status', 'SSH host (zellij session), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
   { 'tab colours', "An SSH tab, or a WSL tab that ran ssh, takes its host's colour and name (its ~/.ssh/config.local alias); a WSL tab otherwise its distro's colour" },
   { 'tab marks', "Bell rang, % progress, dot: output you haven't seen" },
 }
@@ -158,7 +159,7 @@ function M.apply(config)
     -- (zsh, bash and Nushell; not inside zellij).
     { event = { Down = { streak = 3, button = 'Left' } }, mods = 'CTRL', action = act.SelectTextAtMouseCursor('SemanticZone') },
     { event = { Up = { streak = 3, button = 'Left' } }, mods = 'CTRL', action = copy_on_release },
-    -- Ctrl+Shift+drag moves the window by default; Win+drag too, with no title bar to grab.
+    -- Ctrl+Shift+drag moves the window from anywhere by default; Win+drag too.
     { event = { Drag = { streak = 1, button = 'Left' } }, mods = 'SUPER', action = act.StartWindowDrag },
   }
 

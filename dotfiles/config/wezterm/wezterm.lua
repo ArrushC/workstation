@@ -8,7 +8,8 @@
 -- WEZTERM_CONFIG_FILE and puts the wezterm CLI on the User PATH).
 -- It sits beside Warp (the primary terminal) and Windows Terminal (the default one):
 -- Catppuccin Mocha with the mauve accent, JetBrainsMono NFM 10.5, Nushell through mise's
--- shim, no title bar, and the tab bar at the bottom with a status footer on its right.
+-- shim, and the tab bar as the title bar: at the top, the status on its right, then
+-- minimize and close buttons.
 -- Ctrl+Shift+H lists every key.
 --
 -- This file links the modules beside it, each owning its settings and event handlers,
@@ -17,7 +18,7 @@
 --   wsl.lua         Nushell, the launcher's shell entries, WSL domains
 --   sshconfig.lua   ~/.ssh/config.local's hosts, read and edited in place (no settings)
 --   domains.lua     SSH: the launcher's host entries, finding and naming a tab's host
---   status.lua      the status footer and its notices (flash)
+--   status.lua      the status on the tab bar's right and its notices (flash)
 --   tabs.lua        tab titles: marks, glyphs, names, host colours
 --   actions.lua     what keys, mouse, + and the palette do (the SSH host editor too); links;
 --                   file links in helix

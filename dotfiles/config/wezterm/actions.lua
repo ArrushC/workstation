@@ -382,7 +382,7 @@ M.switch_tab = wezterm.action_callback(function(window, pane)
 end)
 
 -- Alt+Shift+S: resize mode. Arrows move the split 3 cells at a time until Esc or Enter;
--- the footer says RESIZE meanwhile. (Ctrl+Shift+Alt+arrows still move it by one.)
+-- the status says RESIZE meanwhile. (Ctrl+Shift+Alt+arrows still move it by one.)
 M.resize_mode = act.ActivateKeyTable({ name = 'resize_pane', one_shot = false })
 
 -- Quick selects that act on the pick. Both type into the pane as a paste, so the pane's
