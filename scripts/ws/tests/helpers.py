@@ -90,6 +90,7 @@ class Scratch(unittest.TestCase):
         lg = log or self.root / "mise.log"
         return self.fake("mise", f"""printf '%s\\n' "$*" >>"{lg}"
 case " $* " in
+  *" bootstrap "*) echo "WS_BACKED_UP=${{WS_BACKED_UP:-}}" >>"{lg}.env" ;;
   *" dot status --json"*) cat "{st}" ;;
   *" dot diff "*) cat "{df}" ;;
   *" tasks ls "*) echo '[]' ;;

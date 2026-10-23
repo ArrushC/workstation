@@ -2406,6 +2406,11 @@ PY
       bad "$f: wsh must be \`ws help\` (the catalogue), not its own text"
       errs=$((errs + 1))
     fi
+    # wsa's logic is ws apply's (scripts/ws/wslib/apply.py): a profile only hands over.
+    if ! grep -qxE 'wsa\(\) \{ ws apply "\$@"; \}|def --wrapped wsa \[\.\.\.args\] \{ ws apply \.\.\.\$args \}|function wsa \{ ws apply @args \}' "$f"; then
+      bad "$f: wsa must be one line calling \`ws apply\`, not its own apply logic"
+      errs=$((errs + 1))
+    fi
   done
   zsh_body=$(sed -n '/^ws() {/,/^}/p' dotfiles/zshrc.tera | grep -v -e 'WS_SHELL=' -e 'print -z')
   bash_body=$(sed -n '/^ws() {/,/^}/p' dotfiles/bashrc.tera | grep -v -e 'WS_SHELL=' -e 'read -r -e' -e 'history -s' -e 'eval "$cmd"' -e '^  fi$' -e 'bash has no print -z')
@@ -2414,7 +2419,7 @@ PY
     diff <(printf '%s\n' "$zsh_body") <(printf '%s\n' "$bash_body") | sed 's/^/       /' | head -20
     errs=$((errs + 1))
   fi
-  [ "$errs" -eq 0 ] && ok "ws and wsh in zshrc/bashrc (same body), config.nu and the PowerShell profile call scripts/ws/ws.py"
+  [ "$errs" -eq 0 ] && ok "ws, wsh and wsa in zshrc/bashrc (same ws body), config.nu and the PowerShell profile call scripts/ws/ws.py"
 }
 
 run_parallel() {

@@ -16,6 +16,10 @@ if sys.version_info < (3, 11):
         "ws: needs Python 3.11 or newer (mise's python, tools.python in config.toml); "
         "this is %s. Run wsu (or mise install python) first.\n" % sys.version.split()[0]
     )
+    if sys.argv[1:3] == ["baseline", "snapshot"]:
+        sys.stderr.write("ws: no pre-apply backup: the apply goes ahead without one.\n")
+    if sys.argv[1:2] == ["apply"]:
+        sys.stderr.write("ws: to apply without the local-edit check: mise -C ~ bootstrap --only dotfiles --yes\n")
     # The bootstrap hooks must never stop a bootstrap: before the tools phase has
     # installed mise's Python, they skip with this message.
     sys.exit(0 if sys.argv[1:2] == ["baseline"] else 2)

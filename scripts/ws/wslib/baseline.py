@@ -149,12 +149,17 @@ class Backup:
                 return None
         if self.dir is None:
             core.private_dir(core.private_dir(self.base.parent) / self.base.name)
-            self.dir = self.base / f"{core.stamp()}-{self.reason}"
-            n = 1
-            while self.dir.exists():
-                n += 1
-                self.dir = self.base / f"{core.stamp()}-{self.reason}-{n}"
-            self.dir.mkdir(mode=0o700)
+            # mkdir is the claim: it fails if the name exists, so two processes in the same
+            # second never share a set (a check before it would race).
+            name, n = f"{core.stamp()}-{self.reason}", 1
+            while True:
+                d = self.base / (name if n == 1 else f"{name}-{n}")
+                try:
+                    d.mkdir(mode=0o700)
+                    break
+                except FileExistsError:
+                    n += 1
+            self.dir = d
             _prune(self.base, KEEP_BACKUPS)
         rel = _backup_rel(path)
         dest = self.dir

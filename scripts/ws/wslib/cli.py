@@ -7,7 +7,8 @@ import os
 import sys
 import traceback
 
-SUBCOMMANDS = ("reconcile", "open", "help", "health", "actions", "baseline", "complete")
+SUBCOMMANDS = ("reconcile", "open", "apply", "help", "health", "actions", "baseline", "complete")
+COMPLETED = SUBCOMMANDS[:6]  # the ones a user types
 
 
 def _reconcile_parser() -> argparse.ArgumentParser:
@@ -41,10 +42,18 @@ def _open_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _apply_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(prog="ws apply", description=(
+        "Apply the repo's dotfiles to this home (wsa). A file the apply would overwrite that was "
+        "edited here, or that differs with no baseline to tell, is shown with its diff first, and "
+        "ws asks (it refuses when it can't ask). Other options go to mise bootstrap."))
+
+
 USAGE = """\
 usage: ws [words...]          the palette (search starts with the words)
        ws reconcile [...]     review dotfiles that differ from the repo (ws reconcile -h)
        ws open [project]      open a project workspace (ws open -h)
+       ws apply [...]         apply the repo's dotfiles, asking before a local edit is lost (wsa)
        ws health              run the health report and fix a finding
        ws help                the cheatsheet (wsh)
        ws actions [--json]    list every action and what it runs
@@ -82,6 +91,10 @@ def _main(argv: list[str]) -> int:
         from .workspace import main as open_main
 
         return open_main(_open_parser().parse_args(rest))
+    if cmd == "apply":
+        from .apply import main as apply_main
+
+        return apply_main(_apply_parser().parse_known_args(rest)[1])
     if cmd == "help":
         from .catalog import help_text, load
 
@@ -102,9 +115,18 @@ def _main(argv: list[str]) -> int:
     return palette(rest)
 
 
+# `ws baseline snapshot`'s exit status when a file the apply would overwrite couldn't be
+# backed up. The pre-dotfiles tasks pass this one status through, and mise then stops the
+# bootstrap before the dotfiles phase (and everything after it); every other outcome is 0.
+STOP_APPLY = 3
+
+
 def baseline(args: list[str]) -> int:
     """The bootstrap hooks: `record` after every dotfiles apply (post-dotfiles), `snapshot`
-    before it (pre-dotfiles). They never fail a bootstrap: any error is a warning."""
+    before it (pre-dotfiles). `record` never fails a bootstrap. `snapshot` fails it (STOP_APPLY)
+    only when a file the apply would overwrite couldn't be backed up; a check that couldn't run
+    says so and lets the apply go ahead, since no file is then known to need a backup."""
+    from . import core
     from .baseline import Store
     from .dotfiles import load, record_agreed, snapshot
 
@@ -115,28 +137,55 @@ def baseline(args: list[str]) -> int:
             print(f"{store.index_path}: {len(store.files)} file(s) recorded"
                   + (" (written for another home: read-only here)" if store.foreign else ""))
             return 0
+        if what == "snapshot" and os.environ.get("WS_BACKED_UP") == "1":
+            return 0  # wsa or ws reconcile backed up what this apply overwrites, and stops if it can't
         model = load(store, render_templates=False)
         if model.errors:
-            print(f"ws baseline: skipped ({model.errors[0]})", file=sys.stderr)
+            if what == "snapshot":
+                _no_snapshot(f"the check couldn't run: {model.errors[0]}")
+            else:
+                print(f"ws baseline: not recorded ({model.errors[0]})", file=sys.stderr)
             return 0
         if what == "record":
             n = record_agreed(model, store, "apply")
             if n:
                 print(f"ws: dotfile baselines updated ({n})")
         elif what == "snapshot":
-            if os.environ.get("WS_RECONCILE_APPLY") == "1":
-                return 0  # ws reconcile already backed up the one file it applies
-            b = snapshot(model, store)
+            b, failed = snapshot(model, store)
             if b.saved:
                 print(f"ws: backed up {snapshot_words(b.counts())} the apply may overwrite: {b.dir}")
                 print("    (ws reconcile --backups lists them with restore commands)")
+            if failed:
+                print(core.paint(
+                    "ws: PRE-APPLY BACKUP FAILED: couldn't copy "
+                    + "; ".join(f"{core.tilde(f)} ({why})" for f, why in failed)
+                    + ". The apply is stopped, so they aren't overwritten without a backup. Keep them with "
+                    "ws reconcile (record or merge), or fix what stopped the backup, then run it again; to "
+                    "overwrite them without one, set WS_BACKED_UP=1 for that run.", "red", on=core.color_on(sys.stderr)),
+                    file=sys.stderr)
+                return STOP_APPLY
+            if not b.saved:
+                print(f"ws: pre-apply backup: nothing to back up ({len(model.items)} managed file(s) checked, "
+                      "no local edit the apply could overwrite)")
         else:
             print(f"ws baseline: unknown action {what!r} (record, snapshot, status)", file=sys.stderr)
             return 2
-    except Exception:  # noqa: BLE001 (a hook must never stop the bootstrap)
-        print("ws baseline: failed (the bootstrap carries on):", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 (before any file is known to need a backup)
+        if what == "snapshot":
+            _no_snapshot(f"{type(e).__name__}: {e}")
+        else:
+            print("ws baseline: failed (the bootstrap carries on):", file=sys.stderr)
         traceback.print_exc(limit=3)
     return 0
+
+
+def _no_snapshot(why: str) -> None:
+    """The pre-apply check didn't get as far as knowing what the apply overwrites, so nothing
+    was backed up and the apply goes ahead: say so, distinct from "nothing to back up"."""
+    from . import core
+
+    print(core.paint(f"ws: no pre-apply backup: {why}. The apply goes ahead without one, so a local edit it "
+                     "overwrites may not be recoverable.", "yellow", on=core.color_on(sys.stderr)), file=sys.stderr)
 
 
 def snapshot_words(counts: dict[str, int]) -> str:
@@ -157,7 +206,7 @@ def complete(words: list[str]) -> int:
     """Candidates for the word being completed, for the zsh, bash and Nushell completers."""
     if len(words) <= 1:
         cur = words[0] if words else ""
-        print("\n".join(s for s in SUBCOMMANDS[:5] if s.startswith(cur)))
+        print("\n".join(s for s in COMPLETED if s.startswith(cur)))
         return 0
     sub, cur = words[0], words[-1]
     if sub == "open" and not cur.startswith("-"):

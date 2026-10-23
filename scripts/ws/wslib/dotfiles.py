@@ -308,21 +308,37 @@ def record_agreed(model: Model, store: Store, how: str) -> int:
     return n
 
 
-def snapshot(model: Model, store: Store) -> Backup:
-    """Before an apply: back up every live file that the apply would overwrite and the
-    baseline doesn't already hold (a local edit, or a difference with no baseline)."""
+def at_risk(item: Item) -> str:
+    """Why an apply would lose this live file's content: LOCAL_EDIT, or NO_BASELINE when it
+    differs with nothing to say which side moved. "" when it wouldn't: the live file matches
+    the repo, the baseline holds it, or the apply leaves it alone."""
+    live = item.live_data
+    if live is None:
+        return ""
+    if item.cls == SOURCE_MISSING:
+        return ""  # mise refuses the whole apply and writes nothing
+    if item.intended_known and item.intended is not None and live == item.intended:
+        return ""
+    if item.entry.template and item.entry.state == "applied":
+        return ""
+    if item.has_base and live == item.base:
+        return ""
+    if item.intended_known and item.intended is None:
+        return ""  # removed from the repo: an apply doesn't touch it
+    return LOCAL_EDIT if item.has_base else NO_BASELINE
+
+
+def snapshot(model: Model, store: Store) -> tuple[Backup, list[tuple[Path, str]]]:
+    """Before an apply: back up every live file the apply would overwrite and the baseline
+    doesn't already hold (at_risk). Returns the set and each such file that couldn't be backed
+    up, with why; one failure doesn't stop the others."""
     backup = Backup("pre-apply", store.root)
+    failed: list[tuple[Path, str]] = []
     for item in model.items:
-        live = item.live_data
-        if live is None:
-            continue
-        if item.intended_known and item.intended is not None and live == item.intended:
-            continue
-        if item.entry.template and item.entry.state == "applied":
-            continue
-        if item.has_base and live == item.base:
-            continue
-        if item.intended_known and item.intended is None:
-            continue  # removed from the repo: an apply doesn't touch it
-        backup.save(item.live, live, LOCAL_EDIT if item.has_base else NO_BASELINE)
-    return backup
+        why = at_risk(item)
+        if why:
+            try:
+                backup.save(item.live, item.live_data, why)
+            except Exception as e:  # noqa: BLE001 (whatever it was, this file has no backup)
+                failed.append((item.live, getattr(e, "strerror", None) or str(e) or type(e).__name__))
+    return backup, failed

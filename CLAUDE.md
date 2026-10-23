@@ -60,7 +60,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `mise run --skip-tools dotfiles-baseline`), each command with its own `|| true` (`sh -o errexit`).
 - Both OSes keep `pre-dotfiles` (`dotfiles-snapshot[-win]`) and `post-dotfiles`
   (`dotfiles-baseline[-win]`): ws reconcile's backups and baseline (`check_bootstrap_config`
-  pins them). They never fail a bootstrap: before mise's Python exists they skip.
+  pins them). `post-dotfiles` never fails a bootstrap. `pre-dotfiles` fails it for one reason
+  only: a file the apply would overwrite couldn't be backed up (`ws baseline snapshot` exits 3,
+  `cli.STOP_APPLY`; the tasks pass 3 through and turn anything else into 0, the Windows one with
+  `if errorlevel 3 if not errorlevel 4`). Before mise's Python exists, or when its check can't
+  run, it says `no pre-apply backup` and the apply goes ahead. `WS_BACKED_UP=1` skips it: wsa and
+  reconcile set it after backing up themselves (and stopping if they can't).
 - Linux-only steps hang off `config.linux.toml`'s `final` hook (vcpkg, fonts, wezterm-terminfo…):
   a full `mise bootstrap` only, never `--only dotfiles`.
 - dnf installs in one batch, so one unresolvable name fails the run. Only add names verified on EL8
@@ -93,7 +98,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `check-templates.sh` may pin one). `check_layout` holds the three-file, OS-token layout.
 - `vars.sudo` (`config.local.toml`) is written only by `bootstrap.sh`; missing means yes.
 - Every `ws*` command and `bootstrap.ps1` pin `mise -C` to the home directory. mise finds its config by walking up from
-  the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` also refuses unless
+  the cwd, so an unpinned run from `/mnt/c/...` manages the wrong checkout. `wsa` (`ws apply`) also refuses unless
   `mise dot status --json`'s `.files[0].origin.config_root` is the pinned root (unknown proceeds).
 
 **Dotfiles**
@@ -149,6 +154,15 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **ws (`scripts/ws`)**
 - One catalogue: `actions.toml` feeds the palette and `wsh` (`ws help`) in all four shells; never
   put a cheatsheet back in an rc file (`check_ws`). ASCII only (PowerShell 5.1 consoles).
+- Workflow logic lives in ws, not in the four profiles: every shell's `wsa` is one line calling
+  `ws apply` (`wslib/apply.py`; `check_ws`). A profile keeps only what a child process can't do:
+  change directory, fill the prompt, complete, bind keys. `ws apply` asks only when content
+  would be lost (`dotfiles.at_risk`, the same rule the pre-apply backup uses); a check that
+  can't run warns and applies. After a yes it re-runs the whole check (mise re-renders
+  templates, so their variables count), backs up itself and stops on any change or failed
+  backup. Backup sets are claimed by an exclusive `mkdir` (`-N` on a collision), never a
+  check-then-create. In nu 0.113 a failing external ends the def, so config.nu's
+  `ws` catches ws.py's failure, cleans up, then re-raises it (`$failed.raw`).
 - The picker returns an action id; the argv comes from the catalogue or mise's task list. A `change`
   action prints its command and asks. Shell functions are inserted on the prompt, never run by ws.
 - Reconcile never copies a rendered template over its `.tera` source, never `mise dot add`s a

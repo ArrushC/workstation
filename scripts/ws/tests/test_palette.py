@@ -184,10 +184,11 @@ class Cli(Scratch):
         # No mise on PATH at all: the hook says so and exits 0, so a bootstrap carries on.
         p = self.run_ws("baseline", "record", env={"PATH": str(self.bin)})
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn("skipped", p.stderr)
+        self.assertIn("not recorded", p.stderr)
         self.fake("mise", "echo 'not json'")
         p = self.run_ws("baseline", "snapshot")
         self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("no pre-apply backup: the check couldn't run", p.stderr)  # not "nothing to back up"
 
     def test_help_matches_catalogue(self) -> None:
         p = self.run_ws("help", env={"WS_SHELL": "nu"})
