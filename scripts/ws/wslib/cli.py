@@ -115,9 +115,17 @@ def _main(argv: list[str]) -> int:
     return palette(rest)
 
 
+# `ws baseline snapshot`'s exit status when a file the apply would overwrite couldn't be
+# backed up. The pre-dotfiles tasks pass this one status through, and mise then stops the
+# bootstrap before the dotfiles phase (and everything after it); every other outcome is 0.
+STOP_APPLY = 3
+
+
 def baseline(args: list[str]) -> int:
     """The bootstrap hooks: `record` after every dotfiles apply (post-dotfiles), `snapshot`
-    before it (pre-dotfiles). They never fail a bootstrap: any error is a warning."""
+    before it (pre-dotfiles). `record` never fails a bootstrap. `snapshot` fails it (STOP_APPLY)
+    only when a file the apply would overwrite couldn't be backed up; a check that couldn't run
+    says so and lets the apply go ahead, since no file is then known to need a backup."""
     from . import core
     from .baseline import Store
     from .dotfiles import load, record_agreed, snapshot
@@ -135,7 +143,7 @@ def baseline(args: list[str]) -> int:
         model = load(store, render_templates=False)
         if model.errors:
             if what == "snapshot":
-                _backup_failed(f"the check couldn't run: {model.errors[0]}")
+                _no_snapshot(f"the check couldn't run: {model.errors[0]}")
             else:
                 print(f"ws baseline: not recorded ({model.errors[0]})", file=sys.stderr)
             return 0
@@ -149,31 +157,36 @@ def baseline(args: list[str]) -> int:
                 print(f"ws: backed up {snapshot_words(b.counts())} the apply may overwrite: {b.dir}")
                 print("    (ws reconcile --backups lists them with restore commands)")
             if failed:
-                _backup_failed("couldn't copy " + "; ".join(f"{core.tilde(f)} ({why})" for f, why in failed))
-            elif not b.saved:
+                print(core.paint(
+                    "ws: PRE-APPLY BACKUP FAILED: couldn't copy "
+                    + "; ".join(f"{core.tilde(f)} ({why})" for f, why in failed)
+                    + ". The apply is stopped, so they aren't overwritten without a backup. Keep them with "
+                    "ws reconcile (record or merge), or fix what stopped the backup, then run it again; to "
+                    "overwrite them without one, set WS_BACKED_UP=1 for that run.", "red", on=core.color_on(sys.stderr)),
+                    file=sys.stderr)
+                return STOP_APPLY
+            if not b.saved:
                 print(f"ws: pre-apply backup: nothing to back up ({len(model.items)} managed file(s) checked, "
                       "no local edit the apply could overwrite)")
         else:
             print(f"ws baseline: unknown action {what!r} (record, snapshot, status)", file=sys.stderr)
             return 2
-    except Exception as e:  # noqa: BLE001 (a hook must never stop the bootstrap)
+    except Exception as e:  # noqa: BLE001 (before any file is known to need a backup)
         if what == "snapshot":
-            _backup_failed(f"{type(e).__name__}: {e}")
+            _no_snapshot(f"{type(e).__name__}: {e}")
         else:
             print("ws baseline: failed (the bootstrap carries on):", file=sys.stderr)
         traceback.print_exc(limit=3)
     return 0
 
 
-def _backup_failed(why: str) -> None:
-    """The pre-apply backup didn't happen (or not for every file). The hook still exits 0, so
-    the apply goes ahead: say plainly that what it overwrites may be unrecoverable."""
+def _no_snapshot(why: str) -> None:
+    """The pre-apply check didn't get as far as knowing what the apply overwrites, so nothing
+    was backed up and the apply goes ahead: say so, distinct from "nothing to back up"."""
     from . import core
 
-    print(core.paint(f"ws: PRE-APPLY BACKUP FAILED: {why}. The apply goes ahead anyway (this hook never "
-                     "stops a bootstrap), so a local edit it overwrites may not be recoverable from a "
-                     "backup. wsa takes its own backup and stops instead.", "red", on=core.color_on(sys.stderr)),
-          file=sys.stderr)
+    print(core.paint(f"ws: no pre-apply backup: {why}. The apply goes ahead without one, so a local edit it "
+                     "overwrites may not be recoverable.", "yellow", on=core.color_on(sys.stderr)), file=sys.stderr)
 
 
 def snapshot_words(counts: dict[str, int]) -> str:

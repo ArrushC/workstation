@@ -12,10 +12,9 @@ After a yes, wsa checks again before it runs mise: if a file at risk changed whi
 waited, another file became at risk, or what would replace one changed (for a template, mise
 renders it again, so a change to its .tera file or to any variable it uses shows), nothing is
 applied and you review it afresh; a check that can't run then refuses too. It then backs the
-files up itself and stops if that fails, so the backup a yes promises exists before anything
-is overwritten. (The pre-dotfiles hook, which a raw `mise bootstrap` or wsu relies on instead,
-reports a failed backup but never stops the apply.) A few milliseconds still pass between
-that check and mise's write.
+files up itself and stops if that fails, and tells the pre-dotfiles hook (WS_BACKED_UP) that
+it needn't take a second copy. A few milliseconds still pass between that check and mise's
+write.
 
 mise resolving a config root other than this home means the -C pin failed and the wrong
 checkout would be applied: that always refuses. The check says which way it went: it ran
@@ -77,11 +76,12 @@ def _bootstrap(extra: list[str], *, backed_up: bool) -> int:
                     env={"WS_BACKED_UP": "1"} if backed_up else None).returncode
 
 
-def _decision(risky: list[tuple[dotfiles.Item, str]]) -> dict[str, tuple[object, ...]]:
-    """What the answer was given about: each file at risk, as it was read, and what would
+def _decision(risky: list[tuple[dotfiles.Item, str]]) -> dict[str, tuple[str | None, str, str | None]]:
+    """What the answer was given about: each file at risk, its content as read, and what would
     replace it (for a template, mise's render, so a change to any of its inputs shows)."""
-    return {str(item.live): (item.seen.get(item.live), why,
-                             baseline.sha(item.intended) if item.intended_known and item.intended is not None else None)
+    def digest(data: bytes | None) -> str | None:
+        return None if data is None else baseline.sha(data)
+    return {str(item.live): (digest(item.live_data), why, digest(item.intended) if item.intended_known else None)
             for item, why in risky}
 
 
@@ -171,8 +171,8 @@ def _confirm(risky: list[tuple[dotfiles.Item, str]]) -> bool:
         print(f"  {core.tilde(item.live)}  ({'edited here since the last deploy' if why == LOCAL_EDIT else 'differs, and no baseline says which side changed'})")
     if not core.interactive():
         print(f"wsa: refusing to overwrite them non-interactively. Nothing applied. Keep an edit with ws reconcile "
-              f"(record or merge), or overwrite them anyway with {RAW} (its pre-dotfiles hook tries to back them "
-              "up, and carries on, saying so, if it can't)", file=sys.stderr)
+              f"(record or merge), or overwrite them anyway with {RAW} (its pre-dotfiles hook backs them up "
+              "first, and stops the apply if it can't)", file=sys.stderr)
         return False
     if ui.confirm("Apply anyway and overwrite them? wsa backs each up first, and stops if it can't."):
         return True

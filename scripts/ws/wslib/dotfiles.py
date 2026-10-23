@@ -336,8 +336,8 @@ def at_risk(item: Item) -> str:
 
 def snapshot(model: Model, store: Store) -> tuple[Backup, list[tuple[Path, str]]]:
     """Before an apply: back up every live file the apply would overwrite and the baseline
-    doesn't already hold (at_risk). Returns the set and each file that couldn't be backed up,
-    with why; one failure doesn't stop the others."""
+    doesn't already hold (at_risk). Returns the set and each such file that couldn't be backed
+    up, with why; one failure doesn't stop the others."""
     backup = Backup("pre-apply", store.root)
     failed: list[tuple[Path, str]] = []
     for item in model.items:
@@ -345,6 +345,6 @@ def snapshot(model: Model, store: Store) -> tuple[Backup, list[tuple[Path, str]]
         if why:
             try:
                 backup.save(item.live, item.live_data, why)
-            except OSError as e:
-                failed.append((item.live, e.strerror or str(e)))
+            except Exception as e:  # noqa: BLE001 (whatever it was, this file has no backup)
+                failed.append((item.live, getattr(e, "strerror", None) or str(e) or type(e).__name__))
     return backup, failed

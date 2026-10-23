@@ -188,7 +188,7 @@ class Cli(Scratch):
         self.fake("mise", "echo 'not json'")
         p = self.run_ws("baseline", "snapshot")
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn("PRE-APPLY BACKUP FAILED: the check couldn't run", p.stderr)  # not "nothing to back up"
+        self.assertIn("no pre-apply backup: the check couldn't run", p.stderr)  # not "nothing to back up"
 
     def test_help_matches_catalogue(self) -> None:
         p = self.run_ws("help", env={"WS_SHELL": "nu"})

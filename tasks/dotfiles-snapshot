@@ -3,12 +3,15 @@
 #MISE hide=true
 # Runs before every dotfiles apply. An apply overwrites a copy or template target that
 # differs without asking (wsu's bootstrap included), so a local edit the baseline doesn't
-# hold is copied aside first, when that works. It never stops a bootstrap (mise abandons the
-# whole bootstrap on a failing hook): a backup that fails is reported as PRE-APPLY BACKUP
-# FAILED and the apply goes ahead. wsa backs up itself and stops instead (WS_BACKED_UP).
+# hold is copied aside first. Only one failure stops the bootstrap: such a file that couldn't
+# be backed up (ws.py exits 3, passed through; mise then stops before the dotfiles phase).
+# Anything else, no Python yet included, exits 0 with a message and the apply goes ahead.
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 py=$(command -v python3) || {
   echo "ws: no pre-apply backup (no python3 yet): the apply goes ahead without one" >&2
   exit 0
 }
-"$py" "$root/scripts/ws/ws.py" baseline snapshot || true
+"$py" "$root/scripts/ws/ws.py" baseline snapshot
+rc=$?
+[ "$rc" -eq 3 ] && exit 3
+exit 0

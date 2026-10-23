@@ -180,21 +180,31 @@ post-dotfiles = "{py} baseline record"
         self.assertTrue(sets[0].endswith("-pre-apply"), listing)
         self.assertEqual((self.home / ".app conf").read_text(), "a = 1\n")
 
-    @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "POSIX permissions, not root")
-    def test_a_failed_pre_apply_backup_doesnt_stop_the_apply(self) -> None:
-        # What wsu and a raw apply do when the hook can't back up: it says so, exits 0, and mise
-        # deploys anyway (a failing hook would stop the whole bootstrap). wsa stops instead.
+    def test_a_backup_that_fails_stops_the_apply_only_when_something_needs_one(self) -> None:
+        # The pre-dotfiles hook exits 3 when a file the apply would overwrite can't be backed
+        # up, and mise stops before the dotfiles phase; with nothing at risk it goes ahead.
         p = self.mise("dot", "apply", "--force", "--yes")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        self.write(self.home / ".app conf", "a = local\n")
         backups = self.state / "dotfiles/backups"
-        backups.mkdir(mode=0o700, parents=True, exist_ok=True)
-        backups.chmod(0o500)  # empty, so the scratch dir still cleans up
+        shutil.rmtree(backups, ignore_errors=True)
+        self.write(backups, "a file where the backups directory goes")  # every backup now fails
+        self.write(self.repo / "dotfiles/app conf", "a = 2\n")             # a repo change: nothing at risk
         p = self.mise("dot", "apply", "--yes")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("pre-apply backup: nothing to back up", p.stdout + p.stderr)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")
+        self.write(self.home / ".app conf", "a = local\n")                 # now a local edit is at risk
+        self.write(self.repo / "dotfiles/greeting.tera", "hey {{ vars.name }}\nline two\n")
+        p = self.mise("dot", "apply", "--yes")
+        self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("PRE-APPLY BACKUP FAILED: couldn't copy ~/.app conf", p.stdout + p.stderr)
-        self.assertEqual((self.home / ".app conf").read_text(), "a = 1\n")  # overwritten, no backup
-
+        self.assertIn("The apply is stopped", p.stdout + p.stderr)
+        self.assertEqual((self.home / ".app conf").read_text(), "a = local\n")           # kept
+        self.assertEqual((self.home / ".greeting").read_text(), "hello Scratch Host\nline two\n")  # nothing applied
+        p = subprocess.run(["mise", "-C", str(self.home), "dot", "apply", "--yes"], capture_output=True, text=True,
+                           cwd=self.home, env=dict(os.environ, WS_BACKED_UP="1"))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)  # the documented way to overwrite anyway
+        self.assertEqual((self.home / ".app conf").read_text(), "a = 2\n")
 
 if __name__ == "__main__":
     unittest.main()
