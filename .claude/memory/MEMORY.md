@@ -29,3 +29,4 @@
 - [WezTerm: no wezterm.gui.* at load](project-wezterm-no-gui-calls-at-load.md) — it deadlocks WezTerm before the GUI exists; pcall and the lint stand-in can't catch it.
 - [WezTerm: WebGpu + 120 fps](project-wezterm-render-webgpu-120fps.md) — a 60 fps cap and OpenGL were each measured slower on this Intel laptop; don't re-add them.
 - [WezTerm: unfocused cursor is a hollow box](project-wezterm-unfocused-cursor-hollow.md) — hard-coded in WezTerm, no config keeps the bar; the user would prefer a bar but left it (an upstream PR is the only route).
+- [WezTerm: integrated title bar reverted](project-wezterm-integrated-title-bar-reverted.md) — #107's top tab bar with minimize/close buttons was cramped, laggy to drag and slow; reverted, don't re-propose.

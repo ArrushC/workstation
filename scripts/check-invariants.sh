@@ -1682,19 +1682,7 @@ check(c.check_for_updates == false, 'check_for_updates is not false (wezterm-nig
 check(c.term == 'wezterm', 'term is not wezterm')
 check(c.scrollback_lines == 1000000, 'scrollback_lines is not 1,000,000')
 check(c.front_end == 'WebGpu' and c.webgpu_power_preference == 'HighPerformance' and c.max_fps == 120, 'rendering is not WebGpu + HighPerformance + 120 fps')
--- The tab bar is the title bar: double-click-to-maximize wants exactly this value, and a
--- hidden bar (one tab) would take the buttons with it.
-check(c.window_decorations == 'INTEGRATED_BUTTONS|RESIZE' and c.tab_bar_at_bottom == false and c.use_fancy_tab_bar == false
-  and c.enable_tab_bar ~= false and c.hide_tab_bar_if_only_one_tab ~= true, 'chrome: the retro tab bar is not the title bar (INTEGRATED_BUTTONS|RESIZE, at the top, always shown)')
--- The retro bar draws each button from tab_bar_style and hit-tests it by its hover's width,
--- so a hover of another width moves the button under the mouse.
-local buttons = table.concat(c.integrated_title_buttons or {}, ',')
-check(buttons == 'Hide,Close' and c.integrated_title_button_alignment == 'Right', 'the window buttons are not minimize and close, on the right: ' .. buttons)
-for _, b in ipairs(c.integrated_title_buttons) do
-  local k = 'window_' .. b:lower()
-  local s, h = (c.tab_bar_style or {})[k], (c.tab_bar_style or {})[k .. '_hover']
-  check(s and h and wezterm.column_width(s) == wezterm.column_width(h), 'tab_bar_style.' .. k .. ' and its _hover are missing or differ in width')
-end
+check(c.window_decorations == 'RESIZE' and c.tab_bar_at_bottom == true and c.use_fancy_tab_bar == false, 'chrome: not RESIZE with the retro tab bar at the bottom')
 check(c.visual_bell and c.visual_bell.target == 'CursorColor', 'no visual bell')
 check(c.default_cursor_style == 'BlinkingBar' and c.cursor_blink_rate > 0, 'the cursor is not a blinking bar')
 -- WezTerm reads an easing's four numbers as a one-dimensional cubic: one whose first isn't 0
@@ -1778,7 +1766,7 @@ for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config
   check(type(handlers[e]) == 'function', 'no ' .. e .. ' handler')
 end
 
--- Status (the tab bar's right end).
+-- Footer.
 local status, performed, pasted, sent
 local function window(key_table, id)
   return {
@@ -1814,18 +1802,18 @@ end
 local wide = { cols = 140, viewport_rows = 38, scrollback_rows = 10234, scrollback_top = 0 }
 battery = { { state_of_charge = 0.42, state = 'Discharging' } }
 handlers['update-status'](window(nil), pane(wide, false, 10233))
-check(has(status, '10,234 · 38 rows') and has(status, '42%') and has(status, os.date('%a')), 'status: ' .. tostring(status))
+check(has(status, '10,234 · 38 rows') and has(status, '42%') and has(status, os.date('%a')), 'footer: ' .. tostring(status))
 handlers['update-status'](window(nil), pane(wide, false, 9799))
-check(has(status, '9,800/10,234'), 'the status does not show the cursor line once a program moves it up: ' .. status)
+check(has(status, '9,800/10,234'), 'footer does not show the cursor line once a program moves it up: ' .. status)
 handlers['update-status'](window('copy_mode'), pane(wide, true, 0))
-check(has(status, 'COPY') and not has(status, 'rows'), 'status in copy mode over a full-screen app: ' .. status)
+check(has(status, 'COPY') and not has(status, 'rows'), 'footer in copy mode over a full-screen app: ' .. status)
 handlers['update-status'](window('search_mode'), pane(wide, false, 0))
-check(has(status, 'SEARCH'), 'the status has no SEARCH badge: ' .. status)
+check(has(status, 'SEARCH'), 'footer has no SEARCH badge: ' .. status)
 handlers['update-status'](window('resize_pane'), pane(wide, false, 0))
-check(has(status, 'RESIZE'), 'the status has no RESIZE badge: ' .. status)
+check(has(status, 'RESIZE'), 'footer has no RESIZE badge: ' .. status)
 battery = { { state_of_charge = 1, state = 'Full' } }
 handlers['update-status'](window(nil), pane({ cols = 70, viewport_rows = 38, scrollback_rows = 500, scrollback_top = 0 }, false, 499))
-check(not has(status, 'rows') and not has(status, '%') and has(status, os.date('%H:%M')), 'narrow status: ' .. status)
+check(not has(status, 'rows') and not has(status, '%') and has(status, os.date('%H:%M')), 'narrow footer: ' .. status)
 
 -- Notices.
 local w, p = window(nil), pane(wide, false, 10233)
@@ -1869,11 +1857,11 @@ local host_colour = tab_bg(bg)
 check(not wezterm.GLOBAL.bell_panes['7'], 'viewing the tab does not clear its bell mark')
 check(host_colour ~= '#cba6f7' and host_colour:match('^#%x+$'), 'an active SSH tab is not filled with its host colour: ' .. tostring(host_colour))
 handlers['update-status'](window(nil, 2), sp)
-check(has(status, 'dev10 · zellij:main'), 'the status does not name the SSH host and its zellij session: ' .. status)
+check(has(status, 'dev10 · zellij:main'), 'the footer does not name the SSH host and its zellij session: ' .. status)
 local sp_dims = sp.get_dimensions
 sp.get_dimensions = function() return { cols = 120, viewport_rows = 38, scrollback_rows = 10, scrollback_top = 0 } end
 handlers['update-status'](window(nil, 2), sp)
-check(has(status, 'dev10') and not has(status, 'zellij'), 'a narrower status keeps the zellij session: ' .. status)
+check(has(status, 'dev10') and not has(status, 'zellij'), 'a narrower footer keeps the zellij session: ' .. status)
 sp.get_dimensions = sp_dims
 bg.is_active = false
 check(title(bg) == ' ● > 1: dev10 ', 'unseen output: [' .. title(bg) .. ']')
@@ -1954,14 +1942,14 @@ check(title(wsl) == ' $ 1: AlmaLinux-9 ', 'a WSL tab back from ssh is not named 
 wsl.tab_title = string.rep('n', 60)
 check(#title(wsl) <= 32, 'a long name overflows max_width: ' .. #title(wsl))
 
--- The status names the host a WSL tab has ssh'd to (OSC 7, else a user@host title).
+-- The footer names the host a WSL tab has ssh'd to (OSC 7, else a user@host title).
 local wsl_proc = { name = 'wsl.exe', argv = { 'wsl.exe' } }
 handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 44, domain = 'WSL:AlmaLinux-9', cwd = 'file://build01.corp/home/me', proc = wsl_proc }))
-check(has(status, 'build01.corp'), "the status does not name the host a WSL tab has ssh'd to: " .. status)
+check(has(status, 'build01.corp'), "the footer does not name the host a WSL tab has ssh'd to: " .. status)
 handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 45, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@cache-apl:~', proc = wsl_proc }))
-check(has(status, 'cache-apl'), 'the status does not name a host known only from its title: ' .. status)
+check(has(status, 'cache-apl'), 'the footer does not name a host known only from its title: ' .. status)
 handlers['update-status'](window(nil, 3), pane(wide, false, 0, { id = 46, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@PC:~', proc = wsl_proc }))
-check(not has(status, 'PC'), 'the status names this machine as a WSL tab\'s host: ' .. status)
+check(not has(status, 'PC'), 'the footer names this machine as a WSL tab\'s host: ' .. status)
 
 -- New tabs and splits: WezTerm's default, except a WSL pane whose directory isn't in the
 -- distro starts in ~ (wsl.exe --cd ~), and an SSH tab's run its ssh again.
@@ -2158,7 +2146,7 @@ check(has(slurp(), 'Host delta'), 'No deleted the host')
 open_host('delta', 'Delete')
 pick('Yes')
 check(not has(slurp(), 'delta') and performed.action == 'ReloadConfiguration', 'Yes did not delete the host and reload: ' .. slurp())
--- A file it can't write: the status says so, nothing reloads.
+-- A file it can't write: the footer says so, nothing reloads.
 os.execute('chmod 444 "' .. conf .. '"')
 performed = nil
 open_host('beta', 'Delete')
@@ -2176,7 +2164,7 @@ LUA
     # Ctrl+Shift+O writes under TEMP (as the Windows triple, $tmp/t\name: a file in $tmp).
     out=$(TEMP="$tmp/t" "${lua[@]}" "$tmp/check.lua" "$cfg" "$triple" "$tmp" "$tmp/la" "$modules" 2>&1)
     if [ "$out" = ok ]; then
-      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome and window buttons, cursor, TERM, keys, mouse, launcher, new tabs and splits, status, notices, SSH tabs and host aliases, the SSH host editor, file links, scrollback, tab marks, cheatsheet"
+      ok "$cfg and its modules (${modules//,/, }) run as $triple: theme, chrome, cursor, TERM, keys, mouse, launcher, new tabs and splits, footer, notices, SSH tabs and host aliases, the SSH host editor, file links, scrollback, tab marks, cheatsheet"
     else
       bad "$cfg as $triple: $out"
     fi

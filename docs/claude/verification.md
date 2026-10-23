@@ -176,7 +176,7 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   save reloads. A refactor that should change nothing: dump the returned config under the
   lint's stand-in before and after (same tables, same event names), and diff `show-keys`
   with `user-defined-N` masked (callback numbers follow creation order).
-- Lint: `check_wezterm_config` runs the config and its handlers (status, notices, tab marks,
+- Lint: `check_wezterm_config` runs the config and its handlers (footer, notices, tab marks,
   cheatsheet, quick selects, new tabs and splits, host aliases) under LuaJIT with a stand-in
   `wezterm` module; a new `wezterm.*` call or Pane method needs a stand-in there. It fails on
   a `.lua` beside `wezterm.lua` that nothing requires.
@@ -214,26 +214,16 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   coloured. Nushell and PowerShell tabs show `xterm-256color`. `mise run health`'s wezterm rows
   cover the entry and, from WSL, the Windows nightly, Start Menu shortcut, toast id,
   `%APPDATA%\wezterm`, `WEZTERM_CONFIG_FILE` and PATH entry (via `winterop`).
-- GUI-only (no headless check): the status, tab colours/marks, notices, toasts, Ctrl+click and
+- GUI-only (no headless check): the footer, tab colours/marks, notices, toasts, Ctrl+click and
   file links, Ctrl+triple-click, the + button's three clicks, the close prompt (Ctrl+Shift+W
   on an idle Nushell tab asks). In a launcher SSH tab: the host's
-  colour and name, `zellij:main` in a wide status, Ctrl+Shift+F5 after `exit`, and `ll` then
+  colour and name, `zellij:main` in a wide footer, Ctrl+Shift+F5 after `exit`, and `ll` then
   Ctrl+click on a file (helix opens over ssh), and Ctrl+Shift+T / Alt+Shift+D open another
   ssh to the host, while Ctrl+Alt+T opens Nushell locally in ssh's directory. In a WSL tab: `ssh` to a host (also one without this setup), and the tab
-  and status name it, then Ctrl+Shift+T opens WSL in `~`; after `exit` the tab is the
+  and footer name it, then Ctrl+Shift+T opens WSL in `~`; after `exit` the tab is the
   distro again. Ctrl+Shift+P lists "Split pane down / right"; a palette pick no longer logs
   "Error while saving recents". A WSL tab at rest is its distro's colour (AlmaLinux-9: sky),
   not mauve; the previously active tab is underlined and Alt+0 returns to it.
-- Window buttons (tab bar as title bar), driven from WSL without moving the real cursor: start
-  `wezterm.exe --config-file <%TEMP% copy> start --always-new-process -- cmd.exe /k`, find its
-  `wezterm-gui.exe` by command line, capture only it with `PrintWindow(hwnd, hdc, 3)` (client
-  area, full content; call `SetProcessDpiAwarenessContext(-4)` first), and `PostMessage`
-  WM_LBUTTONDOWN/UP in client pixels: twice on the bar's empty middle maximizes then restores
-  (`IsZoomed`), minimize sets `IsIconic`, close ends the process. The close button is the last
-  five cells (cell = 8 px at 96 dpi). Hover can't be driven: WezTerm's `TrackMouseEvent` sees
-  the real cursor outside and posts WM_MOUSELEAVE at once. On Windows the bar's drag is the
-  native caption (`WM_NCHITTEST` returns HTCAPTION there; `request_drag_move` is a no-op), so
-  dragging and snapping need a real mouse too.
 
 ## ws (palette, reconcile, workspaces)
 
