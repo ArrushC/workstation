@@ -77,8 +77,8 @@
   "gutter": {
     "folds": true,
     "runnables": true,
-    "bookmarks": true,
-    "breakpoints": false,
+    "bookmarks": false,
+    "breakpoints": true,
   },
   "collaboration_panel": {
     "dock": "left",
@@ -171,7 +171,9 @@
     },
   },
   "agent": {
-    "sidebar_side": "right",
+    "threads_sidebar": {
+      "position": "right"
+    },
     "dock": "left",
     "play_sound_when_agent_done": "always",
     "model_parameters": [],
