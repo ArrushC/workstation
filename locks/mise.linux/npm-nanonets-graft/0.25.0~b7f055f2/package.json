@@ -7,6 +7,6 @@
     }
   },
   "dependencies": {
-    "@nanonets/graft": "0.21.1"
+    "@nanonets/graft": "0.25.0"
   }
 }

@@ -51,7 +51,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 <!-- regenerated on config*.toml edits by .claude/hooks/sync-tool-memory.sh; run `wsa` to deploy -->
 
 ### Tools for both OSes (config.toml; Windows-only entries carry os)
-- `starship` 1.26.0
+- `starship` 1.27.0
 - `helix` 25.07.1
 - `aqua:neovim/neovim` 0.12.5
 - `tree-sitter` 0.27.0
@@ -59,7 +59,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `cmake` 4.4.4
 - `ninja` 1.13.2
 - `jq` 1.8.2
-- `gh` 2.102.0
+- `gh` 2.103.2
 - `fzf` 0.74.5
 - `zoxide` 0.10.0
 - `fd` 10.5.0
@@ -68,26 +68,26 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `ripgrep` 15.2.0
 - `delta` 0.20.1
 - `yazi` 26.9.1
-- `atuin` 18.23.0
-- `uv` 0.13.0
+- `atuin` 18.24.2
+- `uv` 0.13.5
 - `python` 3.14.8
-- `node` 26.11.1
+- `node` 26.12.1
 - `typescript-language-server` 6.0.2
 - `typescript` 5.9.3
 - `bash-language-server` 5.8.1
 - `yaml-language-server` 1.25.0
 - `vscode-langservers-extracted` 4.10.0
-- `go` 1.27.2
+- `go` 1.27.3
 - `gopls` 0.23.0
-- `lua-language-server` 3.19.1
+- `lua-language-server` 3.19.2
 - `basedpyright` 1.40.2
 - `ccstatusline` 2.2.32
 - `oh-my-mermaid` 0.2.0
-- `archify` 3.0.1
+- `archify` 3.2.0
 - `nerd-fonts` 3.5.1
 - `opencode` 1.19.0
-- `oh-my-pi` 18.9.1
-- `jcode` 0.99.0
+- `oh-my-pi` 18.12.6
+- `jcode` 0.99.1
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1
 - `carapace-bin` 1.8.0
@@ -97,7 +97,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 ### Linux toolbelt (config.linux.toml)
 - `zellij` 0.45.1
 - `glow` 3.0.0
-- `btop` 1.4.7
+- `btop` 1.4.8
 - `yq` 4.54.1
 - `witr` 0.3.4
 - `lazydocker` 0.25.2
@@ -106,22 +106,22 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gopass` 1.17.4
 - `age` 1.3.2
 - `gitui` 0.28.1
-- `lazygit` 0.66.1
+- `lazygit` 0.66.2
 - `jj` 0.46.0
-- `xh` 0.26.2
+- `xh` 0.26.3
 - `micro` 2.0.15
 - `ctop` 0.7.7
 - `k9s` 0.51.0
 - `rclone` 1.75.2
-- `croc` 11.5.4
+- `croc` 11.5.5
 - `hyperfine` 2.0.0
 - `sops` 3.13.3
 - `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
 - `cheat` 5.1.0
-- `fx` 40.0.0
+- `fx` 40.0.1
 - `miller` 6.22.0
-- `doggo` 1.4.0
+- `doggo` 1.4.2
 - `miniserve` 0.35.0
 - `numbat` 1.24.0
 - `grex` 1.4.6
@@ -129,17 +129,17 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gitleaks` 8.30.1
 - `hexyl` 0.17.0
 - `gum` 2.0.2
-- `rust-analyzer` 2026-10-05
+- `rust-analyzer` 2026-10-19
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
-- `herdr` 0.9.3
+- `herdr` 0.9.5
 - `zig` 0.17.0
-- `pwndbg` 2026.09.15
+- `pwndbg` 2026.10.22
 - `usql` 0.21.6
-- `fastfetch` 2.69.0
+- `fastfetch` 2.70.0
 - `procs` 0.14.12
 - `bandwhich` 0.23.1
-- `tealdeer` 1.9.0
+- `tealdeer` 1.9.1
 - `nnn` 5.3
 - `csvlens` 0.15.1
 - `trippy` 0.13.0
@@ -154,7 +154,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `difftastic` 0.71.0
 - `bottom` 0.14.9
 - `dust` 1.2.6
-- `dysk` 3.7.1
+- `dysk` 3.8.1
 - `gdu` 5.38.0
 - `sd` 1.1.0
 - `jnv` 0.7.1
@@ -162,13 +162,13 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `moor` 2.19.5
 - `gob` 3.9.0
 - `watchexec` 2.8.0
-- `qsv` 24.0.0
+- `qsv` 26.0.0
 - `zjstatus` 0.25.0
 - `neovim-releases` 0.12.5
 - `conda:helix` 25.07.1
-- `conda:ast-grep` 0.45.3
+- `conda:ast-grep` 0.51.0
 - `conda:jless` 0.9.0
-- `conda:gitlogue` 0.12.0
+- `conda:gitlogue` 0.12.1
 - `conda:htmlq` 0.4.0
 - `conda:ugrep` 7.8.5
 - `conda:datamash` 1.9
@@ -183,10 +183,10 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `glances` latest
 - `asciinema` latest
 - `harlequin` latest
-- `@nanonets/graft` 0.21.1
+- `@nanonets/graft` 0.25.0
 
 ### Host pins (config.toml [vars])
-- `vcpkg` 2026.07.29
+- `vcpkg` 2026.10.16
 - `claude` latest
 
 ### System packages (dnf, Linux; skipped without sudo)
