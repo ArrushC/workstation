@@ -22,13 +22,13 @@ locked = true
 [vars]
 # Host pins that tasks read via `#MISE env={X="{{ vars.x }}"}`;
 # scripts/check-invariants.sh asserts the dual-edits.
-vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by tasks/vcpkg
+vcpkg_version = "2026.10.16"     # microsoft/vcpkg release tag checked out by tasks/vcpkg
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
 [tools]
 # Tools for both OSes (%USERPROFILE%\.config\mise is this same checkout on Windows).
 # Windows-only entries carry `os = ["windows"]`; Linux-only tools live in config.linux.toml.
-starship = "1.26.0"
+starship = "1.27.0"
 # helix on Windows: aqua's archive carries runtime/ beside hx, so no HELIX_RUNTIME. Linux
 # takes conda-forge's build (config.linux.toml): the GitHub archive needs glibc 2.34, past
 # EL8's 2.28, and conda-forge has no Windows build.
@@ -46,7 +46,7 @@ tree-sitter = { version = "0.27.0", os = ["windows"] }
 cmake = { version = "4.4.4", os = ["windows"] }   # Neovim's :Make/:CMakeConfigure (Linux: dnf cmake)
 ninja = { version = "1.13.2", os = ["windows"] }  # CMake's generator (Linux: dnf ninja-build)
 jq = "1.8.2"
-gh = "2.102.0"
+gh = "2.103.2"
 # The zsh toolbelt Nushell on Windows shares (pickers, z/zi, Ctrl-R history, eza listings, delta pager).
 fzf = "0.74.5"
 zoxide = "0.10.0"
@@ -57,10 +57,10 @@ ripgrep = "15.2.0"
 # aqua's Linux builds are gnu (GLIBC_2.29+, past EL8's 2.28), so Linux pins musl; Windows takes the msvc zip.
 "github:dandavison/delta" = { version = "0.20.1", platforms = { linux-x64 = { asset_pattern = "delta-{{version}}-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "delta-{{version}}-x86_64-pc-windows-msvc.zip" } } }
 "github:sxyazi/yazi" = { version = "26.9.1", platforms = { linux-x64 = { asset_pattern = "yazi-x86_64-unknown-linux-musl.zip" }, windows-x64 = { asset_pattern = "yazi-x86_64-pc-windows-msvc.zip" } } }
-"github:atuinsh/atuin" = { version = "18.23.0", platforms = { linux-x64 = { asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "atuin-x86_64-pc-windows-msvc.zip" } } }
+"github:atuinsh/atuin" = { version = "18.24.2", platforms = { linux-x64 = { asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz" }, windows-x64 = { asset_pattern = "atuin-x86_64-pc-windows-msvc.zip" } } }
 # uv: builds the python-env venv (on mise's python, below). Pinned >= 0.12.10 because
 # `mise lock` refuses Python dependency locks (pypi:/pipx: tools) below that.
-uv = "0.13.0"
+uv = "0.13.5"
 # python: interpreter for the dependency-locked pypi: tools (without it mise
 # falls back to the system 3.9 and glances/harlequin refuse to install) and
 # for python-env's venv (tasks/python-env; bootstrap.ps1 on Windows). It shadows
@@ -73,10 +73,10 @@ python = "3.14.8"
 # finds typescript as a global sibling (separate npm: trees would break that). A
 # changed postinstall only re-runs when node reinstalls; scripts/lib/mise-install.sh
 # forces it. --allow-scripts=core-js silences npm 11's install-scripts warning.
-node = { version = "26.11.1", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.2 typescript@5.9.3 bash-language-server@5.8.1 yaml-language-server@1.25.0 vscode-langservers-extracted@4.10.0" }
-go = "1.27.2"
+node = { version = "26.12.1", postinstall = "npm install -g --allow-scripts=core-js typescript-language-server@6.0.2 typescript@5.9.3 bash-language-server@5.8.1 yaml-language-server@1.25.0 vscode-langservers-extracted@4.10.0" }
+go = "1.27.3"
 "go:golang.org/x/tools/gopls" = "0.23.0"
-lua-language-server = "3.19.1"
+lua-language-server = "3.19.2"
 "pypi:basedpyright" = "1.40.2"
 "npm:ccstatusline" = "2.2.32"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
 # oh-my-mermaid (`omm`): architecture docs as Mermaid diagrams in a repo's .omm/, written by
@@ -88,10 +88,10 @@ lua-language-server = "3.19.1"
 # interactive HTML architecture/workflow/sequence diagrams. The release zip is the skill
 # directory; tasks/claude (Linux) links ~/.claude/skills/archify to it, scripts/claude-skills.nu
 # (Windows) copies it there. Its update reminder is off (settings.enforced.json env).
-"github:tt-a1i/archify" = { version = "3.0.1", asset_pattern = "archify.zip" }
+"github:tt-a1i/archify" = { version = "3.2.0", asset_pattern = "archify.zip" }
 "github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font, the only pin: tasks/fonts (Linux) and bootstrap.ps1 (Windows, via scripts/install-nerd-fonts.ps1) install its TTFs
 opencode = "1.19.0"
-"github:can1357/oh-my-pi" = "18.9.1"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
+"github:can1357/oh-my-pi" = "18.12.6"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
 # jcode: a Rust coding-agent harness (not in mise's registry). The Linux build needs glibc 2.17;
 # its archive holds the binary and a launcher script that runs it by name, so the launcher
 # becomes `jcode`. Release builds update themselves and send usage telemetry (an install
@@ -99,7 +99,7 @@ opencode = "1.19.0"
 # ~/.jcode/no_telemetry marker ([dotfiles]) turn both off, and the weekly bump moves the pin.
 # Its Claude subscription login reuses Claude Code's OAuth client, which Anthropic's terms
 # restrict for third-party tools: give it an API key or another provider instead.
-"github:1jehuang/jcode" = { version = "0.99.0", platforms = { linux-x64 = { asset_pattern = "jcode-linux-x86_64.tar.gz", rename_exe = { "jcode-linux-x86_64" = "jcode" } }, windows-x64 = { asset_pattern = "jcode-windows-x86_64.tar.gz", rename_exe = { "jcode-windows-x86_64.exe" = "jcode.exe" } } } }
+"github:1jehuang/jcode" = { version = "0.99.1", platforms = { linux-x64 = { asset_pattern = "jcode-linux-x86_64.tar.gz", rename_exe = { "jcode-linux-x86_64" = "jcode" } }, windows-x64 = { asset_pattern = "jcode-windows-x86_64.tar.gz", rename_exe = { "jcode-windows-x86_64.exe" = "jcode.exe" } } } }
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", platforms = { linux-x64 = { asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }, windows-x64 = { asset_pattern = "devtoys.cli_win_x64_portable.zip" } } }   # CLI only; per-platform assets
 nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (WT); launched via %LOCALAPPDATA%\mise\shims\nu.exe
 "github:carapace-sh/carapace-bin" = { version = "1.8.0", os = ["windows"], asset_pattern = "carapace-bin_{{version}}_windows_amd64.zip" }   # Nushell's Tab completion for ~1000 CLIs (config.nu's external completer)
