@@ -15,9 +15,9 @@ local M = {}
 
 M.launcher = act.ShowLauncherArgs({ flags = 'FUZZY|LAUNCH_MENU_ITEMS|DOMAINS' })
 
--- Where a new tab or split from this pane starts. An SSH tab's runs its ssh again, so it
--- opens on the same host (the launcher's attaches the same zellij session, as another
--- client); with `no_ssh` it is the default shell here instead, in the directory its ssh
+-- Where a new tab or split from this pane starts. An SSH tab's runs its ssh again
+-- (domains.ssh_again: checking the host knows TERM=wezterm), so it opens on the same host
+-- (the launcher's attaches the same zellij session, as another client); with `no_ssh` it is the default shell here instead, in the directory its ssh
 -- started from (home once ssh has exited). Otherwise WezTerm's default (the pane's domain
 -- and directory), except that a WSL pane whose directory isn't one in the distro starts
 -- in its home. Before the shell's first OSC 7, and inside zellij (which keeps OSC 7 to
@@ -31,7 +31,7 @@ local function spawn_from(pane, no_ssh)
     local cwd = info and info.cwd
     return { domain = here, cwd = (cwd and cwd ~= '') and cwd or wezterm.home_dir }
   elseif s then
-    return { args = s.argv, domain = here }
+    return { args = domains.ssh_again(s.argv), domain = here }
   end
   local domain = pane:get_domain_name() or ''
   if domain:find('^WSL:') then
@@ -117,7 +117,7 @@ M.reconnect = wezterm.action_callback(function(window, pane)
     flash(window, pane, 'Not an SSH tab: nothing to reconnect', 'warn')
     return
   end
-  window:perform_action(act.SpawnCommandInNewTab({ args = s.argv, domain = here }), pane)
+  window:perform_action(act.SpawnCommandInNewTab({ args = domains.ssh_again(s.argv), domain = here }), pane)
 end)
 
 -- Ctrl+Alt+S: the SSH hosts in ~/.ssh/config.local (sshconfig.lua), the launcher's SSH

@@ -209,6 +209,11 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   exe name in the pane's process tree is in `skip_close_confirmation_for_processes_named`. A
   middle-click on a tab always confirms, and `AlwaysPrompt` runs the same check for the window,
   so the hook returning false is the only way a middle-click closes without asking.
+- A spawn can't change TERM: `apply_cmd_defaults` (config/src/config.rs) sets `config.term`
+  after the spawn's `set_environment_variables`, so an ssh WezTerm starts always sends
+  TERM=wezterm; `domains.ssh_launch`/`ssh_again` check on the host instead. On a host without
+  the entry, a login zsh with TERM=wezterm echoes Backspace as a space (a pty probe with
+  `HOME` pointing away from `~/.terminfo` reproduces it; with the check it's `\b...`).
 - On a host after a full bootstrap: `infocmp wezterm | head -1` exits 0; in a WezTerm WSL tab
   `echo $TERM` prints `wezterm`, `sudo env | grep ^TERM=` prints `xterm-256color`, and `ls` is
   coloured. Nushell and PowerShell tabs show `xterm-256color`. `mise run health`'s wezterm rows
