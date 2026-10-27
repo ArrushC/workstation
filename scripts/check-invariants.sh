@@ -1971,10 +1971,28 @@ check(t.action == 'SplitHorizontal' and t.args.domain == 'CurrentPaneDomain', 'A
 t = spawned('CTRL|SHIFT+t', { id = 43, domain = 'WSL:AlmaLinux-9', cwd = 'file://PC/home/me', title = 'me@cache-apl:~', proc = wsl_proc })
 check(t.args.cwd == '~', "Ctrl+Shift+T in a WSL tab on a host known from its title does not start in ~")
 local ssh_tab = { id = 47, proc = { name = 'ssh.exe', argv = ssh_argv } }
+-- Run from WezTerm, ssh sends TERM=wezterm, so the remote side checks the host knows it
+-- (zsh on one that doesn't draws Backspace as a space): a command gets the check in front,
+-- none becomes -t, the check and a login shell, and one that checks already is kept.
+local check_cmd = 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color;'
+local again = { ssh_argv[1], '-p', '2222', '-t', 'me@dev10', check_cmd .. ' exec zellij attach --create main' }
+local function same(a, b)
+  if #a ~= #b then return false end
+  for i = 1, #a do if a[i] ~= b[i] then return false end end
+  return true
+end
 t = spawned('CTRL|SHIFT+t', ssh_tab)
-check(t.action == 'SpawnCommandInNewTab' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Ctrl+Shift+T in an SSH tab does not open another ssh to its host')
+check(t.action == 'SpawnCommandInNewTab' and same(t.args.args, again) and t.args.domain.DomainName == 'local',
+  'Ctrl+Shift+T in an SSH tab does not open another ssh to its host, checking its TERM first: ' .. table.concat(t.args.args or {}, ' | '))
 t = spawned('ALT|SHIFT+D', ssh_tab)
-check(t.action == 'SplitVertical' and t.args.args == ssh_argv and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
+check(t.action == 'SplitVertical' and same(t.args.args, again) and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
+t = spawned('CTRL|SHIFT+t', { id = 49, proc = { name = 'ssh', argv = { 'ssh', '-p', '22', 'dev10' } } })
+check(same(t.args.args, { 'ssh', '-t', '-p', '22', 'dev10', check_cmd .. ' exec $SHELL -l' }),
+  'Ctrl+Shift+T after a typed ssh does not run a login shell behind the TERM check: ' .. table.concat(t.args.args or {}, ' | '))
+for _, argv in ipairs({ ssh, again }) do -- the launcher's, and one run again
+  t = spawned('CTRL|SHIFT+t', { id = 50, proc = { name = 'ssh', argv = argv } })
+  check(same(t.args.args, argv), 'Ctrl+Shift+T adds a second TERM check to an ssh that has one: ' .. table.concat(t.args.args or {}, ' | '))
+end
 -- Ctrl+Alt+T: never another ssh. An SSH tab's is the default shell here, in the directory
 -- its ssh started from (home once ssh has exited); any other tab's is Ctrl+Shift+T's.
 t = spawned('CTRL|ALT+t', { id = 48, proc = { name = 'ssh.exe', argv = ssh_argv, cwd = 'C:\\src' } })
@@ -1994,7 +2012,7 @@ end
 -- Reconnect: reruns the ssh seen in the pane after it has exited; elsewhere it says why not.
 sp.proc = false
 keys['CTRL|SHIFT+F5'].callback(w, sp)
-check(performed.action == 'SpawnCommandInNewTab' and performed.args.args == ssh_argv and performed.args.domain.DomainName == 'local', 'Ctrl+Shift+F5 does not rerun the exited ssh')
+check(performed.action == 'SpawnCommandInNewTab' and same(performed.args.args, again) and performed.args.domain.DomainName == 'local', 'Ctrl+Shift+F5 does not rerun the exited ssh, checking its TERM first')
 keys['CTRL|SHIFT+F5'].callback(w, pane(wide, false, 0, { id = 20 }))
 check(has(status, 'nothing to reconnect'), 'Ctrl+Shift+F5 in a local shell says nothing: ' .. tostring(status))
 

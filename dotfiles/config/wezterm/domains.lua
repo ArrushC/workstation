@@ -136,11 +136,39 @@ function M.shq(s)
   return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
+-- An ssh WezTerm starts sends TERM=wezterm with the pty (WezTerm sets TERM after a spawn's
+-- own variables, so a spawn can't change it), so its remote command starts with this: a
+-- host without that terminfo entry switches to xterm-256color. Without it, zsh there draws
+-- Backspace as a space, moving the cursor right.
+local term_check = 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color;'
+
 -- The launcher's command for a host (Ctrl+Alt+S's Connect too): ssh -t, attaching zellij's
--- main session. ssh sends TERM=wezterm with the pty; a host without that terminfo entry
--- starts zellij with xterm-256color instead.
+-- main session.
 function M.ssh_launch(host)
-  return { 'ssh', '-t', host, 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color; exec zellij attach --create main' }
+  return { 'ssh', '-t', host, term_check .. ' exec zellij attach --create main' }
+end
+
+-- An SSH tab's ssh, run again from WezTerm (a new tab or split on its host, Ctrl+Shift+F5).
+-- One typed in Nushell or PowerShell had TERM=xterm-256color (both switch to it), but run
+-- from WezTerm it sends TERM=wezterm, so it checks first too: a remote command gets the
+-- check in front, and none becomes -t, the check and a login shell. One that already
+-- checks (the launcher's, or one run again before) stays as it is.
+function M.ssh_again(argv)
+  local _, at = M.ssh_dest(argv)
+  if table.concat(argv, ' ', at + 1):find(term_check, 1, true) then
+    return argv
+  end
+  local out = {}
+  for i, a in ipairs(argv) do
+    out[i] = a
+  end
+  if at < #argv then
+    out[at + 1] = term_check .. ' ' .. argv[at + 1]
+    return out
+  end
+  table.insert(out, 2, '-t')
+  table.insert(out, term_check .. ' exec $SHELL -l')
+  return out
 end
 
 function M.apply(config)
