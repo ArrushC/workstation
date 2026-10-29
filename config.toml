@@ -29,6 +29,9 @@ zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invarian
 # Tools for both OSes (%USERPROFILE%\.config\mise is this same checkout on Windows).
 # Windows-only entries carry `os = ["windows"]`; Linux-only tools live in config.linux.toml.
 starship = "1.26.0"
+process-compose = "1.122.0"
+restic = "0.19.1"
+hyperfine = "2.0.0"
 # helix on Windows: aqua's archive carries runtime/ beside hx, so no HELIX_RUNTIME. Linux
 # takes conda-forge's build (config.linux.toml): the GitHub archive needs glibc 2.34, past
 # EL8's 2.28, and conda-forge has no Windows build.

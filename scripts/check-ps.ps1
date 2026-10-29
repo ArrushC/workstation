@@ -17,6 +17,7 @@ $targets = @(
     'scripts/test-winget-apps.ps1',
     'scripts/test-python-fonts.ps1',
     'scripts/claude-settings-merge.ps1',
+    'scripts/update.ps1',
     'scripts/test-claude-settings-merge.ps1',
     'scripts/wezterm-nightly.ps1',
     'scripts/test-wezterm-nightly.ps1',

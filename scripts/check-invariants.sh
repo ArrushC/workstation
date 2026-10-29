@@ -396,9 +396,7 @@ check_ps_mise_comma_lists() {
 check_git_pull_prune() {
   hdr "git pull of this checkout passes --prune"
   local f hits allgood=1
-  for f in bootstrap.sh bootstrap.ps1 tasks/update \
-    dotfiles/windows/Documents/PowerShell/Microsoft.PowerShell_profile.ps1.tera \
-    dotfiles/windows/AppData/Roaming/nushell/config.nu.tera; do
+  for f in bootstrap.sh bootstrap.ps1 tasks/update scripts/update.ps1; do
     hits=$(grep -nE '^[^#]*git[[:space:]]+-C[[:space:]]+[^[:space:]]+[[:space:]]+pull([[:space:]]|$)' "$f")
     if [ -z "$hits" ]; then
       allgood=0
@@ -408,7 +406,7 @@ check_git_pull_prune() {
       bad "$f: a pull without --prune: $(grep -v -- '--prune' <<<"$hits" | head -1)"
     fi
   done
-  [ "$allgood" -eq 1 ] && ok "bootstrap.sh, bootstrap.ps1, tasks/update and both Windows wsu pull with --prune"
+  [ "$allgood" -eq 1 ] && ok "bootstrap.sh, bootstrap.ps1 and both mise update tasks pull with --prune"
 }
 
 check_sentinels() {

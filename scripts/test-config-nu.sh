@@ -113,8 +113,6 @@ run_nu 'alias gx = git.exe log; do $env.config.completions.external.completer ["
 check "the expansion's first word loses its .exe" is "git nushell git log "
 run_nu 'do $env.config.completions.external.completer ["git" "sta"] | get value.0'
 check "a plain command is passed as typed" is "git nushell git sta"
-run_nu 'ws-targets | str join ","'
-check "ws-targets lists the tracked targets" is "~/.gitconfig,~/.zshrc"
 # The menu-width hook, picked out by its source; it reports the menu's limit after it runs.
 MENU_HOOK='do --env ($env.config.hooks.pre_prompt | where {|h| view source $h | str contains max_completion_width } | first); $env.config.menus | where name == ide_completion_menu | get 0.type.max_completion_width'
 NU_PRELUDE='def "term size" [] { {columns: 140, rows: 40} }; ' run_nu "$MENU_HOOK"
@@ -122,18 +120,6 @@ check "Tab's menu may grow to the terminal's width less a description's (140 -> 
 NU_PRELUDE='def "term size" [] { {columns: 30, rows: 40} }; ' run_nu "$MENU_HOOK"
 check "...but never below 20 columns" is "20"
 
-echo "-- ws* commands"
-run_nu 'wss | columns | str join ","'
-check "wss is a table of target, mode and state" is "target,mode,state"
-run_nu 'wss | where state == differs | get target.0'
-check "wss can be filtered by state" is "~/.zshrc"
-run_nu 'wss --foo'
-check "an argument to wss passes through to mise" has "dot status --foo"
-run_nu 'wse ~/.zshrc --apply'
-check "wse passes its arguments through" has "dot edit"
-check "wse passes mise's flags through" bash -c '[[ "$1" =~ dot\ edit\ .*\.zshrc\ --apply ]]' _ "$OUT"
-run_nu 'wsd'
-check "wsd with no argument diffs everything" has "dot diff"
 run_nu 'wsh'
 check "without mise's Python, wsh says how to get it" has "mise's Python isn't installed"
 run_nu 'wsa'
@@ -151,6 +137,22 @@ if [ -n "$WSPY" ]; then
   mkdir -p "$HOMEDIR/.config" "$T/proj dir/.git"
   ln -sfn "$ROOT" "$HOMEDIR/.config/mise" # WORKSTATION_REPO, as on Windows
   export MISE_WHICH_OUT="$WSPY"
+
+  echo "-- ws* commands"
+  run_nu 'ws-targets | str join ","'
+  check "ws-targets lists the tracked targets" is "~/.gitconfig,~/.zshrc"
+  run_nu 'ws status | columns | str join ","'
+  check "wss is a table of target, mode and state" is "target,mode,state"
+  run_nu 'wss | where state == differs | get target.0'
+  check "wss can be filtered by state" is "~/.zshrc"
+  run_nu 'wss --foo'
+  check "an argument to wss passes through to mise" has "dot status --foo"
+  run_nu 'wse ~/.zshrc --apply'
+  check "wse passes its arguments through" has "dot edit"
+  check "wse passes mise's flags through" bash -c '[[ "$1" =~ dot\ edit\ .*\.zshrc\ --apply ]]' _ "$OUT"
+  run_nu 'wsd'
+  check "wsd with no argument diffs everything" has "dot diff"
+
   run_nu 'wsh'
   check "wsh prints the catalogue for Nushell (its per-machine override dir)" has 'nushell\autoload'
   check "...and no other shell's" bash -c '[[ "$1" != *".zshrc.local"* ]]' _ "$OUT"

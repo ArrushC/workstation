@@ -219,43 +219,13 @@ function Invoke-Starship-PreCommand {
 }
 
 # --- workstation aliases (mise dotfiles; mirror the Linux bashrc) -----------
-# Every ws* command pins `-C $env:USERPROFILE`: mise resolves its config root
-# by walking UP from the current directory, and this checkout IS
-# %USERPROFILE%\.config\mise -- so an unpinned ws* run from any directory
-# whose ancestors contain their own .config\mise (a second checkout, or --
-# under WSL -- the Linux checkout reached via \\wsl$\...) silently manages the
-# WRONG checkout instead of erroring. Confirmed live on this same class of
-# bug on Linux: an unpinned `wsa` run from a Windows drive mount rewrote
-# ~/.zshrc/~/.bashrc from a stale clone and made seven dotfiles executable.
-function wse { mise -C $env:USERPROFILE dot edit @args }
-function wsd { mise -C $env:USERPROFILE dot diff @args }
-# wss: objects to filter (wss | Where-Object state -eq differs), from mise dot status --json; any
-# argument goes to mise's own text output instead (wss --json). PARITY: config.nu's wss
-# returns the same columns.
-function wss {
-    if ($args.Count -gt 0) { mise -C $env:USERPROFILE dot status @args; return }
-    (mise -C $env:USERPROFILE dot status --json | ConvertFrom-Json).files | Select-Object target, mode, state
-}
-function wsr { mise -C $env:USERPROFILE dot add --changed @args }
-# wsa: apply the repo's dotfiles. `ws apply` (scripts\ws\wslib\apply.py) is the one
-# program behind every shell's wsa: it shows each local edit the apply would overwrite and
-# asks first (refusing when it can't ask), and refuses outright if mise resolved a config
-# root other than %USERPROFILE%. PARITY: config.nu's wsa.
+# Compatibility shortcuts. ws owns dispatch; the profile only adapts shell values.
+function wse { ws edit @args }
+function wsd { ws diff @args }
+function wss { ws status @args }
+function wsr { ws record @args }
 function wsa { ws apply @args }
-# `mise run update` is tasks/update, a
-# #!/usr/bin/env bash script that calls `systemctl --user` and ends in an
-# unscoped `mise bootstrap --yes` -- none of that runs on Windows. Do the
-# Windows-safe equivalent directly: fast-forward pull, then the same
-# `--only dotfiles,tools` scope bootstrap.ps1 itself uses. The git pull is
-# already pinned via -C $env:WORKSTATION_REPO (a fixed path, not cwd-derived)
-# -- only the mise bootstrap call needed the -C fix. --prune drops the
-# origin/* branches GitHub no longer has (a merged PR's). Keep 'dotfiles,tools'
-# quoted: `mise` is a function here (mise activate pwsh), and a bare list
-# reaches it as two arguments (check_ps_mise_comma_lists).
-function wsu {
-    git -C $env:WORKSTATION_REPO pull --ff-only --prune
-    if ($LASTEXITCODE -eq 0) { mise -C $env:USERPROFILE bootstrap --only 'dotfiles,tools' --yes @args }
-}
+function wsu { ws update @args }
 # ws -- the workstation palette (`ws [words]`), dotfile reconciliation (`ws reconcile`) and
 # project workspaces (`ws open [project]`): scripts\ws\ws.py on mise's Python, the same
 # program as config.nu's ws. Windows has no zellij, so `ws open` changes this shell to the
@@ -263,19 +233,27 @@ function wsu {
 # the WS_OUT file is applied here; a command to run (a function such as wsa) is printed,
 # because PSReadLine can't pre-fill the next prompt from a function. PARITY: config.nu's ws.
 function ws {
+    if ($args.Count -eq 1 -and $args[0] -eq 'status') {
+        (ws status --json | ConvertFrom-Json).files | Select-Object target, mode, state
+        return
+    }
     $py = mise -C $env:USERPROFILE which python 2>$null
-    if (-not $py) { Write-Warning "ws: mise's Python isn't installed yet (wsu installs it)"; return }
+    if (-not $py) { Write-Warning "ws: mise's Python isn't installed yet (run mise install python)"; $global:LASTEXITCODE = 127; return }
     $out = [System.IO.Path]::GetTempFileName()
     $env:WS_OUT = $out
     $env:WS_SHELL = 'pwsh'
     try { & $py (Join-Path $env:WORKSTATION_REPO 'scripts\ws\ws.py') @args }
-    finally { Remove-Item Env:WS_OUT, Env:WS_SHELL -ErrorAction SilentlyContinue }
+    finally {
+        $wsExit = $LASTEXITCODE
+        Remove-Item Env:WS_OUT, Env:WS_SHELL -ErrorAction SilentlyContinue
+    }
     $todo = @(Get-Content -LiteralPath $out -Encoding UTF8 -ErrorAction SilentlyContinue)
     Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
     foreach ($line in $todo) {
         $kind, $value = $line -split "`t", 2
         if ($kind -eq 'cd') { Set-Location -LiteralPath $value }
     }
+    $global:LASTEXITCODE = $wsExit
 }
 # wsh -- the workstation cheatsheet, printed from scripts\ws\actions.toml (the catalogue `ws`
 # searches; config.nu's and the bash/zsh wsh print the same, per shell).
@@ -402,6 +380,18 @@ function Get-AdminPassword {
     Write-Host ("  expires: {0}" -f $r.ExpirationTimestamp) -ForegroundColor DarkGray
 }
 Set-Alias -Name adminpw -Value Get-AdminPassword
+
+# Completion comes from the same registry as bash, zsh and Nushell.
+Register-ArgumentCompleter -CommandName ws -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    $py = mise -C $env:USERPROFILE which python 2>$null
+    if (-not $py) { return }
+    $words = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.Value })
+    if ($wordToComplete -eq '') { $words += '' }
+    & $py (Join-Path $env:WORKSTATION_REPO 'scripts\ws\ws.py') complete @words | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
 
 # --- Per-machine override (untracked) ---------------------------------------
 # Sourced last so it can override anything above.

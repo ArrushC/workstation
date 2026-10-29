@@ -26,4 +26,4 @@ if [ "$("$root/scripts/lib/bootstrap-fn.sh" config_get "$root/config.local.toml"
   printf ' ! sudo = "no" in config.local.toml: skipping the system steps (dnf, /etc files); re-run %s/bootstrap.sh with sudo to apply them\n' "$root"
 fi
 
-mise bootstrap --yes "${skip[@]}"
+mise bootstrap --yes "${skip[@]}" "$@"

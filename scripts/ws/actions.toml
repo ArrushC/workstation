@@ -76,7 +76,7 @@ desc = "mise dot edit <path>: edit a tracked file's source"
 group = "workstation"
 kind = "open"
 keywords = ["dotfiles", "edit", "source"]
-alias = "wse"
+alias = "ws edit"
 run = ["mise", "-C", "{home}", "dot", "edit", "{arg}"]
 pick = "dotfile-targets"
 
@@ -87,7 +87,7 @@ desc = "mise dot diff: what an apply would change in your home"
 group = "workstation"
 kind = "read"
 keywords = ["dotfiles", "diff"]
-alias = "wsd"
+alias = "ws diff"
 run = ["mise", "-C", "{home}", "dot", "diff"]
 
 [[action]]
@@ -97,7 +97,7 @@ desc = "apply; warns and asks first if your home has an unrecorded local edit"
 group = "workstation"
 kind = "change"
 keywords = ["dotfiles", "apply", "deploy"]
-alias = "wsa"
+alias = "ws apply"
 ws = ["apply"]
 
 [[action]]
@@ -107,7 +107,7 @@ desc = "mise dot add --changed: copy edited FILE entries back to their source (w
 group = "workstation"
 kind = "change"
 keywords = ["dotfiles", "record", "capture"]
-alias = "wsr"
+alias = "ws record"
 run = ["mise", "-C", "{home}", "dot", "add", "--changed"]
 
 [[action]]
@@ -117,7 +117,7 @@ desc = "mise dot status: every managed file and its state"
 group = "workstation"
 kind = "read"
 keywords = ["dotfiles", "status", "list"]
-alias = "wss"
+alias = "ws status"
 run = ["mise", "-C", "{home}", "dot", "status"]
 
 [[action]]
@@ -128,7 +128,7 @@ group = "workstation"
 kind = "change"
 keywords = ["update", "pull", "bootstrap", "install"]
 os = ["linux"]
-alias = "wsu"
+alias = "ws update"
 task = "update"
 
 [[action]]
@@ -139,8 +139,8 @@ group = "workstation"
 kind = "change"
 keywords = ["update", "pull", "bootstrap", "install"]
 os = ["windows"]
-alias = "wsu"
-insert = "wsu"
+alias = "ws update"
+ws = ["update"]
 
 [[action]]
 id = "backups"
@@ -169,7 +169,7 @@ desc = "this help: the ws* commands, shell shortcuts and per-host files"
 group = "workstation"
 kind = "read"
 keywords = ["help", "cheatsheet", "aliases"]
-alias = "wsh"
+alias = "ws help"
 ws = ["help"]
 
 [[action]]
@@ -214,6 +214,71 @@ kind = "read"
 keywords = ["project", "workspace", "zellij", "session", "list"]
 alias = "ws open --list"
 ws = ["open", "--list"]
+
+
+[[action]]
+id = "runs"
+title = "Run journal"
+desc = "browse recorded commands and their output; Ctrl-R reruns a selected command"
+group = "projects"
+kind = "open"
+alias = "ws runs"
+ws = ["runs"]
+
+[[action]]
+id = "resume"
+title = "Resume work"
+desc = "recent projects, dirty worktrees, running jobs, failed runs and notes"
+group = "projects"
+kind = "open"
+alias = "ws resume"
+ws = ["resume"]
+
+[[action]]
+id = "services"
+title = "Project services"
+desc = "process-compose dashboard for this project (starts its configured processes)"
+group = "projects"
+kind = "change"
+alias = "ws services"
+ws = ["services"]
+
+[[action]]
+id = "bench"
+title = "Benchmark history"
+desc = "saved hyperfine measurements with Git revision and host metadata"
+group = "projects"
+kind = "read"
+alias = "ws bench list"
+ws = ["bench", "list"]
+
+[[action]]
+id = "debug"
+title = "Check record/replay debugging"
+desc = "rr records and replays true to check this Linux host"
+group = "projects"
+kind = "read"
+alias = "ws debug check"
+ws = ["debug", "check"]
+os = ["linux"]
+
+[[action]]
+id = "backup-snapshots"
+title = "Backup snapshots"
+desc = "list snapshots in the configured restic repository"
+group = "workstation"
+kind = "read"
+alias = "ws backup snapshots"
+ws = ["backup", "snapshots"]
+
+[[action]]
+id = "backup-config"
+title = "Configure backups"
+desc = "edit this host's restic repository and selected paths"
+group = "workstation"
+kind = "open"
+alias = "ws backup config"
+ws = ["backup", "config"]
 
 # --- health ---------------------------------------------------------------------
 
@@ -779,12 +844,12 @@ run = ["cheat", "workstation"]
 
 [[note]]
 title = "Common flow"
-text = ["wse <file>   edit the source", "wsd          preview the change", "wsa          apply to ~"]
+text = ["ws edit <file>   edit the source", "ws diff          preview the change", "ws apply         apply to ~"]
 
 [[note]]
 title = "When something edits a deployed file itself (Claude Code, Zed, Warp, WT)"
 text = ["ws reconcile                      review each one: record, apply, merge, edit, skip",
-        "wsr                               (file entries)",
+        "ws record                         (file entries)",
         "mise dot add ~/.claude/agents     (a whole directory entry, by exact target path)"]
 
 [[note]]

@@ -712,25 +712,12 @@ alias devtoys='devtoys.cli' # DevToys CLI
 alias vgm='valgrind --tool=memcheck --track-origins=yes --track-fds=yes'
 
 # --- Aliases — workstation (mise dotfiles) -----------------------------------
-# Every ws* command pins `-C "$HOME"`: mise resolves its config root by
-# walking UP from the current directory, and this checkout IS ~/.config/mise
-# — so an unpinned ws* run from anywhere containing its own .config/mise
-# ancestor (a Windows drive mount under WSL, a second checkout, ...) silently
-# manages the WRONG checkout instead of erroring. Confirmed live: `wsa` run
-# from /mnt/c/Users/<user> rewrote ~/.zshrc/~/.bashrc from a stale Windows
-# clone and made seven dotfiles executable (DrvFs reports 0744 regardless of
-# git mode, and `template`/`copy` both preserve the source's executable bit).
-alias wse='mise -C "$HOME" dot edit'
-alias wsd='mise -C "$HOME" dot diff'
-alias wss='mise -C "$HOME" dot status'
-alias wsr='mise -C "$HOME" dot add --changed'
-# wsu is pinned too: `mise run update` (tasks/update) resolves its OWN "root"
-# from $0's on-disk location, which follows the same cwd-walked config root —
-# unpinned, a wrong-cwd run would git-pull AND bootstrap the wrong checkout,
-# not just read it. Verified `mise -C "$HOME" run update --help` reports the
-# same `Source: ~/.config/mise/tasks/update` as the unpinned form does from
-# inside the repo, so pinning changes nothing for a normal invocation.
-alias wsu='mise -C "$HOME" run update'
+# Compatibility shortcuts. ws owns dispatch and pins workstation mise calls to home.
+alias wse='ws edit'
+alias wsd='ws diff'
+alias wss='ws status'
+alias wsr='ws record'
+alias wsu='ws update'
 # wsa is a function (below, near wsh): `ws apply`, which asks before a local edit is lost.
 
 # --- Functions ---------------------------------------------------------------

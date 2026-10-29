@@ -7,8 +7,9 @@ import os
 import sys
 import traceback
 
-SUBCOMMANDS = ("reconcile", "open", "apply", "help", "health", "actions", "baseline", "complete")
-COMPLETED = SUBCOMMANDS[:6]  # the ones a user types
+COMPLETED = ("reconcile", "open", "apply", "help", "health", "actions", "edit", "diff", "status",
+             "record", "update", "runs", "services", "debug", "bench", "resume", "backup")
+SUBCOMMANDS = (*COMPLETED, "baseline", "complete")
 
 
 def _reconcile_parser() -> argparse.ArgumentParser:
@@ -57,6 +58,16 @@ usage: ws [words...]          the palette (search starts with the words)
        ws health              run the health report and fix a finding
        ws help                the cheatsheet (wsh)
        ws actions [--json]    list every action and what it runs
+       ws edit|diff|status|record [...]   delegate to mise dot (flags pass through)
+       ws update [...]       update this host through its mise task
+       ws runs [...]         record commands, browse output and rerun a previous run
+       ws services [...]     project services through process-compose
+       ws debug [...]        record/replay debugging through rr (Linux)
+       ws bench [...]        benchmarks with Git and host metadata
+       ws resume [...]       recent projects, notes, jobs and failed runs
+       ws backup [...]       configured restic backups and restore checks
+
+Use ws <command> --help for details. Legacy wse/wsd/wss/wsr/wsu/wsa/wsh still work.
 """
 
 
@@ -83,6 +94,18 @@ def _main(argv: list[str]) -> int:
     rest = argv[1:] if cmd else argv
     if cmd == "baseline":
         return baseline(rest)
+    if cmd in ("edit", "diff", "status", "record", "update"):
+        from .commands import delegated
+
+        return delegated(cmd, rest)
+    if cmd in ("services", "debug"):
+        from .workflows import main as workflows
+
+        return workflows(rest, command=cmd)
+    if cmd in ("runs", "bench", "resume", "backup"):
+        from importlib import import_module
+
+        return import_module(f".{cmd}", __package__).main(rest)
     if cmd == "reconcile":
         from .reconcile import main as reconcile
 
@@ -103,6 +126,15 @@ def _main(argv: list[str]) -> int:
     if cmd == "health":
         from .palette import health
 
+        if rest:
+            from . import core
+
+            if rest == ["--help"] or rest == ["-h"]:
+                print("usage: ws health [--report]\nInteractive health findings and repairs; --report runs the mise health task only.")
+                return 0
+            if rest != ["--report"]:
+                return core.die("usage: ws health [--report]", 2)
+            return core.mise("run", "health", capture=False).returncode
         return health()
     if cmd == "actions":
         from .palette import main as palette
@@ -210,7 +242,7 @@ def complete(words: list[str]) -> int:
         print("\n".join(s for s in COMPLETED if s.startswith(cur)))
         return 0
     sub, cur = words[0], words[-1]
-    if sub == "open" and not cur.startswith("-"):
+    if sub in ("open", "resume") and not cur.startswith("-"):
         from .workspace import discover
 
         names = sorted({p.label for p in discover()})
@@ -220,5 +252,26 @@ def complete(words: list[str]) -> int:
     elif sub == "reconcile":
         print("\n".join(f for f in ["--list", "--json", "--record", "--apply", "--merge", "--yes", "--backups"]
                         if f.startswith(cur)))
+    elif sub in ("edit", "diff") and not cur.startswith("-"):
+        import json
+        from . import core
+
+        result = core.mise("dot", "status", "--json")
+        try:
+            targets = [f["target"] for f in json.loads(result.stdout)["files"]]
+            print("\n".join(t for t in targets if t.startswith(cur)))
+        except (ValueError, KeyError, TypeError):
+            pass
+    else:
+        choices = {
+            "runs": ("start", "list", "search", "show", "rerun", "--help"),
+            "bench": ("run", "list", "compare", "--help"),
+            "backup": ("config", "init", "run", "snapshots", "ls", "restore", "check", "verify", "--help"),
+            "debug": ("check", "record", "replay", "--help"),
+            "services": ("up", "down", "list", "attach", "process", "graph", "--help"),
+            "resume": ("--list", "--json", "--note", "--cd", "--tab", "--help"),
+            "health": ("--report", "--help"),
+        }
+        print("\n".join(s for s in choices.get(sub, ("--help",)) if s.startswith(cur)))
     return 0
 

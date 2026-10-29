@@ -79,12 +79,12 @@ class Catalogue(unittest.TestCase):
     def test_help_per_shell(self) -> None:
         nu = catalog.help_text(self.cat, "windows", "nu")
         self.assertIn("nushell\\autoload", nu)
-        self.assertIn("wsu", nu)
+        self.assertIn("ws update", nu)
         self.assertNotIn("zs [name]", nu)  # zellij is Linux-only
         bash = catalog.help_text(self.cat, "linux", "bash")
         self.assertIn("~/.bashrc.local", bash)
         self.assertNotIn("~/.zshrc.local", bash)
-        for alias in ("wse", "wsd", "wsa", "wsr", "wss", "wsu", "wsh", "ws reconcile", "ws open [project]"):
+        for alias in ("ws edit", "ws diff", "ws apply", "ws record", "ws status", "ws update", "ws help", "ws reconcile", "ws open [project]"):
             self.assertRegex(bash, rf"(?m)^  {re.escape(alias)}\s", alias)
 
 

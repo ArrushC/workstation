@@ -2,17 +2,17 @@
 # Synced via mise dotfiles. Edit with:  cheat -e workstation
 
 # --- workstation (mise dotfiles) ---
-wsa          # apply tracked dotfiles
-wse <file>   # edit a tracked file's source
-wsd          # diff pending changes
-wss          # status
-wsr          # record changed copy-mode files back to source
-wsu          # update: pull repo + mise install + mise bootstrap
-ws [words]   # palette: search every action (ws python, ws rebuild, ws ssh)
-ws reconcile # review dotfile differences: record, apply, merge, edit, skip
+ws apply                 # apply tracked dotfiles
+ws edit <file>           # edit a tracked file's source
+ws diff                  # diff pending changes
+ws status                # status
+ws record                # record changed copy-mode files back to source
+ws update                # update: pull repo + mise install + mise bootstrap
+ws [words]               # palette: search every action (ws python, ws rebuild, ws ssh)
+ws reconcile             # review dotfile differences: record, apply, merge, edit, skip
 ws reconcile --backups   # what ws backed up before overwriting, with restore commands
 ws open [project]        # attach to / resurrect / create a project's zellij session
-ws health    # health report, then run the repair of a failing row
+ws health                # health report, then run the repair of a failing row
 
 # --- zellij (multiplexer) ---
 zj           # zellij
@@ -32,7 +32,7 @@ cht.sh --shell            # interactive cheat.sh REPL (rlwrap, a dnf package)
 # sudo = "no" in config.local.toml's [vars] skips them; get sudo and re-run to apply
 mise bootstrap status      # what mise bootstrap would still change
 mise run health             # tools, host state, services report
-mise run update             # = wsu: git pull, then mise install + mise bootstrap (system steps per the saved sudo)
+mise run update             # = ws update: git pull, then mise install + mise bootstrap (system steps per the saved sudo)
 mise run check-updates      # mise outdated + dnf check-update (where dnf exists) + [vars] pins vs upstream
 mise run python-env         # rebuild the blessed Python venv (on mise python)
 mise run fonts               # install the pinned Nerd Font
