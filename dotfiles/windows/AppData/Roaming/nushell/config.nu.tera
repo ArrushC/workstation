@@ -220,52 +220,17 @@ $env.config.hooks.command_not_found = {|cmd|
 }
 
 # --- workstation commands (mise dotfiles; mirror the PowerShell profile) ----
-# Every ws* command pins `-C $env.USERPROFILE`: mise resolves its config root
-# by walking UP from the current directory, and this checkout IS
-# %USERPROFILE%\.config\mise -- so an unpinned ws* run from any directory
-# whose ancestors contain their own .config\mise (a second checkout, or --
-# under WSL -- the Linux checkout reached via \\wsl$\...) silently manages the
-# WRONG checkout instead of erroring. Confirmed live on this same class of
-# bug on Linux: an unpinned `wsa` run from a Windows drive mount rewrote
-# ~/.zshrc/~/.bashrc from a stale clone and made seven dotfiles executable.
-# wse, wsd and wss are defs (wsr stays an alias): Tab on wse and wsd offers the tracked
-# targets, and wss returns a table to filter (`wss | where state == differs`); any argument
-# to wss goes to mise's own text output instead (`wss --json`). ws-targets and wss read
-# `mise dot status --json` (one mise start). --wrapped hands mise's flags through (wse --apply).
-# PARITY: the PowerShell wss returns the same columns as objects.
+# Compatibility shortcuts; all operations go through ws. Structured status is adapted
+# in ws itself, so ws status and wss return the same Nushell table.
 def ws-targets [] {
-    try { mise -C $env.USERPROFILE dot status --json | from json | get files.target } catch { [] }
+    try { ws status --json | from json | get files.target } catch { [] }
 }
-def --wrapped wse [...args: string@ws-targets] { mise -C $env.USERPROFILE dot edit ...$args }
-def --wrapped wsd [...args: string@ws-targets] { mise -C $env.USERPROFILE dot diff ...$args }
-def --wrapped wss [...args: string] {
-    if ($args | is-empty) {
-        mise -C $env.USERPROFILE dot status --json | from json | get files | select target mode state
-    } else {
-        mise -C $env.USERPROFILE dot status ...$args
-    }
-}
-alias wsr = mise -C $env.USERPROFILE dot add --changed
-# wsa: apply the repo's dotfiles. `ws apply` (scripts\ws\wslib\apply.py) is the one
-# program behind every shell's wsa: it shows each local edit the apply would overwrite and
-# asks first (refusing when it can't ask), and refuses outright if mise resolved a config
-# root other than %USERPROFILE%. --wrapped hands mise's flags through. PARITY: the
-# PowerShell profile's wsa.
+def --wrapped wse [...args: string@ws-targets] { ws edit ...$args }
+def --wrapped wsd [...args: string@ws-targets] { ws diff ...$args }
+def --wrapped wss [...args: string] { ws status ...$args }
+def --wrapped wsr [...args: string] { ws record ...$args }
 def --wrapped wsa [...args] { ws apply ...$args }
-# `mise run update` is tasks/update, a
-# #!/usr/bin/env bash script that calls `systemctl --user` and ends in an
-# unscoped `mise bootstrap --yes` -- none of that runs on Windows. Do the
-# Windows-safe equivalent directly: fast-forward pull, then the same
-# `--only dotfiles,tools` scope bootstrap.ps1 itself uses. The git pull is
-# already pinned via -C $env.WORKSTATION_REPO (a fixed path, not cwd-derived)
-# -- only the mise bootstrap call needed the -C fix. --prune drops the
-# origin/* branches GitHub no longer has (a merged PR's).
-def wsu [...args] {
-    git -C $env.WORKSTATION_REPO pull --ff-only --prune
-    if $env.LAST_EXIT_CODE == 0 {
-        mise -C $env.USERPROFILE bootstrap --only dotfiles,tools --yes ...$args
-    }
-}
+def --wrapped wsu [...args] { ws update ...$args }
 # ws -- the workstation palette (`ws [words]`), dotfile reconciliation (`ws reconcile`) and
 # project workspaces (`ws open [project]`): scripts\ws\ws.py on mise's Python, the same
 # program as the bash/zsh ws. Windows has no zellij, so `ws open` changes this shell to the
@@ -284,8 +249,16 @@ def ws-complete [context: string] {
 def --env --wrapped ws [...args: string@ws-complete] {
     let py = (ws-python)
     if ($py | is-empty) {
-        print -e "ws: mise's Python isn't installed yet (wsu installs it)"
+        print -e "ws: mise's Python isn't installed yet (run mise install python)"
         return
+    }
+    if $args == [status] {
+        return (^$py ($env.WORKSTATION_REPO | path join scripts ws ws.py) status --json | from json | get files | select target mode state)
+    }
+    # Return machine-readable output as pipeline data instead of printing it as an
+    # intermediate statement while the interactive wrapper cleans up WS_OUT.
+    if "--json" in $args {
+        return (with-env { WS_SHELL: "nu" } { ^$py ($env.WORKSTATION_REPO | path join scripts ws ws.py) ...$args })
     }
     let out = (mktemp -t ws-out.XXXXXX)
     # A non-zero exit (wsa refusing, say) would end this def on the spot, leaving the WS_OUT

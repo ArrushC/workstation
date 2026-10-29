@@ -127,6 +127,13 @@ description = "Install or update WezTerm's nightly build (the post-tools hook)"
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-nightly.ps1 || exit /b 0"
 
+# ws update (wsu): tasks/update is bash and ends in an unscoped bootstrap, so Windows pulls
+# and bootstraps dotfiles and tools only, as bootstrap.ps1 does (scripts/update.ps1).
+[tasks.update-windows]
+description = "Update this Windows host: pull, then mise bootstrap dotfiles and tools"
+run_windows = 'powershell -NoProfile -ExecutionPolicy Bypass -File "{{ xdg_config_home }}/mise/scripts/update.ps1"'
+run = "echo 'update-windows requires Windows' >&2; exit 1"
+
 # ws reconcile's baseline and pre-apply backups (scripts/ws; tasks/dotfiles-baseline and
 # tasks/dotfiles-snapshot on Linux). Before the tools phase has installed mise's Python (a
 # fresh host) `python` fails, and `exit /b 0` keeps the bootstrap going. The snapshot passes

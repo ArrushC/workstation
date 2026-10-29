@@ -86,9 +86,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - vcpkg stays a task: `[bootstrap.repos]` can't shallow-clone or update. The C/C++ toolbelt
   spans dnf, mise and vcpkg on purpose; don't unify it.
 - `/dev/tty` reads in `bootstrap.sh` and `tasks/bootstrap` are load-bearing under `curl | bash`.
-- After `git pull`, `bootstrap.sh`, `bootstrap.ps1` and `tasks/update` re-exec the pulled copy of
-  themselves (guard: `WORKSTATION_BOOTSTRAP_PULLED` / `WORKSTATION_UPDATE_PULLED`), so no old code
-  runs against the new tree. Keep the pull before anything a change could affect.
+- After `git pull`, `bootstrap.sh`, `bootstrap.ps1`, `tasks/update` and `scripts/update.ps1` re-exec
+  the pulled copy of themselves (guard: `WORKSTATION_BOOTSTRAP_PULLED` / `WORKSTATION_UPDATE_PULLED`;
+  update.ps1's `-Pulled`), so no old code runs against the new tree. Keep the pull before anything a change could affect.
 - WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks reach it (and `config_get`) via `scripts/lib/bootstrap-fn.sh`.
 
 **`MISE_ENV` and sudo**

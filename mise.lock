@@ -399,6 +399,21 @@ checksum = "sha256:5c8325ced8bacd8418d62706f669e96d9c3578a9237526e34d546900cbc04
 url = "https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-windows.zip"
 url_api = "https://api.github.com/repos/helix-editor/helix/releases/assets/274144377"
 
+[[tools.hyperfine]]
+version = "2.0.0"
+backend = "aqua:sharkdp/hyperfine"
+specifiers = ["2.0.0"]
+
+[tools.hyperfine."platforms.linux-x64"]
+checksum = "sha256:ae2beda2ac99c098427e4f755244552daf20e514422889cca6d44421e2d93c87"
+url = "https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/sharkdp/hyperfine/releases/assets/619831673"
+
+[tools.hyperfine."platforms.windows-x64"]
+checksum = "sha256:3dec51acee1060908e67948838d6bc0a7aacde0774acebfa4afb220dcf0bc078"
+url = "https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/sharkdp/hyperfine/releases/assets/619834237"
+
 [[tools.jq]]
 version = "1.8.2"
 backend = "aqua:jqlang/jq"
@@ -504,6 +519,21 @@ checksum = "sha256:17108e9448c4fdad48eb8714c4ed6f5dfc9cf86c2eb8f2ce5d02043fef806
 url = "https://github.com/anomalyco/opencode/releases/download/v1.19.0/opencode-windows-x64.zip"
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/629458990"
 
+[[tools.process-compose]]
+version = "1.122.0"
+backend = "aqua:F1bonacc1/process-compose"
+specifiers = ["1.122.0"]
+
+[tools.process-compose."platforms.linux-x64"]
+checksum = "sha256:9b6dbc38324c0b0481f1cd1dd828ffdc78117129ec797678f4bf8c4023311281"
+url = "https://github.com/F1bonacc1/process-compose/releases/download/v1.122.0/process-compose_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/F1bonacc1/process-compose/releases/assets/518622317"
+
+[tools.process-compose."platforms.windows-x64"]
+checksum = "sha256:13fd7023199c7375c26477f11f213fde826e932d831f7dd51a5c229fbee3bf79"
+url = "https://github.com/F1bonacc1/process-compose/releases/download/v1.122.0/process-compose_windows_amd64.zip"
+url_api = "https://api.github.com/repos/F1bonacc1/process-compose/releases/assets/518622326"
+
 [[tools."pypi:basedpyright"]]
 version = "1.40.2"
 backend = "pypi:basedpyright"
@@ -524,6 +554,21 @@ provenance = "github-attestations"
 checksum = "sha256:10e5705e44938ee78de35c62b30fdfe2945b53438343d04c0f53548cdd8e91b6"
 url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
 provenance = "github-attestations"
+
+[[tools.restic]]
+version = "0.19.1"
+backend = "aqua:restic/restic"
+specifiers = ["0.19.1"]
+
+[tools.restic."platforms.linux-x64"]
+checksum = "sha256:f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"
+url = "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2"
+url_api = "https://api.github.com/repos/restic/restic/releases/assets/466999719"
+
+[tools.restic."platforms.windows-x64"]
+checksum = "sha256:da948ad707ed690426473aaba2046cd61f8f90f6f0e7dab6be0d5796531de67d"
+url = "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_windows_amd64.zip"
+url_api = "https://api.github.com/repos/restic/restic/releases/assets/466998668"
 
 [[tools.ripgrep]]
 version = "15.2.0"

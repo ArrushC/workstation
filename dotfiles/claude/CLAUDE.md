@@ -52,6 +52,9 @@ The full, always-current inventory of what's installed (with versions) is below.
 
 ### Tools for both OSes (config.toml; Windows-only entries carry os)
 - `starship` 1.26.0
+- `process-compose` 1.122.0
+- `restic` 0.19.1
+- `hyperfine` 2.0.0
 - `helix` 25.07.1
 - `aqua:neovim/neovim` 0.12.5
 - `tree-sitter` 0.27.0
@@ -114,7 +117,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `k9s` 0.51.0
 - `rclone` 1.75.2
 - `croc` 11.5.4
-- `hyperfine` 2.0.0
 - `sops` 3.13.3
 - `systemctl-tui` 0.8.0
 - `lazyjournal` 0.8.6
@@ -190,6 +192,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `claude` latest
 
 ### System packages (dnf, Linux; skipped without sudo)
-- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson moreutils mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rsync rsyslog socat strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
+- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson moreutils mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rr rsync rsyslog socat strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
 
 <!-- TOOLS:END -->

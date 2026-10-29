@@ -898,16 +898,6 @@ specifiers = ["1.4.3"]
 checksum = "blake3:a608d8ca6863c74eb1d32a57886e7c459313fed80c8473abce1dccf42a408842"
 url = "https://raw.githubusercontent.com/joehillen/sysz/1.4.3/sysz"
 
-[[tools.hyperfine]]
-version = "2.0.0"
-backend = "aqua:sharkdp/hyperfine"
-specifiers = ["2.0.0"]
-
-[tools.hyperfine."platforms.linux-x64"]
-checksum = "sha256:ae2beda2ac99c098427e4f755244552daf20e514422889cca6d44421e2d93c87"
-url = "https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/sharkdp/hyperfine/releases/assets/619831673"
-
 [[tools.jj]]
 version = "0.46.0"
 backend = "aqua:jj-vcs/jj"

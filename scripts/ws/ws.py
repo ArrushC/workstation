@@ -14,7 +14,7 @@ import sys
 if sys.version_info < (3, 11):
     sys.stderr.write(
         "ws: needs Python 3.11 or newer (mise's python, tools.python in config.toml); "
-        "this is %s. Run wsu (or mise install python) first.\n" % sys.version.split()[0]
+        "this is %s. Run mise install python first.\n" % sys.version.split()[0]
     )
     if sys.argv[1:3] == ["baseline", "snapshot"]:
         sys.stderr.write("ws: no pre-apply backup: the apply goes ahead without one.\n")
