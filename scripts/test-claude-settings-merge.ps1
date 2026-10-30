@@ -1,7 +1,8 @@
 # Tests scripts/claude-settings-merge.ps1, Windows' ~/.claude/settings.json merge, against
 # this checkout's settings.seed.json and settings.enforced.json, writing a throwaway -Dest:
 # a first run (the seed and the enforced keys), a live file (the enforced keys win; its own
-# keys, hook types and plugins stay), non-ASCII text kept, an up-to-date file left alone,
+# keys, hook types and plugins stay), non-ASCII text kept, a live file with a UTF-8 BOM
+# (merged, and rewritten without it even when up to date), an up-to-date file left alone,
 # a live file that isn't JSON and a PATH without jq (each a warning, the file as it was,
 # exit 0), bootstrap.ps1's Invoke-ClaudeSettingsMerge running the script, and
 # config.windows.toml running it from the post-tools hook, so wsu merges too.
@@ -61,6 +62,27 @@ try {
         Assert ($r.Code -eq 0) "exit $($r.Code): $($r.Out)"
         $note = (Read-Settings).note
         Assert ($note -ceq $text) "note is now '$note'"
+    }
+
+    Test-Case 'a live file with a UTF-8 BOM: merged and rewritten without it, no temp file left' {
+        [IO.File]::WriteAllText($dest, '{"theme":"auto","mine":1}', [Text.UTF8Encoding]::new($true))
+        $r = Invoke-Merge
+        Assert ($r.Code -eq 0) "exit $($r.Code): $($r.Out)"
+        Assert ($r.Out -match 'merged') "no merge line: $($r.Out)"
+        Assert ([IO.File]::ReadAllBytes($dest)[0] -ne 0xEF) 'the BOM is still there'
+        $s = Read-Settings
+        Assert ($s.mine -eq 1) 'a live-only key was dropped'
+        Assert ($s.theme -eq $enforced.theme) "theme is $($s.theme)"
+        $left = @(Get-ChildItem -Force -LiteralPath (Split-Path $dest) | Where-Object { $_.Name -ne 'settings.json' } | ForEach-Object { $_.Name })
+        Assert ($left.Count -eq 0) "left behind: $($left -join ', ')"
+    }
+
+    Test-Case 'an up-to-date file with a BOM: still rewritten without it' {
+        Invoke-Merge | Out-Null
+        [IO.File]::WriteAllText($dest, [IO.File]::ReadAllText($dest), [Text.UTF8Encoding]::new($true))
+        $r = Invoke-Merge
+        Assert ($r.Code -eq 0) "exit $($r.Code): $($r.Out)"
+        Assert ([IO.File]::ReadAllBytes($dest)[0] -ne 0xEF) 'the BOM is still there'
     }
 
     Test-Case 'an up-to-date file: not rewritten, nothing said' {

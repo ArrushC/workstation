@@ -50,7 +50,9 @@ function Merge-Settings {
     $dir = Split-Path -Parent $Dest
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $empty = Join-Path $dir ".settings.json.empty.$PID.tmp"
+    $nobom = Join-Path $dir ".settings.json.nobom.$PID.tmp"
     $tmp = Join-Path $dir ".settings.json.$PID.tmp"
+    $bom = $false
     try {
         $live = $Dest
         if (Test-Path -LiteralPath $Dest) {
@@ -58,6 +60,15 @@ function Merge-Settings {
             if ($LASTEXITCODE -ne 0) {
                 Write-Step "! $Dest is not valid JSON -- left as it is"
                 return
+            }
+            # jq -s reads the three files as one stream, so a live file's UTF-8 BOM (Windows
+            # PowerShell 5.1's Set-Content -Encoding UTF8 writes one) lands mid-stream, a parse
+            # error that stopped every merge: merge a copy without it, and rewrite the file.
+            $b = [IO.File]::ReadAllBytes($Dest)
+            if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) {
+                [IO.File]::WriteAllText($nobom, [IO.File]::ReadAllText($Dest), [Text.UTF8Encoding]::new($false))
+                $live = $nobom
+                $bom = $true
             }
         } else {
             [IO.File]::WriteAllText($empty, '{}')
@@ -69,12 +80,12 @@ function Merge-Settings {
             return
         }
         $text = ($merged -join "`n") + "`n"
-        if ((Test-Path -LiteralPath $Dest) -and [IO.File]::ReadAllText($Dest) -ceq $text) { return }
+        if (-not $bom -and (Test-Path -LiteralPath $Dest) -and [IO.File]::ReadAllText($Dest) -ceq $text) { return }
         [IO.File]::WriteAllText($tmp, $text, [Text.UTF8Encoding]::new($false))
         Move-Item -Force -LiteralPath $tmp -Destination $Dest
         Write-Step "merged seed + live + enforced -> $Dest"
     } finally {
-        Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $empty, $tmp
+        Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $empty, $nobom, $tmp
     }
 }
 
