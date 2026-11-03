@@ -11,4 +11,10 @@ if (-not $Pulled) {
     exit $LASTEXITCODE
 }
 mise -C $env:USERPROFILE bootstrap --only 'dotfiles,tools' --yes @BootstrapArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# An explicitly scoped update applies only its requested phases. Ordinary updates
+# reuse bootstrap's user integrations; no second clone, UAC or app installation.
+if (-not $BootstrapArgs -or $BootstrapArgs.Count -eq 0) {
+    & (Join-Path $repo 'bootstrap.ps1') -RepoPath $repo -MaintenanceOnly -SkipKeyGen -SkipElevated
+}
 exit $LASTEXITCODE

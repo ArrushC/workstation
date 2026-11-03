@@ -75,11 +75,11 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `uv` 0.13.0
 - `python` 3.14.8
 - `node` 26.11.1
-- `typescript-language-server` 6.0.2
-- `typescript` 5.9.3
 - `bash-language-server` 5.8.1
-- `yaml-language-server` 1.25.0
+- `typescript` 5.9.3
+- `typescript-language-server` 6.0.2
 - `vscode-langservers-extracted` 4.10.0
+- `yaml-language-server` 1.25.0
 - `go` 1.27.2
 - `gopls` 0.23.0
 - `lua-language-server` 3.19.1

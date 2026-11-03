@@ -10,9 +10,9 @@ name: disk-budget
 on:
   push:
     branches: [main]
-    paths: ['config*.toml', 'mise*.lock', 'locks/**', '.github/workflows/disk-budget.yml']
+    paths: ['config*.toml', 'mise*.lock', 'locks/**', 'environments/**', 'scripts/tool-env.py', '.github/workflows/disk-budget.yml']
   pull_request:
-    paths: ['config*.toml', 'mise*.lock', 'locks/**', 'scripts/lib/verify-binary.sh', 'tasks/verify-tools', '.github/workflows/disk-budget.yml']
+    paths: ['config*.toml', 'mise*.lock', 'locks/**', 'environments/**', 'scripts/tool-env.py', 'scripts/lib/verify-binary.sh', 'tasks/verify-tools', '.github/workflows/disk-budget.yml']
   workflow_dispatch:
 
 permissions:
@@ -47,6 +47,12 @@ jobs:
           mkdir -p "$h"
           export HOME="$h" XDG_DATA_HOME="$h/.local/share" XDG_CACHE_HOME="$h/.cache" XDG_STATE_HOME="$h/.local/state" GOPATH="$h/go"
           mise install
+          # Measure the full supported catalogue and keep checking optional
+          # binaries against EL8. The network-only script and EL9-only native
+          # addon remain excluded, as they were before the smaller default.
+          extras=$(python3 -c 'import tomllib; print(" ".join(k for f in ["config.toml", "config.linux.toml"] for k,v in tomllib.load(open(f,"rb"))["tools"].items() if isinstance(v,dict) and v.get("lazy") and "linux" in v.get("os",["linux"]) and k not in ["http:cht.sh","npm:@nanonets/graft"]))')
+          mise install $extras
+          mise exec python -- python scripts/tool-env.py all
           # Every Linux asset must run on EL8 (glibc 2.28): a bump to a build that
           # needs a newer glibc fails here (fix: a musl github: asset, else conda:).
           WORKSTATION_GLIBC_FLOOR=2.28 bash tasks/verify-tools
@@ -87,8 +93,11 @@ jobs:
           $env:GOPATH = "$root\go"
           $env:GOCACHE = "$root\go-build"
           $env:npm_config_cache = "$root\npm"
-          mise install
+          $env:LOCALAPPDATA = "$root\local"
+          mise install --include-lazy
           if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
+          mise exec python -- python scripts/tool-env.py all
+          if ($LASTEXITCODE -ne 0) { throw "dependency environment install exited $LASTEXITCODE" }
           $bytes = (Get-ChildItem -LiteralPath $root -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
           $mb = [math]::Ceiling($bytes / 1MB)
           "windows: $mb MB" | Add-Content $env:GITHUB_STEP_SUMMARY

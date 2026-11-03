@@ -1,16 +1,8 @@
 #!/usr/bin/env bash
-#MISE description="Blessed Python scripting env: a venv on mise's python + launchers wpy/textual/typer (--rebuild forces a rebuild)"
-#USAGE flag "--rebuild" help="Rebuild the env even when it is up to date (also upgrades its libraries)"
+#MISE description="Build the locked scripting environment; keep wpy/textual/typer launchers"
+#USAGE flag "--rebuild" help="Build a fresh generation from the committed lock (does not upgrade dependencies)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
-mkdir -p "$state"
-python="$(mise where python)/bin/python3"
-stamp="$state/python-env.stamp"
-want="$python $(cat "$root/scripts/lib/python-env.sh" "$root/scripts/python-env.txt" | cksum | cut -d' ' -f1)"
-if [ "${usage_rebuild:-false}" != true ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] && [ -x "$HOME/.local/bin/wpy" ]; then
-  echo "  python-env up to date ($python; mise run python-env --rebuild to rebuild)"
-  exit 0
-fi
-"$root/scripts/lib/python-env.sh" "$python"
-printf '%s\n' "$want" >"$stamp"
+args=()
+if [ "${usage_rebuild:-false}" = true ]; then args+=(--rebuild); fi
+exec python3 "$root/scripts/tool-env.py" python "${args[@]}"

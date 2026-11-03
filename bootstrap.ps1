@@ -14,6 +14,7 @@
 [CmdletBinding()]
 param(
     [string]$RepoPath = (Join-Path $env:USERPROFILE ".config\mise"),
+    [switch]$MaintenanceOnly,  # refresh user integrations after ws update; no clone or package install
     [switch]$SkipKeyGen,       # skip the SSH-key generation prompt
     [switch]$SkipToolInstall,  # skip mise, the mise tools, the winget GUI apps, the Python env + Claude Code
     [switch]$SkipDotfiles,     # clone + install tools but don't apply dotfiles yet
@@ -45,8 +46,6 @@ $MiseVersion = "2026.9.9"
 $MiseSha256  = "f758ee4afe061cccd4587c0108c147209a7cb2372704909a8b9d5e230203ec07"
 $MiseUrl     = "https://github.com/jdx/mise/releases/download/v$MiseVersion/mise-v$MiseVersion-windows-x64.zip"
 $MiseShims   = Join-Path $env:LOCALAPPDATA "mise\shims"
-
-$WsPythonEnv = Join-Path $WsRoot "python-env"
 
 # =============================================================================
 # HELPERS: output, HTTP, PATH
@@ -546,7 +545,7 @@ function Invoke-WslConfigReminder {
 # checks on Linux: a disk that fills mid-install leaves tools half-extracted that mise
 # still counts as installed. The budget is what a fresh Windows install writes, as
 # measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what is
-# already installed, plus 1 GB for the new versions an update installs before the prune.
+# already installed, plus 1 GB for the new versions an update installs beside the old ones.
 # Nothing to install needs no room (the budget counts caches that `installs` doesn't).
 # $env:WORKSTATION_SKIP_DISK_CHECK = '1' goes ahead anyway; a missing budget or an
 # unreadable drive skips it.
@@ -596,7 +595,7 @@ function Get-FreeSpaceMB {
 # --force-dotfiles (a target can already be a differing real file); $FirstApplyMarker
 # then stops it, so a later real conflict surfaces. After a good tools phase, as
 # scripts/lib/mise-install.sh does on Linux: shims on PATH (later steps need jq,
-# uv), node reinstalled when its declaration changed, prune, reshim.
+# uv). The post-tools hook owns dependency environments and reshimming.
 function Invoke-MiseBootstrap {
     $phases = @()
     if (-not $SkipDotfiles) { $phases += 'dotfiles' }
@@ -638,16 +637,10 @@ function Invoke-MiseBootstrap {
         Write-Fail "'mise config ls' failed (exit $lsCode) -- an older mise than config.toml's min_version? re-run .\bootstrap.ps1 after a download succeeds:`n  $head"
     }
     if (($lsOut -join "`n") -notmatch 'config\.windows\.toml') {
-        Write-Fail "mise did not load config.windows.toml, so miserc.toml (windows) was not honoured -- -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap/prune; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
+        Write-Fail "mise did not load config.windows.toml, so miserc.toml (windows) was not honoured -- -RepoPath outside %USERPROFILE%\.config\mise? Stopping before mise bootstrap; 'mise -C `$env:USERPROFILE config ls' shows what loaded."
     }
 
-    # `mise where node` succeeds only when the DECLARED node is installed.
-    $hadNode = $false
-    if (-not $SkipToolInstall) {
-        Assert-ToolsDiskSpace
-        Invoke-Native { & mise @miseCd where node *> $null }
-        $hadNode = ($LASTEXITCODE -eq 0)
-    }
+    if (-not $SkipToolInstall) { Assert-ToolsDiskSpace }
 
     $onlyPhases = $phases -join ','
     Write-Log "Running mise bootstrap --only $onlyPhases (source: $RepoPath)..."
@@ -678,49 +671,8 @@ reported above and re-run.
     if (-not $SkipToolInstall) {
         Add-ToUserPath $MiseShims
         Update-SessionPath
-        Invoke-Native {
-            & mise @miseCd where node *> $null
-            if ($LASTEXITCODE -eq 0) {
-                # Marker = node's declaration hashed (-f: a bare `config get` reads only
-                # config.windows.toml). Unreadable: reinstall, no marker, the next run retries.
-                $decl = (@(& mise @miseCd config get -f (Join-Path $RepoPath "config.toml") tools.node 2>$null) -join "`n").Trim()
-                $marker = $null
-                if (($LASTEXITCODE -eq 0) -and $decl) {
-                    $bytes = [System.Text.Encoding]::UTF8.GetBytes($decl)
-                    $stream = New-Object System.IO.MemoryStream (,$bytes)
-                    $sum = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
-                    $marker = Join-Path $WsStamps "node-postinstall.$sum.stamp"
-                } else {
-                    Write-Warn "could not read tools.node from config.toml -- forcing the node reinstall so its npm postinstall can't be skipped"
-                }
-                $nodeOk = $true
-                if ($hadNode -and -not ($marker -and (Test-Path -LiteralPath $marker))) {
-                    Write-Log "node already installed but its declaration changed -- reinstalling so its npm postinstall (the language servers) re-runs"
-                    # Streamed, and kept in $forceOut to spot Windows' file-lock error.
-                    $forceOut = @()
-                    & mise @miseCd install --yes --force node 2>&1 | ForEach-Object { "$_" } | Tee-Object -Variable forceOut | Out-Host
-                    $forceExit = $LASTEXITCODE
-                    if ($forceExit -ne 0) {
-                        $nodeOk = $false
-                        if ((@($forceOut) -join "`n") -match 'os error 32|being used by another process') {
-                            Write-Warn "node is in use (an editor's language server, a dev server, an agent) -- close running node processes and re-run .\bootstrap.ps1"
-                        } else {
-                            Write-Warn "mise install --force node exited $forceExit (output above) -- re-run .\bootstrap.ps1 to retry"
-                        }
-                    } else {
-                        Write-Ok "node reinstalled (language servers refreshed)"
-                    }
-                }
-                if ($nodeOk -and $marker) {
-                    Get-ChildItem -Path $WsStamps -Filter "node-postinstall.*.stamp" -ErrorAction SilentlyContinue | Remove-Item -Force
-                    New-Item -ItemType File -Force -Path $marker | Out-Null
-                }
-            }
-            & mise @miseCd prune --yes
-            if ($LASTEXITCODE -ne 0) { Write-Warn "mise prune exited $LASTEXITCODE (non-fatal)" }
-            & mise @miseCd reshim
-            if ($LASTEXITCODE -ne 0) { Write-Warn "mise reshim exited $LASTEXITCODE (non-fatal)" }
-        }
+        # The post-tools task has already published checked dependency launchers.
+        # Keep old runtimes available for rollback; cleanup is explicit.
     }
 
     if (-not $SkipDotfiles) { Invoke-WslConfigReminder }
@@ -1122,58 +1074,6 @@ function Invoke-InstallClaudeCode {
     if (Test-Path $claudeExe) { Add-ToUserPath (Split-Path $claudeExe -Parent) }
 }
 
-# The `python-env` task's Windows half: a uv venv on mise's python with python-env.txt's
-# libraries. The stamp is the interpreter path + the parsed list, so a python bump or
-# a list change rebuilds and a comment edit doesn't (to upgrade, delete the stamp).
-function Invoke-PythonEnv {
-    if ($SkipToolInstall) {
-        Write-Log "Python env skipped (-SkipToolInstall)"
-        return
-    }
-    $python = Get-MiseToolExe -Tool python -Exe python.exe
-    $uvExe = $null
-    if ($python) {
-        $out = @(Invoke-Native { & mise -C $env:USERPROFILE which uv 2>$null }); $code = $LASTEXITCODE
-        if (($code -eq 0) -and ($out.Count -gt 0)) { $uvExe = "$($out[0])".Trim() }
-    }
-    $libsFile = Join-Path $RepoPath "scripts\python-env.txt"
-    if (-not $python -or -not $uvExe -or -not (Test-Path -LiteralPath $libsFile)) {
-        Write-Warn "Python env skipped — needs mise's python + uv ('mise where python', 'mise which uv': did the tools phase fail?) and $libsFile"
-        return
-    }
-    # One name per line; `#` starts a comment (whole line, or after whitespace).
-    $libs = @(Get-Content -Encoding UTF8 -LiteralPath $libsFile | ForEach-Object { ($_ -replace '(^|\s+)#.*$', '').Trim() } | Where-Object { $_ })
-    $want = (@($python) + $libs) -join "`n"
-    $stamp = Join-Path $WsStamps "python-env.stamp"
-    $wpyShim = Join-Path $WsBin "wpy.cmd"
-    if ((Test-Path $stamp) -and ([System.IO.File]::ReadAllText($stamp).Trim() -eq $want) -and (Test-Path $wpyShim)) {
-        Write-Ok "Python env already built ($WsPythonEnv on $python)"
-        return
-    }
-
-    Write-Log "Building Python scripting env on $python ($($libs.Count) libs)..."
-    try {
-        if (Test-Path $WsPythonEnv) { Remove-Item -Recurse -Force $WsPythonEnv }
-        & $uvExe venv --python $python $WsPythonEnv
-        if ($LASTEXITCODE -ne 0) { throw "uv venv exited $LASTEXITCODE" }
-        $envPy = Join-Path $WsPythonEnv "Scripts\python.exe"
-        & $uvExe pip install --python $envPy --upgrade @libs
-        if ($LASTEXITCODE -ne 0) { throw "uv pip install exited $LASTEXITCODE" }
-
-        $scripts = Join-Path $WsPythonEnv "Scripts"
-        Set-Content -Path $wpyShim -Value "@echo off`r`n`"$envPy`" %*" -Encoding Ascii
-        Set-Content -Path (Join-Path $WsBin "textual.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'textual.exe')`" %*" -Encoding Ascii
-        Set-Content -Path (Join-Path $WsBin "typer.cmd") -Value "@echo off`r`n`"$(Join-Path $scripts 'typer.exe')`" %*" -Encoding Ascii
-
-        if (-not (Test-Path $WsStamps)) { New-Item -ItemType Directory -Force -Path $WsStamps | Out-Null }
-        [System.IO.File]::WriteAllText($stamp, $want)
-        Write-Ok "Python env built ($WsPythonEnv on $python; launchers: wpy, textual, typer)"
-    } catch {
-        Write-Warn "Python env build failed: $($_.Exception.Message)"
-        Write-Warn "  Re-run .\bootstrap.ps1 to retry (no stamp was written)."
-    }
-}
-
 # mise installs JetBrainsMono Nerd Font (config.toml, as tasks/fonts uses on
 # Linux); scripts/install-nerd-fonts.ps1 copies the six Mono TTFs and registers
 # them per-user, plus an at-logon task, since HKCU fonts don't reliably load alone.
@@ -1246,7 +1146,7 @@ function Invoke-EnsureSshKey {
 # Get the checkout current, then run the rest from the checkout's own bootstrap.ps1:
 # PowerShell runs the copy it parsed, so after a pull old code would drive the new
 # tree. The re-run (same switches, minus -Reinstall/-Yes) skips this block.
-if (-not $env:WORKSTATION_BOOTSTRAP_PULLED) {
+if (-not $MaintenanceOnly -and -not $env:WORKSTATION_BOOTSTRAP_PULLED) {
     if ($Reinstall) { Invoke-Reinstall }
     Invoke-Preflight
     Invoke-CloneRepo
@@ -1258,20 +1158,22 @@ if (-not $env:WORKSTATION_BOOTSTRAP_PULLED) {
     & (Join-Path $RepoPath "bootstrap.ps1") @pass
     exit $LASTEXITCODE
 }
-Invoke-ToolInstall        # the pinned mise under %LOCALAPPDATA%\workstation
-Invoke-MiseBootstrap      # `mise bootstrap --only dotfiles,tools` -- dotfiles + every CLI tool; shims on PATH, node marker, prune; .wslconfig reminder; its post-tools hook regenerates Nushell's init files (mise run nu-init)
-Install-WingetApps        # GUI apps: mise bootstrap --only packages (config.windows.toml's winget list), then SSHFS-Win (UAC)
+if (-not $MaintenanceOnly) {
+    Invoke-ToolInstall
+    Invoke-MiseBootstrap
+    Install-WingetApps
+    Invoke-InstallBurntToast
+    Invoke-InstallClaudeCode
+}
 Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
 Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; re-seeded per mise install dir)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
-Invoke-InstallBurntToast  # PowerShell-module install for Claude Code WSL2 notification hooks
-Invoke-InstallClaudeCode  # native Claude Code via the official installer (manifest-verified; self-updates)
 Invoke-ClaudeSettingsMerge     # ~/.claude/settings.json seed+live+enforced jq merge
 Invoke-ClaudeSettingsLocalSeed # ~/.claude/settings.local.json seed-if-absent
-Invoke-PythonEnv          # blessed uv venv on mise's python + scripts\python-env.txt (wpy/textual/typer shims)
 Invoke-InstallNerdFonts   # JetBrainsMono Nerd Font Mono from mise — per-user registration + logon task
+if ($MaintenanceOnly) { exit 0 }
 Invoke-EnsureSshKey
 
 Write-Host ""

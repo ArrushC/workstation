@@ -224,3 +224,19 @@ esac''')
                                  "-Pulled", "--skip", "tools"], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ["-C", str(self.home), "bootstrap", "--only", "dotfiles,tools", "--yes", "--skip", "tools"])
+
+    def test_windows_update_runs_shared_maintenance_after_success(self):
+        # Copy only the entrypoint and provide a recording bootstrap. No real
+        # user integration, registry, installer, or network operation can run.
+        repo = self.home / "update-fixture"
+        (repo / "scripts").mkdir(parents=True)
+        script = repo / "scripts/update.ps1"
+        script.write_text((REPO / "scripts/update.ps1").read_text())
+        (repo / "bootstrap.ps1").write_text(
+            "param($RepoPath, [switch]$MaintenanceOnly, [switch]$SkipKeyGen, [switch]$SkipElevated)\n"
+            "if (-not $MaintenanceOnly -or -not $SkipKeyGen -or -not $SkipElevated) { throw 'unsafe update' }\n"
+            "Write-Output 'maintenance'; exit 0\n")
+        result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-Pulled"],
+                                env=dict(os.environ, USERPROFILE=str(self.home)), capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], "maintenance")

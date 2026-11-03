@@ -156,7 +156,7 @@ run_windows = 'python "{{ xdg_config_home }}/mise/scripts/ws/ws.py" baseline sna
 run = "true"
 
 [bootstrap.hooks]
-post-tools = "mise run nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win"
+post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win"
 pre-dotfiles = "mise run --skip-tools dotfiles-snapshot-win"
 post-dotfiles = "mise run --skip-tools dotfiles-baseline-win"
 
@@ -175,3 +175,8 @@ post-dotfiles = "mise run --skip-tools dotfiles-baseline-win"
 "winget:WinSCP.WinSCP" = "latest"
 "winget:ScooterSoftware.BeyondCompare.5" = "latest"
 "winget:ZedIndustries.Zed" = "latest"
+
+[tasks.tool-env-win]
+description = "Sync locked Python and language-server environments (bootstrap and update); --clean then removes superseded ones"
+run_windows = 'python "{{ xdg_config_home }}/mise/scripts/tool-env.py" all'
+run = "true"

@@ -401,6 +401,7 @@ def adminpw [] {
 # file with the pinned nu (check-templates.sh), so a bump that breaks it fails CI.
 
 let workstation_bootstrap_flags = [
+    { value: "-MaintenanceOnly", description: "refresh user integrations after a tools update" }
     { value: "-RepoPath", description: "alternate clone path (default %USERPROFILE%\\.config\\mise)" }
     { value: "-SkipKeyGen", description: "skip the SSH-key prompt" }
     { value: "-SkipToolInstall", description: "skip mise, the mise tools, the winget GUI apps, the Python env and Claude Code" }
