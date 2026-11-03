@@ -1,11 +1,20 @@
 ---
 name: project-tool-env-rollout
-description: Host state of the locked Python/LSP environments (scripts/tool-env.py) and lazy-tool simplification; opened as a PR on 2026-11-03, neither host rolled out yet.
+description: Host state of the locked Python/LSP environments (scripts/tool-env.py), merged in #112 on 2026-11-03; #112's lazy specialist tools were reverted to the full eager toolbelt the same day.
 metadata:
   type: project
 ---
 
-On 2026-11-03 the simplification (lazy specialist tools, `environments/{python,lsp}` locks,
+Update on 2026-11-03: PR #112 merged as `8e52725`. The user then requested restoring
+the full default toolbelt for consistency. The follow-up removes the 68 newly lazy
+declarations; only the pre-existing cht.sh/graft exceptions remain lazy. Locked
+environments, shared installation, and Windows maintenance stay in place. Do not
+reintroduce the smaller default. After the merge, WSL's `ws update` published python
+`ebd7de6a` and lsp `c7239507` (`tool-env.py status` exit 2: 4 superseded items, 0 runtimes,
+for `--clean`), and every eager tool was already installed there; Windows was skipped at the
+user's request. The bullets below are the pre-merge snapshot.
+
+Earlier on 2026-11-03 the simplification (lazy specialist tools, `environments/{python,lsp}` locks,
 `scripts/tool-env.py`, Windows `bootstrap.ps1 -MaintenanceOnly` from `ws update`) was committed
 on branch `tool-env-environments` and opened as a PR, not merged. The Windows checkout was
 clean at 1952628 with no work of its own, so it carries over through an ordinary merge and then

@@ -3,43 +3,43 @@
 # Installed user-level under ~/.local/share/mise; interactive shells get the real bin
 # dirs via `mise activate`, everything else the shims.
 [tools]
-# Specialist tools install on first use; mise install --include-lazy preloads them.
-# Existing installations remain available. Runtime/editor/bootstrap dependencies stay eager.
+# Install the full toolbelt by default on every supported host.
+# Only the documented cht.sh/graft compatibility exceptions remain lazy.
 # --- aqua registry (short names) ---
 zellij = "0.45.1"
 glow = "3.0.0"
 btop = "1.4.7"
 yq = "4.54.1"
-witr = { version = "0.3.4", lazy = true, lazy_bins = ["witr"] }
-lazydocker = { version = "0.25.2", lazy = true, lazy_bins = ["lazydocker"] }
-dive = { version = "0.13.1", lazy = true, lazy_bins = ["dive"] }
-lnav = { version = "0.14.1", lazy = true, lazy_bins = ["lnav"] }
-gopass = { version = "1.17.4", lazy = true, lazy_bins = ["gopass"] }
-age = { version = "1.3.2", lazy = true, lazy_bins = ["age", "age-keygen", "age-inspect"] }
-gitui = { version = "0.28.1", lazy = true, lazy_bins = ["gitui"] }
+witr = "0.3.4"
+lazydocker = "0.25.2"
+dive = "0.13.1"
+lnav = "0.14.1"
+gopass = "1.17.4"
+age = "1.3.2"
+gitui = "0.28.1"
 lazygit = "0.66.1"
-jj = { version = "0.46.0", lazy = true, lazy_bins = ["jj"] }
-xh = { version = "0.26.2", lazy = true, lazy_bins = ["xh"] }
-micro = { version = "2.0.15", lazy = true, lazy_bins = ["micro"] }
-ctop = { version = "0.7.7", lazy = true, lazy_bins = ["ctop"] }
-k9s = { version = "0.51.0", lazy = true, lazy_bins = ["k9s"] }
-rclone = { version = "1.75.2", lazy = true, lazy_bins = ["rclone"] }
-croc = { version = "11.5.4", lazy = true, lazy_bins = ["croc"] }
-sops = { version = "3.13.3", lazy = true, lazy_bins = ["sops"] }
-systemctl-tui = { version = "0.8.0", lazy = true, lazy_bins = ["systemctl-tui"] }
-lazyjournal = { version = "0.8.6", lazy = true, lazy_bins = ["lazyjournal"] }
+jj = "0.46.0"
+xh = "0.26.2"
+micro = "2.0.15"
+ctop = "0.7.7"
+k9s = "0.51.0"
+rclone = "1.75.2"
+croc = "11.5.4"
+sops = "3.13.3"
+systemctl-tui = "0.8.0"
+lazyjournal = "0.8.6"
 cheat = "5.1.0"
-fx = { version = "40.0.0", lazy = true, lazy_bins = ["fx"] }
-miller = { version = "6.22.0", lazy = true, lazy_bins = ["mlr"] }
-doggo = { version = "1.4.0", lazy = true, lazy_bins = ["doggo"] }
-miniserve = { version = "0.35.0", lazy = true, lazy_bins = ["miniserve"] }
-numbat = { version = "1.24.0", lazy = true, lazy_bins = ["numbat"] }
-grex = { version = "1.4.6", lazy = true, lazy_bins = ["grex"] }
+fx = "40.0.0"
+miller = "6.22.0"
+doggo = "1.4.0"
+miniserve = "0.35.0"
+numbat = "1.24.0"
+grex = "1.4.6"
 shfmt = "3.14.1"
 gitleaks = "8.30.1"
-hexyl = { version = "0.17.0", lazy = true, lazy_bins = ["hexyl"] }
+hexyl = "0.17.0"
 gum = "2.0.2"
-rust-analyzer = { version = "2026-10-05", lazy = true, lazy_bins = ["rust-analyzer"] }
+rust-analyzer = "2026-10-05"
 marksman = "2026-02-08"
 taplo = "0.10.0"
 herdr = "0.9.3"
@@ -51,56 +51,56 @@ herdr = "0.9.3"
 zig = "0.17.0"
 # --- github: (registry entry absent, or its asset needs a glibc newer than EL8's 2.28) ---
 "github:pwndbg/pwndbg" = { version = "2026.09.15", version_prefix = "", asset_pattern = "pwndbg_{{version}}_x86_64-portable.tar.xz", bin_path = "pwndbg/bin" }   # archive extracts a top-level pwndbg/ wrapper dir; its bin/ also holds gdb 17 + gdbserver, first on PATH, so plain `gdb` is this one (GEF via ~/.gdbinit)
-"github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" }, lazy = true, lazy_bins = ["usql"] }   # dynamic build needs glibc 2.38
+"github:xo/usql" = { version = "0.21.6", asset_pattern = "usql_static-{{version}}-linux-amd64.tar.bz2", rename_exe = { "usql_static" = "usql" } }   # dynamic build needs glibc 2.38
 "github:fastfetch-cli/fastfetch" = { version = "2.69.0", asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz" }   # plain build's loader fails on EL9
-"github:dalance/procs" = { version = "0.14.12", asset_pattern = "procs-v{{version}}-x86_64-linux.zip", lazy = true, lazy_bins = ["procs"] }
-"github:imsnif/bandwhich" = { version = "0.23.1", asset_pattern = "bandwhich-v{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["bandwhich"] }
+"github:dalance/procs" = { version = "0.14.12", asset_pattern = "procs-v{{version}}-x86_64-linux.zip" }
+"github:imsnif/bandwhich" = { version = "0.23.1", asset_pattern = "bandwhich-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }
 "github:tealdeer-rs/tealdeer" = { version = "1.9.0", asset_pattern = "tealdeer-linux-x86_64-musl", bin = "tldr" }
-"github:jarun/nnn" = { version = "5.3", asset_pattern = "nnn-musl-static-{{version}}.x86_64.tar.gz", rename_exe = { "nnn-musl-static" = "nnn" }, lazy = true, lazy_bins = ["nnn"] }
-"github:YS-L/csvlens" = { version = "0.15.1", asset_pattern = "csvlens-x86_64-unknown-linux-musl.tar.xz", lazy = true, lazy_bins = ["csvlens"] }
-"github:fujiapple852/trippy" = { version = "0.13.0", asset_pattern = "trippy-{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["trip"] }   # binary is `trip`
-"github:tummychow/git-absorb" = { version = "0.9.0", asset_pattern = "git-absorb-{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["git-absorb"] }
-"github:ouch-org/ouch" = { version = "0.8.3", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["ouch"] }   # 0.8.3+ signs with cosign, not GitHub attestations, so mise reads bumps as a provenance downgrade; verified by hand with cosign verify-blob
-"github:boyter/scc" = { version = "4.1.0", asset_pattern = "scc_Linux_x86_64.tar.gz", lazy = true, lazy_bins = ["scc"] }
-"github:multiprocessio/dsq" = { version = "0.23.0", lazy = true, lazy_bins = ["dsq"] }
+"github:jarun/nnn" = { version = "5.3", asset_pattern = "nnn-musl-static-{{version}}.x86_64.tar.gz", rename_exe = { "nnn-musl-static" = "nnn" } }
+"github:YS-L/csvlens" = { version = "0.15.1", asset_pattern = "csvlens-x86_64-unknown-linux-musl.tar.xz" }
+"github:fujiapple852/trippy" = { version = "0.13.0", asset_pattern = "trippy-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # binary is `trip`
+"github:tummychow/git-absorb" = { version = "0.9.0", asset_pattern = "git-absorb-{{version}}-x86_64-unknown-linux-musl.tar.gz" }
+"github:ouch-org/ouch" = { version = "0.8.3", asset_pattern = "ouch-x86_64-unknown-linux-musl.tar.gz" }   # 0.8.3+ signs with cosign, not GitHub attestations, so mise reads bumps as a provenance downgrade; verified by hand with cosign verify-blob
+"github:boyter/scc" = { version = "4.1.0", asset_pattern = "scc_Linux_x86_64.tar.gz" }
+"github:multiprocessio/dsq" = "0.23.0"
 "github:Canop/broot" = { version = "1.61.0", asset_pattern = "broot_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }
-"github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd", lazy = true, lazy_bins = ["nnd"] }
-"github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz", lazy = true, lazy_bins = ["gping"] }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl
-"github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["tv"] }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; binary is `tv`
-"github:Wilfred/difftastic" = { version = "0.71.0", asset_pattern = "difft-{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["difft"] }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); the gnu build needs glibc 2.29
-"github:ClementTsang/bottom" = { version = "0.14.9", asset_pattern = "bottom_x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["btm"] }   # aqua's gnu build needs glibc 2.29; binary is `btm`
-"github:bootandy/dust" = { version = "1.2.6", asset_pattern = "dust-v{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["dust"] }   # aqua's gnu build needs glibc 2.29
-"github:Canop/dysk" = { version = "3.7.1", asset_pattern = "dysk_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl", lazy = true, lazy_bins = ["dysk"] }   # filesystems and their free space (a clearer df); the zip holds every target, as broot's does
-"github:dundee/gdu" = { version = "5.38.0", asset_pattern = "gdu_linux_amd64_static.tgz", rename_exe = { "gdu_linux_amd64_static" = "gdu" }, lazy = true, lazy_bins = ["gdu"] }   # ncdu-style disk usage, parallel; aqua's default build is dynamically linked
-"github:chmln/sd" = { version = "1.1.0", asset_pattern = "sd-v{{version}}-x86_64-unknown-linux-musl.tar.gz", lazy = true, lazy_bins = ["sd"] }   # aqua's gnu build needs glibc 2.29
-"github:ynqa/jnv" = { version = "0.7.1", asset_pattern = "jnv-x86_64-unknown-linux-musl.tar.xz", lazy = true, lazy_bins = ["jnv"] }   # interactive jq filter; the pinned mise's aqua registry picks the gnu build
-"github:theryangeary/choose" = { version = "1.3.7", asset_pattern = "choose-x86_64-unknown-linux-musl", bin = "choose", lazy = true, lazy_bins = ["choose"] }   # fields by index (cut/awk '{print $N}'); aqua's gnu build needs glibc 2.34
-"github:walles/moor" = { version = "2.19.5", asset_pattern = "moor-v{{version}}-linux-amd64", bin = "moor", lazy = true, lazy_bins = ["moor"] }   # a pager (formerly moar); static Go binary
+"github:al13n321/nnd" = { version = "0.80", asset_pattern = "nnd" }
+"github:orf/gping" = { version = "1.21.0", version_prefix = "gping-v", asset_pattern = "gping-Linux-musl-x86_64.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl
+"github:alexpasmantier/television" = { version = "0.15.9", asset_pattern = "tv-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua defaults to gnu (GLIBC_2.39 > EL9's 2.34); pin musl; binary is `tv`
+"github:Wilfred/difftastic" = { version = "0.71.0", asset_pattern = "difft-{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua can't resolve 0.71.0+ (asset names gained a version prefix); the gnu build needs glibc 2.29
+"github:ClementTsang/bottom" = { version = "0.14.9", asset_pattern = "bottom_x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29; binary is `btm`
+"github:bootandy/dust" = { version = "1.2.6", asset_pattern = "dust-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
+"github:Canop/dysk" = { version = "3.7.1", asset_pattern = "dysk_{{version}}.zip", bin_path = "x86_64-unknown-linux-musl" }   # filesystems and their free space (a clearer df); the zip holds every target, as broot's does
+"github:dundee/gdu" = { version = "5.38.0", asset_pattern = "gdu_linux_amd64_static.tgz", rename_exe = { "gdu_linux_amd64_static" = "gdu" } }   # ncdu-style disk usage, parallel; aqua's default build is dynamically linked
+"github:chmln/sd" = { version = "1.1.0", asset_pattern = "sd-v{{version}}-x86_64-unknown-linux-musl.tar.gz" }   # aqua's gnu build needs glibc 2.29
+"github:ynqa/jnv" = { version = "0.7.1", asset_pattern = "jnv-x86_64-unknown-linux-musl.tar.xz" }   # interactive jq filter; the pinned mise's aqua registry picks the gnu build
+"github:theryangeary/choose" = { version = "1.3.7", asset_pattern = "choose-x86_64-unknown-linux-musl", bin = "choose" }   # fields by index (cut/awk '{print $N}'); aqua's gnu build needs glibc 2.34
+"github:walles/moor" = { version = "2.19.5", asset_pattern = "moor-v{{version}}-linux-amd64", bin = "moor" }   # a pager (formerly moar); static Go binary
 "github:juanibiapina/gob" = { version = "3.9.0", asset_pattern = "gob_{{version}}_linux_amd64.tar.gz" }   # background jobs an agent (or you) starts and checks later; the CLI starts its own daemon
-"github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz", lazy = true, lazy_bins = ["watchexec"] }   # aqua's gnu build needs glibc 2.29
-"github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv", lazy = true, lazy_bins = ["qsv"] }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
+"github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
+"github:dathere/qsv" = { version = "24.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
 "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
 "github:neovim/neovim-releases" = { version = "0.12.5", asset_pattern = "nvim-linux-x86_64.tar.gz" }   # neovim's own glibc-2.17 build (LuaJIT); the main repo's tarball and appimage (aqua) need glibc 2.34; releases trail upstream by days to weeks
 # --- conda: (the project ships only glibc builds newer than EL8's 2.28, or only static musl ones; conda-forge builds against glibc 2.17/2.28) ---
 "conda:helix" = "25.07.1"   # glibc 2.17, runtime bundled (no HELIX_RUNTIME); Windows keeps aqua's helix (config.toml)
-"conda:ast-grep" = { version = "0.45.3", lazy = true, lazy_bins = ["ast-grep", "sg"] }   # provides `ast-grep` and `sg`
-"conda:jless" = { version = "0.9.0", lazy = true, lazy_bins = ["jless"] }
-"conda:gitlogue" = { version = "0.12.0", lazy = true, lazy_bins = ["gitlogue"] }
-"conda:htmlq" = { version = "0.4.0", lazy = true, lazy_bins = ["htmlq"] }
-"conda:ugrep" = { version = "7.8.5", lazy = true, lazy_bins = ["ugrep", "ug", "ugrep+", "ug+", "ugrep-indexer"] }   # provides `ugrep` and `ug`; upstream ships Windows binaries only, EPEL 9 has 3.x and EL8 none
-"conda:datamash" = { version = "1.9", lazy = true, lazy_bins = ["datamash", "decorate"] }   # EPEL has 1.5 (EL8) / 1.7 (EL9) behind sudo
+"conda:ast-grep" = "0.45.3"   # provides `ast-grep` and `sg`
+"conda:jless" = "0.9.0"
+"conda:gitlogue" = "0.12.0"
+"conda:htmlq" = "0.4.0"
+"conda:ugrep" = "7.8.5"   # provides `ugrep` and `ug`; upstream ships Windows binaries only, EPEL 9 has 3.x and EL8 none
+"conda:datamash" = "1.9"   # EPEL has 1.5 (EL8) / 1.7 (EL9) behind sudo
 # entr isn't packaged for EL8 or EL9 and upstream ships source only. conda-forge trails
 # upstream (5.5 from 2023; upstream 5.9 adds Linux symlink watching, ENTR_RESTART_SIGNAL).
-"conda:entr" = { version = "5.5", lazy = true, lazy_bins = ["entr"] }
+"conda:entr" = "5.5"
 # pueue + pueued. Upstream ships only static musl builds, whose user lookup reads
 # /etc/passwd alone: for a directory (SSSD/LDAP) account pueued can't name its
 # socket and exits. The glibc build looks the user up through NSS.
 "conda:pueue" = "4.0.4"
 "conda:tree-sitter-cli" = "0.27.1"   # nvim-treesitter (main) builds parsers with it; upstream's asset needs glibc 2.39 and there is no musl build
 # --- http: (no GitHub release, bare assets, or scripts) ---
-"http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz", lazy = true, lazy_bins = ["ncdu"] }
+"http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
 "http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }
-"http:sysz" = { version = "1.4.3", url = "https://raw.githubusercontent.com/joehillen/sysz/{{version}}/sysz", bin = "sysz", lazy = true, lazy_bins = ["sysz"] }
+"http:sysz" = { version = "1.4.3", url = "https://raw.githubusercontent.com/joehillen/sysz/{{version}}/sysz", bin = "sysz" }
 # The OpenSSH tag in the URL is hard-coded: bump it with `version` (10.6p1 -> V_10_6_P1).
 "http:ssh-copy-id" = { version = "10.5p1", url = "https://raw.githubusercontent.com/openssh/openssh-portable/V_10_5_P1/contrib/ssh-copy-id", bin = "ssh-copy-id" }
 # Rolling raw script with no release or {{version}} in the URL; the http: backend
@@ -109,9 +109,9 @@ zig = "0.17.0"
 # cht.sh's site is down (HTTP 500 on 2026-10-11); the script queries that site anyway.
 "http:cht.sh" = { version = "0", url = "https://cht.sh/:cht.sh", bin = "cht.sh", lazy = true, lazy_bins = ["cht.sh"] }
 # --- pypi: (latest at install time, pinned by mise.lock) ---
-"pypi:glances" = { version = "latest", lazy = true, lazy_bins = ["glances"] }
-"pypi:asciinema" = { version = "latest", lazy = true, lazy_bins = ["asciinema"] }
-"pypi:harlequin" = { version = "latest", lazy = true, lazy_bins = ["harlequin", "hsql"] }
+"pypi:glances" = "latest"
+"pypi:asciinema" = "latest"
+"pypi:harlequin" = "latest"
 # --- npm: (compiles at install: lazy, so `mise install` skips it and the first run installs it) ---
 # graft: a code graph for coding agents (`graft init` wires one repo into Claude Code).
 # EL9+ only: tree-sitter's prebuilt addon needs GLIBCXX_3.4.29 (EL8 has 3.4.25) and

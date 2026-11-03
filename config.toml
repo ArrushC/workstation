@@ -26,14 +26,13 @@ vcpkg_version = "2026.07.29"     # microsoft/vcpkg release tag checked out by ta
 zjstatus_zellij_floor = "0.45.0" # zjstatus' stated zellij floor; check-invariants asserts tools.zellij >= this (not a pin — never bumped by the bumper)
 
 [tools]
-# Specialist tools install on first use; mise install --include-lazy preloads them.
-# Existing installations remain available. Runtime/editor/bootstrap dependencies stay eager.
+# Install the full toolbelt by default on every supported host.
 # Tools for both OSes (%USERPROFILE%\.config\mise is this same checkout on Windows).
 # Windows-only entries carry `os = ["windows"]`; Linux-only tools live in config.linux.toml.
 starship = "1.26.0"
-process-compose = { version = "1.122.0", lazy = true, lazy_bins = ["process-compose"] }
-restic = { version = "0.19.1", lazy = true, lazy_bins = ["restic"] }
-hyperfine = { version = "2.0.0", lazy = true, lazy_bins = ["hyperfine"] }
+process-compose = "1.122.0"
+restic = "0.19.1"
+hyperfine = "2.0.0"
 # helix on Windows: aqua's archive carries runtime/ beside hx, so no HELIX_RUNTIME. Linux
 # takes conda-forge's build (config.linux.toml): the GitHub archive needs glibc 2.34, past
 # EL8's 2.28, and conda-forge has no Windows build.
@@ -86,15 +85,15 @@ lua-language-server = "3.19.1"
 # its Claude Code plugin's /omm-scan (tasks/claude installs the plugin on Linux; Windows:
 # `omm setup claude`). aube refuses it on weekly downloads (<1000): 0.2.0's npm provenance
 # traces to the v0.2.0 tag of oh-my-mermaid/oh-my-mermaid.
-"npm:oh-my-mermaid" = { version = "0.2.0", allow_low_downloads = true, lazy = true, lazy_bins = ["omm"] }
+"npm:oh-my-mermaid" = { version = "0.2.0", allow_low_downloads = true }
 # archify: a Claude Code skill (SKILL.md + a Node renderer, no npm dependencies) for
 # interactive HTML architecture/workflow/sequence diagrams. The release zip is the skill
 # directory; tasks/claude (Linux) links ~/.claude/skills/archify to it, scripts/claude-skills.nu
 # (Windows) copies it there. Its update reminder is off (settings.enforced.json env).
 "github:tt-a1i/archify" = { version = "3.0.1", asset_pattern = "archify.zip" }
 "github:ryanoasis/nerd-fonts" = { version = "3.5.1", asset_pattern = "JetBrainsMono.tar.xz" }   # JetBrainsMono Nerd Font, the only pin: tasks/fonts (Linux) and bootstrap.ps1 (Windows, via scripts/install-nerd-fonts.ps1) install its TTFs
-opencode = { version = "1.19.0", lazy = true, lazy_bins = ["opencode"] }
-"github:can1357/oh-my-pi" = { version = "18.9.1", lazy = true, lazy_bins = ["omp"] }   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
+opencode = "1.19.0"
+"github:can1357/oh-my-pi" = "18.9.1"   # bare per-platform binary asset; Linux auto-strips the suffix to `omp` (bin= would make a non-.exe file on Windows)
 # jcode: a Rust coding-agent harness (not in mise's registry). The Linux build needs glibc 2.17;
 # its archive holds the binary and a launcher script that runs it by name, so the launcher
 # becomes `jcode`. Release builds update themselves and send usage telemetry (an install
@@ -102,7 +101,7 @@ opencode = { version = "1.19.0", lazy = true, lazy_bins = ["opencode"] }
 # ~/.jcode/no_telemetry marker ([dotfiles]) turn both off, and the weekly bump moves the pin.
 # Its Claude subscription login reuses Claude Code's OAuth client, which Anthropic's terms
 # restrict for third-party tools: give it an API key or another provider instead.
-"github:1jehuang/jcode" = { version = "0.99.0", platforms = { linux-x64 = { asset_pattern = "jcode-linux-x86_64.tar.gz", rename_exe = { "jcode-linux-x86_64" = "jcode" } }, windows-x64 = { asset_pattern = "jcode-windows-x86_64.tar.gz", rename_exe = { "jcode-windows-x86_64.exe" = "jcode.exe" } } }, lazy = true, lazy_bins = ["jcode"] }
+"github:1jehuang/jcode" = { version = "0.99.0", platforms = { linux-x64 = { asset_pattern = "jcode-linux-x86_64.tar.gz", rename_exe = { "jcode-linux-x86_64" = "jcode" } }, windows-x64 = { asset_pattern = "jcode-windows-x86_64.tar.gz", rename_exe = { "jcode-windows-x86_64.exe" = "jcode.exe" } } } }
 "github:DevToys-app/DevToys" = { version = "2.0.9.0", platforms = { linux-x64 = { asset_pattern = "devtoys.cli_linux_x64_portable.zip", rename_exe = { "DevToys.CLI" = "devtoys.cli" } }, windows-x64 = { asset_pattern = "devtoys.cli_win_x64_portable.zip" } } }   # CLI only; per-platform assets
 nushell = { version = "0.113.1", os = ["windows"] }   # Windows default shell (WT); launched via %LOCALAPPDATA%\mise\shims\nu.exe
 "github:carapace-sh/carapace-bin" = { version = "1.8.0", os = ["windows"], asset_pattern = "carapace-bin_{{version}}_windows_amd64.zip" }   # Nushell's Tab completion for ~1000 CLIs (config.nu's external completer)
