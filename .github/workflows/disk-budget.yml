@@ -46,12 +46,9 @@ jobs:
           h="$RUNNER_TEMP/home"
           mkdir -p "$h"
           export HOME="$h" XDG_DATA_HOME="$h/.local/share" XDG_CACHE_HOME="$h/.cache" XDG_STATE_HOME="$h/.local/state" GOPATH="$h/go"
+          # The default install includes specialist tools. Only cht.sh and
+          # graft remain excluded for their download/compiler requirements.
           mise install
-          # Measure the full supported catalogue and keep checking optional
-          # binaries against EL8. The network-only script and EL9-only native
-          # addon remain excluded, as they were before the smaller default.
-          extras=$(python3 -c 'import tomllib; print(" ".join(k for f in ["config.toml", "config.linux.toml"] for k,v in tomllib.load(open(f,"rb"))["tools"].items() if isinstance(v,dict) and v.get("lazy") and "linux" in v.get("os",["linux"]) and k not in ["http:cht.sh","npm:@nanonets/graft"]))')
-          mise install $extras
           mise exec python -- python scripts/tool-env.py all
           # Every Linux asset must run on EL8 (glibc 2.28): a bump to a build that
           # needs a newer glibc fails here (fix: a musl github: asset, else conda:).
@@ -94,7 +91,7 @@ jobs:
           $env:GOCACHE = "$root\go-build"
           $env:npm_config_cache = "$root\npm"
           $env:LOCALAPPDATA = "$root\local"
-          mise install --include-lazy
+          mise install
           if ($LASTEXITCODE -ne 0) { throw "mise install exited $LASTEXITCODE" }
           mise exec python -- python scripts/tool-env.py all
           if ($LASTEXITCODE -ne 0) { throw "dependency environment install exited $LASTEXITCODE" }

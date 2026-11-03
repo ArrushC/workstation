@@ -108,7 +108,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks reach it (and `config_get`) via `scripts/lib/bootstrap-fn.sh`.
 
 **`MISE_ENV` and sudo**
-- One catalogue for every host; specialist tools use lazy installation, not extra profile tokens.
+- One catalogue for every host; the full toolbelt, including specialist tools, installs by default.
+  Only cht.sh (its site's outages) and graft (EL9+ only, compiles at install) stay lazy;
+  `check_tool_environments` refuses any other `lazy = true`.
   `scripts/lib/mise-env.sh --write` writes the git-ignored
   `miserc.toml` (`env = ["linux"]`); `bootstrap.ps1` writes `["windows"]`. Every mise process reads it;
   nothing exports `MISE_ENV` (`bootstrap.sh`, `bootstrap.ps1` and `tasks/update` unset it; CI and

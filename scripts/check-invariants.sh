@@ -2340,7 +2340,7 @@ check_helix_config() {
 }
 
 check_tool_environments() {
-  hdr "locked dependency environments and lazy tool declarations"
+  hdr "locked dependency environments and full default toolbelt"
   need_py tool-env || return
   local out
   if out=$("$PY" scripts/test-tool-env.py 2>&1); then
@@ -2364,10 +2364,12 @@ packages = {p["name"]: p["version"] for p in locked["package"]}
 for dep in py["project"]["dependencies"]:
     name, version = dep.split("==")
     assert packages[name] == version, f"Python lock is stale: {name}"
-for f in ["config.toml", "config.linux.toml"]:
+lazy_exceptions = {("config.linux.toml", "http:cht.sh"), ("config.linux.toml", "npm:@nanonets/graft")}
+for f in ["config.toml", "config.linux.toml", "config.windows.toml"]:
     config = tomllib.loads((root / f).read_text())
-    for name, value in config["tools"].items():
+    for name, value in config.get("tools", {}).items():
         if isinstance(value, dict) and value.get("lazy"):
+            assert (f, name) in lazy_exceptions, f"tool must install by default: {f}:{name}"
             assert value.get("lazy_bins"), f"lazy tool has no first-use command: {name}"
 common = tomllib.loads((root / "config.toml").read_text())
 assert isinstance(common["tools"]["node"], str), "Node must have no dependency postinstall"
@@ -2383,7 +2385,7 @@ for part in py["project"]["requires-python"].split(","):
 for f, task in [("config.linux.toml", "tool-env"), ("config.windows.toml", "tool-env-win")]:
     config = tomllib.loads((root / f).read_text())
     assert task in config["bootstrap"]["hooks"]["post-tools"].split(), f"missing post-tools environment sync: {f}"
-print("locks match their manifests and tools.python; both OSes sync environments; every lazy tool names its commands")
+print("locks match their manifests and tools.python; both OSes sync environments; full toolbelt installs except cht.sh/graft")
 CHECK
   ); then ok "$out"; else bad "${out##*$'\n'}"; fi
 }

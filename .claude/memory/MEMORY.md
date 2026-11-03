@@ -31,5 +31,5 @@
 - [WezTerm: unfocused cursor is a hollow box](project-wezterm-unfocused-cursor-hollow.md) — hard-coded in WezTerm, no config keeps the bar; the user would prefer a bar but left it (an upstream PR is the only route).
 - [WezTerm: integrated title bar reverted](project-wezterm-integrated-title-bar-reverted.md) — #107's top tab bar with minimize/close buttons was cramped, laggy to drag and slow; reverted, don't re-propose.
 - [Windows: .ps1 shadows .cmd](project-windows-ps1-shadows-cmd.md) — PowerShell runs name.ps1 before name.cmd in one dir; npm leftovers shadowed tool-env launchers (removed by hand on Windows 2026-11-02).
-- [tool-env rollout state](project-tool-env-rollout.md) — lazy tools + locked Python/LSP envs, PR opened 2026-11-03 (unmerged); WSL runs pre-PR generations, Windows pending merge + ws update; lazy_bins must list every command.
+- [tool-env rollout state](project-tool-env-rollout.md) — locked Python/LSP envs merged in #112; the full toolbelt is eager again (only cht.sh/graft lazy, don't re-shrink); WSL updated, Windows `ws update` and both hosts' `--clean` pending.
 - [Windows: Check Point blocks renames](project-windows-checkpoint-rename-race.md) — its scan-on-close makes os.replace onto a just-closed file fail with WinError 5 (~1 in 20k writes); Restart Manager cannot see it; tool-env retries for 1 s.
