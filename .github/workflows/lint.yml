@@ -15,6 +15,33 @@ permissions:
   contents: read
 
 jobs:
+  dependency-environments:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            token: linux
+          - runner: windows-latest
+            token: windows
+    runs-on: ${{ matrix.runner }}
+    env:
+      MISE_ENV: ${{ matrix.token }}
+      MISE_CONFIG_DIR: ${{ github.workspace }}
+      MISE_LOCKFILE: "false"
+      MISE_LOCKED: "0"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.9
+          install: false
+      - name: Install only the runtimes for scratch environment tests
+        run: mise install node python uv
+      - name: Check failure recovery and locked installations in temporary directories
+        run: |
+          mise exec python -- python scripts/test-tool-env.py
+          mise exec python -- python scripts/test-tool-env-real.py
   invariants:
     runs-on: ubuntu-latest
     steps:
@@ -101,11 +128,11 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-winget-apps.ps1
-      - name: Test python-env + Nerd Font steps (Windows PowerShell 5.1)
+      - name: Test the Nerd Font step (Windows PowerShell 5.1)
         if: always()
         shell: powershell
         run: ./scripts/test-python-fonts.ps1
-      - name: Test python-env + Nerd Font steps (pwsh)
+      - name: Test the Nerd Font step (pwsh)
         if: always()
         shell: pwsh
         run: ./scripts/test-python-fonts.ps1

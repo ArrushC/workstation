@@ -1,0 +1,12 @@
+{
+  "name": "workstation-language-servers",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "bash-language-server": "5.8.1",
+    "typescript": "5.9.3",
+    "typescript-language-server": "6.0.2",
+    "vscode-langservers-extracted": "4.10.0",
+    "yaml-language-server": "1.25.0"
+  }
+}

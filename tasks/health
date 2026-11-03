@@ -167,9 +167,9 @@ else
   n_missing=$(wc -w <<<"$missing_tools")
   row_bad "mise tools" "$n_missing missing ($missing_tools) — mise install"
 fi
-# An update installs new versions before `mise prune` drops the old ones;
-# scripts/lib/mise-install.sh stops when free space is below what is left to
-# install plus 1 GB.
+# An update installs new versions beside the old ones (nothing prunes them until
+# `mise run tool-env --clean`); scripts/lib/mise-install.sh stops when free space
+# is below what is left to install plus 1 GB.
 mise_data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
 free_mb=$(df -Pk "$mise_data" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')
 if [ -z "$free_mb" ]; then
@@ -205,6 +205,15 @@ if [ -x "$HOME/.local/bin/wpy" ]; then
 else
   row_bad "python-env" "missing: ~/.local/bin/wpy — mise run python-env"
 fi
+# The published Python/LSP generations (scripts/tool-env.py status: 0 ok, 1 one
+# isn't published or its launcher runs another, 2 superseded ones are reclaimable).
+env_rc=0
+env_out=$(python3 "$root/scripts/tool-env.py" status 2>&1) || env_rc=$?
+case $env_rc in
+0) row_ok "dependency envs" "$env_out" ;;
+2) row_warn "dependency envs" "$env_out — mise run tool-env --clean (after checking the new ones work)" ;;
+*) row_bad "dependency envs" "${env_out:-tool-env status failed} — mise run tool-env" ;;
+esac
 echo ""
 
 # 5. zjstatus — config.linux.toml's zjstatus tool loads on every Linux host, and

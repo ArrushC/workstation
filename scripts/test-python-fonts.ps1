@@ -1,12 +1,12 @@
-﻿# Tests bootstrap.ps1's python-env and Nerd Font steps without running the
-# bootstrap: Invoke-PythonEnv, Invoke-InstallNerdFonts and Get-MiseToolExe
-# are extracted from the script's AST (scripts/lib/test-helpers.ps1), and
-# scripts/install-nerd-fonts.ps1 runs for real on fake TTFs.
+﻿# Tests bootstrap.ps1's Nerd Font step without running the bootstrap:
+# Invoke-InstallNerdFonts and Get-MiseToolExe are extracted from the script's
+# AST (scripts/lib/test-helpers.ps1), and scripts/install-nerd-fonts.ps1 runs
+# for real on fake TTFs. The Python env is no longer a bootstrap.ps1 step: the
+# post-tools task (scripts/tool-env.py) builds it, tested by
+# scripts/test-tool-env.py and scripts/test-tool-env-real.py.
 #
 # Nothing real is touched:
-#  - `mise` (the helper's) and `uv` are function stubs that record their
-#    arguments (functions win over mise.exe/uv.exe on PATH); the script stops
-#    unless both resolve to them
+#  - `mise` is a function stub
 #  - $RepoPath, the workstation dirs and $env:LOCALAPPDATA point at a temp dir
 #  - install-nerd-fonts.ps1 mostly runs with -NoRegister: no HKCU Fonts key,
 #    no session activation, no logon task. Get-/New-/Remove-ItemProperty,
@@ -19,12 +19,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fontScript = Join-Path $repoRoot 'scripts\install-nerd-fonts.ps1'
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
-. (Import-AstFunction $ast 'Get-MiseToolExe', 'Invoke-PythonEnv', 'Invoke-InstallNerdFonts', 'Invoke-Native')
-# The uv stub (`mise which uv` answers "uv", so `& $uvExe` lands here). Each
-# call keeps its arguments unjoined, so an unsplatted library list shows up.
-$script:uvCalls = New-Object System.Collections.Generic.List[object]
-$script:uvExit = 0
-function uv { $script:uvCalls.Add(@($args)); $global:LASTEXITCODE = $script:uvExit }
+. (Import-AstFunction $ast 'Get-MiseToolExe', 'Invoke-InstallNerdFonts', 'Invoke-Native')
 # The font script's registry and Task Scheduler calls, recorded in $fontCalls.
 # $fontReg is the fake HKCU Fonts key (an ordered name -> value table, or
 # $null): Get-ItemProperty answers with it, New-/Remove-ItemProperty change
@@ -52,153 +47,22 @@ function New-ScheduledTaskAction { 'action' }
 function New-ScheduledTaskTrigger { 'trigger' }
 function New-ScheduledTaskSettingsSet { 'settings' }
 function New-ScheduledTaskPrincipal { 'principal' }
-Assert-Stub 'mise', 'uv', 'Get-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Add-Type', 'Register-ScheduledTask',
+Assert-Stub 'mise', 'Get-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Add-Type', 'Register-ScheduledTask',
     'New-ScheduledTaskAction', 'New-ScheduledTaskTrigger', 'New-ScheduledTaskSettingsSet', 'New-ScheduledTaskPrincipal'
 # A real activation type in this process would let the font script call GDI.
 if (([System.Management.Automation.PSTypeName]'Workstation.FontActivator').Type) { throw 'refusing to run: Workstation.FontActivator is loaded' }
-
-# The first recorded uv call whose first argument is $Verb (unrolled: no).
-function Get-UvCall([string]$Verb) {
-    foreach ($c in $script:uvCalls) { if (@($c).Count -gt 0 -and $c[0] -ceq $Verb) { return ,$c } }
-    return $null
-}
-function Format-UvCalls { (@(foreach ($c in $script:uvCalls) { "uv $(@($c) -join ' ')" })) -join ' | ' }
-# True when every argument is a string and the list equals $Want exactly.
-function Test-Args($Call, [string[]]$Want) {
-    $c = @($Call)
-    if ($c.Count -ne $Want.Count) { return $false }
-    for ($i = 0; $i -lt $c.Count; $i++) {
-        if (-not ($c[$i] -is [string]) -or ($c[$i] -cne $Want[$i])) { return $false }
-    }
-    return $true
-}
 
 $savedLocalAppData = $env:LOCALAPPDATA
 $tmp = New-TestTempDir 'pyfonts-'
 try {
     $script:RepoPath = Join-Path $tmp 'repo'
-    $txt = Join-Path $script:RepoPath 'scripts\python-env.txt'
-    New-Item -ItemType Directory -Force -Path (Split-Path $txt -Parent) | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt
+    New-Item -ItemType Directory -Force -Path (Join-Path $script:RepoPath 'scripts') | Out-Null
     $script:WsRoot = Join-Path $tmp 'ws'
     $script:WsBin = Join-Path $script:WsRoot 'bin'
     $script:WsStamps = Join-Path $script:WsRoot 'stamps'
-    $script:WsPythonEnv = Join-Path $script:WsRoot 'python-env'
     New-Item -ItemType Directory -Force -Path $script:WsBin, $script:WsStamps | Out-Null
     $script:SkipToolInstall = $false
     $script:SkipNerdFonts = $false
-    $envPy = Join-Path $script:WsPythonEnv 'Scripts\python.exe'
-
-    # A fake `mise where python` dir with a python.exe in it.
-    function New-Python([string]$Name) {
-        $d = Join-Path $tmp $Name
-        New-TestFile (Join-Path $d 'python.exe')
-        return $d
-    }
-    function Use-Python([string]$Dir) {
-        $script:miseReply = @{ 'where python' = @{ Out = $Dir; Exit = 0 }; 'which uv' = @{ Out = 'uv'; Exit = 0 } }
-    }
-    function Invoke-Py {
-        $script:uvCalls.Clear()
-        $script:miseCalls.Clear()
-        Invoke-PythonEnv
-    }
-    # python-env.txt's entries, read the way scripts/lib/python-env.sh does.
-    function Get-Lib { @(Get-Content -LiteralPath $txt | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
-    function Assert-Built([string]$PyDir, [string[]]$Libs = @(Get-Lib)) {
-        $venv = Get-UvCall 'venv'
-        Assert ($null -ne $venv) "no uv venv call: $(Format-UvCalls)"
-        Assert (Test-Args $venv @('venv', '--python', (Join-Path $PyDir 'python.exe'), $script:WsPythonEnv)) "uv venv: $(Format-UvCalls)"
-        $pip = Get-UvCall 'pip'
-        Assert ($null -ne $pip) "no uv pip call: $(Format-UvCalls)"
-        $want = @('pip', 'install', '--python', $envPy, '--upgrade') + $Libs
-        Assert (Test-Args $pip $want) "uv pip: $(Format-UvCalls) -- want: uv $($want -join ' ')"
-    }
-    $py1 = New-Python 'mise\python\3.14.7'
-    $py2 = New-Python 'mise\python\3.15.0'
-
-    Test-Case 'python-env: uv venv on `mise where python`\python.exe; the libraries are python-env.txt; launchers; mise pinned with -C' {
-        Use-Python $py1
-        Invoke-Py
-        Assert-Built $py1
-        Assert (@(Get-Lib).Count -ge 5) "python-env.txt lists only $(@(Get-Lib).Count) libraries"
-        Assert ($null -eq (Get-UvCall 'python')) "uv downloaded its own CPython: $(Format-UvCalls)"
-        Assert ($script:miseCalls.Count -ge 2) "mise calls: $($script:miseCalls -join ' | ')"
-        foreach ($c in $script:miseCalls) { Assert ($c.StartsWith("mise -C $env:USERPROFILE ")) "not pinned to %USERPROFILE%: $c" }
-        foreach ($n in 'wpy', 'textual', 'typer') { Assert (Test-Path (Join-Path $script:WsBin "$n.cmd")) "$n.cmd missing" }
-        Assert ((Read-Text (Join-Path $script:WsBin 'wpy.cmd')).Contains("`"$envPy`" %*")) "wpy.cmd: $(Read-Text (Join-Path $script:WsBin 'wpy.cmd'))"
-        Assert ($script:warnings.Count -eq 0) "unexpected warning: $($script:warnings -join ' | ')"
-    }
-
-    Test-Case 'python-env: the same interpreter and library list again -> no rebuild' {
-        Invoke-Py
-        Assert ($script:uvCalls.Count -eq 0) "rebuilt: $(Format-UvCalls)"
-    }
-
-    Test-Case 'python-env: another interpreter path (a tools.python bump) rebuilds on it' {
-        Use-Python $py2
-        Invoke-Py
-        Assert-Built $py2
-    }
-
-    Test-Case 'python-env: an edited python-env.txt rebuilds with the new list' {
-        Add-Content -LiteralPath $txt -Value 'attrs'
-        Invoke-Py
-        Assert-Built $py2
-        Assert ((Get-UvCall 'pip') -ccontains 'attrs') "attrs not installed: $(Format-UvCalls)"
-    }
-
-    Test-Case 'python-env: a failed uv step warns, writes no stamp, and the next run retries' {
-        Use-Python $py1
-        $script:uvExit = 1
-        try { Invoke-Py } finally { $script:uvExit = 0 }
-        Assert (($script:warnings -join ' ') -like '*Python env build failed*') "warnings: $($script:warnings -join ' | ')"
-        $script:warnings.Clear()
-        Invoke-Py
-        Assert-Built $py1
-        Assert ($script:warnings.Count -eq 0) "unexpected warning: $($script:warnings -join ' | ')"
-    }
-
-    Test-Case 'python-env: inline comments, CRLF and padding parse to the same list, so such an edit does not rebuild' {
-        Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt -Force
-        $canon = @(Get-Lib)
-        Use-Python $py1
-        Invoke-Py
-        Assert-Built $py1 $canon
-        $noisy = @('# a new header line', '') + @($canon | ForEach-Object { "  $_   # why it is here" })
-        [System.IO.File]::WriteAllText($txt, (($noisy -join "`r`n") + "`r`n"))
-        Invoke-Py
-        Assert ($script:uvCalls.Count -eq 0) "rebuilt after a comment/CRLF edit: $(Format-UvCalls)"
-        Remove-Item -LiteralPath (Join-Path $script:WsStamps 'python-env.stamp') -Force
-        Invoke-Py
-        Assert-Built $py1 $canon
-    }
-
-    Test-Case 'python-env: a UTF-8 BOM on python-env.txt parses to the same list, so it does not rebuild' {
-        Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt -Force
-        Use-Python $py1
-        Invoke-Py
-        [System.IO.File]::WriteAllText($txt, (Read-Text $txt), (New-Object System.Text.UTF8Encoding $true))
-        $head = [System.IO.File]::ReadAllBytes($txt)
-        try { Invoke-Py } finally { Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\python-env.txt') -Destination $txt -Force }
-        Assert (($head[0] -eq 0xEF) -and ($head[1] -eq 0xBB) -and ($head[2] -eq 0xBF)) 'no BOM written'
-        Assert ($script:uvCalls.Count -eq 0) "rebuilt after adding a BOM: $(Format-UvCalls)"
-    }
-
-    Test-Case 'python-env: no python from mise -> a warning; uv never runs' {
-        $script:miseReply = @{ 'where python' = @{ Exit = 1 }; 'which uv' = @{ Out = 'uv'; Exit = 0 } }
-        Get-ChildItem -LiteralPath $script:WsStamps | Remove-Item -Force
-        Invoke-Py
-        Assert ($script:uvCalls.Count -eq 0) "uv ran: $(Format-UvCalls)"
-        Assert ($script:warnings.Count -eq 1) "warnings: $($script:warnings -join ' | ')"
-    }
-
-    Test-Case 'python-env: -SkipToolInstall -> neither mise nor uv runs' {
-        Use-Python $py1
-        $script:SkipToolInstall = $true
-        try { Invoke-Py } finally { $script:SkipToolInstall = $false }
-        Assert ($script:miseCalls.Count -eq 0 -and $script:uvCalls.Count -eq 0) "ran: $($script:miseCalls -join ' | ') $(Format-UvCalls)"
-    }
 
     # Invoke-InstallNerdFonts against a fake installer that records -SourceDir.
     $fontSrc = Join-Path $tmp 'mise\nerd-fonts\3.5.1'
@@ -349,4 +213,4 @@ if (Test-Path (Join-Path $PSScriptRoot 'fail')) { throw 'fake installer failed' 
     $env:LOCALAPPDATA = $savedLocalAppData
     Remove-Item -Recurse -Force $tmp
 }
-Complete-Test 'python-env and font'
+Complete-Test 'font'

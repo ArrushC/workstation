@@ -1,0 +1,18 @@
+[project]
+name = "workstation-python"
+version = "1.0.0"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "textual==8.2.8",
+  "textual-dev==1.8.0",
+  "click==8.5.0",
+  "rich==15.0.0",
+  "httpx==0.28.1",
+  "pydantic==2.14.1",
+  "typer==0.27.3",
+  "polars==2.0.0",
+  "duckdb==1.5.6",
+]
+
+[tool.uv]
+package = false

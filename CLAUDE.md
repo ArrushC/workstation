@@ -48,7 +48,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **Provisioning**
 - `bootstrap.sh` is a thin seed; its only pin is `MISE_VERSION`/`MISE_SHA256`. Tools are mise pins,
   host state is `[bootstrap.*]` tables, procedural steps are tasks in `tasks/`. Don't add install
-  logic to `bootstrap.sh` or new provisioning scripts.
+  logic to `bootstrap.sh` or duplicate platform-specific dependency installers.
+  `scripts/tool-env.py` owns the Python/LSP environments on both OSes.
 - Sudo-needing tables (dnf, `[bootstrap.files]`) live only in `config.linux.toml`; without sudo
   they're skipped with `--skip packages,files` (`vars.sudo`, decided by `bootstrap.sh`). A WSL-only
   step checks `is_wsl` at run time.
@@ -77,6 +78,21 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   directory (SSSD) account (not in /etc/passwd), which `usermod`/`chsh` can't change.
 - `[vars]` pins (`vcpkg_version`, `zjstatus_zellij_floor`) reach
   tasks through `#MISE env={X="{{ vars.x }}"}`.
+- Node has no postinstall. `environments/lsp/package.json` + npm's generated lock own the
+  language servers; TypeScript and ts-ls stay siblings. `environments/python/pyproject.toml`
+  + uv's generated lock own scripting libraries. `scripts/tool-env.py` builds each generation
+  in a new directory (never in place, even one missing its `.complete`), removes it if the build
+  fails, and publishes launchers only after its check passes; never move a built venv. Each
+  launcher is replaced atomically, the set isn't: a failed write can leave earlier launchers on
+  the new generation and `current.json` on the old until a rerun. It rewrites a file only when
+  its content changes, and on Windows retries a rename for at most 1 s, only for WinError 5/32:
+  Check Point's on-access scan opens each file as it closes and blocks the rename.
+- Both OSes run tool-env from post-tools, including routine updates. Never automatically
+  prune runtimes: old generations can still use them. The one cleanup is the explicit
+  `tool-env --clean` (sync, delete non-published generations, then `mise prune` only if every
+  deletion succeeded; otherwise exit 1). `tool-env.py status` is health's "dependency envs" row.
+  Windows update also calls bootstrap's `-MaintenanceOnly` path for fonts and user
+  integrations, without app installs or prompts.
 - Never hand-edit `mise*.lock` or `locks/**`. Regenerate them with `mise lock` (recipe:
   `docs/claude/verification.md`). `config.toml` sets `locked = true`: installs never rewrite locks
   (each OS's mise mangles the other's entries; a dirty tree breaks `wsu`). Lock-file-off installs
@@ -92,7 +108,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - WSL detection is `bootstrap.sh`'s `is_wsl()`; tasks reach it (and `config_get`) via `scripts/lib/bootstrap-fn.sh`.
 
 **`MISE_ENV` and sudo**
-- One setup for every host; no mode. `scripts/lib/mise-env.sh --write` writes the git-ignored
+- One catalogue for every host; specialist tools use lazy installation, not extra profile tokens.
+  `scripts/lib/mise-env.sh --write` writes the git-ignored
   `miserc.toml` (`env = ["linux"]`); `bootstrap.ps1` writes `["windows"]`. Every mise process reads it;
   nothing exports `MISE_ENV` (`bootstrap.sh`, `bootstrap.ps1` and `tasks/update` unset it; CI and
   `check-templates.sh` may pin one). `check_layout` holds the three-file, OS-token layout.
@@ -137,7 +154,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 **Windows**
 - Never render Windows targets with Linux mise (`os()` is its OS).
 - `bootstrap.ps1` pins only mise; CLI tools are mise tools, GUI apps winget
-  `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap`/prune unless `config.windows.toml` loads.
+  `[bootstrap.packages]` (not SSHFS-Win: UAC). No User `MISE_ENV`; it stops before `mise bootstrap` unless `config.windows.toml` loads.
 - Nushell runs via mise's `nu.exe` shim (`Install-Mise` renames a running `mise.exe`); `nu-init` (post-tools) writes vendor/autoload.
 - `scripts/test-*.ps1` test Windows (CI `windows-http`, 5.1+pwsh).
 - Scripts never write WT's tracked `settings.json`: SSH launchers → a WT fragment;

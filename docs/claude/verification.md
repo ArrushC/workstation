@@ -36,8 +36,12 @@
   `~/.config/mise/miserc.toml` has the right `env = [...]`; `systemctl --user is-active dev.mise.pueued`
   prints `active`.
 - python-env: `mise run python-env && wpy -c "import textual, click, rich, httpx, pydantic, typer, polars, duckdb; print('ok')"`.
-  A second run prints "up to date"; `mise run python-env --rebuild` forces an upgrade. The env is built on
-  `mise where python`. Windows' `Invoke-PythonEnv` reads the same `scripts/python-env.txt` (`scripts/test-python-fonts.ps1`).
+  A second run reuses the same generation (same path in "locked environment ready at ..."); `mise run python-env --rebuild`
+  rebuilds from the committed lock. The env is built on `mise which python`. Both OSes use `scripts/tool-env.py` and
+  `environments/python/uv.lock`; `python3 scripts/tool-env.py status` (exit 0 ok, 1 unpublished, 2 cleanup available)
+  is the health row. Run `python3 scripts/test-tool-env.py` for failure recovery and
+  `python3 scripts/test-tool-env-real.py` for scratch installs and TypeScript initialization. Never run `--clean` on a
+  real host for a test: it deletes rollback generations and prunes runtimes.
 - Fonts: `fc-list | grep -i 'jetbrainsmono nerd font mono' | wc -l` is 6 on native Linux hosts, 0 on
   WSL. Windows: 6 `JetBrainsMonoNerdFontMono-*.ttf` under
   `$env:LOCALAPPDATA\Microsoft\Windows\Fonts`.
@@ -79,11 +83,11 @@
   | `test-curl.ps1` | `Invoke-CurlRequest` |
   | `test-config-local.ps1` | `Set-ConfigLocalVar`, `Invoke-EnsureConfigLocal` |
   | `test-ssh-launchers.ps1` | SSH host parsing, the WT fragment, the Warp Tab Configs |
-  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); the `config.windows.toml` guard; `-C` pinning; the node marker |
+  | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); the `config.windows.toml` guard; `-C` pinning; locked-environment delegation |
   | `test-winget-apps.ps1` | `Install-WingetApps` (`mise bootstrap --only packages`, pinned `-C`) and `Install-SshfsWin` (presence by `winget list`, no `--silent`, the UAC warning, `-SkipElevated`, exit codes) |
-  | `test-python-fonts.ps1` | `Invoke-PythonEnv`, `Invoke-InstallNerdFonts`, and `install-nerd-fonts.ps1` on fake TTFs |
+  | `test-python-fonts.ps1` | `Invoke-InstallNerdFonts` and `install-nerd-fonts.ps1` on fake TTFs (the Python env is `scripts/test-tool-env*.py`) |
   | `test-claude-settings-merge.ps1` | `claude-settings-merge.ps1` against the real seed and enforced files (non-ASCII, bad JSON, no jq), `Invoke-ClaudeSettingsMerge`, the post-tools wiring |
-- From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `scripts/python-env.txt` under
+- From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `environments/` under
   `%TEMP%` (keep the `scripts\` layout: tests find the repo as their parent dir), `cd` to
   `%USERPROFILE%` and run each with `-NoProfile -ExecutionPolicy Bypass -File` under `powershell.exe`
   and `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`. powershell.exe 5.1 needs the Machine

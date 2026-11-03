@@ -43,7 +43,7 @@ emit_block() {
   # 1-3, all from mise config*.toml [tools]/[vars]/[bootstrap.packages] —
   # config*.toml is the single source of truth for the whole inventory now.
   "$PY" - "$ROOT" <<'PY'
-import sys, tomllib
+import json, sys, tomllib
 
 root = sys.argv[1]
 
@@ -78,14 +78,9 @@ for title, fname in sections:
     print(f"\n### {title}")
     for name, spec in tools.items():
         print(f"- `{short_name(name)}` {fmt_version(spec)}")
-        # node's postinstall carries the npm language-server sidecars as one
-        # `name@version` per word — surface each as its own line.
-        if name == "node" and isinstance(spec, dict) and "postinstall" in spec:
-            for tok in spec["postinstall"].split():
-                if "@" not in tok:
-                    continue
-                pkg, _, ver = tok.rpartition("@")
-                if pkg and ver:
+        if name == "node":
+            with open(f"{root}/environments/lsp/package.json") as fh:
+                for pkg, ver in json.load(fh)["dependencies"].items():
                     print(f"- `{pkg}` {ver}")
 
 # 2. Host pins declared directly in config.toml [vars]. Order:

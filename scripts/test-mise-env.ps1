@@ -246,39 +246,16 @@ try {
         Assert (@(Get-MiseCall 'reshim').Count -eq 0) 'mise reshim ran after a failed bootstrap'
     }
 
-    Test-Case 'mise bootstrap: tool steps after a good bootstrap; every call pinned with -C; node marker' {
-        $script:miseReply = @{
-            'config ls'  = @{ Out = $winLs; Exit = 0 }
-            'where node' = @{ Out = 'C:\node'; Exit = 0 }
-            'config get' = @{ Out = 'version = "26.10.0"'; Exit = 0 }
+    Test-Case 'mise bootstrap: tool steps are hook-owned; runtime is never forced or pruned' {
+        $script:miseReply = @{ 'config ls' = @{ Out = $winLs; Exit = 0 } }
+        $msg = Invoke-Bootstrap
+        Assert ($msg -eq '') "failed: $msg"
+        foreach ($c in @($script:miseCalls | Where-Object { $_ -like 'mise *' })) {
+            Assert ($c.StartsWith("mise -C $env:USERPROFILE ")) "not pinned: $c"
         }
-        Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp' | Remove-Item -Force
-        $msg = Invoke-Bootstrap
-        Assert ($msg -eq '') "failed: $msg"
-        $calls = @($script:miseCalls | Where-Object { $_ -like 'mise *' })
-        $pin = "mise -C $env:USERPROFILE "
-        foreach ($c in $calls) { Assert ($c.StartsWith($pin)) "not pinned to %USERPROFILE%: $c" }
-        $boot = $script:miseCalls.IndexOf(@(Get-MiseCall 'bootstrap --only dotfiles,tools --yes')[0])
-        $prune = $script:miseCalls.IndexOf(@(Get-MiseCall 'prune --yes')[0])
-        Assert (($boot -ge 0) -and ($prune -gt $boot)) "order: $($script:miseCalls -join ' | ')"
-        Assert (@(Get-MiseCall 'install --yes --force node').Count -eq 1) 'node not force-reinstalled'
-        Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 1) 'no node marker'
-        Assert (@(Get-MiseCall 'prune --yes').Count -eq 1 -and @(Get-MiseCall 'reshim').Count -eq 1) 'prune/reshim missing'
-    }
-
-    Test-Case 'mise bootstrap: unchanged node declaration -> no reinstall' {
-        $msg = Invoke-Bootstrap
-        Assert ($msg -eq '') "failed: $msg"
-        Assert (@(Get-MiseCall 'install --yes --force node').Count -eq 0) 'node reinstalled again'
-    }
-
-    Test-Case 'mise bootstrap: node in use -> warning, no marker' {
-        Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp' | Remove-Item -Force
-        $script:miseReply['install --yes --force node'] = @{ Out = 'Error: failed to remove node (os error 32)'; Exit = 1 }
-        $msg = Invoke-Bootstrap
-        Assert ($msg -eq '') "failed: $msg"
-        Assert (($script:warnings -join ' ') -like '*close running node processes*') "warnings: $($script:warnings -join ' | ')"
-        Assert (@(Get-ChildItem $script:WsStamps -Filter 'node-postinstall.*.stamp').Count -eq 0) 'marker written after a failed reinstall'
+        Assert (@(Get-MiseCall 'bootstrap --only dotfiles,tools --yes').Count -eq 1) 'bootstrap missing'
+        Assert (@(Get-MiseCall 'install --yes --force node').Count -eq 0) 'runtime reinstalled'
+        Assert (@(Get-MiseCall 'prune').Count -eq 0) 'rollback runtime pruned'
     }
 
     # Something to install, so the check runs (mise exits 0 when there is nothing).

@@ -10,7 +10,7 @@
 #   (3) vendored files: WezTerm's terminfo entry (follows upstream main) and
 #       gob's Claude Code skill (follows the gob pin).
 #
-# Coupled tool pins (go+gopls, node's postinstall LSP servers, gob's skill) are bumped by
+# Coupled tool pins (go+gopls, the locked LSP bundle, gob's skill) are bumped by
 # dedicated code that keeps every paired edit in step. Only the pins in the EXCLUDE list below
 # are reported and never edited: those need a coupling floor read from release
 # notes, a download check, or a wheel-coverage check the bumper can't do.
@@ -59,17 +59,9 @@ exit_code=0
 #    mise's go: backend builds it with the PINNED go. go bumps freely. gopls
 #    bumps only when its floor is at or below the go pin this run leaves.
 #    Otherwise it is reported as manual.
-#  - node's `postinstall` string pins the LSP servers (typescript-language-
-#    server, typescript, bash-/yaml-language-server,
-#    vscode-langservers-extracted). `mise outdated` sees only node itself, so
-#    the postinstall step after the main loop moves each package to the newest release within
-#    its CURRENT major, straight from the npm registry. A new major is
-#    reported as manual: an LSP server's major can change which TypeScript
-#    or node it needs. typescript is also held on 5.x, because ts-ls needs
-#    typescript/lib/tsserver.js, which TS 7 removed
-#    (check_pins). A changed postinstall string makes
-#    scripts/lib/mise-install.sh reinstall node on each host, so the
-#    servers are actually refreshed.
+#  - environments/lsp/package.json pins the language servers and TypeScript.
+#    Update within each current major and regenerate package-lock.json. Node
+#    stays independently pinned; a server update never reinstalls the runtime.
 #  - github:juanibiapina/gob bumps freely; its Claude Code skill
 #    (dotfiles/claude/skills/gob, vendored at the pin's tag) is re-vendored at
 #    the new tag in layer 3, after mise lock has had its say on the pin.
@@ -91,7 +83,7 @@ EXCLUDE="github:dj95/zjstatus http:ncdu python"
 # Coupled pins bumped by dedicated code instead of EXCLUDE. check_pins
 # requires every dual-edit/coupled pin to be in EXCLUDE or this list.
 # shellcheck disable=SC2034  # read by check-invariants.sh, not here
-COUPLED_AUTO="go go:golang.org/x/tools/gopls github:juanibiapina/gob node"
+COUPLED_AUTO="go go:golang.org/x/tools/gopls github:juanibiapina/gob"
 # Tools that publish no provenance but whose releases carry a file mise mistakes for SLSA
 # provenance: jcode's release-provenance.json is its own record of the build, not in-toto.
 # mise's lock-time check then fails on every new version, so each weekly bump would be
@@ -345,32 +337,41 @@ if [ -z "$outdated_fail" ]; then
     fi
   fi
 
-  # node's postinstall LSP servers: newest release within each package's
+  # the locked LSP bundle: newest release within each package's
   # CURRENT major (typescript: the 5.x line, see the header). A new major is
   # reported, not taken.
-  node_line="$(grep -m1 -E '^node = \{' config.toml)"
-  for spec in $(grep -oE '[a-z@/.-]+@[0-9]+\.[0-9]+\.[0-9]+' <<<"$node_line"); do
+  lsp_specs="$(jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' environments/lsp/package.json)"
+  lsp_bumped=false
+  for spec in $(grep -oE '[a-z@/.-]+@[0-9]+\.[0-9]+\.[0-9]+' <<<"$lsp_specs"); do
     pkg="${spec%@*}" pcur="${spec##*@}" major="${pcur%%.*}"
     pnew="$(npm_latest_in_major "$pkg" "$major")"
     platest="$(npm_latest "$pkg")"
     if [ -n "$platest" ] && [ "${platest%%.*}" != "$major" ] && version_gt "$platest" "$pcur"; then
       if [ "$pkg" = typescript ]; then
-        manual="${manual}- \`typescript\` (node postinstall): held on ${major}.x — $platest has no lib/tsserver.js, which typescript-language-server needs\n"
+        manual="${manual}- \`typescript\` (LSP bundle): held on ${major}.x — $platest has no lib/tsserver.js, which typescript-language-server needs\n"
       else
-        manual="${manual}- \`$pkg\` (node postinstall): $pcur → $platest is a new major — take it by hand once its compatibility is checked\n"
+        manual="${manual}- \`$pkg\` (LSP bundle): $pcur → $platest is a new major — take it by hand once its compatibility is checked\n"
       fi
     fi
     [ -n "$pnew" ] && version_gt "$pnew" "$pcur" || continue
     if $DRY; then
-      bumped="${bumped}- \`$pkg\` (config.toml node postinstall): $pcur → $pnew\n"
-    elif PIN_OLD="$spec" PIN_NEW="$pkg@$pnew" perl -i -pe \
-      's/(?<=[ "])\Q$ENV{PIN_OLD}\E(?=[ "])/$ENV{PIN_NEW}/ if /^node = \{/' config.toml &&
-      grep -qF "$pkg@$pnew" config.toml; then
-      bumped="${bumped}- \`$pkg\` (config.toml node postinstall): $pcur → $pnew\n"
+      bumped="${bumped}- \`$pkg\` (environments/lsp/package.json): $pcur → $pnew\n"
+    elif jq --arg pkg "$pkg" --arg version "$pnew" '.dependencies[$pkg] = $version' environments/lsp/package.json >"$MISE_GLOBAL_LINKDIR/lsp-package.json" &&
+      cp "$MISE_GLOBAL_LINKDIR/lsp-package.json" environments/lsp/package.json; then
+      lsp_bumped=true
+      bumped="${bumped}- \`$pkg\` (environments/lsp/package.json): $pcur → $pnew\n"
     else
-      failed="${failed}- \`$pkg\` (node postinstall): could not rewrite $spec (manual)\n"
+      failed="${failed}- \`$pkg\` (LSP bundle): could not rewrite $spec (manual)\n"
     fi
   done
+
+  # The lock follows package.json; hosts pick both up through tool-env (post-tools).
+  if $lsp_bumped; then
+    if ! npm install --prefix environments/lsp --package-lock-only --ignore-scripts --no-audit --no-fund; then
+      failed="${failed}- LSP dependency lock failed; review environments/lsp before merging\n"
+      exit_code=1
+    fi
+  fi
 
   if [ -n "$bumped" ] && ! $DRY; then
     # mise lock writes a pypi: tool's dependency lock (its `uv = { path =

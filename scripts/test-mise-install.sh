@@ -1,28 +1,7 @@
 #!/usr/bin/env bash
 # test-mise-install.sh — offline behavioural tests, no real mise/network needed.
-# scripts/lib/mise-install.sh (fake `mise` on PATH): (1) fresh install writes
-# the marker without forcing; (2) unchanged declaration → no force; (3) changed
-# declaration with node already present → exactly one `install --force node`.
-# tasks/verify-tools: (5) a failing `mise bin-paths` exits 1 with the failure
-# message instead of silently reporting zero binaries.
-# mise-install.sh: (9) an unreadable `tools.node` declaration must force the
-# node reinstall and write NO marker, never the empty-input cksum (a constant
-# marker name froze the whole re-run mechanism).
-# mise-install.sh's disk check (fake df/du, a temp disk-budget.toml): (10) too
-# little room stops before installing and lists the largest folders; (11) what
-# is already installed lowers the need; (12) 4.5 GB is short of the 5000 + 1024 MB
-# need; (13) WORKSTATION_SKIP_DISK_CHECK=1 goes ahead with a warning; (14)
-# an unreadable df and (15) a missing budget skip the check; (16) a CRLF budget
-# file is still read; (28) nothing to install skips the check, however little room.
-# tasks/optional-packages (fake rpm/sudo): (17) nothing
-# missing means no sudo; (18) a missing package goes to dnf with strict=0 and an
-# absent one is reported as skipped, exit 0. (19) verify-binary.sh honours
-# WORKSTATION_GLIBC_FLOOR. enable-el-repos.sh (fake os-release/rpm/dnf/sudo):
-# (20) subscribed RHEL 8 enables codeready-builder-for-rhel-8 through
-# subscription-manager; (21) EL8 Alma enables powertools, (22) EL9 crb; (23) an
-# enabled CRB means no sudo; (24) a failed enable exits 1 naming the command and
-# showing its error; (25) RHEL installs EPEL from Fedora's URL, (26) Alma by name.
-# tasks/optional-packages (27): on EL8 bear (EL9+) is skipped without sudo.
+# Installs runtimes without forcing Node or pruning rollback versions; checks
+# disk preflight, binary compatibility, optional packages and EL repositories.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"
@@ -67,14 +46,10 @@ fail() {
 bash "$root/scripts/lib/mise-install.sh" >/dev/null
 grep -qx install "$FAKE_LOG" || fail "first run did not install"
 grep -q 'install --force' "$FAKE_LOG" && fail "fresh install forced node"
-ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null || fail "marker not written"
-# 2. unchanged
+# Repeated installs never reinstall Node merely for a dependency change.
 : >"$FAKE_LOG"
 bash "$root/scripts/lib/mise-install.sh" >/dev/null
-grep -q 'install --force' "$FAKE_LOG" && fail "unchanged declaration forced node"
-# 3. changed
-FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@2" }' bash "$root/scripts/lib/mise-install.sh" >/dev/null
-[ "$(grep -c 'install --force node' "$FAKE_LOG")" = 1 ] || fail "changed declaration should force node exactly once"
+grep -q 'install --force' "$FAKE_LOG" && fail "repeat install forced node"
 
 # 5. verify-tools: a failing `mise bin-paths` must fail loudly, not report 0.
 V="$T/verify-bin"
@@ -92,28 +67,6 @@ rc5=0
 out5="$(PATH="$V:$PATH" bash "$root/tasks/verify-tools" 2>&1)" || rc5=$?
 [ "$rc5" = 1 ] || fail "verify-tools (mise bin-paths failure): expected exit 1, got $rc5"
 printf '%s\n' "$out5" | grep -q 'verify-tools: mise bin-paths failed' || fail "verify-tools (mise bin-paths failure): missing failure message"
-
-# 9. mise-install.sh: an UNREADABLE node declaration (the real failure mode —
-# `mise config get tools.node` without `-f` reads only the highest-precedence
-# config file, which declares no node, so it errors) must NOT settle
-# on the empty-input cksum. Before the fix that constant marker froze the
-# mechanism: node would never force-reinstall again on a postinstall change.
-: >"$FAKE_LOG"
-rm -f "$XDG_STATE_HOME/workstation"/node-postinstall.*
-: >"$FAKE_NODE" # node already installed
-FAKE_DECL_FAIL=1 bash "$root/scripts/lib/mise-install.sh" >/dev/null 2>&1
-[ "$(grep -c 'install --force node' "$FAKE_LOG")" = 1 ] ||
-  fail "unreadable declaration must force the node reinstall (never assume unchanged)"
-empty_sum="$(printf '' | cksum | cut -d' ' -f1)"
-[ -e "$XDG_STATE_HOME/workstation/node-postinstall.$empty_sum" ] &&
-  fail "unreadable declaration wrote the empty-cksum marker ($empty_sum) — the mechanism would freeze"
-ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null 2>&1 &&
-  fail "unreadable declaration must write no marker at all, so the next run retries"
-# and it recovers: a readable declaration on the next run writes a real marker
-: >"$FAKE_LOG"
-bash "$root/scripts/lib/mise-install.sh" >/dev/null
-ls "$XDG_STATE_HOME/workstation"/node-postinstall.* >/dev/null ||
-  fail "a readable declaration after a failure must write the marker again"
 
 # 10-15. The disk check, run from a copy of the script in a temp repo whose
 # disk-budget.toml says linux 5000 MB (the real file changes
@@ -273,4 +226,4 @@ if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; the
   printf '%s\n' "$out19" | grep -q 'checked against glibc 2.0 (WORKSTATION_GLIBC_FLOOR)' || fail "verify-binary floor: $out19"
 fi
 
-echo "PASS: mise-install.sh installs/forces-node-once-on-change; verify-tools fails loudly on a broken mise bin-paths; an unreadable tools.node declaration forces the reinstall and writes NO marker; the disk check stops a too-full disk before installing (budgets from disk-budget.toml, installed tools counted, override, unreadable df or missing budget skipped, nothing to install never blocked); optional-packages installs only what's missing with strict=0 and skips what the release lacks; enable-el-repos installs EPEL (by URL on RHEL) and picks CRB per host (RHEL subscription-manager, EL8 powertools, EL9 crb), stopping with the error when it can't; optional-packages skips a package below its first EL release without sudo; verify-binary honours WORKSTATION_GLIBC_FLOOR"
+echo "PASS: runtime installs, disk preflight, binary compatibility and EL package handling"

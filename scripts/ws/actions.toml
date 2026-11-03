@@ -349,7 +349,7 @@ wsh = false
 [[action]]
 id = "python-env"
 title = "Update the Python env"
-desc = "mise run python-env: build wpy's venv on mise's Python if it changed"
+desc = "mise run python-env: sync wpy's env with environments/python/uv.lock (new generation only if it changed)"
 group = "python"
 kind = "change"
 keywords = ["python", "venv", "wpy", "textual"]
@@ -361,7 +361,7 @@ wsh = false
 [[action]]
 id = "python-env-rebuild"
 title = "Rebuild the Python env"
-desc = "mise run python-env --rebuild: rebuild wpy's venv with the latest libraries"
+desc = "mise run python-env --rebuild: a fresh generation from the same lock (upgrade: edit pyproject.toml, uv lock)"
 group = "python"
 kind = "change"
 keywords = ["python", "venv", "wpy", "rebuild", "upgrade"]
@@ -369,6 +369,52 @@ os = ["linux"]
 alias = "mise run python-env --rebuild"
 run = ["mise", "-C", "{home}", "run", "python-env", "--rebuild"]
 fixes = ["python-env"]
+
+[[action]]
+id = "tool-env"
+title = "Sync the Python and language-server envs"
+desc = "mise run tool-env: build and publish the locked wpy and LSP environments if their locks changed"
+group = "python"
+kind = "change"
+keywords = ["python", "wpy", "lsp", "language", "server", "typescript", "npm", "lock"]
+os = ["linux"]
+task = "tool-env"
+fixes = ["dependency envs"]
+wsh = false
+
+[[action]]
+id = "tool-env-clean"
+title = "Reclaim superseded envs and runtimes"
+desc = "mise run tool-env --clean: sync, then delete older env generations and mise prune unused runtimes"
+group = "python"
+kind = "change"
+keywords = ["clean", "prune", "disk", "space", "generations", "runtimes", "python", "lsp"]
+os = ["linux"]
+alias = "mise run tool-env --clean"
+run = ["mise", "-C", "{home}", "run", "tool-env", "--clean"]
+fixes = ["dependency envs"]
+
+[[action]]
+id = "tool-env-win"
+title = "Sync the Python and language-server envs"
+desc = "mise run tool-env-win: build and publish the locked wpy and LSP environments if their locks changed"
+group = "python"
+kind = "change"
+keywords = ["python", "wpy", "lsp", "language", "server", "typescript", "npm", "lock"]
+os = ["windows"]
+task = "tool-env-win"
+wsh = false
+
+[[action]]
+id = "tool-env-clean-win"
+title = "Reclaim superseded envs and runtimes"
+desc = "mise run tool-env-win --clean: sync, then delete older env generations and mise prune unused runtimes"
+group = "python"
+kind = "change"
+keywords = ["clean", "prune", "disk", "space", "generations", "runtimes", "python", "lsp"]
+os = ["windows"]
+alias = "mise run tool-env-win --clean"
+run = ["mise", "-C", "{home}", "run", "tool-env-win", "--clean"]
 
 [[action]]
 id = "fonts"

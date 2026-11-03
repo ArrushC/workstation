@@ -4,7 +4,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-files=(bootstrap.sh bootstrap.ps1 config.toml config.linux.toml
+files=(environments/lsp/package.json bootstrap.sh bootstrap.ps1 config.toml config.linux.toml
   dotfiles/zshrc.tera dotfiles/bashrc.tera tasks/vcpkg tasks/check-updates
   scripts/bump-versions.sh scripts/gen-tool-memory.sh scripts/check-invariants.sh
   .github/workflows/lint.yml .github/workflows/version-bumps.yml
@@ -74,7 +74,7 @@ pins
 case_ "zellij below the zjstatus floor fails" 1 "is below"
 
 fresh
-sed -i -E 's/typescript@[0-9.]+/typescript@7.0.0/' "$T/config.toml"
+sed -i -E 's/("typescript": "?)[0-9.]+/\17.0.0/' "$T/environments/lsp/package.json"
 pins
 case_ "typescript major 7 fails" 1 "major 7 > 5"
 
@@ -89,14 +89,9 @@ pins
 case_ "unreadable zjstatus pin fails" 1 "zjstatus pin unreadable"
 
 fresh
-sed -i -E 's/typescript-language-server@[0-9.]+ //' "$T/config.toml"
+sed -i '/"typescript-language-server":/d' "$T/environments/lsp/package.json"
 pins
-case_ "typescript-language-server missing from postinstall fails" 1 "missing from node's postinstall"
-
-fresh
-sed -i -E 's/^(COUPLED_AUTO=".*) node"/\1"/' "$T/scripts/bump-versions.sh"
-pins
-case_ "node missing from COUPLED_AUTO fails" 1 "node"
+case_ "typescript-language-server missing from bundle fails" 1 "missing from environments/lsp/package.json"
 
 fresh
 sed -i -E 's/^(tag: +v)[0-9.]+/\10.0.1/' "$T/dotfiles/claude/skills/gob/.vendor"

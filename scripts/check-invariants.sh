@@ -183,19 +183,14 @@ check_pins() {
     "zshrc.tera=$(sed -nE 's/.*VCPKG_ROOT="([^"]*)".*/\1/p' dotfiles/zshrc.tera | head -1)" \
     "bashrc.tera=$(sed -nE 's/.*VCPKG_ROOT="([^"]*)".*/\1/p' dotfiles/bashrc.tera | head -1)" \
     "tasks/vcpkg=$(sed -nE 's/.*vroot="([^"]*)".*/\1/p' tasks/vcpkg | head -1)"
-  # TypeScript 7 ships only bin/tsc, no lib/tsserver.js, so typescript-language-server can't start.
   pin_major_at_most "typescript (tsserver for typescript-language-server)" \
-    "$(grep -E '^node = ' config.toml | grep -oE 'typescript@[0-9.]+' | cut -d@ -f2)" 5 \
-    "keep the 5.x line"
-  if grep -E '^node = ' config.toml | grep -q 'typescript-language-server@'; then
-    ok "typescript-language-server is in node's postinstall"
+    "$(jq -r '.dependencies.typescript // empty' environments/lsp/package.json)" 5 "keep the 5.x line"
+  if jq -e '.dependencies["typescript-language-server"]' environments/lsp/package.json >/dev/null; then
+    ok "typescript-language-server is in the locked LSP bundle"
   else
-    bad "typescript-language-server@ missing from node's postinstall in config.toml"
+    bad "typescript-language-server missing from environments/lsp/package.json"
   fi
-  # Pins the bumper must skip or bump as a pair: zjstatus (its zellij floor), ncdu (URL
-  # 404s on some releases), go + gopls, node (its postinstall pins the LSP servers), gob
-  # (its vendored skill).
-  pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls node github:juanibiapina/gob
+  pin_bumper_handles github:dj95/zjstatus http:ncdu go go:golang.org/x/tools/gopls github:juanibiapina/gob
   # gob's Claude Code skill is vendored at the pin's tag, so it describes the installed CLI.
   pin_equal "gob (its vendored Claude Code skill)" \
     "config.linux.toml=$(sed -nE 's#^"github:juanibiapina/gob" = \{ version = "([^"]+)".*#\1#p' config.linux.toml)" \
@@ -1180,7 +1175,7 @@ check_disk_budget() {
 }
 
 check_mise_install_lib() {
-  hdr "mise install lib (scripts/lib/mise-install.sh: force-reinstall-on-change, tasks/verify-tools)"
+  hdr "mise install lib (runtime install, disk preflight, tasks/verify-tools)"
   local out
   if out=$(bash scripts/test-mise-install.sh 2>&1); then
     ok "${out#PASS: }"
@@ -2344,6 +2339,55 @@ check_helix_config() {
   fi
 }
 
+check_tool_environments() {
+  hdr "locked dependency environments and lazy tool declarations"
+  need_py tool-env || return
+  local out
+  if out=$("$PY" scripts/test-tool-env.py 2>&1); then
+    ok "dependency installs preserve working launchers on failure"
+  else
+    bad "tool-env tests: $out"
+  fi
+  if out=$(
+    "$PY" - 2>&1 <<'CHECK'
+import json, tomllib
+from pathlib import Path
+root = Path.cwd()
+package = json.loads((root / "environments/lsp/package.json").read_text())
+lock = json.loads((root / "environments/lsp/package-lock.json").read_text())
+assert lock["packages"][""]["dependencies"] == package["dependencies"], "LSP lock is stale"
+for name, version in package["dependencies"].items():
+    assert lock["packages"]["node_modules/" + name]["version"] == version, name
+py = tomllib.loads((root / "environments/python/pyproject.toml").read_text())
+locked = tomllib.loads((root / "environments/python/uv.lock").read_text())
+packages = {p["name"]: p["version"] for p in locked["package"]}
+for dep in py["project"]["dependencies"]:
+    name, version = dep.split("==")
+    assert packages[name] == version, f"Python lock is stale: {name}"
+for f in ["config.toml", "config.linux.toml"]:
+    config = tomllib.loads((root / f).read_text())
+    for name, value in config["tools"].items():
+        if isinstance(value, dict) and value.get("lazy"):
+            assert value.get("lazy_bins"), f"lazy tool has no first-use command: {name}"
+common = tomllib.loads((root / "config.toml").read_text())
+assert isinstance(common["tools"]["node"], str), "Node must have no dependency postinstall"
+# uv sync --locked refuses a python outside requires-python, so a python bump past it
+# would fail every host's post-tools hook (bump the range and re-lock with it).
+pin = tuple(int(x) for x in common["tools"]["python"].split(".")[:3])
+import operator, re
+ops = {">=": operator.ge, ">": operator.gt, "<=": operator.le, "<": operator.lt, "==": operator.eq}
+for part in py["project"]["requires-python"].split(","):
+    op, ver = re.fullmatch(r"\s*(>=|<=|==|>|<)\s*([0-9.]+)\s*", part).groups()
+    want = tuple(int(x) for x in ver.split("."))
+    assert ops[op](pin[:len(want)], want), f"tools.python {'.'.join(map(str, pin))} is outside requires-python {part.strip()}"
+for f, task in [("config.linux.toml", "tool-env"), ("config.windows.toml", "tool-env-win")]:
+    config = tomllib.loads((root / f).read_text())
+    assert task in config["bootstrap"]["hooks"]["post-tools"].split(), f"missing post-tools environment sync: {f}"
+print("locks match their manifests and tools.python; both OSes sync environments; every lazy tool names its commands")
+CHECK
+  ); then ok "$out"; else bad "${out##*$'\n'}"; fi
+}
+
 if [ "${1:-}" = --shell-files ]; then
   shell_targets
   exit 0
@@ -2458,6 +2502,7 @@ run_parallel() {
 
 printf '%s%s== workstation invariant check ==%s\n' "$BOLD" "$BLUE" "$RESET"
 check_pins
+check_tool_environments
 check_line_endings_and_mode
 check_dotfiles_mode
 check_bom

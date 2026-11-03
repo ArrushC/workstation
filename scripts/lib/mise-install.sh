@@ -1,26 +1,10 @@
 #!/usr/bin/env bash
 # mise-install.sh — install every tool this host's config set (miserc.toml) declares.
-# It first checks there is room for them (check_disk below).
-#
-# node's npm postinstall carries the language servers; mise re-runs it only on
-# a (re)install, so a changed postinstall string with an unchanged node pin
-# would otherwise never land. Marker = cksum of node's declaration under
-# ~/.local/state/workstation/; when node was ALREADY installed and the marker
-# is stale, node is force-reinstalled once. Then `mise prune` drops versions no
-# config references. User-level; never sudo. Run by `mise bootstrap`'s pre-tools
-# hook (config.linux.toml), so after the dnf batch: node needs libatomic to start.
-#
-# The declaration is read with an explicit `-f config.toml`: a bare
-# `mise config get tools.node` reads only the HIGHEST-PRECEDENCE loaded file,
-# which is config.linux.toml (it declares no node),
-# so it errors and the cksum would silently be the empty-input constant —
-# freezing the marker and disabling the re-run mechanism entirely. An
-# unreadable declaration force-reinstalls instead of assuming "unchanged":
-# re-running the postinstall is cheap, skipping it leaves stale LSP servers.
+# It first checks there is room for them (check_disk below). It never prunes: the
+# published Python/LSP environments still run on the old runtimes until the
+# post-tools hook moves them, so cleanup is `mise run tool-env --clean`.
 set -euo pipefail
 repo="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
-state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
-mkdir -p "$state"
 export MISE_YES=1
 
 # Room for the tools before installing any: a disk that fills mid-install leaves
@@ -28,7 +12,7 @@ export MISE_YES=1
 # sources). The budget is what a fresh install writes on Linux, as
 # measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what
 # is already installed, plus 1 GB for the new versions an update installs before
-# `mise prune` drops the old ones. Nothing to install needs no room: the budget
+# explicit cleanup drops the old ones. Nothing to install needs no room: the budget
 # also counts the caches, which `installs` doesn't, so a host with every tool
 # already installed would otherwise still need about 2 GB free for an update that
 # writes nothing. WORKSTATION_SKIP_DISK_CHECK=1 goes ahead anyway; a missing
@@ -69,32 +53,6 @@ check_disk() {
 }
 check_disk
 
-had_node=false
-if mise where node >/dev/null 2>&1; then had_node=true; fi
-
 mise install
-
-if mise where node >/dev/null 2>&1; then
-  decl="$(mise config get -f "$repo/config.toml" tools.node 2>/dev/null || true)"
-  if [ -z "$decl" ]; then
-    printf '  ! could not read tools.node from %s — forcing the node reinstall so the npm postinstall cannot be silently skipped\n' \
-      "$repo/config.toml" >&2
-    sum=""
-  else
-    sum="$(printf '%s' "$decl" | cksum | cut -d' ' -f1)"
-  fi
-  if $had_node && { [ -z "$sum" ] || [ ! -f "$state/node-postinstall.$sum" ]; }; then
-    printf '  node already installed but its declaration changed — reinstalling so the npm postinstall re-runs\n'
-    mise install --force node
-  fi
-  # No marker when the declaration was unreadable: the next run must retry,
-  # never settle on a constant name.
-  if [ -n "$sum" ]; then
-    rm -f "$state"/node-postinstall.*
-    : >"$state/node-postinstall.$sum"
-  fi
-fi
-
-mise prune
 mise reshim
 printf '  ✓ mise tools installed\n'

@@ -13,8 +13,8 @@ if [ -z "${WORKSTATION_UPDATE_PULLED:-}" ]; then
 fi
 
 # miserc.toml from mise-env.sh (the OS token set), then drop any exported
-# variable: an exported MISE_ENV would override miserc and could make the pre-tools
-# hook's `mise prune` (scripts/lib/mise-install.sh) remove tools.
+# variable: an exported MISE_ENV would override miserc and install (or, under
+# `mise run tool-env --clean`, prune) for the wrong config set.
 tokens="$("$root/scripts/lib/mise-env.sh" --write)"
 unset MISE_ENV
 printf '==> config set %s (miserc.toml)\n' "$tokens"

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="End-of-bootstrap steps on every host: cheat sheets, nb notebook, tldr cache (after python-env)"
-#MISE depends=["python-env"]
+#MISE description="End-of-bootstrap steps on every host: cheat sheets, nb notebook, tldr cache"
 set -euo pipefail
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
 # 1. cheat community cheatsheets. Cloned here rather than via [bootstrap.repos]
