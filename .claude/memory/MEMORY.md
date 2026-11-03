@@ -31,5 +31,7 @@
 - [WezTerm: unfocused cursor is a hollow box](project-wezterm-unfocused-cursor-hollow.md) — hard-coded in WezTerm, no config keeps the bar; the user would prefer a bar but left it (an upstream PR is the only route).
 - [WezTerm: integrated title bar reverted](project-wezterm-integrated-title-bar-reverted.md) — #107's top tab bar with minimize/close buttons was cramped, laggy to drag and slow; reverted, don't re-propose.
 - [Windows: .ps1 shadows .cmd](project-windows-ps1-shadows-cmd.md) — PowerShell runs name.ps1 before name.cmd in one dir; npm leftovers shadowed tool-env launchers (removed by hand on Windows 2026-11-02).
-- [tool-env rollout state](project-tool-env-rollout.md) — locked Python/LSP envs merged in #112; the full toolbelt is eager again (only cht.sh/graft lazy, don't re-shrink); WSL updated, Windows `ws update` and both hosts' `--clean` pending.
+- [tool-env rollout state](project-tool-env-rollout.md) — locked Python/LSP envs merged in #112; the full toolbelt is eager again (#113; only cht.sh/graft lazy, don't re-shrink); WSL, Windows and atc-cache-dev10 updated 2026-11-03, `--clean` pending on each.
+- [dev10: hand-installed graft](project-dev10-graft-hand-installed.md) — graft there is a hand-installed 0.18.0 in ~/.local/bin behind an empty mise 0.21.1 dir; the user uses it, keep both, don't "clean up".
+- [dev10: polars CPU warning](project-dev10-polars-cpu-masked.md) — the VM hides AVX2-era features; polars warns but works; the user kept the default runtime (rtcompat only if it ever crashes).
 - [Windows: Check Point blocks renames](project-windows-checkpoint-rename-race.md) — its scan-on-close makes os.replace onto a just-closed file fail with WinError 5 (~1 in 20k writes); Restart Manager cannot see it; tool-env retries for 1 s.
