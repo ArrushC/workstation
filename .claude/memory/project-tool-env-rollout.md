@@ -11,8 +11,11 @@ declarations; only the pre-existing cht.sh/graft exceptions remain lazy. Locked
 environments, shared installation, and Windows maintenance stay in place. Do not
 reintroduce the smaller default. After the merge, WSL's `ws update` published python
 `ebd7de6a` and lsp `c7239507` (`tool-env.py status` exit 2: 4 superseded items, 0 runtimes,
-for `--clean`), and every eager tool was already installed there; Windows was skipped at the
-user's request. The bullets below are the pre-merge snapshot.
+for `--clean`), and every eager tool was already installed there. After #113 (`6e0a751`) all
+three hosts ran `ws update` on 2026-11-03: WSL and Windows (python `d4860b36`, lsp `8b371edf`)
+had every declared tool, and atc-cache-dev10 built `ebd7de6a`/`c7239507` for the first time and
+installed process-compose and restic. `--clean` hasn't run on any host. The bullets below are
+the pre-merge snapshot.
 
 Earlier on 2026-11-03 the simplification (lazy specialist tools, `environments/{python,lsp}` locks,
 `scripts/tool-env.py`, Windows `bootstrap.ps1 -MaintenanceOnly` from `ws update`) was committed
