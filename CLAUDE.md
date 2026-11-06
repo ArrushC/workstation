@@ -163,6 +163,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   Warp's `workstation-*.toml` are runtime.
 - Warp is primary; WT is compat (default terminal, Nushell).
 - `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
+- DeepSeek Harness: `scripts/deepseek-harness.ps1` (post-tools) installs the official desktop app only when Windows doesn't list it, from `dsh-desk/feeds/win-x64/nightly.yml` (its SHA-512, then the Hangzhou DeepSeek Authenticode signer); the app self-updates. Never winget: those ids are third-party repackages. A 5.1 child of pwsh inherits pwsh's PSModulePath and can't autoload core modules, so the script resets it.
 
 **zellij**
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays

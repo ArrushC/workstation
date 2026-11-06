@@ -127,6 +127,16 @@ description = "Install or update WezTerm's nightly build (the post-tools hook)"
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-nightly.ps1 || exit /b 0"
 
+# DeepSeek Harness's desktop app (DeepSeek's agent harness), per-user without UAC. Installed only
+# when Windows doesn't list it; from then on its own updater keeps it current (nightly channel).
+# Not winget: every "DeepSeek Harness" package there is a third-party repackage.
+# scripts/deepseek-harness.ps1 checks the installer against the SHA-512 in DeepSeek's update feed
+# and DeepSeek's code-signing certificate before it runs it.
+[tasks.deepseek-harness-win]
+description = "Install DeepSeek Harness's desktop app when it's missing (the post-tools hook); it updates itself"
+dir = "{{ xdg_config_home }}/mise"
+run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deepseek-harness.ps1 || exit /b 0"
+
 # ws update (wsu): tasks/update is bash and ends in an unscoped bootstrap, so Windows pulls
 # and bootstraps dotfiles and tools only, as bootstrap.ps1 does (scripts/update.ps1).
 [tasks.update-windows]
@@ -156,7 +166,7 @@ run_windows = 'python "{{ xdg_config_home }}/mise/scripts/ws/ws.py" baseline sna
 run = "true"
 
 [bootstrap.hooks]
-post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win"
+post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win ::: deepseek-harness-win"
 pre-dotfiles = "mise run --skip-tools dotfiles-snapshot-win"
 post-dotfiles = "mise run --skip-tools dotfiles-baseline-win"
 
