@@ -83,11 +83,33 @@ try {
         Assert (-not $r.Ok) "accepted signer '$($r.Signer)'"
         Assert ($r.Signer -like '*Microsoft*') "signer '$($r.Signer)'"
     }
+    Test-Case 'Test-Signer: Ok when the signer matches exactly, case-sensitively' {
+        $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+        $actual = (Test-Signer $cmd).Signer
+        Assert ($actual -ne '') 'no signer'
+        $r = Test-Signer $cmd -Expected $actual
+        Assert ($r.Ok -and $r.Status -eq 'Valid') "Ok $($r.Ok), status $($r.Status)"
+        $r = Test-Signer $cmd -Expected $actual.ToLowerInvariant()
+        Assert (-not $r.Ok) 'a different case was accepted'
+    }
+    Test-Case 'Test-Signer: an unreadable path gives Error, not a throw' {
+        foreach ($bad in (Join-Path $tmp 'no such installer.exe'), $tmp) {   # missing file; a directory
+            $r = Test-Signer $bad
+            Assert (-not $r.Ok -and $r.Signer -ceq '' -and $r.Status -like 'Error:*') "status '$($r.Status)' for $bad"
+        }
+    }
     Test-Case 'Get-InstalledHarness: missing key, lookalike, exact name' {
         Assert ($null -eq (Get-InstalledHarness $uninstall)) 'no key'
         New-Item -Path "$uninstall\{lookalike}" -Force | Out-Null
         Set-ItemProperty -Path "$uninstall\{lookalike}" -Name DisplayName -Value 'DeepSeek Harness Desktop'
         Assert ($null -eq (Get-InstalledHarness $uninstall)) 'lookalike counted'
+        New-Item -Path "$uninstall\{noname}" -Force | Out-Null   # no DisplayName at all
+        Assert ($null -eq (Get-InstalledHarness $uninstall)) 'nameless subkey counted'
+        New-Item -Path "$uninstall\{nover}" -Force | Out-Null
+        Set-ItemProperty -Path "$uninstall\{nover}" -Name DisplayName -Value 'DeepSeek Harness'
+        $n = Get-InstalledHarness $uninstall
+        Assert ($null -ne $n -and $n.Version -ceq '' -and $n.Name -ceq '{nover}') 'no DisplayVersion'
+        Remove-Item -LiteralPath "$uninstall\{nover}" -Force
         New-Item -Path "$uninstall\{dsh}" -Force | Out-Null
         Set-ItemProperty -Path "$uninstall\{dsh}" -Name DisplayName -Value 'DeepSeek Harness'
         Set-ItemProperty -Path "$uninstall\{dsh}" -Name DisplayVersion -Value '0.2.2-rc.1'
