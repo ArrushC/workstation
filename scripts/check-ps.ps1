@@ -21,6 +21,8 @@ $targets = @(
     'scripts/test-claude-settings-merge.ps1',
     'scripts/wezterm-nightly.ps1',
     'scripts/test-wezterm-nightly.ps1',
+    'scripts/deepseek-harness.ps1',
+    'scripts/test-deepseek-harness.ps1',
     'scripts/test-wezterm-config.ps1',
     'scripts/lib/test-helpers.ps1',
     'scripts/check-ps.ps1'

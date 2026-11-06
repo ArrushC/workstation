@@ -31,6 +31,13 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 started from pwsh 7 inherits pwsh's PSModulePath, which puts
+# pwsh's modules first; Microsoft.PowerShell.Security (Get-AuthenticodeSignature) then
+# fails to load, and an unverifiable installer must never be run. Reset it to the
+# machine value (the 5.1 and system module folders).
+if ($PSVersionTable.PSEdition -ne 'Core') {
+    $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+}
 
 function Write-Step([string]$Message) { Write-Host "  deepseek-harness: $Message" }
 
@@ -117,3 +124,68 @@ function Get-InstalledHarness([string]$Key, [string]$Name = 'DeepSeek Harness') 
     }
     return $null
 }
+
+# curl.exe with bootstrap.ps1's Invoke-CurlRequest flags: retries, and a stalled
+# transfer aborts instead of hanging.
+function Get-Url([string]$Uri, [string]$OutFile) {
+    $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location',
+        '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30',
+        '--speed-limit', '1', '--speed-time', '60', '--output', $OutFile, '--url', $Uri)
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    $out = & curl.exe @curlArgs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl.exe exit ${LASTEXITCODE} for ${Uri}: $((@($out) | ForEach-Object { "$_".Trim() }) -join ' ')"
+    }
+}
+
+# Runs the installer and returns its exit code. On timeout it throws and leaves the
+# process running (killing an installer half-way would leave a broken install).
+function Invoke-Installer([string]$Path, [string[]]$ArgumentList = @('/S'), [int]$TimeoutSec = 900) {
+    $p = Start-Process -FilePath $Path -ArgumentList $ArgumentList -PassThru -WindowStyle Hidden
+    $null = $p.Handle   # without it, 5.1's ExitCode is $null after WaitForExit
+    if (-not $p.WaitForExit($TimeoutSec * 1000)) {
+        throw "the installer didn't finish within $TimeoutSec s (it may still be running)"
+    }
+    return $p.ExitCode
+}
+
+# Installs the app when it isn't listed. State is 'present' (nothing fetched) or
+# 'installed'. Throws a reason on any refusal; the downloaded folder is always removed.
+function Install-Harness([string]$FeedUrl, [string]$Prefix, [string]$UninstallKey, [string]$WorkDir, [int]$TimeoutSec = 900) {
+    $have = Get-InstalledHarness $UninstallKey
+    if ($have) { return [pscustomobject]@{ State = 'present'; Version = $have.Version } }
+    $dir = Join-Path $WorkDir ('deepseek-harness-' + [guid]::NewGuid())
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    try {
+        try {
+            $feedFile = Join-Path $dir 'nightly.yml'
+            Get-Url $FeedUrl $feedFile
+            $feed = Read-Feed ([IO.File]::ReadAllText($feedFile)) $Prefix
+        } catch {
+            throw "the update feed $FeedUrl isn't usable: $($_.Exception.Message)"
+        }
+        $installer = Join-Path $dir ($feed.Url.Substring($feed.Url.LastIndexOf('/') + 1))
+        Get-Url $feed.Url $installer
+        if (-not (Test-Sha512 $installer $feed.Sha512)) { throw "the installer's SHA-512 doesn't match the feed's" }
+        $sig = Test-Signer $installer
+        if (-not $sig.Ok) {
+            throw "the installer isn't signed by Hangzhou DeepSeek Artificial Intelligence Co., Ltd. (status $($sig.Status), signer '$($sig.Signer)')"
+        }
+        $code = Invoke-Installer -Path $installer -TimeoutSec $TimeoutSec
+        if ($code -ne 0) { throw "the installer exited $code" }
+        if (-not (Get-InstalledHarness $UninstallKey)) { throw 'the installer exited 0 but Windows lists no DeepSeek Harness' }
+        return [pscustomobject]@{ State = 'installed'; Version = $feed.Version }
+    } finally {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+try {
+    $r = Install-Harness -FeedUrl $FeedUrl -Prefix $InstallerPrefix -UninstallKey $UninstallKey -WorkDir $WorkDir -TimeoutSec $TimeoutSec
+    if ($r.State -eq 'present') { Write-Step "DeepSeek Harness $($r.Version) is installed; it updates itself" }
+    else { Write-Step "installed DeepSeek Harness $($r.Version); it updates itself from now on" }
+} catch {
+    Write-Step "not installed: $($_.Exception.Message)"
+}
+exit 0
