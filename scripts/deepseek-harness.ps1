@@ -27,6 +27,7 @@ param(
     [string]$InstallerPrefix = 'https://download.deepseek.com/dsh-desk/bin/win-x64/',
     [string]$UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
     [string]$WorkDir = [IO.Path]::GetTempPath(),
+    [string]$StateDir = (Join-Path $env:LOCALAPPDATA 'workstation\deepseek-harness'),
     [int]$TimeoutSec = 900
 )
 Set-StrictMode -Version Latest
@@ -49,7 +50,7 @@ function Read-Feed([string]$Text, [string]$Prefix) {
     $lines = $Text -split "\r?\n"
     $v = @{}
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^(version|path|sha512):\s*(.*)$') {
+        if ($lines[$i] -cmatch '^(version|path|sha512):\s*(.*)$') {
             $key = $Matches[1]
             $val = $Matches[2].Trim()
             if ($val -match '^[>|]-?$') {
@@ -126,9 +127,10 @@ function Get-InstalledHarness([string]$Key, [string]$Name = 'DeepSeek Harness') 
 }
 
 # curl.exe with bootstrap.ps1's Invoke-CurlRequest flags: retries, and a stalled
-# transfer aborts instead of hanging.
+# transfer aborts instead of hanging. Unlike wezterm-nightly.ps1's Get-Url it also
+# follows redirects over https only (--proto-redir =https).
 function Get-Url([string]$Uri, [string]$OutFile) {
-    $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location',
+    $curlArgs = @('--disable', '--fail', '--silent', '--show-error', '--location', '--proto-redir', '=https',
         '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30',
         '--speed-limit', '1', '--speed-time', '60', '--output', $OutFile, '--url', $Uri)
     $ErrorActionPreference = 'Continue'
@@ -152,7 +154,11 @@ function Invoke-Installer([string]$Path, [string[]]$ArgumentList = @('/S'), [int
 
 # Installs the app when it isn't listed. State is 'present' (nothing fetched) or
 # 'installed'. Throws a reason on any refusal; the downloaded folder is always removed.
-function Install-Harness([string]$FeedUrl, [string]$Prefix, [string]$UninstallKey, [string]$WorkDir, [int]$TimeoutSec = 900) {
+# A complete, SHA-512-verified build the signer check or the install then refuses is
+# recorded in <StateDir>\rejected.sha512 (line 1: its feed SHA-512, line 2: the reason),
+# and isn't downloaded again until the feed names another build. A mismatch, a download
+# or a feed problem is never recorded: those can be transient.
+function Install-Harness([string]$FeedUrl, [string]$Prefix, [string]$UninstallKey, [string]$WorkDir, [string]$StateDir, [int]$TimeoutSec = 900) {
     $have = Get-InstalledHarness $UninstallKey
     if ($have) { return [pscustomobject]@{ State = 'present'; Version = $have.Version } }
     $dir = Join-Path $WorkDir ('deepseek-harness-' + [guid]::NewGuid())
@@ -165,16 +171,37 @@ function Install-Harness([string]$FeedUrl, [string]$Prefix, [string]$UninstallKe
         } catch {
             throw "the update feed $FeedUrl isn't usable: $($_.Exception.Message)"
         }
+        $rejectFile = Join-Path $StateDir 'rejected.sha512'
+        if (Test-Path -LiteralPath $rejectFile) {
+            $prev = @([IO.File]::ReadAllLines($rejectFile))
+            if ($prev.Count -ge 1 -and $prev[0] -ceq $feed.Sha512) {
+                $why = if ($prev.Count -ge 2) { $prev[1] } else { 'no reason recorded' }
+                throw "DeepSeek Harness $($feed.Version) failed to install before ($why); skipping it until DeepSeek publishes a new build. Delete $rejectFile to retry"
+            }
+        }
+        Write-Step "downloading DeepSeek Harness $($feed.Version) (about 290 MB)"
         $installer = Join-Path $dir ($feed.Url.Substring($feed.Url.LastIndexOf('/') + 1))
         Get-Url $feed.Url $installer
         if (-not (Test-Sha512 $installer $feed.Sha512)) { throw "the installer's SHA-512 doesn't match the feed's" }
-        $sig = Test-Signer $installer
-        if (-not $sig.Ok) {
-            throw "the installer isn't signed by Hangzhou DeepSeek Artificial Intelligence Co., Ltd. (status $($sig.Status), signer '$($sig.Signer)')"
+        try {
+            $sig = Test-Signer $installer
+            if (-not $sig.Ok) {
+                throw "the installer isn't signed by Hangzhou DeepSeek Artificial Intelligence Co., Ltd. (status $($sig.Status), signer '$($sig.Signer)')"
+            }
+            Write-Step "installing DeepSeek Harness $($feed.Version) (this can take a few minutes)"
+            $code = Invoke-Installer -Path $installer -TimeoutSec $TimeoutSec
+            if ($code -eq 2) {
+                throw "the installer exited 2 (DeepSeek's installer refuses when the app is running, the install folder isn't empty or isn't writable, or the disk is full)"
+            }
+            if ($code -ne 0) { throw "the installer exited $code" }
+            if (-not (Get-InstalledHarness $UninstallKey)) { throw 'the installer exited 0 but Windows lists no DeepSeek Harness' }
+        } catch {
+            $reason = ($_.Exception.Message -split "\r?\n")[0]
+            New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+            [IO.File]::WriteAllText($rejectFile, "$($feed.Sha512)`n$reason`n")
+            throw "$reason (skipping this build until DeepSeek publishes a new one; delete $rejectFile to retry)"
         }
-        $code = Invoke-Installer -Path $installer -TimeoutSec $TimeoutSec
-        if ($code -ne 0) { throw "the installer exited $code" }
-        if (-not (Get-InstalledHarness $UninstallKey)) { throw 'the installer exited 0 but Windows lists no DeepSeek Harness' }
+        Remove-Item -LiteralPath $rejectFile -Force -ErrorAction SilentlyContinue
         return [pscustomobject]@{ State = 'installed'; Version = $feed.Version }
     } finally {
         Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
@@ -182,7 +209,7 @@ function Install-Harness([string]$FeedUrl, [string]$Prefix, [string]$UninstallKe
 }
 
 try {
-    $r = Install-Harness -FeedUrl $FeedUrl -Prefix $InstallerPrefix -UninstallKey $UninstallKey -WorkDir $WorkDir -TimeoutSec $TimeoutSec
+    $r = Install-Harness -FeedUrl $FeedUrl -Prefix $InstallerPrefix -UninstallKey $UninstallKey -WorkDir $WorkDir -StateDir $StateDir -TimeoutSec $TimeoutSec
     if ($r.State -eq 'present') { Write-Step "DeepSeek Harness $($r.Version) is installed; it updates itself" }
     else { Write-Step "installed DeepSeek Harness $($r.Version); it updates itself from now on" }
 } catch {

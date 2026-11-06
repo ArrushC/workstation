@@ -683,6 +683,8 @@ for f, d in loaded.items():
             n_winget += 1
             if key.lower() == "winget:sshfs-win.sshfs-win":
                 win_hits.append(f"{f}:{key} (SSHFS-Win must raise UAC; it stays in bootstrap.ps1's Install-SshfsWin)")
+            if "deepseek" in key.lower():
+                win_hits.append(f"{f}:{key} (DeepSeek Harness is never a winget package: those are third-party repackages; scripts/deepseek-harness.ps1 installs DeepSeek's own)")
             if val != "latest":
                 win_hits.append(f"{f}:{key} = {val!r} (want \"latest\": the apps self-update)")
         elif key.startswith("winget:"):

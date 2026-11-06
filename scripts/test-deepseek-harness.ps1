@@ -1,10 +1,18 @@
-# Tests the pure checks in scripts/deepseek-harness.ps1, imported from its AST:
-# Read-Feed (the live feed shape, top-level path over files[].url, quoted one-line
-# values, and refusing a non-feed, a bad version, an installer URL outside the prefix,
-# a missing or malformed SHA-512), Test-Sha512 (match and mismatch, on a path with a
-# space), Test-Signer (an unsigned file; a valid signature from someone else) and
-# Get-InstalledHarness (no key, a lookalike name, the exact name). The registry cases
-# use a throwaway HKCU key, never the real Uninstall key.
+# Tests scripts/deepseek-harness.ps1, imported from its AST, and runs it whole:
+#   Read-Feed (the live feed shape, top-level path over files[].url, quoted one-line
+#   values, and refusing a non-feed, a bad version, an installer URL outside the prefix,
+#   a missing or malformed SHA-512), Test-Sha512 (match and mismatch, on a path with a
+#   space), Test-Signer (an unsigned file; a valid signature from someone else; an
+#   unreadable path), Get-InstalledHarness (no key, a lookalike name, the exact name),
+#   Invoke-Installer (the exit code; a hung installer times out), whole-script runs (an
+#   unreachable feed, an installed app, exit 0 each time), the Install-Harness flow over
+#   file:// fixtures (no download when installed, a verified build installs with its
+#   progress lines, a SHA-512 mismatch or another signer runs nothing, a failing or
+#   unlisted install is reported, a build that failed to install or was refused by the
+#   signer check isn't downloaded again until the feed changes), and the PSModulePath
+#   regression (5.1 under pwsh's module path still checks the signature). The registry
+#   cases use a throwaway HKCU key, never the real Uninstall key, and every run passes a
+#   throwaway -StateDir, never %LOCALAPPDATA%\workstation\deepseek-harness.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -13,9 +21,12 @@ $script = Join-Path $PSScriptRoot 'deepseek-harness.ps1'
 $shell = (Get-Process -Id $PID).Path
 $ast = Read-ScriptAst $script
 . (Import-AstFunction $ast 'Read-Feed', 'Test-Sha512', 'Test-Signer', 'Get-InstalledHarness', 'Write-Step', 'Get-Url', 'Invoke-Installer', 'Install-Harness')
+$script:steps = New-Object System.Collections.Generic.List[string]
+function Write-Step([string]$Message) { $script:steps.Add($Message) }   # record; the whole-script runs keep the real one
 
 $tmp = New-TestTempDir 'deepseek-harness-'
 $work = Join-Path $tmp 'work dir'            # a space, as under a OneDrive profile
+$state = Join-Path $tmp 'state'              # throwaway; never the real %LOCALAPPDATA% state
 $regRoot = "HKCU:\Software\workstation-test-$([guid]::NewGuid())"
 $uninstall = "$regRoot\Uninstall"            # throwaway; never the real Uninstall key
 $prefix = 'https://download.deepseek.com/dsh-desk/bin/win-x64/'
@@ -55,12 +66,12 @@ function New-Feed([string]$Name, [byte[]]$Installer, [string]$Sha) {   # fixture
 function Register-Fake { New-Item -Path "$uninstall\{dsh}" -Force | Out-Null
     Set-ItemProperty -Path "$uninstall\{dsh}" -Name DisplayName -Value 'DeepSeek Harness'
     Set-ItemProperty -Path "$uninstall\{dsh}" -Name DisplayVersion -Value '0.2.2-rc.1' }
-function Reset-Flow { $script:installs.Clear(); $script:installReply = @{ Exit = 0; Register = $true }; $script:signerOk = $true
+function Reset-Flow { $script:installs.Clear(); $script:steps.Clear(); Remove-Item -LiteralPath $state -Recurse -Force -ErrorAction SilentlyContinue; $script:installReply = @{ Exit = 0; Register = $true }; $script:signerOk = $true
     Remove-Item -LiteralPath $uninstall -Recurse -Force -ErrorAction SilentlyContinue; New-Item -Path $uninstall -Force | Out-Null
     New-Item -ItemType Directory -Force -Path $work | Out-Null }
 function Get-WorkLeft { @(Get-ChildItem -LiteralPath $work -Force).Count }
 function Invoke-Script([string]$FeedUrl, [string]$Prefix, [string]$Exe = $shell) {
-    $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $script -FeedUrl $FeedUrl -InstallerPrefix $Prefix -UninstallKey $uninstall -WorkDir $work 2>&1 | Out-String
+    $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $script -FeedUrl $FeedUrl -InstallerPrefix $Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state 2>&1 | Out-String
     [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 $missingFeed = 'file:///' + ($tmp -replace '\\', '/') + '/missing.yml'
@@ -178,33 +189,60 @@ try {
 
     Test-Case 'Install-Harness: installed already means no download' {
         Reset-Flow; Register-Fake
-        $r = Install-Harness -FeedUrl $missingFeed -Prefix 'file:///nowhere/' -UninstallKey $uninstall -WorkDir $work
+        $r = Install-Harness -FeedUrl $missingFeed -Prefix 'file:///nowhere/' -UninstallKey $uninstall -WorkDir $work -StateDir $state
         Assert ($r.State -eq 'present' -and $r.Version -ceq '0.2.2-rc.1') "$($r.State)"; Assert ($script:installs.Count -eq 0) 'installer ran'
     }
     Test-Case 'Install-Harness: installs a verified build' {
         Reset-Flow; $f = New-Feed 'good' $fake
-        $r = Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work
+        $r = Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state
         Assert ($r.State -eq 'installed' -and $r.Version -ceq '0.2.2-rc.1') "$($r.State)"
         Assert ($script:installs.Count -eq 1 -and $script:installs[0] -like "$work\*\deepseek-harness-0.2.2-rc.1-win-x64.exe|/S") "$($script:installs)"
         Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
+        Assert ($script:steps -contains 'downloading DeepSeek Harness 0.2.2-rc.1 (about 290 MB)') "steps: $($script:steps -join ' / ')"
+        Assert ($script:steps -contains 'installing DeepSeek Harness 0.2.2-rc.1 (this can take a few minutes)') "steps: $($script:steps -join ' / ')"
     }
     Test-Case 'Install-Harness: a SHA-512 mismatch runs nothing' {
         Reset-Flow; $f = New-Feed 'badsha' $fake (Get-B64Sha512 ([byte[]](0)))
-        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work } "*SHA-512 doesn't match*"
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } "*SHA-512 doesn't match*"
         Assert ($script:installs.Count -eq 0) 'installer ran'; Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
+        Assert (-not (Test-Path -LiteralPath (Join-Path $state 'rejected.sha512'))) 'a mismatch was remembered'
     }
     Test-Case 'Install-Harness: another signer runs nothing' {
         Reset-Flow; $script:signerOk = $false; $f = New-Feed 'badsig' $fake
-        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work } "*isn't signed by Hangzhou DeepSeek Artificial Intelligence Co., Ltd.*"
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } "*isn't signed by Hangzhou DeepSeek Artificial Intelligence Co., Ltd.*"
         Assert ($script:installs.Count -eq 0) 'installer ran'; Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
     }
     Test-Case 'Install-Harness: a failing installer is reported' {
         Reset-Flow; $script:installReply = @{ Exit = 2; Register = $false }; $f = New-Feed 'exit2' $fake
-        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work } '*installer exited 2*'
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } '*installer exited 2*'
+        Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
     }
     Test-Case 'Install-Harness: exit 0 without a listing is reported' {
         Reset-Flow; $script:installReply = @{ Exit = 0; Register = $false }; $f = New-Feed 'unlisted' $fake
-        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work } '*lists no DeepSeek Harness*'
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } '*lists no DeepSeek Harness*'
+        Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
+    }
+    Test-Case "Install-Harness: a build that failed to install isn't downloaded again" {
+        Reset-Flow; $script:installReply = @{ Exit = 2; Register = $false }; $f = New-Feed 'rej1' $fake
+        $rej = Join-Path $state 'rejected.sha512'
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } '*exited 2*delete*rejected.sha512*'
+        Assert (Test-Path -LiteralPath $rej) 'no rejected.sha512'
+        Assert (([IO.File]::ReadAllLines($rej))[0] -ceq (Get-B64Sha512 $fake)) 'line 1 is not the feed sha512'
+        Remove-Item -Path (Join-Path $tmp 'rej1\bin\*.exe') -Force   # a download attempt would now fail differently
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } '*failed to install before*'
+        Assert ($script:installs.Count -eq 1) "installer ran $($script:installs.Count) times"
+        $script:installReply = @{ Exit = 0; Register = $true }
+        $g = New-Feed 'rej2' ([Text.Encoding]::ASCII.GetBytes('a newer installer'))
+        $r = Install-Harness -FeedUrl $g.FeedUrl -Prefix $g.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state
+        Assert ($r.State -eq 'installed') "$($r.State)"
+        Assert (-not (Test-Path -LiteralPath $rej)) 'rejected.sha512 kept after a successful install'
+    }
+    Test-Case 'Install-Harness: a signer refusal is remembered' {
+        Reset-Flow; $script:signerOk = $false; $f = New-Feed 'rejsig' $fake
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } "*isn't signed by*"
+        Assert (Test-Path -LiteralPath (Join-Path $state 'rejected.sha512')) 'no rejected.sha512'
+        Assert-Throws { Install-Harness -FeedUrl $f.FeedUrl -Prefix $f.Prefix -UninstallKey $uninstall -WorkDir $work -StateDir $state } '*failed to install before*'
+        Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
     }
 } finally {
     Remove-Item $regRoot, $tmp -Recurse -Force -ErrorAction SilentlyContinue

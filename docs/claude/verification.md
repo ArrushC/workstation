@@ -206,7 +206,7 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
   `scripts/` and `dotfiles/config/wezterm` with throwaway `-Root`/`-ShortcutDir`/`-DataDir`
   and keys, over a fake older install (a `current` junction, `current.version` = `old`):
   this config installs; one with an unknown field is refused and `rejected.sha256` written.
-- DeepSeek Harness installer: `scripts/test-deepseek-harness.ps1` under `powershell.exe` and pwsh, from a copy under `%TEMP%` with `lib/test-helpers.ps1`. Its Uninstall key is a throwaway HKCU path, and it never runs a real installer. Never run `deepseek-harness.ps1` with its defaults from an agent: that installs the real app.
+- DeepSeek Harness installer: `scripts/test-deepseek-harness.ps1` under `powershell.exe` and pwsh, from a copy under `%TEMP%` with `lib/test-helpers.ps1`. Its Uninstall key is a throwaway HKCU path and every run passes a throwaway `-StateDir`, and it never runs a real installer. Never run `deepseek-harness.ps1` with its defaults from an agent: that installs the real app.
 - Source-checked on the nightly (e2a98e1b): a spawn's `cwd = '~'` reaches `wsl.exe --cd ~` as is
   (no Windows-side expansion), and a split or `SpawnTab` inherits the pane's cwd only within its
   domain; `wsl.exe --cd <missing dir>` prints an error and starts in `/`. A close with
