@@ -408,5 +408,40 @@ class Launcher(AgentScratch):
         self.assertIn("no repositories", r.stdout)
 
 
+HOOK = REPO / "dotfiles" / "claude" / "skills" / "workstation-orchestration" / "hooks" / "context.sh"
+
+
+class HookScript(AgentScratch):
+    """The SessionStart hook: one line from ws-agent context, nothing on any failure, exit 0."""
+
+    def hook(self, stdin: str = "{}", **env: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["bash", str(HOOK)], input=stdin, capture_output=True, text=True, timeout=20,
+                              env={**os.environ, **env})
+
+    def test_context_hook_prints_line(self) -> None:
+        self.fake("ws-agent", 'echo "[orchestration] x $PWD"; echo "second line"')
+        d = self.root / "proj dir"
+        d.mkdir()
+        r = self.hook(json.dumps({"session_id": "s", "cwd": str(d), "hook_event_name": "SessionStart"}))
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout, f"[orchestration] x {d}\n")   # first line only, run in the session's directory
+
+    def test_context_hook_fail_open(self) -> None:
+        self.fake("ws-agent", "echo partial; exit 1")
+        r = self.hook()
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        self.fake("ws-agent", "sleep 10; echo late")
+        r = self.hook(WS_AGENT_HOOK_TIMEOUT="1")
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        (self.bin / "ws-agent").unlink()
+        r = self.hook(PATH=f"{self.bin}{os.pathsep}/usr/bin{os.pathsep}/bin")
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+
+    def test_context_hook_missing_cwd(self) -> None:
+        self.fake("ws-agent", 'echo "[orchestration] here"')
+        r = self.hook(json.dumps({"cwd": str(self.root / "gone")}))
+        self.assertEqual((r.returncode, r.stdout), (0, "[orchestration] here\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

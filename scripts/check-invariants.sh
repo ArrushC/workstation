@@ -930,13 +930,22 @@ check_lsp_plugin() {
 # manifest names its folder, every module hooks.json lists exists, it has tests, and where
 # claude is installed it passes `claude plugin validate --strict` and `claude plugin test`
 # (each run on a copy, so neither can write into the checkout). CI has no claude.
+# One named exception loads in every session on purpose: workstation-orchestration, the
+# global SessionStart hook (a plugin because settings.enforced.json would replace the live
+# hooks.SessionStart array). It stays command hooks only: no modules, no other hook type.
+GLOBAL_PLUGIN=workstation-orchestration
 check_claude_mods() {
   hdr "Claude Code mods (.claude/skills/*/hooks, project scope)"
   local hooks dir name tmp n=0 module
   for hooks in dotfiles/claude/skills/*/hooks/hooks.json; do
-    [ -f "$hooks" ] && bad "${hooks%/hooks/hooks.json} is a mod under dotfiles/claude/skills: it would load in every session; mods live in .claude/skills"
+    [ -f "$hooks" ] || continue
+    if [ "$hooks" = "dotfiles/claude/skills/$GLOBAL_PLUGIN/hooks/hooks.json" ] &&
+      jq -e '(has("modules") | not) and ([.hooks[]?[]?.hooks[]?.type] | length > 0 and all(. == "command"))' "$hooks" >/dev/null 2>&1; then
+      continue
+    fi
+    bad "${hooks%/hooks/hooks.json} is a mod under dotfiles/claude/skills: it would load in every session; mods live in .claude/skills"
   done
-  if jq -e '.enabledPlugins // {} | keys[] | select(startswith("workstation-") and . != "workstation-lsp@skills-dir")' \
+  if jq -e --arg g "$GLOBAL_PLUGIN@skills-dir" '.enabledPlugins // {} | keys[] | select(startswith("workstation-") and . != "workstation-lsp@skills-dir" and . != $g)' \
     dotfiles/claude/settings.enforced.json >/dev/null 2>&1; then
     bad "dotfiles/claude/settings.enforced.json names a workstation mod: project-scope mods load without it"
   fi

@@ -199,8 +199,8 @@ class PrepareError(Exception):
     pass
 
 
-def _run(argv: list[str], cwd: Path | None = None, **kw: object) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(argv, cwd=cwd, capture_output=True, **kw)  # type: ignore[call-overload]
+def _run(argv: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(argv, cwd=cwd, capture_output=True)
 
 
 def prepare(job: jobs.Job, jobdir: Path) -> None:
@@ -407,19 +407,35 @@ def collect(job: jobs.Job, jobdir: Path) -> list[str]:
 
 # --- the run ---------------------------------------------------------------------------
 
+def _pick_result(data: object) -> dict[str, object] | None:
+    """The result message of `claude -p --output-format json`: claude 2.1.319 prints an array of
+    every message ending in {"type": "result", ...}; other builds print that object alone."""
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list):
+        dicts = [m for m in data if isinstance(m, dict)]
+        results = [m for m in dicts if m.get("type") == "result"]
+        return (results or dicts or [None])[-1]
+    return None
+
+
 def _claude_result(path: Path) -> dict[str, object]:
     try:
         text = path.read_text(encoding="utf-8", errors="replace").strip()
     except OSError:
         return {}
-    for line in reversed(text.splitlines()):
-        try:
-            data = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(data, dict):
-            return data
-    return {}
+    try:
+        found = _pick_result(json.loads(text))
+    except ValueError:
+        found = None
+        for line in reversed(text.splitlines()):
+            try:
+                found = _pick_result(json.loads(line))
+            except ValueError:
+                continue
+            if found is not None:
+                break
+    return found or {}
 
 
 def _log(fh: IO[str], msg: str) -> None:

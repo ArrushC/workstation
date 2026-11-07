@@ -27,8 +27,9 @@ mkdir -p "$HOME/.claude/projects/fake" && : >"$HOME/.claude/projects/fake/$sid.j
 echo x >>"$d/calls"
 [ -f "$d/script.sh" ] && bash "$d/script.sh"
 [ -f "$d/sleep" ] && sleep "$(cat "$d/sleep")"
-printf '{"type":"result","subtype":"success","is_error":%s,"duration_ms":10,"num_turns":3,"result":"done: changed things","session_id":"%s","total_cost_usd":0}\n' \
-  "$(cat "$d/is_error" 2>/dev/null || echo false)" "$sid"
+# claude 2.1.319's --output-format json: one line, an array of every message ending in the result
+printf '[{"type":"system","subtype":"init","session_id":"%s","cwd":"%s"},{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":%s,"duration_ms":10,"num_turns":3,"result":"done: changed things","session_id":"%s","total_cost_usd":0,"terminal_reason":"completed"}]\n' \
+  "$sid" "$PWD" "$(cat "$d/is_error" 2>/dev/null || echo false)" "$sid"
 exit "$(cat "$d/exit" 2>/dev/null || echo 0)"
 """
 
@@ -128,6 +129,7 @@ class ExecGit(Exec):
         info = self.exit_json(job)
         self.assertEqual(info["exit_code"], 0)
         self.assertEqual(info["session_id"], jobs.load(job.id).session_id)
+        self.assertEqual(info["num_turns"], 3)   # read from the result message, not a fallback
         diff = self.result(job, "changes.diff")
         self.assertIn("+    return 2", diff)
         self.assertIn("new.txt", diff)
@@ -310,6 +312,20 @@ class ExecSvn(Exec):
         text = ax.inspect(jobs.load(job.id))
         self.assertIn("a.txt", text)
         self.assertIn("M", text)
+
+
+class ClaudeOutput(unittest.TestCase):
+    def test_reads_result_from_array_and_object(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "claude.json"
+            p.write_text(json.dumps([{"type": "system", "subtype": "init", "session_id": "S"},
+                                     {"type": "result", "is_error": False, "num_turns": 2, "result": "ok", "session_id": "S"}]))
+            self.assertEqual(ax._claude_result(p)["result"], "ok")
+            p.write_text(json.dumps({"type": "result", "is_error": True, "result": "bad"}) + "\n")
+            self.assertEqual(ax._claude_result(p)["result"], "bad")
+            p.write_text("not json\n")
+            self.assertEqual(ax._claude_result(p), {})
 
 
 if __name__ == "__main__":
