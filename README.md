@@ -636,6 +636,16 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     the next allowed engine, with a note on what the first one did. With none left the job is
     `waiting`.
   - A repository that allows only Claude never runs on Codex.
+- **Checks and review**:
+  - When a job reports done, ws-agent itself runs the repository's `--check` commands in
+    the job sandbox: no network unless `--network`, 20 minutes each, the last 1 MB of output
+    kept in `checks.txt`.
+  - A failing check goes back to the same session with its output, `--fix-rounds` times
+    (default once); the checks run again after each round.
+  - A job whose checks still fail is `succeeded checks fail`, never just succeeded.
+  - `--review E` then has engine E read the change in a fresh, read-only session and write
+    `review.json` (ok or concerns, with findings). The review never changes the patch.
+  - With no sandbox on the host, checks are `not run`, never run unsandboxed.
 - **States**:
   - queued, running, succeeded, failed, cancelled, closed;
   - interrupted: the daemon or the host stopped under it;

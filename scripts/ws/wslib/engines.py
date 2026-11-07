@@ -24,7 +24,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Collection, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -44,6 +44,20 @@ REPORT_SCHEMA: dict[str, object] = {
         "notes": {"type": ["string", "null"]},
     },
 }
+
+REVIEW_SCHEMA: dict[str, object] = {
+    "type": "object", "additionalProperties": False,
+    "required": ["verdict", "summary", "findings"],
+    "properties": {
+        "verdict": {"type": "string", "enum": ["ok", "concerns"]},
+        "summary": {"type": "string"},
+        "findings": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False, "required": ["file", "line", "issue"],
+            "properties": {"file": {"type": "string"}, "line": {"type": ["integer", "null"]},
+                           "issue": {"type": "string"}}}},
+    },
+}
+READ_TOOLS = ("Read", "Glob", "Grep")
 
 # No bare Edit/Write: acceptEdits allows edits inside the copy, and a tool-wide rule would also
 # allow them outside it (blockWritesOutsideWorkingDirectories blocks those writes outright too).
@@ -71,6 +85,8 @@ class Confinement:
     commands: tuple[str, ...]
     instructions: str
     read_dirs: tuple[Path, ...] = ()
+    read_only: bool = False                         # a review: reads only, changes nothing
+    schema: Mapping[str, object] = field(default_factory=lambda: REPORT_SCHEMA)
 
 
 @dataclass
@@ -96,18 +112,36 @@ class Engine(Protocol):
     def env(self, base: Mapping[str, str]) -> dict[str, str]: ...
     def session_from(self, adir: Path) -> str | None: ...
     def transcript_exists(self, sid: str) -> bool: ...
-    def parse(self, adir: Path, rc: int) -> Outcome: ...
+    def parse(self, adir: Path, rc: int, *, schema: Mapping[str, object] = REPORT_SCHEMA) -> Outcome: ...
 
 
-def _report(value: object) -> dict[str, object] | None:
+def conform(value: object, schema: Mapping[str, object]) -> dict[str, object] | None:
+    """`value` (an object, or its JSON text) as the schema's required fields: None when one that
+    isn't nullable is missing or an enum doesn't match; a missing nullable one becomes None."""
     if isinstance(value, str):
         try:
             value = json.loads(value)
         except ValueError:
             return None
-    if not isinstance(value, dict) or value.get("status") not in STATUSES:
+    props = schema.get("properties")
+    required = schema.get("required")
+    if not isinstance(value, dict) or not isinstance(props, dict) or not isinstance(required, list):
         return None
-    return {k: value.get(k) for k in ("status", "summary", "question", "tests", "notes")}
+    out: dict[str, object] = {}
+    for key in required:
+        spec = props.get(key) if isinstance(props.get(key), dict) else {}
+        assert isinstance(spec, dict)
+        types = spec.get("type")
+        if value.get(key) is None:
+            if isinstance(types, list) and "null" in types:
+                out[key] = None
+                continue
+            return None
+        enum = spec.get("enum")
+        if isinstance(enum, list) and value[key] not in enum:
+            return None
+        out[key] = value[key]
+    return out
 
 
 def _bin_dir(name: str) -> list[Path]:
@@ -184,18 +218,23 @@ class ClaudeEngine:
         del adir
         sandbox: dict[str, object] = {
             "enabled": True, "failIfUnavailable": True, "allowUnsandboxedCommands": False,
-            "filesystem": {"allowWrite": [str(c.wc)], "denyRead": [str(core.home() / ".claude" / ".credentials.json")]},
+            "filesystem": {"allowWrite": [] if c.read_only else [str(c.wc)],
+                           "denyRead": [str(core.home() / ".claude" / ".credentials.json")]},
         }
         if not c.network:
             sandbox["network"] = {"allowedDomains": []}
         settings = {"permissions": {"blockWritesOutsideWorkingDirectories": True}, "sandbox": sandbox}
         session = ["--resume", resume] if resume else ["--session-id", job.session_id]
-        return [shutil.which("claude") or "claude", "-p", "--output-format", "json", "--permission-mode", "acceptEdits",
+        # A review runs in the default mode with read tools only: an edit would need approval,
+        # and --permission-prompts none denies it.
+        mode = "default" if c.read_only else "acceptEdits"
+        tools = list(READ_TOOLS) if c.read_only else [*CLAUDE_TOOLS, *(f"Bash({cmd})" for cmd in c.commands)]
+        return [shutil.which("claude") or "claude", "-p", "--output-format", "json", "--permission-mode", mode,
                 "--permission-prompts", "none", *session, "--name", f"ws-agent {job.id}: {job.title}"[:80],
-                "--append-system-prompt", c.instructions, "--json-schema", json.dumps(REPORT_SCHEMA),
+                "--append-system-prompt", c.instructions, "--json-schema", json.dumps(c.schema),
                 "--settings", json.dumps(settings), *(["--model", model] if model else []),
                 *(a for d in c.read_dirs for a in ("--add-dir", str(d))),
-                "--allowedTools", *CLAUDE_TOOLS, *(f"Bash({cmd})" for cmd in c.commands)]
+                "--allowedTools", *tools]
 
     def env(self, base: Mapping[str, str]) -> dict[str, str]:
         return {k: v for k, v in base.items() if not k.startswith(("OPENAI_", "CODEX_"))}
@@ -207,7 +246,7 @@ class ClaudeEngine:
     def transcript_exists(self, sid: str) -> bool:
         return bool(sid) and any((self._home() / "projects").glob(f"*/{sid}.jsonl"))
 
-    def parse(self, adir: Path, rc: int) -> Outcome:
+    def parse(self, adir: Path, rc: int, *, schema: Mapping[str, object] = REPORT_SCHEMA) -> Outcome:
         res = claude_result(adir / "stdout")
         if not res:
             return Outcome("error", None, "", message=f"claude printed no result (exit {rc})")
@@ -228,7 +267,7 @@ class ClaudeEngine:
             else:
                 out.kind = "error"
             return out
-        out.report = _report(res.get("structured_output"))
+        out.report = conform(res.get("structured_output"), schema)
         if out.report is None:
             out.kind, out.message = "error", "claude ended without the structured report"
         return out
@@ -297,7 +336,7 @@ class CodexEngine:
         del job
         adir.mkdir(parents=True, exist_ok=True)
         schema = adir / "schema.json"
-        schema.write_text(json.dumps(REPORT_SCHEMA), encoding="utf-8")
+        schema.write_text(json.dumps(c.schema), encoding="utf-8")
         common = ["--json", "-o", str(adir / "last.json"), "--output-schema", str(schema), "--skip-git-repo-check",
                   "--ignore-rules", "--ignore-user-config"]
         conf = ["-c", 'approval_policy="never"',
@@ -307,7 +346,8 @@ class CodexEngine:
         tail = [*(["-m", model] if model else []), "-"]
         if resume:   # `exec resume` takes no -s/-C: the sandbox comes by -c, the directory is the cwd
             return [codex, "exec", "resume", resume, *common, "-c", 'sandbox_mode="workspace-write"', *conf, *tail]
-        return [codex, "exec", *common, "-s", "workspace-write", "-C", str(c.wc), *conf, *tail]
+        mode = "read-only" if c.read_only else "workspace-write"
+        return [codex, "exec", *common, "-s", mode, "-C", str(c.wc), *conf, *tail]
 
     def env(self, base: Mapping[str, str]) -> dict[str, str]:
         return {k: v for k, v in base.items() if not k.startswith("ANTHROPIC_") and k != "CLAUDE_CODE_OAUTH_TOKEN"}
@@ -321,7 +361,7 @@ class CodexEngine:
     def transcript_exists(self, sid: str) -> bool:
         return bool(sid) and any((core.home() / ".codex" / "sessions").glob(f"**/rollout-*-{sid}.jsonl"))
 
-    def parse(self, adir: Path, rc: int) -> Outcome:
+    def parse(self, adir: Path, rc: int, *, schema: Mapping[str, object] = REPORT_SCHEMA) -> Outcome:
         events = _events(adir / "stdout")
         sid = self.session_from(adir) or ""
         turns = sum(1 for e in events if e.get("type") == "turn.completed")
@@ -340,13 +380,13 @@ class CodexEngine:
             return Outcome("error", None, sid, turns=turns, message=f"codex stopped before finishing (exit {rc})")
         report = None
         try:
-            report = _report((adir / "last.json").read_text(encoding="utf-8"))
+            report = conform((adir / "last.json").read_text(encoding="utf-8"), schema)
         except OSError:
             pass
         if report is None:
             texts = [e["item"].get("text") for e in events if e.get("type") == "item.completed"
                      and isinstance(e.get("item"), dict) and e["item"].get("type") == "agent_message"]  # type: ignore[union-attr]
-            report = _report(texts[-1]) if texts else None
+            report = conform(texts[-1], schema) if texts else None
         if report is None:
             return Outcome("error", None, sid, turns=turns, message="codex ended without the structured report")
         return Outcome("ok", report, sid, turns=turns, message=str(report.get("summary") or "")[:500])

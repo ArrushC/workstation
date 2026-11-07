@@ -479,6 +479,70 @@ class Attempts(Exec):
         self.assertIn("app.py", self.result(job, "changes.diff"))
 
 
+class ChecksAndReview(Attempts):
+    def test_fix_round_resumes_with_the_failure(self) -> None:
+        # The check passes once fixed.txt exists; the second engine run creates it.
+        self.claude_script('[ "$(wc -l <"$WS_FAKE_CLAUDE/calls")" -ge 2 ] && : >fixed.txt\n')
+        job = self.git_job(checks=("test -e fixed.txt || { echo not-fixed-yet; exit 4; }",))
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        self.assertEqual(self.claude_calls(), 2)
+        second = (self.fc / "stdin.2").read_text()
+        self.assertIn("checks failed", second)
+        self.assertIn("not-fixed-yet", second)
+        argv2 = (self.fc / "argv.2").read_text().splitlines()
+        self.assertIn("--resume", argv2)   # the same session fixes its own change
+        info = self.exit_json(job)
+        self.assertEqual((info["checks"], info["fix_rounds"]), ("pass", 1))
+        self.assertEqual(json.loads(self.result(job, "checks.json"))[0]["exit"], 0)
+
+    def test_no_fix_rounds_records_the_failure(self) -> None:
+        job = self.git_job(checks=("exit 4",), fix_rounds=0)
+        self.assertEqual(ax.execute(job.id, resume=False), 0)   # the job finished; its checks didn't pass
+        self.assertEqual(self.claude_calls(), 1)
+        info = self.exit_json(job)
+        self.assertEqual(info["checks"], "fail")
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "succeeded")
+
+    def test_checks_only_after_done(self) -> None:
+        job = self.git_job(checks=("touch ran-checks",))
+        self.write(self.fc / "report", '{"status":"question","summary":"s","question":"q?","tests":null,"notes":null}')
+        ax.execute(job.id, resume=False)
+        self.assertFalse((jobs.job_dir(job.id) / "wc" / "ran-checks").exists())
+        self.assertEqual(self.exit_json(job)["checks"], "none")
+
+    def test_review_recorded_and_read_only(self) -> None:
+        job = self.git_job(engines=("claude", "codex"), review="codex")
+        self.claude_script('printf "x\\n" >>app.py\n')
+        self.write(self.fx / "report", json.dumps({"verdict": "concerns", "summary": "one issue",
+                                                   "findings": [{"file": "app.py", "line": 3, "issue": "off by one"}]}))
+        self.write(self.fx / "script.sh", 'printf "review wrote this\\n" >>app.py 2>/dev/null; true\n')
+        wc = jobs.job_dir(job.id) / "wc"
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        review = json.loads(self.result(job, "review.json"))
+        self.assertEqual(review["verdict"], "concerns")
+        self.assertEqual(review["findings"][0]["issue"], "off by one")
+        argv = (self.fx / "argv").read_text().splitlines()
+        self.assertEqual(argv[argv.index("-s") + 1], "read-only")
+        stdin = (self.fx / "stdin").read_text()
+        self.assertIn("do the thing", stdin)
+        self.assertIn("app.py", stdin)   # the patch is in the prompt
+        self.assertEqual(jobs.load(job.id).engine, "claude")   # the job's own session is untouched
+        self.assertEqual(self.exit_json(job)["review"], "concerns")
+        # A review that writes anyway (this fake ignores -s read-only) never reaches the patch, which
+        # was taken before it, and is reported.
+        self.assertIn("review wrote this", (wc / "app.py").read_text())
+        self.assertNotIn("review wrote this", self.result(job, "changes.diff"))
+        self.assertIn("the review changed the working copy", self.result(job, "warnings.txt"))
+
+    def test_review_engine_must_be_allowed_and_available(self) -> None:
+        job = self.git_job(engines=("claude", "codex"), review="codex")
+        self.write(self.fx / "login", "Not logged in")
+        self.write(self.fx / "login.rc", "1")
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "review.json").exists())
+        self.assertIn("review", self.result(job, "warnings.txt"))
+
+
 REAL_WRAP = agent_sandbox.wrap
 
 

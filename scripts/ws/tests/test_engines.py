@@ -114,6 +114,36 @@ class Argv(Engines):
         self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN", codex_env)
         self.assertNotIn("ANTHROPIC_API_KEY", codex_env)
 
+    def test_read_only_runs(self) -> None:
+        c = engines.Confinement(wc=self.wc, network=False, commands=("make *",), instructions="R", read_only=True,
+                                schema=engines.REVIEW_SCHEMA)
+        argv = engines.ENGINES["claude"].argv(_job(), self.adir, resume=None, c=c, model="")
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "default")   # edits need approval: none comes
+        self.assertEqual(argv[argv.index("--allowedTools") + 1:], ["Read", "Glob", "Grep"])
+        self.assertEqual(json.loads(argv[argv.index("--json-schema") + 1]), engines.REVIEW_SCHEMA)
+        self.assertEqual(json.loads(argv[argv.index("--settings") + 1])["sandbox"]["filesystem"]["allowWrite"], [])
+        cx = engines.ENGINES["codex"].argv(_job(), self.adir, resume=None, c=c, model="")
+        self.assertEqual(cx[cx.index("-s") + 1], "read-only")
+        self.assertEqual(json.loads((self.adir / "schema.json").read_text()), engines.REVIEW_SCHEMA)
+
+    def test_conform(self) -> None:
+        self.assertEqual(engines.conform({"status": "done", "summary": "s"}, engines.REPORT_SCHEMA),
+                         {"status": "done", "summary": "s", "question": None, "tests": None, "notes": None})
+        self.assertIsNone(engines.conform({"status": "maybe", "summary": "s"}, engines.REPORT_SCHEMA))
+        self.assertIsNone(engines.conform({"summary": "s"}, engines.REPORT_SCHEMA))
+        self.assertIsNone(engines.conform("not json", engines.REPORT_SCHEMA))
+        review = {"verdict": "ok", "summary": "fine", "findings": []}
+        self.assertEqual(engines.conform(json.dumps(review), engines.REVIEW_SCHEMA), review)
+        self.assertIsNone(engines.conform({"verdict": "ok", "summary": "x"}, engines.REVIEW_SCHEMA))
+
+    def test_parse_with_the_review_schema(self) -> None:
+        review = {"verdict": "concerns", "summary": "s", "findings": [{"file": "a", "line": None, "issue": "i"}]}
+        self.out(json.dumps([{"type": "result", "is_error": False, "session_id": "S", "result": "r",
+                              "structured_output": review}]))
+        o = engines.ENGINES["claude"].parse(self.adir, 0, schema=engines.REVIEW_SCHEMA)
+        self.assertEqual((o.kind, o.report), ("ok", review))
+        self.assertEqual(engines.ENGINES["claude"].parse(self.adir, 0).kind, "error")   # not a report
+
     def test_paths(self) -> None:
         self.assertEqual(engines.ENGINES["claude"].rw_paths(), [self.home / ".claude", self.home / ".claude.json"])
         self.assertEqual(engines.ENGINES["codex"].rw_paths(), [self.home / ".codex"])

@@ -236,6 +236,25 @@ class Manage(Cli):
         self.assertIn("waiting", out)
         self.assertIn("2100-01-01", out)
 
+    def test_result_shows_checks_and_review(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude", "checks": "fail",
+                            "fix_rounds": 1, "review": "concerns"},
+                      {"status": "done", "summary": "did it", "question": None, "tests": None, "notes": None})
+        res = jobs.job_dir(jid) / "result"
+        self.write(res / "checks.json", json.dumps([{"cmd": "make test", "exit": 2, "duration_s": 1.0, "timed_out": False}]))
+        self.write(res / "checks.txt", "$ make test    (exit 2, 1.0s)\n" + "".join(f"line {i}\n" for i in range(40)) + "\n")
+        self.write(res / "review.json", json.dumps({"verdict": "concerns", "summary": "one problem", "findings": [
+            {"file": "app.py", "line": 7, "issue": "the cache never expires"}]}))
+        rc, out, _ = self.cli("result", jid)
+        self.assertEqual(rc, 0)
+        self.assertIn("checks: fail (after 1 fix round)", out)
+        self.assertIn("make test: exit 2", out)
+        self.assertIn("line 39", out)
+        self.assertNotIn("line 10\n", out)   # the last 20 lines only
+        self.assertIn("review: concerns", out)
+        self.assertIn("app.py:7: the cache never expires", out)
+
     def test_retry_a_waiting_job_and_close_a_needs_you_one(self) -> None:
         w = self.queued_run(self.repo, "waits")
         self.finished(w, {"exit_code": 1, "kind": "usage_limit", "engine": "claude", "reset_at": "2100-01-01T00:00:00+00:00"})

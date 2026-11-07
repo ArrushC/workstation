@@ -19,6 +19,7 @@ to result/inspect-<attempt>.txt and gives it to Claude before anything else.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -34,7 +35,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import IO
 
-from . import agent_registry, agent_sandbox, core, engines, jobs
+from . import agent_checks, agent_registry, agent_sandbox, core, engines, jobs
 
 RULES = """\
 You are a queued ws-agent job running unattended. Work only inside this working copy.
@@ -584,6 +585,82 @@ def _known_session(job: jobs.Job, res: Path, engine: engines.Engine) -> str:
     return ""
 
 
+FIX = """\
+The repository's checks failed after your change:
+$ {cmd}    ({how})
+{tail}
+Fix the cause, then end with the structured report again."""
+
+REVIEW_RULES = """\
+You are reviewing the change a queued ws-agent job made. Read the files in this working copy as
+you need; change nothing and run nothing that writes. End with the structured review: verdict ok
+when the change does what the task asks and you can name no defect, else concerns, with each
+finding's file, line (or null) and issue."""
+
+REVIEW = """\
+The task the job was given:
+{task}
+
+Its checks:
+{checks}
+
+Its change (also at {diff_path}):
+{diff}"""
+
+REVIEW_DIFF_MAX = 200_000
+
+
+def _check_env(env: Mapping[str, str]) -> dict[str, str]:
+    """A check runs the repository's own code: no engine's login either."""
+    return {k: v for k, v in env.items()
+            if not k.startswith(("ANTHROPIC_", "OPENAI_", "CODEX_")) and k != "CLAUDE_CODE_OAUTH_TOKEN"}
+
+
+def _review(job: jobs.Job, jd: Path, entry: agent_registry.Repo, task: str, log: IO[str], deadline: float,
+            bindir: Path, attempt: int) -> tuple[str | None, str | None]:
+    """A second-opinion review by `entry.review` in a fresh, read-only session: (verdict or None,
+    a warning or None). It never touches the job's own session, and the patch was taken before it."""
+    res, wc = jd / "result", jd / "wc"
+    name = entry.review
+    engine = engines.ENGINES.get(name)
+    if engine is None or name not in entry.engines:
+        return None, f"review skipped: {name} isn't one of this repository's engines"
+    problem = engine.available() or (f"cooling down until {engines.cooling(name)}" if engines.cooling(name) else None)
+    if problem:
+        return None, f"review skipped: {name}: {problem}"
+    remaining = int(min(deadline - time.monotonic(), 1800))
+    if remaining <= 0:
+        return None, "review skipped: the job's time ran out"
+    diff = (res / "changes.diff").read_text(encoding="utf-8", errors="replace") if (res / "changes.diff").exists() else ""
+    checks = (res / "checks.txt").read_text(encoding="utf-8", errors="replace") if (res / "checks.txt").exists() else "(none)"
+    prompt = REVIEW.format(task=task, checks=checks[-20000:], diff_path=res / "changes.diff",
+                           diff=diff[:REVIEW_DIFF_MAX] + ("\n... (cut)" if len(diff) > REVIEW_DIFF_MAX else ""))
+    reviewer = dataclasses.replace(job, session_id=str(uuid.uuid4()) if engine.name == "claude" else "")
+    adir = res / "attempts" / f"{attempt}.review"
+    adir.mkdir(parents=True, exist_ok=True)
+    c = engines.Confinement(wc=wc, network=False, commands=(), instructions=REVIEW_RULES, read_dirs=(res,),
+                            read_only=True, schema=engines.REVIEW_SCHEMA)
+    before = _vcs_view(job, wc)
+    try:
+        inner = agent_sandbox.wrap(engine.argv(reviewer, adir, resume=None, c=c,
+                                               model=agent_registry.settings().engine(name).model),
+                                   job_id=job.id, wc=wc, ro=engine.ro_paths(), rw=engine.rw_paths())
+    except agent_sandbox.SandboxError as e:
+        return None, f"review skipped: {e}"
+    _log(log, f"ws-agent: review by {name}")
+    with engines.slot(name, agent_registry.settings().engine(name).parallel), open(adir / "stdout", "wb") as out:
+        rc = _run_engine(job, ["timeout", "--kill-after=60s", f"{remaining}s", *inner], prompt, out, log, wc,
+                         engine.env(clean_env(os.environ, bindir, job.id)))
+    outcome = engine.parse(adir, rc, schema=engines.REVIEW_SCHEMA)
+    note = None
+    if _vcs_view(job, wc) != before:
+        note = "the review changed the working copy; the patch was taken before it"
+    if outcome.kind != "ok" or outcome.report is None:
+        return None, note or f"review by {name} failed ({outcome.kind}): {outcome.message[:200]}"
+    core.atomic_write(res / "review.json", (json.dumps(outcome.report, indent=2) + "\n").encode("utf-8"))
+    return str(outcome.report.get("verdict")), note
+
+
 def execute(job_id: str, *, resume: bool) -> int:
     job = jobs.load(job_id)
     jd = jobs.job_dir(job.id)
@@ -608,7 +685,7 @@ def execute(job_id: str, *, resume: bool) -> int:
                 core.atomic_write(res / "report.json", (json.dumps(report, indent=2) + "\n").encode("utf-8"))
             info: dict[str, object] = {
                 "exit_code": code, "finished": core.now_iso(), "attempt": attempt, "engine": job.engine,
-                "kind": kind, "status": report.get("status") if report else None, "checks": "none",
+                "kind": kind, "status": report.get("status") if report else None, "checks": extra.pop("checks", "none"),
                 "session_id": job.session_id, "is_error": code != 0, "timed_out": kind == "timeout",
                 "num_turns": outcome.turns if outcome else None,
                 "duration_ms": outcome.duration_ms if outcome else None,
@@ -644,8 +721,11 @@ def execute(job_id: str, *, resume: bool) -> int:
         intent = "resume" if resume else "start"
         handoff_why = "it was interrupted"
         stopped: set[str] = set()   # engines that hit their usage limit during this attempt
-        retries = run_no = 0
+        retries = run_no = fix_used = 0
         outcome: engines.Outcome | None = None
+        verdict = "none"
+        fix_text = ""
+        check_env = _check_env(clean_env(os.environ, bindir, job.id))
         while True:
             engine, reasons = engines.select(entry, exclude=stopped)
             if engine is None:
@@ -661,7 +741,11 @@ def execute(job_id: str, *, resume: bool) -> int:
             resume_sid: str | None = None
             if prev and prev != engine.name:
                 prompt = HANDOFF.format(prev=prev, why=handoff_why, report=_last_report(res), task=task,
-                                        inspection=inspection or inspect(job))
+                                        inspection=inspection or inspect(job)) + (f"\n\n{fix_text}" if intent == "fix" else "")
+            elif intent == "fix" and resumable:
+                prompt, resume_sid = fix_text, sid
+            elif intent == "fix":
+                prompt = f"{task}\n\n---\n{fix_text}\n\n{inspect(job)}"
             elif intent == "retry" and resumable:
                 prompt, resume_sid = RETRY.format(why=outcome.message[:200] if outcome else "?"), sid
             elif intent in ("resume", "retry") and resumable:
@@ -720,15 +804,36 @@ def execute(job_id: str, *, resume: bool) -> int:
                 stopped.add(engine.name)
                 handoff_why = f"it hit its usage limit, until {until}"
                 _log(log, f"ws-agent: {engine.name} hit its usage limit (until {until}); trying the next allowed engine")
-                intent = "resume"
+                intent = "fix" if intent == "fix" else "resume"
                 continue
+            if outcome.kind == "ok" and outcome.report and outcome.report.get("status") == "done" and entry.checks:
+                runs = agent_checks.run_checks(job, jd, entry, check_env)
+                verdict = agent_checks.verdict(runs)
+                bad = agent_checks.failing(runs) if runs else None
+                _log(log, f"ws-agent: checks {verdict}")
+                if verdict == "fail" and bad is not None and fix_used < entry.fix_rounds:
+                    fix_used += 1
+                    how = f"timed out after {agent_checks.CHECK_TIMEOUT}s" if bad.timed_out else f"exit {bad.exit}"
+                    fix_text = FIX.format(cmd=bad.cmd, how=how, tail=agent_checks.fix_tail(bad))
+                    intent, retries = "fix", 0
+                    _log(log, f"ws-agent: fix round {fix_used}/{entry.fix_rounds}: {bad.cmd} ({how})")
+                    continue
             break
         warnings = collect(job, jd)
         if outcome.kind == "timeout":
             return finish(124, kind="timeout", outcome=outcome, reason=f"timed out after {job.timeout}",
-                          warnings=len(warnings))
+                          warnings=len(warnings), checks=verdict, fix_rounds=fix_used)
         if outcome.kind != "ok" or outcome.report is None:
             _log(log, f"ws-agent: {engine.name} failed ({outcome.kind}): {outcome.message[:300]}")
-            return finish(1, kind=outcome.kind, outcome=outcome, reason=outcome.message[:500], warnings=len(warnings))
+            return finish(1, kind=outcome.kind, outcome=outcome, reason=outcome.message[:500], warnings=len(warnings),
+                          checks=verdict, fix_rounds=fix_used)
         status = outcome.report.get("status")
-        return finish(0 if status == "done" else 1, kind="ok", outcome=outcome, warnings=len(warnings))
+        review = None
+        if status == "done" and entry.review:
+            review, note = _review(job, jd, entry, task, log, deadline, bindir, attempt)
+            if note:
+                warnings.append(note)
+                with open(res / "warnings.txt", "a", encoding="utf-8") as fh:
+                    fh.write(note + "\n")
+        return finish(0 if status == "done" else 1, kind="ok", outcome=outcome, warnings=len(warnings), checks=verdict,
+                      fix_rounds=fix_used, review=review)

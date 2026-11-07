@@ -427,6 +427,8 @@ def _result(args: argparse.Namespace) -> int:
         if report.get("question"):
             print(f"question: {report['question']}")
             print(f"  answer with: ws-agent answer {job.id} \"...\"")
+    _print_checks(info, res)
+    _print_review(res)
     diff_path = res / "changes.diff"
     diff = diff_path.read_text(encoding="utf-8", errors="replace") if diff_path.exists() else ""
     stats = agent_exec._diff_stats(diff)
@@ -451,6 +453,48 @@ def _result(args: argparse.Namespace) -> int:
         print("--- changes.diff")
         sys.stdout.write(diff if diff.endswith("\n") or not diff else diff + "\n")
     return 0
+
+
+def _print_checks(info: dict[str, object], res: Path) -> None:
+    verdict = info.get("checks")
+    if verdict in (None, "none"):
+        return
+    rounds = info.get("fix_rounds") or 0
+    print(f"checks: {verdict}" + (f" (after {rounds} fix round{'s' if rounds != 1 else ''})" if rounds else ""))
+    try:
+        runs = json.loads((res / "checks.json").read_text(encoding="utf-8"))
+        text = (res / "checks.txt").read_text(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
+        return
+    blocks: dict[str, list[str]] = {}
+    current = None
+    for line in text.splitlines():
+        if line.startswith("$ "):
+            current = line[2:].split("    (", 1)[0]
+            blocks[current] = []
+        elif current is not None:
+            blocks[current].append(line)
+    for r in runs if isinstance(runs, list) else []:
+        if not isinstance(r, dict) or (r.get("exit") == 0 and not r.get("timed_out")):
+            continue
+        how = "timed out" if r.get("timed_out") else f"exit {r.get('exit')}"
+        print(f"  {r.get('cmd')}: {how}")
+        tail = [ln for ln in blocks.get(str(r.get("cmd")), []) if ln.strip()][-20:]
+        print("\n".join(f"    {ln}" for ln in tail))
+
+
+def _print_review(res: Path) -> None:
+    try:
+        review = json.loads((res / "review.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(review, dict):
+        return
+    print(f"review: {review.get('verdict')}: {review.get('summary')}")
+    for f in review.get("findings") or []:
+        if isinstance(f, dict):
+            where = f"{f.get('file')}:{f.get('line')}" if f.get("line") is not None else str(f.get("file"))
+            print(f"  {where}: {f.get('issue')}")
 
 
 def _cancel(args: argparse.Namespace) -> int:
