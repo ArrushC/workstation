@@ -277,6 +277,7 @@ state = "running"
 "dnf:gcc" = "latest"
 "dnf:git" = "latest"
 "dnf:subversion" = "latest"        # svn for SVN working copies and ws agent jobs; AppStream on EL8 (1.10, module default) and EL9 (1.14)
+"dnf:bubblewrap" = "latest"        # bwrap: ws agent's job sandbox (and Claude Code's/Codex's own); BaseOS on EL8 (0.4) and EL9 (0.6)
 "dnf:libatomic" = "latest"          # node >=25 links libatomic.so.1 (BaseOS); without it node/ccstatusline die at startup
 "dnf:make" = "latest"
 "dnf:ncurses" = "latest"
