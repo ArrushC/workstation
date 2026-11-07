@@ -574,20 +574,68 @@ checks. Snapshot pruning and scheduling remain explicit restic/system scheduler 
 
 ## Agent orchestration
 
-Every Claude Code session decides by itself how to run a development request: directly,
-with subagents, or as a **queued job** that outlives the session (policy in
-`dotfiles/claude/CLAUDE.md`). Queued jobs are `ws agent` / `ws-agent` (Linux): headless
-Claude Code under the pueue group `agents`, one private working copy per job at a recorded
-base (SVN `URL@rev` or a git commit), and a reviewable patch at the end. A job never
-commits, pushes or otherwise writes to the repository.
+Every Claude Code session decides by itself how to run a development request; you don't
+pick a mode or invoke a skill. The policy is the `## Orchestration` section of
+`dotfiles/claude/CLAUDE.md` (deployed to `~/.claude/CLAUDE.md`), and a SessionStart hook
+(the `workstation-orchestration` plugin) gives each session one line about its repository:
+
+```
+[orchestration] svn ~/src/foo ^/trunk@4123 | jobs: allowed; queue 0/1 running, 1 queued | here: a3f2c1 succeeded (review) | superagent: none
+```
+
+| Work | Runs as |
+|---|---|
+| Questions, small or single-file changes | directly in the session |
+| Separable parallel work (searches, investigations, implement then review) | subagents; git writers get worktrees, SVN writers never share a working copy |
+| Long or multi-stage work that should outlive the session | a queued job (`ws-agent run`), in a repository you allowed |
+| Issue/PR-shaped work in a GitHub repository with a registered DeepSeek Super-agent | Super-agent (phase 2; none registered yet), each submission with your OK |
+
+### Queued jobs (`ws agent`, also `ws-agent`; Linux)
+
+A job is headless Claude Code (`claude -p`, this host's login) in a private working copy of
+the repository at the base recorded when you asked: SVN `URL@rev` (a fresh checkout) or a git
+commit (a worktree on branch `ws-agent/<id>`). pueue's group `agents` queues them, one at a
+time by default (`[queue] parallel` in `~/.config/workstation/agents.toml`), and keeps their
+output (`pueue log <task>`). The job never commits, pushes or otherwise writes to the
+repository: it ends with a patch you review and apply.
 
 ```sh
-ws-agent allow ~/src/foo          # once per repository, in your own terminal
-ws-agent ls                       # jobs of this repository (--all: every one)
-ws-agent result <id>              # Claude's report, the patch and how to apply it
-ws-agent cancel|retry|close <id>
-ws-agent doctor                   # claude login, pueued, svn, registry, disk
+ws-agent allow ~/src/foo [--command 'make *']   # once per repository, in your own terminal
+ws-agent repos | ws-agent disallow ~/src/foo
+ws-agent ls [--all]          # jobs of this repository, with their state
+ws-agent result <id>         # Claude's report, changes per file, the patch and how to apply it
+ws-agent show <id>           # base, attempts, session, the end of its log
+ws-agent cancel <id>         # stop it; the working copy stays for a look
+ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
+ws-agent close <id>          # after review: delete the working copy, keep the result
+ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
+ws-agent doctor              # Claude login, pueued, svn, the registry, free disk
 ```
+
+- **States**: queued, running, succeeded, failed, interrupted (the daemon or the host stopped
+  under it), cancelled, closed. A job is never started twice for the same prompt and
+  repository (`--force` overrides); `--paths` warns when two jobs claim the same files.
+- **Review artifacts** (`<state>/agent-jobs/<id>/result/`): `changes.diff` (SVN: `svn diff
+  --git --show-copies-as-adds`, which `svn patch --strip N` reproduces with binaries and
+  `svn:*` properties; git: a binary diff), `manifest.txt` (every changed path, moves,
+  property changes, binaries), `props.txt`, `apply.txt`, `warnings.txt` (unversioned files,
+  copied to `unversioned/` when small), `claude.json`, `exit.json`.
+- **Guards, not a boundary**: a job runs with `--permission-mode acceptEdits`, nothing may
+  prompt, and a fixed allowlist plus the repository's `--command` rules. `svn` and `git` on
+  its PATH refuse commit, copy, merge, update, switch, lock, revision properties and push;
+  svn runs without cached credentials, and SSH agent, GitHub tokens and git credential
+  helpers are removed from its environment. A program called by absolute path gets past the
+  shims, so allow only repositories you'd let Claude Code edit.
+- **Limits**: jobs stop with WSL or Windows sleep and come back `interrupted`; pueue also
+  pauses the group when its daemon stops (`ws-agent resume`). Jobs share the host's Claude
+  Code plan and its usage limits with your interactive sessions. Windows runs tiers 1–2 only.
+- **Remote dev servers**: everything is per host. A Linux host with this workstation applied
+  (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
+  with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by
+  this repository on its own.
+- **Turning it off**: `ws-agent pause` holds jobs; deleting `~/.config/workstation/agents.toml`
+  allows none. To remove the routing, drop the `## Orchestration` section and set
+  `workstation-orchestration@skills-dir` to `false` in `settings.enforced.json`, then `wsa`.
 
 ## Adding things
 

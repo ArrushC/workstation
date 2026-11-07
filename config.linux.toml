@@ -276,6 +276,7 @@ state = "running"
 # --- core ---
 "dnf:gcc" = "latest"
 "dnf:git" = "latest"
+"dnf:subversion" = "latest"        # svn for SVN working copies and ws agent jobs; AppStream on EL8 (1.10, module default) and EL9 (1.14)
 "dnf:libatomic" = "latest"          # node >=25 links libatomic.so.1 (BaseOS); without it node/ccstatusline die at startup
 "dnf:make" = "latest"
 "dnf:ncurses" = "latest"
