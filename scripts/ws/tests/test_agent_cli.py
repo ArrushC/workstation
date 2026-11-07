@@ -76,7 +76,7 @@ class Run(Cli):
         self.assertEqual(job.pueue_id, 7)
         self.assertEqual((jobs.job_dir(jid) / "prompt.md").read_text(), "add a cache")
         calls = self.pueue_calls()
-        self.assertIn(["group", "add", "agents", "--parallel", "1"], calls)
+        self.assertIn(["group", "add", "agents", "--parallel", "2"], calls)   # two at a time, one per engine
         add = [c for c in calls if c[0] == "add"][-1]
         self.assertEqual(add[add.index("--group") + 1], "agents")
 
@@ -366,6 +366,38 @@ class Registry(Cli):
         self.assertIn("make *", out)
         self.assertEqual(self.cli("disallow", str(repo))[0], 0)
         self.assertIsNone(reg.find(repo))
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_allow_engines_and_checks(self) -> None:
+        _, wc = self.svn_repo()
+        rc, out, err = self.cli("allow", str(wc), "--engine", "claude", "--engine", "codex", "--check", "make test",
+                                "--fix-rounds", "0", "--review", "claude", "--network")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("OpenAI", out + err)
+        self.assertIn("authoriz", out + err)
+        found = reg.find(wc)
+        assert found is not None
+        self.assertEqual((found.engines, found.checks, found.fix_rounds, found.review, found.network),
+                         (("claude", "codex"), ("make test",), 0, "claude", True))
+        rc, out, _ = self.cli("repos")
+        self.assertIn("engines: claude, codex", out)
+        self.assertIn("checks: make test", out)
+        self.assertIn("network: on", out)
+
+    def test_allow_bad_review_is_a_usage_error(self) -> None:
+        repo = self.git_repo()
+        rc, _, err = self.cli("allow", str(repo), "--review", "codex")
+        self.assertEqual(rc, 2)
+        self.assertIn("isn't one of this repository's engines", err)
+        self.assertIsNone(reg.find(repo))
+
+    def test_allow_unparseable_registry(self) -> None:
+        repo = self.git_repo()
+        self.write(reg.registry_path(), "[[bad\n")
+        rc, _, err = self.cli("allow", str(repo))
+        self.assertEqual(rc, 1)
+        self.assertIn("agents.toml", err)
+        self.assertEqual(reg.registry_path().read_text(), "[[bad\n")
 
 
 class Context(Cli):

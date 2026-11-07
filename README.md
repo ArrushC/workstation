@@ -593,13 +593,14 @@ pick a mode or invoke a skill. The policy is the `## Orchestration` section of
 
 A job is headless Claude Code (`claude -p`, this host's login) in a private working copy of
 the repository at the base recorded when you asked: SVN `URL@rev` (a fresh checkout) or a git
-commit (a worktree on branch `ws-agent/<id>`). pueue's group `agents` queues them, one at a
+commit (a worktree on branch `ws-agent/<id>`). pueue's group `agents` queues them, two at a
 time by default (`[queue] parallel` in `~/.config/workstation/agents.toml`), and keeps their
 output (`pueue log <task>`). The job never commits, pushes or otherwise writes to the
 repository: it ends with a patch you review and apply.
 
 ```sh
-ws-agent allow ~/src/foo [--command 'make *']   # once per repository, in your own terminal
+ws-agent allow ~/src/foo [--command 'make *'] [--engine claude --engine codex] [--check 'make test']
+               [--fix-rounds 1] [--review claude] [--network]   # once per repository, in your own terminal
 ws-agent repos | ws-agent disallow ~/src/foo
 ws-agent ls [--all]          # jobs of this repository, with their state
 ws-agent result <id> [--diff] # Claude's report, changes per file, how to apply; --diff prints the patch
@@ -611,6 +612,20 @@ ws-agent pause | resume      # hold the queue (running jobs finish) / start it a
 ws-agent doctor              # Claude login, pueued, svn, the registry, free disk
 ```
 
+- **Per repository** (`allow` flags; `allow` again replaces them):
+  - `--engine`: which engines its jobs may run on, in preference order (default `claude`).
+    `codex` sends the code it reads to OpenAI: for company code that needs your
+    organization's authorization for OpenAI, separate from Claude's.
+  - `--check`: commands ws-agent runs on each job's result.
+  - `--fix-rounds`: how many times a failing check goes back to the engine (default 1).
+  - `--review`: a second-opinion review by one of its engines.
+  - `--network`: lets the agent's commands and the checks reach the network (off by default).
+- **Per host**, by hand in `agents.toml` (kept when `allow` rewrites the file; a file ws-agent
+  can't parse is never overwritten):
+  - `[queue] parallel = 2`, and `[engines.codex] parallel = 1` / `model = "…"`.
+  - `[sandbox] hide = ["/data/svn"]`: more directories jobs must not read.
+  - `[notify] desktop = false`.
+  - Claude Code sessions can't edit this file (the global secret guard denies it).
 - **States**: queued, running, succeeded, failed, interrupted (the daemon or the host stopped
   under it), cancelled, closed. A job counts as running while its claude lives, whatever
   pueue says. A second `run` of the same prompt in the same repository is refused while the

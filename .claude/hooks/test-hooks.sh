@@ -166,6 +166,12 @@ run "$GH/secret-guard.sh" "$(j --arg c "cat notes/key.txt" '{tool_name:"Bash",to
 ok "bash naming key.txt -> silent" empty
 run "$GH/secret-guard.sh" "$(j --arg c "ls -la" '{tool_name:"Bash",tool_input:{command:$c}}')"
 ok "allow normal bash" empty
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/workstation/agents.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "deny editing ws-agent's registry" has '"permissionDecision":"deny"'
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/workstation/agents.toml" '{tool_name:"Write",tool_input:{file_path:$f}}')"
+ok "deny writing ws-agent's registry" has 'ws-agent allow'
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/workstation/agents.toml" '{tool_name:"Read",tool_input:{file_path:$f}}')"
+ok "allow reading ws-agent's registry" empty
 
 echo "== dangerous-command-guard (G2) =="
 g() { run "$GH/dangerous-command-guard.sh" "$(j --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}')"; }

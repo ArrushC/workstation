@@ -5,6 +5,8 @@
 # secrets out of Claude's reach:
 #   - DENY editing OR reading SSH private keys, *.pem and *.key
 #   - ASK before a Bash command that names an SSH private key
+#   - DENY editing ws-agent's registry (~/.config/workstation/agents.toml): only the
+#     person widens it, with ws-agent allow (an accidental-write guard, like the rest)
 #
 # Contract: hook JSON on stdin -> PreToolUse JSON on stdout. Fails OPEN if it
 # cannot parse the input (so it never wedges the session).
@@ -49,6 +51,12 @@ case "$tool" in
 Edit | Write | MultiEdit | Read)
   f="$(hookfield '.tool_input.file_path')"
   [ -n "$f" ] || exit 0
+  case "$tool:${f//\\//}" in
+  Read:*) ;;
+  *:*/.config/workstation/agents.toml)
+    emit deny "Refusing to modify $f: ws-agent's registry (which repositories queued jobs may use, and which engines may read their code) changes only through ws-agent allow, run by the person in their own terminal."
+    ;;
+  esac
   if is_secret_path "$f"; then
     verb="modify"
     [ "$tool" = "Read" ] && verb="read"

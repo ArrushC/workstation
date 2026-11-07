@@ -127,16 +127,39 @@ def _allow(args: argparse.Namespace) -> int:
         _err(f"ws-agent: {args.path} isn't in a git or SVN working copy")
         return 3
     try:
-        repo = agent_registry.allow(p.root, p.kind, args.command or [])
+        repo = agent_registry.allow(p.root, p.kind, args.command or [], engines=tuple(args.engine or ("claude",)),
+                                    checks=tuple(args.check or ()), fix_rounds=args.fix_rounds, review=args.review or "",
+                                    network=args.network)
     except agent_registry.Refused as e:
         _err(str(e))
         return 3
+    except ValueError as e:
+        _err(str(e))
+        return 2
+    except agent_registry.Unreadable as e:
+        _err(str(e))
+        return 1
     print(f"allowed: {core.tilde(repo.path)} ({repo.vcs})")
-    if repo.commands:
-        print(f"jobs may also run: {', '.join(repo.commands)}")
-    print("Queued jobs run headless Claude Code with this host's login in a private copy at a recorded base;\n"
+    for line in _repo_words(repo):
+        print(f"  {line}")
+    if "codex" in repo.engines:
+        print("Codex sends the code it reads to OpenAI. For company code that needs your organization's "
+              "authorization for OpenAI, separate from Claude's.")
+    print("Queued jobs run headless in a sandboxed private copy at a recorded base, with this host's logins;\n"
           "they never commit, push or otherwise write to the repository. ws-agent disallow undoes this.")
     return 0
+
+
+def _repo_words(r: agent_registry.Repo) -> list[str]:
+    words = [f"engines: {', '.join(r.engines)}"]
+    if r.commands:
+        words.append(f"commands: {', '.join(r.commands)}")
+    if r.checks:
+        words.append(f"checks: {', '.join(r.checks)} (fix rounds {r.fix_rounds})")
+    if r.review:
+        words.append(f"review: {r.review}")
+    words.append(f"network: {'on' if r.network else 'off'}")
+    return words
 
 
 def _disallow(args: argparse.Namespace) -> int:
@@ -147,6 +170,9 @@ def _disallow(args: argparse.Namespace) -> int:
     except agent_registry.Refused as e:
         _err(str(e))
         return 3
+    except agent_registry.Unreadable as e:
+        _err(str(e))
+        return 1
     print(f"{'disallowed' if removed else 'was not allowed'}: {core.tilde(root)}")
     return 0
 
@@ -159,8 +185,7 @@ def _repos(_: argparse.Namespace) -> int:
         return 0
     print(f"queue: pueue group {jobs.GROUP}, {parallel} at a time")
     for key, r in sorted(repos.items()):
-        extra = f"  commands: {', '.join(r.commands)}" if r.commands else ""
-        print(f"{key}  ({r.vcs}, since {r.allowed_at[:10]}){extra}")
+        print(f"{key}  ({r.vcs}, since {r.allowed_at[:10]})  " + "; ".join(_repo_words(r)))
     return 0
 
 
@@ -542,6 +567,12 @@ def _parser() -> argparse.ArgumentParser:
     a = sub.add_parser("allow", help="let queued jobs use a repository (your own terminal only)")
     a.add_argument("path")
     a.add_argument("--command", action="append", help="an extra Bash permission rule for jobs, e.g. 'make *'")
+    a.add_argument("--engine", action="append", choices=agent_registry.KNOWN_ENGINES,
+                   help="an engine jobs may run on, in preference order (repeatable; default claude)")
+    a.add_argument("--check", action="append", help="a command ws-agent runs on each job's result (repeatable)")
+    a.add_argument("--fix-rounds", type=int, default=1, help="engine rounds to fix failing checks (default 1)")
+    a.add_argument("--review", choices=agent_registry.KNOWN_ENGINES, help="a second-opinion review by this engine")
+    a.add_argument("--network", action="store_true", help="let the agent's commands and the checks use the network")
     a.set_defaults(fn=_allow)
     d = sub.add_parser("disallow")
     d.add_argument("path")
