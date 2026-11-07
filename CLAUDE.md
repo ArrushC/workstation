@@ -209,17 +209,33 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   (`check_ws`), so an early hook prints a message instead of a SyntaxError.
 - Tests: `scripts/test-ws.sh` (lint runs it: fixtures in scratch homes, real mise and fzf when
   present); `scripts/test-config-nu.sh` covers Nushell's `ws`.
-- `ws agent` (`wslib/{agent,jobs,agent_exec,agent_registry,vcs}.py`; `ws-agent` in `~/.local/bin` for hooks,
-  Claude's tools and pueue): queued headless `claude -p` jobs in pueue group `agents` (parallel 1), one private
-  working copy per job at the base recorded at `run`, a patch at the end; never a write upstream. Its svn/git
-  shims (svn: no repository writes; git: default-deny, reads + add/rm/mv/restore/apply; both confined to the
-  job's copy), `blockWritesOutsideWorkingDirectories`, no bare Edit/Write rule and a credential-free environment
-  are accidental-write guards, not a boundary. claude runs in its own process group (`timeout` setpgids
-  itself, so `pueue kill` never reaches it): `run.pid` records it, it gets PDEATHSIG, and while it lives the
-  job is `running` whatever pueue says; `cancel` kills that group.
-  `allow`/`disallow` refuse under `CLAUDECODE=1`; `run` refuses under `WS_AGENT_JOB`. Job state is derived
-  (exit.json, then the pueue task), never stored; `claude -p --output-format json` prints an array ending in
-  the result. Tests use fake pueue/claude (`tests/agent_helpers.py`) and a scratch pueued; never the real ones.
+- `ws agent` (`wslib/{agent,jobs,agent_exec,agent_registry,vcs,engines,agent_sandbox,agent_checks,agent_events}.py`;
+  `ws-agent` in `~/.local/bin` for hooks, the agents' tools and pueue): queued headless jobs in pueue group
+  `agents` (parallel 2, one per engine via `engines.slot`), one private working copy per job at the base
+  recorded at `run`, a patch at the end; never a write upstream.
+  - Engines (`engines.py`): Claude Code and Codex behind one interface (argv from a `Confinement`, output →
+    `Outcome` ok/transient/usage_limit/auth/error with the structured report). A repository's `engines` list is
+    the only set its code may reach (Codex = OpenAI: the person adds it). Transient → same session after
+    15/60/240 s; usage limit → cooldown and the next allowed engine, or `waiting`.
+  - The job sandbox (`agent_sandbox.wrap`, bwrap) is the read boundary: `$HOME` and `/tmp` are throwaway layers
+    with the tools and the engine's own state bound back, other jobs, every registered copy and `[sandbox] hide`
+    are hidden, a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
+    `sandbox` settings; Codex: workspace-write, `--ignore-rules`). No working sandbox → no job, never phase-1
+    confinement. git in a job only reads (`GIT_OPTIONAL_LOCKS=0`; ws-agent stages); the svn shim refuses server
+    writes; `.claude/.cc-writes` is engine bookkeeping, never in a patch.
+  - `exit.json` carries `kind`, `status`, `engine`, `checks`, `review`; job.json `engine` + `history`. State:
+    closed > cancelled > a live run (`run.pid`) > exit.json (needs-you for question/blocked, waiting for a usage
+    limit) > pueue. claude/codex run in their own process group (`timeout` setpgids itself): PDEATHSIG, `cancel`
+    kills the group.
+  - Checks (`agent_checks.py`) run by ws-agent in the job sandbox (no network unless `--network`, bounded tail,
+    no engine login), with `fix_rounds` resumes; `--review E` is a fresh read-only session into review.json.
+  - `thread.jsonl` holds `tell`/`answer` messages (delivered by id, after the turn) and reports; a message that
+    lands while a job finishes requeues it under `queue_lock`. Events (`agent_events.py`) feed the plugin's
+    UserPromptSubmit hook and `notify.sh` (detached, `NOTIFY_NO_MODAL`).
+  - `allow`/`disallow` refuse under `CLAUDECODE=1` (and the secret guard denies editing agents.toml); `run` and
+    `tell` refuse under `WS_AGENT_JOB`. Tests use fake pueue/claude/codex (`tests/agent_helpers.py`) and patch
+    `agent_sandbox.wrap`/`probe` (subprocess tests go through `no_sandbox_ws`), except the real-bwrap tests in
+    `test_agent_sandbox`/`test_agent_checks`; never the real pueued or a real model.
 
 ## File care
 

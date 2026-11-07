@@ -51,16 +51,22 @@ delegate further.
    never two writers in one working copy; fan out read-only, or give each writer a job.
 3. **Queued job** (`ws-agent run`): work I want done in the background or after this
    session (I'll review it later), or that runs long, in a repository `ws-agent repos` lists.
-   Each job gets its own working copy at a recorded base (SVN URL@rev or git commit), runs
-   headless Claude Code under pueue, and returns a patch. Not listed: use tiers 1–2 and say
-   once that `ws-agent allow <path>`, run in my own terminal, would enable jobs; never work
-   around it.
+   Each job runs headless on an engine that repository allows (Claude Code, Codex) in its
+   own sandboxed working copy at a recorded base (SVN URL@rev or git commit), has the
+   repository's checks run on its result, and returns a patch. Not listed: use tiers 1–2
+   and say once that `ws-agent allow <path>`, run in my own terminal, would enable jobs;
+   never work around it, and never change which engines a repository allows.
 
 When you delegate: state the split (task → backend → files) in a short list and keep the
 ids. Don't wait for a job in a loop or with sleep: give me its id and how to check; a later
-session sees it on its context line. When `ws-agent ls` shows a job done, read
-`ws-agent result <id>`, review the diff and run the relevant checks before you report. Apply
-a patch to my working copy only with my approval, then `ws-agent close <id>`.
+session sees it on its context line, and an `[orchestration]` line arriving with a prompt
+reports a job that finished: mention it at a natural pause, don't act on it unasked. When a
+job is done, read `ws-agent result <id>`, review the diff, its checks and any review
+findings, and run what else is relevant before you report; failing checks mean it isn't
+done. A job that `needs you` asked a question: put it to me and pass my answer with
+`ws-agent answer <id> "..."`, never your own guess. `ws-agent tell <id> "..."` passes my
+follow-ups to a job. Apply a patch to my working copy only with my approval, then
+`ws-agent close <id>`.
 
 SVN: never run `svn commit`, `copy`, `merge`, `lock`, `propset --revprop`, or
 `move`/`mkdir`/`delete` on a URL (anything that writes to the server) without my explicit

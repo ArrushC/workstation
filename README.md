@@ -587,7 +587,7 @@ pick a mode or invoke a skill. The policy is the `## Orchestration` section of
 |---|---|
 | Questions, small or single-file changes | directly in the session |
 | Separable parallel work (searches, investigations, implement then review) | subagents; git writers get worktrees, SVN writers never share a working copy |
-| Long or multi-stage work that should outlive the session | a queued job (`ws-agent run`), in a repository you allowed |
+| Long or multi-stage work that should outlive the session | a queued job (`ws-agent run`), in a repository you allowed, on the engines (Claude Code, Codex) you allowed for it |
 
 ### Queued jobs (`ws agent`, also `ws-agent`; Linux)
 
