@@ -67,8 +67,10 @@ class Events(AgentScratch):
 
 class Notify(AgentScratch):
     def test_notify_detached(self) -> None:
+        # written whole, then renamed: the test polls for the file and must never read it half-written
         script = self.write(self.home / ".claude" / "notify.sh",
-                            f'printf "%s\\n" "$@" >"{self.root}/notify.argv"; env >"{self.root}/notify.env"; sleep 2\n')
+                            f'printf "%s\\n" "$@" >"{self.root}/notify.argv"; env >"{self.root}/notify.tmp"; '
+                            f'mv "{self.root}/notify.tmp" "{self.root}/notify.env"; sleep 2\n')
         start = time.monotonic()
         ev.notify("aaa111 succeeded (the 'thing'); $(rm -rf /)")
         self.assertLess(time.monotonic() - start, 1.5)   # never waits for the notice
