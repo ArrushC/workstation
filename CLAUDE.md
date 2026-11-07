@@ -288,10 +288,13 @@ Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enf
   `rm -rf` of `/` or `~`, `curl | bash`, force-push.
 - Both match command *text*, so a commit message naming a pattern is screened.
 
-Global plugin `dotfiles/claude/skills/workstation-orchestration/` (enabled in `settings.enforced.json`): one
-SessionStart command hook, `ws-agent context` → the `[orchestration]` line the routing policy (`## Orchestration`
-in `dotfiles/claude/CLAUDE.md`) reads. Read-only, fail-open, 3 s. The only plugin with hooks allowed under
-`dotfiles/claude/skills` (`check_claude_mods`: command hooks only, no modules).
+Global plugin `dotfiles/claude/skills/workstation-orchestration/` (enabled in `settings.enforced.json`): two
+command hooks. SessionStart runs `ws-agent context` → the `[orchestration]` line the routing policy (`## Orchestration`
+in `dotfiles/claude/CLAUDE.md`) reads; UserPromptSubmit runs `ws-agent events` → lines for jobs that finished
+since the session's last prompt (files only, never pueue). Read-only, fail-open, 3 s. The only plugin with hooks
+allowed under `dotfiles/claude/skills` (`check_claude_mods`: command hooks only, no modules).
+`dotfiles/claude/notify.sh` doubles quotes for PowerShell (a job title can't inject), and `NOTIFY_NO_MODAL=1`
+(ws-agent) never falls back to the blocking MessageBox.
 
 Mods (function-hook plugins in `.claude/skills/workstation-{sync,ship,lint-fold}/`): project scope, loaded as
 `<name>@skills-dir` only in a session in this checkout once it's trusted. Never under `dotfiles/claude/skills`

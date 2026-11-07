@@ -38,7 +38,7 @@ shell_targets() {
   printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
     .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
     dotfiles/claude/notify.sh dotfiles/local/bin/winterop dotfiles/local/bin/zcc dotfiles/local/bin/zc++ \
-    dotfiles/local/bin/ws-agent dotfiles/claude/skills/workstation-orchestration/hooks/context.sh \
+    dotfiles/local/bin/ws-agent dotfiles/claude/skills/workstation-orchestration/hooks/*.sh \
     dotfiles/config/bash/completions.bash
 }
 

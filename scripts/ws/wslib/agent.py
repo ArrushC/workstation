@@ -28,7 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
+from . import agent_events, agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
 
 MAX_CONTEXT = 400
 
@@ -697,6 +697,23 @@ def _doctor(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _events(args: argparse.Namespace) -> int:
+    """The UserPromptSubmit hook's lines: the hook JSON on stdin (session_id, cwd), the events this
+    session hasn't seen on stdout. Files only (no pueue), and never an error."""
+    del args
+    try:
+        data = json.loads(sys.stdin.read() or "{}")
+        if not isinstance(data, dict):
+            return 0
+        p = vcs.probe(Path(str(data.get("cwd") or os.getcwd())))
+        key = core.tilde(p.root) if p.root else ""
+        for line in agent_events.lines_for(str(data.get("session_id") or ""), key):
+            print(line)
+    except Exception:  # noqa: BLE001 - a prompt hook must never fail the prompt
+        pass
+    return 0
+
+
 def _exec(args: argparse.Namespace) -> int:
     return agent_exec.execute(args.id, resume=args.resume)
 
@@ -707,6 +724,7 @@ def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="ws agent", description="Queued headless Claude Code jobs (see ws-agent --help).")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("context", help="the one-line orchestration summary").set_defaults(fn=lambda a: print(context_line(Path.cwd())) or 0)
+    sub.add_parser("events", help="job events a session hasn't seen (UserPromptSubmit hook)").set_defaults(fn=_events)
     r = sub.add_parser("route", help="this repository's execution options")
     r.add_argument("--json", action="store_true")
     r.add_argument("--repo")
@@ -762,7 +780,7 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-SUBCOMMANDS = ("context", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
+SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
                "tell", "answer", "pause", "resume", "doctor", "--help")
 
 

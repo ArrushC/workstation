@@ -605,6 +605,47 @@ class Conversations(Attempts):
         self.assertEqual(jobs.undelivered(jobs.load(job.id)), [])
 
 
+class Events(Attempts):
+    def test_a_finished_job_is_an_event_and_a_notice(self) -> None:
+        from wslib import agent_events
+        notices: list[str] = []
+        job = self.git_job(checks=("true",))
+        with mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            ax.execute(job.id, resume=False)
+        events = [json.loads(line) for line in agent_events.events_path().read_text().splitlines()]
+        self.assertEqual(events[-1]["kind"], "succeeded")
+        self.assertEqual(events[-1]["job"], job.id)
+        self.assertIn("checks pass", events[-1]["text"])
+        self.assertEqual(len(notices), 1)
+        self.assertIn(job.id, notices[0])
+
+    def test_needs_you_and_waiting_are_events(self) -> None:
+        from wslib import agent_events
+        with mock.patch.object(agent_events, "notify"):
+            q = self.git_job()
+            self.write(self.fc / "report", '{"status":"question","summary":"s","question":"A or B?","tests":null,"notes":null}')
+            ax.execute(q.id, resume=False)
+            (self.fc / "report").unlink()
+            self.write(self.fc / "fail.2", USAGE_2100)
+            w = self.make_job(self.home / "src" / "proj", "git", jobs.load(q.id).base, prompt="another")
+            ax.execute(w.id, resume=False)
+        kinds = [json.loads(line)["kind"] for line in agent_events.events_path().read_text().splitlines()]
+        self.assertEqual(kinds, ["needs-you", "waiting"])
+
+    def test_a_requeued_job_is_no_event(self) -> None:
+        from wslib import agent_events
+        job = self.git_job()
+        self.pueue_status({})
+        real_collect = ax.collect
+
+        def collect_and_tell(j: jobs.Job, jd: Path) -> list[str]:
+            jobs.post(jobs.load(j.id), "you", "more")
+            return real_collect(j, jd)
+        with mock.patch.object(ax, "collect", side_effect=collect_and_tell), mock.patch.object(agent_events, "notify"):
+            ax.execute(job.id, resume=False)
+        self.assertFalse(agent_events.events_path().exists())
+
+
 REAL_WRAP = agent_sandbox.wrap
 
 

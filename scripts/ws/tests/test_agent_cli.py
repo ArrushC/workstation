@@ -665,6 +665,7 @@ class Launcher(AgentScratch):
 
 
 HOOK = REPO / "dotfiles" / "claude" / "skills" / "workstation-orchestration" / "hooks" / "context.sh"
+EVENTS_HOOK = HOOK.with_name("events.sh")
 
 
 class HookScript(AgentScratch):
@@ -697,6 +698,52 @@ class HookScript(AgentScratch):
         self.fake("ws-agent", 'echo "[orchestration] here"')
         r = self.hook(json.dumps({"cwd": str(self.root / "gone")}))
         self.assertEqual((r.returncode, r.stdout), (0, "[orchestration] here\n"))
+
+    def events_hook(self, stdin: str = "{}", **env: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["bash", str(EVENTS_HOOK)], input=stdin, capture_output=True, text=True, timeout=20,
+                              env={**os.environ, **env})
+
+    def test_events_hook_passes_the_prompt_json_and_prints_lines(self) -> None:
+        self.fake("ws-agent", f'cat >"{self.root}/events.stdin"; echo "$1 $PWD"; echo "[orchestration] b1 failed"')
+        d = self.root / "proj dir"
+        d.mkdir()
+        payload = json.dumps({"session_id": "S", "cwd": str(d), "hook_event_name": "UserPromptSubmit", "prompt": "hi"})
+        r = self.events_hook(payload)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout, f"events {d}\n[orchestration] b1 failed\n")
+        self.assertEqual(json.loads((self.root / "events.stdin").read_text())["session_id"], "S")
+
+    def test_events_hook_fails_open(self) -> None:
+        self.fake("ws-agent", "echo partial; exit 1")
+        self.assertEqual((self.events_hook().returncode, self.events_hook().stdout), (0, ""))
+        self.fake("ws-agent", "sleep 10; echo late")
+        r = self.events_hook(WS_AGENT_HOOK_TIMEOUT="1")
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        (self.bin / "ws-agent").unlink()
+        r = self.events_hook(PATH=f"{self.bin}{os.pathsep}/usr/bin{os.pathsep}/bin")
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+
+
+class EventsCommand(Cli):
+    def test_events_never_calls_pueue(self) -> None:
+        from wslib import agent_events
+        repo = self.git_repo()
+        reg.allow(repo, "git", [])
+        self.pueue_status({})
+        jid = self.queued_run(repo)
+        before = len(self.pueue_calls())
+        payload = json.dumps({"session_id": "sess-1", "cwd": str(repo)})
+        with mock.patch("sys.stdin", io.StringIO(payload)):
+            self.assertEqual(self.cli("events", cwd=repo), (0, "", ""))   # first prompt: marker only
+        agent_events.append("succeeded", jobs.load(jid), f"{jid} succeeded (t)")
+        (self.bin / "pueue").unlink()
+        with mock.patch("sys.stdin", io.StringIO(payload)):
+            rc, out, _ = self.cli("events", cwd=repo)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, f"[orchestration] {jid} succeeded (t): ws-agent result {jid}\n")
+        self.assertEqual(len(self.pueue_calls()), before)
+        with mock.patch("sys.stdin", io.StringIO("not json")):
+            self.assertEqual(self.cli("events", cwd=repo)[:2], (0, ""))
 
 
 @unittest.skipUnless(shutil.which("pueued") and shutil.which("pueue"), "pueue not installed")

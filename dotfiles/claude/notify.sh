@@ -15,9 +15,24 @@ if [ -z "${ZELLIJ:-}" ] && { [ "${TERM_PROGRAM:-}" = WezTerm ] || [ "${TERM:-}" 
     "$(printf '%s' "$msg" | tr ';[:cntrl:]' ', ')" >/dev/tty; } 2>/dev/null; then
   :
 elif [ -n "${WSL_DISTRO_NAME:-}" ]; then
-  powershell.exe -NoProfile -Command "New-BurntToastNotification -Text '$title','$msg'" >/dev/null 2>&1 ||
-    powershell.exe -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('$msg','$title') | Out-Null" >/dev/null 2>&1 ||
-    true
+  # PowerShell single-quoted strings: a quote is written twice, so the text can't end the string.
+  pt=${title//\'/\'\'}
+  pm=${msg//\'/\'\'}
+  if [ "${NOTIFY_NO_MODAL:-}" = 1 ]; then
+    # a caller that must never block (ws-agent): BurntToast, else a plain WinRT toast, never a dialog
+    toast="[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null;"
+    toast+=" \$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+    toast+=" \$x = \$t.GetElementsByTagName('text'); \$x.Item(0).AppendChild(\$t.CreateTextNode('$pt')) > \$null;"
+    toast+=" \$x.Item(1).AppendChild(\$t.CreateTextNode('$pm')) > \$null;"
+    toast+=" [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new(\$t))"
+    powershell.exe -NoProfile -Command "New-BurntToastNotification -Text '$pt','$pm'" >/dev/null 2>&1 ||
+      powershell.exe -NoProfile -Command "$toast" >/dev/null 2>&1 ||
+      true
+  else
+    powershell.exe -NoProfile -Command "New-BurntToastNotification -Text '$pt','$pm'" >/dev/null 2>&1 ||
+      powershell.exe -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('$pm','$pt') | Out-Null" >/dev/null 2>&1 ||
+      true
+  fi
 else
   notify-send --urgency=critical "$title" "$msg" >/dev/null 2>&1 || true
 fi

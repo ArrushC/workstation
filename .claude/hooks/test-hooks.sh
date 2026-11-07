@@ -344,6 +344,34 @@ se_run "$RH/session-end-notify.sh" 'not json at all'
 ok "malformed input -> fail-open silent" silent
 rm -rf "$SE"
 
+echo "== notify.sh (WSL path: quoting, NOTIFY_NO_MODAL) =="
+NT="$(mktemp -d)"
+mkdir -p "$NT/bin"
+# a fake powershell.exe: records each -Command; BurntToast "fails" when $NT/no-bt exists
+cat >"$NT/bin/powershell.exe" <<EOF
+#!/usr/bin/env bash
+printf '%s\n---\n' "\$3" >>"$NT/calls"
+case "\$3" in *BurntToast*) [ -e "$NT/no-bt" ] && exit 1 ;; esac
+exit 0
+EOF
+chmod +x "$NT/bin/powershell.exe"
+nt_run() { env -u ZELLIJ -u TERM_PROGRAM TERM=dumb WSL_DISTRO_NAME=x PATH="$NT/bin:/usr/bin:/bin" "$@" bash "$ROOT/dotfiles/claude/notify.sh" "ws-agent" "it's done'; Remove-Item C:\\x; '" </dev/null >/dev/null 2>&1; }
+nt_run
+OUT="$(cat "$NT/calls")"
+ok "a quote in the text is doubled for PowerShell" has "it''s done''; Remove-Item"
+ok "a quote can't end the string" lacks "it's done'"
+: >"$NT/no-bt"
+: >"$NT/calls"
+nt_run NOTIFY_NO_MODAL=1
+OUT="$(cat "$NT/calls")"
+ok "NOTIFY_NO_MODAL: BurntToast failing falls back to a toast" has "ToastNotificationManager"
+ok "NOTIFY_NO_MODAL: never the modal MessageBox" lacks "MessageBox"
+: >"$NT/calls"
+nt_run
+OUT="$(cat "$NT/calls")"
+ok "without it the MessageBox fallback stays" has "MessageBox"
+rm -rf "$NT"
+
 echo
 if [ "$fail" -eq 0 ]; then
   printf '\033[0;32m✓ all %d hook assertions passed\033[0m\n' "$pass"

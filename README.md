@@ -643,6 +643,15 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - A finished, waiting or interrupted one resumes its session with them.
   - A message that lands while a job is finishing still reaches it: the job requeues itself.
   - Closed and cancelled jobs take no messages.
+- **Hearing about jobs**:
+  - When a job finishes, needs you or is waiting, every open Claude Code session in that
+    repository gets one `[orchestration] <id> …: ws-agent result <id>` line with your next
+    prompt; a question from any repository reaches all sessions.
+  - It's at most three lines, each once per session, from the plugin's UserPromptSubmit hook,
+    which reads only `<state>/agent-events.jsonl`.
+  - Under WSL a Windows notice pops up too (`~/.claude/notify.sh`: BurntToast, else a plain
+    toast, never a dialog); `[notify] desktop = false` turns that off.
+  - Hosts without a desktop (a dev server) get the session lines only.
 - **Checks and review**:
   - When a job reports done, ws-agent itself runs the repository's `--check` commands in
     the job sandbox: no network unless `--network`, 20 minutes each, the last 1 MB of output

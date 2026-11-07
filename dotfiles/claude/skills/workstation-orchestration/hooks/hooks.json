@@ -1,5 +1,5 @@
 {
-  "description": "One-line orchestration context for the session's repository (ws-agent context).",
+  "description": "The orchestration context for the session's repository (ws-agent context) at session start, and job events the session hasn't heard of on each prompt (ws-agent events).",
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +7,17 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/context.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/events.sh\"",
             "timeout": 5
           }
         ]

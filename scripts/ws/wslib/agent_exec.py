@@ -35,7 +35,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import IO
 
-from . import agent_checks, agent_registry, agent_sandbox, core, engines, jobs
+from . import agent_checks, agent_events, agent_registry, agent_sandbox, core, engines, jobs
 
 RULES = """\
 You are a queued ws-agent job running unattended. Work only inside this working copy.
@@ -615,7 +615,7 @@ The person wrote to this job:
 Take it into account and carry on; end with the structured report."""
 
 
-def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> None:
+def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> bool:
     """A message that arrived while the job was finishing (its checks, collecting, its review):
     the job goes on in its session. Under the queue lock, as `tell` decides under it whether to
     requeue: whichever comes second finds the other's work done (exit.json already moved)."""
@@ -625,8 +625,29 @@ def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> None:
                 _archive_exit(job, res)
                 jobs.enqueue(job, resume=True)
                 _log(log, f"ws-agent: the person wrote while it finished: requeued (task {job.pueue_id})")
+                return True
     except jobs.QueueError as e:
         _log(log, f"ws-agent: a message is waiting, but requeueing failed ({e}); ws-agent retry {job.id} delivers it")
+    return False
+
+
+def _announce(job: jobs.Job, info: dict[str, object]) -> None:
+    """The finished job as an event line for live sessions and a desktop notice."""
+    st = jobs.outcome_state(info)
+    checks = info.get("checks")
+    if st == "succeeded":
+        words = "succeeded" + (f" checks {checks}" if checks in ("pass", "fail", "not run") else "")
+    elif st == "needs-you":
+        words = "needs you"
+    elif st == "waiting":
+        words = f"waiting for {info.get('engine') or 'an engine'}"
+    else:
+        words = "failed"
+    try:
+        agent_events.append(st, job, f"{job.id} {words} ({job.title[:60]})")
+        agent_events.notify(f"{job.id} {words}: {job.title[:80]}")
+    except OSError:
+        pass
 
 
 def _prior_exit(res: Path, attempts: int) -> dict[str, object]:
@@ -719,8 +740,8 @@ def execute(job_id: str, *, resume: bool) -> int:
                 "cost_usd": outcome.cost_usd if outcome else None, **extra}
             core.atomic_write(res / "exit.json", (json.dumps(info, indent=2) + "\n").encode("utf-8"))
             _log(log, f"--- attempt {attempt} finished: {kind}, exit {code}")
-            if kind == "ok":
-                _requeue_if_told(job, res, log)
+            if not (kind == "ok" and _requeue_if_told(job, res, log)):   # requeued: it isn't finished
+                _announce(job, info)
             return 0 if code == 0 else 1
 
         entry = agent_registry.find(core.expand(job.repo))
