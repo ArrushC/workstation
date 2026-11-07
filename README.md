@@ -591,7 +591,8 @@ pick a mode or invoke a skill. The policy is the `## Orchestration` section of
 
 ### Queued jobs (`ws agent`, also `ws-agent`; Linux)
 
-A job is headless Claude Code (`claude -p`, this host's login) in a private working copy of
+A job is a headless agent on an engine its repository allows: Claude Code (`claude -p`) or
+Codex (`codex exec`), with this host's own logins. It works in a private working copy of
 the repository at the base recorded when you asked: SVN `URL@rev` (a fresh checkout) or a git
 commit (a worktree on branch `ws-agent/<id>`). pueue's group `agents` queues them, two at a
 time by default (`[queue] parallel` in `~/.config/workstation/agents.toml`), and keeps their
@@ -603,13 +604,13 @@ ws-agent allow ~/src/foo [--command 'make *'] [--engine claude --engine codex] [
                [--fix-rounds 1] [--review claude] [--network]   # once per repository, in your own terminal
 ws-agent repos | ws-agent disallow ~/src/foo
 ws-agent ls [--all]          # jobs of this repository, with their state
-ws-agent result <id> [--diff] # Claude's report, changes per file, how to apply; --diff prints the patch
+ws-agent result <id> [--diff] # the job's report, changes per file, how to apply; --diff prints the patch
 ws-agent show <id>           # base, attempts, session, the end of its log
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
 ws-agent close <id>          # after review: delete the working copy, keep the result
 ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
-ws-agent doctor              # Claude login, pueued, svn, the registry, free disk
+ws-agent doctor              # each engine's login and cooldown, the sandbox, pueued, svn, the registry, disk
 ```
 
 - **Per repository** (`allow` flags; `allow` again replaces them):
@@ -626,27 +627,56 @@ ws-agent doctor              # Claude login, pueued, svn, the registry, free dis
   - `[sandbox] hide = ["/data/svn"]`: more directories jobs must not read.
   - `[notify] desktop = false`.
   - Claude Code sessions can't edit this file (the global secret guard denies it).
-- **States**: queued, running, succeeded, failed, interrupted (the daemon or the host stopped
-  under it), cancelled, closed. A job counts as running while its claude lives, whatever
-  pueue says. A second `run` of the same prompt in the same repository is refused while the
-  first is queued, running, awaiting review, failed or interrupted (`retry` those; `--force`
-  overrides), under a lock; `--paths` warns when two jobs claim the same files.
+- **Engines**:
+  - Each attempt runs on the first engine the repository allows that is logged in and not
+    cooling down.
+  - A temporary provider or network error retries the same session after 15 s, 60 s and
+    240 s.
+  - A usage limit cools that engine down until its reset (or an hour) and hands the job to
+    the next allowed engine, with a note on what the first one did. With none left the job is
+    `waiting`.
+  - A repository that allows only Claude never runs on Codex.
+- **States**:
+  - queued, running, succeeded, failed, cancelled, closed;
+  - interrupted: the daemon or the host stopped under it;
+  - needs-you: the job asked a question or a rule blocked it;
+  - waiting: every allowed engine is at its usage limit.
+  - A job counts as running while its engine lives, whatever pueue says.
+  - Every job ends with a structured report (status, summary, question, tests), shown by
+    `result`.
+  - A second `run` of the same prompt in the same repository is refused, under a lock, while
+    the first isn't closed or cancelled (`retry` a failed or interrupted one; `--force`
+    overrides).
+  - `--paths` warns when two jobs claim the same files.
 - **Review artifacts** (`<state>/agent-jobs/<id>/result/`): `changes.diff` (SVN: `svn diff
   --git --show-copies-as-adds`, which `svn patch --strip N` reproduces with binaries and
   `svn:*` properties; git: a binary diff), `manifest.txt` (every changed path, moves,
   property changes, binaries), `props.txt`, `apply.txt`, `warnings.txt` (unversioned files,
   copied to `unversioned/` when small; symlinks are listed, never followed; versioned files
-  removed with a plain `rm`/`mv`), `claude.json`, `exit.json`.
-- **Guards, not a boundary**: a job runs with `--permission-mode acceptEdits` (edits inside
-  its copy only; writes outside it are blocked), nothing may prompt, and a fixed allowlist
-  plus the repository's `--command` rules. On its PATH, `svn` refuses every write to the
-  repository and `git` everything but reads and add/rm/mv/restore/apply (a worktree shares
-  refs, config and hooks with your repository); both refuse writes outside the job's copy.
-  Its environment has no SSH agent, no keys for git or svn+ssh, no git credential helpers
-  and no `*TOKEN*` variables except Claude's own login (`CLAUDE_CODE_OAUTH_TOKEN`,
-  `ANTHROPIC_AUTH_TOKEN`), and svn runs without cached credentials; pueue doesn't store
-  those tokens either. A program called by absolute path gets past the shims, so allow only
-  repositories you'd let Claude Code edit.
+  removed with a plain `rm`/`mv`), `report.json`, `exit.json`, and each engine run's raw
+  output under `attempts/`.
+- **The job sandbox**: every engine run and every check happens inside ws-agent's own
+  bubblewrap sandbox.
+  - What an engine reads goes to its provider, so the sandbox hides reads as well as
+    writes:
+    - the home directory, except the tools the job needs and the engine's own state;
+    - other jobs' directories and every registered working copy;
+    - `[sandbox] hide`.
+  - Only the job's directory is writable and kept; `/tmp` and the home directory are
+    throwaway layers.
+  - Inside it, the engine's own sandbox confines its commands to the copy, with no network
+    unless the repository allows it. Claude's sandbox also can't read Claude's credentials.
+  - A host where bwrap can't make the sandbox runs no jobs; `doctor` says why.
+- **Guards inside it**:
+  - Claude runs with `--permission-mode acceptEdits` (edits inside its copy only), nothing
+    may prompt, and a fixed allowlist plus the repository's `--command` rules. Codex runs
+    `workspace-write` with `--ignore-rules`, so your own Codex rules don't apply to jobs.
+  - On its PATH, `svn` refuses every write to the repository, and `git` only reads (a
+    worktree shares refs, config and objects with your repository, mounted read-only): the
+    agent edits files and ws-agent stages them.
+  - Its environment has no SSH agent, no keys for git or svn+ssh, no git credential helpers,
+    and no `*TOKEN*` variables except its engine's own login. svn runs without cached
+    credentials; pueue doesn't store those tokens either.
 - **Limits**: Windows sleep pauses WSL and its jobs, which carry on after waking (a job's
   `--timeout` counts only awake time); `wsl --shutdown`, a reboot or a pueued stop ends them
   as `interrupted` (`retry` resumes the same session; claude dies with its executor, so

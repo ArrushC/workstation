@@ -79,6 +79,9 @@ class Job:
     cancelled: bool = False
     closed: bool = False
     warnings: list[str] = field(default_factory=list)
+    engine: str = ""          # the engine whose session session_id is ("" on a phase-1 record: claude)
+    history: list[dict[str, object]] = field(default_factory=list)   # one entry per engine run
+    auto_resumes: int = 0
 
 
 @dataclass(frozen=True)
@@ -336,16 +339,26 @@ def resume() -> None:
 
 # --- derived state -----------------------------------------------------------------
 
+def outcome_state(info: dict[str, object]) -> str:
+    """What a finished attempt's exit.json means: the report's question/blocked → needs-you; a
+    usage limit with no engine left → waiting (serve requeues it when the cooldown ends)."""
+    if info.get("status") in ("question", "blocked"):
+        return "needs-you"
+    if info.get("kind") == "usage_limit":
+        return "waiting"
+    return "succeeded" if info.get("exit_code") == 0 else "failed"
+
+
 def state(job: Job, tasks: dict[int, str] | None) -> str:
     if job.closed:
         return "closed"
     if job.cancelled:
         return "cancelled"
+    if live_run(job) is not None:   # an engine still works, whatever an older result or pueue says
+        return "running"
     info = exit_info(job)
     if info is not None:
-        return "succeeded" if info.get("exit_code") == 0 else "failed"
-    if live_run(job) is not None:
-        return "running"
+        return outcome_state(info)
     if tasks is None:
         return "unknown"
     word = tasks.get(job.pueue_id) if job.pueue_id is not None else None
@@ -360,10 +373,11 @@ def state(job: Job, tasks: dict[int, str] | None) -> str:
 
 def duplicate(repo: str, prompt_sha: str, all_: list[Job], tasks: dict[int, str] | None) -> Job | None:
     """A job of the same repository and prompt that isn't closed or cancelled: queued, running,
-    awaiting review, or failed/interrupted (`ws agent retry` continues those)."""
+    awaiting review or an answer, waiting for an engine, or failed/interrupted (`ws agent retry`
+    continues those)."""
     for job in all_:
         if job.repo == repo and job.prompt_sha == prompt_sha and \
-                state(job, tasks) in (*ACTIVE, "succeeded", "failed", "interrupted"):
+                state(job, tasks) in (*ACTIVE, "succeeded", "failed", "interrupted", "needs-you", "waiting"):
             return job
     return None
 

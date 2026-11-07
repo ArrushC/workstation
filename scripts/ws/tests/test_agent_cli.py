@@ -14,7 +14,7 @@ from contextlib import chdir, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from agent_helpers import HAVE_SVN, AgentScratch, git, svn
+from agent_helpers import CLAUDE_AUTH_OK, HAVE_SVN, AgentScratch, git, no_sandbox_ws, svn
 from helpers import REPO, WS
 
 from wslib import agent, core, jobs
@@ -186,6 +186,68 @@ class Manage(Cli):
         self.assertEqual(rows[b]["state"], "queued")
         self.assertEqual(rows[a]["repo"], "~/src/proj")
 
+    def finished(self, jid: str, info: dict[str, object], report: dict[str, object] | None = None) -> None:
+        res = jobs.job_dir(jid) / "result"
+        self.write(res / "exit.json", json.dumps(info))
+        if report is not None:
+            self.write(res / "report.json", json.dumps(report))
+        job = jobs.load(jid)
+        job.engine = str(info.get("engine", ""))
+        jobs.save(job)
+
+    def test_ls_columns(self) -> None:
+        a = self.queued_run(self.repo, "one")
+        self.finished(a, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "codex", "checks": "fail"})
+        rc, out, _ = self.cli("ls", cwd=self.repo)
+        self.assertEqual(rc, 0)
+        self.assertRegex(out, rf"^{a}\s+succeeded\s+checks fail\s+codex\s+\d{{4}}-\d\d-\d\dT")
+        rc, out, _ = self.cli("ls", "--json", cwd=self.repo)
+        row = json.loads(out)[0]
+        self.assertEqual((row["engine"], row["checks"]), ("codex", "fail"))
+
+    def test_context_shows_engines_and_needs_you(self) -> None:
+        reg.allow(self.repo, "git", [], engines=("claude", "codex"))
+        q = self.queued_run(self.repo, "ask me")
+        self.finished(q, {"exit_code": 1, "status": "question", "kind": "ok", "engine": "claude"},
+                      {"status": "question", "summary": "s", "question": "A or B?", "tests": None, "notes": None})
+        w = self.queued_run(self.repo, "wait for it")
+        self.finished(w, {"exit_code": 1, "kind": "usage_limit", "engine": "claude",
+                          "reset_at": "2100-01-01T15:30:00+00:00"})
+        line = agent.context_line(self.repo)
+        self.assertIn("jobs: allowed (claude, codex)", line)
+        self.assertIn(f"{q} needs you", line)
+        self.assertRegex(line, rf"{w} waiting \(claude until \d\d:\d\d\)")
+
+    def test_result_shows_report(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 1, "status": "question", "kind": "ok", "engine": "claude"},
+                      {"status": "question", "summary": "Two ways to do it.", "question": "Keep the old API?",
+                       "tests": None, "notes": None})
+        rc, out, _ = self.cli("result", jid)
+        self.assertEqual(rc, 0)
+        self.assertIn("needs-you", out)
+        self.assertIn("Two ways to do it.", out)
+        self.assertIn("Keep the old API?", out)
+        self.assertIn(f"ws-agent answer {jid}", out)
+        w = self.queued_run(self.repo, "another")
+        self.finished(w, {"exit_code": 1, "kind": "usage_limit", "engine": "claude", "reason": "claude: cooling down",
+                          "reset_at": "2100-01-01T00:00:00+00:00"})
+        rc, out, _ = self.cli("result", w)
+        self.assertIn("waiting", out)
+        self.assertIn("2100-01-01", out)
+
+    def test_retry_a_waiting_job_and_close_a_needs_you_one(self) -> None:
+        w = self.queued_run(self.repo, "waits")
+        self.finished(w, {"exit_code": 1, "kind": "usage_limit", "engine": "claude", "reset_at": "2100-01-01T00:00:00+00:00"})
+        rc, out, err = self.cli("retry", w)
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"requeued {w}", out)
+        q = self.queued_run(self.repo, "asks")
+        self.finished(q, {"exit_code": 1, "status": "question", "kind": "ok", "engine": "claude"})
+        rc, _, err = self.cli("close", q)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(jobs.state(jobs.load(q), {}), "closed")
+
     def test_ls_other_repo_hidden_unless_all(self) -> None:
         self.queued_run(self.repo, "one")
         other = self.git_repo("other")
@@ -251,9 +313,9 @@ class Manage(Cli):
     def test_result_shows_patch_and_warnings(self) -> None:
         jid = self.queued_run(self.repo)
         res = jobs.job_dir(jid) / "result"
-        self.write(res / "exit.json", '{"exit_code": 0}')
-        self.write(res / "claude.json", json.dumps({"type": "result", "is_error": False, "result": "Added the cache.",
-                                                    "session_id": "S"}))
+        self.write(res / "exit.json", '{"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"}')
+        self.write(res / "report.json", json.dumps({"status": "done", "summary": "Added the cache.", "question": None,
+                                                    "tests": "make test: ok", "notes": None}))
         self.write(res / "changes.diff", "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n+x\n+y\n-z\n")
         self.write(res / "warnings.txt", "unversioned, not in the patch: extra.txt\n")
         self.write(res / "apply.txt", "Apply in your checkout:\n  git apply --index X\n")
@@ -261,6 +323,7 @@ class Manage(Cli):
         self.assertEqual(rc, 0)
         self.assertIn("succeeded", out)
         self.assertIn("Added the cache.", out)
+        self.assertIn("make test: ok", out)
         self.assertIn("app.py: +2 -1", out)
         self.assertIn("extra.txt", out)
         self.assertIn(str(res / "changes.diff"), out)
@@ -411,7 +474,7 @@ class Context(Cli):
         jid = self.queued_run(repo)
         self.pueue_status({7: QUEUED})
         line = agent.context_line(repo)
-        self.assertRegex(line, r"^\[orchestration\] git ~/src/proj main@[0-9a-f]{12} \| jobs: allowed; queue 0/1 running,"
+        self.assertRegex(line, r"^\[orchestration\] git ~/src/proj main@[0-9a-f]{12} \| jobs: allowed \(claude\); queue 0/1 running,"
                                rf" 1 queued \| here: {jid} queued$")
         d = self.root / "plain"
         d.mkdir()
@@ -454,7 +517,7 @@ class Context(Cli):
         reg.allow(wc, "svn", [])
         self.pueue_status({})
         self.assertRegex(agent.context_line(wc / "sub"),
-                         r"^\[orchestration\] svn ~/src/svnwc \^/trunk@1 \| jobs: allowed; queue 0/1 running, 0 queued"
+                         r"^\[orchestration\] svn ~/src/svnwc \^/trunk@1 \| jobs: allowed \(claude\); queue 0/1 running, 0 queued"
                          r" \| here: none$")
 
     def test_route_json(self) -> None:
@@ -485,6 +548,27 @@ class Doctor(Cli):
         self.assertNotIn("someone@example.invalid", out)
         self.assertNotIn("org-123-secret", out)
         self.assertRegex(out, r"svn.*not installed")
+
+    def test_doctor_rows(self) -> None:
+        self.fake("claude", 'echo \'{"loggedIn": true, "authMethod": "claude.ai", "subscriptionType": "pro"}\'')
+        self.fake("codex", 'echo "Not logged in" >&2; exit 1')
+        repo = self.git_repo()
+        reg.allow(repo, "git", [], engines=("claude", "codex"))
+        self.pueue_status({})
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            rc, out, _ = self.cli("doctor")
+        self.assertRegex(out, r"ok\s+engine claude: ")
+        self.assertRegex(out, r"!!\s+engine codex: not logged in")
+        self.assertRegex(out, r"ok\s+sandbox: ")
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value="no bwrap"):
+            rc, out, _ = self.cli("doctor")
+        self.assertEqual(rc, 1)
+        self.assertRegex(out, r"!!\s+sandbox: no bwrap")
+        engines_mod = agent.engines
+        engines_mod.cool("claude", "2100-01-01T00:00:00+00:00")
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            rc, out, _ = self.cli("doctor")
+        self.assertRegex(out, r"engine claude: .*cooling down until 2100-01-01")
 
 
 class Launcher(AgentScratch):
@@ -555,7 +639,12 @@ class RealQueueCancel(Cli):
             if (self.root / "p.sock").exists():
                 break
             time.sleep(0.1)
-        self.fake("claude", 'echo $$ >"$HOME/claude.pid"; sleep 300')
+        self.fake("claude", CLAUDE_AUTH_OK + 'echo $$ >"$HOME/claude.pid"; sleep 300')
+        # pueue runs _exec in its own process, where the job sandbox would hide this scratch home
+        # (and the fake) under /tmp: it runs through a ws.py stand-in with the sandbox switched off.
+        p = mock.patch.object(core, "WS_PY", no_sandbox_ws(self.root))
+        p.start()
+        self.addCleanup(p.stop)
 
     def tearDown(self) -> None:
         subprocess.run(["pueue", "-c", os.environ["WS_AGENT_PUEUE_CONFIG"], "shutdown"], capture_output=True)

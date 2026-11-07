@@ -19,6 +19,7 @@ to result/inspect-<attempt>.txt and gives it to Claude before anything else.
 from __future__ import annotations
 
 import contextlib
+import datetime as dt
 import json
 import os
 import re
@@ -26,24 +27,45 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from pathlib import Path
 from typing import IO
 
-from . import agent_registry, core, jobs
+from . import agent_registry, agent_sandbox, core, engines, jobs
 
 RULES = """\
 You are a queued ws-agent job running unattended. Work only inside this working copy.
 Do not delegate further: no ws-agent commands, and at most one writer at a time.
 Never commit, push, copy, merge, switch, update, lock or change revision properties;
-leave every change uncommitted (svn add new files; for git, stage nothing yourself).
+leave every change uncommitted (svn add the new files you create).
+git: edit files only; never run git add, rm, mv, restore or apply (ws-agent stages everything
+when you finish).
 SVN: delete, move or copy versioned files with svn delete/move/copy, never plain rm/mv/cp.
-This job has no credentials for the repository server: work from the files here.
-When you finish, end with: what changed, the checks you ran and their results, open risks.
-If you can't finish, start your final message with BLOCKED: and the reason.
+This job has no credentials for the repository server, and no network unless its repository
+allows it: work from the files here.
+End with the structured report. status: done when finished (summary: what changed, the checks
+you ran and their results, open risks); question when you need the person, with one concrete
+question; blocked when a rule stops you; failed when the task can't be done.
 """
+
+HANDOFF = """\
+This job was started by another agent ({prev}), which stopped ({why}). Its last report: {report}
+Review the working copy's current state below, keep what's done, and finish the task.
+
+The task:
+{task}
+
+{inspection}"""
+
+RETRY = """\
+The previous turn stopped on a temporary provider error ({why}). Carry on with the task from
+where it stopped, and end with the structured report."""
+
+BACKOFF = (15, 60, 240)   # seconds before each retry of a transient provider or network failure
+USAGE_COOLDOWN = 3600     # when a usage-limit message names no reset time
 
 RESUME = """\
 This queued job stopped before it finished (attempt {attempt}: interrupted, failed or timed out).
@@ -59,12 +81,6 @@ An earlier attempt at this job was interrupted before its session was saved. Its
 is kept; review its current state below before you change anything.
 
 {inspection}"""
-
-# No bare Edit/Write: acceptEdits already allows edits inside the job's copy, and a tool-wide
-# rule would also allow them outside it (claude_argv blocks those writes outright too).
-BASE_TOOLS = ("Read", "Glob", "Grep", "Bash(svn *)", "Bash(git *)", "Bash(rg *)", "Bash(fd *)",
-              "Bash(ls *)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(diff *)",
-              "Bash(python3 -m unittest*)")
 
 UNVERSIONED_FILE_MAX = 1 << 20
 UNVERSIONED_TOTAL_MAX = 20 << 20
@@ -82,12 +98,12 @@ SVN_LOCAL = {"add", "delete", "del", "remove", "rm", "move", "mv", "rename", "re
              "mkdir"}
 SVN_VALUE_OPTS = {"--username", "--password", "--config-dir", "--config-option"}
 GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env"}
-# A job's git worktree shares refs, config, stash and hooks with the person's repository, so
-# git is default-deny: reads anywhere, and only these writes, inside the job's copy.
+# A job's git worktree shares refs, config, stash, hooks and objects with the person's
+# repository (read-only inside the job sandbox), so git in a job only reads: the agent edits
+# files, and ws-agent stages them itself when it collects the result.
 GIT_READ = {"status", "diff", "log", "show", "blame", "annotate", "grep", "ls-files", "ls-tree", "cat-file", "rev-parse",
             "rev-list", "describe", "shortlog", "whatchanged", "diff-files", "diff-index", "diff-tree", "check-ignore",
             "var", "help", "version"}
-GIT_LOCAL = {"add", "rm", "mv", "restore", "apply"}
 
 
 def _inside(token: str, base: Path, wc: Path) -> bool:
@@ -141,17 +157,12 @@ def svn_refusal(args: list[str], wc: Path | None = None, cwd: Path | None = None
 
 
 def git_refusal(args: list[str], wc: Path | None = None, cwd: Path | None = None) -> str | None:
-    sub, rest = _subcommand(args, GIT_VALUE_OPTS)
+    del wc, cwd
+    sub, _ = _subcommand(args, GIT_VALUE_OPTS)
     if sub is None or sub in GIT_READ:
         return None
-    if sub in GIT_LOCAL:
-        here = cwd or Path.cwd()
-        moved = [args[i + 1] for i, a in enumerate(args[:-1]) if a in ("-C", "--git-dir", "--work-tree")]
-        moved += [a.split("=", 1)[1] for a in args if a.startswith(("--git-dir=", "--work-tree="))]
-        if wc is None or (all(_inside(m, here, wc) for m in moved) and _confined(here, wc, rest)):
-            return None
-        return f"ws-agent: git {sub} outside the job's working copy ({wc}); a person runs it"
-    return f"ws-agent: git {sub} changes the shared repository or reaches outside it; a person runs it"
+    return (f"ws-agent: git {sub} writes; in a job git only reads (edit the files: ws-agent stages them "
+            "when you finish)")
 
 
 def shim(tool: str, real: str, args: list[str], svn_config: str | None = None, wc: str | None = None) -> int:
@@ -207,30 +218,9 @@ def clean_env(base: Mapping[str, str], bindir: Path, job_id: str) -> dict[str, s
         "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "credential.helper", "GIT_CONFIG_VALUE_0": "",
         "GIT_SSH_COMMAND": _NO_KEYS_SSH, "SVN_SSH": _NO_KEYS_SSH,
         "SVN_EDITOR": "false",
+        "GIT_OPTIONAL_LOCKS": "0",   # git status never writes the gitdir, which the job sandbox mounts read-only
     })
     return env
-
-
-def permission_rules(job: jobs.Job, repo_commands: tuple[str, ...]) -> list[str]:
-    del job
-    return [*BASE_TOOLS, *(f"Bash({c})" for c in repo_commands)]
-
-
-def claude_argv(job: jobs.Job, jobdir: Path, *, resume: bool, rules: list[str]) -> list[str]:
-    del jobdir
-    claude = shutil.which("claude") or "claude"
-    session = ["--resume", job.session_id] if resume else ["--session-id", job.session_id]
-    confine = json.dumps({"permissions": {"blockWritesOutsideWorkingDirectories": True}})
-    return [claude, "-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--permission-prompts", "none",
-            *session, "--name", f"ws-agent {job.id}: {job.title}"[:80], "--append-system-prompt", RULES,
-            "--settings", confine, "--allowedTools", *rules]
-
-
-def transcript_exists(session_id: str) -> bool:
-    if not session_id:
-        return False
-    base = Path(os.environ.get("CLAUDE_CONFIG_DIR") or core.home() / ".claude") / "projects"
-    return any(base.glob(f"*/{session_id}.jsonl"))
 
 
 # --- the working copy -----------------------------------------------------------------
@@ -354,14 +344,27 @@ def _binary_paths(diff: str) -> set[str]:
     return found
 
 
+# What an engine leaves in the copy for itself: Claude Code's sandbox records its writes in
+# .claude/.cc-writes. Never part of a review, nor of a git job's patch.
+ENGINE_FILES = (".claude/.cc-writes",)
+
+
 def _ignores_itself(path: Path) -> bool:
     """A tool's state directory that marks itself ignored with a `*` .gitignore (.pytest_cache,
-    .mypy_cache, the remember plugin's .remember): never something to review."""
+    .mypy_cache, the remember plugin's .remember), or one holding only an engine's own
+    bookkeeping (ENGINE_FILES): never something to review."""
+    if not path.is_dir():
+        return False
     try:
         lines = (path / ".gitignore").read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        return False
-    return path.is_dir() and any(line.strip() == "*" for line in lines)
+        lines = []
+    if any(line.strip() == "*" for line in lines):
+        return True
+    own = {Path(f) for f in ENGINE_FILES}
+    files = [p for p in path.rglob("*") if p.is_file() or p.is_symlink()]
+    root = path.parent
+    return bool(files) and all(p.relative_to(root) in own for p in files)
 
 
 def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> tuple[list[str], list[str]]:
@@ -471,7 +474,7 @@ def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], 
 
 def _collect_git(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], list[str]]:
     base = job.base.get("commit", "HEAD")
-    _run(["git", "add", "-A"], cwd=wc)
+    _run(["git", "add", "-A", "--", ".", *(f":(exclude){f}" for f in ENGINE_FILES)], cwd=wc)
     (res / "status.txt").write_bytes(_run(["git", "status", "--short"], cwd=wc).stdout)
     diff = _run(["git", "diff", "--cached", "--binary", "-M", base], cwd=wc).stdout
     names = _text(_run(["git", "diff", "--cached", "--name-status", "-M", base], cwd=wc)).splitlines()
@@ -501,37 +504,6 @@ def collect(job: jobs.Job, jobdir: Path) -> list[str]:
 
 # --- the run ---------------------------------------------------------------------------
 
-def _pick_result(data: object) -> dict[str, object] | None:
-    """The result message of `claude -p --output-format json`: claude 2.1.319 prints an array of
-    every message ending in {"type": "result", ...}; other builds print that object alone."""
-    if isinstance(data, dict):
-        return data
-    if isinstance(data, list):
-        dicts = [m for m in data if isinstance(m, dict)]
-        results = [m for m in dicts if m.get("type") == "result"]
-        return (results or dicts or [None])[-1]
-    return None
-
-
-def _claude_result(path: Path) -> dict[str, object]:
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace").strip()
-    except OSError:
-        return {}
-    try:
-        found = _pick_result(json.loads(text))
-    except ValueError:
-        found = None
-        for line in reversed(text.splitlines()):
-            try:
-                found = _pick_result(json.loads(line))
-            except ValueError:
-                continue
-            if found is not None:
-                break
-    return found or {}
-
-
 def _log(fh: IO[str], msg: str) -> None:
     fh.write(msg.rstrip("\n") + "\n")
     fh.flush()
@@ -539,7 +511,7 @@ def _log(fh: IO[str], msg: str) -> None:
 
 def _die_with_parent() -> None:
     """In the child, before exec: get SIGTERM when _exec dies (pueue kill sends it SIGKILL), so
-    `timeout` passes TERM on to claude instead of leaving it running as an orphan."""
+    `timeout` passes TERM on to the engine instead of leaving it running as an orphan."""
     try:
         import ctypes
 
@@ -548,10 +520,10 @@ def _die_with_parent() -> None:
         pass
 
 
-def _run_claude(job: jobs.Job, argv: list[str], prompt: str, out: IO[bytes], log: IO[str], cwd: Path,
+def _run_engine(job: jobs.Job, argv: list[str], prompt: str, out: IO[bytes], log: IO[str], cwd: Path,
                 env: dict[str, str]) -> int:
-    """claude (under timeout) as its own process group, recorded in run.pid while it runs; a
-    TERM/HUP/INT to _exec goes on to that group."""
+    """The engine (under timeout, inside the job sandbox) as its own process group, recorded in
+    run.pid while it runs; a TERM/HUP/INT to _exec goes on to that group."""
     proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=out, stderr=log, cwd=cwd, env=env,
                             start_new_session=True, preexec_fn=_die_with_parent)
     jobs.record_run(job, proc.pid)
@@ -571,6 +543,47 @@ def _run_claude(job: jobs.Job, argv: list[str], prompt: str, out: IO[bytes], log
         jobs.clear_run(job)
 
 
+def _seconds(text: str) -> int:
+    m = re.fullmatch(r"\s*(\d+)\s*([smhd]?)\s*", text or "")
+    return int(m.group(1)) * {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2)] if m else 7200
+
+
+def _archive_exit(job: jobs.Job, res: Path) -> None:
+    """The previous attempt's result moves aside (exit-<n>.json, report-<n>.json): a new attempt
+    never reads, and nobody mistakes, an old outcome for its own."""
+    for name in ("exit", "report"):
+        cur = res / f"{name}.json"
+        if cur.exists():
+            target = res / f"{name}-{job.attempts}.json"
+            if target.exists():
+                cur.unlink()
+            else:
+                cur.replace(target)
+
+
+def _last_report(res: Path) -> str:
+    for p in sorted(res.glob("report*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict):
+            return f"{data.get('status')}: {data.get('summary')}"
+    return "(none)"
+
+
+def _known_session(job: jobs.Job, res: Path, engine: engines.Engine) -> str:
+    """The session this engine already has for the job: the recorded one, or (for an engine that
+    names its session as it runs, like Codex) the one its last interrupted output names."""
+    if job.session_id:
+        return job.session_id
+    for adir in sorted((res / "attempts").glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+        sid = engine.session_from(adir)
+        if sid:
+            return sid
+    return ""
+
+
 def execute(job_id: str, *, resume: bool) -> int:
     job = jobs.load(job_id)
     jd = jobs.job_dir(job.id)
@@ -582,56 +595,140 @@ def execute(job_id: str, *, resume: bool) -> int:
         with open(jd / "exec.log", "a", encoding="utf-8") as log:
             _log(log, f"ws-agent: not running {job.id}: it is {why} ({core.now_iso()})")
         return 1
-    (res / "exit.json").unlink(missing_ok=True)
+    _archive_exit(job, res)
     attempt = job.attempts + 1
     with open(jd / "exec.log", "a", encoding="utf-8") as log:
         _log(log, f"--- attempt {attempt} {'resume' if resume else 'start'} {core.now_iso()}")
 
-        def finish(code: int, **extra: object) -> int:
+        def finish(code: int, *, kind: str, outcome: engines.Outcome | None = None, **extra: object) -> int:
             job.attempts = attempt
             jobs.save(job)
-            info = {"exit_code": code, "finished": core.now_iso(), "attempt": attempt, **extra}
+            report = outcome.report if outcome else None
+            if report is not None:
+                core.atomic_write(res / "report.json", (json.dumps(report, indent=2) + "\n").encode("utf-8"))
+            info: dict[str, object] = {
+                "exit_code": code, "finished": core.now_iso(), "attempt": attempt, "engine": job.engine,
+                "kind": kind, "status": report.get("status") if report else None, "checks": "none",
+                "session_id": job.session_id, "is_error": code != 0, "timed_out": kind == "timeout",
+                "num_turns": outcome.turns if outcome else None,
+                "duration_ms": outcome.duration_ms if outcome else None,
+                "cost_usd": outcome.cost_usd if outcome else None, **extra}
             core.atomic_write(res / "exit.json", (json.dumps(info, indent=2) + "\n").encode("utf-8"))
-            _log(log, f"--- attempt {attempt} finished: exit {code}")
+            _log(log, f"--- attempt {attempt} finished: {kind}, exit {code}")
             return 0 if code == 0 else 1
 
         entry = agent_registry.find(core.expand(job.repo))
         if entry is None:
             _log(log, f"ws-agent: {job.repo} isn't allowed for queued jobs any more (ws-agent allow <path>)")
-            return finish(1, is_error=True, reason="not allowed")
+            return finish(1, kind="not_allowed", reason="not allowed")
         try:
             prepare(job, jd)
         except PrepareError as e:
             _log(log, f"ws-agent: preparing the working copy failed: {e}")
-            return finish(1, is_error=True, reason="prepare failed")
+            return finish(1, kind="prepare", reason="prepare failed")
+        why = agent_sandbox.probe()
+        if why:
+            _log(log, f"ws-agent: no job sandbox on this host, so no job runs here: {why}")
+            return finish(1, kind="sandbox", reason=f"no job sandbox on this host: {why}")
+        wc = jd / "wc"
         bindir = jd / "bin"
-        write_shims(bindir, jd / "svn-config", jd / "wc")
+        write_shims(bindir, jd / "svn-config", wc)
         (jd / "rules.md").write_text(RULES, encoding="utf-8")
-        use_resume = resume and transcript_exists(job.session_id)
-        if not use_resume:
-            job.session_id = str(uuid.uuid4())
-            jobs.save(job)
+        task = (jd / "prompt.md").read_text(encoding="utf-8")
+        inspection = ""
         if resume:
             inspection = inspect(job)
             (res / f"inspect-{attempt}.txt").write_text(inspection, encoding="utf-8")
-            prompt = (RESUME.format(attempt=attempt, inspection=inspection) if use_resume else
-                      (jd / "prompt.md").read_text(encoding="utf-8")
-                      + FRESH_AFTER_INTERRUPT.format(inspection=inspection))
-        else:
-            prompt = (jd / "prompt.md").read_text(encoding="utf-8")
-        if not shutil.which("claude"):
-            _log(log, "ws-agent: claude isn't on PATH")
-            return finish(1, is_error=True, reason="no claude")
-        argv = ["timeout", "--kill-after=60s", job.timeout,
-                *claude_argv(job, jd, resume=use_resume, rules=permission_rules(job, entry.commands))]
-        _log(log, f"ws-agent: running claude ({'resume ' + job.session_id if use_resume else 'session ' + job.session_id})")
-        with open(res / "claude.json", "wb") as out:
-            rc = _run_claude(job, argv, prompt, out, log, jd / "wc", clean_env(os.environ, bindir, job.id))
-        out_info = _claude_result(res / "claude.json")
+        deadline = time.monotonic() + _seconds(job.timeout)
+        prev = job.engine or ("claude" if job.session_id else "")   # a phase-1 record was always claude
+        intent = "resume" if resume else "start"
+        handoff_why = "it was interrupted"
+        stopped: set[str] = set()   # engines that hit their usage limit during this attempt
+        retries = run_no = 0
+        outcome: engines.Outcome | None = None
+        while True:
+            engine, reasons = engines.select(entry, exclude=stopped)
+            if engine is None:
+                waiting = all(n in stopped or engines.cooling(n) for n in entry.engines)
+                until = min((u for u in (engines.cooling(n) for n in entry.engines) if u), default="")
+                _log(log, "ws-agent: no engine can run this job now: " + "; ".join(reasons))
+                if outcome is not None or wc.exists():
+                    collect(job, jd)
+                return finish(1, kind="usage_limit" if waiting else "error", outcome=outcome,
+                              reason="; ".join(reasons), reset_at=until)
+            sid = _known_session(job, res, engine) if prev == engine.name else ""
+            resumable = bool(sid) and engine.transcript_exists(sid)
+            resume_sid: str | None = None
+            if prev and prev != engine.name:
+                prompt = HANDOFF.format(prev=prev, why=handoff_why, report=_last_report(res), task=task,
+                                        inspection=inspection or inspect(job))
+            elif intent == "retry" and resumable:
+                prompt, resume_sid = RETRY.format(why=outcome.message[:200] if outcome else "?"), sid
+            elif intent in ("resume", "retry") and resumable:
+                prompt, resume_sid = RESUME.format(attempt=attempt, inspection=inspection or inspect(job)), sid
+            elif intent in ("resume", "retry"):
+                prompt = task + FRESH_AFTER_INTERRUPT.format(inspection=inspection or inspect(job))
+            else:
+                prompt = task
+            if resume_sid is None:
+                job.session_id = str(uuid.uuid4()) if engine.name == "claude" else ""
+            job.engine = engine.name
+            jobs.save(job)
+            remaining = int(deadline - time.monotonic())
+            if remaining <= 0:
+                collect(job, jd)
+                return finish(124, kind="timeout", outcome=outcome, reason=f"timed out after {job.timeout}")
+            run_no += 1
+            adir = res / "attempts" / f"{attempt}.{run_no}"
+            adir.mkdir(parents=True, exist_ok=True)
+            c = engines.Confinement(wc=wc, network=entry.network, commands=entry.commands, instructions=RULES,
+                                    read_dirs=tuple(p for p in (jd / "input",) if p.is_dir()))
+            model = agent_registry.settings().engine(engine.name).model
+            try:
+                inner = agent_sandbox.wrap(engine.argv(job, adir, resume=resume_sid, c=c, model=model), job_id=job.id,
+                                           wc=wc, ro=engine.ro_paths(), rw=engine.rw_paths())
+            except agent_sandbox.SandboxError as e:
+                _log(log, str(e))
+                return finish(1, kind="sandbox", reason=str(e))
+            argv = ["timeout", "--kill-after=60s", f"{remaining}s", *inner]
+            env = engine.env(clean_env(os.environ, bindir, job.id))
+            cap = agent_registry.settings().engine(engine.name).parallel
+            with engines.slot(engine.name, cap):
+                _log(log, f"ws-agent: running {engine.name} ({'resume ' + resume_sid if resume_sid else 'new session'})")
+                with open(adir / "stdout", "wb") as out:
+                    rc = _run_engine(job, argv, prompt, out, log, wc, env)
+            outcome = engine.parse(adir, rc)
+            if rc == 124:
+                outcome.kind = "timeout"
+            job.session_id = outcome.session_id or engine.session_from(adir) or job.session_id
+            job.history.append({"attempt": attempt, "engine": engine.name, "session_id": job.session_id,
+                                "started": core.now_iso(), "kind": outcome.kind})
+            jobs.save(job)
+            prev = engine.name
+            if outcome.kind == "transient" and retries < len(BACKOFF):
+                wait = BACKOFF[retries]
+                retries += 1
+                _log(log, f"ws-agent: {engine.name} hit a temporary error ({outcome.message[:200]}); "
+                          f"retrying in {wait}s ({retries}/{len(BACKOFF)})")
+                time.sleep(wait)
+                intent = "retry"
+                continue
+            if outcome.kind == "usage_limit":
+                until = outcome.reset_at or dt.datetime.fromtimestamp(time.time() + USAGE_COOLDOWN,
+                                                                      tz=dt.timezone.utc).isoformat()
+                engines.cool(engine.name, until)
+                stopped.add(engine.name)
+                handoff_why = f"it hit its usage limit, until {until}"
+                _log(log, f"ws-agent: {engine.name} hit its usage limit (until {until}); trying the next allowed engine")
+                intent = "resume"
+                continue
+            break
         warnings = collect(job, jd)
-        is_error = bool(out_info.get("is_error", rc != 0))
-        code = rc if rc != 0 else (1 if is_error else 0)
-        return finish(code, is_error=is_error, timed_out=rc == 124,
-                      session_id=str(out_info.get("session_id") or job.session_id),
-                      num_turns=out_info.get("num_turns"), duration_ms=out_info.get("duration_ms"),
-                      warnings=len(warnings))
+        if outcome.kind == "timeout":
+            return finish(124, kind="timeout", outcome=outcome, reason=f"timed out after {job.timeout}",
+                          warnings=len(warnings))
+        if outcome.kind != "ok" or outcome.report is None:
+            _log(log, f"ws-agent: {engine.name} failed ({outcome.kind}): {outcome.message[:300]}")
+            return finish(1, kind=outcome.kind, outcome=outcome, reason=outcome.message[:500], warnings=len(warnings))
+        status = outcome.report.get("status")
+        return finish(0 if status == "done" else 1, kind="ok", outcome=outcome, warnings=len(warnings))

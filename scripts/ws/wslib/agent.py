@@ -18,6 +18,7 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import os
@@ -26,7 +27,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import agent_exec, agent_registry, core, jobs, vcs
+from . import agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
 
 MAX_CONTEXT = 400
 
@@ -54,6 +55,27 @@ def _queue_words(q: jobs.Queue | None, parallel: int) -> str:
     return f"queue {q.running}/{q.parallel if q.group else parallel} running, {q.queued} queued"
 
 
+def _hhmm(iso: str) -> str:
+    try:
+        return dt.datetime.fromisoformat(iso).astimezone().strftime("%H:%M")
+    except ValueError:
+        return "?"
+
+
+def _state_words(job: jobs.Job, st: str) -> str:
+    """A job's state as the context line and `ls` say it: needs you, waiting (claude until
+    15:30), succeeded checks fail (review)."""
+    info = jobs.exit_info(job) or {}
+    if st == "needs-you":
+        return "needs you"
+    if st == "waiting":
+        return f"waiting ({info.get('engine') or job.engine or '?'} until {_hhmm(str(info.get('reset_at') or ''))})"
+    if st == "succeeded":
+        checks = info.get("checks")
+        return ("succeeded" + (f" checks {checks}" if checks in ("pass", "fail", "not run") else "") + " (review)")
+    return st
+
+
 def _here(repo_key: str, tasks: dict[int, str] | None) -> str:
     rows = []
     for j in jobs.all_jobs():
@@ -62,7 +84,7 @@ def _here(repo_key: str, tasks: dict[int, str] | None) -> str:
         st = jobs.state(j, tasks)
         if st == "closed":
             continue
-        rows.append(f"{j.id} {st}{' (review)' if st == 'succeeded' else ''}")
+        rows.append(f"{j.id} {_state_words(j, st)}")
     if not rows:
         return "here: none"
     extra = f", +{len(rows) - 4} more" if len(rows) > 4 else ""
@@ -78,10 +100,11 @@ def context_line(cwd: Path) -> str:
         if p.kind == "none" or p.root is None:
             return "[orchestration] no repository here"
         _, parallel = agent_registry.load()
-        allowed = agent_registry.find(p.root) is not None
-        q = jobs.pueue_status() if allowed or jobs.all_jobs() else None
+        entry = agent_registry.find(p.root)
+        q = jobs.pueue_status() if entry is not None or jobs.all_jobs() else None
         parts = [f"[orchestration] {_head(p)}",
-                 f"jobs: allowed; {_queue_words(q, parallel)}" if allowed else "jobs: not allowed (ws-agent allow)",
+                 f"jobs: allowed ({', '.join(entry.engines)}); {_queue_words(q, parallel)}" if entry is not None
+                 else "jobs: not allowed (ws-agent allow)",
                  _here(core.tilde(p.root), q.tasks if q else None)]
         return " | ".join(parts)[:MAX_CONTEXT]
     except Exception:  # noqa: BLE001 - the hook must never fail a session start
@@ -322,7 +345,9 @@ def _ls(args: argparse.Namespace) -> int:
             continue
         if st == "closed" and not args.all:
             continue
-        rows.append({"id": j.id, "state": st, "title": j.title, "repo": j.repo, "vcs": j.vcs, "created": j.created,
+        info = jobs.exit_info(j) or {}
+        rows.append({"id": j.id, "state": st, "checks": str(info.get("checks") or "-") if info else "-",
+                     "engine": j.engine or "-", "title": j.title, "repo": j.repo, "vcs": j.vcs, "created": j.created,
                      "attempts": j.attempts, "pueue_id": j.pueue_id})
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -332,7 +357,8 @@ def _ls(args: argparse.Namespace) -> int:
         return 0
     for r in rows:
         where = "" if key else f"  {r['repo']}"
-        print(f"{r['id']}  {r['state']:<11} {r['created'][:16]}  {r['title']}{where}")
+        checks = f"checks {r['checks']}" if r["checks"] not in ("-", "none") else "-"
+        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  {r['title']}{where}")
     if tasks is None:
         _err("warning: pueued isn't running, so live states are unknown")
     return 0
@@ -373,22 +399,34 @@ def _result(args: argparse.Namespace) -> int:
         return 1
     st = jobs.state(job, _tasks())
     res = jobs.job_dir(job.id) / "result"
+    info = jobs.exit_info(job) or {}
     print(f"{job.id}  {st}  {job.title}")
-    print(f"base: {_base_words(job)}   attempts: {job.attempts}")
+    print(f"base: {_base_words(job)}   attempts: {job.attempts}   engine: {info.get('engine') or job.engine or '-'}")
     if not (res / "exit.json").exists():
         print(f"no result yet ({st}); ws-agent show {job.id} has the log")
         return 0
     if st == "failed":
-        info = jobs.exit_info(job) or {}
         why = (f"timed out after {job.timeout}" if info.get("timed_out") else str(info.get("reason") or "")
-               or ("Claude reported an error" if info.get("is_error") else f"exit {info.get('exit_code')}"))
+               or ("the engine reported an error" if info.get("is_error") else f"exit {info.get('exit_code')}"))
         print(f"failed: {why}")
         print("exec.log (end):")
         print("\n".join(f"  {line}" for line in agent_exec._tail(jobs.job_dir(job.id) / "exec.log", 10)))
-    claude = agent_exec._claude_result(res / "claude.json")
-    if claude.get("result"):
-        print("Claude's report:")
-        print("\n".join(f"  {line}" for line in str(claude["result"]).splitlines()))
+    if st == "waiting":
+        print(f"waiting: no allowed engine can run it until {info.get('reset_at') or '?'} ({info.get('reason') or ''}); "
+              f"ws-agent retry {job.id} tries again")
+    try:
+        report = json.loads((res / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        report = None
+    if isinstance(report, dict):
+        print(f"report ({report.get('status')}):")
+        print("\n".join(f"  {line}" for line in str(report.get("summary") or "").splitlines()))
+        for key in ("tests", "notes"):
+            if report.get(key):
+                print(f"{key}: {report[key]}")
+        if report.get("question"):
+            print(f"question: {report['question']}")
+            print(f"  answer with: ws-agent answer {job.id} \"...\"")
     diff_path = res / "changes.diff"
     diff = diff_path.read_text(encoding="utf-8", errors="replace") if diff_path.exists() else ""
     stats = agent_exec._diff_stats(diff)
@@ -420,7 +458,7 @@ def _cancel(args: argparse.Namespace) -> int:
     if job is None:
         return 1
     st = jobs.state(job, _tasks())
-    if st not in ("queued", "running", "interrupted", "unknown"):
+    if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
         _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
         return 3
     job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
@@ -440,8 +478,9 @@ def _retry(args: argparse.Namespace) -> int:
         return 1
     q = jobs.pueue_status()
     st = jobs.state(job, q.tasks if q else None)
-    if st not in ("failed", "interrupted"):
-        _err(f"ws-agent: {job.id} is {st}; only failed or interrupted jobs are retried")
+    if st not in ("failed", "interrupted", "waiting"):
+        hint = f" (ws-agent answer {job.id} \"...\")" if st == "needs-you" else ""
+        _err(f"ws-agent: {job.id} is {st}; only failed, interrupted or waiting jobs are retried{hint}")
         return 3
     if q is None:
         _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
@@ -467,7 +506,7 @@ def _close(args: argparse.Namespace) -> int:
     if job is None:
         return 1
     st = jobs.state(job, _tasks())
-    if st not in ("succeeded", "failed", "cancelled"):
+    if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
         _err(f"ws-agent: {job.id} is {st}; " + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
         return 3
     jd = jobs.job_dir(job.id)
@@ -508,7 +547,8 @@ def _resume(_: argparse.Namespace) -> int:
 
 # --- doctor ---------------------------------------------------------------------------------
 
-def _doctor(_: argparse.Namespace) -> int:
+def _doctor(args: argparse.Namespace) -> int:
+    del args
     problems = 0
 
     def row(ok: bool, text: str) -> None:
@@ -516,20 +556,29 @@ def _doctor(_: argparse.Namespace) -> int:
         problems += not ok
         print(f"{'ok' if ok else '!!'}  {text}")
 
-    claude = core.which("claude")
-    if not claude:
-        row(False, "claude: not installed (queued jobs need Claude Code)")
-    else:
-        r = subprocess.run([claude, "auth", "status"], capture_output=True, text=True, timeout=30)
-        try:
-            info = json.loads(r.stdout[r.stdout.find("{"):]) if "{" in r.stdout else {}
-        except ValueError:
-            info = {}
-        if info.get("loggedIn"):
-            row(True, f"claude: {claude}, signed in via {info.get('authMethod', '?')} "
-                      f"({info.get('apiProvider', '?')}, plan {info.get('subscriptionType', '?')})")
-        else:
-            row(False, f"claude: {claude}, not signed in (claude auth login)")
+    repos_now, _ = agent_registry.load()
+    wanted = ["claude", *sorted({e for r in repos_now.values() for e in r.engines} - {"claude"})]
+    for name in wanted:
+        engine = engines.ENGINES[name]
+        until = engines.cooling(name)
+        cool = f"; cooling down until {until} (usage limit)" if until else ""
+        problem = engine.available()
+        path = core.which(name) or "-"
+        if problem:
+            row(False, f"engine {name}: {problem}{cool}")
+            continue
+        detail = ""
+        if name == "claude":   # the method and plan only: never the account's email or organization
+            r = subprocess.run([path, "auth", "status"], capture_output=True, text=True, timeout=30)
+            try:
+                info = json.loads(r.stdout[r.stdout.find("{"):]) if "{" in r.stdout else {}
+            except ValueError:
+                info = {}
+            detail = (f", signed in via {info.get('authMethod', '?')} ({info.get('apiProvider', '?')}, "
+                      f"plan {info.get('subscriptionType', '?')})")
+        row(True, f"engine {name}: {path}{detail}{cool}")
+    why = agent_sandbox.probe(force=True)
+    row(why is None, f"sandbox: {'bwrap works here (outer and nested)' if why is None else why}")
     q = jobs.pueue_status()
     _, parallel = agent_registry.load()
     if q is None:
