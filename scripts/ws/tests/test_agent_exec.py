@@ -305,6 +305,18 @@ class ExecSvn(Exec):
         self.assertTrue((cfg / "servers").is_file())   # svn ran with the job's own config dir, not ~/.subversion
         self.assertEqual([p for p in cfg.rglob("*") if p.is_file() and "auth" in p.parts], [])   # no cached credentials
 
+    def test_self_ignored_tool_dirs_are_not_review_noise(self) -> None:
+        _, _, job = self.svn_job()
+        self.claude_script('mkdir -p .toolstate/logs && printf "*\\n" >.toolstate/.gitignore && printf x >.toolstate/logs/a\n'
+                           'printf "keep\\n" >notes.txt\n')
+        ax.execute(job.id, resume=False)
+        warnings = self.result(job, "warnings.txt")
+        self.assertIn("notes.txt", warnings)
+        self.assertNotIn(".toolstate", warnings)
+        self.assertRegex(self.result(job, "manifest.txt"), r"\.toolstate\tunversioned tool directory \(ignores itself\)")
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "unversioned" / ".toolstate").exists())
+        self.assertTrue((jobs.job_dir(job.id) / "result" / "unversioned" / "notes.txt").exists())
+
     def test_inspect_lists_changes(self) -> None:
         _, _, job = self.svn_job()
         self.claude_script('printf "zz\\n" >>a.txt\n')

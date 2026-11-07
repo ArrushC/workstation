@@ -291,6 +291,16 @@ def _binary_paths(diff: str) -> set[str]:
     return found
 
 
+def _ignores_itself(path: Path) -> bool:
+    """A tool's state directory that marks itself ignored with a `*` .gitignore (.pytest_cache,
+    .mypy_cache, the remember plugin's .remember): never something to review."""
+    try:
+        lines = (path / ".gitignore").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+    return path.is_dir() and any(line.strip() == "*" for line in lines)
+
+
 def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> list[str]:
     """Copy small unversioned files for review; returns the ones only listed."""
     skipped: list[str] = []
@@ -336,6 +346,9 @@ def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], 
             continue
         item, props = st.get("item", ""), st.get("props", "none")
         if item == "unversioned":
+            if _ignores_itself(wc / path):
+                manifest.append(f"{path}\tunversioned tool directory (ignores itself)")
+                continue
             unversioned.append(path)
             manifest.append(f"{path}\tunversioned (not in the patch)")
             continue
