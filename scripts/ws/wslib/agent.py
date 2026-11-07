@@ -6,7 +6,7 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
 (group `agents`), persistence, logs and killing; Claude Code does the work.
 
     context                 the one-line [orchestration] summary (SessionStart hook)
-    route [--json]          this repository: VCS, base, allowed?, queue, jobs, Super-agent
+    route [--json]          this repository: VCS, base, allowed?, queue, jobs
     allow <path> [--command RULE]... | disallow <path> | repos
                             which repositories jobs may use (refused inside Claude Code)
     run --title T (--prompt TEXT | --prompt-file F) [--repo P] [--rev R] [--timeout 2h]
@@ -76,14 +76,13 @@ def context_line(cwd: Path) -> str:
             return f"[orchestration] queued job {job}: work directly in this working copy; no further delegation"
         p = vcs.probe(cwd)
         if p.kind == "none" or p.root is None:
-            return "[orchestration] no repository here | superagent: none"
+            return "[orchestration] no repository here"
         _, parallel = agent_registry.load()
         allowed = agent_registry.find(p.root) is not None
         q = jobs.pueue_status() if allowed or jobs.all_jobs() else None
         parts = [f"[orchestration] {_head(p)}",
                  f"jobs: allowed; {_queue_words(q, parallel)}" if allowed else "jobs: not allowed (ws-agent allow)",
-                 _here(core.tilde(p.root), q.tasks if q else None),
-                 "superagent: none"]
+                 _here(core.tilde(p.root), q.tasks if q else None)]
         return " | ".join(parts)[:MAX_CONTEXT]
     except Exception:  # noqa: BLE001 - the hook must never fail a session start
         return ""
@@ -103,7 +102,7 @@ def _route(args: argparse.Namespace) -> int:
             "commands": list(entry.commands) if entry else [],
             "queue": None if q is None else {"group": q.group or "absent", "running": q.running, "queued": q.queued,
                                              "parallel": q.parallel if q.group else parallel},
-            "jobs": here, "superagent": "none"}
+            "jobs": here}
     if args.json:
         print(json.dumps(data, indent=2))
         return 0
@@ -117,7 +116,6 @@ def _route(args: argparse.Namespace) -> int:
     print(f"Queue: {_queue_words(q, parallel)}")
     for row in here:
         print(f"  {row['id']}  {row['state']:<11} {row['title']}")
-    print("DeepSeek Super-agent: none registered for this repository")
     return 0
 
 

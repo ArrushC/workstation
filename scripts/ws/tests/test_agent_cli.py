@@ -374,16 +374,16 @@ class Context(Cli):
         self.pueue_status({})
         line = agent.context_line(repo)
         self.assertRegex(line, r"^\[orchestration\] git ~/src/proj main@[0-9a-f]{12} \| jobs: not allowed \(ws-agent allow\)"
-                               r" \| here: none \| superagent: none$")
+                               r" \| here: none$")
         reg.allow(repo, "git", [])
         jid = self.queued_run(repo)
         self.pueue_status({7: QUEUED})
         line = agent.context_line(repo)
         self.assertRegex(line, r"^\[orchestration\] git ~/src/proj main@[0-9a-f]{12} \| jobs: allowed; queue 0/1 running,"
-                               rf" 1 queued \| here: {jid} queued \| superagent: none$")
+                               rf" 1 queued \| here: {jid} queued$")
         d = self.root / "plain"
         d.mkdir()
-        self.assertEqual(agent.context_line(d), "[orchestration] no repository here | superagent: none")
+        self.assertEqual(agent.context_line(d), "[orchestration] no repository here")
         os.environ["WS_AGENT_JOB"] = jid
         self.assertIn(f"queued job {jid}", agent.context_line(repo))
         self.assertLessEqual(len(line), 400)
@@ -423,7 +423,7 @@ class Context(Cli):
         self.pueue_status({})
         self.assertRegex(agent.context_line(wc / "sub"),
                          r"^\[orchestration\] svn ~/src/svnwc \^/trunk@1 \| jobs: allowed; queue 0/1 running, 0 queued"
-                         r" \| here: none \| superagent: none$")
+                         r" \| here: none$")
 
     def test_route_json(self) -> None:
         repo = self.git_repo()
@@ -432,10 +432,9 @@ class Context(Cli):
         rc, out, _ = self.cli("route", "--json", cwd=repo)
         self.assertEqual(rc, 0)
         data = json.loads(out)
-        self.assertEqual(set(data), {"vcs", "root", "base", "github", "allowed", "commands", "queue", "jobs", "superagent"})
+        self.assertEqual(set(data), {"vcs", "root", "base", "github", "allowed", "commands", "queue", "jobs"})
         self.assertEqual(data["vcs"], "git")
         self.assertTrue(data["allowed"])
-        self.assertEqual(data["superagent"], "none")
         self.assertEqual(data["commands"], ["make *"])
 
 

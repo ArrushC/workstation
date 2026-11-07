@@ -580,7 +580,7 @@ pick a mode or invoke a skill. The policy is the `## Orchestration` section of
 (the `workstation-orchestration` plugin) gives each session one line about its repository:
 
 ```
-[orchestration] svn ~/src/foo ^/trunk@4123 | jobs: allowed; queue 0/1 running, 1 queued | here: a3f2c1 succeeded (review) | superagent: none
+[orchestration] svn ~/src/foo ^/trunk@4123 | jobs: allowed; queue 0/1 running, 1 queued | here: a3f2c1 succeeded (review)
 ```
 
 | Work | Runs as |
@@ -588,7 +588,6 @@ pick a mode or invoke a skill. The policy is the `## Orchestration` section of
 | Questions, small or single-file changes | directly in the session |
 | Separable parallel work (searches, investigations, implement then review) | subagents; git writers get worktrees, SVN writers never share a working copy |
 | Long or multi-stage work that should outlive the session | a queued job (`ws-agent run`), in a repository you allowed |
-| Issue/PR-shaped work in a GitHub repository with a registered DeepSeek Super-agent | Super-agent (phase 2; none registered yet), each submission with your OK |
 
 ### Queued jobs (`ws agent`, also `ws-agent`; Linux)
 

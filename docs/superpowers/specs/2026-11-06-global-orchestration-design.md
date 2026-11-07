@@ -1,5 +1,9 @@
 # Global orchestration: design
 
+> 2026-11-07: tier 4 (DeepSeek Super-agent) was dropped before merge. The person wants the
+> super-agent's framework on whatever model is available (Claude, Codex), not DeepSeek's
+> runtime; phase 2 (`2026-11-07-orchestration-phase2-design.md`) builds it into `ws agent`.
+
 Agreed 2026-11-06. Goal: every Claude Code session on a workstation host decides by
 itself how to execute a development request (directly, with native subagents, as a queued
 headless job, or through DeepSeek Super-agent), in any repository, git or SVN. Super-agent is

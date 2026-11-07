@@ -55,9 +55,6 @@ delegate further.
    headless Claude Code under pueue, and returns a patch. Not listed: use tiers 1–2 and say
    once that `ws-agent allow <path>`, run in my own terminal, would enable jobs; never work
    around it.
-4. **DeepSeek Super-agent**: only where `ws-agent route` shows a healthy instance for this
-   GitHub repository, for issue- or PR-shaped work that benefits from its tickets; each
-   submission needs my OK. Never send SVN or unregistered code to it.
 
 When you delegate: state the split (task → backend → files) in a short list and keep the
 ids. Don't wait for a job in a loop or with sleep: give me its id and how to check; a later
