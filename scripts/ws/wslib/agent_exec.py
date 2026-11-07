@@ -188,16 +188,17 @@ def write_shims(bindir: Path, svn_config: Path, wc: Path | None = None) -> None:
 
 # --- environment and command line ----------------------------------------------------
 
-_DROP = {"SSH_AUTH_SOCK", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "WS_AGENT_JOB", *jobs.TOKENS}
+_DROP = {"SSH_AUTH_SOCK", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "WS_AGENT_JOB"}
 _NO_KEYS_SSH = "ssh -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityFile=/dev/null"
 
 
 def clean_env(base: Mapping[str, str], bindir: Path, job_id: str) -> dict[str, str]:
     """The job's environment: no parent-session markers (provider/auth CLAUDE_CODE_* stay), no
     repository credentials where that's practical (no SSH agent, no keys for git or svn+ssh, no
-    git credential helpers or tokens), the shims first on PATH."""
+    git credential helpers, no tokens but Claude's own auth: jobs.is_token), the shims first on PATH."""
     env = {k: v for k, v in jobs.strip_session(base).items()
-           if k not in _DROP and not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
+           if k not in _DROP and not jobs.is_token(k)
+           and not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
     false = shutil.which("false") or "/bin/false"
     env.update({
         "PATH": f"{bindir}{os.pathsep}{base.get('PATH', '')}",

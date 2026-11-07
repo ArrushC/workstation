@@ -231,13 +231,18 @@ class Jobs(AgentScratch):
     def test_enqueue_env_has_no_tokens_or_session_markers(self) -> None:
         self.write(self.pq / "record-env", "")
         for k, v in {"GH_TOKEN": "g", "GITHUB_TOKEN": "g2", "CLAUDECODE": "1", "CLAUDE_CODE_MESSAGING_TOKEN": "m",
-                     "CLAUDE_CODE_SESSION_ID": "s", "CLAUDE_CODE_OAUTH_TOKEN": "keep", "SSH_AUTH_SOCK": "/agent"}.items():
+                     "CLAUDE_CODE_SESSION_ID": "s", "CLAUDE_CODE_OAUTH_TOKEN": "keep", "SSH_AUTH_SOCK": "/agent",
+                     "MISE_GITHUB_TOKEN": "m2", "GITHUB_API_TOKEN": "m3", "NPM_TOKEN": "n",
+                     "ANTHROPIC_AUTH_TOKEN": "keep2"}.items():
             os.environ[k] = v
         jobs.enqueue(self.mkjob(), resume=False)
+        names = {line.split("=", 1)[0] for line in (self.pq / "add.env").read_text().splitlines()}
         env = (self.pq / "add.env").read_text()
-        for gone in ("GH_TOKEN=", "GITHUB_TOKEN=", "CLAUDECODE=", "CLAUDE_CODE_MESSAGING_TOKEN=", "CLAUDE_CODE_SESSION_ID="):
-            self.assertNotIn(gone, env)
+        for gone in ("GH_TOKEN", "GITHUB_TOKEN", "MISE_GITHUB_TOKEN", "GITHUB_API_TOKEN", "NPM_TOKEN", "CLAUDECODE",
+                     "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_SESSION_ID"):
+            self.assertNotIn(gone, names)
         self.assertIn("CLAUDE_CODE_OAUTH_TOKEN=keep", env)   # a token-authenticated job still needs it
+        self.assertIn("ANTHROPIC_AUTH_TOKEN=keep2", env)
         self.assertIn("SSH_AUTH_SOCK=/agent", env)           # svn+ssh checkout in prepare
 
     def test_queue_lock_is_exclusive(self) -> None:

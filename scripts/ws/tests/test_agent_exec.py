@@ -123,16 +123,18 @@ class Env(unittest.TestCase):
                 "CLAUDE_CODE_BRIDGE_SESSION_ID": "b", "CLAUDE_CODE_EXECPATH": "/e", "CLAUDE_CODE_CHILD_SESSION": "1",
                 "CLAUDE_CODE_SESSION_ATTENDED": "1", "CLAUDE_CODE_OAUTH_TOKEN": "keep", "CLAUDE_CODE_USE_VERTEX": "1",
                 "ANTHROPIC_API_KEY": "keep2", "SSH_AUTH_SOCK": "/s", "GH_TOKEN": "g", "GITHUB_TOKEN": "g2",
-                "GITLAB_TOKEN": "g3", "WS_AGENT_JOB": "old"}
+                "GITLAB_TOKEN": "g3", "MISE_GITHUB_TOKEN": "g4", "GITHUB_API_TOKEN": "g5", "NPM_TOKEN": "n",
+                "ANTHROPIC_AUTH_TOKEN": "keep3", "WS_AGENT_JOB": "old"}
         env = ax.clean_env(base, Path("/job/bin"), "abc123")
         for gone in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_MESSAGING_SOCKET",
                      "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_CODE_EXECPATH",
                      "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ATTENDED", "SSH_AUTH_SOCK", "GH_TOKEN",
-                     "GITHUB_TOKEN", "GITLAB_TOKEN"):
+                     "GITHUB_TOKEN", "GITLAB_TOKEN", "MISE_GITHUB_TOKEN", "GITHUB_API_TOKEN", "NPM_TOKEN"):
             self.assertNotIn(gone, env, gone)
         self.assertEqual(env["CLAUDE_CODE_OAUTH_TOKEN"], "keep")
         self.assertEqual(env["CLAUDE_CODE_USE_VERTEX"], "1")
         self.assertEqual(env["ANTHROPIC_API_KEY"], "keep2")
+        self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "keep3")
         self.assertEqual(env["PATH"], "/job/bin" + os.pathsep + "/usr/bin")
         self.assertEqual(env["WS_AGENT_JOB"], "abc123")
         self.assertEqual(env["GIT_TERMINAL_PROMPT"], "0")

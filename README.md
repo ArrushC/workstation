@@ -629,7 +629,8 @@ ws-agent doctor              # Claude login, pueued, svn, the registry, free dis
   repository and `git` everything but reads and add/rm/mv/restore/apply (a worktree shares
   refs, config and hooks with your repository); both refuse writes outside the job's copy.
   Its environment has no SSH agent, no keys for git or svn+ssh, no git credential helpers
-  and no GitHub/GitLab tokens, and svn runs without cached credentials; pueue doesn't store
+  and no `*TOKEN*` variables except Claude's own login (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `ANTHROPIC_AUTH_TOKEN`), and svn runs without cached credentials; pueue doesn't store
   those tokens either. A program called by absolute path gets past the shims, so allow only
   repositories you'd let Claude Code edit.
 - **Limits**: Windows sleep pauses WSL and its jobs, which carry on after waking (a job's

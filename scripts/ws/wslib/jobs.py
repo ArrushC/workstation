@@ -31,9 +31,16 @@ from . import core
 
 GROUP = "agents"
 ACTIVE = ("queued", "running")
-# Repository tokens a queued job never needs, kept out of what pueue stores per task (its
-# state.json holds every task's environment) and out of the job itself.
-TOKENS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GITLAB_TOKEN")
+# Tokens a queued job never needs, kept out of what pueue stores per task (its state.json holds
+# every task's environment) and out of the job itself: every *TOKEN* variable (GITHUB_TOKEN and
+# its aliases MISE_GITHUB_TOKEN, GITHUB_API_TOKEN, GH_TOKEN; GITLAB_TOKEN, NPM_TOKEN...) except
+# Claude's own auth, which a token-authenticated job runs on.
+CLAUDE_AUTH = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN"})
+
+
+def is_token(name: str) -> bool:
+    return "TOKEN" in name.upper() and name not in CLAUDE_AUTH
+
 _SESSION_MARK = re.compile(r"SESSION|MESSAGING|BRIDGE|ENTRYPOINT|EXECPATH|ATTENDED|CHILD")
 
 
@@ -47,8 +54,8 @@ def strip_session(base: Mapping[str, str]) -> dict[str, str]:
 
 def queue_env(base: Mapping[str, str]) -> dict[str, str]:
     """The environment `pueue add` records for a task (and hands to _exec): no session markers,
-    no repository tokens. SSH_AUTH_SOCK stays (a path): an svn+ssh checkout in prepare needs it."""
-    return {k: v for k, v in strip_session(base).items() if k not in TOKENS}
+    no tokens (is_token). SSH_AUTH_SOCK stays (a path): an svn+ssh checkout in prepare needs it."""
+    return {k: v for k, v in strip_session(base).items() if not is_token(k)}
 
 
 class QueueError(Exception):
