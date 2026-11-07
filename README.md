@@ -572,6 +572,23 @@ or empty target. `verify --include <path>` can limit a restore drill; temporary 
 removed afterwards. Run `ws backup verify` from your existing scheduler for periodic restore
 checks. Snapshot pruning and scheduling remain explicit restic/system scheduler operations.
 
+## Agent orchestration
+
+Every Claude Code session decides by itself how to run a development request: directly,
+with subagents, or as a **queued job** that outlives the session (policy in
+`dotfiles/claude/CLAUDE.md`). Queued jobs are `ws agent` / `ws-agent` (Linux): headless
+Claude Code under the pueue group `agents`, one private working copy per job at a recorded
+base (SVN `URL@rev` or a git commit), and a reviewable patch at the end. A job never
+commits, pushes or otherwise writes to the repository.
+
+```sh
+ws-agent allow ~/src/foo          # once per repository, in your own terminal
+ws-agent ls                       # jobs of this repository (--all: every one)
+ws-agent result <id>              # Claude's report, the patch and how to apply it
+ws-agent cancel|retry|close <id>
+ws-agent doctor                   # claude login, pueued, svn, registry, disk
+```
+
 ## Adding things
 
 **A tool.** One line in the right file for CLI tools; library bundles use their environment manifests. `config.toml` holds tools for both OSes (add `os = ["linux"]` or `os = ["windows"]` for single-OS ones) and `config.linux.toml` the Linux toolbelt. Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset. Every Linux asset must run on EL8's glibc 2.28: prefer a musl build (see the gping, yazi, delta and bottom entries); when a project ships only newer-glibc builds, take conda-forge's (`conda:`, built against glibc 2.17 or 2.28; see helix and ast-grep). After an install, `tasks/verify-tools` checks every binary runs on the host, and `disk-budget.yml` checks them against glibc 2.28 in CI.

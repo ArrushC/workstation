@@ -284,6 +284,7 @@ DOTFILES_MODE_ALLOWLIST=(
   "dotfiles/local/bin/winterop"                      # ~/.local/bin copy entry — a script invoked directly from the shell
   "dotfiles/local/bin/zcc"                           # ~/.local/bin copy entry — zig as a C compiler, invoked directly
   "dotfiles/local/bin/zc++"                          # ~/.local/bin copy entry — the same script as C++
+  "dotfiles/local/bin/ws-agent"                      # ~/.local/bin copy entry — `ws agent` for Claude Code, hooks and pueue
 )
 check_dotfiles_mode() {
   hdr "dotfiles/ sources: git mode 100644 except the allowlist"

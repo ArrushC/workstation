@@ -8,7 +8,7 @@ import sys
 import traceback
 
 COMPLETED = ("reconcile", "open", "apply", "help", "health", "actions", "edit", "diff", "status",
-             "record", "update", "runs", "services", "debug", "bench", "resume", "backup")
+             "record", "update", "runs", "services", "debug", "bench", "resume", "backup", "agent")
 SUBCOMMANDS = (*COMPLETED, "baseline", "complete")
 
 
@@ -66,6 +66,7 @@ usage: ws [words...]          the palette (search starts with the words)
        ws bench [...]        benchmarks with Git and host metadata
        ws resume [...]       recent projects, notes, jobs and failed runs
        ws backup [...]       configured restic backups and restore checks
+       ws agent [...]        queued headless Claude Code jobs (also ws-agent; ws agent -h)
 
 Use ws <command> --help for details. Legacy wse/wsd/wss/wsr/wsu/wsa/wsh still work.
 """
@@ -102,7 +103,7 @@ def _main(argv: list[str]) -> int:
         from .workflows import main as workflows
 
         return workflows(rest, command=cmd)
-    if cmd in ("runs", "bench", "resume", "backup"):
+    if cmd in ("runs", "bench", "resume", "backup", "agent"):
         from importlib import import_module
 
         return import_module(f".{cmd}", __package__).main(rest)
@@ -271,6 +272,8 @@ def complete(words: list[str]) -> int:
             "services": ("up", "down", "list", "attach", "process", "graph", "--help"),
             "resume": ("--list", "--json", "--note", "--cd", "--tab", "--help"),
             "health": ("--report", "--help"),
+            "agent": ("context", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry",
+                      "close", "pause", "resume", "doctor", "--help"),
         }
         print("\n".join(s for s in choices.get(sub, ("--help",)) if s.startswith(cur)))
     return 0

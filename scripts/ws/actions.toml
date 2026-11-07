@@ -888,6 +888,29 @@ run = ["cheat", "workstation"]
 
 # --- notes: the cheatsheet's closing sections ----------------------------------------
 
+[[action]]
+id = "agent-ls"
+title = "Agent jobs here"
+desc = "ws-agent ls: queued headless Claude Code jobs of this repository (--all for every one)"
+group = "projects"
+kind = "read"
+keywords = ["agent", "jobs", "queue", "claude", "orchestration", "pueue", "background"]
+os = ["linux"]
+requires = ["pueue"]
+alias = "ws-agent ls"
+ws = ["agent", "ls"]
+
+[[action]]
+id = "agent-doctor"
+title = "Check agent orchestration"
+desc = "ws-agent doctor: Claude Code login, pueued and its agents group, svn, the job registry, disk"
+group = "health"
+kind = "read"
+keywords = ["agent", "orchestration", "claude", "pueue", "svn", "doctor", "jobs"]
+os = ["linux"]
+alias = "ws-agent doctor"
+ws = ["agent", "doctor"]
+
 [[note]]
 title = "Common flow"
 text = ["ws edit <file>   edit the source", "ws diff          preview the change", "ws apply         apply to ~"]

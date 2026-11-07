@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# ws-agent: `ws agent` for callers without the shell's ws function: Claude Code's tools, the
+# SessionStart hook (workstation-orchestration), and pueue. Same interpreter choice as
+# python-cli: mise's Python (the global pin), else python3. ws.py says so if it's too old.
+py=''
+command -v mise >/dev/null 2>&1 && py=$(mise -C "$HOME" which python3 2>/dev/null)
+[ -n "$py" ] || py=$(command -v python3)
+[ -n "$py" ] || {
+  echo 'ws-agent: no Python interpreter found' >&2
+  exit 1
+}
+exec "$py" "$HOME/.config/mise/scripts/ws/ws.py" agent "$@"
