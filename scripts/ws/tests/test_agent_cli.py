@@ -315,6 +315,20 @@ class Manage(Cli):
         self.assertEqual(rc, 3)
         self.assertIn("running", err)
 
+    def test_result_diff_prints_the_patch(self) -> None:
+        jid = self.queued_run(self.repo)
+        res = jobs.job_dir(jid) / "result"
+        self.write(res / "exit.json", '{"exit_code": 0}')
+        self.write(res / "changes.diff", "diff --git a/app.py b/app.py\n+cached\n")
+        self.write(res / "manifest.txt", "app.py\tmodified\n")
+        rc, out, _ = self.cli("result", jid, "--diff")
+        self.assertEqual(rc, 0)
+        self.assertIn("+cached", out)            # the patch itself, so review needs no read outside the project
+        self.assertIn("app.py\tmodified", out)
+        rc, out, _ = self.cli("result", jid)
+        self.assertNotIn("+cached", out)
+        self.assertIn(f"ws-agent result {jid} --diff", out)
+
     def test_pause_resume(self) -> None:
         self.assertEqual(self.cli("pause")[0], 0)
         self.assertEqual(self.cli("resume")[0], 0)

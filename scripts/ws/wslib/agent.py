@@ -371,7 +371,7 @@ def _result(args: argparse.Namespace) -> int:
     stats = agent_exec._diff_stats(diff)
     print("Changes:" if stats else "Changes: none")
     print("\n".join(stats))
-    print(f"patch: {diff_path}")
+    print(f"patch: {diff_path}" + ("" if getattr(args, "diff", False) else f"  (printed by: ws-agent result {job.id} --diff)"))
     for name in ("manifest.txt", "props.txt", "status.txt"):
         if (res / name).exists():
             print(f"{name.split('.')[0]}: {res / name}")
@@ -382,6 +382,13 @@ def _result(args: argparse.Namespace) -> int:
     warnings = [*job.warnings, *(warn_file.read_text(encoding="utf-8").splitlines() if warn_file.exists() else [])]
     for w in warnings:
         print(f"warning: {w}")
+    if getattr(args, "diff", False):
+        manifest = res / "manifest.txt"
+        if manifest.exists():
+            print("--- manifest.txt")
+            print(manifest.read_text(encoding="utf-8", errors="replace").rstrip())
+        print("--- changes.diff")
+        sys.stdout.write(diff if diff.endswith("\n") or not diff else diff + "\n")
     return 0
 
 
@@ -561,6 +568,8 @@ def _parser() -> argparse.ArgumentParser:
     for name, fn in (("show", _show), ("result", _result), ("cancel", _cancel), ("retry", _retry), ("close", _close)):
         p = sub.add_parser(name)
         p.add_argument("id")
+        if name == "result":
+            p.add_argument("--diff", action="store_true", help="also print the manifest and the whole patch")
         p.set_defaults(fn=fn)
     sub.add_parser("pause").set_defaults(fn=_pause)
     sub.add_parser("resume").set_defaults(fn=_resume)

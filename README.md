@@ -603,7 +603,7 @@ repository: it ends with a patch you review and apply.
 ws-agent allow ~/src/foo [--command 'make *']   # once per repository, in your own terminal
 ws-agent repos | ws-agent disallow ~/src/foo
 ws-agent ls [--all]          # jobs of this repository, with their state
-ws-agent result <id>         # Claude's report, changes per file, the patch and how to apply it
+ws-agent result <id> [--diff] # Claude's report, changes per file, how to apply; --diff prints the patch
 ws-agent show <id>           # base, attempts, session, the end of its log
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
