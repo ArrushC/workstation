@@ -609,6 +609,33 @@ Its change (also at {diff_path}):
 
 REVIEW_DIFF_MAX = 200_000
 
+TELL = """\
+The person wrote to this job:
+{lines}
+Take it into account and carry on; end with the structured report."""
+
+
+def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> None:
+    """A message that arrived while the job was finishing (its checks, collecting, its review):
+    the job goes on in its session. Under the queue lock, as `tell` decides under it whether to
+    requeue: whichever comes second finds the other's work done (exit.json already moved)."""
+    try:
+        with jobs.queue_lock():
+            if jobs.undelivered(job) and (res / "exit.json").exists():
+                _archive_exit(job, res)
+                jobs.enqueue(job, resume=True)
+                _log(log, f"ws-agent: the person wrote while it finished: requeued (task {job.pueue_id})")
+    except jobs.QueueError as e:
+        _log(log, f"ws-agent: a message is waiting, but requeueing failed ({e}); ws-agent retry {job.id} delivers it")
+
+
+def _prior_exit(res: Path, attempts: int) -> dict[str, object]:
+    try:
+        data = json.loads((res / f"exit-{attempts}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
 
 def _check_env(env: Mapping[str, str]) -> dict[str, str]:
     """A check runs the repository's own code: no engine's login either."""
@@ -692,6 +719,8 @@ def execute(job_id: str, *, resume: bool) -> int:
                 "cost_usd": outcome.cost_usd if outcome else None, **extra}
             core.atomic_write(res / "exit.json", (json.dumps(info, indent=2) + "\n").encode("utf-8"))
             _log(log, f"--- attempt {attempt} finished: {kind}, exit {code}")
+            if kind == "ok":
+                _requeue_if_told(job, res, log)
             return 0 if code == 0 else 1
 
         entry = agent_registry.find(core.expand(job.repo))
@@ -739,7 +768,13 @@ def execute(job_id: str, *, resume: bool) -> int:
             sid = _known_session(job, res, engine) if prev == engine.name else ""
             resumable = bool(sid) and engine.transcript_exists(sid)
             resume_sid: str | None = None
-            if prev and prev != engine.name:
+            pending = jobs.undelivered(job)
+            told = TELL.format(lines="\n".join(f"- {m.get('text')}" for m in pending)) if pending else ""
+            if pending and intent in ("resume", "tell") and resumable and prev == engine.name and \
+                    (intent == "tell" or _prior_exit(res, job.attempts).get("kind") == "ok"):
+                # it finished or asked, and the person wrote: their words are the whole prompt
+                prompt, resume_sid, told = told, sid, ""
+            elif prev and prev != engine.name:
                 prompt = HANDOFF.format(prev=prev, why=handoff_why, report=_last_report(res), task=task,
                                         inspection=inspection or inspect(job)) + (f"\n\n{fix_text}" if intent == "fix" else "")
             elif intent == "fix" and resumable:
@@ -750,10 +785,13 @@ def execute(job_id: str, *, resume: bool) -> int:
                 prompt, resume_sid = RETRY.format(why=outcome.message[:200] if outcome else "?"), sid
             elif intent in ("resume", "retry") and resumable:
                 prompt, resume_sid = RESUME.format(attempt=attempt, inspection=inspection or inspect(job)), sid
-            elif intent in ("resume", "retry"):
+            elif intent in ("resume", "retry", "tell"):
                 prompt = task + FRESH_AFTER_INTERRUPT.format(inspection=inspection or inspect(job))
             else:
                 prompt = task
+            if told:
+                prompt = f"{prompt}\n\n---\n{told}"
+            jobs.mark_delivered(job, [m.get("id") for m in pending], attempt)
             if resume_sid is None:
                 job.session_id = str(uuid.uuid4()) if engine.name == "claude" else ""
             job.engine = engine.name
@@ -806,6 +844,13 @@ def execute(job_id: str, *, resume: bool) -> int:
                 _log(log, f"ws-agent: {engine.name} hit its usage limit (until {until}); trying the next allowed engine")
                 intent = "fix" if intent == "fix" else "resume"
                 continue
+            if outcome.kind == "ok" and outcome.report:
+                r = outcome.report
+                jobs.post(job, "job", f"{r.get('status')}: {r.get('summary')}"
+                          + (f"\nquestion: {r.get('question')}" if r.get("question") else ""), attempt=attempt)
+                if jobs.undelivered(job):   # the person wrote during the turn: it goes on in the same session
+                    intent, retries = "tell", 0
+                    continue
             if outcome.kind == "ok" and outcome.report and outcome.report.get("status") == "done" and entry.checks:
                 runs = agent_checks.run_checks(job, jd, entry, check_env)
                 verdict = agent_checks.verdict(runs)

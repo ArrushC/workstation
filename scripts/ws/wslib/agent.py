@@ -11,7 +11,8 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
                             which repositories jobs may use (refused inside Claude Code)
     run --title T (--prompt TEXT | --prompt-file F) [--repo P] [--rev R] [--timeout 2h]
         [--paths GLOB]... [--force]
-    ls [--repo P | --all] [--json] | show <id> | result <id>
+    ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
+    tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
 """
 
@@ -376,6 +377,15 @@ def _show(args: argparse.Namespace) -> int:
     print(f"directory: {jd}")
     for w in job.warnings:
         print(f"warning: {w}")
+    talk = jobs.thread(job)
+    if talk:
+        print("conversation:")
+        for m in talk:
+            who = "you" if m.get("from") == "you" else "job"
+            when = str(m.get("ts", ""))[:16]
+            note = "" if who == "job" or m.get("delivered") else "  (not delivered yet)"
+            body = str(m.get("text", "")).replace("\n", "\n        ")
+            print(f"  {when}  {who}: {body}{note}")
     log = agent_exec._tail(jd / "exec.log", 15)
     if log:
         print("exec.log (end):")
@@ -545,6 +555,50 @@ def _retry(args: argparse.Namespace) -> int:
     return 0
 
 
+def _tell(args: argparse.Namespace) -> int:
+    """The person's words to a job: kept in its thread and delivered after its current turn if
+    it runs, else by resuming its session now."""
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
+        return 3
+    text = " ".join(args.text).strip()
+    if not text:
+        _err("ws-agent: the message is empty")
+        return 2
+    job = _load(args.id)
+    if job is None:
+        return 1
+    try:
+        with jobs.queue_lock():   # the executor checks for undelivered messages under it too
+            q = jobs.pueue_status()
+            st = jobs.state(job, q.tasks if q else None)
+            if st in ("closed", "cancelled"):
+                _err(f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)")
+                return 3
+            jobs.post(job, "you", text)
+            if st in ("running", "queued"):
+                print(f"told {job.id}: delivered after its current turn")
+                return 0
+            if q is None:
+                _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued); the message is kept "
+                     f"and goes with ws-agent retry {job.id}")
+                return 1
+            res = jobs.job_dir(job.id) / "result"
+            for name in ("exit", "report"):
+                cur = res / f"{name}.json"
+                if cur.exists():
+                    cur.replace(res / f"{name}-{job.attempts}.json")
+            jobs.kill(job)   # drop the finished task from the queue
+            jobs.enqueue(job, resume=True)
+    except jobs.QueueError as e:
+        _err(str(e))
+        return 1
+    print(f"requeued {job.id} (task {job.pueue_id}): it resumes its session with your message")
+    if q.group == "Paused":
+        _err("warning: the queue is paused; ws-agent resume starts it (other queued jobs start too)")
+    return 0
+
+
 def _close(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
@@ -693,6 +747,11 @@ def _parser() -> argparse.ArgumentParser:
         if name == "result":
             p.add_argument("--diff", action="store_true", help="also print the manifest and the whole patch")
         p.set_defaults(fn=fn)
+    for name in ("tell", "answer"):
+        t = sub.add_parser(name, help="send the job a message (answer: to the question it asked)")
+        t.add_argument("id")
+        t.add_argument("text", nargs="+")
+        t.set_defaults(fn=_tell)
     sub.add_parser("pause").set_defaults(fn=_pause)
     sub.add_parser("resume").set_defaults(fn=_resume)
     sub.add_parser("doctor").set_defaults(fn=_doctor)
@@ -704,7 +763,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
-               "pause", "resume", "doctor", "--help")
+               "tell", "answer", "pause", "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:

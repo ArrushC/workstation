@@ -255,6 +255,64 @@ class Manage(Cli):
         self.assertIn("review: concerns", out)
         self.assertIn("app.py:7: the cache never expires", out)
 
+    def test_tell_finished_job_requeues_with_the_message(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        rc, out, err = self.cli("tell", jid, "please", "also", "update", "the", "docs")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"requeued {jid}", out)
+        adds = [c for c in self.pueue_calls() if c[0] == "add"]
+        self.assertEqual(adds[-1][-1], "--resume")
+        self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(jid))], ["please also update the docs"])
+        res = jobs.job_dir(jid) / "result"
+        self.assertFalse((res / "exit.json").exists())
+        self.assertEqual(jobs.state(jobs.load(jid), {jobs.load(jid).pueue_id: "Queued"}), "queued")
+
+    def test_answer_is_tell(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 1, "status": "question", "kind": "ok", "engine": "claude"})
+        rc, out, err = self.cli("answer", jid, "use option B")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(jid))], ["use option B"])
+
+    def test_tell_while_running_only_posts(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.pueue_status({7: RUNNING})
+        before = len([c for c in self.pueue_calls() if c[0] == "add"])
+        rc, out, err = self.cli("tell", jid, "carry on")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("after its current turn", out)
+        self.assertEqual(len([c for c in self.pueue_calls() if c[0] == "add"]), before)
+
+    def test_tell_refusals(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.write(jobs.job_dir(jid) / "result" / "exit.json", '{"exit_code": 0}')
+        self.assertEqual(self.cli("close", jid)[0], 0)
+        rc, _, err = self.cli("tell", jid, "too late")
+        self.assertEqual(rc, 3)
+        self.assertIn("closed", err)
+        other = self.queued_run(self.repo, "other")
+        job = jobs.load(other)
+        job.cancelled = True
+        jobs.save(job)
+        self.assertEqual(self.cli("tell", other, "x")[0], 3)
+        live = self.queued_run(self.repo, "live")
+        os.environ["WS_AGENT_JOB"] = "abc123"
+        rc, _, err = self.cli("tell", live, "x")
+        self.assertEqual(rc, 3)
+        self.assertIn("queued job", err)
+        del os.environ["WS_AGENT_JOB"]
+        self.assertEqual(self.cli("tell", live, "   ")[0], 2)
+
+    def test_show_prints_the_thread(self) -> None:
+        jid = self.queued_run(self.repo)
+        jobs.post(jobs.load(jid), "job", "question: A or B?", attempt=1)
+        jobs.post(jobs.load(jid), "you", "B")
+        rc, out, _ = self.cli("show", jid)
+        self.assertEqual(rc, 0)
+        self.assertRegex(out, r"job.*question: A or B\?")
+        self.assertRegex(out, r"you.*B")
+
     def test_retry_a_waiting_job_and_close_a_needs_you_one(self) -> None:
         w = self.queued_run(self.repo, "waits")
         self.finished(w, {"exit_code": 1, "kind": "usage_limit", "engine": "claude", "reset_at": "2100-01-01T00:00:00+00:00"})

@@ -605,7 +605,8 @@ ws-agent allow ~/src/foo [--command 'make *'] [--engine claude --engine codex] [
 ws-agent repos | ws-agent disallow ~/src/foo
 ws-agent ls [--all]          # jobs of this repository, with their state
 ws-agent result <id> [--diff] # the job's report, changes per file, how to apply; --diff prints the patch
-ws-agent show <id>           # base, attempts, session, the end of its log
+ws-agent show <id>           # base, attempts, session, the conversation, the end of its log
+ws-agent tell <id> "..."     # your follow-up: after its current turn, or resuming it (answer: to its question)
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
 ws-agent close <id>          # after review: delete the working copy, keep the result
@@ -636,6 +637,12 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     the next allowed engine, with a note on what the first one did. With none left the job is
     `waiting`.
   - A repository that allows only Claude never runs on Codex.
+- **Conversations**: `tell` (or `answer`, for a job that `needs-you`) keeps your words in the
+  job's `thread.jsonl` beside its reports, and `show` prints them.
+  - A running or queued job gets them after its current turn, in the same session.
+  - A finished, waiting or interrupted one resumes its session with them.
+  - A message that lands while a job is finishing still reaches it: the job requeues itself.
+  - Closed and cancelled jobs take no messages.
 - **Checks and review**:
   - When a job reports done, ws-agent itself runs the repository's `--check` commands in
     the job sandbox: no network unless `--network`, 20 minutes each, the last 1 MB of output

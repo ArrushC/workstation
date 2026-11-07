@@ -151,6 +151,62 @@ def exit_info(job: Job) -> dict[str, object] | None:
     return data if isinstance(data, dict) else None
 
 
+# --- the conversation ------------------------------------------------------------------
+# thread.jsonl: the person's messages to a job (`ws agent tell`) and the job's reports, in order.
+# A message is delivered when a prompt carrying it goes to the engine; only those are marked.
+
+@contextlib.contextmanager
+def _thread_lock(job: Job) -> Iterator[None]:
+    core.private_dir(job_dir(job.id))
+    fh = open(job_dir(job.id) / "thread.lock", "a+")  # noqa: SIM115 - held for the with-block
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+    finally:
+        fh.close()
+
+
+def _thread_path(job: Job) -> Path:
+    return job_dir(job.id) / "thread.jsonl"
+
+
+def thread(job: Job) -> list[dict[str, object]]:
+    try:
+        lines = _thread_path(job).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    found = []
+    for line in lines:
+        try:
+            m = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(m, dict):
+            found.append(m)
+    return found
+
+
+def post(job: Job, sender: str, text: str, *, attempt: int | None = None) -> None:
+    msg = {"id": secrets.token_hex(4), "ts": core.now_iso(), "from": sender, "text": text, "attempt": attempt}
+    with _thread_lock(job), open(_thread_path(job), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(msg) + "\n")
+
+
+def undelivered(job: Job) -> list[dict[str, object]]:
+    return [m for m in thread(job) if m.get("from") == "you" and not m.get("delivered")]
+
+
+def mark_delivered(job: Job, ids: list[object], attempt: int) -> None:
+    if not ids:
+        return
+    with _thread_lock(job):
+        msgs = thread(job)
+        for m in msgs:
+            if m.get("id") in ids and not m.get("delivered"):
+                m["delivered"] = attempt
+        core.atomic_write(_thread_path(job), "".join(json.dumps(m) + "\n" for m in msgs).encode("utf-8"))
+
+
 # --- pueue -------------------------------------------------------------------------
 
 def pueue_argv(*args: str) -> list[str]:

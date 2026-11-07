@@ -240,6 +240,21 @@ class Jobs(AgentScratch):
         jobs.record_run(job, proc.pid)
         self.assertEqual(jobs.state(job, {3: "Running"}), "running")
 
+    def test_thread_round_trip(self) -> None:
+        job = self.mkjob()
+        self.assertEqual(jobs.thread(job), [])
+        jobs.post(job, "you", "use option B")
+        jobs.post(job, "job", "done: did it", attempt=1)
+        jobs.post(job, "you", "and add a test")
+        pending = jobs.undelivered(job)
+        self.assertEqual([m["text"] for m in pending], ["use option B", "and add a test"])
+        jobs.mark_delivered(job, [pending[0]["id"]], 2)   # only what was sent is marked
+        self.assertEqual([m["text"] for m in jobs.undelivered(job)], ["and add a test"])
+        jobs.mark_delivered(job, [m["id"] for m in jobs.undelivered(job)], 3)
+        self.assertEqual(jobs.undelivered(job), [])
+        self.assertEqual([(m["from"], m.get("delivered")) for m in jobs.thread(job)],
+                         [("you", 2), ("job", None), ("you", 3)])
+
     def test_duplicate_includes_needs_you_and_waiting(self) -> None:
         q = self.mkjob(prompt_sha="Q", pueue_id=4)
         self.write(jobs.job_dir(q.id) / "result" / "exit.json", '{"exit_code": 1, "status": "question"}')

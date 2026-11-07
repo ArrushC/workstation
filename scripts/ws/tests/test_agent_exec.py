@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -541,6 +542,67 @@ class ChecksAndReview(Attempts):
         self.assertEqual(ax.execute(job.id, resume=False), 0)
         self.assertFalse((jobs.job_dir(job.id) / "result" / "review.json").exists())
         self.assertIn("review", self.result(job, "warnings.txt"))
+
+
+class Conversations(Attempts):
+    def test_answer_after_a_question_resumes_the_same_session(self) -> None:
+        job = self.git_job()
+        self.write(self.fc / "report.1", '{"status":"question","summary":"s","question":"A or B?","tests":null,"notes":null}')
+        ax.execute(job.id, resume=False)
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "needs-you")
+        sid = jobs.load(job.id).session_id
+        jobs.post(jobs.load(job.id), "you", "use option B")
+        self.assertEqual(ax.execute(job.id, resume=True), 0)
+        stdin = (self.fc / "stdin.2").read_text()
+        self.assertIn("use option B", stdin)
+        self.assertNotIn("stopped before it finished", stdin)   # it asked; it wasn't interrupted
+        argv = (self.fc / "argv.2").read_text().splitlines()
+        self.assertEqual(argv[argv.index("--resume") + 1], sid)
+        self.assertEqual(jobs.undelivered(jobs.load(job.id)), [])
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "succeeded")
+        froms = [m["from"] for m in jobs.thread(jobs.load(job.id))]
+        self.assertEqual(froms, ["job", "you", "job"])   # the reports are part of the conversation
+
+    def test_tell_while_running_waits_for_the_turn(self) -> None:
+        job = self.git_job()
+        self.claude_script('[ "$(wc -l <"$WS_FAKE_CLAUDE/calls")" -eq 1 ] && sleep 1\n')
+
+        def tell_during_the_run() -> None:
+            for _ in range(100):
+                if jobs.live_run(jobs.load(job.id)) is not None:
+                    break
+                time.sleep(0.02)
+            jobs.post(jobs.load(job.id), "you", "also handle the empty case")
+        t = threading.Thread(target=tell_during_the_run)
+        t.start()
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        t.join(10)
+        self.assertEqual(self.claude_calls(), 2)
+        self.assertIn("also handle the empty case", (self.fc / "stdin.2").read_text())
+        argv = (self.fc / "argv.2").read_text().splitlines()
+        self.assertIn("--resume", argv)
+        self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))   # delivered in place, no new task
+
+    def test_message_during_collect_requeues(self) -> None:
+        job = self.git_job()
+        real_collect = ax.collect
+        posted: list[bool] = []
+
+        def collect_and_tell(j: jobs.Job, jd: Path) -> list[str]:
+            if not posted:
+                posted.append(True)
+                jobs.post(jobs.load(j.id), "you", "one more thing")
+            return real_collect(j, jd)
+        self.pueue_status({})
+        with mock.patch.object(ax, "collect", side_effect=collect_and_tell):
+            self.assertEqual(ax.execute(job.id, resume=False), 0)
+        adds = [c for c in self.pueue_calls() if c[0] == "add"]
+        self.assertEqual(len(adds), 1)
+        self.assertEqual(adds[0][-1], "--resume")
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "exit.json").exists())   # archived: it goes on
+        self.assertEqual(ax.execute(job.id, resume=True), 0)
+        self.assertIn("one more thing", (self.fc / "stdin.2").read_text())
+        self.assertEqual(jobs.undelivered(jobs.load(job.id)), [])
 
 
 REAL_WRAP = agent_sandbox.wrap
