@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import unittest
 from contextlib import chdir, redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -265,6 +266,55 @@ class Manage(Cli):
         self.assertIn(str(res / "changes.diff"), out)
         self.assertIn("git apply --index", out)
 
+    def test_run_duplicate_of_failed_suggests_retry(self) -> None:
+        jid = self.queued_run(self.repo, "flaky task")
+        self.write(jobs.job_dir(jid) / "result" / "exit.json", '{"exit_code": 1}')
+        rc, out, err = self.cli("run", "--title", "t", "--prompt", "flaky task", "--repo", str(self.repo))
+        self.assertEqual(rc, 3)
+        self.assertIn(f"ws-agent retry {jid}", err)
+
+    def test_run_waits_for_the_queue_lock(self) -> None:
+        os.environ["WS_AGENT_LOCK_TIMEOUT"] = "0.2"
+        with jobs.queue_lock():
+            rc, _, err = self.cli("run", "--title", "t", "--prompt", "locked out", "--repo", str(self.repo))
+        self.assertEqual(rc, 1)
+        self.assertIn("another ws-agent run", err)
+        self.assertEqual(jobs.all_jobs(), [])
+
+    def test_result_failed_shows_reason_and_log(self) -> None:
+        jid = self.queued_run(self.repo)
+        jd = jobs.job_dir(jid)
+        self.write(jd / "result" / "exit.json", json.dumps({"exit_code": 124, "timed_out": True, "is_error": True}))
+        self.write(jd / "exec.log", "--- attempt 1 start\nws-agent: running claude (session S)\n--- attempt 1 finished: exit 124\n")
+        rc, out, _ = self.cli("result", jid)
+        self.assertEqual(rc, 0)
+        self.assertIn("timed out after 2h", out)
+        self.assertIn("finished: exit 124", out)
+
+    def test_cancel_stops_the_running_claude(self) -> None:
+        jid = self.queued_run(self.repo)
+        proc = subprocess.Popen(["sleep", "300"], start_new_session=True)
+        self.addCleanup(lambda: (proc.kill(), proc.wait()))
+        jobs.record_run(jobs.load(jid), proc.pid)
+        self.pueue_status({7: KILLED})   # pueue lost track of it; claude still runs
+        self.assertEqual(jobs.state(jobs.load(jid), {7: "Killed"}), "running")
+        rc, out, err = self.cli("cancel", jid)
+        self.assertEqual(rc, 0, err)
+        proc.wait(timeout=15)
+        self.assertIsNone(jobs.live_run(jobs.load(jid)))
+        self.assertEqual(jobs.state(jobs.load(jid), {}), "cancelled")
+
+    def test_close_refuses_while_claude_runs(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.write(jobs.job_dir(jid) / "result" / "exit.json", '{"exit_code": 1}')
+        proc = subprocess.Popen(["sleep", "300"], start_new_session=True)
+        self.addCleanup(lambda: (proc.kill(), proc.wait()))
+        jobs.record_run(jobs.load(jid), proc.pid)
+        os.remove(jobs.job_dir(jid) / "result" / "exit.json")
+        rc, _, err = self.cli("close", jid)
+        self.assertEqual(rc, 3)
+        self.assertIn("running", err)
+
     def test_pause_resume(self) -> None:
         self.assertEqual(self.cli("pause")[0], 0)
         self.assertEqual(self.cli("resume")[0], 0)
@@ -441,6 +491,56 @@ class HookScript(AgentScratch):
         self.fake("ws-agent", 'echo "[orchestration] here"')
         r = self.hook(json.dumps({"cwd": str(self.root / "gone")}))
         self.assertEqual((r.returncode, r.stdout), (0, "[orchestration] here\n"))
+
+
+@unittest.skipUnless(shutil.which("pueued") and shutil.which("pueue"), "pueue not installed")
+class RealQueueCancel(Cli):
+    """ws-agent run → a real (scratch) pueued → _exec → a fake claude; cancel must stop claude itself."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.bin / "pueue").unlink()
+        cfg = self.root / "pueue.yml"
+        (self.root / "pr").mkdir()
+        self.write(cfg, f"shared:\n  pueue_directory: {self.root / 'pd'}\n  runtime_directory: {self.root / 'pr'}\n"
+                        f"  unix_socket_path: {self.root / 'p.sock'}\n")
+        os.environ["WS_AGENT_PUEUE_CONFIG"] = str(cfg)
+        self.daemon = subprocess.Popen(["pueued", "-c", str(cfg)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(50):
+            if (self.root / "p.sock").exists():
+                break
+            time.sleep(0.1)
+        self.fake("claude", 'echo $$ >"$HOME/claude.pid"; sleep 300')
+
+    def tearDown(self) -> None:
+        subprocess.run(["pueue", "-c", os.environ["WS_AGENT_PUEUE_CONFIG"], "shutdown"], capture_output=True)
+        try:
+            self.daemon.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.daemon.kill()
+        super().tearDown()
+
+    def test_cancel_stops_claude_and_frees_the_slot(self) -> None:
+        repo = self.git_repo()
+        reg.allow(repo, "git", [])
+        jid = self.queued_run(repo, "sleepy")
+        job = jobs.load(jid)
+        for _ in range(150):   # run.pid lands as timeout starts; the fake writes claude.pid a moment later
+            if jobs.live_run(job) is not None and (self.home / "claude.pid").exists():
+                break
+            time.sleep(0.1)
+        self.assertIsNotNone(jobs.live_run(job), (jobs.job_dir(jid) / "exec.log").read_text() if (jobs.job_dir(jid) / "exec.log").exists() else "")
+        claude_pid = int((self.home / "claude.pid").read_text())
+        rc, _, err = self.cli("cancel", jid)
+        self.assertEqual(rc, 0, err)
+        for _ in range(100):
+            if not Path(f"/proc/{claude_pid}").exists():
+                break
+            time.sleep(0.1)
+        self.assertFalse(Path(f"/proc/{claude_pid}").exists())   # claude itself is gone, not only _exec
+        q = jobs.pueue_status()
+        assert q is not None
+        self.assertEqual(q.running, 0)
 
 
 if __name__ == "__main__":

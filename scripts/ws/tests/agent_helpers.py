@@ -46,7 +46,7 @@ args=("$@")
 [ -f "$d/fail-${args[0]}" ] && { echo "fake pueue: ${args[0]} failed" >&2; exit 1; }
 case "${args[0]}" in
 status) [ -f "$d/status.json" ] || { echo "daemon down" >&2; exit 1; }; cat "$d/status.json" ;;
-add) n=$(cat "$d/next" 2>/dev/null || echo 7); echo $((n + 1)) >"$d/next"; echo "$n" ;;
+add) [ -f "$d/record-env" ] && env >"$d/add.env"; n=$(cat "$d/next" 2>/dev/null || echo 7); echo $((n + 1)) >"$d/next"; echo "$n" ;;
 esac
 exit 0
 """

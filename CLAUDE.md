@@ -212,7 +212,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `ws agent` (`wslib/{agent,jobs,agent_exec,agent_registry,vcs}.py`; `ws-agent` in `~/.local/bin` for hooks,
   Claude's tools and pueue): queued headless `claude -p` jobs in pueue group `agents` (parallel 1), one private
   working copy per job at the base recorded at `run`, a patch at the end; never a write upstream. Its svn/git
-  shims, permission allowlist and credential-free environment are accidental-write guards, not a boundary.
+  shims (svn: no repository writes; git: default-deny, reads + add/rm/mv/restore/apply; both confined to the
+  job's copy), `blockWritesOutsideWorkingDirectories`, no bare Edit/Write rule and a credential-free environment
+  are accidental-write guards, not a boundary. claude runs in its own process group (`timeout` setpgids
+  itself, so `pueue kill` never reaches it): `run.pid` records it, it gets PDEATHSIG, and while it lives the
+  job is `running` whatever pueue says; `cancel` kills that group.
   `allow`/`disallow` refuse under `CLAUDECODE=1`; `run` refuses under `WS_AGENT_JOB`. Job state is derived
   (exit.json, then the pueue task), never stored; `claude -p --output-format json` prints an array ending in
   the result. Tests use fake pueue/claude (`tests/agent_helpers.py`) and a scratch pueued; never the real ones.

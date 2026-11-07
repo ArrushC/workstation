@@ -233,26 +233,33 @@ def _run_job(args: argparse.Namespace) -> int:
         _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
         return 1
     sha = hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest()
-    all_ = jobs.all_jobs()
-    dup = jobs.duplicate(key, sha, all_, q.tasks)
-    if dup and not args.force:
-        print(dup.id)
-        _err(f"ws-agent: job {dup.id} already does this ({jobs.state(dup, q.tasks)}); --force queues another")
-        return 3
-    for other in jobs.overlaps(key, args.paths or [], all_, q.tasks):
-        warnings.append(f"job {other.id} ({jobs.state(other, q.tasks)}) also claims {', '.join(other.paths)}: "
-                        "review the two patches together")
     _, parallel = agent_registry.load()
-    job = jobs.Job(id=jobs.new_id(), title=args.title, repo=key, vcs=p.kind, base=base, prompt_sha=sha,
-                   paths=list(args.paths or []), created=core.now_iso(), session_id="", timeout=args.timeout,
-                   warnings=warnings)
     try:
-        jobs.ensure_group(parallel)
-        jobs.save(job)
-        (jobs.job_dir(job.id) / "prompt.md").write_text(prompt, encoding="utf-8")
-        jobs.enqueue(job, resume=False)
+        with jobs.queue_lock():   # the duplicate check, the record and the enqueue as one step
+            all_ = jobs.all_jobs()
+            dup = jobs.duplicate(key, sha, all_, q.tasks)
+            if dup and not args.force:
+                st = jobs.state(dup, q.tasks)
+                print(dup.id)
+                hint = (f"ws-agent retry {dup.id} continues it" if st in ("failed", "interrupted")
+                        else f"ws-agent result {dup.id} once it's done")
+                _err(f"ws-agent: job {dup.id} already does this ({st}); {hint}; --force queues another")
+                return 3
+            for other in jobs.overlaps(key, args.paths or [], all_, q.tasks):
+                warnings.append(f"job {other.id} ({jobs.state(other, q.tasks)}) also claims {', '.join(other.paths)}: "
+                                "review the two patches together")
+            job = jobs.Job(id=jobs.new_id(), title=args.title, repo=key, vcs=p.kind, base=base, prompt_sha=sha,
+                           paths=list(args.paths or []), created=core.now_iso(), session_id="", timeout=args.timeout,
+                           warnings=warnings)
+            try:
+                jobs.ensure_group(parallel)
+                jobs.save(job)
+                (jobs.job_dir(job.id) / "prompt.md").write_text(prompt, encoding="utf-8")
+                jobs.enqueue(job, resume=False)
+            except jobs.QueueError:
+                shutil.rmtree(jobs.job_dir(job.id), ignore_errors=True)
+                raise
     except jobs.QueueError as e:
-        shutil.rmtree(jobs.job_dir(job.id), ignore_errors=True)
         _err(str(e))
         return 1
     print(job.id)
@@ -348,6 +355,13 @@ def _result(args: argparse.Namespace) -> int:
     if not (res / "exit.json").exists():
         print(f"no result yet ({st}); ws-agent show {job.id} has the log")
         return 0
+    if st == "failed":
+        info = jobs.exit_info(job) or {}
+        why = (f"timed out after {job.timeout}" if info.get("timed_out") else str(info.get("reason") or "")
+               or ("Claude reported an error" if info.get("is_error") else f"exit {info.get('exit_code')}"))
+        print(f"failed: {why}")
+        print("exec.log (end):")
+        print("\n".join(f"  {line}" for line in agent_exec._tail(jobs.job_dir(job.id) / "exec.log", 10)))
     claude = agent_exec._claude_result(res / "claude.json")
     if claude.get("result"):
         print("Claude's report:")
@@ -379,10 +393,14 @@ def _cancel(args: argparse.Namespace) -> int:
     if st not in ("queued", "running", "interrupted", "unknown"):
         _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
         return 3
-    jobs.kill(job)
-    job.cancelled = True
+    job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
     jobs.save(job)
-    print(f"cancelled {job.id}; its working copy and log are kept (ws-agent close {job.id} removes the copy)")
+    confirmed = jobs.kill(job)
+    stopped = jobs.stop_run(job)
+    print(f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
+          f"(ws-agent close {job.id} removes the copy)")
+    if not confirmed:
+        _err("warning: pueue didn't confirm removing the task; if it starts later it refuses to run (cancelled)")
     return 0
 
 

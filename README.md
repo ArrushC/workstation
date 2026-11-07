@@ -613,22 +613,31 @@ ws-agent doctor              # Claude login, pueued, svn, the registry, free dis
 ```
 
 - **States**: queued, running, succeeded, failed, interrupted (the daemon or the host stopped
-  under it), cancelled, closed. A job is never started twice for the same prompt and
-  repository (`--force` overrides); `--paths` warns when two jobs claim the same files.
+  under it), cancelled, closed. A job counts as running while its claude lives, whatever
+  pueue says. A second `run` of the same prompt in the same repository is refused while the
+  first is queued, running, awaiting review, failed or interrupted (`retry` those; `--force`
+  overrides), under a lock; `--paths` warns when two jobs claim the same files.
 - **Review artifacts** (`<state>/agent-jobs/<id>/result/`): `changes.diff` (SVN: `svn diff
   --git --show-copies-as-adds`, which `svn patch --strip N` reproduces with binaries and
   `svn:*` properties; git: a binary diff), `manifest.txt` (every changed path, moves,
   property changes, binaries), `props.txt`, `apply.txt`, `warnings.txt` (unversioned files,
-  copied to `unversioned/` when small), `claude.json`, `exit.json`.
-- **Guards, not a boundary**: a job runs with `--permission-mode acceptEdits`, nothing may
-  prompt, and a fixed allowlist plus the repository's `--command` rules. `svn` and `git` on
-  its PATH refuse commit, copy, merge, update, switch, lock, revision properties and push;
-  svn runs without cached credentials, and SSH agent, GitHub tokens and git credential
-  helpers are removed from its environment. A program called by absolute path gets past the
-  shims, so allow only repositories you'd let Claude Code edit.
-- **Limits**: jobs stop with WSL or Windows sleep and come back `interrupted`; pueue also
-  pauses the group when its daemon stops (`ws-agent resume`). Jobs share the host's Claude
-  Code plan and its usage limits with your interactive sessions. Windows runs tiers 1–2 only.
+  copied to `unversioned/` when small; symlinks are listed, never followed; versioned files
+  removed with a plain `rm`/`mv`), `claude.json`, `exit.json`.
+- **Guards, not a boundary**: a job runs with `--permission-mode acceptEdits` (edits inside
+  its copy only; writes outside it are blocked), nothing may prompt, and a fixed allowlist
+  plus the repository's `--command` rules. On its PATH, `svn` refuses every write to the
+  repository and `git` everything but reads and add/rm/mv/restore/apply (a worktree shares
+  refs, config and hooks with your repository); both refuse writes outside the job's copy.
+  Its environment has no SSH agent, no keys for git or svn+ssh, no git credential helpers
+  and no GitHub/GitLab tokens, and svn runs without cached credentials; pueue doesn't store
+  those tokens either. A program called by absolute path gets past the shims, so allow only
+  repositories you'd let Claude Code edit.
+- **Limits**: Windows sleep pauses WSL and its jobs, which carry on after waking (a job's
+  `--timeout` counts only awake time); `wsl --shutdown`, a reboot or a pueued stop ends them
+  as `interrupted` (`retry` resumes the same session; claude dies with its executor, so
+  nothing keeps running unseen). pueue may pause the group when its daemon stops
+  (`ws-agent resume`). Jobs share the host's Claude Code plan and its usage limits with your
+  interactive sessions. Windows runs tiers 1–2 only.
 - **Remote dev servers**: everything is per host. A Linux host with this workstation applied
   (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
   with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by

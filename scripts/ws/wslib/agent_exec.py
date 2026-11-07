@@ -18,10 +18,12 @@ to result/inspect-<attempt>.txt and gives it to Claude before anything else.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import uuid
@@ -37,15 +39,16 @@ You are a queued ws-agent job running unattended. Work only inside this working 
 Do not delegate further: no ws-agent commands, and at most one writer at a time.
 Never commit, push, copy, merge, switch, update, lock or change revision properties;
 leave every change uncommitted (svn add new files; for git, stage nothing yourself).
-The repository server isn't reachable from this job (no credentials): work from the files here.
+SVN: delete, move or copy versioned files with svn delete/move/copy, never plain rm/mv/cp.
+This job has no credentials for the repository server: work from the files here.
 When you finish, end with: what changed, the checks you ran and their results, open risks.
 If you can't finish, start your final message with BLOCKED: and the reason.
 """
 
 RESUME = """\
-This queued job was interrupted (attempt {attempt}). Before anything else, review the working
-copy's current state below: keep what is done, finish what isn't, and don't repeat outside
-actions. Then continue the original task.
+This queued job stopped before it finished (attempt {attempt}: interrupted, failed or timed out).
+Before anything else, review the working copy's current state below: keep what is done, finish
+what isn't, and don't repeat outside actions. Then continue the original task.
 
 {inspection}"""
 
@@ -57,7 +60,9 @@ is kept; review its current state below before you change anything.
 
 {inspection}"""
 
-BASE_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep", "Bash(svn *)", "Bash(git *)", "Bash(rg *)", "Bash(fd *)",
+# No bare Edit/Write: acceptEdits already allows edits inside the job's copy, and a tool-wide
+# rule would also allow them outside it (claude_argv blocks those writes outright too).
+BASE_TOOLS = ("Read", "Glob", "Grep", "Bash(svn *)", "Bash(git *)", "Bash(rg *)", "Bash(fd *)",
               "Bash(ls *)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(diff *)",
               "Bash(python3 -m unittest*)")
 
@@ -77,7 +82,28 @@ SVN_LOCAL = {"add", "delete", "del", "remove", "rm", "move", "mv", "rename", "re
              "mkdir"}
 SVN_VALUE_OPTS = {"--username", "--password", "--config-dir", "--config-option"}
 GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env"}
-GIT_REFUSED = {"push", "svn", "send-email", "credential"}
+# A job's git worktree shares refs, config, stash and hooks with the person's repository, so
+# git is default-deny: reads anywhere, and only these writes, inside the job's copy.
+GIT_READ = {"status", "diff", "log", "show", "blame", "annotate", "grep", "ls-files", "ls-tree", "cat-file", "rev-parse",
+            "rev-list", "describe", "shortlog", "whatchanged", "diff-files", "diff-index", "diff-tree", "check-ignore",
+            "var", "help", "version"}
+GIT_LOCAL = {"add", "rm", "mv", "restore", "apply"}
+
+
+def _inside(token: str, base: Path, wc: Path) -> bool:
+    p = Path(os.path.expanduser(token))
+    p = (p if p.is_absolute() else base / p).resolve()
+    w = wc.resolve()
+    return p == w or w in p.parents
+
+
+def _confined(cwd: Path | None, wc: Path | None, tokens: list[str]) -> bool:
+    """Whether a write-capable command stays in the job's copy: it runs there and names no path
+    outside it (relative tokens resolve against cwd, so plain values such as `native` pass)."""
+    if wc is None:
+        return True
+    here = cwd or Path.cwd()
+    return _inside(".", here, wc) and all(_inside(t, here, wc) for t in tokens if not t.startswith("-"))
 
 
 def _subcommand(args: list[str], value_opts: set[str]) -> tuple[str | None, list[str]]:
@@ -98,8 +124,9 @@ def _is_url(token: str) -> bool:
     return bool(_URL.match(token)) or token.startswith("^/")
 
 
-def svn_refusal(args: list[str]) -> str | None:
-    """Why the shim refuses this svn command line, or None when it may run."""
+def svn_refusal(args: list[str], wc: Path | None = None, cwd: Path | None = None) -> str | None:
+    """Why the shim refuses this svn command line, or None when it may run. With `wc`, a
+    working-copy write must also stay inside the job's copy."""
     if any(a == "--revprop" or a.startswith("--revprop=") for a in args):
         return "ws-agent: svn --revprop changes the repository; a person runs it"
     sub, rest = _subcommand(args, SVN_VALUE_OPTS)
@@ -107,21 +134,31 @@ def svn_refusal(args: list[str]) -> str | None:
         return None
     name = SVN_CANON.get(sub, sub)
     if sub in SVN_LOCAL and not any(_is_url(t) for t in rest):
-        return None
+        if _confined(cwd, wc, rest):
+            return None
+        return f"ws-agent: svn {name} outside the job's working copy ({wc}); a person runs it"
     return f"ws-agent: svn {name} writes to the repository; a person runs it"
 
 
-def git_refusal(args: list[str]) -> str | None:
-    sub, _ = _subcommand(args, GIT_VALUE_OPTS)
-    if sub is not None and (sub in GIT_REFUSED or sub.startswith("credential-")):
-        return f"ws-agent: git {sub} reaches outside this working copy; a person runs it"
-    return None
+def git_refusal(args: list[str], wc: Path | None = None, cwd: Path | None = None) -> str | None:
+    sub, rest = _subcommand(args, GIT_VALUE_OPTS)
+    if sub is None or sub in GIT_READ:
+        return None
+    if sub in GIT_LOCAL:
+        here = cwd or Path.cwd()
+        moved = [args[i + 1] for i, a in enumerate(args[:-1]) if a in ("-C", "--git-dir", "--work-tree")]
+        moved += [a.split("=", 1)[1] for a in args if a.startswith(("--git-dir=", "--work-tree="))]
+        if wc is None or (all(_inside(m, here, wc) for m in moved) and _confined(here, wc, rest)):
+            return None
+        return f"ws-agent: git {sub} outside the job's working copy ({wc}); a person runs it"
+    return f"ws-agent: git {sub} changes the shared repository or reaches outside it; a person runs it"
 
 
-def shim(tool: str, real: str, args: list[str], svn_config: str | None = None) -> int:
+def shim(tool: str, real: str, args: list[str], svn_config: str | None = None, wc: str | None = None) -> int:
     """The body of bin/svn and bin/git in a job: refuse with exit 3, or exec the real binary
     (svn without cached credentials: --no-auth-cache --config-dir <empty job dir>)."""
-    reason = svn_refusal(args) if tool == "svn" else git_refusal(args)
+    root = Path(wc) if wc else None
+    reason = svn_refusal(args, root, Path.cwd()) if tool == "svn" else git_refusal(args, root, Path.cwd())
     if reason:
         sys.stderr.write(reason + "\n")
         return 3
@@ -132,41 +169,42 @@ def shim(tool: str, real: str, args: list[str], svn_config: str | None = None) -
     return 127   # not reached
 
 
-def write_shims(bindir: Path, svn_config: Path) -> None:
+def write_shims(bindir: Path, svn_config: Path, wc: Path | None = None) -> None:
     bindir.mkdir(parents=True, exist_ok=True)
     svn_config.mkdir(parents=True, exist_ok=True)
     search = os.pathsep.join(p for p in os.environ.get("PATH", "").split(os.pathsep) if Path(p) != bindir)
+    root = str(wc) if wc else None
     for tool in ("svn", "git"):
         real = shutil.which(tool, path=search)
         if not real:
             continue
         cfg = str(svn_config) if tool == "svn" else None
         body = (f"#!{sys.executable} -I\nimport sys\nsys.path.insert(0, {str(core.WS_DIR)!r})\n"
-                f"from wslib.agent_exec import shim\nsys.exit(shim({tool!r}, {real!r}, sys.argv[1:], {cfg!r}))\n")
+                f"from wslib.agent_exec import shim\n"
+                f"sys.exit(shim({tool!r}, {real!r}, sys.argv[1:], {cfg!r}, {root!r}))\n")
         target = bindir / tool
         core.atomic_write(target, body.encode("utf-8"), 0o755)
 
 
 # --- environment and command line ----------------------------------------------------
 
-_SESSION_MARK = re.compile(r"SESSION|MESSAGING|BRIDGE|ENTRYPOINT|EXECPATH|ATTENDED|CHILD")
-_DROP = {"CLAUDECODE", "SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
-         "GITLAB_TOKEN", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "WS_AGENT_JOB"}
+_DROP = {"SSH_AUTH_SOCK", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "WS_AGENT_JOB", *jobs.TOKENS}
+_NO_KEYS_SSH = "ssh -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityFile=/dev/null"
 
 
 def clean_env(base: Mapping[str, str], bindir: Path, job_id: str) -> dict[str, str]:
     """The job's environment: no parent-session markers (provider/auth CLAUDE_CODE_* stay), no
-    repository credentials where that's practical, the shims first on PATH."""
-    env = {k: v for k, v in base.items()
-           if k not in _DROP and not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))
-           and not (k.startswith("CLAUDE_CODE_") and _SESSION_MARK.search(k[len("CLAUDE_CODE_"):]))}
+    repository credentials where that's practical (no SSH agent, no keys for git or svn+ssh, no
+    git credential helpers or tokens), the shims first on PATH."""
+    env = {k: v for k, v in jobs.strip_session(base).items()
+           if k not in _DROP and not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
     false = shutil.which("false") or "/bin/false"
     env.update({
         "PATH": f"{bindir}{os.pathsep}{base.get('PATH', '')}",
         "WS_AGENT_JOB": job_id,
         "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": false, "SSH_ASKPASS": false,
         "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "credential.helper", "GIT_CONFIG_VALUE_0": "",
-        "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityFile=/dev/null",
+        "GIT_SSH_COMMAND": _NO_KEYS_SSH, "SVN_SSH": _NO_KEYS_SSH,
         "SVN_EDITOR": "false",
     })
     return env
@@ -181,9 +219,10 @@ def claude_argv(job: jobs.Job, jobdir: Path, *, resume: bool, rules: list[str]) 
     del jobdir
     claude = shutil.which("claude") or "claude"
     session = ["--resume", job.session_id] if resume else ["--session-id", job.session_id]
+    confine = json.dumps({"permissions": {"blockWritesOutsideWorkingDirectories": True}})
     return [claude, "-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--permission-prompts", "none",
             *session, "--name", f"ws-agent {job.id}: {job.title}"[:80], "--append-system-prompt", RULES,
-            "--allowedTools", *rules]
+            "--settings", confine, "--allowedTools", *rules]
 
 
 def transcript_exists(session_id: str) -> bool:
@@ -203,20 +242,43 @@ def _run(argv: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
     return subprocess.run(argv, cwd=cwd, capture_output=True)
 
 
-def prepare(job: jobs.Job, jobdir: Path) -> None:
+def discard_wc(job: jobs.Job, jobdir: Path) -> None:
+    """Remove a job's working copy and, for git, its worktree entry and branch in the person's
+    repository (ws-agent/<id>, which holds no commits: jobs can't commit)."""
     wc = jobdir / "wc"
-    if wc.exists():
-        return
-    if job.vcs == "svn":
-        r = _run(["svn", "checkout", "--non-interactive", "-q", f"{job.base['url']}@{job.base['rev']}", str(wc)])
-    elif job.vcs == "git":
-        r = _run(["git", "-C", str(core.expand(job.repo)), "worktree", "add", "-q", "-b", f"ws-agent/{job.id}", str(wc),
-                  job.base["commit"]])
-    else:
-        raise PrepareError(f"ws-agent: can't prepare a {job.vcs!r} working copy")
-    if r.returncode != 0:
+    (jobdir / "prepared").unlink(missing_ok=True)
+    if job.vcs == "git":
+        repo = str(core.expand(job.repo))
+        if wc.exists():
+            _run(["git", "-C", repo, "worktree", "remove", "--force", str(wc)])
         shutil.rmtree(wc, ignore_errors=True)
+        _run(["git", "-C", repo, "worktree", "prune"])
+        _run(["git", "-C", repo, "branch", "-D", f"ws-agent/{job.id}"])
+    else:
+        shutil.rmtree(wc, ignore_errors=True)
+
+
+def prepare(job: jobs.Job, jobdir: Path) -> None:
+    """The job's working copy at its base, made once: `prepared` marks a complete one, so a copy
+    an interruption cut short (a long checkout) is thrown away and made again, never reused."""
+    wc = jobdir / "wc"
+    if (jobdir / "prepared").exists() and wc.exists():
+        return
+    discard_wc(job, jobdir)
+    try:
+        if job.vcs == "svn":
+            r = _run(["svn", "checkout", "--non-interactive", "-q", f"{job.base['url']}@{job.base['rev']}", str(wc)])
+        elif job.vcs == "git":
+            r = _run(["git", "-C", str(core.expand(job.repo)), "worktree", "add", "-q", "-b", f"ws-agent/{job.id}",
+                      str(wc), job.base["commit"]])
+        else:
+            raise PrepareError(f"ws-agent: can't prepare a {job.vcs!r} working copy")
+    except OSError as e:
+        raise PrepareError(f"ws-agent: {job.vcs} isn't runnable: {e}") from e
+    if r.returncode != 0:
+        discard_wc(job, jobdir)
         raise PrepareError(r.stderr.decode("utf-8", "replace").strip() or f"exit {r.returncode}")
+    (jobdir / "prepared").write_text(core.now_iso() + "\n", encoding="utf-8")
 
 
 def _text(r: subprocess.CompletedProcess[bytes]) -> str:
@@ -301,15 +363,26 @@ def _ignores_itself(path: Path) -> bool:
     return path.is_dir() and any(line.strip() == "*" for line in lines)
 
 
-def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> list[str]:
-    """Copy small unversioned files for review; returns the ones only listed."""
+def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> tuple[list[str], list[str]]:
+    """Copy small unversioned files for review; returns (too large to copy, symlinks). Symlinks
+    are never followed: one to / or /usr/include would walk the filesystem, one to a file
+    outside the copy would copy that file into the result."""
     skipped: list[str] = []
+    links: list[str] = []
     total = 0
     files: list[tuple[str, Path]] = []
     for rel in paths:
         p = wc / rel
-        if p.is_dir():
-            files += [(str(f.relative_to(wc)), f) for f in sorted(p.rglob("*")) if f.is_file()]
+        if p.is_symlink():
+            links.append(rel)
+        elif p.is_dir():
+            for top, dirs, names in os.walk(p, followlinks=False):
+                for name in sorted(names + dirs):
+                    f = Path(top, name)
+                    if f.is_symlink():
+                        links.append(str(f.relative_to(wc)))
+                    elif f.is_file():
+                        files.append((str(f.relative_to(wc)), f))
         elif p.is_file():
             files.append((rel, p))
     for rel, p in files:
@@ -321,7 +394,7 @@ def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> list[str]:
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(p, target)
-    return skipped
+    return skipped, links
 
 
 def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], list[str]]:
@@ -345,6 +418,12 @@ def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], 
         if st is None:
             continue
         item, props = st.get("item", ""), st.get("props", "none")
+        if item in ("missing", "incomplete", "obstructed", "conflicted"):
+            why = {"missing": "deleted without svn delete, so not in the patch",
+                   "incomplete": "an interrupted svn operation left it incomplete",
+                   "obstructed": "a different kind of item is in its place",
+                   "conflicted": "it has a conflict"}[item]
+            warnings.append(f"{item}: {path} ({why})")
         if item == "unversioned":
             if _ignores_itself(wc / path):
                 manifest.append(f"{path}\tunversioned tool directory (ignores itself)")
@@ -372,8 +451,9 @@ def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], 
         (res / "props.txt").write_text("(no property changes)\n", encoding="utf-8")
     if unversioned:
         warnings += [f"unversioned, not in the patch: {p}" for p in unversioned]
-        skipped = _copy_unversioned(wc, unversioned, res / "unversioned")
+        skipped, links = _copy_unversioned(wc, unversioned, res / "unversioned")
         warnings += [f"unversioned and too large to copy: {p}" for p in skipped]
+        warnings += [f"unversioned symlink, not followed or copied: {p}" for p in links]
     url, root = job.base.get("url", ""), job.base.get("repos_root", "")
     rel = url[len(root):].strip("/") if root and url.startswith(root) else ""
     strip = len(rel.split("/")) if rel else 0
@@ -396,7 +476,7 @@ def _collect_git(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], 
     names = _text(_run(["git", "diff", "--cached", "--name-status", "-M", base], cwd=wc)).splitlines()
     diff_path = res / "changes.diff"
     (res / "apply.txt").write_text(f"Base: commit {base}\nApply in your checkout:\n  git apply --check {diff_path}\n"
-                                   f"  git apply --index {diff_path}\nOr take the branch ws-agent/{job.id}.\n",
+                                   f"  git apply --index {diff_path}\n",
                                    encoding="utf-8")
     return diff, names, []
 
@@ -456,11 +536,51 @@ def _log(fh: IO[str], msg: str) -> None:
     fh.flush()
 
 
+def _die_with_parent() -> None:
+    """In the child, before exec: get SIGTERM when _exec dies (pueue kill sends it SIGKILL), so
+    `timeout` passes TERM on to claude instead of leaving it running as an orphan."""
+    try:
+        import ctypes
+
+        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGTERM)   # PR_SET_PDEATHSIG
+    except (OSError, AttributeError):
+        pass
+
+
+def _run_claude(job: jobs.Job, argv: list[str], prompt: str, out: IO[bytes], log: IO[str], cwd: Path,
+                env: dict[str, str]) -> int:
+    """claude (under timeout) as its own process group, recorded in run.pid while it runs; a
+    TERM/HUP/INT to _exec goes on to that group."""
+    proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=out, stderr=log, cwd=cwd, env=env,
+                            start_new_session=True, preexec_fn=_die_with_parent)
+    jobs.record_run(job, proc.pid)
+
+    def forward(sig: int, _frame: object) -> None:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, sig)
+
+    old = {s: signal.signal(s, forward) for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+    try:
+        with contextlib.suppress(BrokenPipeError):
+            proc.communicate(prompt.encode("utf-8"))
+        return proc.wait()
+    finally:
+        for s, h in old.items():
+            signal.signal(s, h)
+        jobs.clear_run(job)
+
+
 def execute(job_id: str, *, resume: bool) -> int:
     job = jobs.load(job_id)
     jd = jobs.job_dir(job.id)
     res = jd / "result"
     res.mkdir(parents=True, exist_ok=True)
+    if job.cancelled or job.closed or jobs.live_run(job) is not None:
+        why = ("cancelled" if job.cancelled else "closed") if (job.cancelled or job.closed) else \
+            "still running in another attempt"
+        with open(jd / "exec.log", "a", encoding="utf-8") as log:
+            _log(log, f"ws-agent: not running {job.id}: it is {why} ({core.now_iso()})")
+        return 1
     (res / "exit.json").unlink(missing_ok=True)
     attempt = job.attempts + 1
     with open(jd / "exec.log", "a", encoding="utf-8") as log:
@@ -484,7 +604,7 @@ def execute(job_id: str, *, resume: bool) -> int:
             _log(log, f"ws-agent: preparing the working copy failed: {e}")
             return finish(1, is_error=True, reason="prepare failed")
         bindir = jd / "bin"
-        write_shims(bindir, jd / "svn-config")
+        write_shims(bindir, jd / "svn-config", jd / "wc")
         (jd / "rules.md").write_text(RULES, encoding="utf-8")
         use_resume = resume and transcript_exists(job.session_id)
         if not use_resume:
@@ -505,13 +625,12 @@ def execute(job_id: str, *, resume: bool) -> int:
                 *claude_argv(job, jd, resume=use_resume, rules=permission_rules(job, entry.commands))]
         _log(log, f"ws-agent: running claude ({'resume ' + job.session_id if use_resume else 'session ' + job.session_id})")
         with open(res / "claude.json", "wb") as out:
-            r = subprocess.run(argv, input=prompt.encode("utf-8"), stdout=out, stderr=log, cwd=jd / "wc",
-                               env=clean_env(os.environ, bindir, job.id))
+            rc = _run_claude(job, argv, prompt, out, log, jd / "wc", clean_env(os.environ, bindir, job.id))
         out_info = _claude_result(res / "claude.json")
         warnings = collect(job, jd)
-        is_error = bool(out_info.get("is_error", r.returncode != 0))
-        code = r.returncode if r.returncode != 0 else (1 if is_error else 0)
-        return finish(code, is_error=is_error, timed_out=r.returncode == 124,
+        is_error = bool(out_info.get("is_error", rc != 0))
+        code = rc if rc != 0 else (1 if is_error else 0)
+        return finish(code, is_error=is_error, timed_out=rc == 124,
                       session_id=str(out_info.get("session_id") or job.session_id),
                       num_turns=out_info.get("num_turns"), duration_ms=out_info.get("duration_ms"),
                       warnings=len(warnings))

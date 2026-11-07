@@ -6,10 +6,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
+import time
 import unittest
 from pathlib import Path
 
 from agent_helpers import HAVE_SVN, AgentScratch, git, svn
+from helpers import WS
 
 from wslib import agent_exec as ax
 from wslib import agent_registry as reg
@@ -88,8 +91,29 @@ class Refusals(unittest.TestCase):
         for args in (["push"], ["-c", "x=y", "push", "origin"], ["-C", "/r", "push"], ["svn", "dcommit"],
                      ["credential", "fill"], ["credential-store", "get"], ["send-email", "x.patch"]):
             self.assertIsNotNone(ax.git_refusal(args), args)
-        for args in (["status"], ["commit", "-m", "x"], ["-C", "/r", "diff"], ["log", "--oneline"], [], ["--version"]):
+        for args in (["status"], ["-C", "/r", "diff"], ["log", "--oneline"], [], ["--version"], ["add", "x.py"],
+                     ["restore", "--staged", "x.py"]):
             self.assertIsNone(ax.git_refusal(args), args)
+        for args in (["commit", "-m", "x"], ["merge", "b"], ["rebase", "main"], ["cherry-pick", "c"], ["tag", "v1"],
+                     ["update-ref", "refs/heads/x", "HEAD"], ["stash"], ["config", "user.name", "x"], ["remote", "add", "o", "u"],
+                     ["worktree", "add", "x"], ["branch", "-D", "x"], ["checkout", "-b", "x"], ["switch", "-c", "x"],
+                     ["fetch"], ["pull"], ["gc"], ["reset", "--hard"], ["reflog", "expire"]):
+            self.assertIsNotNone(ax.git_refusal(args), args)
+
+    def test_shims_confine_writes_to_the_job_copy(self) -> None:
+        wc, out = Path("/jobs/j1/wc"), Path("/home/me/src/foo")
+        self.assertIsNone(ax.svn_refusal(["revert", "-R", "."], wc=wc, cwd=wc))
+        self.assertIsNone(ax.svn_refusal(["propset", "svn:eol-style", "native", "sub/f.c"], wc=wc, cwd=wc / "sub"))
+        self.assertIsNotNone(ax.svn_refusal(["revert", "-R", str(out)], wc=wc, cwd=wc))
+        self.assertIsNotNone(ax.svn_refusal(["delete", "/home/me/src/foo/x.c"], wc=wc, cwd=wc))
+        self.assertIsNotNone(ax.svn_refusal(["revert", "-R", "."], wc=wc, cwd=out))
+        self.assertIsNotNone(ax.svn_refusal(["add", "../escape"], wc=wc, cwd=wc))
+        self.assertIsNone(ax.svn_refusal(["status", str(out)], wc=wc, cwd=wc))   # reading elsewhere is fine
+        self.assertIsNotNone(ax.git_refusal(["-C", str(out), "add", "x"], wc=wc, cwd=wc))
+        self.assertIsNotNone(ax.git_refusal(["add", "x"], wc=wc, cwd=out))
+        self.assertIsNotNone(ax.git_refusal(["--work-tree", str(out), "restore", "."], wc=wc, cwd=wc))
+        self.assertIsNone(ax.git_refusal(["add", "x"], wc=wc, cwd=wc))
+        self.assertIsNone(ax.git_refusal(["-C", str(out), "status"], wc=wc, cwd=wc))
 
 
 class Env(unittest.TestCase):
@@ -116,6 +140,18 @@ class Env(unittest.TestCase):
         self.assertEqual(env["GIT_CONFIG_VALUE_0"], "")
         self.assertTrue(env["GIT_ASKPASS"].endswith("false"))
         self.assertEqual(env["SVN_EDITOR"], "false")
+        self.assertIn("BatchMode=yes", env["SVN_SSH"])
+        self.assertIn("IdentityFile=/dev/null", env["SVN_SSH"])
+
+    def test_claude_argv_confines_writes(self) -> None:
+        job = jobs.Job(id="abc123", title="t", repo="~/r", vcs="git", base={}, prompt_sha="s", paths=[], created="",
+                       session_id="S", timeout="2h")
+        argv = ax.claude_argv(job, Path("/j"), resume=False, rules=ax.permission_rules(job, ()))
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        self.assertIs(settings["permissions"]["blockWritesOutsideWorkingDirectories"], True)
+        rules = argv[argv.index("--allowedTools") + 1:]
+        self.assertNotIn("Edit", rules)   # acceptEdits covers the copy; a bare rule would reach beyond it
+        self.assertNotIn("Write", rules)
 
 
 class ExecGit(Exec):
@@ -219,6 +255,68 @@ class ExecGit(Exec):
         self.assertFalse((self.fc / "stale").exists())
         self.assertEqual(self.exit_json(job)["exit_code"], 0)
 
+    def test_cancelled_or_closed_job_never_runs(self) -> None:
+        repo = self.git_repo()
+        for flag in ("cancelled", "closed"):
+            job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"},
+                                prompt=f"p {flag}")
+            setattr(job, flag, True)
+            jobs.save(job)
+            self.assertEqual(ax.execute(job.id, resume=False), 1)
+            self.assertFalse((jobs.job_dir(job.id) / "result" / "exit.json").exists())
+            self.assertFalse((jobs.job_dir(job.id) / "wc").exists())
+        self.assertEqual(self.claude_calls(), 0)
+
+    def test_live_attempt_blocks_another(self) -> None:
+        repo = self.git_repo()
+        job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
+        proc = subprocess.Popen(["sleep", "300"], start_new_session=True)
+        self.addCleanup(lambda: (proc.kill(), proc.wait()))
+        jobs.record_run(job, proc.pid)
+        self.assertEqual(ax.execute(job.id, resume=True), 1)
+        self.assertEqual(self.claude_calls(), 0)
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "exit.json").exists())
+        self.assertIn("still running", (jobs.job_dir(job.id) / "exec.log").read_text())
+
+    def test_run_pid_recorded_during_the_run(self) -> None:
+        repo = self.git_repo()
+        job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
+        self.claude_script('cp ../run.pid "$WS_FAKE_CLAUDE/run.pid.seen"; ps -o pgid= -p $$ | tr -d " " >"$WS_FAKE_CLAUDE/pgid"\n')
+        ax.execute(job.id, resume=False)
+        seen = json.loads((self.fc / "run.pid.seen").read_text())
+        self.assertEqual(str(seen["pgid"]), (self.fc / "pgid").read_text().strip())   # claude runs in the recorded group
+        self.assertFalse((jobs.job_dir(job.id) / "run.pid").exists())
+
+    def test_claude_dies_with_its_executor(self) -> None:
+        repo = self.git_repo()
+        job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
+        self.write(self.fc / "sleep", "300")
+        ex = subprocess.Popen([sys.executable, str(WS / "ws.py"), "agent", "_exec", job.id], env=os.environ.copy())
+        self.addCleanup(lambda: (ex.kill(), ex.wait()))
+        for _ in range(100):
+            if jobs.live_run(job) is not None:
+                break
+            time.sleep(0.1)
+        self.assertIsNotNone(jobs.live_run(job))
+        ex.kill()   # what `pueue kill` does to _exec
+        ex.wait()
+        for _ in range(100):
+            if jobs.live_run(job) is None:
+                break
+            time.sleep(0.1)
+        self.assertIsNone(jobs.live_run(job))   # timeout and claude went with it
+
+    def test_partial_worktree_is_rebuilt(self) -> None:
+        repo = self.git_repo()
+        job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
+        git("branch", f"ws-agent/{job.id}", cwd=repo)   # a branch left by an attempt cut short
+        self.write(jobs.job_dir(job.id) / "wc" / "half.txt", "an interrupted checkout\n")
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        wc = jobs.job_dir(job.id) / "wc"
+        self.assertFalse((wc / "half.txt").exists())
+        self.assertTrue((wc / "app.py").exists())
+        self.assertNotIn("half.txt", self.result(job, "changes.diff"))
+
     def test_no_changes_warned(self) -> None:
         repo = self.git_repo()
         job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
@@ -316,6 +414,33 @@ class ExecSvn(Exec):
         self.assertRegex(self.result(job, "manifest.txt"), r"\.toolstate\tunversioned tool directory \(ignores itself\)")
         self.assertFalse((jobs.job_dir(job.id) / "result" / "unversioned" / ".toolstate").exists())
         self.assertTrue((jobs.job_dir(job.id) / "result" / "unversioned" / "notes.txt").exists())
+
+    def test_partial_checkout_is_rebuilt(self) -> None:
+        _, _, job = self.svn_job()
+        self.write(jobs.job_dir(job.id) / "wc" / "junk.txt", "half a checkout\n")
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        wc = jobs.job_dir(job.id) / "wc"
+        self.assertFalse((wc / "junk.txt").exists())
+        self.assertEqual(svn("info", "--show-item", "revision", str(wc)), "1")
+
+    def test_plain_rm_and_mv_are_warned(self) -> None:
+        _, _, job = self.svn_job()
+        self.claude_script("rm sub/b.txt\nmv a.txt plain-moved.txt\n")
+        ax.execute(job.id, resume=False)
+        warnings = self.result(job, "warnings.txt")
+        self.assertRegex(warnings, r"missing.*sub/b\.txt")
+        self.assertRegex(warnings, r"missing.*a\.txt")
+        self.assertIn("plain-moved.txt", warnings)
+
+    def test_symlinks_are_not_followed(self) -> None:
+        _, _, job = self.svn_job()
+        outside = self.write(self.root / "outside" / "secret.txt", "not for the result\n")
+        self.claude_script(f"ln -s {outside.parent} dirlink\nln -s {outside} filelink\n")
+        ax.execute(job.id, resume=False)
+        unv = jobs.job_dir(job.id) / "result" / "unversioned"
+        self.assertFalse((unv / "dirlink").exists())
+        self.assertFalse((unv / "filelink").exists())
+        self.assertRegex(self.result(job, "warnings.txt"), r"symlink.*dirlink")
 
     def test_inspect_lists_changes(self) -> None:
         _, _, job = self.svn_job()

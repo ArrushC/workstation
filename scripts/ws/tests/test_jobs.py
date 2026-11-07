@@ -6,10 +6,12 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import unittest
 
 from agent_helpers import REAL_STATUS, AgentScratch
+from helpers import WS
 
 from wslib import jobs
 
@@ -129,8 +131,8 @@ class Jobs(AgentScratch):
         job = self.mkjob(pueue_id=4)
         self.write(self.pq / "fail-kill", "")   # already finished: kill fails, remove still runs
         jobs.kill(job)
-        self.assertEqual([c[0] for c in self.pueue_calls()[-2:]], ["kill", "remove"])
-        self.assertEqual(self.pueue_calls()[-1][-1], "4")
+        changes = [c for c in self.pueue_calls() if c[0] in ("kill", "remove")]
+        self.assertEqual(changes, [["kill", "4"], ["remove", "4"]])
 
     def test_pause_resume(self) -> None:
         jobs.pause()
@@ -146,8 +148,7 @@ class Jobs(AgentScratch):
 
     def test_duplicate_ignores_finished(self) -> None:
         closed = self.mkjob(prompt_sha="X", pueue_id=3, closed=True)
-        failed = self.mkjob(prompt_sha="X", pueue_id=4)
-        self.exit_json(failed, 1)
+        self.mkjob(prompt_sha="X", pueue_id=4, cancelled=True)
         self.assertIsNone(jobs.duplicate("~/src/proj", "X", jobs.all_jobs(), {3: "Running", 4: "Success"}))
         done = self.mkjob(prompt_sha="X", pueue_id=5)
         self.exit_json(done, 0)   # succeeded but not yet reviewed and closed: still a duplicate
@@ -182,6 +183,73 @@ class Jobs(AgentScratch):
         back = jobs.load(job.id)
         self.assertEqual(back, job)
         self.assertEqual([j.id for j in jobs.all_jobs()], [job.id])
+
+    # --- the fix pass after the final review ----------------------------------------
+
+    def spawn_group(self) -> subprocess.Popen[bytes]:
+        proc = subprocess.Popen(["sleep", "300"], start_new_session=True)
+        self.addCleanup(lambda: (proc.kill(), proc.wait()))
+        return proc
+
+    def test_state_running_while_recorded_process_alive(self) -> None:
+        job = self.mkjob(pueue_id=3)
+        proc = self.spawn_group()
+        jobs.record_run(job, proc.pid)
+        self.assertEqual(jobs.live_run(job), proc.pid)
+        self.assertEqual(jobs.state(job, {3: "Killed"}), "running")   # pueue lost it; claude still works
+        self.assertEqual(jobs.state(job, {}), "running")
+
+    def test_live_run_ignores_dead_or_reused_pid(self) -> None:
+        job = self.mkjob(pueue_id=3)
+        proc = self.spawn_group()
+        jobs.record_run(job, proc.pid)
+        data = json.loads((jobs.job_dir(job.id) / "run.pid").read_text())
+        data["start"] = "1"   # another process now holds that pid
+        (jobs.job_dir(job.id) / "run.pid").write_text(json.dumps(data))
+        self.assertIsNone(jobs.live_run(job))
+        self.assertEqual(jobs.state(job, {3: "Killed"}), "interrupted")
+
+    def test_stop_run_kills_the_group(self) -> None:
+        job = self.mkjob()
+        proc = self.spawn_group()
+        jobs.record_run(job, proc.pid)
+        self.assertTrue(jobs.stop_run(job, grace=2))
+        proc.wait(timeout=5)
+        self.assertIsNone(jobs.live_run(job))
+        self.assertFalse(jobs.stop_run(job))   # nothing left to stop
+
+    def test_duplicate_includes_failed_and_interrupted(self) -> None:
+        failed = self.mkjob(prompt_sha="F", pueue_id=4)
+        self.exit_json(failed, 1)
+        self.assertEqual(jobs.duplicate("~/src/proj", "F", jobs.all_jobs(), {}).id, failed.id)  # type: ignore[union-attr]
+        stopped = self.mkjob(prompt_sha="I", pueue_id=5)
+        self.assertEqual(jobs.duplicate("~/src/proj", "I", jobs.all_jobs(), {5: "Killed"}).id, stopped.id)  # type: ignore[union-attr]
+        gone = self.mkjob(prompt_sha="C", pueue_id=6, cancelled=True)
+        self.assertIsNone(jobs.duplicate("~/src/proj", "C", jobs.all_jobs(), {6: "Running"}))
+        del gone
+
+    def test_enqueue_env_has_no_tokens_or_session_markers(self) -> None:
+        self.write(self.pq / "record-env", "")
+        for k, v in {"GH_TOKEN": "g", "GITHUB_TOKEN": "g2", "CLAUDECODE": "1", "CLAUDE_CODE_MESSAGING_TOKEN": "m",
+                     "CLAUDE_CODE_SESSION_ID": "s", "CLAUDE_CODE_OAUTH_TOKEN": "keep", "SSH_AUTH_SOCK": "/agent"}.items():
+            os.environ[k] = v
+        jobs.enqueue(self.mkjob(), resume=False)
+        env = (self.pq / "add.env").read_text()
+        for gone in ("GH_TOKEN=", "GITHUB_TOKEN=", "CLAUDECODE=", "CLAUDE_CODE_MESSAGING_TOKEN=", "CLAUDE_CODE_SESSION_ID="):
+            self.assertNotIn(gone, env)
+        self.assertIn("CLAUDE_CODE_OAUTH_TOKEN=keep", env)   # a token-authenticated job still needs it
+        self.assertIn("SSH_AUTH_SOCK=/agent", env)           # svn+ssh checkout in prepare
+
+    def test_queue_lock_is_exclusive(self) -> None:
+        os.environ["WS_AGENT_LOCK_TIMEOUT"] = "0.3"
+        with jobs.queue_lock():
+            r = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]);"
+                                "from wslib import jobs\ntry:\n    jobs.queue_lock().__enter__()\nexcept jobs.QueueError as e:"
+                                "\n    print(e); sys.exit(3)", str(WS)], capture_output=True, text=True, env=os.environ.copy())
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertIn("another ws-agent", r.stdout)
+        with jobs.queue_lock():   # free again once released
+            pass
 
 
 @unittest.skipUnless(shutil.which("pueued") and shutil.which("pueue"), "pueue not installed")

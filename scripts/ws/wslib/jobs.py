@@ -12,12 +12,18 @@ its result/exit.json (written by the executor when it finishes) and pueue's view
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import fnmatch
 import json
 import os
+import re
 import secrets
+import signal
 import subprocess
 import sys
+import time
+from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -25,6 +31,24 @@ from . import core
 
 GROUP = "agents"
 ACTIVE = ("queued", "running")
+# Repository tokens a queued job never needs, kept out of what pueue stores per task (its
+# state.json holds every task's environment) and out of the job itself.
+TOKENS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GITLAB_TOKEN")
+_SESSION_MARK = re.compile(r"SESSION|MESSAGING|BRIDGE|ENTRYPOINT|EXECPATH|ATTENDED|CHILD")
+
+
+def strip_session(base: Mapping[str, str]) -> dict[str, str]:
+    """`base` without what ties a process to the Claude Code session that started it: CLAUDECODE
+    and the CLAUDE_CODE_* session variables. Provider/auth ones (CLAUDE_CODE_OAUTH_TOKEN,
+    CLAUDE_CODE_USE_*) stay: a job authenticates with them."""
+    return {k: v for k, v in base.items() if k != "CLAUDECODE"
+            and not (k.startswith("CLAUDE_CODE_") and _SESSION_MARK.search(k[len("CLAUDE_CODE_"):]))}
+
+
+def queue_env(base: Mapping[str, str]) -> dict[str, str]:
+    """The environment `pueue add` records for a task (and hands to _exec): no session markers,
+    no repository tokens. SSH_AUTH_SOCK stays (a path): an svn+ssh checkout in prepare needs it."""
+    return {k: v for k, v in strip_session(base).items() if k not in TOKENS}
 
 
 class QueueError(Exception):
@@ -124,9 +148,9 @@ def pueue_argv(*args: str) -> list[str]:
     return ["pueue", *(["-c", cfg] if cfg else []), *args]
 
 
-def _pueue(*args: str) -> subprocess.CompletedProcess[str] | None:
+def _pueue(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str] | None:
     try:
-        return subprocess.run(pueue_argv(*args), capture_output=True, text=True, timeout=30)
+        return subprocess.run(pueue_argv(*args), capture_output=True, text=True, timeout=30, env=env)
     except (OSError, subprocess.TimeoutExpired):
         return None
 
@@ -194,7 +218,7 @@ def enqueue(job: Job, *, resume: bool) -> int:
     """Queue `ws.py agent _exec <id>` in the agents group; records and returns the task id."""
     cmd = [sys.executable, str(core.WS_PY), "agent", "_exec", job.id, *(["--resume"] if resume else [])]
     r = _pueue("add", "--print-task-id", "--group", GROUP, "--label", f"ws-agent:{job.id}",
-               "--working-directory", str(job_dir(job.id)), "--", *cmd)
+               "--working-directory", str(job_dir(job.id)), "--", *cmd, env=queue_env(os.environ))
     if r is None or r.returncode != 0:
         raise QueueError(f"ws-agent: pueue add failed: {((r.stderr or r.stdout) if r else 'no pueue').strip()}")
     try:
@@ -205,12 +229,94 @@ def enqueue(job: Job, *, resume: bool) -> int:
     return job.pueue_id
 
 
-def kill(job: Job) -> None:
-    """Stop the job's task if it runs, then drop it from the queue. Both are no-ops when done."""
+def kill(job: Job) -> bool:
+    """Stop the job's pueue task if it runs, then drop it from the queue; True when pueue
+    answered. (The claude it started is stopped by stop_run: pueue kills only the task's own
+    process group, and `timeout` puts claude in another.)"""
     if job.pueue_id is None:
-        return
-    _pueue("kill", str(job.pueue_id))
-    _pueue("remove", str(job.pueue_id))
+        return True
+    k = _pueue("kill", str(job.pueue_id))
+    deadline = time.monotonic() + 3   # pueue refuses to remove a task that is still stopping
+    while time.monotonic() < deadline:
+        q = pueue_status()
+        if q is None or q.tasks.get(job.pueue_id) not in ("Running", "Paused"):
+            break
+        time.sleep(0.1)
+    r = _pueue("remove", str(job.pueue_id))
+    return k is not None and r is not None and (k.returncode == 0 or r.returncode == 0)
+
+
+@contextlib.contextmanager
+def queue_lock() -> Iterator[None]:
+    """Serialise run's duplicate check, record and enqueue across processes (two sessions, or a
+    Bash call retried after a timeout, queue at the same moment)."""
+    core.private_dir(jobs_dir())
+    fh = open(jobs_dir() / ".queue.lock", "a+")  # noqa: SIM115 - held for the with-block
+    deadline = time.monotonic() + float(os.environ.get("WS_AGENT_LOCK_TIMEOUT", "30"))
+    try:
+        while True:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise QueueError("ws-agent: another ws-agent run is queuing a job; try again") from None
+                time.sleep(0.05)
+        yield
+    finally:
+        fh.close()
+
+
+# --- the claude a job runs ------------------------------------------------------------
+# _exec records the process group of what it started (timeout and claude) in run.pid with the
+# process's start time, so a reused pid is never mistaken for it. While that group lives the
+# job is running, whatever pueue says: a daemon stop or `pueue kill` takes only _exec itself.
+
+def _proc(pid: int) -> tuple[str, str] | None:
+    """(state, start time) of a process from /proc/<pid>/stat, or None when it doesn't exist."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    fields = stat[stat.rfind(")") + 2:].split()
+    return (fields[0], fields[19]) if len(fields) > 19 else None
+
+
+def record_run(job: Job, pgid: int) -> None:
+    info = _proc(pgid)
+    core.atomic_write(job_dir(job.id) / "run.pid", json.dumps({"pgid": pgid, "start": info[1] if info else ""}).encode())
+
+
+def clear_run(job: Job) -> None:
+    (job_dir(job.id) / "run.pid").unlink(missing_ok=True)
+
+
+def live_run(job: Job) -> int | None:
+    """The process group of the job's claude while it still runs."""
+    try:
+        data = json.loads((job_dir(job.id) / "run.pid").read_text(encoding="utf-8"))
+        pgid, start = int(data["pgid"]), str(data["start"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    info = _proc(pgid)
+    return pgid if info and info[1] == start and info[0] != "Z" else None
+
+
+def stop_run(job: Job, grace: float = 10.0) -> bool:
+    """Stop the job's claude (its whole process group): TERM, then KILL after `grace` seconds.
+    False when nothing was running."""
+    pgid = live_run(job)
+    if pgid is None:
+        return False
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pgid, signal.SIGTERM)
+    deadline = time.monotonic() + grace
+    while live_run(job) is not None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if live_run(job) is not None:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(pgid, signal.SIGKILL)
+    return True
 
 
 def pause() -> None:
@@ -231,6 +337,8 @@ def state(job: Job, tasks: dict[int, str] | None) -> str:
     info = exit_info(job)
     if info is not None:
         return "succeeded" if info.get("exit_code") == 0 else "failed"
+    if live_run(job) is not None:
+        return "running"
     if tasks is None:
         return "unknown"
     word = tasks.get(job.pueue_id) if job.pueue_id is not None else None
@@ -244,9 +352,11 @@ def state(job: Job, tasks: dict[int, str] | None) -> str:
 
 
 def duplicate(repo: str, prompt_sha: str, all_: list[Job], tasks: dict[int, str] | None) -> Job | None:
-    """A job of the same repository and prompt that is queued, running, or succeeded and not yet closed."""
+    """A job of the same repository and prompt that isn't closed or cancelled: queued, running,
+    awaiting review, or failed/interrupted (`ws agent retry` continues those)."""
     for job in all_:
-        if job.repo == repo and job.prompt_sha == prompt_sha and state(job, tasks) in (*ACTIVE, "succeeded"):
+        if job.repo == repo and job.prompt_sha == prompt_sha and \
+                state(job, tasks) in (*ACTIVE, "succeeded", "failed", "interrupted"):
             return job
     return None
 
