@@ -424,6 +424,17 @@ class Attempts(Exec):
         self.assertTrue(str(info["reset_at"]).startswith("2100-01-01"))
         self.assertEqual(jobs.state(jobs.load(job.id), {}), "waiting")
 
+    def test_cooling_and_logged_out_is_waiting(self) -> None:
+        # Claude hits its limit and Codex isn't logged in: the job waits for Claude's reset (serve
+        # requeues it then) instead of failing.
+        job = self.git_job(engines=("claude", "codex"))
+        self.write(self.fc / "fail.1", USAGE_2100)
+        self.write(self.fx / "login", "Not logged in")
+        self.write(self.fx / "login.rc", "1")
+        self.assertEqual(ax.execute(job.id, resume=False), 1)
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "waiting")
+        self.assertTrue(str(self.exit_json(job)["reset_at"]).startswith("2100-01-01"))
+
     def test_codex_resumes_its_own_thread(self) -> None:
         job = self.git_job(engines=("codex",))
         self.write(self.fx / "fail.1", json.dumps("stream disconnected before completion"))

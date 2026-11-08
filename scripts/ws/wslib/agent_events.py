@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -38,14 +39,18 @@ def marker_dir() -> Path:
 
 
 def append(kind: str, job: jobs.Job, text: str) -> None:
+    """One event line. serve and every executor append from their own processes, so the size
+    check, the rotation and the write happen under agent-events.lock."""
     path = events_path()
     core.private_dir(path.parent)
-    with contextlib.suppress(OSError):
-        if path.stat().st_size > EVENTS_MAX:
-            path.replace(path.with_suffix(".jsonl.1"))
     line = json.dumps({"ts": time.time(), "job": job.id, "repo": job.repo, "kind": kind, "text": text})
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(line + "\n")
+    with open(path.with_name("agent-events.lock"), "a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with contextlib.suppress(OSError):
+            if path.stat().st_size > EVENTS_MAX:
+                path.replace(path.with_suffix(".jsonl.1"))
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
 
 
 def _tail_events(path: Path) -> list[dict[str, object]]:

@@ -782,7 +782,10 @@ def execute(job_id: str, *, resume: bool) -> int:
         while True:
             engine, reasons = engines.select(entry, exclude=stopped)
             if engine is None:
-                waiting = all(n in stopped or engines.cooling(n) for n in entry.engines)
+                # waiting as soon as one allowed engine will come back by itself (its usage limit
+                # resets); serve requeues the job then. With none cooling, nothing will change on
+                # its own (logged out, no sandbox): failed.
+                waiting = any(n in stopped or engines.cooling(n) for n in entry.engines)
                 until = min((u for u in (engines.cooling(n) for n in entry.engines) if u), default="")
                 _log(log, "ws-agent: no engine can run this job now: " + "; ".join(reasons))
                 if outcome is not None or wc.exists():
