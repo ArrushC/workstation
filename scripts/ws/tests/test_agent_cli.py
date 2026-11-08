@@ -255,6 +255,39 @@ class Manage(Cli):
         self.assertIn("review: concerns", out)
         self.assertIn("app.py:7: the cache never expires", out)
 
+    def test_queue_job_from_code(self) -> None:
+        head = git("rev-parse", "HEAD", cwd=self.repo)
+        given = {"commit": head, "branch": "from-a-source"}
+        q = agent.queue_job(self.repo, "a source's job", "review it", origin="svn:uuid:7", base=given)
+        self.assertEqual((q.code, q.error), (0, ""))
+        assert q.job is not None
+        job = jobs.load(q.job.id)
+        self.assertEqual(job.origin, "svn:uuid:7")
+        self.assertEqual(job.base, given)
+        self.assertEqual((jobs.job_dir(job.id) / "prompt.md").read_text(), "review it")
+        self.assertTrue(any(c[0] == "add" for c in self.pueue_calls()))
+
+    def test_queue_job_refuses_duplicates_like_run(self) -> None:
+        first = agent.queue_job(self.repo, "t", "the same task")
+        self.assertEqual(first.code, 0)
+        again = agent.queue_job(self.repo, "t", "the same task")
+        self.assertEqual(again.code, 3)
+        assert first.job is not None and again.dup is not None
+        self.assertEqual(again.dup.id, first.job.id)
+        self.assertIn("already does this", again.error)
+        self.assertEqual(agent.queue_job(self.repo, "t", "   ").code, 2)
+        os.environ["WS_AGENT_JOB"] = "abc123"
+        self.assertEqual(agent.queue_job(self.repo, "t", "other").code, 3)
+
+    def test_tell_job_from_code(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        code, msg = agent.tell_job(jobs.load(jid), "one more thing")
+        self.assertEqual(code, 0)
+        self.assertIn(f"requeued {jid}", msg)
+        self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(jid))], ["one more thing"])
+        self.assertEqual(agent.tell_job(jobs.load(jid), "  ")[0], 2)
+
     def test_tell_finished_job_requeues_with_the_message(self) -> None:
         jid = self.queued_run(self.repo)
         self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})

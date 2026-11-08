@@ -26,7 +26,8 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -282,79 +283,86 @@ def _prompt(args: argparse.Namespace) -> str | None:
     return args.prompt
 
 
-def _base(p: vcs.Probe, rev: str | None, warnings: list[str]) -> dict[str, str] | None:
+def _base(p: vcs.Probe, rev: str | None, warnings: list[str]) -> tuple[dict[str, str] | None, str]:
+    """The base a new job starts from, or (None, why not)."""
     root = core.tilde(p.root) if p.root else "?"
     if p.kind == "svn":
         if (p.mixed or p.switched) and not rev:
             why = "mixed revisions" if p.mixed else "a switched subtree"
-            _err(f"ws-agent: {root} has {why} ({p.version}); name the base with --rev <N>")
-            return None
+            return None, f"ws-agent: {root} has {why} ({p.version}); name the base with --rev <N>"
         base = {"url": p.url, "repos_root": p.repos_root, "rev": rev or p.rev}
         if p.modified:
             warnings.append(f"local modifications in {root} are not included: the job starts from "
                             f"{vcs.short_url(p)}@{base['rev']}")
-        return base
+        return base, ""
     commit = p.rev
     if rev:
         r = subprocess.run(["git", "-C", str(p.root), "rev-parse", "--verify", "-q", f"{rev}^{{commit}}"],
                            capture_output=True, text=True)
         commit = r.stdout.strip() if r.returncode == 0 else ""
         if not commit:
-            _err(f"ws-agent: {rev!r} isn't a commit in {root}")
-            return None
+            return None, f"ws-agent: {rev!r} isn't a commit in {root}"
     if not commit:
-        _err(f"ws-agent: {root} has no commits yet")
-        return None
+        return None, f"ws-agent: {root} has no commits yet"
     if p.modified:
         warnings.append(f"uncommitted changes in {root} are not included: the job starts from {commit[:12]}")
-    return {"commit": commit, "branch": p.branch}
+    return {"commit": commit, "branch": p.branch}, ""
 
 
-def _run_job(args: argparse.Namespace) -> int:
+@dataclass
+class Queued:
+    """What queue_job did: the job (code 0), or why not (1 an error, 2 bad input, 3 refused)."""
+    job: jobs.Job | None
+    error: str
+    code: int
+    warnings: list[str]
+    dup: jobs.Job | None = None
+    paused: bool = False
+
+
+def queue_job(root: Path, title: str, prompt: str, *, rev: str | None = None, paths: Sequence[str] = (),
+              timeout: str = "2h", force: bool = False, origin: str = "",
+              base: dict[str, str] | None = None) -> Queued:
+    """The one way a job is made, for `run`, `accept` and serve alike: allowed, a base (the
+    probe's, or the one a source gives), the duplicate and overlap checks, the record and the
+    enqueue under the queue lock."""
     if os.environ.get("WS_AGENT_JOB"):
-        _err("ws-agent: this is a queued job; it can't queue jobs (work directly)")
-        return 3
-    prompt = _prompt(args)
-    if prompt is None:
-        return 1
+        return Queued(None, "ws-agent: this is a queued job; it can't queue jobs (work directly)", 3, [])
     if not prompt.strip():
-        _err("ws-agent: the prompt is empty")
-        return 2
-    p = vcs.probe(Path(args.repo) if args.repo else Path.cwd(), thorough=True)
+        return Queued(None, "ws-agent: the prompt is empty", 2, [])
+    p = vcs.probe(root, thorough=True)
     if p.kind == "none" or p.root is None:
-        _err(f"ws-agent: {args.repo or Path.cwd()} isn't in a git or SVN working copy")
-        return 3
+        return Queued(None, f"ws-agent: {root} isn't in a git or SVN working copy", 3, [])
     key = core.tilde(p.root)
     if agent_registry.find(p.root) is None:
-        _err(f"ws-agent: {key} isn't allowed for queued jobs; run 'ws-agent allow {key}' in your own terminal")
-        return 3
+        return Queued(None, f"ws-agent: {key} isn't allowed for queued jobs; run 'ws-agent allow {key}' in your own "
+                      "terminal", 3, [])
     warnings: list[str] = []
-    base = _base(p, args.rev, warnings)
     if base is None:
-        return 3
+        base, why = _base(p, rev, warnings)
+        if base is None:
+            return Queued(None, why, 3, warnings)
     q = jobs.pueue_status()
     if q is None:
-        _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
-        return 1
+        return Queued(None, "ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)", 1, warnings)
     sha = hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest()
     _, parallel = agent_registry.load()
     try:
         with jobs.queue_lock():   # the duplicate check, the record and the enqueue as one step
             all_ = jobs.all_jobs()
             dup = jobs.duplicate(key, sha, all_, q.tasks)
-            if dup and not args.force:
+            if dup and not force:
                 st = jobs.state(dup, q.tasks)
-                print(dup.id)
                 hint = (f"ws-agent retry {dup.id} continues it" if st in ("failed", "interrupted")
                         else f"ws-agent result {dup.id} once it's done")
-                _err(f"ws-agent: job {dup.id} already does this ({st}); {hint}; --force queues another")
-                return 3
-            for other in jobs.overlaps(key, args.paths or [], all_, q.tasks):
+                return Queued(None, f"ws-agent: job {dup.id} already does this ({st}); {hint}; --force queues another",
+                              3, warnings, dup=dup)
+            for other in jobs.overlaps(key, list(paths), all_, q.tasks):
                 warnings.append(f"job {other.id} ({jobs.state(other, q.tasks)}) also claims {', '.join(other.paths)}: "
                                 "review the two patches together")
-            job = jobs.Job(id=jobs.new_id(), title=args.title, repo=key, vcs=p.kind, base=base, prompt_sha=sha,
-                           paths=list(args.paths or []), created=core.now_iso(), session_id="", timeout=args.timeout,
-                           warnings=warnings)
+            job = jobs.Job(id=jobs.new_id(), title=title, repo=key, vcs=p.kind, base=base, prompt_sha=sha,
+                           paths=list(paths), created=core.now_iso(), session_id="", timeout=timeout,
+                           warnings=warnings, origin=origin)
             try:
                 jobs.ensure_group(parallel)
                 jobs.save(job)
@@ -364,13 +372,27 @@ def _run_job(args: argparse.Namespace) -> int:
                 shutil.rmtree(jobs.job_dir(job.id), ignore_errors=True)
                 raise
     except jobs.QueueError as e:
-        _err(str(e))
+        return Queued(None, str(e), 1, warnings)
+    return Queued(job, "", 0, warnings, paused=q.group == "Paused")
+
+
+def _run_job(args: argparse.Namespace) -> int:
+    prompt = _prompt(args)
+    if prompt is None:
         return 1
+    q = queue_job(Path(args.repo) if args.repo else Path.cwd(), args.title, prompt, rev=args.rev,
+                  paths=args.paths or [], timeout=args.timeout, force=args.force)
+    if q.dup is not None:
+        print(q.dup.id)
+    if q.job is None:
+        _err(q.error)
+        return q.code
+    job = q.job
     print(job.id)
-    for w in warnings:
+    for w in q.warnings:
         _err(f"warning: {w}")
     _err(f"queued {job.id} in pueue group {jobs.GROUP} (task {job.pueue_id}); ws-agent ls, ws-agent result {job.id}")
-    if q.group == "Paused":
+    if q.paused:
         _err("warning: the queue is paused (pueue pauses it when its daemon stops); ws-agent resume starts it")
     return 0
 
@@ -612,34 +634,27 @@ def _retry(args: argparse.Namespace) -> int:
     return 0
 
 
-def _tell(args: argparse.Namespace) -> int:
-    """The person's words to a job: kept in its thread and delivered after its current turn if
-    it runs, else by resuming its session now."""
+def tell_job(job: jobs.Job, text: str) -> tuple[int, str]:
+    """The person's words to a job, kept in its thread: delivered after its current turn if it
+    runs, else by resuming its session now. (code, message): 0 told or requeued, 1 an error,
+    2 an empty message, 3 refused."""
     if os.environ.get("WS_AGENT_JOB"):
-        _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
-        return 3
-    text = " ".join(args.text).strip()
+        return 3, "ws-agent: this is a queued job; it can't message jobs (work directly)"
+    text = text.strip()
     if not text:
-        _err("ws-agent: the message is empty")
-        return 2
-    job = _load(args.id)
-    if job is None:
-        return 1
+        return 2, "ws-agent: the message is empty"
     try:
         with jobs.queue_lock():   # the executor checks for undelivered messages under it too
             q = jobs.pueue_status()
             st = jobs.state(job, q.tasks if q else None)
             if st in ("closed", "cancelled"):
-                _err(f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)")
-                return 3
+                return 3, f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)"
             jobs.post(job, "you", text)
             if st in ("running", "queued"):
-                print(f"told {job.id}: delivered after its current turn")
-                return 0
+                return 0, f"told {job.id}: delivered after its current turn"
             if q is None:
-                _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued); the message is kept "
-                     f"and goes with ws-agent retry {job.id}")
-                return 1
+                return 1, ("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued); the message is "
+                           f"kept and goes with ws-agent retry {job.id}")
             res = jobs.job_dir(job.id) / "result"
             for name in ("exit", "report"):
                 cur = res / f"{name}.json"
@@ -648,12 +663,26 @@ def _tell(args: argparse.Namespace) -> int:
             jobs.kill(job)   # drop the finished task from the queue
             jobs.enqueue(job, resume=True)
     except jobs.QueueError as e:
-        _err(str(e))
-        return 1
-    print(f"requeued {job.id} (task {job.pueue_id}): it resumes its session with your message")
+        return 1, str(e)
+    msg = f"requeued {job.id} (task {job.pueue_id}): it resumes its session with your message"
     if q.group == "Paused":
-        _err("warning: the queue is paused; ws-agent resume starts it (other queued jobs start too)")
-    return 0
+        msg += "\nwarning: the queue is paused; ws-agent resume starts it (other queued jobs start too)"
+    return 0, msg
+
+
+def _tell(args: argparse.Namespace) -> int:
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
+        return 3
+    job = _load(args.id)
+    if job is None:
+        return 1
+    code, msg = tell_job(job, " ".join(args.text))
+    if code == 0:
+        print(msg)
+    else:
+        _err(msg)
+    return code
 
 
 def _close(args: argparse.Namespace) -> int:
