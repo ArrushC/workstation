@@ -466,3 +466,24 @@ follow-ups to a job. Apply a patch to my working copy only with my approval, the
   - `git -C ~/.config/mise fetch && git -C ~/.config/mise switch feat/orchestration-phase2 && wsa`, then `mise bootstrap --only packages` with sudo for bubblewrap if it's missing;
   - then tell the agent "deployed".
 - [ ] **Step 4: Live checks after the person deploys.** P7 (toast, plus the event line in a live session in the repository and none elsewhere) and P10 (fresh sessions follow the new policy: `answer`, event lines, checks reported). Add them to the PR.
+
+## Validation log
+
+2026-11-08. All runs used the worktree's code (`ws.py agent`), a scratch registry, state and pueued
+(`~/scratch/p2val`), and real Claude Code 2.1.319 (Pro) and Codex 0.166 (ChatGPT) on scratch git
+repositories with nothing proprietary in them. Every job went `run` → pueue → `_exec` → the engine
+inside the job sandbox.
+
+| # | Job(s) | Result |
+|---|---|---|
+| P3 | 08d489 (Claude, r1, check `test -e NOTE.txt`) | **pass.** The check failed. The fix round resumed the same session (`resume f7184ef5…`) with the failing output, and the check passed: `checks: pass (after 1 fix round)`. The patch is the two intended files only. |
+| P2 | a2d67e (Claude, r2, with `touch`/`python3 -c`/`cp`/`curl` allowed so the OS layer is what's tested); ce8f30 (Codex, r3) | **pass.** All three out-of-copy writes failed and nothing reached `outside/`. `git add` was refused by the shim (Claude) or declined per the rules (Codex). curl was blocked (Claude: the sandbox proxy, 403; Codex: no DNS). All four reads failed (a sibling job's copy, a registered repository, a `[sandbox] hide` path, `~/.ssh/config`), including Claude's Read tool, though all four files exist on the host. Grepping both engines' own transcripts gives 0 marker hits and 0 ssh-config lines, so none of that content reached a provider. |
+| P5 | dee98a (Claude, r1) | **pass.** `tell` during the engine's run posted the message without adding a pueue task (tasks 0–4 for 5 jobs). After the turn, the executor resumed the same session (`resume 9e6d1b41…`). `extra.txt` was added and the checks passed. The patch has exactly 3 files. |
+| P4 | 0204f4 (Codex, r3) | **pass.** It went `needs-you` with the question "hello or welcome?". `answer` requeued it, and attempt 2 resumed the same Codex thread (`01a1baa9…`). It renamed the function to welcome and succeeded. |
+| P1 | 08d489 tell + Claude cooling; 2d08c7 (r2, Claude only) | **pass.** With Claude cooling down, the tell on 08d489 (claude+codex repository) ran on Codex in a fresh thread. Its transcript holds the hand-off note ("started by another agent (claude)"), the original task and the message, and the job succeeded with its checks passing. 2d08c7 ended `waiting` until the cooldown with 0 engine runs: Codex never ran. |
+| P6 | — | Covered by tests with a fake engine (`test_transient_retry_resumes_same_session`, `test_transient_gives_up_after_three_retries`); a real provider error can't be caused on demand. |
+
+Found and fixed during validation: Claude's sandbox bookkeeping is a directory (`.claude/.cc-writes/`), not a
+file, so SVN results reported `.claude` as unversioned (commit "Claude's sandbox bookkeeping is a directory").
+Claude's sandbox also shows empty placeholder dotfiles (`.bashrc`, `.gitconfig`, `.mcp.json`, …) inside the copy
+during a run; they don't persist, and no patch contained them (checked for each job's `diff --git` headers).
