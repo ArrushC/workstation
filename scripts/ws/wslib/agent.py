@@ -251,10 +251,15 @@ def _github(args: argparse.Namespace) -> int:
                 if gh else None
             logins = [r.stdout.strip()] if r is not None and r.returncode == 0 and r.stdout.strip() else []
         src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins))
+    prev = agent_registry.find(root)
     rc, repo = _source_change(agent_registry.set_github, root, src)
     if repo is not None:
         print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
               + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)})" if src else ""))
+        if src is not None:
+            agent_sources.start_github(repo)   # from now: no backlog
+        elif prev is not None and prev.github is not None and prev.github.slug:
+            agent_sources.update_source(f"gh:{prev.github.slug}", None)
     return rc
 
 

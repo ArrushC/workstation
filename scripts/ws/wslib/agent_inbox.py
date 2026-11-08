@@ -22,6 +22,13 @@ from . import core, jobs
 STATUSES = ("open", "accepted", "dismissed")
 PRIVATE = 0o600
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+_TAG = re.compile(r"<\s*(/?)\s*untrusted\s*>", re.IGNORECASE)
+
+
+def defuse(text: str) -> str:
+    """Someone else's text made safe to quote between <untrusted> tags: any tag that could open
+    or close the quote, in any case or spacing, no longer can."""
+    return _TAG.sub(lambda m: f"<{m.group(1)}untrusted-text>", text)
 
 
 def printable(text: str, *, lines: bool = False) -> str:

@@ -1,0 +1,47 @@
+[
+  {
+    "number": 118,
+    "title": "ws agent phase 2a: Claude/Codex engines, read-hiding job sandbox, checks, conversations",
+    "body": "Phase 2a of the orchestration work: `ws agent` becomes a super-agent-style job runner on whatever model is available. Stacked on #117 (base `feat/global-orchestration`); GitHub retargets it to `main` when #117 merges.\n\nDesign: `docs/superpo",
+    "user": {
+      "login": "ArrushC"
+    },
+    "html_url": "https://github.com/ArrushC/workstation/pull/118",
+    "state": "closed",
+    "created_at": "2026-11-08T10:47:47Z",
+    "updated_at": "2026-11-08T11:25:02Z",
+    "pull_request": {
+      "url": "https://api.github.com/repos/ArrushC/workstation/pulls/118"
+    }
+  },
+  {
+    "number": 117,
+    "title": "Global orchestration: automatic routing, ws agent queued jobs, SVN support (phase 1)",
+    "body": "## Summary\n\nPhase 1 of global, VCS-independent orchestration. Every Claude Code session on a workstation host now decides by itself how to run a request: directly, with subagents, or as a queued headless job. It does this in git and SVN rep",
+    "user": {
+      "login": "ArrushC"
+    },
+    "html_url": "https://github.com/ArrushC/workstation/pull/117",
+    "state": "closed",
+    "created_at": "2026-11-07T13:29:27Z",
+    "updated_at": "2026-11-08T11:21:08Z",
+    "pull_request": {
+      "url": "https://api.github.com/repos/ArrushC/workstation/pulls/117"
+    }
+  },
+  {
+    "number": 116,
+    "title": "tools: install DeepSeek Harness's desktop app on Windows",
+    "body": "On Windows, installs [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), DeepSeek's open-source agent harness, as its official desktop app (opened from the Start Menu). `scripts/deepseek-harness.ps1` runs from the Windows `",
+    "user": {
+      "login": "ArrushC"
+    },
+    "html_url": "https://github.com/ArrushC/workstation/pull/116",
+    "state": "closed",
+    "created_at": "2026-11-06T20:42:38Z",
+    "updated_at": "2026-11-06T20:46:00Z",
+    "pull_request": {
+      "url": "https://api.github.com/repos/ArrushC/workstation/pulls/116"
+    }
+  }
+]

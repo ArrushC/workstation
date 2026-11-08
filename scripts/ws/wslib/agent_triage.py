@@ -20,7 +20,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import re
 import shutil
 import signal
 import subprocess
@@ -45,7 +44,6 @@ TRIAGE_SCHEMA: dict[str, object] = {
 TRIAGE_TIMEOUT = 120
 TRIAGE_PER_HOUR = 30
 CLAUDE_MODEL = "haiku"
-_TAG = re.compile(r"<\s*(/?)\s*untrusted\s*>", re.IGNORECASE)
 
 PROMPT = """\
 You triage one change for a person who watches this repository. Decide whether it matches one of
@@ -75,14 +73,9 @@ def _ask(c: agent_inbox.Candidate, reason: str) -> dict[str, object]:
     return {"decision": "ask", "rule": None, "title": c.title, "task": c.prompt, "reason": reason}
 
 
-def _quote(text: str) -> str:
-    """The text with any tag that could open or close the quote defused, in any case."""
-    return _TAG.sub(lambda m: f"<{m.group(1)}untrusted-text>", text)
-
-
 def prompt_for(c: agent_inbox.Candidate, rules: tuple[str, ...]) -> str:
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
-    return PROMPT.format(rules=numbered, text=_quote(c.text))
+    return PROMPT.format(rules=numbered, text=agent_inbox.defuse(c.text))
 
 
 def _counter() -> Path:

@@ -628,7 +628,10 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     with your own svn credentials; nothing is written to the server. An accepted one becomes a review job whose
     copy holds only the directories that revision touched, with its diff and log entry beside the copy.
   - GitHub: `ws-agent github <path> [--mode …] [--login L]...` (default: your gh login). An issue or comment on
-    the repository's github.com remote that starts with `/agent` from a listed login is a request.
+    the repository's github.com remote that starts with `/agent` from a listed login, made after you run it, is
+    a request. Its job starts from the pull request's head, or else the default branch, fetched with `git fetch
+    origin` into `FETCH_HEAD` only: your branches and remote-tracking refs stay as they are. A later `/agent` on
+    the same issue goes to its open job. Polls use your gh login, read only: nothing is posted back.
   - `unwatch` and `ungithub` stop them.
   - What they find passes fixed rules first: the repository is still allowed, the source isn't `off`, the author
     or login is listed (GitHub needs `--login`; an SVN watch without `--author` takes anyone), the item is new,

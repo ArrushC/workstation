@@ -690,7 +690,9 @@ class Registry(Cli):
         found = reg.find(repo)
         assert found is not None and found.github is not None
         self.assertEqual(found.github, reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",)))
+        self.assertRegex(str(sources.source_state()["gh:ArrushC/proj"]["cursor"]), r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
         self.assertEqual(self.cli("ungithub", str(repo))[0], 0)
+        self.assertNotIn("gh:ArrushC/proj", sources.source_state())
         self.assertEqual(self.cli("github", str(wc))[0], 2)   # an SVN copy has no GitHub
         os.environ["CLAUDECODE"] = "1"
         self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 3)
