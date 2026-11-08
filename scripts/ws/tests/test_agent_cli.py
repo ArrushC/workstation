@@ -19,6 +19,7 @@ from helpers import REPO, WS
 
 from wslib import agent, core, jobs
 from wslib import agent_exec as ax
+from wslib import agent_inbox as inbox
 from wslib import agent_registry as reg
 
 QUEUED = {"status": {"Queued": {"enqueued_at": "2026-11-06T23:48:51.387887077Z"}}}
@@ -511,6 +512,98 @@ class Manage(Cli):
         rc, _, err = self.cli("show", "zzzzzz")
         self.assertEqual(rc, 1)
         self.assertIn("no job", err)
+
+
+class InboxCommands(Cli):
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = self.git_repo()
+        reg.allow(self.repo, "git", [])
+        self.pueue_status({})
+        self.head = git("rev-parse", "HEAD", cwd=self.repo)
+
+    def item(self, cid: str = "gh:ArrushC/proj:c9", decision: dict[str, object] | None = None,
+             **kw: object) -> inbox.Item:
+        fields: dict[str, object] = {"cid": cid, "source": "github", "repo": "~/src/proj", "explicit": True,
+                                     "author": "arrushc", "title": "fix the parser", "text": "/agent fix the parser",
+                                     "base": {"commit": self.head, "branch": "FETCH_HEAD"}, "prompt": "Fix the parser."}
+        fields.update(kw)
+        return inbox.add(inbox.Candidate(**fields), decision)  # type: ignore[arg-type]
+
+    def test_inbox_lists_and_shows(self) -> None:
+        rc, out, _ = self.cli("inbox")
+        self.assertEqual((rc, out.strip()), (0, "no open inbox items"))
+        req = self.item()
+        rev = self.item("svn:u-1:5", {"decision": "ask", "rule": "API changes", "title": "r5", "task": "review r5",
+                                      "reason": "it touches the public API"},
+                        source="svn", explicit=False, title="r5 by alice: rename f", text="rename f to g", author="alice")
+        rc, out, _ = self.cli("inbox")
+        self.assertEqual(rc, 0)
+        self.assertRegex(out, rf"{req.id}\s+github\s+request\s+fix the parser\s+\(~/src/proj\)")
+        self.assertRegex(out, rf"{rev.id}\s+svn\s+ask\s+r5 by alice: rename f\s+\(~/src/proj\)")
+        rc, out, _ = self.cli("inbox", "--json")
+        self.assertEqual({r["id"] for r in json.loads(out)}, {req.id, rev.id})
+        rc, out, _ = self.cli("inbox", "--show", rev.id[:5])
+        self.assertEqual(rc, 0)
+        for want in ("svn:u-1:5", "alice", "ask", "API changes", "it touches the public API", "rename f to g",
+                     f"ws-agent accept {rev.id}"):
+            self.assertIn(want, out)
+        self.assertEqual(self.cli("inbox", "--show", "nope")[0], 1)
+        # someone else's words never reach the terminal as escape sequences
+        evil = self.item("gh:ArrushC/proj:c66", title="bad\x1b[2Jtitle\r", text="one\n\x1b]0;pwned\x07two")
+        for argv in (("inbox",), ("inbox", "--all"), ("inbox", "--show", evil.id)):
+            out = self.cli(*argv)[1]
+            self.assertNotIn("\x1b", out)
+            self.assertNotIn("\r", out)
+        self.assertIn("bad?[2Jtitle", self.cli("inbox")[1])
+
+    def test_accept_queues_with_origin_and_base(self) -> None:
+        it = self.item()
+        rc, out, err = self.cli("accept", it.id[:6], "--note", "keep the API")
+        self.assertEqual(rc, 0, err)
+        jid = out.split()[0]
+        job = jobs.load(jid)
+        self.assertEqual((job.origin, job.title), ("gh:ArrushC/proj:c9", "fix the parser"))
+        self.assertEqual(job.base, {"commit": self.head, "branch": "FETCH_HEAD"})
+        prompt = (jobs.job_dir(jid) / "prompt.md").read_text()
+        self.assertTrue(prompt.startswith("Fix the parser."))
+        self.assertIn("keep the API", prompt)
+        got = inbox.get(it.id)
+        self.assertEqual((got.status, got.job), ("accepted", jid))
+        rc, _, err = self.cli("accept", it.id)
+        self.assertEqual(rc, 3)
+        self.assertIn(jid, err)
+        # a refusal on the way leaves the item open
+        other = self.item("gh:ArrushC/proj:c10", prompt="Another.")
+        reg.disallow(self.repo)
+        rc, _, err = self.cli("accept", other.id)
+        self.assertEqual(rc, 3)
+        self.assertIn("isn't allowed", err)
+        self.assertEqual(inbox.get(other.id).status, "open")
+
+    def test_dismiss(self) -> None:
+        it = self.item()
+        rc, out, _ = self.cli("dismiss", it.id)
+        self.assertEqual(rc, 0)
+        self.assertIn(f"dismissed {it.id}", out)
+        self.assertEqual(inbox.get(it.id).status, "dismissed")
+        self.assertNotIn(it.id, self.cli("inbox")[1])
+        self.assertRegex(self.cli("inbox", "--all")[1], rf"{it.id}\s+github\s+request\s+fix the parser\s+\(~/src/proj\)"
+                                                       r"\s+dismissed")
+        self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))
+        self.assertEqual(self.cli("dismiss", "nope")[0], 1)
+        rc, out, err = self.cli("accept", it.id)   # a dismissed item can still be accepted
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.cli("dismiss", it.id)[0], 3)   # but an accepted one isn't dismissed
+
+    def test_context_shows_inbox_count(self) -> None:
+        self.assertNotIn("inbox", agent.context_line(self.repo))
+        self.item("gh:ArrushC/proj:c1")
+        b = self.item("gh:ArrushC/proj:c2")
+        self.item("gh:ArrushC/other:c3", repo="~/src/other")   # another repository's
+        self.assertRegex(agent.context_line(self.repo), r"\| here: none \| inbox 2$")
+        inbox.resolve(b, "dismissed")
+        self.assertRegex(agent.context_line(self.repo), r"\| here: none \| inbox 1$")
 
 
 class Registry(Cli):

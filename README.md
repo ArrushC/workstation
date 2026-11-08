@@ -628,6 +628,13 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - GitHub: `ws-agent github <path> [--mode …] [--login L]...` (default: your gh login). An issue or comment on
     the repository's github.com remote that starts with `/agent` from a listed login is a request.
   - `unwatch` and `ungithub` stop them.
+  - What they find passes fixed rules first: the repository is still allowed, the source isn't `off`, the author
+    or login is listed (GitHub needs `--login`; an SVN watch without `--author` takes anyone), the item is new,
+    and at most 10 jobs a day come from one source.
+  - In `observe` mode (the default) it then waits in the inbox for you. `ws-agent inbox [--all] [--json]` lists it,
+    `ws-agent inbox --show <id>` prints one item (the author's words are shown, never followed), `ws-agent accept
+    <id> [--note "…"]` queues it as a job at the base the source recorded, and `ws-agent dismiss <id>` drops it.
+    The session line shows `inbox N` for the repository.
   - Settings land in `[repo."<path>".watch]` and `[repo."<path>".github]`. A mode ws-agent doesn't know reads
     as `off`.
 - **Per host**, by hand in `agents.toml` (kept when `allow` rewrites the file; a file ws-agent

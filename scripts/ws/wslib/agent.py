@@ -13,12 +13,15 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
         [--paths GLOB]... [--force]
     ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
+    inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
+                            what a watched source found, waiting for the person
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime as dt
 import hashlib
 import json
@@ -31,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_events, agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
+from . import agent_events, agent_exec, agent_inbox, agent_registry, agent_sandbox, core, engines, jobs, vcs
 
 MAX_CONTEXT = 400
 
@@ -110,6 +113,9 @@ def context_line(cwd: Path) -> str:
                  f"jobs: allowed ({', '.join(entry.engines)}); {_queue_words(q, parallel)}" if entry is not None
                  else "jobs: not allowed (ws-agent allow)",
                  _here(core.tilde(p.root), q.tasks if q else None)]
+        waiting = len(agent_inbox.items(core.tilde(p.root)))
+        if waiting:
+            parts.append(f"inbox {waiting}")
         return " | ".join(parts)[:MAX_CONTEXT]
     except Exception:  # noqa: BLE001 - the hook must never fail a session start
         return ""
@@ -382,6 +388,11 @@ def _run_job(args: argparse.Namespace) -> int:
         return 1
     q = queue_job(Path(args.repo) if args.repo else Path.cwd(), args.title, prompt, rev=args.rev,
                   paths=args.paths or [], timeout=args.timeout, force=args.force)
+    return _report_queued(q)
+
+
+def _report_queued(q: Queued) -> int:
+    """What run and accept print: the job id on stdout, the rest on stderr."""
     if q.dup is not None:
         print(q.dup.id)
     if q.job is None:
@@ -394,6 +405,95 @@ def _run_job(args: argparse.Namespace) -> int:
     _err(f"queued {job.id} in pueue group {jobs.GROUP} (task {job.pueue_id}); ws-agent ls, ws-agent result {job.id}")
     if q.paused:
         _err("warning: the queue is paused (pueue pauses it when its daemon stops); ws-agent resume starts it")
+    return 0
+
+
+# --- the inbox -------------------------------------------------------------------------
+
+def _decision_word(it: agent_inbox.Item) -> str:
+    if it.decision:
+        return str(it.decision.get("decision") or "-")
+    return "request" if it.candidate.get("explicit") else "-"
+
+
+def _inbox(args: argparse.Namespace) -> int:
+    if args.show:
+        return _inbox_show(args.show)
+    rows = agent_inbox.items(all_=args.all)
+    if args.json:
+        print(json.dumps([dataclasses.asdict(i) for i in rows], indent=2))
+        return 0
+    if not rows:
+        print("the inbox is empty" if args.all else "no open inbox items")
+        return 0
+    for it in rows:
+        c = it.candidate
+        tail = (f"  {it.status}" + (f" {it.job}" if it.job else "")) if args.all else ""
+        title = agent_inbox.printable(str(c.get("title") or ""))
+        print(f"{it.id}  {c.get('source', '?')!s:<7} {_decision_word(it):<8} {title}  ({c.get('repo', '?')}){tail}")
+    return 0
+
+
+def _inbox_show(prefix: str) -> int:
+    try:
+        it = agent_inbox.get(prefix)
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return 1
+    c, d = it.candidate, it.decision or {}
+    clean = agent_inbox.printable
+    lines = [f"{it.id}  {it.status}" + (f" (job {it.job})" if it.job else "") + f"  {clean(str(c.get('title') or ''))}",
+             f"  from: {c.get('source')} {clean(str(c.get('cid')))} by {clean(str(c.get('author') or '?'))}"
+             + (f"  {clean(str(c['url']))}" if c.get("url") else ""),
+             f"  repo: {c.get('repo')}   found: {it.created}"]
+    if d:
+        lines.append(f"  triage: {d.get('decision')}" + (f" (rule: {clean(str(d['rule']))})" if d.get("rule") else ""))
+        if d.get("reason"):
+            lines.append(f"  reason: {clean(str(d['reason']))}")
+    elif c.get("explicit"):
+        lines.append("  a request (/agent): no triage")
+    lines += ["", "their words (untrusted):"]
+    lines += ["  " + ln for ln in clean(str(c.get("text") or ""), lines=True).splitlines()]
+    if it.status != "accepted":
+        lines += ["", f"ws-agent accept {it.id} [--note TEXT] | ws-agent dismiss {it.id}"]
+    print("\n".join(lines))
+    return 0
+
+
+def _inbox_item(prefix: str) -> agent_inbox.Item | None:
+    try:
+        return agent_inbox.get(prefix)
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return None
+
+
+def _accept(args: argparse.Namespace) -> int:
+    it = _inbox_item(args.id)
+    if it is None:
+        return 1
+    if it.status == "accepted":
+        _err(f"ws-agent: {it.id} was already accepted: job {it.job} (ws-agent result {it.job})")
+        return 3
+    c = it.as_candidate()
+    prompt = c.prompt
+    if args.note and args.note.strip():
+        prompt = prompt.rstrip("\n") + f"\n\nA note from the person who accepted this:\n{args.note.strip()}\n"
+    q = queue_job(core.expand(c.repo), c.title, prompt, origin=c.cid, base=c.base)
+    if q.job is not None:
+        agent_inbox.resolve(it, "accepted", q.job.id)
+    return _report_queued(q)
+
+
+def _dismiss(args: argparse.Namespace) -> int:
+    it = _inbox_item(args.id)
+    if it is None:
+        return 1
+    if it.status == "accepted":
+        _err(f"ws-agent: {it.id} was accepted as job {it.job}; cancel or close that job instead")
+        return 3
+    agent_inbox.resolve(it, "dismissed")
+    print(f"dismissed {it.id}: {agent_inbox.printable(str(it.candidate.get('title') or ''))}")
     return 0
 
 
@@ -881,6 +981,18 @@ def _parser() -> argparse.ArgumentParser:
         t.add_argument("id")
         t.add_argument("text", nargs="+")
         t.set_defaults(fn=_tell)
+    ib = sub.add_parser("inbox", help="what sources found, waiting for you to accept or dismiss")
+    ib.add_argument("--all", action="store_true", help="accepted and dismissed items too")
+    ib.add_argument("--json", action="store_true")
+    ib.add_argument("--show", metavar="ID", help="one item in full")
+    ib.set_defaults(fn=_inbox)
+    acc = sub.add_parser("accept", help="queue an inbox item as a job")
+    acc.add_argument("id")
+    acc.add_argument("--note", help="your words, added to the job's prompt")
+    acc.set_defaults(fn=_accept)
+    dis = sub.add_parser("dismiss")
+    dis.add_argument("id")
+    dis.set_defaults(fn=_dismiss)
     sub.add_parser("pause").set_defaults(fn=_pause)
     sub.add_parser("resume").set_defaults(fn=_resume)
     sub.add_parser("doctor").set_defaults(fn=_doctor)
@@ -892,7 +1004,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
-               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "pause", "resume", "doctor", "--help")
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "pause",
+               "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:
