@@ -15,6 +15,8 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
     inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
                             what a watched source found, waiting for the person
+    serve [--once]          the always-on loop (the ws-agent-serve service): recovery, sources
+    close --empty           close every succeeded job whose patch is empty
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
 """
 
@@ -29,13 +31,14 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import (agent_events, agent_exec, agent_inbox, agent_registry, agent_sandbox, agent_sources, core, engines, jobs,
-               vcs)
+from . import (agent_disk, agent_events, agent_exec, agent_inbox, agent_registry, agent_sandbox, agent_serve,
+               agent_sources, core, engines, jobs, vcs)
 
 MAX_CONTEXT = 400
 
@@ -117,6 +120,10 @@ def context_line(cwd: Path) -> str:
         waiting = len(agent_inbox.items(core.tilde(p.root)))
         if waiting:
             parts.append(f"inbox {waiting}")
+        if agent_serve.configured():
+            parts.append("serve up" if agent_serve.up() else "serve down")
+        if agent_disk.low():
+            parts.append("disk low")
         return " | ".join(parts)[:MAX_CONTEXT]
     except Exception:  # noqa: BLE001 - the hook must never fail a session start
         return ""
@@ -149,7 +156,7 @@ def _route(args: argparse.Namespace) -> int:
         print(f"Extra commands jobs may run: {', '.join(entry.commands)}")
     print(f"Queue: {_queue_words(q, parallel)}")
     for row in here:
-        print(f"  {row['id']}  {row['state']:<11} {row['title']}")
+        print(f"  {row['id']}  {row['state']:<11} {agent_inbox.printable(str(row['title']))}")
     return 0
 
 
@@ -418,6 +425,9 @@ def _report_queued(q: Queued) -> int:
     _err(f"queued {job.id} in pueue group {jobs.GROUP} (task {job.pueue_id}); ws-agent ls, ws-agent result {job.id}")
     if q.paused:
         _err("warning: the queue is paused (pueue pauses it when its daemon stops); ws-agent resume starts it")
+    low = agent_disk.low()
+    if low:
+        _err(f"warning: disk low: {low}; serve starts no source jobs until there's room")
     return 0
 
 
@@ -551,7 +561,8 @@ def _ls(args: argparse.Namespace) -> int:
     for r in rows:
         where = "" if key else f"  {r['repo']}"
         checks = f"checks {r['checks']}" if r["checks"] not in ("-", "none") else "-"
-        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  {r['title']}{where}")
+        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  "
+              f"{agent_inbox.printable(r['title'])}{where}")
     if tasks is None:
         _err("warning: pueued isn't running, so live states are unknown")
     return 0
@@ -563,7 +574,7 @@ def _show(args: argparse.Namespace) -> int:
         return 1
     st = jobs.state(job, _tasks())
     jd = jobs.job_dir(job.id)
-    print(f"{job.id}  {st}  {job.title}")
+    print(f"{job.id}  {st}  {agent_inbox.printable(job.title)}")
     print(f"repository: {job.repo} ({job.vcs})   base: {_base_words(job)}")
     print(f"created {job.created}, attempts {job.attempts}, pueue task {job.pueue_id}, session {job.session_id or '-'}")
     print(f"directory: {jd}")
@@ -602,7 +613,7 @@ def _result(args: argparse.Namespace) -> int:
     st = jobs.state(job, _tasks())
     res = jobs.job_dir(job.id) / "result"
     info = jobs.exit_info(job) or {}
-    print(f"{job.id}  {st}  {job.title}")
+    print(f"{job.id}  {st}  {agent_inbox.printable(job.title)}")
     print(f"base: {_base_words(job)}   attempts: {job.attempts}   engine: {info.get('engine') or job.engine or '-'}")
     if not (res / "exit.json").exists():
         print(f"no result yet ({st}); ws-agent show {job.id} has the log")
@@ -799,6 +810,14 @@ def _tell(args: argparse.Namespace) -> int:
 
 
 def _close(args: argparse.Namespace) -> int:
+    if args.empty:
+        if args.id:
+            _err("ws-agent: close --empty takes no job id")
+            return 2
+        return _close_empty()
+    if not args.id:
+        _err("ws-agent: close needs a job id (or --empty: every succeeded job with an empty patch)")
+        return 2
     job = _load(args.id)
     if job is None:
         return 1
@@ -806,6 +825,31 @@ def _close(args: argparse.Namespace) -> int:
     if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
         _err(f"ws-agent: {job.id} is {st}; " + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
         return 3
+    print(close_job(job))
+    return 0
+
+
+def _close_empty() -> int:
+    """Every succeeded job whose patch is empty (a review that changed nothing): their ids."""
+    tasks = _tasks()
+    closed = 0
+    for job in jobs.all_jobs():
+        if jobs.state(job, tasks) != "succeeded":
+            continue
+        try:
+            empty = not (jobs.job_dir(job.id) / "result" / "changes.diff").read_bytes().strip()
+        except OSError:
+            continue   # no patch recorded: not known to be empty
+        if empty:
+            close_job(job)
+            print(job.id)
+            closed += 1
+    _err(f"closed {closed} job{'s' if closed != 1 else ''} with an empty patch; their results stay")
+    return 0
+
+
+def close_job(job: jobs.Job) -> str:
+    """Remove a finished job's working copy (and, for git, its worktree and branch); the result stays."""
     jd = jobs.job_dir(job.id)
     wc = jd / "wc"
     if job.vcs == "git":
@@ -818,8 +862,19 @@ def _close(args: argparse.Namespace) -> int:
     jobs.kill(job)
     job.closed = True
     jobs.save(job)
-    print(f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}")
-    return 0
+    return f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}"
+
+
+def _serve(args: argparse.Namespace) -> int:
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't run serve (work directly)")
+        return 3
+    if os.environ.get("CLAUDECODE") == "1" and not args.once:
+        # The loop starts jobs on its own: it runs as the person's service, not from a session.
+        _err("ws-agent: a Claude Code session doesn't start the serve loop; the service runs it "
+             "(systemctl --user start dev.mise.ws-agent-serve), or use serve --once for one pass")
+        return 3
+    return agent_serve.serve(once=args.once)
 
 
 def _pause(_: argparse.Namespace) -> int:
@@ -896,9 +951,21 @@ def _doctor(args: argparse.Namespace) -> int:
     repos, _ = agent_registry.load()
     row(True, f"registry: {core.tilde(agent_registry.registry_path())}, {len(repos)} repositories allowed")
     jd = jobs.jobs_dir()
-    probe_dir = jd if jd.exists() else core.state_dir() if core.state_dir().exists() else core.home()
-    free = shutil.disk_usage(probe_dir).free
-    row(free > 5 << 30, f"jobs: {core.tilde(jd)}, {len(jobs.all_jobs())} jobs, {free >> 30} GiB free")
+    row(True, f"jobs: {core.tilde(jd)}, {len(jobs.all_jobs())} jobs, {len(agent_inbox.items())} open inbox items")
+    usage = agent_disk.usage()
+    if usage is not None:
+        where, free, total = usage
+        row(agent_disk.low() is None, f"disk: {free >> 30} GiB free ({int(100 * free / total) if total else 0}%) on "
+            f"{core.tilde(where)}; source jobs don't start under {agent_disk.threshold()}")
+    if not agent_serve.configured():
+        row(True, "serve: no sources configured (ws-agent watch, ws-agent github)")
+    elif agent_serve.up():
+        st = agent_serve.status()
+        ago = int(time.time() - float(st.get("last_tick") or 0))  # type: ignore[arg-type]
+        row(True, f"serve: up since {st.get('started')} (last tick {ago} s ago)"
+            + (f"; last error: {st['last_error']}" if st.get("last_error") else ""))
+    else:
+        row(False, "serve: down (systemctl --user start dev.mise.ws-agent-serve)")
     return 1 if problems else 0
 
 
@@ -983,12 +1050,19 @@ def _parser() -> argparse.ArgumentParser:
     ls.add_argument("--all", action="store_true")
     ls.add_argument("--json", action="store_true")
     ls.set_defaults(fn=_ls)
-    for name, fn in (("show", _show), ("result", _result), ("cancel", _cancel), ("retry", _retry), ("close", _close)):
+    for name, fn in (("show", _show), ("result", _result), ("cancel", _cancel), ("retry", _retry)):
         p = sub.add_parser(name)
         p.add_argument("id")
         if name == "result":
             p.add_argument("--diff", action="store_true", help="also print the manifest and the whole patch")
         p.set_defaults(fn=fn)
+    cl = sub.add_parser("close", help="after review: delete a job's working copy, keep its result")
+    cl.add_argument("id", nargs="?")
+    cl.add_argument("--empty", action="store_true", help="every succeeded job whose patch is empty")
+    cl.set_defaults(fn=_close)
+    sv = sub.add_parser("serve", help="the always-on loop: recovery and the watched sources (the ws-agent-serve service)")
+    sv.add_argument("--once", action="store_true", help="one pass, then exit")
+    sv.set_defaults(fn=_serve)
     for name in ("tell", "answer"):
         t = sub.add_parser(name, help="send the job a message (answer: to the question it asked)")
         t.add_argument("id")
@@ -1017,8 +1091,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
-               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "pause",
-               "resume", "doctor", "--help")
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "serve",
+               "pause", "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:

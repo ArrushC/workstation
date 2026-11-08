@@ -42,6 +42,12 @@ class Events(AgentScratch):
         self.assertIn("eee004", lines[-1])   # the newest last
         self.assertEqual(ev.lines_for("S2", "~/src/proj"), [])   # another session starts fresh
 
+    def test_inbox_event_line(self) -> None:
+        self.assertEqual(ev.lines_for("S1", "~/src/proj"), [])
+        ev.append_inbox("a1b2c3d4e5", "~/src/proj", "inbox: a1b2c3d4e5 (svn) waits for you")
+        self.assertEqual(ev.lines_for("S1", "~/src/proj"),
+                         ["[orchestration] inbox: a1b2c3d4e5 (svn) waits for you: ws-agent inbox --show a1b2c3d4e5"])
+
     def test_session_ids_cant_escape_the_marker_dir(self) -> None:
         self.assertEqual(ev.lines_for("../../evil", "~/src/proj"), [])
         self.assertFalse((self.state / "evil").exists())

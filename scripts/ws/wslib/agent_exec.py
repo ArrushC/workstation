@@ -687,8 +687,11 @@ def _announce(job: jobs.Job, info: dict[str, object]) -> None:
         words = f"waiting for {info.get('engine') or 'an engine'}"
     else:
         words = "failed"
+    # A source's job is titled from someone else's words (a log message, a comment); the event
+    # line goes into live sessions, so it names only where the job came from.
+    label = job.title[:60] if not job.origin else f"from {job.origin.split(':', 1)[0]}"
     try:
-        agent_events.append(st, job, f"{job.id} {words} ({job.title[:60]})")
+        agent_events.append(st, job, f"{job.id} {words} ({label})")
         agent_events.notify(f"{job.id} {words}: {job.title[:80]}")
     except OSError:
         pass

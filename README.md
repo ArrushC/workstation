@@ -610,6 +610,9 @@ ws-agent tell <id> "..."     # your follow-up: after its current turn, or resumi
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
 ws-agent close <id>          # after review: delete the working copy, keep the result
+ws-agent close --empty       # the same for every succeeded job whose patch is empty
+ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
+ws-agent serve [--once]      # the always-on loop the ws-agent-serve service runs (below)
 ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
 ws-agent doctor              # each engine's login and cooldown, the sandbox, pueued, svn, the registry, disk
 ```
@@ -642,6 +645,17 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     The session line shows `inbox N` for the repository.
   - Settings land in `[repo."<path>".watch]` and `[repo."<path>".github]`. A mode ws-agent doesn't know reads
     as `off`.
+  - In `act` mode, a revision triage accepts and every GitHub request becomes a job straight away; anything
+    triage isn't sure about still goes to the inbox.
+- **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
+  - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
+  - requeues jobs waiting for an engine once one is out of its cooldown;
+  - polls the watched sources.
+
+  It never starts a paused queue. While the state directory's disk has under 10 GiB or 15 % free, source work
+  waits in the inbox and `run` warns. One serve runs per host; its log is
+  `~/.local/state/workstation/agent-serve.log`. Once a source is configured, the session line shows `serve
+  up` or `serve down`, and `ws-agent doctor` shows the last tick.
 - **Per host**, by hand in `agents.toml` (kept when `allow` rewrites the file; a file ws-agent
   can't parse is never overwritten):
   - `[queue] parallel = 2`, and `[engines.codex] parallel = 1` / `model = "…"`.

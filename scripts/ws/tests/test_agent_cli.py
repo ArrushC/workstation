@@ -290,6 +290,66 @@ class Manage(Cli):
         self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(jid))], ["one more thing"])
         self.assertEqual(agent.tell_job(jobs.load(jid), "  ")[0], 2)
 
+    def test_close_empty(self) -> None:
+        empty = self.queued_run(self.repo, "nothing to do")
+        self.finished(empty, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        self.write(jobs.job_dir(empty) / "result" / "changes.diff", "")
+        changed = self.queued_run(self.repo, "a change")
+        self.finished(changed, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        self.write(jobs.job_dir(changed) / "result" / "changes.diff", "--- a/app.py\n+++ b/app.py\n")
+        failed = self.queued_run(self.repo, "broke")
+        self.finished(failed, {"exit_code": 1, "status": "failed", "kind": "ok", "engine": "claude"})
+        self.write(jobs.job_dir(failed) / "result" / "changes.diff", "")
+        rc, out, err = self.cli("close", "--empty")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.split(), [empty])
+        self.assertTrue(jobs.load(empty).closed)
+        self.assertFalse(jobs.load(changed).closed)
+        self.assertFalse(jobs.load(failed).closed)
+        self.assertEqual(self.cli("close", "--empty", changed)[0], 2)
+        self.assertEqual(self.cli("close")[0], 2)
+
+    def test_context_serve_and_disk(self) -> None:
+        self.assertNotIn("serve", agent.context_line(self.repo))   # no source configured
+        reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", logins=("ArrushC",)))
+        self.assertRegex(agent.context_line(self.repo), r"\| serve down$")
+        self.write(core.state_dir() / "agent-serve" / "status.json",
+                   json.dumps({"pid": os.getpid(), "started": core.now_iso(), "last_tick": time.time()}))
+        self.assertRegex(agent.context_line(self.repo), r"\| serve up$")
+        with mock.patch.object(agent.agent_disk, "low", return_value="3 GiB free"):
+            self.assertRegex(agent.context_line(self.repo), r"\| serve up \| disk low$")
+
+    def test_run_warns_when_disk_is_low(self) -> None:
+        with mock.patch.object(agent.agent_disk, "low", return_value="3 GiB free on ~/.local/state"):
+            rc, _, err = self.cli("run", "--title", "t", "--prompt", "x", "--repo", str(self.repo))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("warning: disk low: 3 GiB free", err)
+
+    def test_serve_loop_is_the_services_not_a_sessions(self) -> None:
+        os.environ["CLAUDECODE"] = "1"
+        rc, _, err = self.cli("serve")
+        self.assertEqual(rc, 3)
+        self.assertIn("dev.mise.ws-agent-serve", err)
+        self.assertEqual(self.cli("serve", "--once")[0], 0)   # one pass is fine (validation)
+        os.environ.pop("CLAUDECODE")
+        os.environ["WS_AGENT_JOB"] = "abc123"
+        self.assertEqual(self.cli("serve", "--once")[0], 3)
+
+    def test_doctor_serve_row(self) -> None:
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            out = self.cli("doctor")[1]
+        self.assertRegex(out, r"ok\s+serve: no sources configured")
+        self.assertRegex(out, r"ok\s+disk: \d+ GiB free .*10 GiB or 15%")
+        reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", logins=("ArrushC",)))
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            out = self.cli("doctor")[1]
+        self.assertRegex(out, r"!!\s+serve: down \(systemctl --user start dev\.mise\.ws-agent-serve\)")
+        self.write(core.state_dir() / "agent-serve" / "status.json",
+                   json.dumps({"pid": os.getpid(), "started": "2026-11-08T10:00:00+00:00", "last_tick": time.time()}))
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            out = self.cli("doctor")[1]
+        self.assertRegex(out, r"ok\s+serve: up since 2026-11-08T10:00:00\+00:00 \(last tick \d+ s ago\)")
+
     def test_tell_finished_job_requeues_with_the_message(self) -> None:
         jid = self.queued_run(self.repo)
         self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
