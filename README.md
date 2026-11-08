@@ -612,6 +612,7 @@ ws-agent retry <id>          # failed/interrupted: shows what is there, then res
 ws-agent close <id>          # after review: delete the working copy, keep the result
 ws-agent close --empty       # the same for every succeeded job whose patch is empty
 ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
+ws-agent ui                  # jobs and the inbox in one fzf list: enter pages a result, alt-t/r/c/x/a/d act
 ws-agent serve [--once]      # the always-on loop the ws-agent-serve service runs (below)
 ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
 ws-agent doctor              # each engine's login and cooldown, the sandbox, pueued, svn, the registry, disk

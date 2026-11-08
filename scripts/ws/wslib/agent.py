@@ -15,6 +15,7 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
     inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
                             what a watched source found, waiting for the person
+    ui [--rows]             jobs and the inbox in one fzf list (enter result, alt-keys act)
     serve [--once]          the always-on loop (the ws-agent-serve service): recovery, sources
     close --empty           close every succeeded job whose patch is empty
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
@@ -865,6 +866,26 @@ def close_job(job: jobs.Job) -> str:
     return f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}"
 
 
+def _ui(args: argparse.Namespace) -> int:
+    from . import agent_ui
+    if args.rows:
+        for r in agent_ui.rows():
+            print(r)
+        return 0
+    fzf = core.which("fzf")
+    if not fzf:
+        _err("ws-agent: fzf isn't installed (mise install fzf); ws-agent ls and ws-agent inbox show the same lists")
+        return 1
+    argv = agent_ui.fzf_argv(core.shell_join(core.self_argv("agent")))
+    argv[0] = fzf
+    rows = agent_ui.rows()
+    if not rows:
+        print("no jobs and nothing in the inbox")
+        return 0
+    r = subprocess.run(argv, input="\n".join(rows) + "\n", text=True)
+    return 0 if r.returncode in (0, 1, 130) else r.returncode   # picked, no match, esc
+
+
 def _serve(args: argparse.Namespace) -> int:
     if os.environ.get("WS_AGENT_JOB"):
         _err("ws-agent: this is a queued job; it can't run serve (work directly)")
@@ -1060,6 +1081,9 @@ def _parser() -> argparse.ArgumentParser:
     cl.add_argument("id", nargs="?")
     cl.add_argument("--empty", action="store_true", help="every succeeded job whose patch is empty")
     cl.set_defaults(fn=_close)
+    ui = sub.add_parser("ui", help="jobs and the inbox in one fzf list")
+    ui.add_argument("--rows", action="store_true", help="print the list fzf shows, and exit")
+    ui.set_defaults(fn=_ui)
     sv = sub.add_parser("serve", help="the always-on loop: recovery and the watched sources (the ws-agent-serve service)")
     sv.add_argument("--once", action="store_true", help="one pass, then exit")
     sv.set_defaults(fn=_serve)
@@ -1091,8 +1115,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
-               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "serve",
-               "pause", "resume", "doctor", "--help")
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "ui",
+               "serve", "pause", "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:
