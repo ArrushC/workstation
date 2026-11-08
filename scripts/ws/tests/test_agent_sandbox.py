@@ -99,6 +99,31 @@ class Layout(Sandbox):
         r = subprocess.run(argv, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def test_wrap_scratch_hides_jobs_and_home(self) -> None:
+        os.environ["WS_STATE_DIR"] = str(self.outside / "state")   # jobs outside /tmp and $HOME
+        in_job = self.write(jobs.job_dir(_job("ccc333").id) / "wc" / "f.txt", "a job's code")
+        repo = self.outside / "company" / "wc"
+        repo.mkdir(parents=True)
+        reg.allow(repo, "svn", [])
+        in_repo = self.write(repo / "src.c", "code")
+        secret = self.write(self.home / "secret.txt", "s")
+        work = self.outside / "state" / "agent-triage" / "t-1"
+        work.mkdir(parents=True)
+
+        def run(code: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", code], workdir=work), capture_output=True,
+                                  text=True, timeout=60)
+
+        for p in (in_job, in_repo, secret):
+            self.assertTrue(p.exists())
+            self.assertNotEqual(run(f"open({str(p)!r}).read()").returncode, 0, p)
+        r = run("import os; open('out.txt', 'w').write(os.getcwd())")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((work / "out.txt").read_text(), str(work.resolve()))
+        r = run(f"open({str(self.outside / 'state' / 'elsewhere')!r}, 'w').write('x')")
+        self.assertNotEqual(r.returncode, 0)   # only the workdir is writable
+        self.assertNotIn("--unshare-net", sbx.wrap_scratch(["true"], workdir=work))   # it has to reach its provider
+
     def test_extra_ro_and_rw_paths(self) -> None:
         ro = self.write(self.home / ".tool" / "bin.txt", "tool")
         rw = self.home / ".state"
