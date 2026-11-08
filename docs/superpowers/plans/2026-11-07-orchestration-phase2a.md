@@ -483,6 +483,14 @@ inside the job sandbox.
 | P1 | 08d489 tell + Claude cooling; 2d08c7 (r2, Claude only) | **pass.** With Claude cooling down, the tell on 08d489 (claude+codex repository) ran on Codex in a fresh thread. Its transcript holds the hand-off note ("started by another agent (claude)"), the original task and the message, and the job succeeded with its checks passing. 2d08c7 ended `waiting` until the cooldown with 0 engine runs: Codex never ran. |
 | P6 | — | Covered by tests with a fake engine (`test_transient_retry_resumes_same_session`, `test_transient_gives_up_after_three_retries`); a real provider error can't be caused on demand. |
 
+Live checks after the person deployed the branch on this host (2026-11-08, real `~/.claude`, real queue, phase 1's
+scratch repositories):
+
+| # | Result |
+|---|---|
+| P7 | **pass (session lines).** Two fresh sessions were opened (orch-svn, orch-local), then real job 6ef77f finished in orch-svn. On the next prompt, the orch-svn session received exactly `[orchestration] 6ef77f succeeded (P7 live event): ws-agent result 6ef77f`, and said so without acting on it. The orch-local session got none. The job's SVN result had no warnings: `.claude` and `.remember` count as tool directories. The Windows notice needs the person's eyes. |
+| P10 | **pass.** Real job b7e858 went `needs-you`. A fresh session asked to "deal with anything that needs attention", allowed to run `ws-agent`, put the question to the person ("I won't pick for you"). It posted nothing to the job's thread (it stayed `needs-you`), reviewed the other results, wouldn't call patches done without their tests, and proposed applying one only with approval. |
+
 Found and fixed during validation: Claude's sandbox bookkeeping is a directory (`.claude/.cc-writes/`), not a
 file, so SVN results reported `.claude` as unversioned (commit "Claude's sandbox bookkeeping is a directory").
 Claude's sandbox also shows empty placeholder dotfiles (`.bashrc`, `.gitconfig`, `.mcp.json`, …) inside the copy
