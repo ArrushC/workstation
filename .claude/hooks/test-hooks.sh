@@ -166,6 +166,12 @@ run "$GH/secret-guard.sh" "$(j --arg c "cat notes/key.txt" '{tool_name:"Bash",to
 ok "bash naming key.txt -> silent" empty
 run "$GH/secret-guard.sh" "$(j --arg c "ls -la" '{tool_name:"Bash",tool_input:{command:$c}}')"
 ok "allow normal bash" empty
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/workstation/agents.toml" '{tool_name:"Edit",tool_input:{file_path:$f}}')"
+ok "deny editing ws-agent's registry" has '"permissionDecision":"deny"'
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/workstation/agents.toml" '{tool_name:"Write",tool_input:{file_path:$f}}')"
+ok "deny writing ws-agent's registry" has 'ws-agent allow'
+run "$GH/secret-guard.sh" "$(j --arg f "/home/u/.config/workstation/agents.toml" '{tool_name:"Read",tool_input:{file_path:$f}}')"
+ok "allow reading ws-agent's registry" empty
 
 echo "== dangerous-command-guard (G2) =="
 g() { run "$GH/dangerous-command-guard.sh" "$(j --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}')"; }
@@ -337,6 +343,34 @@ ok "clean repo, dotfiles drifted -> toast mentions pending apply" notified 'dotf
 se_run "$RH/session-end-notify.sh" 'not json at all'
 ok "malformed input -> fail-open silent" silent
 rm -rf "$SE"
+
+echo "== notify.sh (WSL path: quoting, NOTIFY_NO_MODAL) =="
+NT="$(mktemp -d)"
+mkdir -p "$NT/bin"
+# a fake powershell.exe: records each -Command; BurntToast "fails" when $NT/no-bt exists
+cat >"$NT/bin/powershell.exe" <<EOF
+#!/usr/bin/env bash
+printf '%s\n---\n' "\$3" >>"$NT/calls"
+case "\$3" in *BurntToast*) [ -e "$NT/no-bt" ] && exit 1 ;; esac
+exit 0
+EOF
+chmod +x "$NT/bin/powershell.exe"
+nt_run() { env -u ZELLIJ -u TERM_PROGRAM TERM=dumb WSL_DISTRO_NAME=x PATH="$NT/bin:/usr/bin:/bin" "$@" bash "$ROOT/dotfiles/claude/notify.sh" "ws-agent" "it's done'; Remove-Item C:\\x; '" </dev/null >/dev/null 2>&1; }
+nt_run
+OUT="$(cat "$NT/calls")"
+ok "a quote in the text is doubled for PowerShell" has "it''s done''; Remove-Item"
+ok "a quote can't end the string" lacks "it's done'"
+: >"$NT/no-bt"
+: >"$NT/calls"
+nt_run NOTIFY_NO_MODAL=1
+OUT="$(cat "$NT/calls")"
+ok "NOTIFY_NO_MODAL: BurntToast failing falls back to a toast" has "ToastNotificationManager"
+ok "NOTIFY_NO_MODAL: never the modal MessageBox" lacks "MessageBox"
+: >"$NT/calls"
+nt_run
+OUT="$(cat "$NT/calls")"
+ok "without it the MessageBox fallback stays" has "MessageBox"
+rm -rf "$NT"
 
 echo
 if [ "$fail" -eq 0 ]; then

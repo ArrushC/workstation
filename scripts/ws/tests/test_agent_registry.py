@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tomllib
 import unittest
+from pathlib import Path
 
 from helpers import Scratch
 
@@ -28,7 +29,7 @@ class Registry(Scratch):
         self.assertTrue(found.allowed_at)
         repos, parallel = reg.load()
         self.assertEqual(list(repos), ["~/src/foo"])
-        self.assertEqual(parallel, 1)
+        self.assertEqual(parallel, 2)   # the default: two jobs at a time, one per engine
         data = tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))
         self.assertEqual(data["repo"]["~/src/foo"]["vcs"], "svn")
 
@@ -81,7 +82,84 @@ class Registry(Scratch):
 
     def test_bad_parallel_falls_back(self) -> None:
         self.write(reg.registry_path(), "[queue]\nparallel = 0\n")
-        self.assertEqual(reg.load()[1], 1)
+        self.assertEqual(reg.load()[1], 2)
+
+    # --- v2: engines, checks, review, settings tables ------------------------------------
+
+    def test_v2_fields_round_trip(self) -> None:
+        reg.allow(self.wc, "svn", ["make *"], engines=("claude", "codex"), checks=("make test",), fix_rounds=0,
+                  review="codex", network=True)
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertEqual(found.engines, ("claude", "codex"))
+        self.assertEqual(found.checks, ("make test",))
+        self.assertEqual(found.fix_rounds, 0)
+        self.assertEqual(found.review, "codex")
+        self.assertIs(found.network, True)
+        self.assertEqual(found.commands, ("make *",))
+
+    def test_defaults(self) -> None:
+        self.write(reg.registry_path(), '[repo."~/src/foo"]\nvcs = "svn"\ncommands = []\nallowed_at = "x"\n')
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertEqual(found.engines, ("claude",))
+        self.assertEqual(found.checks, ())
+        self.assertEqual(found.fix_rounds, 1)
+        self.assertEqual(found.review, "")
+        self.assertIs(found.network, False)
+        self.assertEqual(reg.settings().parallel, 2)
+        self.assertEqual(reg.settings().engine("claude"), reg.EngineSettings(parallel=1, model=""))
+
+    def test_settings_tables(self) -> None:
+        self.write(reg.registry_path(), '[queue]\nparallel = 3\n\n[engines.codex]\nparallel = 1\nmodel = "o4"\n\n'
+                                        '[sandbox]\nhide = ["/data/svn"]\n\n[notify]\ndesktop = false\n')
+        st = reg.settings()
+        self.assertEqual(st.parallel, 3)
+        self.assertEqual(st.engine("codex"), reg.EngineSettings(parallel=1, model="o4"))
+        self.assertEqual(st.engine("claude"), reg.EngineSettings())
+        self.assertEqual(st.hide, (Path("/data/svn"),))
+        self.assertIs(st.desktop, False)
+
+    def test_unknown_tables_and_keys_survive_a_write(self) -> None:
+        self.write(reg.registry_path(), '[future]\nx = 1\n\n[repo."~/src/foo"]\nvcs = "svn"\ncommands = []\n'
+                                        'allowed_at = "x"\n\n[repo."~/src/foo".watch]\nurls = ["^/trunk"]\nmode = "observe"\n')
+        before = tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))
+        other = self.home / "src" / "bar"
+        other.mkdir()
+        reg.allow(other, "svn", [])
+        after = tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))
+        self.assertEqual(after["future"], before["future"])
+        self.assertEqual(after["repo"]["~/src/foo"]["watch"], before["repo"]["~/src/foo"]["watch"])
+        self.assertIn("~/src/bar", after["repo"])
+
+    def test_unparseable_file_is_never_overwritten(self) -> None:
+        self.write(reg.registry_path(), "[[bad\n")
+        before = reg.registry_path().read_bytes()
+        with self.assertRaises(reg.Unreadable):
+            reg.allow(self.wc, "svn", [])
+        with self.assertRaises(reg.Unreadable):
+            reg.disallow(self.wc)
+        self.assertEqual(reg.registry_path().read_bytes(), before)
+        self.assertEqual(reg.load()[0], {})   # readers carry on with nothing allowed
+
+    def test_non_bmp_and_unicode_keys_survive(self) -> None:
+        d = self.home / "src" / "café"
+        d.mkdir()
+        reg.allow(d, "svn", ["echo 🚀 done"])
+        reg.allow(self.wc, "svn", [])   # a second write re-reads and re-emits the first
+        found = reg.find(d)
+        assert found is not None
+        self.assertEqual(found.commands, ("echo 🚀 done",))
+
+    def test_review_must_be_an_allowed_engine(self) -> None:
+        with self.assertRaises(ValueError):
+            reg.allow(self.wc, "svn", [], engines=("claude",), review="codex")
+
+    def test_unknown_engine_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            reg.allow(self.wc, "svn", [], engines=("gpt-9",))
+        with self.assertRaises(ValueError):
+            reg.allow(self.wc, "svn", [], engines=())
 
 
 if __name__ == "__main__":

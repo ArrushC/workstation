@@ -218,6 +218,51 @@ class Jobs(AgentScratch):
         self.assertIsNone(jobs.live_run(job))
         self.assertFalse(jobs.stop_run(job))   # nothing left to stop
 
+    def test_state_from_the_report_and_the_outcome(self) -> None:
+        cases = [
+            ({"exit_code": 0, "status": "done", "kind": "ok"}, "succeeded"),
+            ({"exit_code": 1, "status": "question", "kind": "ok"}, "needs-you"),
+            ({"exit_code": 1, "status": "blocked", "kind": "ok"}, "needs-you"),
+            ({"exit_code": 1, "status": "failed", "kind": "ok"}, "failed"),
+            ({"exit_code": 1, "kind": "usage_limit", "reset_at": "2100-01-01T00:00:00+00:00"}, "waiting"),
+            ({"exit_code": 1, "kind": "sandbox"}, "failed"),
+            ({"exit_code": 124, "kind": "timeout"}, "failed"),
+        ]
+        for info, want in cases:
+            job = self.mkjob(pueue_id=3)
+            self.write(jobs.job_dir(job.id) / "result" / "exit.json", json.dumps(info))
+            self.assertEqual(jobs.state(job, {3: "Failed"}), want, info)
+
+    def test_a_live_run_beats_an_old_result(self) -> None:
+        job = self.mkjob(pueue_id=3)
+        self.exit_json(job, 0)
+        proc = self.spawn_group()
+        jobs.record_run(job, proc.pid)
+        self.assertEqual(jobs.state(job, {3: "Running"}), "running")
+
+    def test_thread_round_trip(self) -> None:
+        job = self.mkjob()
+        self.assertEqual(jobs.thread(job), [])
+        jobs.post(job, "you", "use option B")
+        jobs.post(job, "job", "done: did it", attempt=1)
+        jobs.post(job, "you", "and add a test")
+        pending = jobs.undelivered(job)
+        self.assertEqual([m["text"] for m in pending], ["use option B", "and add a test"])
+        jobs.mark_delivered(job, [pending[0]["id"]], 2)   # only what was sent is marked
+        self.assertEqual([m["text"] for m in jobs.undelivered(job)], ["and add a test"])
+        jobs.mark_delivered(job, [m["id"] for m in jobs.undelivered(job)], 3)
+        self.assertEqual(jobs.undelivered(job), [])
+        self.assertEqual([(m["from"], m.get("delivered")) for m in jobs.thread(job)],
+                         [("you", 2), ("job", None), ("you", 3)])
+
+    def test_duplicate_includes_needs_you_and_waiting(self) -> None:
+        q = self.mkjob(prompt_sha="Q", pueue_id=4)
+        self.write(jobs.job_dir(q.id) / "result" / "exit.json", '{"exit_code": 1, "status": "question"}')
+        self.assertEqual(jobs.duplicate("~/src/proj", "Q", jobs.all_jobs(), {}).id, q.id)  # type: ignore[union-attr]
+        w = self.mkjob(prompt_sha="W", pueue_id=5)
+        self.write(jobs.job_dir(w.id) / "result" / "exit.json", '{"exit_code": 1, "kind": "usage_limit"}')
+        self.assertEqual(jobs.duplicate("~/src/proj", "W", jobs.all_jobs(), {}).id, w.id)  # type: ignore[union-attr]
+
     def test_duplicate_includes_failed_and_interrupted(self) -> None:
         failed = self.mkjob(prompt_sha="F", pueue_id=4)
         self.exit_json(failed, 1)

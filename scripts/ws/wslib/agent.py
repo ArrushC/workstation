@@ -11,13 +11,15 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
                             which repositories jobs may use (refused inside Claude Code)
     run --title T (--prompt TEXT | --prompt-file F) [--repo P] [--rev R] [--timeout 2h]
         [--paths GLOB]... [--force]
-    ls [--repo P | --all] [--json] | show <id> | result <id>
+    ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
+    tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import os
@@ -26,7 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import agent_exec, agent_registry, core, jobs, vcs
+from . import agent_events, agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
 
 MAX_CONTEXT = 400
 
@@ -54,6 +56,27 @@ def _queue_words(q: jobs.Queue | None, parallel: int) -> str:
     return f"queue {q.running}/{q.parallel if q.group else parallel} running, {q.queued} queued"
 
 
+def _hhmm(iso: str) -> str:
+    try:
+        return dt.datetime.fromisoformat(iso).astimezone().strftime("%H:%M")
+    except ValueError:
+        return "?"
+
+
+def _state_words(job: jobs.Job, st: str) -> str:
+    """A job's state as the context line and `ls` say it: needs you, waiting (claude until
+    15:30), succeeded checks fail (review)."""
+    info = jobs.exit_info(job) or {}
+    if st == "needs-you":
+        return "needs you"
+    if st == "waiting":
+        return f"waiting ({info.get('engine') or job.engine or '?'} until {_hhmm(str(info.get('reset_at') or ''))})"
+    if st == "succeeded":
+        checks = info.get("checks")
+        return ("succeeded" + (f" checks {checks}" if checks in ("pass", "fail", "not run") else "") + " (review)")
+    return st
+
+
 def _here(repo_key: str, tasks: dict[int, str] | None) -> str:
     rows = []
     for j in jobs.all_jobs():
@@ -62,7 +85,7 @@ def _here(repo_key: str, tasks: dict[int, str] | None) -> str:
         st = jobs.state(j, tasks)
         if st == "closed":
             continue
-        rows.append(f"{j.id} {st}{' (review)' if st == 'succeeded' else ''}")
+        rows.append(f"{j.id} {_state_words(j, st)}")
     if not rows:
         return "here: none"
     extra = f", +{len(rows) - 4} more" if len(rows) > 4 else ""
@@ -78,10 +101,11 @@ def context_line(cwd: Path) -> str:
         if p.kind == "none" or p.root is None:
             return "[orchestration] no repository here"
         _, parallel = agent_registry.load()
-        allowed = agent_registry.find(p.root) is not None
-        q = jobs.pueue_status() if allowed or jobs.all_jobs() else None
+        entry = agent_registry.find(p.root)
+        q = jobs.pueue_status() if entry is not None or jobs.all_jobs() else None
         parts = [f"[orchestration] {_head(p)}",
-                 f"jobs: allowed; {_queue_words(q, parallel)}" if allowed else "jobs: not allowed (ws-agent allow)",
+                 f"jobs: allowed ({', '.join(entry.engines)}); {_queue_words(q, parallel)}" if entry is not None
+                 else "jobs: not allowed (ws-agent allow)",
                  _here(core.tilde(p.root), q.tasks if q else None)]
         return " | ".join(parts)[:MAX_CONTEXT]
     except Exception:  # noqa: BLE001 - the hook must never fail a session start
@@ -127,16 +151,39 @@ def _allow(args: argparse.Namespace) -> int:
         _err(f"ws-agent: {args.path} isn't in a git or SVN working copy")
         return 3
     try:
-        repo = agent_registry.allow(p.root, p.kind, args.command or [])
+        repo = agent_registry.allow(p.root, p.kind, args.command or [], engines=tuple(args.engine or ("claude",)),
+                                    checks=tuple(args.check or ()), fix_rounds=args.fix_rounds, review=args.review or "",
+                                    network=args.network)
     except agent_registry.Refused as e:
         _err(str(e))
         return 3
+    except ValueError as e:
+        _err(str(e))
+        return 2
+    except agent_registry.Unreadable as e:
+        _err(str(e))
+        return 1
     print(f"allowed: {core.tilde(repo.path)} ({repo.vcs})")
-    if repo.commands:
-        print(f"jobs may also run: {', '.join(repo.commands)}")
-    print("Queued jobs run headless Claude Code with this host's login in a private copy at a recorded base;\n"
+    for line in _repo_words(repo):
+        print(f"  {line}")
+    if "codex" in repo.engines:
+        print("Codex sends the code it reads to OpenAI. For company code that needs your organization's "
+              "authorization for OpenAI, separate from Claude's.")
+    print("Queued jobs run headless in a sandboxed private copy at a recorded base, with this host's logins;\n"
           "they never commit, push or otherwise write to the repository. ws-agent disallow undoes this.")
     return 0
+
+
+def _repo_words(r: agent_registry.Repo) -> list[str]:
+    words = [f"engines: {', '.join(r.engines)}"]
+    if r.commands:
+        words.append(f"commands: {', '.join(r.commands)}")
+    if r.checks:
+        words.append(f"checks: {', '.join(r.checks)} (fix rounds {r.fix_rounds})")
+    if r.review:
+        words.append(f"review: {r.review}")
+    words.append(f"network: {'on' if r.network else 'off'}")
+    return words
 
 
 def _disallow(args: argparse.Namespace) -> int:
@@ -147,6 +194,9 @@ def _disallow(args: argparse.Namespace) -> int:
     except agent_registry.Refused as e:
         _err(str(e))
         return 3
+    except agent_registry.Unreadable as e:
+        _err(str(e))
+        return 1
     print(f"{'disallowed' if removed else 'was not allowed'}: {core.tilde(root)}")
     return 0
 
@@ -159,8 +209,7 @@ def _repos(_: argparse.Namespace) -> int:
         return 0
     print(f"queue: pueue group {jobs.GROUP}, {parallel} at a time")
     for key, r in sorted(repos.items()):
-        extra = f"  commands: {', '.join(r.commands)}" if r.commands else ""
-        print(f"{key}  ({r.vcs}, since {r.allowed_at[:10]}){extra}")
+        print(f"{key}  ({r.vcs}, since {r.allowed_at[:10]})  " + "; ".join(_repo_words(r)))
     return 0
 
 
@@ -297,7 +346,9 @@ def _ls(args: argparse.Namespace) -> int:
             continue
         if st == "closed" and not args.all:
             continue
-        rows.append({"id": j.id, "state": st, "title": j.title, "repo": j.repo, "vcs": j.vcs, "created": j.created,
+        info = jobs.exit_info(j) or {}
+        rows.append({"id": j.id, "state": st, "checks": str(info.get("checks") or "-") if info else "-",
+                     "engine": j.engine or "-", "title": j.title, "repo": j.repo, "vcs": j.vcs, "created": j.created,
                      "attempts": j.attempts, "pueue_id": j.pueue_id})
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -307,7 +358,8 @@ def _ls(args: argparse.Namespace) -> int:
         return 0
     for r in rows:
         where = "" if key else f"  {r['repo']}"
-        print(f"{r['id']}  {r['state']:<11} {r['created'][:16]}  {r['title']}{where}")
+        checks = f"checks {r['checks']}" if r["checks"] not in ("-", "none") else "-"
+        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  {r['title']}{where}")
     if tasks is None:
         _err("warning: pueued isn't running, so live states are unknown")
     return 0
@@ -325,6 +377,15 @@ def _show(args: argparse.Namespace) -> int:
     print(f"directory: {jd}")
     for w in job.warnings:
         print(f"warning: {w}")
+    talk = jobs.thread(job)
+    if talk:
+        print("conversation:")
+        for m in talk:
+            who = "you" if m.get("from") == "you" else "job"
+            when = str(m.get("ts", ""))[:16]
+            note = "" if who == "job" or m.get("delivered") else "  (not delivered yet)"
+            body = str(m.get("text", "")).replace("\n", "\n        ")
+            print(f"  {when}  {who}: {body}{note}")
     log = agent_exec._tail(jd / "exec.log", 15)
     if log:
         print("exec.log (end):")
@@ -348,22 +409,36 @@ def _result(args: argparse.Namespace) -> int:
         return 1
     st = jobs.state(job, _tasks())
     res = jobs.job_dir(job.id) / "result"
+    info = jobs.exit_info(job) or {}
     print(f"{job.id}  {st}  {job.title}")
-    print(f"base: {_base_words(job)}   attempts: {job.attempts}")
+    print(f"base: {_base_words(job)}   attempts: {job.attempts}   engine: {info.get('engine') or job.engine or '-'}")
     if not (res / "exit.json").exists():
         print(f"no result yet ({st}); ws-agent show {job.id} has the log")
         return 0
     if st == "failed":
-        info = jobs.exit_info(job) or {}
         why = (f"timed out after {job.timeout}" if info.get("timed_out") else str(info.get("reason") or "")
-               or ("Claude reported an error" if info.get("is_error") else f"exit {info.get('exit_code')}"))
+               or ("the engine reported an error" if info.get("is_error") else f"exit {info.get('exit_code')}"))
         print(f"failed: {why}")
         print("exec.log (end):")
         print("\n".join(f"  {line}" for line in agent_exec._tail(jobs.job_dir(job.id) / "exec.log", 10)))
-    claude = agent_exec._claude_result(res / "claude.json")
-    if claude.get("result"):
-        print("Claude's report:")
-        print("\n".join(f"  {line}" for line in str(claude["result"]).splitlines()))
+    if st == "waiting":
+        print(f"waiting: no allowed engine can run it until {info.get('reset_at') or '?'} ({info.get('reason') or ''}); "
+              f"ws-agent retry {job.id} tries again")
+    try:
+        report = json.loads((res / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        report = None
+    if isinstance(report, dict):
+        print(f"report ({report.get('status')}):")
+        print("\n".join(f"  {line}" for line in str(report.get("summary") or "").splitlines()))
+        for key in ("tests", "notes"):
+            if report.get(key):
+                print(f"{key}: {report[key]}")
+        if report.get("question"):
+            print(f"question: {report['question']}")
+            print(f"  answer with: ws-agent answer {job.id} \"...\"")
+    _print_checks(info, res)
+    _print_review(res)
     diff_path = res / "changes.diff"
     diff = diff_path.read_text(encoding="utf-8", errors="replace") if diff_path.exists() else ""
     stats = agent_exec._diff_stats(diff)
@@ -390,12 +465,54 @@ def _result(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_checks(info: dict[str, object], res: Path) -> None:
+    verdict = info.get("checks")
+    if verdict in (None, "none"):
+        return
+    rounds = info.get("fix_rounds") or 0
+    print(f"checks: {verdict}" + (f" (after {rounds} fix round{'s' if rounds != 1 else ''})" if rounds else ""))
+    try:
+        runs = json.loads((res / "checks.json").read_text(encoding="utf-8"))
+        text = (res / "checks.txt").read_text(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
+        return
+    blocks: dict[str, list[str]] = {}
+    current = None
+    for line in text.splitlines():
+        if line.startswith("$ "):
+            current = line[2:].split("    (", 1)[0]
+            blocks[current] = []
+        elif current is not None:
+            blocks[current].append(line)
+    for r in runs if isinstance(runs, list) else []:
+        if not isinstance(r, dict) or (r.get("exit") == 0 and not r.get("timed_out")):
+            continue
+        how = "timed out" if r.get("timed_out") else f"exit {r.get('exit')}"
+        print(f"  {r.get('cmd')}: {how}")
+        tail = [ln for ln in blocks.get(str(r.get("cmd")), []) if ln.strip()][-20:]
+        print("\n".join(f"    {ln}" for ln in tail))
+
+
+def _print_review(res: Path) -> None:
+    try:
+        review = json.loads((res / "review.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(review, dict):
+        return
+    print(f"review: {review.get('verdict')}: {review.get('summary')}")
+    for f in review.get("findings") or []:
+        if isinstance(f, dict):
+            where = f"{f.get('file')}:{f.get('line')}" if f.get("line") is not None else str(f.get("file"))
+            print(f"  {where}: {f.get('issue')}")
+
+
 def _cancel(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
         return 1
     st = jobs.state(job, _tasks())
-    if st not in ("queued", "running", "interrupted", "unknown"):
+    if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
         _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
         return 3
     job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
@@ -415,8 +532,9 @@ def _retry(args: argparse.Namespace) -> int:
         return 1
     q = jobs.pueue_status()
     st = jobs.state(job, q.tasks if q else None)
-    if st not in ("failed", "interrupted"):
-        _err(f"ws-agent: {job.id} is {st}; only failed or interrupted jobs are retried")
+    if st not in ("failed", "interrupted", "waiting"):
+        hint = f" (ws-agent answer {job.id} \"...\")" if st == "needs-you" else ""
+        _err(f"ws-agent: {job.id} is {st}; only failed, interrupted or waiting jobs are retried{hint}")
         return 3
     if q is None:
         _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
@@ -437,12 +555,56 @@ def _retry(args: argparse.Namespace) -> int:
     return 0
 
 
+def _tell(args: argparse.Namespace) -> int:
+    """The person's words to a job: kept in its thread and delivered after its current turn if
+    it runs, else by resuming its session now."""
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
+        return 3
+    text = " ".join(args.text).strip()
+    if not text:
+        _err("ws-agent: the message is empty")
+        return 2
+    job = _load(args.id)
+    if job is None:
+        return 1
+    try:
+        with jobs.queue_lock():   # the executor checks for undelivered messages under it too
+            q = jobs.pueue_status()
+            st = jobs.state(job, q.tasks if q else None)
+            if st in ("closed", "cancelled"):
+                _err(f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)")
+                return 3
+            jobs.post(job, "you", text)
+            if st in ("running", "queued"):
+                print(f"told {job.id}: delivered after its current turn")
+                return 0
+            if q is None:
+                _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued); the message is kept "
+                     f"and goes with ws-agent retry {job.id}")
+                return 1
+            res = jobs.job_dir(job.id) / "result"
+            for name in ("exit", "report"):
+                cur = res / f"{name}.json"
+                if cur.exists():
+                    cur.replace(res / f"{name}-{job.attempts}.json")
+            jobs.kill(job)   # drop the finished task from the queue
+            jobs.enqueue(job, resume=True)
+    except jobs.QueueError as e:
+        _err(str(e))
+        return 1
+    print(f"requeued {job.id} (task {job.pueue_id}): it resumes its session with your message")
+    if q.group == "Paused":
+        _err("warning: the queue is paused; ws-agent resume starts it (other queued jobs start too)")
+    return 0
+
+
 def _close(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
         return 1
     st = jobs.state(job, _tasks())
-    if st not in ("succeeded", "failed", "cancelled"):
+    if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
         _err(f"ws-agent: {job.id} is {st}; " + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
         return 3
     jd = jobs.job_dir(job.id)
@@ -483,7 +645,8 @@ def _resume(_: argparse.Namespace) -> int:
 
 # --- doctor ---------------------------------------------------------------------------------
 
-def _doctor(_: argparse.Namespace) -> int:
+def _doctor(args: argparse.Namespace) -> int:
+    del args
     problems = 0
 
     def row(ok: bool, text: str) -> None:
@@ -491,20 +654,35 @@ def _doctor(_: argparse.Namespace) -> int:
         problems += not ok
         print(f"{'ok' if ok else '!!'}  {text}")
 
-    claude = core.which("claude")
-    if not claude:
-        row(False, "claude: not installed (queued jobs need Claude Code)")
-    else:
-        r = subprocess.run([claude, "auth", "status"], capture_output=True, text=True, timeout=30)
-        try:
-            info = json.loads(r.stdout[r.stdout.find("{"):]) if "{" in r.stdout else {}
-        except ValueError:
-            info = {}
-        if info.get("loggedIn"):
-            row(True, f"claude: {claude}, signed in via {info.get('authMethod', '?')} "
-                      f"({info.get('apiProvider', '?')}, plan {info.get('subscriptionType', '?')})")
-        else:
-            row(False, f"claude: {claude}, not signed in (claude auth login)")
+    repos_now, _ = agent_registry.load()
+    wanted = ["claude", *sorted({e for r in repos_now.values() for e in r.engines} - {"claude"})]
+    for name in wanted:
+        engine = engines.ENGINES[name]
+        until = engines.cooling(name)
+        cool = f"; cooling down until {until} (usage limit)" if until else ""
+        problem = engine.available()
+        path = core.which(name) or "-"
+        if problem:
+            row(False, f"engine {name}: {problem}{cool}")
+            continue
+        detail = ""
+        if name == "claude":   # the method and plan only: never the account's email or organization
+            r = subprocess.run([path, "auth", "status"], capture_output=True, text=True, timeout=30)
+            try:
+                info = json.loads(r.stdout[r.stdout.find("{"):]) if "{" in r.stdout else {}
+            except ValueError:
+                info = {}
+            detail = (f", signed in via {info.get('authMethod', '?')} ({info.get('apiProvider', '?')}, "
+                      f"plan {info.get('subscriptionType', '?')})")
+        row(True, f"engine {name}: {path}{detail}{cool}")
+    why = agent_sandbox.probe(force=True)
+    row(why is None, f"sandbox: {'bwrap works here (outer and nested)' if why is None else why}")
+    around = [core.tilde(p) for p in agent_sandbox.surrounding_paths()]
+    hide = [core.tilde(p) for p in agent_registry.settings().hide]
+    row(True, "sandbox hides $HOME, /tmp, other jobs, the registered copies"
+              + (f", the folders around those outside $HOME ({', '.join(around)})" if around else "")
+              + (f", [sandbox] hide ({', '.join(hide)})" if hide else "")
+              + "; other code outside $HOME stays readable to jobs: list its folders in [sandbox] hide")
     q = jobs.pueue_status()
     _, parallel = agent_registry.load()
     if q is None:
@@ -525,6 +703,23 @@ def _doctor(_: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _events(args: argparse.Namespace) -> int:
+    """The UserPromptSubmit hook's lines: the hook JSON on stdin (session_id, cwd), the events this
+    session hasn't seen on stdout. Files only (no pueue), and never an error."""
+    del args
+    try:
+        data = json.loads(sys.stdin.read() or "{}")
+        if not isinstance(data, dict):
+            return 0
+        p = vcs.probe(Path(str(data.get("cwd") or os.getcwd())))
+        key = core.tilde(p.root) if p.root else ""
+        for line in agent_events.lines_for(str(data.get("session_id") or ""), key):
+            print(line)
+    except Exception:  # noqa: BLE001 - a prompt hook must never fail the prompt
+        pass
+    return 0
+
+
 def _exec(args: argparse.Namespace) -> int:
     return agent_exec.execute(args.id, resume=args.resume)
 
@@ -535,6 +730,7 @@ def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="ws agent", description="Queued headless Claude Code jobs (see ws-agent --help).")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("context", help="the one-line orchestration summary").set_defaults(fn=lambda a: print(context_line(Path.cwd())) or 0)
+    sub.add_parser("events", help="job events a session hasn't seen (UserPromptSubmit hook)").set_defaults(fn=_events)
     r = sub.add_parser("route", help="this repository's execution options")
     r.add_argument("--json", action="store_true")
     r.add_argument("--repo")
@@ -542,6 +738,12 @@ def _parser() -> argparse.ArgumentParser:
     a = sub.add_parser("allow", help="let queued jobs use a repository (your own terminal only)")
     a.add_argument("path")
     a.add_argument("--command", action="append", help="an extra Bash permission rule for jobs, e.g. 'make *'")
+    a.add_argument("--engine", action="append", choices=agent_registry.KNOWN_ENGINES,
+                   help="an engine jobs may run on, in preference order (repeatable; default claude)")
+    a.add_argument("--check", action="append", help="a command ws-agent runs on each job's result (repeatable)")
+    a.add_argument("--fix-rounds", type=int, default=1, help="engine rounds to fix failing checks (default 1)")
+    a.add_argument("--review", choices=agent_registry.KNOWN_ENGINES, help="a second-opinion review by this engine")
+    a.add_argument("--network", action="store_true", help="let the agent's commands and the checks use the network")
     a.set_defaults(fn=_allow)
     d = sub.add_parser("disallow")
     d.add_argument("path")
@@ -569,6 +771,11 @@ def _parser() -> argparse.ArgumentParser:
         if name == "result":
             p.add_argument("--diff", action="store_true", help="also print the manifest and the whole patch")
         p.set_defaults(fn=fn)
+    for name in ("tell", "answer"):
+        t = sub.add_parser(name, help="send the job a message (answer: to the question it asked)")
+        t.add_argument("id")
+        t.add_argument("text", nargs="+")
+        t.set_defaults(fn=_tell)
     sub.add_parser("pause").set_defaults(fn=_pause)
     sub.add_parser("resume").set_defaults(fn=_resume)
     sub.add_parser("doctor").set_defaults(fn=_doctor)
@@ -579,8 +786,8 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-SUBCOMMANDS = ("context", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
-               "pause", "resume", "doctor", "--help")
+SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
+               "tell", "answer", "pause", "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:

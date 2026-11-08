@@ -52,6 +52,54 @@ exit 0
 """
 
 
+# Every fake claude answers `claude auth status` (engines.select asks before each run) and only
+# then does what the test set up.
+CLAUDE_AUTH_OK = 'if [ "${1:-}" = auth ]; then echo \'{"loggedIn": true, "authMethod": "claude.ai"}\'; exit 0; fi\n'
+
+# A fake `codex`: `login status` answers from $d/login (default logged in); `exec [resume <id>]`
+# records argv/stdin/cwd, writes a session transcript, runs $d/script.sh, then prints Codex 0.166's
+# JSONL events (thread.started, then turn.completed with the report in -o, or turn.failed with the
+# JSON-string message in $d/fail.<n> for call n).
+FAKE_CODEX = r"""
+d="$WS_FAKE_CODEX"
+if [ "${1:-}" = login ]; then cat "$d/login" 2>/dev/null || echo "Logged in using ChatGPT"; exit "$(cat "$d/login.rc" 2>/dev/null || echo 0)"; fi
+echo x >>"$d/calls"
+n=$(wc -l <"$d/calls" | tr -d ' ')
+printf '%s\n' "$@" >"$d/argv"; cp "$d/argv" "$d/argv.$n"
+cat >"$d/stdin"; cp "$d/stdin" "$d/stdin.$n"
+pwd >"$d/cwd"
+sid="T-$n" last="" prev=""
+for a in "$@"; do
+  case "$prev" in resume) sid="$a" ;; -o) last="$a" ;; esac
+  prev="$a"
+done
+mkdir -p "$HOME/.codex/sessions/2026/11/07" && : >"$HOME/.codex/sessions/2026/11/07/rollout-x-$sid.jsonl"
+[ -f "$d/script.sh" ] && bash "$d/script.sh"
+printf '{"type":"thread.started","thread_id":"%s"}\n{"type":"turn.started"}\n' "$sid"
+if [ -f "$d/fail.$n" ]; then
+  m=$(cat "$d/fail.$n")
+  printf '{"type":"error","message":%s}\n{"type":"turn.failed","error":{"message":%s}}\n' "$m" "$m"
+  exit 1
+fi
+r=$(cat "$d/report" 2>/dev/null || echo '{"status":"done","summary":"codex did it","question":null,"tests":null,"notes":null}')
+[ -n "$last" ] && printf '%s' "$r" >"$last"
+printf '{"type":"turn.completed","usage":{}}\n'
+exit 0
+"""
+
+
+def no_sandbox_ws(root: Path) -> Path:
+    """A stand-in for ws.py that runs `ws.py agent ...` with ws-agent's job sandbox switched off,
+    for tests whose _exec runs in another process (pueue, a killed executor) and whose fakes live
+    under /tmp, which the real sandbox hides. The sandbox has its own tests (test_agent_sandbox)."""
+    from helpers import WS
+    p = root / "ws-no-sandbox.py"
+    p.write_text(f"import sys\nsys.path.insert(0, {str(WS)!r})\nfrom wslib import agent_sandbox\n"
+                 "agent_sandbox.wrap = lambda argv, **kw: list(argv)\nagent_sandbox.probe = lambda **kw: None\n"
+                 "from wslib import agent\nsys.exit(agent.main(sys.argv[2:]))\n", encoding="utf-8")
+    return p
+
+
 def git(*args: str, cwd: Path) -> str:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main",
                            *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
@@ -78,6 +126,7 @@ class AgentScratch(Scratch):
         os.environ["WS_FAKE_PUEUE"] = str(self.pq)
         self.fake("pueue", FAKE_PUEUE)
         self.fake("claude", 'echo "fake claude: not set up by this test" >&2; exit 97')
+        self.fake("codex", 'echo "fake codex: not set up by this test" >&2; exit 97')
 
     # --- the fake queue ------------------------------------------------------------
 

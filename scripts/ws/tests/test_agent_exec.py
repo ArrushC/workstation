@@ -5,49 +5,74 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from agent_helpers import HAVE_SVN, AgentScratch, git, svn
+from agent_helpers import CLAUDE_AUTH_OK, FAKE_CODEX, HAVE_SVN, AgentScratch, git, no_sandbox_ws, svn
 from helpers import WS
 
 from wslib import agent_exec as ax
 from wslib import agent_registry as reg
-from wslib import jobs
+from wslib import agent_sandbox, engines, jobs
 
-FAKE_CLAUDE = r"""
+DONE = '{"status":"done","summary":"done: changed things","question":null,"tests":null,"notes":null}'
+# claude 2.1.319's --output-format json: one line, an array of every message ending in the result,
+# with the report in structured_output. $d/fail.<n> makes call n an error result with that text;
+# $d/report (or report.<n>) replaces the report.
+FAKE_CLAUDE = CLAUDE_AUTH_OK + r"""
 d="$WS_FAKE_CLAUDE"
-printf '%s\n' "$@" >"$d/argv"
+echo x >>"$d/calls"
+n=$(wc -l <"$d/calls" | tr -d ' ')
+printf '%s\n' "$@" >"$d/argv"; cp "$d/argv" "$d/argv.$n"
 env >"$d/env"
-cat >"$d/stdin"
+cat >"$d/stdin"; cp "$d/stdin" "$d/stdin.$n"
 pwd >"$d/cwd"
 sid="" prev=""
 for a in "$@"; do case "$prev" in --session-id | --resume) sid="$a" ;; esac; prev="$a"; done
 mkdir -p "$HOME/.claude/projects/fake" && : >"$HOME/.claude/projects/fake/$sid.jsonl"
-echo x >>"$d/calls"
 [ -f "$d/script.sh" ] && bash "$d/script.sh"
 [ -f "$d/sleep" ] && sleep "$(cat "$d/sleep")"
-# claude 2.1.319's --output-format json: one line, an array of every message ending in the result
-printf '[{"type":"system","subtype":"init","session_id":"%s","cwd":"%s"},{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":%s,"duration_ms":10,"num_turns":3,"result":"done: changed things","session_id":"%s","total_cost_usd":0,"terminal_reason":"completed"}]\n' \
-  "$sid" "$PWD" "$(cat "$d/is_error" 2>/dev/null || echo false)" "$sid"
+err=$(cat "$d/is_error" 2>/dev/null || echo false) text="done: changed things"
+[ -f "$d/fail.$n" ] && { err=true; text=$(cat "$d/fail.$n"); }
+so=$(cat "$d/report.$n" 2>/dev/null || cat "$d/report" 2>/dev/null || echo '""" + DONE + r"""')
+[ "$err" = true ] && so=null
+text=$(printf '%s' "$text" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')
+printf '[{"type":"system","subtype":"init","session_id":"%s","cwd":"%s"},{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":%s,"duration_ms":10,"num_turns":3,"result":%s,"session_id":"%s","total_cost_usd":0,"structured_output":%s,"terminal_reason":"completed"}]\n' \
+  "$sid" "$PWD" "$err" "$text" "$sid" "$so"
 exit "$(cat "$d/exit" 2>/dev/null || echo 0)"
 """
 
 
 class Exec(AgentScratch):
+    """The executor with fakes for both engines; ws-agent's job sandbox is switched off here (it
+    would hide the fakes under /tmp) and tested on its own, with real bwrap, in test_agent_sandbox."""
+
     def setUp(self) -> None:
         super().setUp()
         self.fc = self.root / "fake-claude"
         self.fc.mkdir()
         os.environ["WS_FAKE_CLAUDE"] = str(self.fc)
         self.fake("claude", FAKE_CLAUDE)
+        self.fx = self.root / "fake-codex"
+        self.fx.mkdir()
+        os.environ["WS_FAKE_CODEX"] = str(self.fx)
+        self.fake("codex", FAKE_CODEX)
+        self._patches = [mock.patch.object(agent_sandbox, "wrap", side_effect=lambda argv, **kw: list(argv)),
+                         mock.patch.object(agent_sandbox, "probe", return_value=None),
+                         mock.patch.object(ax, "BACKOFF", (0, 0, 0))]
+        for p in self._patches:
+            p.start()
+            self.addCleanup(p.stop)
 
     def make_job(self, repo: Path, vcs: str, base: dict[str, str], *, timeout: str = "2h",
-                 commands: list[str] | None = None, prompt: str = "do the thing") -> jobs.Job:
-        reg.allow(repo, vcs, commands or [])
+                 commands: list[str] | None = None, prompt: str = "do the thing", **allow: object) -> jobs.Job:
+        reg.allow(repo, vcs, commands or [], **allow)  # type: ignore[arg-type]
         job = jobs.Job(id=jobs.new_id(), title="the thing", repo=f"~/{repo.relative_to(self.home).as_posix()}", vcs=vcs,
                        base=base, prompt_sha="s", paths=[], created="2026-11-06T00:00:00+00:00", session_id="",
                        timeout=timeout)
@@ -91,10 +116,10 @@ class Refusals(unittest.TestCase):
         for args in (["push"], ["-c", "x=y", "push", "origin"], ["-C", "/r", "push"], ["svn", "dcommit"],
                      ["credential", "fill"], ["credential-store", "get"], ["send-email", "x.patch"]):
             self.assertIsNotNone(ax.git_refusal(args), args)
-        for args in (["status"], ["-C", "/r", "diff"], ["log", "--oneline"], [], ["--version"], ["add", "x.py"],
-                     ["restore", "--staged", "x.py"]):
+        for args in (["status"], ["-C", "/r", "diff"], ["log", "--oneline"], [], ["--version"]):
             self.assertIsNone(ax.git_refusal(args), args)
-        for args in (["commit", "-m", "x"], ["merge", "b"], ["rebase", "main"], ["cherry-pick", "c"], ["tag", "v1"],
+        for args in (["add", "x.py"], ["restore", "--staged", "x.py"], ["rm", "x"], ["mv", "a", "b"], ["apply", "p"],
+                     ["commit", "-m", "x"], ["merge", "b"], ["rebase", "main"], ["cherry-pick", "c"], ["tag", "v1"],
                      ["update-ref", "refs/heads/x", "HEAD"], ["stash"], ["config", "user.name", "x"], ["remote", "add", "o", "u"],
                      ["worktree", "add", "x"], ["branch", "-D", "x"], ["checkout", "-b", "x"], ["switch", "-c", "x"],
                      ["fetch"], ["pull"], ["gc"], ["reset", "--hard"], ["reflog", "expire"]):
@@ -109,11 +134,12 @@ class Refusals(unittest.TestCase):
         self.assertIsNotNone(ax.svn_refusal(["revert", "-R", "."], wc=wc, cwd=out))
         self.assertIsNotNone(ax.svn_refusal(["add", "../escape"], wc=wc, cwd=wc))
         self.assertIsNone(ax.svn_refusal(["status", str(out)], wc=wc, cwd=wc))   # reading elsewhere is fine
+        # git in a job is read-only: the agent edits files and ws-agent stages them when it finishes
         self.assertIsNotNone(ax.git_refusal(["-C", str(out), "add", "x"], wc=wc, cwd=wc))
-        self.assertIsNotNone(ax.git_refusal(["add", "x"], wc=wc, cwd=out))
-        self.assertIsNotNone(ax.git_refusal(["--work-tree", str(out), "restore", "."], wc=wc, cwd=wc))
-        self.assertIsNone(ax.git_refusal(["add", "x"], wc=wc, cwd=wc))
+        self.assertIsNotNone(ax.git_refusal(["add", "x"], wc=wc, cwd=wc))
+        self.assertIsNotNone(ax.git_refusal(["restore", "."], wc=wc, cwd=wc))
         self.assertIsNone(ax.git_refusal(["-C", str(out), "status"], wc=wc, cwd=wc))
+        self.assertIsNone(ax.git_refusal(["diff", "--stat"], wc=wc, cwd=wc))
 
 
 class Env(unittest.TestCase):
@@ -144,16 +170,7 @@ class Env(unittest.TestCase):
         self.assertEqual(env["SVN_EDITOR"], "false")
         self.assertIn("BatchMode=yes", env["SVN_SSH"])
         self.assertIn("IdentityFile=/dev/null", env["SVN_SSH"])
-
-    def test_claude_argv_confines_writes(self) -> None:
-        job = jobs.Job(id="abc123", title="t", repo="~/r", vcs="git", base={}, prompt_sha="s", paths=[], created="",
-                       session_id="S", timeout="2h")
-        argv = ax.claude_argv(job, Path("/j"), resume=False, rules=ax.permission_rules(job, ()))
-        settings = json.loads(argv[argv.index("--settings") + 1])
-        self.assertIs(settings["permissions"]["blockWritesOutsideWorkingDirectories"], True)
-        rules = argv[argv.index("--allowedTools") + 1:]
-        self.assertNotIn("Edit", rules)   # acceptEdits covers the copy; a bare rule would reach beyond it
-        self.assertNotIn("Write", rules)
+        self.assertEqual(env["GIT_OPTIONAL_LOCKS"], "0")   # git status never writes the read-only gitdir
 
 
 class ExecGit(Exec):
@@ -293,7 +310,8 @@ class ExecGit(Exec):
         repo = self.git_repo()
         job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
         self.write(self.fc / "sleep", "300")
-        ex = subprocess.Popen([sys.executable, str(WS / "ws.py"), "agent", "_exec", job.id], env=os.environ.copy())
+        ex = subprocess.Popen([sys.executable, str(no_sandbox_ws(self.root)), "agent", "_exec", job.id],
+                              env=os.environ.copy())
         self.addCleanup(lambda: (ex.kill(), ex.wait()))
         for _ in range(100):
             if jobs.live_run(job) is not None:
@@ -324,6 +342,312 @@ class ExecGit(Exec):
         job = self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"})
         ax.execute(job.id, resume=False)
         self.assertIn("no changes", self.result(job, "warnings.txt"))
+
+
+USAGE_2100 = "Claude AI usage limit reached|4102444800"   # resets 2100-01-01T00:00:00Z
+
+
+class Attempts(Exec):
+    def git_job(self, **allow: object) -> jobs.Job:
+        repo = self.git_repo()
+        return self.make_job(repo, "git", {"commit": git("rev-parse", "HEAD", cwd=repo), "branch": "main"}, **allow)
+
+    def calls(self, d: Path) -> int:
+        p = d / "calls"
+        return len(p.read_text().splitlines()) if p.exists() else 0
+
+    def test_structured_report_recorded(self) -> None:
+        job = self.git_job()
+        self.write(self.fc / "report", '{"status":"done","summary":"s","question":null,"tests":"make ok","notes":null}')
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        report = json.loads(self.result(job, "report.json"))
+        self.assertEqual((report["status"], report["summary"], report["tests"]), ("done", "s", "make ok"))
+        info = self.exit_json(job)
+        self.assertEqual((info["status"], info["kind"], info["engine"], info["exit_code"]), ("done", "ok", "claude", 0))
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "succeeded")
+        self.assertEqual(jobs.load(job.id).engine, "claude")
+        self.assertEqual(jobs.load(job.id).history[-1]["kind"], "ok")
+
+    def test_question_is_needs_you(self) -> None:
+        job = self.git_job()
+        self.write(self.fc / "report", '{"status":"question","summary":"s","question":"A or B?","tests":null,"notes":null}')
+        self.assertEqual(ax.execute(job.id, resume=False), 1)
+        info = self.exit_json(job)
+        self.assertNotEqual(info["exit_code"], 0)
+        self.assertEqual(info["status"], "question")
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "needs-you")
+
+    def test_transient_retry_resumes_same_session(self) -> None:
+        job = self.git_job()
+        self.write(self.fc / "fail.1", "API Error: 529 Overloaded")
+        self.write(self.fc / "fail.2", "API Error: Connection error.")
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        self.assertEqual(self.claude_calls(), 3)
+        first = (self.fc / "argv.1").read_text().splitlines()
+        sid = first[first.index("--session-id") + 1]
+        for n in (2, 3):
+            argv = (self.fc / f"argv.{n}").read_text().splitlines()
+            self.assertEqual(argv[argv.index("--resume") + 1], sid, n)
+        self.assertIn("temporary", (self.fc / "stdin.2").read_text())
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "succeeded")
+        self.assertEqual([h["kind"] for h in jobs.load(job.id).history], ["transient", "transient", "ok"])
+
+    def test_transient_gives_up_after_three_retries(self) -> None:
+        job = self.git_job()
+        for n in range(1, 6):
+            self.write(self.fc / f"fail.{n}", "API Error: 529 Overloaded")
+        self.assertEqual(ax.execute(job.id, resume=False), 1)
+        self.assertEqual(self.claude_calls(), 4)
+        self.assertEqual(self.exit_json(job)["kind"], "transient")
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "failed")
+
+    def test_usage_limit_falls_back_to_the_next_engine(self) -> None:
+        job = self.git_job(engines=("claude", "codex"))
+        self.write(self.fc / "fail.1", USAGE_2100)
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        info = self.exit_json(job)
+        self.assertEqual(info["engine"], "codex")
+        self.assertIn("started by another agent (claude)", (self.fx / "stdin").read_text())
+        self.assertIn("do the thing", (self.fx / "stdin").read_text())   # the hand-off carries the task
+        self.assertTrue(engines.cooling("claude").startswith("2100-01-01"))
+        self.assertEqual(jobs.load(job.id).engine, "codex")
+        self.assertEqual(jobs.load(job.id).session_id, "T-1")
+        self.assertEqual(json.loads(self.result(job, "report.json"))["summary"], "codex did it")
+
+    def test_claude_only_repo_never_falls_back(self) -> None:
+        job = self.git_job()   # engines: claude only
+        self.write(self.fc / "fail.1", USAGE_2100)
+        self.assertEqual(ax.execute(job.id, resume=False), 1)
+        self.assertEqual(self.calls(self.fx), 0)
+        info = self.exit_json(job)
+        self.assertEqual(info["kind"], "usage_limit")
+        self.assertTrue(str(info["reset_at"]).startswith("2100-01-01"))
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "waiting")
+
+    def test_codex_resumes_its_own_thread(self) -> None:
+        job = self.git_job(engines=("codex",))
+        self.write(self.fx / "fail.1", json.dumps("stream disconnected before completion"))
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        self.assertEqual(self.calls(self.fx), 2)
+        second = (self.fx / "argv.2").read_text().splitlines()
+        self.assertEqual(second[:3], ["exec", "resume", "T-1"])
+        self.assertEqual(self.exit_json(job)["engine"], "codex")
+
+    def test_sandbox_unavailable_runs_nothing(self) -> None:
+        job = self.git_job()
+        with mock.patch.object(agent_sandbox, "probe", return_value="no bwrap"):
+            self.assertEqual(ax.execute(job.id, resume=False), 1)
+        info = self.exit_json(job)
+        self.assertEqual(info["kind"], "sandbox")
+        self.assertIn("no bwrap", str(info["reason"]))
+        self.assertEqual(self.claude_calls(), 0)
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "failed")
+
+    @unittest.skipUnless(shutil.which("bwrap"), "bwrap not installed")
+    def test_engine_runs_inside_the_wrap(self) -> None:
+        job = self.git_job()
+        seen: list[list[str]] = []
+
+        def capture(_job: jobs.Job, argv: list[str], *_a: object) -> int:
+            seen.append(argv)
+            return 1
+        with mock.patch.object(agent_sandbox, "wrap", REAL_WRAP), mock.patch.object(ax, "_run_engine", side_effect=capture):
+            ax.execute(job.id, resume=False)
+        argv = seen[0]
+        self.assertEqual(argv[:2], ["timeout", "--kill-after=60s"])
+        self.assertTrue(argv[3].endswith("bwrap"), argv[:5])
+        tmpfs = [argv[i + 1] for i, a in enumerate(argv) if a == "--tmpfs"]
+        self.assertIn(str(self.home.resolve()), tmpfs)
+        self.assertIn(str(Path(shutil.which("claude") or "").resolve()), argv)   # the engine itself, inside it
+
+    def test_old_job_json_loads(self) -> None:
+        job = self.git_job()
+        p = jobs.job_dir(job.id) / "job.json"
+        data = json.loads(p.read_text())
+        for k in ("engine", "history", "auto_resumes"):
+            data.pop(k, None)
+        p.write_text(json.dumps(data))
+        old = jobs.load(job.id)
+        self.assertEqual((old.engine, old.history, old.auto_resumes), ("", [], 0))
+        self.assertEqual(jobs.state(old, {}), "interrupted")
+        self.assertEqual(ax.execute(job.id, resume=True), 0)
+
+    def test_claude_bookkeeping_is_not_review_noise(self) -> None:
+        job = self.git_job()
+        # Claude Code 2.1.319's sandbox leaves .claude/.cc-writes/ (a directory) in the copy
+        self.claude_script('mkdir -p .claude/.cc-writes && : >.claude/.cc-writes/w1\nprintf "x\\n" >>app.py\n')
+        ax.execute(job.id, resume=False)
+        self.assertNotIn(".cc-writes", self.result(job, "changes.diff"))
+        self.assertIn("app.py", self.result(job, "changes.diff"))
+
+
+class ChecksAndReview(Attempts):
+    def test_fix_round_resumes_with_the_failure(self) -> None:
+        # The check passes once fixed.txt exists; the second engine run creates it.
+        self.claude_script('[ "$(wc -l <"$WS_FAKE_CLAUDE/calls")" -ge 2 ] && : >fixed.txt\n')
+        job = self.git_job(checks=("test -e fixed.txt || { echo not-fixed-yet; exit 4; }",))
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        self.assertEqual(self.claude_calls(), 2)
+        second = (self.fc / "stdin.2").read_text()
+        self.assertIn("checks failed", second)
+        self.assertIn("not-fixed-yet", second)
+        argv2 = (self.fc / "argv.2").read_text().splitlines()
+        self.assertIn("--resume", argv2)   # the same session fixes its own change
+        info = self.exit_json(job)
+        self.assertEqual((info["checks"], info["fix_rounds"]), ("pass", 1))
+        self.assertEqual(json.loads(self.result(job, "checks.json"))[0]["exit"], 0)
+
+    def test_no_fix_rounds_records_the_failure(self) -> None:
+        job = self.git_job(checks=("exit 4",), fix_rounds=0)
+        self.assertEqual(ax.execute(job.id, resume=False), 0)   # the job finished; its checks didn't pass
+        self.assertEqual(self.claude_calls(), 1)
+        info = self.exit_json(job)
+        self.assertEqual(info["checks"], "fail")
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "succeeded")
+
+    def test_checks_only_after_done(self) -> None:
+        job = self.git_job(checks=("touch ran-checks",))
+        self.write(self.fc / "report", '{"status":"question","summary":"s","question":"q?","tests":null,"notes":null}')
+        ax.execute(job.id, resume=False)
+        self.assertFalse((jobs.job_dir(job.id) / "wc" / "ran-checks").exists())
+        self.assertEqual(self.exit_json(job)["checks"], "none")
+
+    def test_review_recorded_and_read_only(self) -> None:
+        job = self.git_job(engines=("claude", "codex"), review="codex")
+        self.claude_script('printf "x\\n" >>app.py\n')
+        self.write(self.fx / "report", json.dumps({"verdict": "concerns", "summary": "one issue",
+                                                   "findings": [{"file": "app.py", "line": 3, "issue": "off by one"}]}))
+        self.write(self.fx / "script.sh", 'printf "review wrote this\\n" >>app.py 2>/dev/null; true\n')
+        wc = jobs.job_dir(job.id) / "wc"
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        review = json.loads(self.result(job, "review.json"))
+        self.assertEqual(review["verdict"], "concerns")
+        self.assertEqual(review["findings"][0]["issue"], "off by one")
+        argv = (self.fx / "argv").read_text().splitlines()
+        self.assertEqual(argv[argv.index("-s") + 1], "read-only")
+        stdin = (self.fx / "stdin").read_text()
+        self.assertIn("do the thing", stdin)
+        self.assertIn("app.py", stdin)   # the patch is in the prompt
+        self.assertEqual(jobs.load(job.id).engine, "claude")   # the job's own session is untouched
+        self.assertEqual(self.exit_json(job)["review"], "concerns")
+        # A review that writes anyway (this fake ignores -s read-only) never reaches the patch, which
+        # was taken before it, and is reported.
+        self.assertIn("review wrote this", (wc / "app.py").read_text())
+        self.assertNotIn("review wrote this", self.result(job, "changes.diff"))
+        self.assertIn("the review changed the working copy", self.result(job, "warnings.txt"))
+
+    def test_review_engine_must_be_allowed_and_available(self) -> None:
+        job = self.git_job(engines=("claude", "codex"), review="codex")
+        self.write(self.fx / "login", "Not logged in")
+        self.write(self.fx / "login.rc", "1")
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "review.json").exists())
+        self.assertIn("review", self.result(job, "warnings.txt"))
+
+
+class Conversations(Attempts):
+    def test_answer_after_a_question_resumes_the_same_session(self) -> None:
+        job = self.git_job()
+        self.write(self.fc / "report.1", '{"status":"question","summary":"s","question":"A or B?","tests":null,"notes":null}')
+        ax.execute(job.id, resume=False)
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "needs-you")
+        sid = jobs.load(job.id).session_id
+        jobs.post(jobs.load(job.id), "you", "use option B")
+        self.assertEqual(ax.execute(job.id, resume=True), 0)
+        stdin = (self.fc / "stdin.2").read_text()
+        self.assertIn("use option B", stdin)
+        self.assertNotIn("stopped before it finished", stdin)   # it asked; it wasn't interrupted
+        argv = (self.fc / "argv.2").read_text().splitlines()
+        self.assertEqual(argv[argv.index("--resume") + 1], sid)
+        self.assertEqual(jobs.undelivered(jobs.load(job.id)), [])
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "succeeded")
+        froms = [m["from"] for m in jobs.thread(jobs.load(job.id))]
+        self.assertEqual(froms, ["job", "you", "job"])   # the reports are part of the conversation
+
+    def test_tell_while_running_waits_for_the_turn(self) -> None:
+        job = self.git_job()
+        self.claude_script('[ "$(wc -l <"$WS_FAKE_CLAUDE/calls")" -eq 1 ] && sleep 1\n')
+
+        def tell_during_the_run() -> None:
+            for _ in range(100):
+                if jobs.live_run(jobs.load(job.id)) is not None:
+                    break
+                time.sleep(0.02)
+            jobs.post(jobs.load(job.id), "you", "also handle the empty case")
+        t = threading.Thread(target=tell_during_the_run)
+        t.start()
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        t.join(10)
+        self.assertEqual(self.claude_calls(), 2)
+        self.assertIn("also handle the empty case", (self.fc / "stdin.2").read_text())
+        argv = (self.fc / "argv.2").read_text().splitlines()
+        self.assertIn("--resume", argv)
+        self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))   # delivered in place, no new task
+
+    def test_message_during_collect_requeues(self) -> None:
+        job = self.git_job()
+        real_collect = ax.collect
+        posted: list[bool] = []
+
+        def collect_and_tell(j: jobs.Job, jd: Path) -> list[str]:
+            if not posted:
+                posted.append(True)
+                jobs.post(jobs.load(j.id), "you", "one more thing")
+            return real_collect(j, jd)
+        self.pueue_status({})
+        with mock.patch.object(ax, "collect", side_effect=collect_and_tell):
+            self.assertEqual(ax.execute(job.id, resume=False), 0)
+        adds = [c for c in self.pueue_calls() if c[0] == "add"]
+        self.assertEqual(len(adds), 1)
+        self.assertEqual(adds[0][-1], "--resume")
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "exit.json").exists())   # archived: it goes on
+        self.assertEqual(ax.execute(job.id, resume=True), 0)
+        self.assertIn("one more thing", (self.fc / "stdin.2").read_text())
+        self.assertEqual(jobs.undelivered(jobs.load(job.id)), [])
+
+
+class Events(Attempts):
+    def test_a_finished_job_is_an_event_and_a_notice(self) -> None:
+        from wslib import agent_events
+        notices: list[str] = []
+        job = self.git_job(checks=("true",))
+        with mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            ax.execute(job.id, resume=False)
+        events = [json.loads(line) for line in agent_events.events_path().read_text().splitlines()]
+        self.assertEqual(events[-1]["kind"], "succeeded")
+        self.assertEqual(events[-1]["job"], job.id)
+        self.assertIn("checks pass", events[-1]["text"])
+        self.assertEqual(len(notices), 1)
+        self.assertIn(job.id, notices[0])
+
+    def test_needs_you_and_waiting_are_events(self) -> None:
+        from wslib import agent_events
+        with mock.patch.object(agent_events, "notify"):
+            q = self.git_job()
+            self.write(self.fc / "report", '{"status":"question","summary":"s","question":"A or B?","tests":null,"notes":null}')
+            ax.execute(q.id, resume=False)
+            (self.fc / "report").unlink()
+            self.write(self.fc / "fail.2", USAGE_2100)
+            w = self.make_job(self.home / "src" / "proj", "git", jobs.load(q.id).base, prompt="another")
+            ax.execute(w.id, resume=False)
+        kinds = [json.loads(line)["kind"] for line in agent_events.events_path().read_text().splitlines()]
+        self.assertEqual(kinds, ["needs-you", "waiting"])
+
+    def test_a_requeued_job_is_no_event(self) -> None:
+        from wslib import agent_events
+        job = self.git_job()
+        self.pueue_status({})
+        real_collect = ax.collect
+
+        def collect_and_tell(j: jobs.Job, jd: Path) -> list[str]:
+            jobs.post(jobs.load(j.id), "you", "more")
+            return real_collect(j, jd)
+        with mock.patch.object(ax, "collect", side_effect=collect_and_tell), mock.patch.object(agent_events, "notify"):
+            ax.execute(job.id, resume=False)
+        self.assertFalse(agent_events.events_path().exists())
+
+
+REAL_WRAP = agent_sandbox.wrap
 
 
 @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
@@ -417,6 +741,15 @@ class ExecSvn(Exec):
         self.assertFalse((jobs.job_dir(job.id) / "result" / "unversioned" / ".toolstate").exists())
         self.assertTrue((jobs.job_dir(job.id) / "result" / "unversioned" / "notes.txt").exists())
 
+    def test_claude_bookkeeping_is_not_review_noise_svn(self) -> None:
+        _, _, job = self.svn_job()
+        self.claude_script('mkdir -p .claude/.cc-writes\nprintf "keep\\n" >notes.txt\n')   # as measured: an empty dir
+        ax.execute(job.id, resume=False)
+        warnings = self.result(job, "warnings.txt")
+        self.assertNotIn(".claude", warnings)
+        self.assertIn("notes.txt", warnings)
+        self.assertFalse((jobs.job_dir(job.id) / "result" / "unversioned" / ".claude").exists())
+
     def test_partial_checkout_is_rebuilt(self) -> None:
         _, _, job = self.svn_job()
         self.write(jobs.job_dir(job.id) / "wc" / "junk.txt", "half a checkout\n")
@@ -460,11 +793,11 @@ class ClaudeOutput(unittest.TestCase):
             p = Path(d) / "claude.json"
             p.write_text(json.dumps([{"type": "system", "subtype": "init", "session_id": "S"},
                                      {"type": "result", "is_error": False, "num_turns": 2, "result": "ok", "session_id": "S"}]))
-            self.assertEqual(ax._claude_result(p)["result"], "ok")
+            self.assertEqual(engines.claude_result(p)["result"], "ok")
             p.write_text(json.dumps({"type": "result", "is_error": True, "result": "bad"}) + "\n")
-            self.assertEqual(ax._claude_result(p)["result"], "bad")
+            self.assertEqual(engines.claude_result(p)["result"], "bad")
             p.write_text("not json\n")
-            self.assertEqual(ax._claude_result(p), {})
+            self.assertEqual(engines.claude_result(p), {})
 
 
 if __name__ == "__main__":
