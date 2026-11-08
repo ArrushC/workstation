@@ -524,6 +524,49 @@ class Registry(Cli):
         self.assertIn("checks: make test", out)
         self.assertIn("network: on", out)
 
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_watch_and_github_commands(self) -> None:
+        _, wc = self.svn_repo()
+        self.assertEqual(self.cli("allow", str(wc))[0], 0)
+        rc, out, err = self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "act", "--author", "bob",
+                                "--rule", "Review locking changes", "--interval", "10m")
+        self.assertEqual(rc, 0, err)
+        found = reg.find(wc)
+        assert found is not None and found.watch is not None
+        self.assertEqual((found.watch.urls, found.watch.mode, found.watch.authors, found.watch.interval),
+                         (("^/trunk",), "act", ("bob",), "10m"))
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "loud")[0], 2)
+        self.assertEqual(self.cli("unwatch", str(wc))[0], 0)
+        found = reg.find(wc)
+        assert found is not None
+        self.assertIsNone(found.watch)
+        repo = self.git_repo()
+        git("remote", "add", "origin", "https://github.com/ArrushC/proj.git", cwd=repo)
+        self.fake("gh", 'case "$*" in "api user --jq .login") echo ArrushC ;; *) exit 1 ;; esac')
+        self.assertEqual(self.cli("allow", str(repo))[0], 0)
+        rc, out, err = self.cli("github", str(repo))
+        self.assertEqual(rc, 0, err)
+        found = reg.find(repo)
+        assert found is not None and found.github is not None
+        self.assertEqual(found.github, reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",)))
+        self.assertEqual(self.cli("ungithub", str(repo))[0], 0)
+        self.assertEqual(self.cli("github", str(wc))[0], 2)   # an SVN copy has no GitHub
+        os.environ["CLAUDECODE"] = "1"
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 3)
+        self.assertEqual(self.cli("github", str(repo))[0], 3)
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_repos_shows_sources(self) -> None:
+        _, wc = self.svn_repo()
+        reg.allow(wc, "svn", [])
+        reg.set_watch(wc, reg.Watch(urls=("^/trunk",), rules=("r1",)))
+        repo = self.git_repo()
+        reg.allow(repo, "git", [])
+        reg.set_github(repo, reg.GitHubSource(slug="ArrushC/proj", logins=("ArrushC",)))
+        rc, out, _ = self.cli("repos")
+        self.assertIn("watch: ^/trunk (observe, 1 rule)", out)
+        self.assertIn("github: ArrushC/proj (observe, logins: ArrushC)", out)
+
     def test_allow_bad_review_is_a_usage_error(self) -> None:
         repo = self.git_repo()
         rc, _, err = self.cli("allow", str(repo), "--review", "codex")

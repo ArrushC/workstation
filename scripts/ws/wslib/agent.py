@@ -26,7 +26,9 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from . import agent_events, agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
 
@@ -183,7 +185,62 @@ def _repo_words(r: agent_registry.Repo) -> list[str]:
     if r.review:
         words.append(f"review: {r.review}")
     words.append(f"network: {'on' if r.network else 'off'}")
+    if r.watch is not None:
+        n = len(r.watch.rules)
+        words.append(f"watch: {', '.join(r.watch.urls)} ({r.watch.mode}, {n} rule{'' if n == 1 else 's'})")
+    if r.github is not None:
+        words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)})")
     return words
+
+
+def _source_change(fn: Callable[[Path, Any], agent_registry.Repo], root: Path,
+                   value: object) -> tuple[int, agent_registry.Repo | None]:
+    try:
+        return 0, fn(root, value)
+    except agent_registry.Refused as e:
+        _err(str(e))
+        return 3, None
+    except ValueError as e:
+        _err(str(e))
+        return 2, None
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return 3, None
+    except agent_registry.Unreadable as e:
+        _err(str(e))
+        return 1, None
+
+
+def _watch(args: argparse.Namespace) -> int:
+    p = vcs.probe(Path(args.path))
+    root = p.root or Path(args.path).resolve()
+    watch = None if args.cmd == "unwatch" else agent_registry.Watch(
+        urls=tuple(args.url or ()), mode=args.mode, authors=tuple(args.author or ()), rules=tuple(args.rule or ()),
+        interval=args.interval)
+    rc, repo = _source_change(agent_registry.set_watch, root, watch)
+    if repo is not None:
+        print(f"{'watching' if watch else 'no longer watching'}: {core.tilde(root)}"
+              + (f" ({', '.join(watch.urls)}, {watch.mode})" if watch else ""))
+    return rc
+
+
+def _github(args: argparse.Namespace) -> int:
+    p = vcs.probe(Path(args.path))
+    root = p.root or Path(args.path).resolve()
+    src = None
+    if args.cmd == "github":
+        logins = list(args.login or [])
+        if not logins and os.environ.get("CLAUDECODE") != "1":
+            gh = core.which("gh")
+            r = subprocess.run([gh, "api", "user", "--jq", ".login"], capture_output=True, text=True, timeout=30) \
+                if gh else None
+            logins = [r.stdout.strip()] if r is not None and r.returncode == 0 and r.stdout.strip() else []
+        src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins))
+    rc, repo = _source_change(agent_registry.set_github, root, src)
+    if repo is not None:
+        print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
+              + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)})" if src else ""))
+    return rc
 
 
 def _disallow(args: argparse.Namespace) -> int:
@@ -748,6 +805,25 @@ def _parser() -> argparse.ArgumentParser:
     d = sub.add_parser("disallow")
     d.add_argument("path")
     d.set_defaults(fn=_disallow)
+    w = sub.add_parser("watch", help="turn new SVN revisions into candidates (your own terminal only)")
+    w.add_argument("path")
+    w.add_argument("--url", action="append", help="a URL to watch, e.g. ^/trunk (repeatable)")
+    w.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
+    w.add_argument("--author", action="append", help="only these authors' revisions (repeatable)")
+    w.add_argument("--rule", action="append", help="what to look for, in plain words (repeatable)")
+    w.add_argument("--interval", default="5m")
+    w.set_defaults(fn=_watch)
+    uw = sub.add_parser("unwatch")
+    uw.add_argument("path")
+    uw.set_defaults(fn=_watch)
+    gh = sub.add_parser("github", help="take /agent requests from GitHub comments (your own terminal only)")
+    gh.add_argument("path")
+    gh.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
+    gh.add_argument("--login", action="append", help="who may ask (repeatable; default: your gh login)")
+    gh.set_defaults(fn=_github)
+    ugh = sub.add_parser("ungithub")
+    ugh.add_argument("path")
+    ugh.set_defaults(fn=_github)
     sub.add_parser("repos").set_defaults(fn=_repos)
     run = sub.add_parser("run", help="queue a job")
     run.add_argument("--title", required=True)
@@ -786,8 +862,8 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
-               "tell", "answer", "pause", "resume", "doctor", "--help")
+SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "pause", "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:

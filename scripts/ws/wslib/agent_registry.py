@@ -12,6 +12,7 @@ empty, so a session's hook keeps working with nothing allowed.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -38,6 +39,28 @@ class Unreadable(Exception):
     """The registry exists but isn't valid TOML: writers refuse rather than overwrite it."""
 
 
+MODES = ("off", "observe", "act")
+_INTERVAL = re.compile(r"^\d+[smhd]?$")
+
+
+@dataclass(frozen=True)
+class Watch:
+    """`[repo."<key>".watch]`: SVN URLs whose new revisions become candidates."""
+    urls: tuple[str, ...]
+    mode: str = "observe"
+    authors: tuple[str, ...] = ()
+    rules: tuple[str, ...] = ()
+    interval: str = "5m"
+
+
+@dataclass(frozen=True)
+class GitHubSource:
+    """`[repo."<key>".github]`: `/agent` comments by these logins on this github.com repository."""
+    slug: str = ""
+    mode: str = "observe"
+    logins: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class Repo:
     path: Path
@@ -49,6 +72,8 @@ class Repo:
     fix_rounds: int = 1
     review: str = ""
     network: bool = False
+    watch: Watch | None = None
+    github: GitHubSource | None = None
 
 
 @dataclass(frozen=True)
@@ -101,6 +126,25 @@ def _strings(value: object) -> tuple[str, ...]:
     return tuple(str(v) for v in value) if isinstance(value, list) else ()
 
 
+def _mode(value: object) -> str:
+    """A hand-written mode ws-agent doesn't know is read as off: never act on a typo."""
+    return str(value) if str(value) in MODES else "off"
+
+
+def _watch(t: object) -> Watch | None:
+    if not isinstance(t, dict):
+        return None
+    interval = str(t.get("interval", "5m"))
+    return Watch(_strings(t.get("urls", [])), _mode(t.get("mode", "observe")), _strings(t.get("authors", [])),
+                 _strings(t.get("rules", [])), interval if _INTERVAL.match(interval) else "5m")
+
+
+def _github(t: object) -> GitHubSource | None:
+    if not isinstance(t, dict):
+        return None
+    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")), _strings(t.get("logins", [])))
+
+
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
     engines = tuple(e for e in _strings(entry.get("engines", ["claude"])) if e in KNOWN_ENGINES) or ("claude",)
     rounds = entry.get("fix_rounds", 1)
@@ -108,7 +152,8 @@ def _repo(key: str, entry: Mapping[str, object]) -> Repo:
     return Repo(core.expand(key), str(entry.get("vcs", "")), _strings(entry.get("commands", [])),
                 str(entry.get("allowed_at", "")), engines, _strings(entry.get("checks", [])),
                 rounds if isinstance(rounds, int) and not isinstance(rounds, bool) and rounds >= 0 else 1,
-                review if review in engines else "", entry.get("network") is True)
+                review if review in engines else "", entry.get("network") is True,
+                _watch(entry.get("watch")), _github(entry.get("github")))
 
 
 def _repos(data: Mapping[str, object]) -> dict[str, Repo]:
@@ -193,7 +238,16 @@ def _emit(table: Mapping[str, object], path: list[str], out: list[str]) -> None:
 def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
     known = {"vcs": r.vcs, "commands": list(r.commands), "allowed_at": r.allowed_at, "engines": list(r.engines),
              "checks": list(r.checks), "fix_rounds": r.fix_rounds, "review": r.review, "network": r.network}
-    return {**known, **{k: v for k, v in old.items() if k not in known}}
+    out: dict[str, object] = {**known, **{k: v for k, v in old.items() if k not in known and k not in ("watch", "github")}}
+    for name, table in (("watch", None if r.watch is None else {
+            "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
+            "rules": list(r.watch.rules), "interval": r.watch.interval}),
+            ("github", None if r.github is None else {
+                "slug": r.github.slug, "mode": r.github.mode, "logins": list(r.github.logins)})):
+        if table is not None:   # keys a newer ws wrote inside the table survive too
+            prev = old.get(name)
+            out[name] = {**(prev if isinstance(prev, dict) else {}), **table}
+    return out
 
 
 def _write(data: dict[str, object], repos: dict[str, Repo]) -> None:
@@ -221,11 +275,57 @@ def allow(root: Path, vcs: str, commands: list[str] | tuple[str, ...], *, engine
         raise ValueError("ws-agent: --fix-rounds can't be negative")
     data = _read_strict()
     repos = _repos(data)
+    prev = repos.get(_key(root))
     repo = Repo(root.resolve(), vcs, tuple(commands), core.now_iso(), tuple(dict.fromkeys(engines)), tuple(checks),
-                fix_rounds, review, network)
+                fix_rounds, review, network, prev.watch if prev else None, prev.github if prev else None)
     repos[_key(root)] = repo
     _write(data, repos)
     return repo
+
+
+def _set_source(root: Path, **change: object) -> Repo:
+    _guard()
+    data = _read_strict()
+    repos = _repos(data)
+    key = _key(root)
+    if key not in repos:
+        raise KeyError(f"ws-agent: {key} isn't allowed for queued jobs; run 'ws-agent allow {key}' first")
+    repo = dataclasses.replace(repos[key], **change)  # type: ignore[arg-type]
+    repos[key] = repo
+    _write(data, repos)
+    return repo
+
+
+def set_watch(root: Path, watch: Watch | None) -> Repo:
+    """Watch these SVN URLs for new revisions (None stops watching). The person's own terminal only."""
+    _guard()
+    if watch is not None:
+        found = find(root)
+        if found is not None and found.vcs != "svn":
+            raise ValueError(f"ws-agent: {_key(root)} is a {found.vcs} repository; only SVN URLs can be watched")
+        if not watch.urls:
+            raise ValueError("ws-agent: watch needs at least one --url (e.g. ^/trunk)")
+        if watch.mode not in MODES:
+            raise ValueError(f"ws-agent: --mode must be one of {', '.join(MODES)}")
+        if not _INTERVAL.match(watch.interval):
+            raise ValueError(f"ws-agent: --interval {watch.interval!r} isn't a duration like 5m")
+    return _set_source(root, watch=watch)
+
+
+def set_github(root: Path, src: GitHubSource | None) -> Repo:
+    """Take `/agent` requests from these logins' comments (None stops it). The person's own terminal only."""
+    _guard()
+    if src is not None:
+        found = find(root)
+        if found is not None and found.vcs != "git":
+            raise ValueError(f"ws-agent: {_key(root)} is a {found.vcs} repository; GitHub needs a git one")
+        if not src.slug:
+            raise ValueError(f"ws-agent: {_key(root)} has no github.com remote")
+        if not src.logins:
+            raise ValueError("ws-agent: name who may ask with --login (nobody can, otherwise)")
+        if src.mode not in MODES:
+            raise ValueError(f"ws-agent: --mode must be one of {', '.join(MODES)}")
+    return _set_source(root, github=src)
 
 
 def disallow(root: Path) -> bool:

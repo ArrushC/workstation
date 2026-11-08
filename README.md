@@ -622,6 +622,14 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - `--fix-rounds`: how many times a failing check goes back to the engine (default 1).
   - `--review`: a second-opinion review by one of its engines.
   - `--network`: lets the agent's commands and the checks reach the network (off by default).
+- **Watched work**: sources per repository, again only from your own terminal.
+  - SVN: `ws-agent watch <path> --url ^/trunk [--mode observe|act|off] [--author A]... [--rule "…"]...
+    [--interval 5m]`. New revisions on the URL become candidates.
+  - GitHub: `ws-agent github <path> [--mode …] [--login L]...` (default: your gh login). An issue or comment on
+    the repository's github.com remote that starts with `/agent` from a listed login is a request.
+  - `unwatch` and `ungithub` stop them.
+  - Settings land in `[repo."<path>".watch]` and `[repo."<path>".github]`. A mode ws-agent doesn't know reads
+    as `off`.
 - **Per host**, by hand in `agents.toml` (kept when `allow` rewrites the file; a file ws-agent
   can't parse is never overwritten):
   - `[queue] parallel = 2`, and `[engines.codex] parallel = 1` / `model = "…"`.

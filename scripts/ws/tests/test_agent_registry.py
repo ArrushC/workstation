@@ -122,14 +122,17 @@ class Registry(Scratch):
 
     def test_unknown_tables_and_keys_survive_a_write(self) -> None:
         self.write(reg.registry_path(), '[future]\nx = 1\n\n[repo."~/src/foo"]\nvcs = "svn"\ncommands = []\n'
-                                        'allowed_at = "x"\n\n[repo."~/src/foo".watch]\nurls = ["^/trunk"]\nmode = "observe"\n')
+                                        'allowed_at = "x"\n\n[repo."~/src/foo".later]\nwhat = ["kept"]\n\n'
+                                        '[repo."~/src/foo".watch]\nurls = ["^/trunk"]\nmode = "observe"\nnewer = 1\n')
         before = tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))
         other = self.home / "src" / "bar"
         other.mkdir()
         reg.allow(other, "svn", [])
         after = tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))
         self.assertEqual(after["future"], before["future"])
-        self.assertEqual(after["repo"]["~/src/foo"]["watch"], before["repo"]["~/src/foo"]["watch"])
+        self.assertEqual(after["repo"]["~/src/foo"]["later"], before["repo"]["~/src/foo"]["later"])
+        watch = after["repo"]["~/src/foo"]["watch"]
+        self.assertEqual((watch["urls"], watch["mode"], watch["newer"]), (["^/trunk"], "observe", 1))
         self.assertIn("~/src/bar", after["repo"])
 
     def test_unparseable_file_is_never_overwritten(self) -> None:
@@ -150,6 +153,75 @@ class Registry(Scratch):
         found = reg.find(d)
         assert found is not None
         self.assertEqual(found.commands, ("echo 🚀 done",))
+
+    # --- sources (phase 2b) -----------------------------------------------------------------
+
+    def test_watch_round_trip(self) -> None:
+        reg.allow(self.wc, "svn", [])
+        w = reg.Watch(urls=("^/trunk",), mode="act", authors=("bob",), rules=("Review src/net",), interval="10m")
+        reg.set_watch(self.wc, w)
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertEqual(found.watch, w)
+        self.assertIsNone(found.github)
+        data = tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))
+        self.assertEqual(data["repo"]["~/src/foo"]["watch"]["urls"], ["^/trunk"])
+        reg.set_watch(self.wc, None)
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertIsNone(found.watch)
+        self.assertNotIn("watch", tomllib.loads(reg.registry_path().read_text(encoding="utf-8"))["repo"]["~/src/foo"])
+
+    def test_github_round_trip(self) -> None:
+        reg.allow(self.wc, "git", [])
+        src = reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",))
+        reg.set_github(self.wc, src)
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertEqual(found.github, src)
+        reg.set_github(self.wc, None)
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertIsNone(found.github)
+
+    def test_allow_keeps_sources(self) -> None:
+        reg.allow(self.wc, "svn", [])
+        w = reg.Watch(urls=("^/trunk",))
+        reg.set_watch(self.wc, w)
+        reg.allow(self.wc, "svn", ["make *"])   # allow again with new rules
+        found = reg.find(self.wc)
+        assert found is not None
+        self.assertEqual((found.watch, found.commands), (w, ("make *",)))
+
+    def test_source_validation(self) -> None:
+        reg.allow(self.wc, "svn", [])
+        for bad in (reg.Watch(urls=("^/trunk",), mode="loud"), reg.Watch(urls=()),
+                    reg.Watch(urls=("^/trunk",), interval="soon")):
+            with self.assertRaises(ValueError, msg=bad):
+                reg.set_watch(self.wc, bad)
+        with self.assertRaises(ValueError):          # github on an svn repository
+            reg.set_github(self.wc, reg.GitHubSource(slug="o/r", logins=("me",)))
+        other = self.home / "src" / "g"
+        other.mkdir()
+        reg.allow(other, "git", [])
+        with self.assertRaises(ValueError):          # a watch on a git repository
+            reg.set_watch(other, reg.Watch(urls=("^/trunk",)))
+        with self.assertRaises(ValueError):          # no github remote
+            reg.set_github(other, reg.GitHubSource(slug="", logins=("me",)))
+        with self.assertRaises(ValueError):          # nobody may trigger it
+            reg.set_github(other, reg.GitHubSource(slug="o/r", logins=()))
+        with self.assertRaises(KeyError):            # not allowed at all
+            reg.set_watch(self.home / "src" / "nope", reg.Watch(urls=("^/trunk",)))
+
+    def test_source_changes_refused_in_claude(self) -> None:
+        reg.allow(self.wc, "svn", [])
+        before = reg.registry_path().read_bytes()
+        os.environ["CLAUDECODE"] = "1"
+        with self.assertRaises(reg.Refused):
+            reg.set_watch(self.wc, reg.Watch(urls=("^/trunk",)))
+        with self.assertRaises(reg.Refused):
+            reg.set_github(self.wc, None)
+        self.assertEqual(reg.registry_path().read_bytes(), before)
 
     def test_review_must_be_an_allowed_engine(self) -> None:
         with self.assertRaises(ValueError):
