@@ -641,6 +641,13 @@ class Doctor(Cli):
             rc, out, _ = self.cli("doctor")
         self.assertEqual(rc, 1)
         self.assertRegex(out, r"!!\s+sandbox: no bwrap")
+        outside = self.root / "data" / "svn" / "projB"
+        outside.mkdir(parents=True)
+        reg.allow(outside, "svn", [])
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            rc, out, _ = self.cli("doctor")
+        self.assertRegex(out, rf"sandbox hides .*{self.root / 'data' / 'svn'}")
+        self.assertIn("[sandbox] hide", out)
         engines_mod = agent.engines
         engines_mod.cool("claude", "2100-01-01T00:00:00+00:00")
         with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):

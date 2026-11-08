@@ -110,6 +110,44 @@ class Layout(Sandbox):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual((rw / "s").read_text(), "kept")
 
+    def test_git_config_secrets_are_hidden(self) -> None:
+        repo = self.git_repo()
+        cfg = repo / ".git" / "config"
+        cfg.write_text(cfg.read_text() + '[remote "origin"]\n\turl = https://x-access-token:SECRET-TOKEN-1@github.com/o/r\n'
+                       '\tfetch = +refs/heads/*:refs/remotes/origin/*\n[http]\n\textraheader = AUTHORIZATION: basic SECRET-2\n'
+                       '[credential]\n\thelper = store\n[user]\n\tname = kept\n')
+        job = _job("ddd444", repo="~/src/proj", vcs="git")
+        wc = jobs.job_dir(job.id) / "wc"
+        wc.rmdir()
+        git("worktree", "add", "-q", "-b", "ws-agent/ddd444", str(wc), cwd=repo)
+        r = subprocess.run(sbx.wrap(["cat", str(cfg)], job_id=job.id, wc=wc), capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("SECRET", r.stdout)
+        self.assertNotIn("helper", r.stdout)
+        self.assertIn("name = kept", r.stdout)            # the rest of the config stays
+        self.assertIn("SECRET-TOKEN-1", cfg.read_text())  # the person's file is untouched
+        env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
+        for argv in (["git", "-C", str(wc), "status", "--short"], ["git", "-C", str(wc), "log", "--oneline", "-1"]):
+            r = subprocess.run(sbx.wrap(argv, job_id=job.id, wc=wc), capture_output=True, text=True, timeout=60, env=env)
+            self.assertEqual(r.returncode, 0, (argv, r.stderr))
+
+    def test_the_folder_around_an_outside_registered_copy_is_hidden(self) -> None:
+        company = self.outside / "data" / "svn"
+        registered = company / "projB"
+        registered.mkdir(parents=True)
+        reg.allow(registered, "svn", [])
+        neighbour = self.write(company / "projA" / "src.c", "SECRET-NEIGHBOUR")   # not registered, not in hide
+        self.assertFalse(self.readable(neighbour))
+        self.assertTrue(neighbour.exists())
+
+    def test_the_folder_hiding_never_hides_what_the_job_needs(self) -> None:
+        company = self.outside / "opt"
+        registered = company / "repo"
+        registered.mkdir(parents=True)
+        reg.allow(registered, "svn", [])
+        tool = self.write(company / "tools" / "tool.txt", "a tool")
+        self.assertTrue(self.readable(tool, ro=[tool.parent]))   # a bound tool's folder is never hidden
+
     def test_git_dir_is_read_only(self) -> None:
         repo = self.git_repo()
         job = _job("ccc333", repo="~/src/proj", vcs="git")

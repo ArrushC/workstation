@@ -18,6 +18,7 @@ engine's own sandbox runs nested inside this one and confines its shell commands
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -49,8 +50,47 @@ def hidden_paths(job_id: str) -> list[Path]:
     return found
 
 
+def surrounding_paths() -> list[Path]:
+    """The folder around each registered copy outside the home directory (/data/svn/projB →
+    /data/svn): unregistered code beside it (/data/svn/projA) is hidden too, never the root."""
+    home = core.home().resolve()
+    found = []
+    for r in agent_registry.load()[0].values():
+        parent = r.path.resolve().parent
+        if parent != Path("/") and not _under(home, parent) and not _under(parent, home) and parent not in found:
+            found.append(parent)
+    return found
+
+
 def _under(p: Path, root: Path) -> bool:
     return p == root or root in p.parents
+
+
+# A git config can hold credentials: a token in a remote URL, an http.extraheader, a credential
+# helper's settings. The engine sees a copy without those lines (and without [credential] and
+# [http] sections); git still works from the rest.
+_GIT_SECRET_KEY = re.compile(r"(?i)^\s*(url|pushurl|insteadof|pushinsteadof|extraheader|helper|password|token|"
+                             r"cookiefile|sslkey|sslcert\w*|proxy\w*)\s*=")
+_GIT_SECRET_SECTION = re.compile(r"(?i)^\s*\[\s*(credential|http)\b")
+
+
+def sanitize_git_config(text: str) -> str:
+    out: list[str] = []
+    skipping = False
+    for line in text.splitlines():
+        if line.strip().startswith("["):
+            skipping = bool(_GIT_SECRET_SECTION.match(line))
+            if not skipping:
+                out.append(line)
+            continue
+        if not skipping and not _GIT_SECRET_KEY.match(line):
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def _git_configs(common: Path) -> list[Path]:
+    return [p for p in (common / "config", common / "config.worktree", *common.glob("modules/**/config"),
+                        *common.glob("worktrees/*/config.worktree")) if p.is_file()]
 
 
 def _git_common_dir(wc: Path) -> Path | None:
@@ -94,9 +134,14 @@ def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro:
             args += ["--bind", str(p), str(p)]
             bound.append(p)
     hidden_roots = (home, Path("/tmp"))
-    for h in hidden_paths(job_id):
+    # Folders around outside registered copies go first and are skipped when they hold anything the
+    # job needs (its directory, a bound tool); the named paths then go over them.
+    candidates = [(h, True) for h in surrounding_paths()] + [(h, False) for h in hidden_paths(job_id)]
+    for h, surrounding in candidates:
         h = h.resolve() if h.exists() else h
         if not h.exists() or _under(jd, h) or _under(wc, h):
+            continue
+        if surrounding and any(_under(b, h) for b in bound):
             continue
         visible = not any(_under(h, r) for r in hidden_roots) or any(_under(h, b) for b in bound)
         if not visible:
@@ -105,6 +150,15 @@ def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro:
     common = _git_common_dir(wc)
     if common is not None and common.exists():
         args += ["--ro-bind", str(common), str(common)]
+        clean = jd / "git-config"
+        clean.mkdir(exist_ok=True)
+        for i, cfg in enumerate(_git_configs(common)):
+            copy = clean / f"{i}.config"
+            try:
+                copy.write_text(sanitize_git_config(cfg.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
+            except OSError:
+                continue
+            args += ["--ro-bind", str(copy), str(cfg)]
     if not network:
         args.append("--unshare-net")
     args += ["--chdir", str((chdir or wc).resolve()), "--", *argv]

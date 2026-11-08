@@ -677,6 +677,12 @@ def _doctor(args: argparse.Namespace) -> int:
         row(True, f"engine {name}: {path}{detail}{cool}")
     why = agent_sandbox.probe(force=True)
     row(why is None, f"sandbox: {'bwrap works here (outer and nested)' if why is None else why}")
+    around = [core.tilde(p) for p in agent_sandbox.surrounding_paths()]
+    hide = [core.tilde(p) for p in agent_registry.settings().hide]
+    row(True, "sandbox hides $HOME, /tmp, other jobs, the registered copies"
+              + (f", the folders around those outside $HOME ({', '.join(around)})" if around else "")
+              + (f", [sandbox] hide ({', '.join(hide)})" if hide else "")
+              + "; other code outside $HOME stays readable to jobs: list its folders in [sandbox] hide")
     q = jobs.pueue_status()
     _, parallel = agent_registry.load()
     if q is None:

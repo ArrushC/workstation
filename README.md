@@ -687,7 +687,13 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     writes:
     - the home directory, except the tools the job needs and the engine's own state;
     - other jobs' directories and every registered working copy;
+    - for a registered copy outside the home directory (`/data/svn/projB`), the folder around it
+      (`/data/svn`), so unregistered code beside it stays hidden;
     - `[sandbox] hide`.
+  - Other code outside the home directory stays readable to jobs, so list its folders in
+    `[sandbox] hide`. `doctor` says what is hidden.
+  - A git job sees its repository's `.git` read-only, and its config without remote URLs,
+    `[credential]` or `[http]` sections, so a token in a URL never reaches the engine.
   - Only the job's directory is writable and kept; `/tmp` and the home directory are
     throwaway layers.
   - Inside it, the engine's own sandbox confines its commands to the copy, with no network
