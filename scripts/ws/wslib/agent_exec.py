@@ -345,8 +345,8 @@ def _binary_paths(diff: str) -> set[str]:
     return found
 
 
-# What an engine leaves in the copy for itself: Claude Code's sandbox records its writes in
-# .claude/.cc-writes. Never part of a review, nor of a git job's patch.
+# What an engine leaves in the copy for itself: Claude Code 2.1.319's sandbox keeps a directory
+# .claude/.cc-writes/. Never part of a review, nor of a git job's patch.
 ENGINE_FILES = (".claude/.cc-writes",)
 
 
@@ -363,9 +363,12 @@ def _ignores_itself(path: Path) -> bool:
     if any(line.strip() == "*" for line in lines):
         return True
     own = {Path(f) for f in ENGINE_FILES}
-    files = [p for p in path.rglob("*") if p.is_file() or p.is_symlink()]
     root = path.parent
-    return bool(files) and all(p.relative_to(root) in own for p in files)
+    entries = [p.relative_to(root) for p in path.rglob("*")]
+
+    def engines_own(rel: Path) -> bool:   # an engine path, inside one, or a directory on the way to one
+        return rel in own or any(o in rel.parents for o in own) or any(rel in o.parents for o in own)
+    return any(e in own for e in entries) and all(engines_own(e) for e in entries)
 
 
 def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> tuple[list[str], list[str]]:

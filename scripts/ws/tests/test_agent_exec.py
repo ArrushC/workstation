@@ -474,7 +474,8 @@ class Attempts(Exec):
 
     def test_claude_bookkeeping_is_not_review_noise(self) -> None:
         job = self.git_job()
-        self.claude_script('mkdir -p .claude && : >.claude/.cc-writes\nprintf "x\\n" >>app.py\n')
+        # Claude Code 2.1.319's sandbox leaves .claude/.cc-writes/ (a directory) in the copy
+        self.claude_script('mkdir -p .claude/.cc-writes && : >.claude/.cc-writes/w1\nprintf "x\\n" >>app.py\n')
         ax.execute(job.id, resume=False)
         self.assertNotIn(".cc-writes", self.result(job, "changes.diff"))
         self.assertIn("app.py", self.result(job, "changes.diff"))
@@ -742,7 +743,7 @@ class ExecSvn(Exec):
 
     def test_claude_bookkeeping_is_not_review_noise_svn(self) -> None:
         _, _, job = self.svn_job()
-        self.claude_script('mkdir -p .claude && : >.claude/.cc-writes\nprintf "keep\\n" >notes.txt\n')
+        self.claude_script('mkdir -p .claude/.cc-writes\nprintf "keep\\n" >notes.txt\n')   # as measured: an empty dir
         ax.execute(job.id, resume=False)
         warnings = self.result(job, "warnings.txt")
         self.assertNotIn(".claude", warnings)
