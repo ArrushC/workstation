@@ -753,8 +753,16 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
   with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by
   this repository on its own.
+  - Each Linux host also runs `ws-agent serve`, the `dev.mise.ws-agent-serve` user unit next to pueued. It does
+    nothing until a repository there has a watch or a GitHub source.
+  - From then on it reads the SVN server (`svn info`, `log` and `diff`, with your svn credentials) and GitHub
+    (`gh api` GETs and `git fetch origin`, with your logins). It never writes to either.
+  - Like pueued, it stops with your last login session; `loginctl enable-linger` keeps both running.
 - **Turning it off**: `ws-agent pause` holds jobs; deleting `~/.config/workstation/agents.toml`
-  allows none. To remove the routing, drop the `## Orchestration` section and set
+  allows none. `systemctl --user stop dev.mise.ws-agent-serve` stops serve until the next apply or login. To
+  keep it off on one host, copy its `[bootstrap.services.ws-agent-serve]` table from `config.linux.toml` into
+  `config.local.toml` with `enabled = false` and `state = "stopped"`. Copy the whole table: a partial one
+  replaces it rather than merging. To remove the routing, drop the `## Orchestration` section and set
   `workstation-orchestration@skills-dir` to `false` in `settings.enforced.json`, then `wsa`.
 
 ## Adding things

@@ -654,6 +654,34 @@ if bad_files:
 else:
     print(f"PASS|files|{n_files} bootstrap.files entry/ies: source exists, phase valid")
 
+# User services: mise's unit carries only ExecStart and Restart (no Environment=, so no PATH), so
+# a command names its program by an absolute path (%h/... or /...), and ws-agent serve, which runs
+# gh, svn, pueue and the engines, gets PATH (with mise's shims) through /usr/bin/env. serve is
+# declared once, for Linux hosts (its sandbox is bwrap).
+bad_svc = []
+n_svc = 0
+for f, d in loaded.items():
+    for name, s in d.get("bootstrap", {}).get("services", {}).items():
+        if not isinstance(s, dict) or s.get("scope") != "user":
+            continue
+        n_svc += 1
+        cmd = str(s.get("command", ""))
+        first = (cmd.split() or [""])[0]
+        if not first.startswith(("/", "%h/")):
+            bad_svc.append(f"{f}:{name} command must start with an absolute path (got {first!r})")
+        if "ws-agent" in cmd and not (cmd.startswith("/usr/bin/env PATH=") and "%h/.local/share/mise/shims" in cmd):
+            bad_svc.append(f"{f}:{name} runs ws-agent without PATH: start it with '/usr/bin/env PATH=...%h/.local/share/mise/shims...'")
+serve = boot("config.linux.toml").get("services", {}).get("ws-agent-serve")
+if not (isinstance(serve, dict) and serve.get("scope") == "user" and "ws-agent serve" in str(serve.get("command", ""))):
+    bad_svc.append('config.linux.toml must declare [bootstrap.services.ws-agent-serve] (scope = "user", runs ws-agent serve)')
+for f in ("config.toml", "config.windows.toml"):
+    if "ws-agent-serve" in boot(f).get("services", {}):
+        bad_svc.append(f"{f} declares ws-agent-serve: it belongs to config.linux.toml alone")
+if bad_svc:
+    print("FAIL|services|" + "; ".join(bad_svc))
+else:
+    print(f"PASS|services|{n_svc} user service(s) start by absolute path; ws-agent serve gets PATH via env, Linux only")
+
 # dnf installs config.linux.toml's packages in one batch, so a name EL8 or EL9 can't resolve
 # fails the whole run. Names known to be wrong, and why:
 dropped = {
