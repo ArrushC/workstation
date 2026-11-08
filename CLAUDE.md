@@ -144,7 +144,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `~/.claude/settings.json` isn't a dotfile. `scripts/lib/claude-settings-merge.sh` (Windows:
   `scripts/claude-settings-merge.ps1`, same jq filter, from the post-tools hook) merges three layers:
   `settings.seed.json` (only where a key is absent) → the live file → `settings.enforced.json`
-  (always wins). Change cross-host keys in the enforced file.
+  (always wins). Change cross-host keys in the enforced file. The merge replaces arrays wholesale, so the enforced file
+  never adds a hook event (it would erase the live one, e.g. herdr's `SessionStart`): a global command
+  hook ships as the `workstation-orchestration` plugin.
 - `/etc` files come from `configs/` via `[bootstrap.files]`. Today that is only `/etc/wsl.conf`, which
   keeps `appendWindowsPath=false` and stays LF-only (CRLF corrupts it). `[dotfiles]` owns `$HOME` only.
 - `dotfiles/ssh/config.tera` gates SSH multiplexing out on Windows (its OpenSSH lacks it).
@@ -207,6 +209,17 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   (`check_ws`), so an early hook prints a message instead of a SyntaxError.
 - Tests: `scripts/test-ws.sh` (lint runs it: fixtures in scratch homes, real mise and fzf when
   present); `scripts/test-config-nu.sh` covers Nushell's `ws`.
+- `ws agent` (`wslib/{agent,jobs,agent_exec,agent_registry,vcs}.py`; `ws-agent` in `~/.local/bin` for hooks,
+  Claude's tools and pueue): queued headless `claude -p` jobs in pueue group `agents` (parallel 1), one private
+  working copy per job at the base recorded at `run`, a patch at the end; never a write upstream. Its svn/git
+  shims (svn: no repository writes; git: default-deny, reads + add/rm/mv/restore/apply; both confined to the
+  job's copy), `blockWritesOutsideWorkingDirectories`, no bare Edit/Write rule and a credential-free environment
+  are accidental-write guards, not a boundary. claude runs in its own process group (`timeout` setpgids
+  itself, so `pueue kill` never reaches it): `run.pid` records it, it gets PDEATHSIG, and while it lives the
+  job is `running` whatever pueue says; `cancel` kills that group.
+  `allow`/`disallow` refuse under `CLAUDECODE=1`; `run` refuses under `WS_AGENT_JOB`. Job state is derived
+  (exit.json, then the pueue task), never stored; `claude -p --output-format json` prints an array ending in
+  the result. Tests use fake pueue/claude (`tests/agent_helpers.py`) and a scratch pueued; never the real ones.
 
 ## File care
 
@@ -274,6 +287,11 @@ Global hooks (`dotfiles/claude/hooks/` → `~/.claude/hooks/`, via `settings.enf
 - `dangerous-command-guard.sh` denies fork bombs, raw-device writes, `mkfs`. It asks before
   `rm -rf` of `/` or `~`, `curl | bash`, force-push.
 - Both match command *text*, so a commit message naming a pattern is screened.
+
+Global plugin `dotfiles/claude/skills/workstation-orchestration/` (enabled in `settings.enforced.json`): one
+SessionStart command hook, `ws-agent context` → the `[orchestration]` line the routing policy (`## Orchestration`
+in `dotfiles/claude/CLAUDE.md`) reads. Read-only, fail-open, 3 s. The only plugin with hooks allowed under
+`dotfiles/claude/skills` (`check_claude_mods`: command hooks only, no modules).
 
 Mods (function-hook plugins in `.claude/skills/workstation-{sync,ship,lint-fold}/`): project scope, loaded as
 `<name>@skills-dir` only in a session in this checkout once it's trusted. Never under `dotfiles/claude/skills`

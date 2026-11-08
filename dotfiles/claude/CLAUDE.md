@@ -34,6 +34,44 @@ Coverage on this host:
 | Markdown | marksman |
 | Lua | lua-language-server |
 
+## Orchestration
+
+Standing instruction for every project: choose how to execute each development request
+yourself; never ask me to pick a mode. This is my explicit request to use subagents and
+queued jobs when they fit. A SessionStart line `[orchestration] …` gives this repository's
+VCS, job queue and jobs; `ws-agent route` refreshes it. No such line (Windows, or a host
+without `ws-agent`): tiers 1–2 only. As a subagent or a queued job, work directly and never
+delegate further.
+
+1. **Direct** (default): questions, explanations, small or single-file changes, quick
+   investigations. Don't delegate what you can finish faster yourself.
+2. **Subagents** (or an agent team, when the session offers one): separable work inside
+   this session, such as parallel searches or investigations, or implement-then-review.
+   One writer per set of files. Git: parallel writers use `isolation: "worktree"`. SVN:
+   never two writers in one working copy; fan out read-only, or give each writer a job.
+3. **Queued job** (`ws-agent run`): work I want done in the background or after this
+   session (I'll review it later), or that runs long, in a repository `ws-agent repos` lists.
+   Each job gets its own working copy at a recorded base (SVN URL@rev or git commit), runs
+   headless Claude Code under pueue, and returns a patch. Not listed: use tiers 1–2 and say
+   once that `ws-agent allow <path>`, run in my own terminal, would enable jobs; never work
+   around it.
+
+When you delegate: state the split (task → backend → files) in a short list and keep the
+ids. Don't wait for a job in a loop or with sleep: give me its id and how to check; a later
+session sees it on its context line. When `ws-agent ls` shows a job done, read
+`ws-agent result <id>`, review the diff and run the relevant checks before you report. Apply
+a patch to my working copy only with my approval, then `ws-agent close <id>`.
+
+SVN: never run `svn commit`, `copy`, `merge`, `lock`, `propset --revprop`, or
+`move`/`mkdir`/`delete` on a URL (anything that writes to the server) without my explicit
+approval in this conversation, and don't `update` or `switch` my working copy unasked.
+Deliver `svn diff` patches, keep `svn:*` property changes, and list unversioned files.
+
+Failures: say what failed and why, quoting the log line. `ws-agent retry <id>` resumes an
+interrupted job; never start a duplicate. Redo the work directly only after
+`ws-agent cancel <id>`, and say so. Never call delegated work done until you have reviewed
+and verified it.
+
 ## Prefer the modern tool
 
 This box installs a large modern toolbelt. Default to these over their classic
@@ -193,6 +231,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `claude` latest
 
 ### System packages (dnf, Linux; skipped without sudo)
-- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson moreutils mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rr rsync rsyslog socat strace tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
+- ShellCheck autofs bash-completion bind-utils binutils ccache clang clang-tools-extra cmake cppcheck cronie file gcc gcc-c++ gdb gdb-gdbserver git goaccess heaptrack htop info inotify-tools libasan libatomic libtsan libubsan lldb llvm lsof ltrace make man-db man-pages meson moreutils mtr multitail ncurses nfs-utils nfs4-acl-tools ninja-build nmap openssl-devel parallel perf pkgconf-pkg-config pv python3-pip rlwrap rr rsync rsyslog socat strace subversion tar tcpdump time tree unzip valgrind vim-common vim-enhanced wget zip zsh
 
 <!-- TOOLS:END -->

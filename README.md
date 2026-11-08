@@ -572,6 +572,80 @@ or empty target. `verify --include <path>` can limit a restore drill; temporary 
 removed afterwards. Run `ws backup verify` from your existing scheduler for periodic restore
 checks. Snapshot pruning and scheduling remain explicit restic/system scheduler operations.
 
+## Agent orchestration
+
+Every Claude Code session decides by itself how to run a development request; you don't
+pick a mode or invoke a skill. The policy is the `## Orchestration` section of
+`dotfiles/claude/CLAUDE.md` (deployed to `~/.claude/CLAUDE.md`), and a SessionStart hook
+(the `workstation-orchestration` plugin) gives each session one line about its repository:
+
+```
+[orchestration] svn ~/src/foo ^/trunk@4123 | jobs: allowed; queue 0/1 running, 1 queued | here: a3f2c1 succeeded (review)
+```
+
+| Work | Runs as |
+|---|---|
+| Questions, small or single-file changes | directly in the session |
+| Separable parallel work (searches, investigations, implement then review) | subagents; git writers get worktrees, SVN writers never share a working copy |
+| Long or multi-stage work that should outlive the session | a queued job (`ws-agent run`), in a repository you allowed |
+
+### Queued jobs (`ws agent`, also `ws-agent`; Linux)
+
+A job is headless Claude Code (`claude -p`, this host's login) in a private working copy of
+the repository at the base recorded when you asked: SVN `URL@rev` (a fresh checkout) or a git
+commit (a worktree on branch `ws-agent/<id>`). pueue's group `agents` queues them, one at a
+time by default (`[queue] parallel` in `~/.config/workstation/agents.toml`), and keeps their
+output (`pueue log <task>`). The job never commits, pushes or otherwise writes to the
+repository: it ends with a patch you review and apply.
+
+```sh
+ws-agent allow ~/src/foo [--command 'make *']   # once per repository, in your own terminal
+ws-agent repos | ws-agent disallow ~/src/foo
+ws-agent ls [--all]          # jobs of this repository, with their state
+ws-agent result <id> [--diff] # Claude's report, changes per file, how to apply; --diff prints the patch
+ws-agent show <id>           # base, attempts, session, the end of its log
+ws-agent cancel <id>         # stop it; the working copy stays for a look
+ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
+ws-agent close <id>          # after review: delete the working copy, keep the result
+ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
+ws-agent doctor              # Claude login, pueued, svn, the registry, free disk
+```
+
+- **States**: queued, running, succeeded, failed, interrupted (the daemon or the host stopped
+  under it), cancelled, closed. A job counts as running while its claude lives, whatever
+  pueue says. A second `run` of the same prompt in the same repository is refused while the
+  first is queued, running, awaiting review, failed or interrupted (`retry` those; `--force`
+  overrides), under a lock; `--paths` warns when two jobs claim the same files.
+- **Review artifacts** (`<state>/agent-jobs/<id>/result/`): `changes.diff` (SVN: `svn diff
+  --git --show-copies-as-adds`, which `svn patch --strip N` reproduces with binaries and
+  `svn:*` properties; git: a binary diff), `manifest.txt` (every changed path, moves,
+  property changes, binaries), `props.txt`, `apply.txt`, `warnings.txt` (unversioned files,
+  copied to `unversioned/` when small; symlinks are listed, never followed; versioned files
+  removed with a plain `rm`/`mv`), `claude.json`, `exit.json`.
+- **Guards, not a boundary**: a job runs with `--permission-mode acceptEdits` (edits inside
+  its copy only; writes outside it are blocked), nothing may prompt, and a fixed allowlist
+  plus the repository's `--command` rules. On its PATH, `svn` refuses every write to the
+  repository and `git` everything but reads and add/rm/mv/restore/apply (a worktree shares
+  refs, config and hooks with your repository); both refuse writes outside the job's copy.
+  Its environment has no SSH agent, no keys for git or svn+ssh, no git credential helpers
+  and no `*TOKEN*` variables except Claude's own login (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `ANTHROPIC_AUTH_TOKEN`), and svn runs without cached credentials; pueue doesn't store
+  those tokens either. A program called by absolute path gets past the shims, so allow only
+  repositories you'd let Claude Code edit.
+- **Limits**: Windows sleep pauses WSL and its jobs, which carry on after waking (a job's
+  `--timeout` counts only awake time); `wsl --shutdown`, a reboot or a pueued stop ends them
+  as `interrupted` (`retry` resumes the same session; claude dies with its executor, so
+  nothing keeps running unseen). pueue may pause the group when its daemon stops
+  (`ws-agent resume`). Jobs share the host's Claude Code plan and its usage limits with your
+  interactive sessions. Windows runs tiers 1–2 only.
+- **Remote dev servers**: everything is per host. A Linux host with this workstation applied
+  (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
+  with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by
+  this repository on its own.
+- **Turning it off**: `ws-agent pause` holds jobs; deleting `~/.config/workstation/agents.toml`
+  allows none. To remove the routing, drop the `## Orchestration` section and set
+  `workstation-orchestration@skills-dir` to `false` in `settings.enforced.json`, then `wsa`.
+
 ## Adding things
 
 **A tool.** One line in the right file for CLI tools; library bundles use their environment manifests. `config.toml` holds tools for both OSes (add `os = ["linux"]` or `os = ["windows"]` for single-OS ones) and `config.linux.toml` the Linux toolbelt. Prefer the aqua registry short name; use `github:` with `asset_pattern` only when the registry picks the wrong asset. Every Linux asset must run on EL8's glibc 2.28: prefer a musl build (see the gping, yazi, delta and bottom entries); when a project ships only newer-glibc builds, take conda-forge's (`conda:`, built against glibc 2.17 or 2.28; see helix and ast-grep). After an install, `tasks/verify-tools` checks every binary runs on the host, and `disk-budget.yml` checks them against glibc 2.28 in CI.

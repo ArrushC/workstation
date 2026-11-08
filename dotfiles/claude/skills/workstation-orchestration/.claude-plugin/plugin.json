@@ -1,0 +1,9 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "workstation-orchestration",
+  "version": "0.1.0",
+  "description": "Global SessionStart hook: one [orchestration] line naming the session's repository (git or SVN), whether queued agent jobs may use it, the job queue and its jobs (ws-agent context). Read-only; prints nothing when ws-agent is absent or slow. The routing policy itself is in ~/.claude/CLAUDE.md.",
+  "author": {
+    "name": "Arrush Chaturvedi"
+  }
+}

@@ -33,3 +33,4 @@
 - [Windows: .ps1 shadows .cmd](project-windows-ps1-shadows-cmd.md) — PowerShell runs name.ps1 before name.cmd in one dir; npm leftovers shadowed tool-env launchers (removed by hand on Windows 2026-11-02).
 - [tool-env rollout state](project-tool-env-rollout.md) — locked Python/LSP envs merged in #112; the full toolbelt is eager again (only cht.sh/graft lazy, don't re-shrink); WSL updated, Windows `ws update` and both hosts' `--clean` pending.
 - [Windows: Check Point blocks renames](project-windows-checkpoint-rename-race.md) — its scan-on-close makes os.replace onto a just-closed file fail with WinError 5 (~1 in 20k writes); Restart Manager cannot see it; tool-env retries for 1 s.
+- [Global orchestration, git + SVN](project-global-orchestration.md) — sessions route work themselves (ws agent, pueue, claude -p); company SVN on remote dev servers; Pro authorized, DeepSeek not; Super-agent is an optional GitHub-only phase 2.
