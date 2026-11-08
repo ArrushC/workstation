@@ -633,9 +633,12 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     copy holds only the directories that revision touched, with its diff and log entry beside the copy.
   - GitHub: `ws-agent github <path> [--mode …] [--login L]...` (default: your gh login). An issue or comment on
     the repository's github.com remote that starts with `/agent` from a listed login, made after you run it, is
-    a request. Its job starts from the pull request's head, or else the default branch, fetched with `git fetch
-    origin` into `FETCH_HEAD` only: your branches and remote-tracking refs stay as they are. A later `/agent` on
+    a request. Its job starts from the pull request's head, or else the default branch. The commit is read with
+    `git ls-remote origin` and fetched into the object store only: your branches, remote-tracking refs and
+    `FETCH_HEAD` stay as they are. Nothing is fetched while `origin` isn't that GitHub repository. A later `/agent` on
     the same issue goes to its open job. Polls use your gh login, read only: nothing is posted back.
+  - A job made from a source runs on someone else's code (a pull request, any committer's revision). It doesn't
+    load that copy's own `.claude` settings (their hooks) or its `.mcp.json`. Jobs you start yourself still do.
   - `unwatch` and `ungithub` stop them.
   - What they find passes fixed rules first: the repository is still allowed, the source isn't `off`, the author
     or login is listed (GitHub needs `--login`; an SVN watch without `--author` takes anyone), the item is new,
@@ -647,7 +650,9 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - Settings land in `[repo."<path>".watch]` and `[repo."<path>".github]`. A mode ws-agent doesn't know reads
     as `off`.
   - In `act` mode, a revision triage accepts and every GitHub request becomes a job straight away; anything
-    triage isn't sure about still goes to the inbox.
+    triage isn't sure about still goes to the inbox. So does a candidate that can't start now: the daily cap,
+    low disk, or a base that couldn't be fetched three times. Turning a watch off and on again, or disallowing
+    a repository and allowing it again, starts it from then: no backlog.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
   - requeues jobs waiting for an engine once one is out of its cooldown;

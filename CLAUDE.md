@@ -241,11 +241,15 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     - It never starts a paused group. A session may only run `serve --once`.
   - Sources (`agent_sources.py`) only read, with the person's credentials:
     - SVN: `info --xml`, then `log -v` past the cursor.
-    - GitHub: `gh api` GETs (≥ 60 s or `X-Poll-Interval`), and `git fetch --refmap= origin <ref>` (FETCH_HEAD
-      only).
+    - GitHub: `gh api` GETs (≥ 60 s or `X-Poll-Interval`). The commit comes from `git ls-remote origin`, then
+      `git -c gc.auto=0 fetch --no-write-fetch-head --refmap= origin <ref>` and `cat-file -e`; `origin` must
+      still be the slug. A request whose base fails 3 times goes to the inbox (`Candidate.note`, no base).
     - State is `agent-serve/sources.json`; each writer patches its own entry under a lock. No cursor means
       start at HEAD or now (no backlog). `handled` stops repeats.
-    - `watch`/`github` start the cursor; `unwatch`/`ungithub` forget it.
+    - `watch`/`github` start the cursor (afresh when the source is new or was off); `unwatch`/`ungithub` and
+      `disallow` forget it.
+    - serve keeps what a poll returned in `agent-serve/pending.json` until each is handled (the cursor has
+      moved past them): a serve killed mid-batch handles them next tick.
   - Candidates:
     - Each passes `agent_admit`: still allowed, not off, author or login listed, not seen, ≤ 10 jobs a day per
       source.
@@ -253,7 +257,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       `--safe-mode`, inside `agent_sandbox.wrap_scratch`. Any failure is `ask`.
     - Act mode plus accept, or an explicit request, goes to `queue_job` (the one path `run` and `accept` use
       too). The rest goes to the inbox (`agent_inbox`, `<state>/agent-inbox/<sha256(cid)[:10]>.json`, 0600).
-    - With disk under 10 GiB or 15 % (`agent_disk`), no source job starts.
+    - With disk under 10 GiB or 15 % (`agent_disk`), or over the cap, no source job starts: it waits in the inbox.
+    - A waiting job is requeued only once `engines.select` finds an engine that can run it.
+    - A job with an `origin` runs Claude with `--setting-sources user --strict-mcp-config`: measured, a copy's own
+      `.claude/settings.json` hooks otherwise run in the job. A source job's title stays out of its prompts and
+      event lines. Triage's `rule` reaches a prompt only if it's one of the watch's rules.
+  - `cancel`, `retry` and `close` reload and re-check the job under `queue_lock`, as serve does.
   - Someone else's words (log messages, comments, triage output):
     - quoted between `<untrusted>` tags (`agent_inbox.defuse`);
     - printed through `printable`;

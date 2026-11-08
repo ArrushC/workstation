@@ -354,7 +354,10 @@ def inspect(job: jobs.Job) -> str:
     """What an interrupted job left behind: working-copy status, changes per file, the log's end."""
     jd = jobs.job_dir(job.id)
     wc = jd / "wc"
-    lines = [f"Job {job.id}: {job.title}", f"Working copy: {wc}"]
+    # A source job's title is someone else's words (a log message's first line): this text goes into
+    # the engine's prompt on a resume, hand-off or fix round, so it names the job's origin instead.
+    head = f"Job {job.id}: {job.title}" if not job.origin else f"Job {job.id} (from {job.origin.split(':', 1)[0]})"
+    lines = [head, f"Working copy: {wc}"]
     if not wc.exists():
         lines.append("(no working copy yet: nothing was changed)")
     else:

@@ -71,6 +71,18 @@ class Argv(Engines):
         self.assertNotIn("--session-id", resumed)
         self.assertEqual(resumed[resumed.index("--model") + 1], "opus")
 
+    def test_source_jobs_ignore_the_copys_project_settings(self) -> None:
+        # A source job's copy is someone else's code (a PR head, any committer's revision): its
+        # .claude/settings.json hooks and .mcp.json servers must not run.
+        job = _job()
+        job.origin = "gh:o/r:c9"
+        argv = engines.ENGINES["claude"].argv(job, self.adir, resume=None, c=self.c, model="")
+        self.assertEqual(argv[argv.index("--setting-sources") + 1], "user")
+        self.assertIn("--strict-mcp-config", argv)
+        self.assertLess(argv.index("--setting-sources"), argv.index("--allowedTools"))   # not eaten as a rule
+        plain = engines.ENGINES["claude"].argv(_job(), self.adir, resume=None, c=self.c, model="")
+        self.assertNotIn("--setting-sources", plain)   # the person's own run keeps their project settings
+
     def test_claude_network_on_leaves_the_sandbox_network_open(self) -> None:
         c = engines.Confinement(wc=self.wc, network=True, commands=(), instructions="R")
         argv = engines.ENGINES["claude"].argv(_job(), self.adir, resume=None, c=c, model="")

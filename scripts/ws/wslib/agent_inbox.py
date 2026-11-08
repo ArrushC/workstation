@@ -51,6 +51,7 @@ class Candidate:
     prompt: str               # the job's prompt if accepted
     thread: str = ""          # gh:<slug>#<number>: follow-ups on it go to the same job
     url: str = ""
+    note: str = ""            # why the source couldn't finish it (no base): it waits in the inbox as is
 
 
 @dataclass

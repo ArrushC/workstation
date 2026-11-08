@@ -233,15 +233,18 @@ def _watch(args: argparse.Namespace) -> int:
     watch = None if args.cmd == "unwatch" else agent_registry.Watch(
         urls=tuple(args.url or ()), mode=args.mode, authors=tuple(args.author or ()), rules=tuple(args.rule or ()),
         interval=args.interval)
+    prev = agent_registry.find(root)
     rc, repo = _source_change(agent_registry.set_watch, root, watch)
     if repo is not None:
         print(f"{'watching' if watch else 'no longer watching'}: {core.tilde(root)}"
               + (f" ({', '.join(watch.urls)}, {watch.mode})" if watch else ""))
         if watch is None:
             agent_sources.forget_sources(f"svn:{core.tilde(root)}:")
-        else:
+        elif watch.mode != "off":
+            # new, or back from off: from HEAD now (nothing committed meanwhile); a changed setting keeps its cursor
+            fresh = prev is None or prev.watch is None or prev.watch.mode == "off"
             try:
-                agent_sources.start_watch(repo)   # from HEAD: no backlog
+                agent_sources.start_watch(repo, fresh=fresh)
             except agent_sources.SourceError as e:
                 _err(f"warning: {e}; the first poll starts the watch at HEAD once the URL answers")
     return rc
@@ -265,7 +268,8 @@ def _github(args: argparse.Namespace) -> int:
         print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
               + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)})" if src else ""))
         if src is not None:
-            agent_sources.start_github(repo)   # from now: no backlog
+            if src.mode != "off":   # from now: new, or back from off, brings nothing from meanwhile
+                agent_sources.start_github(repo, fresh=prev is None or prev.github is None or prev.github.mode == "off")
         elif prev is not None and prev.github is not None and prev.github.slug:
             agent_sources.update_source(f"gh:{prev.github.slug}", None)
     return rc
@@ -274,6 +278,7 @@ def _github(args: argparse.Namespace) -> int:
 def _disallow(args: argparse.Namespace) -> int:
     p = vcs.probe(Path(args.path))
     root = p.root or Path(args.path).resolve()
+    prev = agent_registry.find(root)
     try:
         removed = agent_registry.disallow(root)
     except agent_registry.Refused as e:
@@ -282,6 +287,10 @@ def _disallow(args: argparse.Namespace) -> int:
     except agent_registry.Unreadable as e:
         _err(str(e))
         return 1
+    # its sources' cursors go too: allowed again later, a watch starts from then, not from now
+    agent_sources.forget_sources(f"svn:{core.tilde(root)}:")
+    if prev is not None and prev.github is not None and prev.github.slug:
+        agent_sources.update_source(f"gh:{prev.github.slug}", None)
     print(f"{'disallowed' if removed else 'was not allowed'}: {core.tilde(root)}")
     return 0
 
@@ -503,9 +512,12 @@ def _accept(args: argparse.Namespace) -> int:
     prompt = c.prompt
     if args.note and args.note.strip():
         prompt = prompt.rstrip("\n") + f"\n\nA note from the person who accepted this:\n{args.note.strip()}\n"
-    q = queue_job(core.expand(c.repo), c.title, prompt, origin=c.cid, base=c.base)
+    # an item held without a base (its source couldn't fetch one) starts from your copy's HEAD
+    q = queue_job(core.expand(c.repo), c.title, prompt, origin=c.cid, base=c.base or None)
     if q.job is not None:
         agent_inbox.resolve(it, "accepted", q.job.id)
+        if c.thread:   # a later /agent on that issue goes to this job
+            agent_sources.remember_thread(c.thread, q.job.id)
     return _report_queued(q)
 
 
@@ -715,14 +727,20 @@ def _cancel(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
         return 1
-    st = jobs.state(job, _tasks())
-    if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
-        _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
-        return 3
-    job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
-    jobs.save(job)
-    confirmed = jobs.kill(job)
-    stopped = jobs.stop_run(job)
+    try:
+        with jobs.queue_lock():   # serve recovers and requeues under it: it never writes an older copy back
+            job = jobs.load(job.id)
+            st = jobs.state(job, _tasks())
+            if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
+                _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
+                return 3
+            job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
+            jobs.save(job)
+            confirmed = jobs.kill(job)
+    except jobs.QueueError as e:
+        _err(str(e))
+        return 1
+    stopped = jobs.stop_run(job)   # outside the lock: it waits up to 10 s for the engine
     print(f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
           f"(ws-agent close {job.id} removes the copy)")
     if not confirmed:
@@ -744,12 +762,19 @@ def _retry(args: argparse.Namespace) -> int:
         _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
         return 1
     print(agent_exec.inspect(job), end="")
-    res = jobs.job_dir(job.id) / "result"
-    if (res / "exit.json").exists():
-        (res / "exit.json").replace(res / f"exit-{job.attempts}.json")
-    jobs.kill(job)   # drop the finished task from the queue
     try:
-        jobs.enqueue(job, resume=True)
+        with jobs.queue_lock():   # serve may be recovering this very job: one of you requeues it
+            job = jobs.load(job.id)
+            now_q = jobs.pueue_status()
+            st = jobs.state(job, now_q.tasks if now_q else None)
+            if st not in ("failed", "interrupted", "waiting"):
+                _err(f"ws-agent: {job.id} is {st} now (serve may have requeued it); nothing retried")
+                return 3
+            res = jobs.job_dir(job.id) / "result"
+            if (res / "exit.json").exists():
+                (res / "exit.json").replace(res / f"exit-{job.attempts}.json")
+            jobs.kill(job)   # drop the finished task from the queue
+            jobs.enqueue(job, resume=True)
     except jobs.QueueError as e:
         _err(str(e))
         return 1
@@ -822,11 +847,18 @@ def _close(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
         return 1
-    st = jobs.state(job, _tasks())
-    if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
-        _err(f"ws-agent: {job.id} is {st}; " + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
-        return 3
-    print(close_job(job))
+    try:
+        with jobs.queue_lock():   # serve requeues waiting jobs under it: never one this is closing
+            job = jobs.load(job.id)
+            st = jobs.state(job, _tasks())
+            if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
+                _err(f"ws-agent: {job.id} is {st}; "
+                     + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
+                return 3
+            print(close_job(job))
+    except jobs.QueueError as e:
+        _err(str(e))
+        return 1
     return 0
 
 
@@ -842,7 +874,15 @@ def _close_empty() -> int:
         except OSError:
             continue   # no patch recorded: not known to be empty
         if empty:
-            close_job(job)
+            try:
+                with jobs.queue_lock():
+                    job = jobs.load(job.id)
+                    if jobs.state(job, _tasks()) != "succeeded":
+                        continue
+                    close_job(job)
+            except jobs.QueueError as e:
+                _err(str(e))
+                continue
             print(job.id)
             closed += 1
     _err(f"closed {closed} job{'s' if closed != 1 else ''} with an empty patch; their results stay")

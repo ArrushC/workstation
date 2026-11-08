@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import unittest
 from contextlib import chdir, redirect_stderr, redirect_stdout
@@ -325,6 +326,40 @@ class Manage(Cli):
         self.assertEqual(rc, 0, err)
         self.assertIn("warning: disk low: 3 GiB free", err)
 
+    def test_cancel_retry_close_wait_for_the_queue_lock(self) -> None:
+        # serve recovers and requeues under the queue lock; the person's commands must take it too, or a
+        # tick that loaded the job first writes it back over their cancel.
+        lock = jobs.jobs_dir() / ".queue.lock"
+
+        def held(argv: tuple[str, ...]) -> tuple[int, float]:
+            holder = subprocess.Popen([sys.executable, "-c", "import fcntl, time\n"
+                                       f"f = open({str(lock)!r}, 'a+'); fcntl.flock(f, fcntl.LOCK_EX)\n"
+                                       "print('locked', flush=True); time.sleep(1.5)"],
+                                      stdout=subprocess.PIPE, text=True)
+            assert holder.stdout is not None
+            self.assertEqual(holder.stdout.readline().strip(), "locked")
+            t0 = time.monotonic()
+            rc = self.cli(*argv)[0]
+            waited = time.monotonic() - t0
+            holder.wait()
+            return rc, waited
+
+        a = self.queued_run(self.repo, "to cancel")
+        self.pueue_status({7: QUEUED})
+        rc, waited = held(("cancel", a))
+        self.assertEqual(rc, 0)
+        self.assertGreater(waited, 1.0)
+        b = self.queued_run(self.repo, "to retry")
+        self.finished(b, {"exit_code": 1, "status": "failed", "kind": "ok", "engine": "claude"})
+        rc, waited = held(("retry", b))
+        self.assertEqual(rc, 0)
+        self.assertGreater(waited, 1.0)
+        c = self.queued_run(self.repo, "to close")
+        self.finished(c, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        rc, waited = held(("close", c))
+        self.assertEqual(rc, 0)
+        self.assertGreater(waited, 1.0)
+
     def test_serve_loop_is_the_services_not_a_sessions(self) -> None:
         os.environ["CLAUDECODE"] = "1"
         rc, _, err = self.cli("serve")
@@ -587,7 +622,8 @@ class InboxCommands(Cli):
              **kw: object) -> inbox.Item:
         fields: dict[str, object] = {"cid": cid, "source": "github", "repo": "~/src/proj", "explicit": True,
                                      "author": "arrushc", "title": "fix the parser", "text": "/agent fix the parser",
-                                     "base": {"commit": self.head, "branch": "FETCH_HEAD"}, "prompt": "Fix the parser."}
+                                     "base": {"commit": self.head, "branch": "FETCH_HEAD"}, "prompt": "Fix the parser.",
+                                     "thread": "gh:ArrushC/proj#7"}
         fields.update(kw)
         return inbox.add(inbox.Candidate(**fields), decision)  # type: ignore[arg-type]
 
@@ -634,6 +670,7 @@ class InboxCommands(Cli):
         rc, _, err = self.cli("accept", it.id)
         self.assertEqual(rc, 3)
         self.assertIn(jid, err)
+        self.assertEqual(sources.source_state()["gh:ArrushC/proj"]["threads"], {"#7": jid})   # follow-ups go to it
         # a refusal on the way leaves the item open
         other = self.item("gh:ArrushC/proj:c10", prompt="Another.")
         reg.disallow(self.repo)
@@ -725,6 +762,23 @@ class Registry(Cli):
         rc, _, err = self.cli("watch", str(wc), "--url", f"{url}/nope")
         self.assertEqual(rc, 0, err)   # saved; the first poll starts it once the URL answers
         self.assertIn("warning", err)
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_a_watch_turned_back_on_starts_at_head(self) -> None:
+        # "no backlog": revisions made while a watch was off, or the repository disallowed, are never fetched
+        url, wc = self.svn_repo()
+        self.assertEqual(self.cli("allow", str(wc))[0], 0)
+        key = "svn:~/src/svnwc:^/trunk"
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 0)
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "off")[0], 0)
+        self.write(wc / "a.txt", "a2\n")
+        svn("commit", "-q", "-m", "while off", cwd=wc)
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "observe")[0], 0)
+        self.assertEqual(sources.source_state()[key]["cursor"], 2)
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--interval", "10m")[0], 0)
+        self.assertEqual(sources.source_state()[key]["cursor"], 2)   # a changed setting keeps it
+        self.assertEqual(self.cli("disallow", str(wc))[0], 0)
+        self.assertNotIn(key, sources.source_state())
 
     def test_watch_and_github_commands(self) -> None:
         _, wc = self.svn_repo()

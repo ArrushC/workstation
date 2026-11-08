@@ -53,5 +53,14 @@ def admit(c: agent_inbox.Candidate, entry: agent_registry.Repo | None, mode: str
         return f"{c.cid} was already seen"
     key = source_key(c.cid)
     if daily_count(key) >= DAILY_CAP:
-        return f"the daily cap of {DAILY_CAP} jobs from {key} is reached"
+        return f"{_CAP} of {DAILY_CAP} jobs from {key} is reached"
     return None
+
+
+_CAP = "the daily cap"
+
+
+def is_cap(reason: str) -> bool:
+    """The cap holds a candidate back from becoming a job; it isn't a reason to lose it (serve
+    puts it in the inbox), unlike every other refusal."""
+    return reason.startswith(_CAP)
