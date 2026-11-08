@@ -34,7 +34,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_events, agent_exec, agent_inbox, agent_registry, agent_sandbox, core, engines, jobs, vcs
+from . import (agent_events, agent_exec, agent_inbox, agent_registry, agent_sandbox, agent_sources, core, engines, jobs,
+               vcs)
 
 MAX_CONTEXT = 400
 
@@ -228,6 +229,13 @@ def _watch(args: argparse.Namespace) -> int:
     if repo is not None:
         print(f"{'watching' if watch else 'no longer watching'}: {core.tilde(root)}"
               + (f" ({', '.join(watch.urls)}, {watch.mode})" if watch else ""))
+        if watch is None:
+            agent_sources.forget_sources(f"svn:{core.tilde(root)}:")
+        else:
+            try:
+                agent_sources.start_watch(repo)   # from HEAD: no backlog
+            except agent_sources.SourceError as e:
+                _err(f"warning: {e}; the first poll starts the watch at HEAD once the URL answers")
     return rc
 
 

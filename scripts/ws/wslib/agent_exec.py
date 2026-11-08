@@ -259,7 +259,7 @@ def prepare(job: jobs.Job, jobdir: Path) -> None:
     discard_wc(job, jobdir)
     try:
         if job.vcs == "svn":
-            r = _run(["svn", "checkout", "--non-interactive", "-q", f"{job.base['url']}@{job.base['rev']}", str(wc)])
+            r = _svn_checkout(job, wc)
         elif job.vcs == "git":
             r = _run(["git", "-C", str(core.expand(job.repo)), "worktree", "add", "-q", "-b", f"ws-agent/{job.id}",
                       str(wc), job.base["commit"]])
@@ -270,7 +270,48 @@ def prepare(job: jobs.Job, jobdir: Path) -> None:
     if r.returncode != 0:
         discard_wc(job, jobdir)
         raise PrepareError(r.stderr.decode("utf-8", "replace").strip() or f"exit {r.returncode}")
+    if job.vcs == "svn" and job.base.get("review_rev"):
+        try:
+            _review_input(job, jobdir)
+        except PrepareError:
+            discard_wc(job, jobdir)
+            raise
     (jobdir / "prepared").write_text(core.now_iso() + "\n", encoding="utf-8")
+
+
+def _svn_checkout(job: jobs.Job, wc: Path) -> subprocess.CompletedProcess[bytes]:
+    """`URL@REV`, whole; or, with base["sparse"] (a watcher's review job), only the directories the
+    revision touched: an empty checkout, the root's files first ('.': setting the root's depth
+    later would drop the directories), then each directory and its parents."""
+    url, rev = job.base["url"], job.base["rev"]
+    dirs = [d.strip() for d in job.base.get("sparse", "").splitlines() if d.strip()]
+    if not dirs:
+        return _run(["svn", "checkout", "--non-interactive", "-q", f"{url}@{rev}", str(wc)])
+    r = _run(["svn", "checkout", "--non-interactive", "-q", "--depth", "empty", f"{url}@{rev}", str(wc)])
+    for d in sorted(dirs, key=lambda d: d != "."):
+        if r.returncode != 0:
+            break
+        if d == ".":
+            r = _run(["svn", "update", "--non-interactive", "-q", "--set-depth", "files", "-r", rev, str(wc)])
+        elif not Path(d).is_absolute() and ".." not in Path(d).parts:
+            r = _run(["svn", "update", "--non-interactive", "-q", "--parents", "--set-depth", "infinity", "-r", rev,
+                      str(wc / d)])
+    return r
+
+
+def _review_input(job: jobs.Job, jobdir: Path) -> None:
+    """The reviewed revision's diff and log entry in the job's input/ (outside the copy; the
+    engine reads it): taken here, with the person's svn credentials, outside the sandbox."""
+    rev, url = job.base["review_rev"], job.base["url"]
+    inp = jobdir / "input"
+    inp.mkdir(parents=True, exist_ok=True)
+    for name, argv in ((f"r{rev}.diff", ["svn", "diff", "--non-interactive", "-c", rev, f"{url}@{rev}"]),
+                       (f"r{rev}.log", ["svn", "log", "--non-interactive", "-v", "--xml", "-r", rev, f"{url}@{rev}"])):
+        r = _run(argv)
+        if r.returncode != 0:
+            why = r.stderr.decode("utf-8", "replace").strip() or f"exit {r.returncode}"
+            raise PrepareError(f"ws-agent: svn {argv[1]} of r{rev} failed: {why}")
+        (inp / name).write_bytes(r.stdout)
 
 
 def _text(r: subprocess.CompletedProcess[bytes]) -> str:

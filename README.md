@@ -624,7 +624,9 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - `--network`: lets the agent's commands and the checks reach the network (off by default).
 - **Watched work**: sources per repository, again only from your own terminal.
   - SVN: `ws-agent watch <path> --url ^/trunk [--mode observe|act|off] [--author A]... [--rule "…"]...
-    [--interval 5m]`. New revisions on the URL become candidates.
+    [--interval 5m]`. Revisions committed on the URL after you run it (no backlog) become candidates, read
+    with your own svn credentials; nothing is written to the server. An accepted one becomes a review job whose
+    copy holds only the directories that revision touched, with its diff and log entry beside the copy.
   - GitHub: `ws-agent github <path> [--mode …] [--login L]...` (default: your gh login). An issue or comment on
     the repository's github.com remote that starts with `/agent` from a listed login is a request.
   - `unwatch` and `ungithub` stop them.

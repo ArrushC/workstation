@@ -21,6 +21,7 @@ from wslib import agent, core, jobs
 from wslib import agent_exec as ax
 from wslib import agent_inbox as inbox
 from wslib import agent_registry as reg
+from wslib import agent_sources as sources
 
 QUEUED = {"status": {"Queued": {"enqueued_at": "2026-11-06T23:48:51.387887077Z"}}}
 RUNNING = {"status": {"Running": {"enqueued_at": "2026-11-06T23:48:39Z", "start": "2026-11-06T23:48:41Z"}}}
@@ -651,6 +652,20 @@ class Registry(Cli):
         self.assertIn("network: on", out)
 
     @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_watch_starts_at_head_and_unwatch_forgets(self) -> None:
+        url, wc = self.svn_repo()
+        self.assertEqual(self.cli("allow", str(wc))[0], 0)
+        rc, _, err = self.cli("watch", str(wc), "--url", "^/trunk")
+        self.assertEqual(rc, 0, err)
+        st = sources.source_state()["svn:~/src/svnwc:^/trunk"]
+        self.assertEqual((st["cursor"], st["url"]), (1, f"{url}/trunk"))
+        self.assertEqual(self.cli("unwatch", str(wc))[0], 0)
+        self.assertEqual(sources.source_state(), {})
+        rc, _, err = self.cli("watch", str(wc), "--url", f"{url}/nope")
+        self.assertEqual(rc, 0, err)   # saved; the first poll starts it once the URL answers
+        self.assertIn("warning", err)
+
     def test_watch_and_github_commands(self) -> None:
         _, wc = self.svn_repo()
         self.assertEqual(self.cli("allow", str(wc))[0], 0)
