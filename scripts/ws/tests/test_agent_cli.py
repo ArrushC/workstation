@@ -1128,5 +1128,77 @@ class InterruptCli(Manage):
         self.assertEqual(self.cli("interrupt", jid, "x")[0], 3)
 
 
+class Followups(Manage):
+    def test_a_stale_save_never_uncancels(self) -> None:
+        jid = self.queued_run(self.repo)
+        stale = jobs.load(jid)          # an executor's copy, read before the cancel
+        cur = jobs.load(jid)
+        cur.cancelled = True
+        cur.auto_resumes = 2
+        jobs.save(cur)
+        stale.attempts = 3
+        jobs.save(stale)                # written back later
+        got = jobs.load(jid)
+        self.assertTrue(got.cancelled)
+        self.assertEqual((got.attempts, got.auto_resumes), (3, 2))
+        self.assertTrue(stale.cancelled)   # and the writer learns it
+
+    def test_run_validates_timeout_first(self) -> None:
+        rc, _, err = self.cli("run", "--title", "t", "--prompt", "x", "--repo", str(self.repo), "--timeout", "soon")
+        self.assertEqual(rc, 2)
+        self.assertIn("--timeout", err)
+        self.assertEqual(jobs.all_jobs(), [])
+        self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))
+
+    def test_doctor_survives_a_hanging_auth_status(self) -> None:
+        real = subprocess.run
+
+        def run(argv: list[str], *a: object, **kw: object) -> object:
+            if list(argv[1:3]) == ["auth", "status"]:
+                raise subprocess.TimeoutExpired(argv, 30)
+            return real(argv, *a, **kw)  # type: ignore[call-overload]
+
+        with mock.patch.object(agent.engines.ClaudeEngine, "available", return_value=None), \
+                mock.patch.object(agent.agent_sandbox, "probe", return_value=None), \
+                mock.patch.object(agent.subprocess, "run", side_effect=run):
+            rc, out, _ = self.cli("doctor")
+        self.assertRegex(out, r"ok\s+engine claude: ")
+        self.assertRegex(out, r"serve: ")   # it got to the end
+
+    def test_close_empty_keeps_jobs_that_left_something(self) -> None:
+        jid = self.queued_run(self.repo, "left a file")
+        self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        res = jobs.job_dir(jid) / "result"
+        self.write(res / "changes.diff", "")
+        self.write(res / "warnings.txt", "no changes: the patch is empty\nunversioned: big.bin (too large to copy)\n")
+        rc, out, _ = self.cli("close", "--empty")
+        self.assertEqual((rc, out.split()), (0, []))
+        self.assertFalse(jobs.load(jid).closed)
+
+    def test_queue_job_with_a_base_skips_the_thorough_probe(self) -> None:
+        head = git("rev-parse", "HEAD", cwd=self.repo)
+        real = agent.vcs.probe
+        with mock.patch.object(agent.vcs, "probe", side_effect=real) as probe:
+            q = agent.queue_job(self.repo, "t", "from a source", origin="gh:o/r:c1",
+                                base={"commit": head, "branch": "main"})
+            self.assertEqual(q.code, 0, q.error)
+            self.assertEqual([c.kwargs.get("thorough", False) for c in probe.call_args_list], [False])
+            probe.reset_mock()
+            self.assertEqual(agent.queue_job(self.repo, "t", "the person's own").code, 0)
+            self.assertEqual([c.kwargs.get("thorough", False) for c in probe.call_args_list], [True])
+
+
+class FollowupsSvn(Cli):
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_run_validates_an_svn_rev_first(self) -> None:
+        _, wc = self.svn_repo()
+        reg.allow(wc, "svn", [])
+        self.pueue_status({})
+        rc, _, err = self.cli("run", "--title", "t", "--prompt", "x", "--repo", str(wc), "--rev", "latest")
+        self.assertEqual(rc, 2)
+        self.assertIn("--rev", err)
+        self.assertEqual(jobs.all_jobs(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -449,8 +449,8 @@ def _held_request(entry: agent_registry.Repo, slug: str, rk: str, login: str, bo
 
 
 def poll_github(entry: agent_registry.Repo, now: float
-                ) -> tuple[list[agent_inbox.Candidate], list[tuple[str, str]]]:
-    """New `/agent` requests by the source's logins since the cursor, and follow-ups ((job id, text))
+                ) -> tuple[list[agent_inbox.Candidate], list[tuple[str, str, str]]]:
+    """New `/agent` requests by the source's logins since the cursor, and follow-ups ((job id, text, login))
     for threads whose job is still open. Polls once max(60 s, GitHub's X-Poll-Interval) has passed.
     A request whose base can't be fetched is tried again next poll (the cursor stops before it)."""
     g = entry.github
@@ -491,13 +491,17 @@ def poll_github(entry: agent_registry.Repo, now: float
         if isinstance(i, dict) and str(i.get("created_at") or "") >= cursor and isinstance(i.get("number"), int):
             requests.append((f"i{i['number']}", _login(i), str(i.get("body") or ""), int(i["number"]),
                              str(i.get("html_url") or ""), str(i.get("updated_at") or i.get("created_at")), i))
-    newest = max([cursor, *(r[5] for r in requests)])
+    # The cursor moves over every row read, request or not: rows are sorted by update time, so a
+    # page of old issues that were merely edited can't sit in front of new requests for ever.
+    rows = [x for x in [*(comments if isinstance(comments, list) else []), *(issues if isinstance(issues, list) else [])]
+            if isinstance(x, dict)]
+    newest = max([cursor, *(str(x.get("updated_at") or "") for x in rows)])
     threads = st.get("threads") if isinstance(st.get("threads"), dict) else {}
     assert isinstance(threads, dict)
     failures = st.get("failures") if isinstance(st.get("failures"), dict) else {}
     assert isinstance(failures, dict)
     found: list[agent_inbox.Candidate] = []
-    follow: list[tuple[str, str]] = []
+    follow: list[tuple[str, str, str]] = []
     errors: list[tuple[str, str]] = []
     for rk, login, body, number, url, updated, issue in sorted(requests, key=lambda r: r[5]):
         if rk in handled:
@@ -509,7 +513,7 @@ def poll_github(entry: agent_registry.Repo, now: float
         jid = threads.get(f"#{number}")
         if isinstance(jid, str) and _open_job(jid):
             if instruction:
-                follow.append((jid, instruction))
+                follow.append((jid, instruction, login))
             handled.append(rk)
             continue
         try:

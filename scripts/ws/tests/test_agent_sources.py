@@ -255,7 +255,7 @@ class GitHub(AgentScratch):
                        created=core.now_iso(), session_id="", timeout="2h", origin=f"gh:{SLUG}:c800")
         jobs.save(job)
         src.remember_thread(f"gh:{SLUG}#7", job.id)
-        self.assertEqual(src.poll_github(self.entry, self.t0 + 1), ([], [(job.id, "fix the parser\nkeep the API")]))
+        self.assertEqual(src.poll_github(self.entry, self.t0 + 1), ([], [(job.id, "fix the parser\nkeep the API", "ArrushC")]))
         job.closed = True
         jobs.save(job)
         self.comment(body="/agent and the docs", cid=902)
@@ -341,6 +341,17 @@ class GitHub(AgentScratch):
         off = reg.Repo(path=self.repo, vcs="git", github=reg.GitHubSource(slug=SLUG, mode="off", logins=("ArrushC",)))
         self.assertEqual(src.poll_github(off, self.t0 + 1), ([], []))
         self.assertEqual(self.gh_calls(), [])
+
+
+class GitHubFollowups(GitHub):
+    def test_the_cursor_moves_past_rows_that_arent_requests(self) -> None:
+        self.answer("issues/comments", [])
+        issue = json.loads((FIXTURES / "gh-issue.json").read_text())
+        old = dict(issue, number=3, body="an old issue, edited", created_at=iso(self.t0 - 999),
+                   updated_at=iso(self.t0 + 50))
+        self.answer("issues", [old])
+        self.assertEqual(src.poll_github(self.entry, self.t0 + 1), ([], []))
+        self.assertEqual(src.source_state()[f"gh:{SLUG}"]["cursor"], iso(self.t0 + 50))
 
 
 if __name__ == "__main__":

@@ -870,5 +870,24 @@ class Interrupt(Conversations):
         self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))   # in place, no new task
 
 
+class Followups(Exec):
+    def test_collect_warns_when_the_vcs_fails(self) -> None:
+        repo = self.home / "src" / "proj"
+        repo.mkdir(parents=True)
+        job = self.make_job(repo, "git", {"commit": "0" * 40, "branch": "main"})
+        (jobs.job_dir(job.id) / "wc").mkdir()   # not a repository: every git call fails
+        warnings = ax.collect(job, jobs.job_dir(job.id))
+        self.assertTrue(any("git" in w and "failed" in w for w in warnings), warnings)
+        self.assertIn("failed", self.result(job, "warnings.txt"))
+
+    def test_an_interrupted_attempt_is_counted(self) -> None:
+        repo = self.home / "src" / "proj"
+        repo.mkdir(parents=True)
+        job = self.make_job(repo, "git", {"commit": "0" * 40, "branch": "main"})
+        with mock.patch.object(ax, "prepare", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+            ax.execute(job.id, resume=False)   # killed mid-attempt: finish() never runs
+        self.assertEqual(jobs.load(job.id).attempts, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

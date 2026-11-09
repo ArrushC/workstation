@@ -732,6 +732,7 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     - other jobs' directories and every registered working copy;
     - for a registered copy outside the home directory (`/data/svn/projB`), the folder around it
       (`/data/svn`), so unregistered code beside it stays hidden;
+    - Windows drives under WSL (`/mnt`), `/media`, and other accounts' home directories;
     - `[sandbox] hide`.
   - Other code outside the home directory stays readable to jobs, so list its folders in
     `[sandbox] hide`. `doctor` says what is hidden.
