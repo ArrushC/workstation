@@ -424,6 +424,17 @@ class Attempts(Exec):
         self.assertTrue(str(info["reset_at"]).startswith("2100-01-01"))
         self.assertEqual(jobs.state(jobs.load(job.id), {}), "waiting")
 
+    def test_cooling_and_logged_out_is_waiting(self) -> None:
+        # Claude hits its limit and Codex isn't logged in: the job waits for Claude's reset (serve
+        # requeues it then) instead of failing.
+        job = self.git_job(engines=("claude", "codex"))
+        self.write(self.fc / "fail.1", USAGE_2100)
+        self.write(self.fx / "login", "Not logged in")
+        self.write(self.fx / "login.rc", "1")
+        self.assertEqual(ax.execute(job.id, resume=False), 1)
+        self.assertEqual(jobs.state(jobs.load(job.id), {}), "waiting")
+        self.assertTrue(str(self.exit_json(job)["reset_at"]).startswith("2100-01-01"))
+
     def test_codex_resumes_its_own_thread(self) -> None:
         job = self.git_job(engines=("codex",))
         self.write(self.fx / "fail.1", json.dumps("stream disconnected before completion"))
@@ -696,6 +707,34 @@ class ExecSvn(Exec):
         self.assertEqual(svn("propget", "svn:executable", "run.sh", cwd=fresh), "*")
         self.assertEqual(svn("propget", "svn:eol-style", "renamed.txt", cwd=fresh), "native")
         self.assertEqual(svn("status", "-q", cwd=user_wc), "")   # the user's working copy is untouched
+
+    def test_review_job_prepares_sparse_copy_and_input(self) -> None:
+        url, user_wc = self.svn_repo()
+        self.write(user_wc / "other" / "c.txt", "c\n")
+        svn("add", "-q", "other", cwd=user_wc)
+        svn("commit", "-q", "-m", "r2: other", cwd=user_wc)
+        self.write(user_wc / "sub" / "b.txt", "b changed\n")
+        svn("commit", "-q", "-m", "r3: change sub", cwd=user_wc)
+        job = self.make_job(user_wc, "svn", {"url": f"{url}/trunk", "repos_root": url, "rev": "3", "review_rev": "3",
+                                             "sparse": "sub"})
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        wc = jobs.job_dir(job.id) / "wc"
+        self.assertEqual((wc / "sub" / "b.txt").read_text(), "b changed\n")
+        self.assertFalse((wc / "other").exists())   # only what the revision touched
+        self.assertFalse((wc / "a.txt").exists())
+        inp = jobs.job_dir(job.id) / "input"
+        self.assertIn("+b changed", (inp / "r3.diff").read_text())
+        self.assertIn("r3: change sub", (inp / "r3.log").read_text())
+        argv = (self.fc / "argv").read_text().splitlines()
+        self.assertEqual(argv[argv.index("--add-dir") + 1], str(inp))
+        # root files and a directory: the root's files first, so its depth doesn't drop the directory
+        job2 = self.make_job(user_wc, "svn", {"url": f"{url}/trunk", "repos_root": url, "rev": "3", "review_rev": "2",
+                                              "sparse": "other\n."})
+        self.assertEqual(ax.execute(job2.id, resume=False), 0)
+        wc2 = jobs.job_dir(job2.id) / "wc"
+        self.assertTrue((wc2 / "a.txt").exists())
+        self.assertTrue((wc2 / "other" / "c.txt").exists())
+        self.assertFalse((wc2 / "sub").exists())
 
     def test_checkout_at_recorded_revision(self) -> None:
         url, user_wc, job = self.svn_job()

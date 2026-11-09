@@ -488,7 +488,7 @@ scratch repositories):
 
 | # | Result |
 |---|---|
-| P7 | **pass (session lines).** Two fresh sessions were opened (orch-svn, orch-local), then real job 6ef77f finished in orch-svn. On the next prompt, the orch-svn session received exactly `[orchestration] 6ef77f succeeded (P7 live event): ws-agent result 6ef77f`, and said so without acting on it. The orch-local session got none. The job's SVN result had no warnings: `.claude` and `.remember` count as tool directories. The Windows notice needs the person's eyes. |
+| P7 | **pass (session lines).** Two fresh sessions were opened (orch-svn, orch-local), then real job 6ef77f finished in orch-svn. On the next prompt, the orch-svn session received exactly `[orchestration] 6ef77f succeeded (P7 live event): ws-agent result 6ef77f`, and said so without acting on it. The orch-local session got none. The job's SVN result had no warnings: `.claude` and `.remember` count as tool directories. The person saw both Windows notices. |
 | P10 | **pass.** Real job b7e858 went `needs-you`. A fresh session asked to "deal with anything that needs attention", allowed to run `ws-agent`, put the question to the person ("I won't pick for you"). It posted nothing to the job's thread (it stayed `needs-you`), reviewed the other results, wouldn't call patches done without their tests, and proposed applying one only with approval. |
 
 Found and fixed during validation: Claude's sandbox bookkeeping is a directory (`.claude/.cc-writes/`), not a

@@ -610,6 +610,10 @@ ws-agent tell <id> "..."     # your follow-up: after its current turn, or resumi
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
 ws-agent close <id>          # after review: delete the working copy, keep the result
+ws-agent close --empty       # the same for every succeeded job whose patch is empty
+ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
+ws-agent ui                  # jobs and the inbox in one fzf list: enter pages a result, alt-t/r/c/x/a/d act
+ws-agent serve [--once]      # the always-on loop the ws-agent-serve service runs (below)
 ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
 ws-agent doctor              # each engine's login and cooldown, the sandbox, pueued, svn, the registry, disk
 ```
@@ -622,6 +626,42 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - `--fix-rounds`: how many times a failing check goes back to the engine (default 1).
   - `--review`: a second-opinion review by one of its engines.
   - `--network`: lets the agent's commands and the checks reach the network (off by default).
+- **Watched work**: sources per repository, again only from your own terminal.
+  - SVN: `ws-agent watch <path> --url ^/trunk [--mode observe|act|off] [--author A]... [--rule "…"]...
+    [--interval 5m]`. Revisions committed on the URL after you run it (no backlog) become candidates, read
+    with your own svn credentials; nothing is written to the server. An accepted one becomes a review job whose
+    copy holds only the directories that revision touched, with its diff and log entry beside the copy.
+  - GitHub: `ws-agent github <path> [--mode …] [--login L]...` (default: your gh login). An issue or comment on
+    the repository's github.com remote that starts with `/agent` from a listed login, made after you run it, is
+    a request. Its job starts from the pull request's head, or else the default branch. The commit is read with
+    `git ls-remote origin` and fetched into the object store only: your branches, remote-tracking refs and
+    `FETCH_HEAD` stay as they are. Nothing is fetched while `origin` isn't that GitHub repository. A later `/agent` on
+    the same issue goes to its open job. Polls use your gh login, read only: nothing is posted back.
+  - A job made from a source runs on someone else's code (a pull request, any committer's revision). It doesn't
+    load that copy's own `.claude` settings (their hooks) or its `.mcp.json`. Jobs you start yourself still do.
+  - `unwatch` and `ungithub` stop them.
+  - What they find passes fixed rules first: the repository is still allowed, the source isn't `off`, the author
+    or login is listed (GitHub needs `--login`; an SVN watch without `--author` takes anyone), the item is new,
+    and at most 10 jobs a day come from one source.
+  - In `observe` mode (the default) it then waits in the inbox for you. `ws-agent inbox [--all] [--json]` lists it,
+    `ws-agent inbox --show <id>` prints one item (the author's words are shown, never followed), `ws-agent accept
+    <id> [--note "…"]` queues it as a job at the base the source recorded, and `ws-agent dismiss <id>` drops it.
+    The session line shows `inbox N` for the repository.
+  - Settings land in `[repo."<path>".watch]` and `[repo."<path>".github]`. A mode ws-agent doesn't know reads
+    as `off`.
+  - In `act` mode, a revision triage accepts and every GitHub request becomes a job straight away; anything
+    triage isn't sure about still goes to the inbox. So does a candidate that can't start now: the daily cap,
+    low disk, or a base that couldn't be fetched three times. Turning a watch off and on again, or disallowing
+    a repository and allowing it again, starts it from then: no backlog.
+- **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
+  - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
+  - requeues jobs waiting for an engine once one is out of its cooldown;
+  - polls the watched sources.
+
+  It never starts a paused queue. While the state directory's disk has under 10 GiB or 15 % free, source work
+  waits in the inbox and `run` warns. One serve runs per host; its log is
+  `~/.local/state/workstation/agent-serve.log`. Once a source is configured, the session line shows `serve
+  up` or `serve down`, and `ws-agent doctor` shows the last tick.
 - **Per host**, by hand in `agents.toml` (kept when `allow` rewrites the file; a file ws-agent
   can't parse is never overwritten):
   - `[queue] parallel = 2`, and `[engines.codex] parallel = 1` / `model = "…"`.
@@ -719,8 +759,16 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
   with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by
   this repository on its own.
+  - Each Linux host also runs `ws-agent serve`, the `dev.mise.ws-agent-serve` user unit next to pueued. It does
+    nothing until a repository there has a watch or a GitHub source.
+  - From then on it reads the SVN server (`svn info`, `log` and `diff`, with your svn credentials) and GitHub
+    (`gh api` GETs and `git fetch origin`, with your logins). It never writes to either.
+  - Like pueued, it stops with your last login session; `loginctl enable-linger` keeps both running.
 - **Turning it off**: `ws-agent pause` holds jobs; deleting `~/.config/workstation/agents.toml`
-  allows none. To remove the routing, drop the `## Orchestration` section and set
+  allows none. `systemctl --user stop dev.mise.ws-agent-serve` stops serve until the next apply or login. To
+  keep it off on one host, copy its `[bootstrap.services.ws-agent-serve]` table from `config.linux.toml` into
+  `config.local.toml` with `enabled = false` and `state = "stopped"`. Copy the whole table: a partial one
+  replaces it rather than merging. To remove the routing, drop the `## Orchestration` section and set
   `workstation-orchestration@skills-dir` to `false` in `settings.enforced.json`, then `wsa`.
 
 ## Adding things

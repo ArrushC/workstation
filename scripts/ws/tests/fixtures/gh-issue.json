@@ -1,0 +1,15 @@
+{
+  "number": 55,
+  "title": "Editors: Neovim for C/C++ and a matching Helix setup",
+  "body": "Adds Neovim as a second editor, set up for C and C++, alongside helix (which stays `$EDITOR`). It uses the language servers and debuggers already on every host; nothing is downloaded at runtime and there is no Mason.\n\n## Install (`config.li",
+  "user": {
+    "login": "ArrushC"
+  },
+  "html_url": "https://github.com/ArrushC/workstation/pull/55",
+  "state": "closed",
+  "created_at": "2026-10-09T07:21:43Z",
+  "updated_at": "2026-10-09T08:50:38Z",
+  "pull_request": {
+    "url": "https://api.github.com/repos/ArrushC/workstation/pulls/55"
+  }
+}

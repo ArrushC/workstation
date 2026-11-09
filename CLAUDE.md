@@ -209,7 +209,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   (`check_ws`), so an early hook prints a message instead of a SyntaxError.
 - Tests: `scripts/test-ws.sh` (lint runs it: fixtures in scratch homes, real mise and fzf when
   present); `scripts/test-config-nu.sh` covers Nushell's `ws`.
-- `ws agent` (`wslib/{agent,jobs,agent_exec,agent_registry,vcs,engines,agent_sandbox,agent_checks,agent_events}.py`;
+- `ws agent` (`wslib/{agent,jobs,agent_exec,agent_registry,vcs,engines,agent_sandbox,agent_checks,agent_events}.py`,
+  phase 2b's `agent_{serve,sources,admit,triage,inbox,disk,ui}.py`;
   `ws-agent` in `~/.local/bin` for hooks, the agents' tools and pueue): queued headless jobs in pueue group
   `agents` (parallel 2, one per engine via `engines.slot`), one private working copy per job at the base
   recorded at `run`, a patch at the end; never a write upstream.
@@ -232,6 +233,41 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `thread.jsonl` holds `tell`/`answer` messages (delivered by id, after the turn) and reports; a message that
     lands while a job finishes requeues it under `queue_lock`. Events (`agent_events.py`) feed the plugin's
     UserPromptSubmit hook and `notify.sh` (detached, `NOTIFY_NO_MODAL`).
+  - `serve` (`agent_serve.py`; the `dev.mise.ws-agent-serve` user unit in `config.linux.toml`, PATH via
+    `/usr/bin/env`, held by `check_bootstrap_config`): one per host (`serve.lock`), a tick every 30 s.
+    - It recovers `interrupted` jobs (≤ 2 each: `auto_resumes`, counted before the enqueue) and requeues
+      `waiting` ones once an engine is out of cooldown.
+    - Then it polls each source. Each step catches its own failure.
+    - It never starts a paused group. A session may only run `serve --once`.
+  - Sources (`agent_sources.py`) only read, with the person's credentials:
+    - SVN: `info --xml`, then `log -v` past the cursor.
+    - GitHub: `gh api` GETs (≥ 60 s or `X-Poll-Interval`). The commit comes from `git ls-remote origin`, then
+      `git -c gc.auto=0 fetch --no-write-fetch-head --refmap= origin <ref>` and `cat-file -e`; `origin` must
+      still be the slug. A request whose base fails 3 times goes to the inbox (`Candidate.note`, no base).
+    - State is `agent-serve/sources.json`; each writer patches its own entry under a lock. No cursor means
+      start at HEAD or now (no backlog). `handled` stops repeats.
+    - `watch`/`github` start the cursor (afresh when the source is new or was off); `unwatch`/`ungithub` and
+      `disallow` forget it.
+    - serve keeps what a poll returned in `agent-serve/pending.json` until each is handled (the cursor has
+      moved past them): a serve killed mid-batch handles them next tick.
+  - Candidates:
+    - Each passes `agent_admit`: still allowed, not off, author or login listed, not seen, ≤ 10 jobs a day per
+      source.
+    - An inferred one then goes to `agent_triage`: haiku with `--tools ""`, `--strict-mcp-config` and
+      `--safe-mode`, inside `agent_sandbox.wrap_scratch`. Any failure is `ask`.
+    - Act mode plus accept, or an explicit request, goes to `queue_job` (the one path `run` and `accept` use
+      too). The rest goes to the inbox (`agent_inbox`, `<state>/agent-inbox/<sha256(cid)[:10]>.json`, 0600).
+    - With disk under 10 GiB or 15 % (`agent_disk`), or over the cap, no source job starts: it waits in the inbox.
+    - A waiting job is requeued only once `engines.select` finds an engine that can run it.
+    - A job with an `origin` runs Claude with `--setting-sources user --strict-mcp-config`: measured, a copy's own
+      `.claude/settings.json` hooks otherwise run in the job. A source job's title stays out of its prompts and
+      event lines. Triage's `rule` reaches a prompt only if it's one of the watch's rules.
+  - `cancel`, `retry` and `close` reload and re-check the job under `queue_lock`, as serve does.
+  - Someone else's words (log messages, comments, triage output):
+    - quoted between `<untrusted>` tags (`agent_inbox.defuse`);
+    - printed through `printable`;
+    - never in an event line, since those reach live sessions.
+  - `ui` (`agent_ui.py`) is fzf with `--with-shell 'bash -c'`, and no `)` inside an `execute(...)`.
   - `allow`/`disallow` refuse under `CLAUDECODE=1` (and the secret guard denies editing agents.toml); `run` and
     `tell` refuse under `WS_AGENT_JOB`. Tests use fake pueue/claude/codex (`tests/agent_helpers.py`) and patch
     `agent_sandbox.wrap`/`probe` (subprocess tests go through `no_sandbox_ws`), except the real-bwrap tests in

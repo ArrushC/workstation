@@ -13,12 +13,18 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
         [--paths GLOB]... [--force]
     ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
+    inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
+                            what a watched source found, waiting for the person
+    ui [--rows]             jobs and the inbox in one fzf list (enter result, alt-keys act)
+    serve [--once]          the always-on loop (the ws-agent-serve service): recovery, sources
+    close --empty           close every succeeded job whose patch is empty
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime as dt
 import hashlib
 import json
@@ -26,9 +32,14 @@ import os
 import shutil
 import subprocess
 import sys
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from . import agent_events, agent_exec, agent_registry, agent_sandbox, core, engines, jobs, vcs
+from . import (agent_disk, agent_events, agent_exec, agent_inbox, agent_registry, agent_sandbox, agent_serve,
+               agent_sources, core, engines, jobs, vcs)
 
 MAX_CONTEXT = 400
 
@@ -107,6 +118,13 @@ def context_line(cwd: Path) -> str:
                  f"jobs: allowed ({', '.join(entry.engines)}); {_queue_words(q, parallel)}" if entry is not None
                  else "jobs: not allowed (ws-agent allow)",
                  _here(core.tilde(p.root), q.tasks if q else None)]
+        waiting = len(agent_inbox.items(core.tilde(p.root)))
+        if waiting:
+            parts.append(f"inbox {waiting}")
+        if agent_serve.configured():
+            parts.append("serve up" if agent_serve.up() else "serve down")
+        if agent_disk.low():
+            parts.append("disk low")
         return " | ".join(parts)[:MAX_CONTEXT]
     except Exception:  # noqa: BLE001 - the hook must never fail a session start
         return ""
@@ -139,7 +157,7 @@ def _route(args: argparse.Namespace) -> int:
         print(f"Extra commands jobs may run: {', '.join(entry.commands)}")
     print(f"Queue: {_queue_words(q, parallel)}")
     for row in here:
-        print(f"  {row['id']}  {row['state']:<11} {row['title']}")
+        print(f"  {row['id']}  {row['state']:<11} {agent_inbox.printable(str(row['title']))}")
     return 0
 
 
@@ -183,12 +201,84 @@ def _repo_words(r: agent_registry.Repo) -> list[str]:
     if r.review:
         words.append(f"review: {r.review}")
     words.append(f"network: {'on' if r.network else 'off'}")
+    if r.watch is not None:
+        n = len(r.watch.rules)
+        words.append(f"watch: {', '.join(r.watch.urls)} ({r.watch.mode}, {n} rule{'' if n == 1 else 's'})")
+    if r.github is not None:
+        words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)})")
     return words
+
+
+def _source_change(fn: Callable[[Path, Any], agent_registry.Repo], root: Path,
+                   value: object) -> tuple[int, agent_registry.Repo | None]:
+    try:
+        return 0, fn(root, value)
+    except agent_registry.Refused as e:
+        _err(str(e))
+        return 3, None
+    except ValueError as e:
+        _err(str(e))
+        return 2, None
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return 3, None
+    except agent_registry.Unreadable as e:
+        _err(str(e))
+        return 1, None
+
+
+def _watch(args: argparse.Namespace) -> int:
+    p = vcs.probe(Path(args.path))
+    root = p.root or Path(args.path).resolve()
+    watch = None if args.cmd == "unwatch" else agent_registry.Watch(
+        urls=tuple(args.url or ()), mode=args.mode, authors=tuple(args.author or ()), rules=tuple(args.rule or ()),
+        interval=args.interval)
+    prev = agent_registry.find(root)
+    rc, repo = _source_change(agent_registry.set_watch, root, watch)
+    if repo is not None:
+        print(f"{'watching' if watch else 'no longer watching'}: {core.tilde(root)}"
+              + (f" ({', '.join(watch.urls)}, {watch.mode})" if watch else ""))
+        if watch is None:
+            agent_sources.forget_sources(f"svn:{core.tilde(root)}:")
+        elif watch.mode != "off":
+            # new, or back from off: from HEAD now (nothing committed meanwhile); a changed setting keeps its cursor
+            fresh = prev is None or prev.watch is None or prev.watch.mode == "off"
+            try:
+                agent_sources.start_watch(repo, fresh=fresh)
+            except agent_sources.SourceError as e:
+                _err(f"warning: {e}; the first poll starts the watch at HEAD once the URL answers")
+    return rc
+
+
+def _github(args: argparse.Namespace) -> int:
+    p = vcs.probe(Path(args.path))
+    root = p.root or Path(args.path).resolve()
+    src = None
+    if args.cmd == "github":
+        logins = list(args.login or [])
+        if not logins and os.environ.get("CLAUDECODE") != "1":
+            gh = core.which("gh")
+            r = subprocess.run([gh, "api", "user", "--jq", ".login"], capture_output=True, text=True, timeout=30) \
+                if gh else None
+            logins = [r.stdout.strip()] if r is not None and r.returncode == 0 and r.stdout.strip() else []
+        src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins))
+    prev = agent_registry.find(root)
+    rc, repo = _source_change(agent_registry.set_github, root, src)
+    if repo is not None:
+        print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
+              + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)})" if src else ""))
+        if src is not None:
+            if src.mode != "off":   # from now: new, or back from off, brings nothing from meanwhile
+                agent_sources.start_github(repo, fresh=prev is None or prev.github is None or prev.github.mode == "off")
+        elif prev is not None and prev.github is not None and prev.github.slug:
+            agent_sources.update_source(f"gh:{prev.github.slug}", None)
+    return rc
 
 
 def _disallow(args: argparse.Namespace) -> int:
     p = vcs.probe(Path(args.path))
     root = p.root or Path(args.path).resolve()
+    prev = agent_registry.find(root)
     try:
         removed = agent_registry.disallow(root)
     except agent_registry.Refused as e:
@@ -197,6 +287,10 @@ def _disallow(args: argparse.Namespace) -> int:
     except agent_registry.Unreadable as e:
         _err(str(e))
         return 1
+    # its sources' cursors go too: allowed again later, a watch starts from then, not from now
+    agent_sources.forget_sources(f"svn:{core.tilde(root)}:")
+    if prev is not None and prev.github is not None and prev.github.slug:
+        agent_sources.update_source(f"gh:{prev.github.slug}", None)
     print(f"{'disallowed' if removed else 'was not allowed'}: {core.tilde(root)}")
     return 0
 
@@ -225,79 +319,86 @@ def _prompt(args: argparse.Namespace) -> str | None:
     return args.prompt
 
 
-def _base(p: vcs.Probe, rev: str | None, warnings: list[str]) -> dict[str, str] | None:
+def _base(p: vcs.Probe, rev: str | None, warnings: list[str]) -> tuple[dict[str, str] | None, str]:
+    """The base a new job starts from, or (None, why not)."""
     root = core.tilde(p.root) if p.root else "?"
     if p.kind == "svn":
         if (p.mixed or p.switched) and not rev:
             why = "mixed revisions" if p.mixed else "a switched subtree"
-            _err(f"ws-agent: {root} has {why} ({p.version}); name the base with --rev <N>")
-            return None
+            return None, f"ws-agent: {root} has {why} ({p.version}); name the base with --rev <N>"
         base = {"url": p.url, "repos_root": p.repos_root, "rev": rev or p.rev}
         if p.modified:
             warnings.append(f"local modifications in {root} are not included: the job starts from "
                             f"{vcs.short_url(p)}@{base['rev']}")
-        return base
+        return base, ""
     commit = p.rev
     if rev:
         r = subprocess.run(["git", "-C", str(p.root), "rev-parse", "--verify", "-q", f"{rev}^{{commit}}"],
                            capture_output=True, text=True)
         commit = r.stdout.strip() if r.returncode == 0 else ""
         if not commit:
-            _err(f"ws-agent: {rev!r} isn't a commit in {root}")
-            return None
+            return None, f"ws-agent: {rev!r} isn't a commit in {root}"
     if not commit:
-        _err(f"ws-agent: {root} has no commits yet")
-        return None
+        return None, f"ws-agent: {root} has no commits yet"
     if p.modified:
         warnings.append(f"uncommitted changes in {root} are not included: the job starts from {commit[:12]}")
-    return {"commit": commit, "branch": p.branch}
+    return {"commit": commit, "branch": p.branch}, ""
 
 
-def _run_job(args: argparse.Namespace) -> int:
+@dataclass
+class Queued:
+    """What queue_job did: the job (code 0), or why not (1 an error, 2 bad input, 3 refused)."""
+    job: jobs.Job | None
+    error: str
+    code: int
+    warnings: list[str]
+    dup: jobs.Job | None = None
+    paused: bool = False
+
+
+def queue_job(root: Path, title: str, prompt: str, *, rev: str | None = None, paths: Sequence[str] = (),
+              timeout: str = "2h", force: bool = False, origin: str = "",
+              base: dict[str, str] | None = None) -> Queued:
+    """The one way a job is made, for `run`, `accept` and serve alike: allowed, a base (the
+    probe's, or the one a source gives), the duplicate and overlap checks, the record and the
+    enqueue under the queue lock."""
     if os.environ.get("WS_AGENT_JOB"):
-        _err("ws-agent: this is a queued job; it can't queue jobs (work directly)")
-        return 3
-    prompt = _prompt(args)
-    if prompt is None:
-        return 1
+        return Queued(None, "ws-agent: this is a queued job; it can't queue jobs (work directly)", 3, [])
     if not prompt.strip():
-        _err("ws-agent: the prompt is empty")
-        return 2
-    p = vcs.probe(Path(args.repo) if args.repo else Path.cwd(), thorough=True)
+        return Queued(None, "ws-agent: the prompt is empty", 2, [])
+    p = vcs.probe(root, thorough=True)
     if p.kind == "none" or p.root is None:
-        _err(f"ws-agent: {args.repo or Path.cwd()} isn't in a git or SVN working copy")
-        return 3
+        return Queued(None, f"ws-agent: {root} isn't in a git or SVN working copy", 3, [])
     key = core.tilde(p.root)
     if agent_registry.find(p.root) is None:
-        _err(f"ws-agent: {key} isn't allowed for queued jobs; run 'ws-agent allow {key}' in your own terminal")
-        return 3
+        return Queued(None, f"ws-agent: {key} isn't allowed for queued jobs; run 'ws-agent allow {key}' in your own "
+                      "terminal", 3, [])
     warnings: list[str] = []
-    base = _base(p, args.rev, warnings)
     if base is None:
-        return 3
+        base, why = _base(p, rev, warnings)
+        if base is None:
+            return Queued(None, why, 3, warnings)
     q = jobs.pueue_status()
     if q is None:
-        _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
-        return 1
+        return Queued(None, "ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)", 1, warnings)
     sha = hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest()
     _, parallel = agent_registry.load()
     try:
         with jobs.queue_lock():   # the duplicate check, the record and the enqueue as one step
             all_ = jobs.all_jobs()
             dup = jobs.duplicate(key, sha, all_, q.tasks)
-            if dup and not args.force:
+            if dup and not force:
                 st = jobs.state(dup, q.tasks)
-                print(dup.id)
                 hint = (f"ws-agent retry {dup.id} continues it" if st in ("failed", "interrupted")
                         else f"ws-agent result {dup.id} once it's done")
-                _err(f"ws-agent: job {dup.id} already does this ({st}); {hint}; --force queues another")
-                return 3
-            for other in jobs.overlaps(key, args.paths or [], all_, q.tasks):
+                return Queued(None, f"ws-agent: job {dup.id} already does this ({st}); {hint}; --force queues another",
+                              3, warnings, dup=dup)
+            for other in jobs.overlaps(key, list(paths), all_, q.tasks):
                 warnings.append(f"job {other.id} ({jobs.state(other, q.tasks)}) also claims {', '.join(other.paths)}: "
                                 "review the two patches together")
-            job = jobs.Job(id=jobs.new_id(), title=args.title, repo=key, vcs=p.kind, base=base, prompt_sha=sha,
-                           paths=list(args.paths or []), created=core.now_iso(), session_id="", timeout=args.timeout,
-                           warnings=warnings)
+            job = jobs.Job(id=jobs.new_id(), title=title, repo=key, vcs=p.kind, base=base, prompt_sha=sha,
+                           paths=list(paths), created=core.now_iso(), session_id="", timeout=timeout,
+                           warnings=warnings, origin=origin)
             try:
                 jobs.ensure_group(parallel)
                 jobs.save(job)
@@ -307,14 +408,128 @@ def _run_job(args: argparse.Namespace) -> int:
                 shutil.rmtree(jobs.job_dir(job.id), ignore_errors=True)
                 raise
     except jobs.QueueError as e:
-        _err(str(e))
+        return Queued(None, str(e), 1, warnings)
+    return Queued(job, "", 0, warnings, paused=q.group == "Paused")
+
+
+def _run_job(args: argparse.Namespace) -> int:
+    prompt = _prompt(args)
+    if prompt is None:
         return 1
+    q = queue_job(Path(args.repo) if args.repo else Path.cwd(), args.title, prompt, rev=args.rev,
+                  paths=args.paths or [], timeout=args.timeout, force=args.force)
+    return _report_queued(q)
+
+
+def _report_queued(q: Queued) -> int:
+    """What run and accept print: the job id on stdout, the rest on stderr."""
+    if q.dup is not None:
+        print(q.dup.id)
+    if q.job is None:
+        _err(q.error)
+        return q.code
+    job = q.job
     print(job.id)
-    for w in warnings:
+    for w in q.warnings:
         _err(f"warning: {w}")
     _err(f"queued {job.id} in pueue group {jobs.GROUP} (task {job.pueue_id}); ws-agent ls, ws-agent result {job.id}")
-    if q.group == "Paused":
+    if q.paused:
         _err("warning: the queue is paused (pueue pauses it when its daemon stops); ws-agent resume starts it")
+    low = agent_disk.low()
+    if low:
+        _err(f"warning: disk low: {low}; serve starts no source jobs until there's room")
+    return 0
+
+
+# --- the inbox -------------------------------------------------------------------------
+
+def _decision_word(it: agent_inbox.Item) -> str:
+    if it.decision:
+        return str(it.decision.get("decision") or "-")
+    return "request" if it.candidate.get("explicit") else "-"
+
+
+def _inbox(args: argparse.Namespace) -> int:
+    if args.show:
+        return _inbox_show(args.show)
+    rows = agent_inbox.items(all_=args.all)
+    if args.json:
+        print(json.dumps([dataclasses.asdict(i) for i in rows], indent=2))
+        return 0
+    if not rows:
+        print("the inbox is empty" if args.all else "no open inbox items")
+        return 0
+    for it in rows:
+        c = it.candidate
+        tail = (f"  {it.status}" + (f" {it.job}" if it.job else "")) if args.all else ""
+        title = agent_inbox.printable(str(c.get("title") or ""))
+        print(f"{it.id}  {c.get('source', '?')!s:<7} {_decision_word(it):<8} {title}  ({c.get('repo', '?')}){tail}")
+    return 0
+
+
+def _inbox_show(prefix: str) -> int:
+    try:
+        it = agent_inbox.get(prefix)
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return 1
+    c, d = it.candidate, it.decision or {}
+    clean = agent_inbox.printable
+    lines = [f"{it.id}  {it.status}" + (f" (job {it.job})" if it.job else "") + f"  {clean(str(c.get('title') or ''))}",
+             f"  from: {c.get('source')} {clean(str(c.get('cid')))} by {clean(str(c.get('author') or '?'))}"
+             + (f"  {clean(str(c['url']))}" if c.get("url") else ""),
+             f"  repo: {c.get('repo')}   found: {it.created}"]
+    if d:
+        lines.append(f"  triage: {d.get('decision')}" + (f" (rule: {clean(str(d['rule']))})" if d.get("rule") else ""))
+        if d.get("reason"):
+            lines.append(f"  reason: {clean(str(d['reason']))}")
+    elif c.get("explicit"):
+        lines.append("  a request (/agent): no triage")
+    lines += ["", "their words (untrusted):"]
+    lines += ["  " + ln for ln in clean(str(c.get("text") or ""), lines=True).splitlines()]
+    if it.status != "accepted":
+        lines += ["", f"ws-agent accept {it.id} [--note TEXT] | ws-agent dismiss {it.id}"]
+    print("\n".join(lines))
+    return 0
+
+
+def _inbox_item(prefix: str) -> agent_inbox.Item | None:
+    try:
+        return agent_inbox.get(prefix)
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return None
+
+
+def _accept(args: argparse.Namespace) -> int:
+    it = _inbox_item(args.id)
+    if it is None:
+        return 1
+    if it.status == "accepted":
+        _err(f"ws-agent: {it.id} was already accepted: job {it.job} (ws-agent result {it.job})")
+        return 3
+    c = it.as_candidate()
+    prompt = c.prompt
+    if args.note and args.note.strip():
+        prompt = prompt.rstrip("\n") + f"\n\nA note from the person who accepted this:\n{args.note.strip()}\n"
+    # an item held without a base (its source couldn't fetch one) starts from your copy's HEAD
+    q = queue_job(core.expand(c.repo), c.title, prompt, origin=c.cid, base=c.base or None)
+    if q.job is not None:
+        agent_inbox.resolve(it, "accepted", q.job.id)
+        if c.thread:   # a later /agent on that issue goes to this job
+            agent_sources.remember_thread(c.thread, q.job.id)
+    return _report_queued(q)
+
+
+def _dismiss(args: argparse.Namespace) -> int:
+    it = _inbox_item(args.id)
+    if it is None:
+        return 1
+    if it.status == "accepted":
+        _err(f"ws-agent: {it.id} was accepted as job {it.job}; cancel or close that job instead")
+        return 3
+    agent_inbox.resolve(it, "dismissed")
+    print(f"dismissed {it.id}: {agent_inbox.printable(str(it.candidate.get('title') or ''))}")
     return 0
 
 
@@ -359,7 +574,8 @@ def _ls(args: argparse.Namespace) -> int:
     for r in rows:
         where = "" if key else f"  {r['repo']}"
         checks = f"checks {r['checks']}" if r["checks"] not in ("-", "none") else "-"
-        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  {r['title']}{where}")
+        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  "
+              f"{agent_inbox.printable(r['title'])}{where}")
     if tasks is None:
         _err("warning: pueued isn't running, so live states are unknown")
     return 0
@@ -371,7 +587,7 @@ def _show(args: argparse.Namespace) -> int:
         return 1
     st = jobs.state(job, _tasks())
     jd = jobs.job_dir(job.id)
-    print(f"{job.id}  {st}  {job.title}")
+    print(f"{job.id}  {st}  {agent_inbox.printable(job.title)}")
     print(f"repository: {job.repo} ({job.vcs})   base: {_base_words(job)}")
     print(f"created {job.created}, attempts {job.attempts}, pueue task {job.pueue_id}, session {job.session_id or '-'}")
     print(f"directory: {jd}")
@@ -410,7 +626,7 @@ def _result(args: argparse.Namespace) -> int:
     st = jobs.state(job, _tasks())
     res = jobs.job_dir(job.id) / "result"
     info = jobs.exit_info(job) or {}
-    print(f"{job.id}  {st}  {job.title}")
+    print(f"{job.id}  {st}  {agent_inbox.printable(job.title)}")
     print(f"base: {_base_words(job)}   attempts: {job.attempts}   engine: {info.get('engine') or job.engine or '-'}")
     if not (res / "exit.json").exists():
         print(f"no result yet ({st}); ws-agent show {job.id} has the log")
@@ -511,14 +727,20 @@ def _cancel(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
         return 1
-    st = jobs.state(job, _tasks())
-    if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
-        _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
-        return 3
-    job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
-    jobs.save(job)
-    confirmed = jobs.kill(job)
-    stopped = jobs.stop_run(job)
+    try:
+        with jobs.queue_lock():   # serve recovers and requeues under it: it never writes an older copy back
+            job = jobs.load(job.id)
+            st = jobs.state(job, _tasks())
+            if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
+                _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
+                return 3
+            job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
+            jobs.save(job)
+            confirmed = jobs.kill(job)
+    except jobs.QueueError as e:
+        _err(str(e))
+        return 1
+    stopped = jobs.stop_run(job)   # outside the lock: it waits up to 10 s for the engine
     print(f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
           f"(ws-agent close {job.id} removes the copy)")
     if not confirmed:
@@ -540,12 +762,19 @@ def _retry(args: argparse.Namespace) -> int:
         _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued)")
         return 1
     print(agent_exec.inspect(job), end="")
-    res = jobs.job_dir(job.id) / "result"
-    if (res / "exit.json").exists():
-        (res / "exit.json").replace(res / f"exit-{job.attempts}.json")
-    jobs.kill(job)   # drop the finished task from the queue
     try:
-        jobs.enqueue(job, resume=True)
+        with jobs.queue_lock():   # serve may be recovering this very job: one of you requeues it
+            job = jobs.load(job.id)
+            now_q = jobs.pueue_status()
+            st = jobs.state(job, now_q.tasks if now_q else None)
+            if st not in ("failed", "interrupted", "waiting"):
+                _err(f"ws-agent: {job.id} is {st} now (serve may have requeued it); nothing retried")
+                return 3
+            res = jobs.job_dir(job.id) / "result"
+            if (res / "exit.json").exists():
+                (res / "exit.json").replace(res / f"exit-{job.attempts}.json")
+            jobs.kill(job)   # drop the finished task from the queue
+            jobs.enqueue(job, resume=True)
     except jobs.QueueError as e:
         _err(str(e))
         return 1
@@ -555,34 +784,27 @@ def _retry(args: argparse.Namespace) -> int:
     return 0
 
 
-def _tell(args: argparse.Namespace) -> int:
-    """The person's words to a job: kept in its thread and delivered after its current turn if
-    it runs, else by resuming its session now."""
+def tell_job(job: jobs.Job, text: str) -> tuple[int, str]:
+    """The person's words to a job, kept in its thread: delivered after its current turn if it
+    runs, else by resuming its session now. (code, message): 0 told or requeued, 1 an error,
+    2 an empty message, 3 refused."""
     if os.environ.get("WS_AGENT_JOB"):
-        _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
-        return 3
-    text = " ".join(args.text).strip()
+        return 3, "ws-agent: this is a queued job; it can't message jobs (work directly)"
+    text = text.strip()
     if not text:
-        _err("ws-agent: the message is empty")
-        return 2
-    job = _load(args.id)
-    if job is None:
-        return 1
+        return 2, "ws-agent: the message is empty"
     try:
         with jobs.queue_lock():   # the executor checks for undelivered messages under it too
             q = jobs.pueue_status()
             st = jobs.state(job, q.tasks if q else None)
             if st in ("closed", "cancelled"):
-                _err(f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)")
-                return 3
+                return 3, f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)"
             jobs.post(job, "you", text)
             if st in ("running", "queued"):
-                print(f"told {job.id}: delivered after its current turn")
-                return 0
+                return 0, f"told {job.id}: delivered after its current turn"
             if q is None:
-                _err("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued); the message is kept "
-                     f"and goes with ws-agent retry {job.id}")
-                return 1
+                return 1, ("ws-agent: pueued isn't running (systemctl --user start dev.mise.pueued); the message is "
+                           f"kept and goes with ws-agent retry {job.id}")
             res = jobs.job_dir(job.id) / "result"
             for name in ("exit", "report"):
                 cur = res / f"{name}.json"
@@ -591,22 +813,84 @@ def _tell(args: argparse.Namespace) -> int:
             jobs.kill(job)   # drop the finished task from the queue
             jobs.enqueue(job, resume=True)
     except jobs.QueueError as e:
-        _err(str(e))
-        return 1
-    print(f"requeued {job.id} (task {job.pueue_id}): it resumes its session with your message")
+        return 1, str(e)
+    msg = f"requeued {job.id} (task {job.pueue_id}): it resumes its session with your message"
     if q.group == "Paused":
-        _err("warning: the queue is paused; ws-agent resume starts it (other queued jobs start too)")
-    return 0
+        msg += "\nwarning: the queue is paused; ws-agent resume starts it (other queued jobs start too)"
+    return 0, msg
 
 
-def _close(args: argparse.Namespace) -> int:
+def _tell(args: argparse.Namespace) -> int:
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
+        return 3
     job = _load(args.id)
     if job is None:
         return 1
-    st = jobs.state(job, _tasks())
-    if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
-        _err(f"ws-agent: {job.id} is {st}; " + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
-        return 3
+    code, msg = tell_job(job, " ".join(args.text))
+    if code == 0:
+        print(msg)
+    else:
+        _err(msg)
+    return code
+
+
+def _close(args: argparse.Namespace) -> int:
+    if args.empty:
+        if args.id:
+            _err("ws-agent: close --empty takes no job id")
+            return 2
+        return _close_empty()
+    if not args.id:
+        _err("ws-agent: close needs a job id (or --empty: every succeeded job with an empty patch)")
+        return 2
+    job = _load(args.id)
+    if job is None:
+        return 1
+    try:
+        with jobs.queue_lock():   # serve requeues waiting jobs under it: never one this is closing
+            job = jobs.load(job.id)
+            st = jobs.state(job, _tasks())
+            if st not in ("succeeded", "failed", "cancelled", "needs-you", "waiting"):
+                _err(f"ws-agent: {job.id} is {st}; "
+                     + ("retry or cancel it first" if st == "interrupted" else "wait, or cancel it"))
+                return 3
+            print(close_job(job))
+    except jobs.QueueError as e:
+        _err(str(e))
+        return 1
+    return 0
+
+
+def _close_empty() -> int:
+    """Every succeeded job whose patch is empty (a review that changed nothing): their ids."""
+    tasks = _tasks()
+    closed = 0
+    for job in jobs.all_jobs():
+        if jobs.state(job, tasks) != "succeeded":
+            continue
+        try:
+            empty = not (jobs.job_dir(job.id) / "result" / "changes.diff").read_bytes().strip()
+        except OSError:
+            continue   # no patch recorded: not known to be empty
+        if empty:
+            try:
+                with jobs.queue_lock():
+                    job = jobs.load(job.id)
+                    if jobs.state(job, _tasks()) != "succeeded":
+                        continue
+                    close_job(job)
+            except jobs.QueueError as e:
+                _err(str(e))
+                continue
+            print(job.id)
+            closed += 1
+    _err(f"closed {closed} job{'s' if closed != 1 else ''} with an empty patch; their results stay")
+    return 0
+
+
+def close_job(job: jobs.Job) -> str:
+    """Remove a finished job's working copy (and, for git, its worktree and branch); the result stays."""
     jd = jobs.job_dir(job.id)
     wc = jd / "wc"
     if job.vcs == "git":
@@ -619,8 +903,39 @@ def _close(args: argparse.Namespace) -> int:
     jobs.kill(job)
     job.closed = True
     jobs.save(job)
-    print(f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}")
-    return 0
+    return f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}"
+
+
+def _ui(args: argparse.Namespace) -> int:
+    from . import agent_ui
+    if args.rows:
+        for r in agent_ui.rows():
+            print(r)
+        return 0
+    fzf = core.which("fzf")
+    if not fzf:
+        _err("ws-agent: fzf isn't installed (mise install fzf); ws-agent ls and ws-agent inbox show the same lists")
+        return 1
+    argv = agent_ui.fzf_argv(core.shell_join(core.self_argv("agent")))
+    argv[0] = fzf
+    rows = agent_ui.rows()
+    if not rows:
+        print("no jobs and nothing in the inbox")
+        return 0
+    r = subprocess.run(argv, input="\n".join(rows) + "\n", text=True)
+    return 0 if r.returncode in (0, 1, 130) else r.returncode   # picked, no match, esc
+
+
+def _serve(args: argparse.Namespace) -> int:
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't run serve (work directly)")
+        return 3
+    if os.environ.get("CLAUDECODE") == "1" and not args.once:
+        # The loop starts jobs on its own: it runs as the person's service, not from a session.
+        _err("ws-agent: a Claude Code session doesn't start the serve loop; the service runs it "
+             "(systemctl --user start dev.mise.ws-agent-serve), or use serve --once for one pass")
+        return 3
+    return agent_serve.serve(once=args.once)
 
 
 def _pause(_: argparse.Namespace) -> int:
@@ -697,9 +1012,21 @@ def _doctor(args: argparse.Namespace) -> int:
     repos, _ = agent_registry.load()
     row(True, f"registry: {core.tilde(agent_registry.registry_path())}, {len(repos)} repositories allowed")
     jd = jobs.jobs_dir()
-    probe_dir = jd if jd.exists() else core.state_dir() if core.state_dir().exists() else core.home()
-    free = shutil.disk_usage(probe_dir).free
-    row(free > 5 << 30, f"jobs: {core.tilde(jd)}, {len(jobs.all_jobs())} jobs, {free >> 30} GiB free")
+    row(True, f"jobs: {core.tilde(jd)}, {len(jobs.all_jobs())} jobs, {len(agent_inbox.items())} open inbox items")
+    usage = agent_disk.usage()
+    if usage is not None:
+        where, free, total = usage
+        row(agent_disk.low() is None, f"disk: {free >> 30} GiB free ({int(100 * free / total) if total else 0}%) on "
+            f"{core.tilde(where)}; source jobs don't start under {agent_disk.threshold()}")
+    if not agent_serve.configured():
+        row(True, "serve: no sources configured (ws-agent watch, ws-agent github)")
+    elif agent_serve.up():
+        st = agent_serve.status()
+        ago = int(time.time() - float(st.get("last_tick") or 0))  # type: ignore[arg-type]
+        row(True, f"serve: up since {st.get('started')} (last tick {ago} s ago)"
+            + (f"; last error: {st['last_error']}" if st.get("last_error") else ""))
+    else:
+        row(False, "serve: down (systemctl --user start dev.mise.ws-agent-serve)")
     return 1 if problems else 0
 
 
@@ -748,6 +1075,25 @@ def _parser() -> argparse.ArgumentParser:
     d = sub.add_parser("disallow")
     d.add_argument("path")
     d.set_defaults(fn=_disallow)
+    w = sub.add_parser("watch", help="turn new SVN revisions into candidates (your own terminal only)")
+    w.add_argument("path")
+    w.add_argument("--url", action="append", help="a URL to watch, e.g. ^/trunk (repeatable)")
+    w.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
+    w.add_argument("--author", action="append", help="only these authors' revisions (repeatable)")
+    w.add_argument("--rule", action="append", help="what to look for, in plain words (repeatable)")
+    w.add_argument("--interval", default="5m")
+    w.set_defaults(fn=_watch)
+    uw = sub.add_parser("unwatch")
+    uw.add_argument("path")
+    uw.set_defaults(fn=_watch)
+    gh = sub.add_parser("github", help="take /agent requests from GitHub comments (your own terminal only)")
+    gh.add_argument("path")
+    gh.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
+    gh.add_argument("--login", action="append", help="who may ask (repeatable; default: your gh login)")
+    gh.set_defaults(fn=_github)
+    ugh = sub.add_parser("ungithub")
+    ugh.add_argument("path")
+    ugh.set_defaults(fn=_github)
     sub.add_parser("repos").set_defaults(fn=_repos)
     run = sub.add_parser("run", help="queue a job")
     run.add_argument("--title", required=True)
@@ -765,17 +1111,39 @@ def _parser() -> argparse.ArgumentParser:
     ls.add_argument("--all", action="store_true")
     ls.add_argument("--json", action="store_true")
     ls.set_defaults(fn=_ls)
-    for name, fn in (("show", _show), ("result", _result), ("cancel", _cancel), ("retry", _retry), ("close", _close)):
+    for name, fn in (("show", _show), ("result", _result), ("cancel", _cancel), ("retry", _retry)):
         p = sub.add_parser(name)
         p.add_argument("id")
         if name == "result":
             p.add_argument("--diff", action="store_true", help="also print the manifest and the whole patch")
         p.set_defaults(fn=fn)
+    cl = sub.add_parser("close", help="after review: delete a job's working copy, keep its result")
+    cl.add_argument("id", nargs="?")
+    cl.add_argument("--empty", action="store_true", help="every succeeded job whose patch is empty")
+    cl.set_defaults(fn=_close)
+    ui = sub.add_parser("ui", help="jobs and the inbox in one fzf list")
+    ui.add_argument("--rows", action="store_true", help="print the list fzf shows, and exit")
+    ui.set_defaults(fn=_ui)
+    sv = sub.add_parser("serve", help="the always-on loop: recovery and the watched sources (the ws-agent-serve service)")
+    sv.add_argument("--once", action="store_true", help="one pass, then exit")
+    sv.set_defaults(fn=_serve)
     for name in ("tell", "answer"):
         t = sub.add_parser(name, help="send the job a message (answer: to the question it asked)")
         t.add_argument("id")
         t.add_argument("text", nargs="+")
         t.set_defaults(fn=_tell)
+    ib = sub.add_parser("inbox", help="what sources found, waiting for you to accept or dismiss")
+    ib.add_argument("--all", action="store_true", help="accepted and dismissed items too")
+    ib.add_argument("--json", action="store_true")
+    ib.add_argument("--show", metavar="ID", help="one item in full")
+    ib.set_defaults(fn=_inbox)
+    acc = sub.add_parser("accept", help="queue an inbox item as a job")
+    acc.add_argument("id")
+    acc.add_argument("--note", help="your words, added to the job's prompt")
+    acc.set_defaults(fn=_accept)
+    dis = sub.add_parser("dismiss")
+    dis.add_argument("id")
+    dis.set_defaults(fn=_dismiss)
     sub.add_parser("pause").set_defaults(fn=_pause)
     sub.add_parser("resume").set_defaults(fn=_resume)
     sub.add_parser("doctor").set_defaults(fn=_doctor)
@@ -786,8 +1154,9 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "repos", "run", "ls", "show", "result", "cancel", "retry", "close",
-               "tell", "answer", "pause", "resume", "doctor", "--help")
+SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "ui",
+               "serve", "pause", "resume", "doctor", "--help")
 
 
 def main(argv: list[str]) -> int:

@@ -111,14 +111,12 @@ def _base(bw: str, home: Path) -> list[str]:
             "--tmpfs", "/tmp", "--tmpfs", str(home)]
 
 
-def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro: Sequence[Path] = (),
-         network: bool = True, chdir: Path | None = None) -> list[str]:
-    bw = bwrap()
-    if not bw:
-        raise SandboxError("ws-agent: bwrap isn't installed (dnf install bubblewrap); jobs don't run without it")
+def _layout(bw: str, *, own: Path, keep: Sequence[Path], hidden: list[Path], rw: Sequence[Path],
+            ro: Sequence[Path]) -> list[str]:
+    """The layout every sandbox shares: everything read-only, /tmp and the home directory empty,
+    the tools and `ro` bound back read-only, `own` and `rw` writable, and `hidden` (with the folders
+    around outside registered copies) covered, except a path that holds `own` or `keep`."""
     home = core.home().resolve()
-    jd = jobs.job_dir(job_id).resolve()
-    wc = wc.resolve()
     args = _base(bw, home)
     base_ro = [home / ".local" / "share" / "mise", home / ".local" / "bin", core.WS_DIR,
                Path(sys.prefix), Path(sys.base_prefix)]
@@ -128,18 +126,18 @@ def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro:
         if p.exists() and p not in bound:
             args += ["--ro-bind", str(p), str(p)]
             bound.append(p)
-    for p in (jd, *rw):
+    for p in (own, *rw):
         p = p.resolve()
         if p.exists():
             args += ["--bind", str(p), str(p)]
             bound.append(p)
     hidden_roots = (home, Path("/tmp"))
     # Folders around outside registered copies go first and are skipped when they hold anything the
-    # job needs (its directory, a bound tool); the named paths then go over them.
-    candidates = [(h, True) for h in surrounding_paths()] + [(h, False) for h in hidden_paths(job_id)]
+    # run needs (its directory, a bound tool); the named paths then go over them.
+    candidates = [(h, True) for h in surrounding_paths()] + [(h, False) for h in hidden]
     for h, surrounding in candidates:
         h = h.resolve() if h.exists() else h
-        if not h.exists() or _under(jd, h) or _under(wc, h):
+        if not h.exists() or any(_under(k, h) for k in (own, *keep)):
             continue
         if surrounding and any(_under(b, h) for b in bound):
             continue
@@ -147,6 +145,22 @@ def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro:
         if not visible:
             continue
         args += ["--tmpfs", str(h)] if h.is_dir() else ["--ro-bind", "/dev/null", str(h)]
+    return args
+
+
+def _bwrap_or_raise() -> str:
+    bw = bwrap()
+    if not bw:
+        raise SandboxError("ws-agent: bwrap isn't installed (dnf install bubblewrap); jobs don't run without it")
+    return bw
+
+
+def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro: Sequence[Path] = (),
+         network: bool = True, chdir: Path | None = None) -> list[str]:
+    bw = _bwrap_or_raise()
+    jd = jobs.job_dir(job_id).resolve()
+    wc = wc.resolve()
+    args = _layout(bw, own=jd, keep=(wc,), hidden=hidden_paths(job_id), rw=rw, ro=ro)
     common = _git_common_dir(wc)
     if common is not None and common.exists():
         args += ["--ro-bind", str(common), str(common)]
@@ -163,6 +177,16 @@ def wrap(argv: list[str], *, job_id: str, wc: Path, rw: Sequence[Path] = (), ro:
         args.append("--unshare-net")
     args += ["--chdir", str((chdir or wc).resolve()), "--", *argv]
     return args
+
+
+def wrap_scratch(argv: list[str], *, workdir: Path, ro: Sequence[Path] = (), rw: Sequence[Path] = ()) -> list[str]:
+    """wrap's layout for a run that reads no code (triage): `workdir` (and the engine's `rw`) is
+    all it may write, every job directory and registered copy is hidden, and the network stays,
+    since the engine has to reach its provider."""
+    bw = _bwrap_or_raise()
+    workdir = workdir.resolve()
+    args = _layout(bw, own=workdir, keep=(), hidden=hidden_paths(""), rw=rw, ro=ro)
+    return [*args, "--chdir", str(workdir), "--", *argv]
 
 
 def _cache() -> Path:

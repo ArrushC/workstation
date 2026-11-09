@@ -269,6 +269,23 @@ and plans are in git history before this section). Re-check one before relying o
   `pre/post-user`, `pre/post-tools`, `final`. `post-packages` runs before dotfiles and tools, so a step
   that needs a mise tool goes in `post-tools` or `final`.
 - Removing a `[dotfiles]` entry doesn't delete the file it deployed.
+- A `[bootstrap.services.<name>]` table in `config.local.toml` replaces the declared one; fields
+  don't merge. Measured 2026-11-08: `enabled = false` alone loses `scope = "user"` and reads as a
+  system unit (`unknown service:<name> unit not found`). The whole table with `enabled = false`
+  and `state = "stopped"` gives `create user-service:<name> … stopped (not at login)`.
+
+## ws-agent serve (the `dev.mise.ws-agent-serve` user unit)
+
+- Unit check without applying: copy `config.toml`, `config.linux.toml` and the locks into a scratch
+  dir with `miserc.toml` = `env = ["linux"]`, then `MISE_CONFIG_DIR=<it> mise -C <empty dir>
+  bootstrap services status`. Expect `user-service:ws-agent-serve` going to `running` (`stopped
+  (not at login)` with the opt-out).
+- One pass from a session: `ws-agent serve --once` (a session can't start the loop). On a deployed
+  host: `systemctl --user status dev.mise.ws-agent-serve`, `journalctl --user -u
+  dev.mise.ws-agent-serve -n 20`, the `serve:` row of `ws-agent doctor`, and
+  `~/.local/state/workstation/agent-serve.log`.
+- `check_bootstrap_config` holds the unit's shape: an absolute program path, PATH via
+  `/usr/bin/env`, and `config.linux.toml` only.
 
 ## Claude Code mods
 

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -38,14 +39,28 @@ def marker_dir() -> Path:
 
 
 def append(kind: str, job: jobs.Job, text: str) -> None:
+    """One event line. serve and every executor append from their own processes, so the size
+    check, the rotation and the write happen under agent-events.lock."""
+    _write({"ts": time.time(), "job": job.id, "repo": job.repo, "kind": kind, "text": text})
+
+
+def append_inbox(item_id: str, repo: str, text: str) -> None:
+    """An inbox item waits for the person. `text` never quotes the candidate: a live session
+    reads it, and the candidate's words are someone else's."""
+    _write({"ts": time.time(), "item": item_id, "repo": repo, "kind": "inbox", "text": text})
+
+
+def _write(entry: dict[str, object]) -> None:
     path = events_path()
     core.private_dir(path.parent)
-    with contextlib.suppress(OSError):
-        if path.stat().st_size > EVENTS_MAX:
-            path.replace(path.with_suffix(".jsonl.1"))
-    line = json.dumps({"ts": time.time(), "job": job.id, "repo": job.repo, "kind": kind, "text": text})
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(line + "\n")
+    line = json.dumps(entry)
+    with open(path.with_name("agent-events.lock"), "a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with contextlib.suppress(OSError):
+            if path.stat().st_size > EVENTS_MAX:
+                path.replace(path.with_suffix(".jsonl.1"))
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
 
 
 def _tail_events(path: Path) -> list[dict[str, object]]:
@@ -93,7 +108,9 @@ def lines_for(session_id: str, repo_key: str) -> list[str]:
     events = _tail_events(events_path().with_suffix(".jsonl.1")) + _tail_events(events_path())
     seen = [e for e in events if isinstance(e.get("ts"), (int, float)) and since < float(e["ts"]) <= now  # type: ignore[arg-type]
             and (e.get("repo") == repo_key or e.get("kind") == "needs-you")]
-    return [f"[orchestration] {e.get('text')}: ws-agent result {e.get('job')}" for e in seen[-MAX_LINES:]]
+    return [f"[orchestration] {e.get('text')}: "
+            + (f"ws-agent inbox --show {e.get('item')}" if e.get("kind") == "inbox" else f"ws-agent result {e.get('job')}")
+            for e in seen[-MAX_LINES:]]
 
 
 def _plain(text: str) -> str:

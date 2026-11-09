@@ -264,6 +264,20 @@ requires_tools = true
 enabled = true
 state = "running"
 
+# ws-agent serve: resumes interrupted jobs and polls the watched sources (SVN watches, GitHub
+# /agent requests, read-only with your credentials); idle until a repository here has one.
+# mise's unit carries only ExecStart/Restart, so PATH goes through env. Per-host opt-out: this
+# whole table in config.local.toml with `enabled = false` and `state = "stopped"`. A partial table
+# replaces this one instead of merging (measured, mise 2026.9.9): without `scope = "user"` it
+# becomes a system service mise can't find.
+[bootstrap.services.ws-agent-serve]
+scope = "user"
+command = "/usr/bin/env PATH=%h/.local/bin:%h/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin %h/.local/bin/ws-agent serve"
+restart = "on-failure"
+requires_tools = true
+enabled = true
+state = "running"
+
 [bootstrap.packages]
 # ONE `sudo dnf install -y <every missing name>` per run: a single unresolvable name
 # fails the whole batch, so every name is verified on EL8 and EL9. Names that must not

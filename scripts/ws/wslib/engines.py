@@ -229,8 +229,12 @@ class ClaudeEngine:
         # and --permission-prompts none denies it.
         mode = "default" if c.read_only else "acceptEdits"
         tools = list(READ_TOOLS) if c.read_only else [*CLAUDE_TOOLS, *(f"Bash({cmd})" for cmd in c.commands)]
+        # A source's job runs on someone else's code (a PR head, any committer's revision): the copy's
+        # own .claude settings (hooks run outside Claude's command sandbox) and .mcp.json don't load.
+        foreign = ["--setting-sources", "user", "--strict-mcp-config"] if job.origin else []
+        name = f"ws-agent {job.id}: {job.title}"[:80] if not job.origin else f"ws-agent {job.id}"
         return [shutil.which("claude") or "claude", "-p", "--output-format", "json", "--permission-mode", mode,
-                "--permission-prompts", "none", *session, "--name", f"ws-agent {job.id}: {job.title}"[:80],
+                "--permission-prompts", "none", *foreign, *session, "--name", name,
                 "--append-system-prompt", c.instructions, "--json-schema", json.dumps(c.schema),
                 "--settings", json.dumps(settings), *(["--model", model] if model else []),
                 *(a for d in c.read_dirs for a in ("--add-dir", str(d))),

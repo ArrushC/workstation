@@ -82,6 +82,7 @@ class Job:
     engine: str = ""          # the engine whose session session_id is ("" on a phase-1 record: claude)
     history: list[dict[str, object]] = field(default_factory=list)   # one entry per engine run
     auto_resumes: int = 0
+    origin: str = ""          # the candidate's cid when a source made it (svn:<uuid>:<rev>, gh:<slug>:c<id>)
 
 
 @dataclass(frozen=True)

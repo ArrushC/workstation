@@ -3,6 +3,7 @@ from the events file only) and the desktop notice when a job finishes or needs t
 
 from __future__ import annotations
 
+import json
 import os
 import time
 import unittest
@@ -41,6 +42,12 @@ class Events(AgentScratch):
         self.assertIn("eee004", lines[-1])   # the newest last
         self.assertEqual(ev.lines_for("S2", "~/src/proj"), [])   # another session starts fresh
 
+    def test_inbox_event_line(self) -> None:
+        self.assertEqual(ev.lines_for("S1", "~/src/proj"), [])
+        ev.append_inbox("a1b2c3d4e5", "~/src/proj", "inbox: a1b2c3d4e5 (svn) waits for you")
+        self.assertEqual(ev.lines_for("S1", "~/src/proj"),
+                         ["[orchestration] inbox: a1b2c3d4e5 (svn) waits for you: ws-agent inbox --show a1b2c3d4e5"])
+
     def test_session_ids_cant_escape_the_marker_dir(self) -> None:
         self.assertEqual(ev.lines_for("../../evil", "~/src/proj"), [])
         self.assertFalse((self.state / "evil").exists())
@@ -55,6 +62,24 @@ class Events(AgentScratch):
             self.assertLess(ev.events_path().stat().st_size, 3000)
             ev.append("failed", _job("last01"), "last01 failed")
             self.assertIn("last01", ev.lines_for("S", "~/src/proj")[-1])
+
+    def test_append_waits_for_the_lock(self) -> None:
+        # serve and the executors append from different processes; rotation (stat, then rename)
+        # and the write happen under agent-events.lock, so two finishes can't lose a line.
+        import fcntl
+        import threading
+        job = _job("ccc999")
+        lock = ev.events_path().with_name("agent-events.lock")
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock, "a+") as fh:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            t = threading.Thread(target=ev.append, args=("failed", job, "held back"))
+            t.start()
+            time.sleep(0.4)
+            self.assertFalse(ev.events_path().exists() and "held back" in ev.events_path().read_text())
+            fcntl.flock(fh, fcntl.LOCK_UN)
+        t.join(5)
+        self.assertEqual(json.loads(ev.events_path().read_text().splitlines()[-1])["text"], "held back")
 
     def test_old_markers_pruned(self) -> None:
         ev.lines_for("old", "~/src/proj")

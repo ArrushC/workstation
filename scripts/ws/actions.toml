@@ -901,6 +901,29 @@ alias = "ws-agent ls"
 ws = ["agent", "ls"]
 
 [[action]]
+id = "agent-ui"
+title = "Agent jobs and inbox (picker)"
+desc = "ws-agent ui: jobs and inbox items in one fzf list; enter pages a result, alt-t/r/c/x/a/d tell, retry, cancel, close, accept, dismiss"
+group = "projects"
+kind = "open"
+keywords = ["agent", "jobs", "inbox", "queue", "claude", "orchestration", "pueue", "tui", "picker", "review"]
+os = ["linux"]
+requires = ["fzf", "pueue"]
+alias = "ws-agent ui"
+ws = ["agent", "ui"]
+
+[[action]]
+id = "agent-inbox"
+title = "Agent inbox"
+desc = "ws-agent inbox: what watched SVN URLs and GitHub /agent requests found, waiting for you to accept or dismiss"
+group = "projects"
+kind = "read"
+keywords = ["agent", "inbox", "svn", "github", "watch", "triage", "orchestration", "accept", "dismiss"]
+os = ["linux"]
+alias = "ws-agent inbox"
+ws = ["agent", "inbox"]
+
+[[action]]
 id = "agent-doctor"
 title = "Check agent orchestration"
 desc = "ws-agent doctor: Claude Code login, pueued and its agents group, svn, the job registry, disk"

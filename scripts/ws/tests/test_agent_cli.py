@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import unittest
 from contextlib import chdir, redirect_stderr, redirect_stdout
@@ -19,7 +20,9 @@ from helpers import REPO, WS
 
 from wslib import agent, core, jobs
 from wslib import agent_exec as ax
+from wslib import agent_inbox as inbox
 from wslib import agent_registry as reg
+from wslib import agent_sources as sources
 
 QUEUED = {"status": {"Queued": {"enqueued_at": "2026-11-06T23:48:51.387887077Z"}}}
 RUNNING = {"status": {"Running": {"enqueued_at": "2026-11-06T23:48:39Z", "start": "2026-11-06T23:48:41Z"}}}
@@ -255,6 +258,133 @@ class Manage(Cli):
         self.assertIn("review: concerns", out)
         self.assertIn("app.py:7: the cache never expires", out)
 
+    def test_queue_job_from_code(self) -> None:
+        head = git("rev-parse", "HEAD", cwd=self.repo)
+        given = {"commit": head, "branch": "from-a-source"}
+        q = agent.queue_job(self.repo, "a source's job", "review it", origin="svn:uuid:7", base=given)
+        self.assertEqual((q.code, q.error), (0, ""))
+        assert q.job is not None
+        job = jobs.load(q.job.id)
+        self.assertEqual(job.origin, "svn:uuid:7")
+        self.assertEqual(job.base, given)
+        self.assertEqual((jobs.job_dir(job.id) / "prompt.md").read_text(), "review it")
+        self.assertTrue(any(c[0] == "add" for c in self.pueue_calls()))
+
+    def test_queue_job_refuses_duplicates_like_run(self) -> None:
+        first = agent.queue_job(self.repo, "t", "the same task")
+        self.assertEqual(first.code, 0)
+        again = agent.queue_job(self.repo, "t", "the same task")
+        self.assertEqual(again.code, 3)
+        assert first.job is not None and again.dup is not None
+        self.assertEqual(again.dup.id, first.job.id)
+        self.assertIn("already does this", again.error)
+        self.assertEqual(agent.queue_job(self.repo, "t", "   ").code, 2)
+        os.environ["WS_AGENT_JOB"] = "abc123"
+        self.assertEqual(agent.queue_job(self.repo, "t", "other").code, 3)
+
+    def test_tell_job_from_code(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        code, msg = agent.tell_job(jobs.load(jid), "one more thing")
+        self.assertEqual(code, 0)
+        self.assertIn(f"requeued {jid}", msg)
+        self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(jid))], ["one more thing"])
+        self.assertEqual(agent.tell_job(jobs.load(jid), "  ")[0], 2)
+
+    def test_close_empty(self) -> None:
+        empty = self.queued_run(self.repo, "nothing to do")
+        self.finished(empty, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        self.write(jobs.job_dir(empty) / "result" / "changes.diff", "")
+        changed = self.queued_run(self.repo, "a change")
+        self.finished(changed, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        self.write(jobs.job_dir(changed) / "result" / "changes.diff", "--- a/app.py\n+++ b/app.py\n")
+        failed = self.queued_run(self.repo, "broke")
+        self.finished(failed, {"exit_code": 1, "status": "failed", "kind": "ok", "engine": "claude"})
+        self.write(jobs.job_dir(failed) / "result" / "changes.diff", "")
+        rc, out, err = self.cli("close", "--empty")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.split(), [empty])
+        self.assertTrue(jobs.load(empty).closed)
+        self.assertFalse(jobs.load(changed).closed)
+        self.assertFalse(jobs.load(failed).closed)
+        self.assertEqual(self.cli("close", "--empty", changed)[0], 2)
+        self.assertEqual(self.cli("close")[0], 2)
+
+    def test_context_serve_and_disk(self) -> None:
+        self.assertNotIn("serve", agent.context_line(self.repo))   # no source configured
+        reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", logins=("ArrushC",)))
+        self.assertRegex(agent.context_line(self.repo), r"\| serve down$")
+        self.write(core.state_dir() / "agent-serve" / "status.json",
+                   json.dumps({"pid": os.getpid(), "started": core.now_iso(), "last_tick": time.time()}))
+        self.assertRegex(agent.context_line(self.repo), r"\| serve up$")
+        with mock.patch.object(agent.agent_disk, "low", return_value="3 GiB free"):
+            self.assertRegex(agent.context_line(self.repo), r"\| serve up \| disk low$")
+
+    def test_run_warns_when_disk_is_low(self) -> None:
+        with mock.patch.object(agent.agent_disk, "low", return_value="3 GiB free on ~/.local/state"):
+            rc, _, err = self.cli("run", "--title", "t", "--prompt", "x", "--repo", str(self.repo))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("warning: disk low: 3 GiB free", err)
+
+    def test_cancel_retry_close_wait_for_the_queue_lock(self) -> None:
+        # serve recovers and requeues under the queue lock; the person's commands must take it too, or a
+        # tick that loaded the job first writes it back over their cancel.
+        lock = jobs.jobs_dir() / ".queue.lock"
+
+        def held(argv: tuple[str, ...]) -> tuple[int, float]:
+            holder = subprocess.Popen([sys.executable, "-c", "import fcntl, time\n"
+                                       f"f = open({str(lock)!r}, 'a+'); fcntl.flock(f, fcntl.LOCK_EX)\n"
+                                       "print('locked', flush=True); time.sleep(1.5)"],
+                                      stdout=subprocess.PIPE, text=True)
+            assert holder.stdout is not None
+            self.assertEqual(holder.stdout.readline().strip(), "locked")
+            t0 = time.monotonic()
+            rc = self.cli(*argv)[0]
+            waited = time.monotonic() - t0
+            holder.wait()
+            return rc, waited
+
+        a = self.queued_run(self.repo, "to cancel")
+        self.pueue_status({7: QUEUED})
+        rc, waited = held(("cancel", a))
+        self.assertEqual(rc, 0)
+        self.assertGreater(waited, 1.0)
+        b = self.queued_run(self.repo, "to retry")
+        self.finished(b, {"exit_code": 1, "status": "failed", "kind": "ok", "engine": "claude"})
+        rc, waited = held(("retry", b))
+        self.assertEqual(rc, 0)
+        self.assertGreater(waited, 1.0)
+        c = self.queued_run(self.repo, "to close")
+        self.finished(c, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        rc, waited = held(("close", c))
+        self.assertEqual(rc, 0)
+        self.assertGreater(waited, 1.0)
+
+    def test_serve_loop_is_the_services_not_a_sessions(self) -> None:
+        os.environ["CLAUDECODE"] = "1"
+        rc, _, err = self.cli("serve")
+        self.assertEqual(rc, 3)
+        self.assertIn("dev.mise.ws-agent-serve", err)
+        self.assertEqual(self.cli("serve", "--once")[0], 0)   # one pass is fine (validation)
+        os.environ.pop("CLAUDECODE")
+        os.environ["WS_AGENT_JOB"] = "abc123"
+        self.assertEqual(self.cli("serve", "--once")[0], 3)
+
+    def test_doctor_serve_row(self) -> None:
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            out = self.cli("doctor")[1]
+        self.assertRegex(out, r"ok\s+serve: no sources configured")
+        self.assertRegex(out, r"ok\s+disk: \d+ GiB free .*10 GiB or 15%")
+        reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", logins=("ArrushC",)))
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            out = self.cli("doctor")[1]
+        self.assertRegex(out, r"!!\s+serve: down \(systemctl --user start dev\.mise\.ws-agent-serve\)")
+        self.write(core.state_dir() / "agent-serve" / "status.json",
+                   json.dumps({"pid": os.getpid(), "started": "2026-11-08T10:00:00+00:00", "last_tick": time.time()}))
+        with mock.patch.object(agent.agent_sandbox, "probe", return_value=None):
+            out = self.cli("doctor")[1]
+        self.assertRegex(out, r"ok\s+serve: up since 2026-11-08T10:00:00\+00:00 \(last tick \d+ s ago\)")
+
     def test_tell_finished_job_requeues_with_the_message(self) -> None:
         jid = self.queued_run(self.repo)
         self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
@@ -480,6 +610,100 @@ class Manage(Cli):
         self.assertIn("no job", err)
 
 
+class InboxCommands(Cli):
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = self.git_repo()
+        reg.allow(self.repo, "git", [])
+        self.pueue_status({})
+        self.head = git("rev-parse", "HEAD", cwd=self.repo)
+
+    def item(self, cid: str = "gh:ArrushC/proj:c9", decision: dict[str, object] | None = None,
+             **kw: object) -> inbox.Item:
+        fields: dict[str, object] = {"cid": cid, "source": "github", "repo": "~/src/proj", "explicit": True,
+                                     "author": "arrushc", "title": "fix the parser", "text": "/agent fix the parser",
+                                     "base": {"commit": self.head, "branch": "FETCH_HEAD"}, "prompt": "Fix the parser.",
+                                     "thread": "gh:ArrushC/proj#7"}
+        fields.update(kw)
+        return inbox.add(inbox.Candidate(**fields), decision)  # type: ignore[arg-type]
+
+    def test_inbox_lists_and_shows(self) -> None:
+        rc, out, _ = self.cli("inbox")
+        self.assertEqual((rc, out.strip()), (0, "no open inbox items"))
+        req = self.item()
+        rev = self.item("svn:u-1:5", {"decision": "ask", "rule": "API changes", "title": "r5", "task": "review r5",
+                                      "reason": "it touches the public API"},
+                        source="svn", explicit=False, title="r5 by alice: rename f", text="rename f to g", author="alice")
+        rc, out, _ = self.cli("inbox")
+        self.assertEqual(rc, 0)
+        self.assertRegex(out, rf"{req.id}\s+github\s+request\s+fix the parser\s+\(~/src/proj\)")
+        self.assertRegex(out, rf"{rev.id}\s+svn\s+ask\s+r5 by alice: rename f\s+\(~/src/proj\)")
+        rc, out, _ = self.cli("inbox", "--json")
+        self.assertEqual({r["id"] for r in json.loads(out)}, {req.id, rev.id})
+        rc, out, _ = self.cli("inbox", "--show", rev.id[:5])
+        self.assertEqual(rc, 0)
+        for want in ("svn:u-1:5", "alice", "ask", "API changes", "it touches the public API", "rename f to g",
+                     f"ws-agent accept {rev.id}"):
+            self.assertIn(want, out)
+        self.assertEqual(self.cli("inbox", "--show", "nope")[0], 1)
+        # someone else's words never reach the terminal as escape sequences
+        evil = self.item("gh:ArrushC/proj:c66", title="bad\x1b[2Jtitle\r", text="one\n\x1b]0;pwned\x07two")
+        for argv in (("inbox",), ("inbox", "--all"), ("inbox", "--show", evil.id)):
+            out = self.cli(*argv)[1]
+            self.assertNotIn("\x1b", out)
+            self.assertNotIn("\r", out)
+        self.assertIn("bad?[2Jtitle", self.cli("inbox")[1])
+
+    def test_accept_queues_with_origin_and_base(self) -> None:
+        it = self.item()
+        rc, out, err = self.cli("accept", it.id[:6], "--note", "keep the API")
+        self.assertEqual(rc, 0, err)
+        jid = out.split()[0]
+        job = jobs.load(jid)
+        self.assertEqual((job.origin, job.title), ("gh:ArrushC/proj:c9", "fix the parser"))
+        self.assertEqual(job.base, {"commit": self.head, "branch": "FETCH_HEAD"})
+        prompt = (jobs.job_dir(jid) / "prompt.md").read_text()
+        self.assertTrue(prompt.startswith("Fix the parser."))
+        self.assertIn("keep the API", prompt)
+        got = inbox.get(it.id)
+        self.assertEqual((got.status, got.job), ("accepted", jid))
+        rc, _, err = self.cli("accept", it.id)
+        self.assertEqual(rc, 3)
+        self.assertIn(jid, err)
+        self.assertEqual(sources.source_state()["gh:ArrushC/proj"]["threads"], {"#7": jid})   # follow-ups go to it
+        # a refusal on the way leaves the item open
+        other = self.item("gh:ArrushC/proj:c10", prompt="Another.")
+        reg.disallow(self.repo)
+        rc, _, err = self.cli("accept", other.id)
+        self.assertEqual(rc, 3)
+        self.assertIn("isn't allowed", err)
+        self.assertEqual(inbox.get(other.id).status, "open")
+
+    def test_dismiss(self) -> None:
+        it = self.item()
+        rc, out, _ = self.cli("dismiss", it.id)
+        self.assertEqual(rc, 0)
+        self.assertIn(f"dismissed {it.id}", out)
+        self.assertEqual(inbox.get(it.id).status, "dismissed")
+        self.assertNotIn(it.id, self.cli("inbox")[1])
+        self.assertRegex(self.cli("inbox", "--all")[1], rf"{it.id}\s+github\s+request\s+fix the parser\s+\(~/src/proj\)"
+                                                       r"\s+dismissed")
+        self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))
+        self.assertEqual(self.cli("dismiss", "nope")[0], 1)
+        rc, out, err = self.cli("accept", it.id)   # a dismissed item can still be accepted
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.cli("dismiss", it.id)[0], 3)   # but an accepted one isn't dismissed
+
+    def test_context_shows_inbox_count(self) -> None:
+        self.assertNotIn("inbox", agent.context_line(self.repo))
+        self.item("gh:ArrushC/proj:c1")
+        b = self.item("gh:ArrushC/proj:c2")
+        self.item("gh:ArrushC/other:c3", repo="~/src/other")   # another repository's
+        self.assertRegex(agent.context_line(self.repo), r"\| here: none \| inbox 2$")
+        inbox.resolve(b, "dismissed")
+        self.assertRegex(agent.context_line(self.repo), r"\| here: none \| inbox 1$")
+
+
 class Registry(Cli):
     def test_allow_refused_under_claudecode(self) -> None:
         repo = self.git_repo()
@@ -523,6 +747,86 @@ class Registry(Cli):
         self.assertIn("engines: claude, codex", out)
         self.assertIn("checks: make test", out)
         self.assertIn("network: on", out)
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_watch_starts_at_head_and_unwatch_forgets(self) -> None:
+        url, wc = self.svn_repo()
+        self.assertEqual(self.cli("allow", str(wc))[0], 0)
+        rc, _, err = self.cli("watch", str(wc), "--url", "^/trunk")
+        self.assertEqual(rc, 0, err)
+        st = sources.source_state()["svn:~/src/svnwc:^/trunk"]
+        self.assertEqual((st["cursor"], st["url"]), (1, f"{url}/trunk"))
+        self.assertEqual(self.cli("unwatch", str(wc))[0], 0)
+        self.assertEqual(sources.source_state(), {})
+        rc, _, err = self.cli("watch", str(wc), "--url", f"{url}/nope")
+        self.assertEqual(rc, 0, err)   # saved; the first poll starts it once the URL answers
+        self.assertIn("warning", err)
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_a_watch_turned_back_on_starts_at_head(self) -> None:
+        # "no backlog": revisions made while a watch was off, or the repository disallowed, are never fetched
+        url, wc = self.svn_repo()
+        self.assertEqual(self.cli("allow", str(wc))[0], 0)
+        key = "svn:~/src/svnwc:^/trunk"
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 0)
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "off")[0], 0)
+        self.write(wc / "a.txt", "a2\n")
+        svn("commit", "-q", "-m", "while off", cwd=wc)
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "observe")[0], 0)
+        self.assertEqual(sources.source_state()[key]["cursor"], 2)
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--interval", "10m")[0], 0)
+        self.assertEqual(sources.source_state()[key]["cursor"], 2)   # a changed setting keeps it
+        self.assertEqual(self.cli("disallow", str(wc))[0], 0)
+        self.assertNotIn(key, sources.source_state())
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_watch_commands(self) -> None:
+        _, wc = self.svn_repo()
+        self.assertEqual(self.cli("allow", str(wc))[0], 0)
+        rc, out, err = self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "act", "--author", "bob",
+                                "--rule", "Review locking changes", "--interval", "10m")
+        self.assertEqual(rc, 0, err)
+        found = reg.find(wc)
+        assert found is not None and found.watch is not None
+        self.assertEqual((found.watch.urls, found.watch.mode, found.watch.authors, found.watch.interval),
+                         (("^/trunk",), "act", ("bob",), "10m"))
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "loud")[0], 2)
+        self.assertEqual(self.cli("unwatch", str(wc))[0], 0)
+        found = reg.find(wc)
+        assert found is not None
+        self.assertIsNone(found.watch)
+        self.assertEqual(self.cli("github", str(wc))[0], 2)   # an SVN copy has no GitHub
+        os.environ["CLAUDECODE"] = "1"
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 3)
+
+    def test_github_commands(self) -> None:   # git only: runs where svn isn't installed (CI) too
+        repo = self.git_repo()
+        git("remote", "add", "origin", "https://github.com/ArrushC/proj.git", cwd=repo)
+        self.fake("gh", 'case "$*" in "api user --jq .login") echo ArrushC ;; *) exit 1 ;; esac')
+        self.assertEqual(self.cli("allow", str(repo))[0], 0)
+        rc, out, err = self.cli("github", str(repo))
+        self.assertEqual(rc, 0, err)
+        found = reg.find(repo)
+        assert found is not None and found.github is not None
+        self.assertEqual(found.github, reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",)))
+        self.assertRegex(str(sources.source_state()["gh:ArrushC/proj"]["cursor"]), r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        self.assertEqual(self.cli("ungithub", str(repo))[0], 0)
+        self.assertNotIn("gh:ArrushC/proj", sources.source_state())
+        os.environ["CLAUDECODE"] = "1"
+        self.assertEqual(self.cli("github", str(repo))[0], 3)
+
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_repos_shows_sources(self) -> None:
+        _, wc = self.svn_repo()
+        reg.allow(wc, "svn", [])
+        reg.set_watch(wc, reg.Watch(urls=("^/trunk",), rules=("r1",)))
+        repo = self.git_repo()
+        reg.allow(repo, "git", [])
+        reg.set_github(repo, reg.GitHubSource(slug="ArrushC/proj", logins=("ArrushC",)))
+        rc, out, _ = self.cli("repos")
+        self.assertIn("watch: ^/trunk (observe, 1 rule)", out)
+        self.assertIn("github: ArrushC/proj (observe, logins: ArrushC)", out)
 
     def test_allow_bad_review_is_a_usage_error(self) -> None:
         repo = self.git_repo()

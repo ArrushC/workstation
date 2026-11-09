@@ -88,6 +88,50 @@ exit 0
 """
 
 
+# A fake `gh`: logs argv, and answers `gh api [-i] [--jq .a.b] <endpoint>` from $d/<endpoint
+# without its query, / as _>.json (repos/o/r/issues/comments?since=… → repos_o_r_issues_comments.json);
+# a missing file is a 404. -i prints headers as gh 2.102 does (status line \n, headers \r\n), with
+# X-Poll-Interval from $d/poll-interval when that exists.
+FAKE_GH = r"""
+d="$WS_FAKE_GH"
+( IFS=$'\x1f'; printf '%s\n' "$*" ) >>"$d/argv.log"
+[ "${1:-}" = api ] || { echo "fake gh: only api" >&2; exit 1; }
+shift
+inc=0 jq="" ep=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+  -i | --include) inc=1 ;;
+  -q | --jq) jq="$2"; shift ;;
+  -X | --method | -H | --header | -f | -F | --field | --raw-field) shift ;;
+  -*) ;;
+  *) [ -z "$ep" ] && ep="$1" ;;
+  esac
+  shift
+done
+f="$d/$(printf '%s' "${ep%%\?*}" | tr '/' '_').json"
+if [ ! -f "$f" ]; then
+  [ "$inc" = 1 ] && printf 'HTTP/2.0 404 Not Found\n\r\n'
+  echo '{"message":"Not Found","status":"404"}'
+  echo "gh: Not Found (HTTP 404)" >&2
+  exit 1
+fi
+if [ "$inc" = 1 ]; then
+  printf 'HTTP/2.0 200 OK\nContent-Type: application/json; charset=utf-8\r\n'
+  [ -f "$d/poll-interval" ] && printf 'X-Poll-Interval: %s\r\n' "$(cat "$d/poll-interval")"
+  printf '\r\n'
+fi
+if [ -n "$jq" ]; then
+  python3 -c 'import json, sys
+v = json.load(open(sys.argv[1]))
+for k in sys.argv[2].strip(".").split("."):
+    v = v[k] if k else v
+print(v)' "$f" "$jq"
+else
+  cat "$f"
+fi
+"""
+
+
 def no_sandbox_ws(root: Path) -> Path:
     """A stand-in for ws.py that runs `ws.py agent ...` with ws-agent's job sandbox switched off,
     for tests whose _exec runs in another process (pueue, a killed executor) and whose fakes live

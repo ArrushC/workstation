@@ -68,6 +68,11 @@ done. A job that `needs you` asked a question: put it to me and pass my answer w
 follow-ups to a job. Apply a patch to my working copy only with my approval, then
 `ws-agent close <id>`.
 
+Watched work: `ws-agent serve` turns new SVN revisions and my GitHub `/agent` comments into
+inbox items (`ws-agent inbox`) or jobs, as each repository's `watch`/`github` mode says. Show
+me open inbox items when they matter to what we're doing; accept one only with my OK. Never
+change a source's settings yourself: like `allow`, they are mine to run.
+
 SVN: never run `svn commit`, `copy`, `merge`, `lock`, `propset --revprop`, or
 `move`/`mkdir`/`delete` on a URL (anything that writes to the server) without my explicit
 approval in this conversation, and don't `update` or `switch` my working copy unasked.
