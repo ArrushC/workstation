@@ -780,7 +780,8 @@ class Registry(Cli):
         self.assertEqual(self.cli("disallow", str(wc))[0], 0)
         self.assertNotIn(key, sources.source_state())
 
-    def test_watch_and_github_commands(self) -> None:
+    @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
+    def test_watch_commands(self) -> None:
         _, wc = self.svn_repo()
         self.assertEqual(self.cli("allow", str(wc))[0], 0)
         rc, out, err = self.cli("watch", str(wc), "--url", "^/trunk", "--mode", "act", "--author", "bob",
@@ -795,6 +796,11 @@ class Registry(Cli):
         found = reg.find(wc)
         assert found is not None
         self.assertIsNone(found.watch)
+        self.assertEqual(self.cli("github", str(wc))[0], 2)   # an SVN copy has no GitHub
+        os.environ["CLAUDECODE"] = "1"
+        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 3)
+
+    def test_github_commands(self) -> None:   # git only: runs where svn isn't installed (CI) too
         repo = self.git_repo()
         git("remote", "add", "origin", "https://github.com/ArrushC/proj.git", cwd=repo)
         self.fake("gh", 'case "$*" in "api user --jq .login") echo ArrushC ;; *) exit 1 ;; esac')
@@ -807,9 +813,7 @@ class Registry(Cli):
         self.assertRegex(str(sources.source_state()["gh:ArrushC/proj"]["cursor"]), r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
         self.assertEqual(self.cli("ungithub", str(repo))[0], 0)
         self.assertNotIn("gh:ArrushC/proj", sources.source_state())
-        self.assertEqual(self.cli("github", str(wc))[0], 2)   # an SVN copy has no GitHub
         os.environ["CLAUDECODE"] = "1"
-        self.assertEqual(self.cli("watch", str(wc), "--url", "^/trunk")[0], 3)
         self.assertEqual(self.cli("github", str(repo))[0], 3)
 
     @unittest.skipUnless(HAVE_SVN, "svn/svnadmin not installed")
