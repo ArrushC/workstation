@@ -274,7 +274,7 @@ def complete(words: list[str]) -> int:
             "health": ("--report", "--help"),
             "agent": ("context", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
                       "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "interrupt", "inbox", "accept", "dismiss",
-                      "ui", "serve", "pause", "resume", "doctor", "--help"),
+                      "ui", "fleet", "serve", "pause", "resume", "doctor", "--help"),
         }
         print("\n".join(s for s in choices.get(sub, ("--help",)) if s.startswith(cur)))
     return 0

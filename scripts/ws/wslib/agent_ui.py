@@ -35,8 +35,11 @@ def rows() -> list[str]:
     return out
 
 
-def fzf_argv(ws_agent: str) -> list[str]:
-    """fzf's command line; `ws_agent` is the shell words that run ws-agent."""
+def fzf_argv(ws_agent: str, *, fleet: bool = False) -> list[str]:
+    """fzf's command line; `ws_agent` is the shell words that run ws-agent. With `fleet` the rows
+    start with a host column and every command runs on that row's host (`ws-agent _on <host> ...`)."""
+    if fleet:
+        return _fleet_argv(ws_agent)
     a = ws_agent
     reload = f"+reload({a} ui --rows)"
 
@@ -55,3 +58,25 @@ def fzf_argv(ws_agent: str) -> list[str]:
             *bind("alt-x", f"{a} close {{2}}{_PAUSE}"),
             *bind("alt-a", f"{a} accept {{2}}{_PAUSE}"),
             *bind("alt-d", f"{a} dismiss {{2}}{_PAUSE}")]
+
+
+def _fleet_argv(a: str) -> list[str]:
+    """Rows are host, kind, id, state, title, repo: {1} is the host, {2} the kind, {3} the id."""
+    on = f"{a} _on {{1}}"
+    reload = f"+reload({a} ui --fleet --rows)"
+
+    def bind(key: str, action: str) -> list[str]:
+        return ["--bind", f"{key}:execute({action}){reload}"]
+
+    preview = f"if [ {{2}} = inbox ]; then {on} inbox --show {{3}}; else {on} show {{3}}; fi"
+    page = (f"if [ {{2}} = inbox ]; then {on} inbox --show {{3}}; else {on} result {{3}} --diff; fi"
+            " 2>&1 | ${PAGER:-less}")
+    return ["fzf", "--delimiter", "\\t", "--with-nth", "1,3..", "--with-shell", "bash -c", "--header", HEADER,
+            "--preview", preview, "--preview-window", "right,60%,wrap",
+            *bind("enter", page),
+            *bind("alt-t", f'read -r -p "tell {{3}}: " m && {on} tell {{3}} "$m"{_PAUSE}'),
+            *bind("alt-r", f"{on} retry {{3}}{_PAUSE}"),
+            *bind("alt-c", f"{on} cancel {{3}}{_PAUSE}"),
+            *bind("alt-x", f"{on} close {{3}}{_PAUSE}"),
+            *bind("alt-a", f"{on} accept {{3}}{_PAUSE}"),
+            *bind("alt-d", f"{on} dismiss {{3}}{_PAUSE}")]

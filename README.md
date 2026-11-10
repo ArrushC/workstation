@@ -614,6 +614,8 @@ ws-agent close <id>          # after review: delete the working copy, keep the r
 ws-agent close --empty       # the same for every succeeded job whose patch is empty
 ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
 ws-agent ui                  # jobs and the inbox in one fzf list: enter pages a result, alt-t/r/c/x/a/d act
+ws-agent fleet               # the same lists from this host and your other hosts (ws-agent ui --fleet: the picker)
+ws-agent fleet add <host>    # an SSH alias from your ~/.ssh/config; your own terminal only
 ws-agent serve [--once]      # the always-on loop the ws-agent-serve service runs (below)
 ws-agent pause | resume      # hold the queue (running jobs finish) / start it again
 ws-agent doctor              # each engine's login and cooldown, the sandbox, pueued, svn, the registry, disk
@@ -760,6 +762,10 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   distribution the directory lives in, so a Claude Code session opened on `\\wsl.localhost\<distro>\...` gets the
   `[orchestration]` line and queued jobs. Jobs still run in WSL. A repository on a Windows drive is refused: its
   working copy has to live in WSL. `allow` and the source settings still refuse from a session.
+- **Several hosts**: `ws-agent fleet` asks each listed host over your own SSH (`BatchMode`, a 5 s connect
+  timeout) for its jobs and inbox, only when you run it: nothing is installed or left running there beyond
+  ws-agent itself, and an unreachable host is one row. In `ws-agent ui --fleet` each key runs its command on
+  the row's host.
 - **Remote dev servers**: everything is per host. A Linux host with this workstation applied
   (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
   with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by

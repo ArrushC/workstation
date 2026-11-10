@@ -40,6 +40,8 @@ class Unreadable(Exception):
 
 
 MODES = ("off", "observe", "act")
+# An SSH destination as `ws-agent fleet` passes it to ssh: an alias or user@host, never an option.
+HOST = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(@[A-Za-z0-9][A-Za-z0-9._-]*)?$")
 _INTERVAL = re.compile(r"^\d+[smhd]?$")
 
 
@@ -88,6 +90,7 @@ class Settings:
     engines: Mapping[str, EngineSettings] = field(default_factory=dict)
     hide: tuple[Path, ...] = ()
     desktop: bool = True
+    fleet: tuple[str, ...] = ()   # SSH host aliases `ws-agent fleet` asks
 
     def engine(self, name: str) -> EngineSettings:
         return self.engines.get(name, EngineSettings())
@@ -174,7 +177,11 @@ def _settings(data: Mapping[str, object]) -> Settings:
     engines = {str(n): EngineSettings(_positive(t.get("parallel"), 1), str(t.get("model", "")))
                for n, t in engines_t.items() if isinstance(t, dict)}
     hide = tuple(core.expand(h) for h in _strings(sandbox.get("hide", [])))
-    return Settings(_positive(queue.get("parallel"), DEFAULT_PARALLEL), engines, hide, notify.get("desktop") is not False)
+    fleet_t = data.get("fleet") if isinstance(data.get("fleet"), dict) else {}
+    assert isinstance(fleet_t, dict)
+    fleet = tuple(h for h in _strings(fleet_t.get("hosts", [])) if HOST.match(h))
+    return Settings(_positive(queue.get("parallel"), DEFAULT_PARALLEL), engines, hide, notify.get("desktop") is not False,
+                    fleet)
 
 
 def load() -> tuple[dict[str, Repo], int]:
@@ -326,6 +333,20 @@ def set_github(root: Path, src: GitHubSource | None) -> Repo:
         if src.mode not in MODES:
             raise ValueError(f"ws-agent: --mode must be one of {', '.join(MODES)}")
     return _set_source(root, github=src)
+
+
+def set_fleet(hosts: tuple[str, ...]) -> None:
+    """The hosts `ws-agent fleet` asks over SSH. The person's own terminal only: the list says
+    where this host runs commands."""
+    _guard()
+    for h in hosts:
+        if not HOST.match(h):
+            raise ValueError(f"ws-agent: {h!r} isn't an SSH host alias (letters, digits, . _ -, optionally user@)")
+    data = _read_strict()
+    old = data.get("fleet") if isinstance(data.get("fleet"), dict) else {}
+    assert isinstance(old, dict)
+    data = {**data, "fleet": {**old, "hosts": list(dict.fromkeys(hosts))}}
+    _write(data, _repos(data))
 
 
 def disallow(root: Path) -> bool:

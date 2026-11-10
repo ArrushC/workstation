@@ -16,7 +16,9 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
     interrupt <id> TEXT     stop the job's running turn now and resume it with the message
     inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
                             what a watched source found, waiting for the person
-    ui [--rows]             jobs and the inbox in one fzf list (enter result, alt-keys act)
+    ui [--rows] [--fleet]   jobs and the inbox in one fzf list (enter result, alt-keys act)
+    fleet [--json] | fleet add|remove <host>
+                            the same lists from this host and your other hosts, over your SSH
     serve [--once]          the always-on loop (the ws-agent-serve service): recovery, sources
     close --empty           close every succeeded job whose patch is empty
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
@@ -937,19 +939,66 @@ def close_job(job: jobs.Job) -> str:
     return f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}"
 
 
+def _fleet(args: argparse.Namespace) -> int:
+    from . import agent_fleet
+    if args.action in ("add", "remove"):
+        have = agent_registry.settings().fleet
+        want = (*have, args.host or "") if args.action == "add" else tuple(h for h in have if h != args.host)
+        try:
+            agent_registry.set_fleet(want)
+        except agent_registry.Refused as e:
+            _err(str(e))
+            return 3
+        except ValueError as e:
+            _err(str(e))
+            return 2
+        except agent_registry.Unreadable as e:
+            _err(str(e))
+            return 1
+        print("fleet: " + (", ".join(agent_registry.settings().fleet) or "this host only"))
+        return 0
+    table = agent_fleet.table()
+    if args.json:
+        print(json.dumps([dict(zip(("host", "kind", "id", "state", "title", "repo"), r)) for r in table], indent=2))
+        return 0
+    if not table:
+        print("no jobs and nothing in the inbox, here or on the fleet")
+    for host, kind, ident, state, title, repo in table:
+        what = state if kind != "inbox" else f"inbox:{state}"
+        print(f"{host:<12} {ident:<10} {what:<14} {title}" + (f"  ({repo})" if repo else ""))
+    return 0
+
+
+def _on(args: argparse.Namespace) -> int:
+    """`ws-agent <words>` on a fleet host (the fleet view's keys), or here for `local`."""
+    from . import agent_fleet
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't reach other hosts (work directly)")
+        return 3
+    try:
+        argv = agent_fleet.on(args.host, list(args.words), tty=sys.stdin.isatty())
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return 3
+    if argv is None:
+        return main(list(args.words))
+    return subprocess.run(argv).returncode
+
+
 def _ui(args: argparse.Namespace) -> int:
-    from . import agent_ui
+    from . import agent_fleet, agent_ui
+    source = agent_fleet.rows if args.fleet else agent_ui.rows
     if args.rows:
-        for r in agent_ui.rows():
+        for r in source():
             print(r)
         return 0
     fzf = core.which("fzf")
     if not fzf:
         _err("ws-agent: fzf isn't installed (mise install fzf); ws-agent ls and ws-agent inbox show the same lists")
         return 1
-    argv = agent_ui.fzf_argv(core.shell_join(core.self_argv("agent")))
+    argv = agent_ui.fzf_argv(core.shell_join(core.self_argv("agent")), fleet=args.fleet)
     argv[0] = fzf
-    rows = agent_ui.rows()
+    rows = source()
     if not rows:
         print("no jobs and nothing in the inbox")
         return 0
@@ -1154,7 +1203,17 @@ def _parser() -> argparse.ArgumentParser:
     cl.set_defaults(fn=_close)
     ui = sub.add_parser("ui", help="jobs and the inbox in one fzf list")
     ui.add_argument("--rows", action="store_true", help="print the list fzf shows, and exit")
+    ui.add_argument("--fleet", action="store_true", help="this host and the fleet's hosts (ws-agent fleet add)")
     ui.set_defaults(fn=_ui)
+    fl = sub.add_parser("fleet", help="jobs and inbox items here and on your other hosts, over your SSH")
+    fl.add_argument("action", nargs="?", choices=("add", "remove"), help="change the host list (your own terminal only)")
+    fl.add_argument("host", nargs="?")
+    fl.add_argument("--json", action="store_true")
+    fl.set_defaults(fn=_fleet)
+    on = sub.add_parser("_on")
+    on.add_argument("host")
+    on.add_argument("words", nargs=argparse.REMAINDER)
+    on.set_defaults(fn=_on)
     sv = sub.add_parser("serve", help="the always-on loop: recovery and the watched sources (the ws-agent-serve service)")
     sv.add_argument("--once", action="store_true", help="one pass, then exit")
     sv.set_defaults(fn=_serve)
@@ -1190,7 +1249,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
-               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "interrupt", "inbox", "accept", "dismiss", "ui",
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "interrupt", "inbox", "accept", "dismiss", "ui", "fleet",
                "serve", "pause", "resume", "doctor", "--help")
 
 

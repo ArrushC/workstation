@@ -275,6 +275,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     - printed through `printable`;
     - never in an event line, since those reach live sessions.
   - `ui` (`agent_ui.py`) is fzf with `--with-shell 'bash -c'`, and no `)` inside an `execute(...)`.
+  - `fleet` (`agent_fleet.py`; `[fleet] hosts`, set only by `fleet add/remove`, refused in a session): pull-only
+    over the person's SSH (`ssh -o BatchMode=yes -- <host> 'bash -lc "ws-agent ..."'`, arguments `shlex`-quoted,
+    hosts matched against `agent_registry.HOST` so none reads as an option). Remote text goes through `printable`.
+    `_on <host> <words>` runs one command on a listed host for `ui --fleet`'s keys.
   - `allow`/`disallow` refuse under `CLAUDECODE=1` (and the secret guard denies editing agents.toml); `run` and
     `tell` refuse under `WS_AGENT_JOB`. Tests use fake pueue/claude/codex (`tests/agent_helpers.py`) and patch
     `agent_sandbox.wrap`/`probe` (subprocess tests go through `no_sandbox_ws`), except the real-bwrap tests in
