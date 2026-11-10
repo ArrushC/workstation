@@ -20,6 +20,22 @@ from wslib import agent_sandbox as sbx
 from wslib import jobs
 
 HAVE_BWRAP = bool(shutil.which("bwrap"))
+
+
+def _nested_works() -> bool:
+    """bwrap inside bwrap with its own network namespace (what an engine's sandbox does inside
+    ws-agent's). Some hosts allow the outer one only: GitHub's ubuntu-26.04 runners, for one."""
+    if not HAVE_BWRAP:
+        return False
+    inner = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "--", "true"]
+    try:
+        return subprocess.run(["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", *inner],
+                              capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+NESTED = _nested_works()
 PY = sys.executable
 
 
@@ -93,6 +109,7 @@ class Layout(Sandbox):
         self.assertNotEqual(r.returncode, 0)
         self.assertRegex(r.stderr, r"(?i)unreachable|network|errno")
 
+    @unittest.skipUnless(NESTED, "this host allows no nested sandbox")
     def test_nested_sandbox_runs(self) -> None:
         argv = sbx.wrap(["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "--", "true"],
                         job_id="aaa111", wc=self.wc)
@@ -193,7 +210,7 @@ class Layout(Sandbox):
 
 
 class Probe(Sandbox):
-    @unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
+    @unittest.skipUnless(NESTED, "this host allows no nested sandbox")
     def test_probe_caches_and_reports(self) -> None:
         self.assertIsNone(sbx.probe(force=True))
         cache = json.loads((Path(os.environ["WS_STATE_DIR"]) / "agent-sandbox.json").read_text())

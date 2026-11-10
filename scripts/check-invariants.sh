@@ -1252,7 +1252,9 @@ check_self_tests() {
       ok "$(printf '%s\n' "$out" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^[^[:alnum:]]+//')"
     else
       bad "${t%% *} failed:"
-      { printf '%s\n' "$out" | grep -E 'FAIL' || printf '%s\n' "$out" | tail -5; } | sed 's/^/      /'
+      # FAIL and ERROR lines with what follows them (a unittest traceback names the test and the
+      # cause): CI's log is the only place a host-specific failure shows.
+      { printf '%s\n' "$out" | grep -E -A12 'FAIL|ERROR' || printf '%s\n' "$out" | tail -5; } | tail -80 | sed 's/^/      /'
     fi
   done
 }

@@ -36,14 +36,20 @@ export PATH="$T/bin:$PATH"
 # run <case-dir> <stdin-for-fd3|-> [VAR=value ...] — resolve_host_config and
 # resolve_system_steps in a fresh shell with REPO_DIR=<case-dir>; prints SYSTEM. "-" means no
 # fd 3 (an inherited one is closed) and setsid removes the controlling terminal.
+# S7 sends SIGINT as Ctrl-C would. A runner that starts its jobs with SIGINT ignored (GitHub's
+# ubuntu-26.04 image) hands that down, and a non-interactive bash can't undo an ignore it was
+# born with: env resets it where coreutils can (8.32+; EL8's 8.30 can't, and doesn't need to).
+DEFSIG=()
+env --default-signal=INT true 2>/dev/null && DEFSIG=(--default-signal=INT)
+
 run() {
   local dir=$1 input=$2
   shift 2
   if [ "$input" = - ]; then
-    env "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
+    env "${DEFSIG[@]}" "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
       'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; resolve_host_config; resolve_system_steps; echo "SYSTEM=$SYSTEM"' "$root/bootstrap.sh" </dev/null 3<&- 2>&1
   else
-    env "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
+    env "${DEFSIG[@]}" "$@" WORKSTATION_BOOTSTRAP_LIB=1 REPO_DIR_OVERRIDE="$dir" setsid -w bash -c \
       'source "$0"; REPO_DIR=$REPO_DIR_OVERRIDE; resolve_host_config; resolve_system_steps; echo "SYSTEM=$SYSTEM"' "$root/bootstrap.sh" 3<<<"$input" </dev/null 2>&1
   fi
 }
