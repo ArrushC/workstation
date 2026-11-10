@@ -63,6 +63,19 @@ class GitHubSource:
     logins: tuple[str, ...] = ()
 
 
+PUBLISH_MODES = ("off", "manual", "auto")
+
+
+@dataclass(frozen=True)
+class Publish:
+    """`[repo."<key>".publish]`: what ws-agent may write back for this repository's jobs. Off
+    until the person turns it on; each kind of write is named separately."""
+    mode: str = "off"         # off | manual (only `ws-agent publish <id>`) | auto (serve, passing source jobs)
+    comment: bool = False     # GitHub: the report as a comment on the issue or PR that asked
+    draft_pr: bool = False    # GitHub: the patch on a new branch ws-agent/<id>, as a draft pull request
+    svn_branch: str = ""      # SVN: the parent of new branches (^/branches/ws-agent); "" = never commit
+
+
 @dataclass(frozen=True)
 class Repo:
     path: Path
@@ -76,6 +89,7 @@ class Repo:
     network: bool = False
     watch: Watch | None = None
     github: GitHubSource | None = None
+    publish: Publish = Publish()
 
 
 @dataclass(frozen=True)
@@ -148,6 +162,14 @@ def _github(t: object) -> GitHubSource | None:
     return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")), _strings(t.get("logins", [])))
 
 
+def _publish(t: object) -> Publish:
+    if not isinstance(t, dict):
+        return Publish()
+    mode = str(t.get("mode", "off"))
+    return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
+                   t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")))
+
+
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
     engines = tuple(e for e in _strings(entry.get("engines", ["claude"])) if e in KNOWN_ENGINES) or ("claude",)
     rounds = entry.get("fix_rounds", 1)
@@ -156,7 +178,7 @@ def _repo(key: str, entry: Mapping[str, object]) -> Repo:
                 str(entry.get("allowed_at", "")), engines, _strings(entry.get("checks", [])),
                 rounds if isinstance(rounds, int) and not isinstance(rounds, bool) and rounds >= 0 else 1,
                 review if review in engines else "", entry.get("network") is True,
-                _watch(entry.get("watch")), _github(entry.get("github")))
+                _watch(entry.get("watch")), _github(entry.get("github")), _publish(entry.get("publish")))
 
 
 def _repos(data: Mapping[str, object]) -> dict[str, Repo]:
@@ -245,7 +267,11 @@ def _emit(table: Mapping[str, object], path: list[str], out: list[str]) -> None:
 def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
     known = {"vcs": r.vcs, "commands": list(r.commands), "allowed_at": r.allowed_at, "engines": list(r.engines),
              "checks": list(r.checks), "fix_rounds": r.fix_rounds, "review": r.review, "network": r.network}
-    out: dict[str, object] = {**known, **{k: v for k, v in old.items() if k not in known and k not in ("watch", "github")}}
+    out: dict[str, object] = {**known, **{k: v for k, v in old.items() if k not in known and k not in ("watch", "github", "publish")}}
+    if r.publish != Publish():
+        prev_pub = old.get("publish")
+        out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
+                          "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
@@ -284,7 +310,8 @@ def allow(root: Path, vcs: str, commands: list[str] | tuple[str, ...], *, engine
     repos = _repos(data)
     prev = repos.get(_key(root))
     repo = Repo(root.resolve(), vcs, tuple(commands), core.now_iso(), tuple(dict.fromkeys(engines)), tuple(checks),
-                fix_rounds, review, network, prev.watch if prev else None, prev.github if prev else None)
+                fix_rounds, review, network, prev.watch if prev else None, prev.github if prev else None,
+                prev.publish if prev else Publish())
     repos[_key(root)] = repo
     _write(data, repos)
     return repo
@@ -317,6 +344,23 @@ def set_watch(root: Path, watch: Watch | None) -> Repo:
         if not _INTERVAL.match(watch.interval):
             raise ValueError(f"ws-agent: --interval {watch.interval!r} isn't a duration like 5m")
     return _set_source(root, watch=watch)
+
+
+def set_publish(root: Path, pub: Publish) -> Repo:
+    """What ws-agent may write back for this repository's jobs. The person's own terminal only."""
+    _guard()
+    found = find(root)
+    if pub.mode not in PUBLISH_MODES:
+        raise ValueError(f"ws-agent: --mode must be one of {', '.join(PUBLISH_MODES)}")
+    if found is not None and found.vcs == "svn" and (pub.comment or pub.draft_pr):
+        raise ValueError(f"ws-agent: {_key(root)} is an SVN copy; comments and draft PRs are GitHub's")
+    if found is not None and found.vcs == "git" and pub.svn_branch:
+        raise ValueError(f"ws-agent: {_key(root)} is a git repository; --svn-branch is for SVN copies")
+    if pub.svn_branch and not re.match(r"^\^/[A-Za-z0-9._/-]+$", pub.svn_branch):
+        raise ValueError("ws-agent: --svn-branch is a repository path such as ^/branches/ws-agent")
+    if ".." in pub.svn_branch.split("/"):
+        raise ValueError("ws-agent: --svn-branch can't contain ..")
+    return _set_source(root, publish=pub)
 
 
 def set_github(root: Path, src: GitHubSource | None) -> Repo:

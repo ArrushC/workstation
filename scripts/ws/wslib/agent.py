@@ -14,6 +14,10 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
     ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
     interrupt <id> TEXT     stop the job's running turn now and resume it with the message
+    publish-to <path> [--mode off|manual|auto] [--comment] [--draft-pr] [--svn-branch ^/P]
+                            what may be written back for a repository (refused inside Claude Code)
+    publish <id> [--dry-run] [--even-failing]
+                            write a finished job's result back: a comment, a draft PR, an SVN branch
     inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
                             what a watched source found, waiting for the person
     ui [--rows] [--fleet]   jobs and the inbox in one fzf list (enter result, alt-keys act)
@@ -213,6 +217,8 @@ def _repo_words(r: agent_registry.Repo) -> list[str]:
         words.append(f"watch: {', '.join(r.watch.urls)} ({r.watch.mode}, {n} rule{'' if n == 1 else 's'})")
     if r.github is not None:
         words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)})")
+    if r.publish != agent_registry.Publish():
+        words.append(f"publish: {_publish_words(r.publish)}")
     return words
 
 
@@ -280,6 +286,45 @@ def _github(args: argparse.Namespace) -> int:
         elif prev is not None and prev.github is not None and prev.github.slug:
             agent_sources.update_source(f"gh:{prev.github.slug}", None)
     return rc
+
+
+def _publish_to(args: argparse.Namespace) -> int:
+    p = vcs.probe(Path(args.path))
+    root = p.root or Path(args.path).resolve()
+    pub = agent_registry.Publish(mode=args.mode, comment=bool(args.comment), draft_pr=bool(args.draft_pr),
+                                 svn_branch=args.svn_branch or "")
+    rc, repo = _source_change(agent_registry.set_publish, root, pub)
+    if repo is not None:
+        print(f"publishing for {core.tilde(root)}: {_publish_words(repo.publish)}")
+        if pub.mode == "auto":
+            _err("ws-agent serve will now write these for passing jobs from this repository's sources, with your "
+                 "credentials, without asking per job. ws-agent publish-to <path> --mode off stops it.")
+    return rc
+
+
+def _publish_words(p: agent_registry.Publish) -> str:
+    kinds = [w for w, on in (("GitHub comment", p.comment), ("draft PR", p.draft_pr),
+                             (f"SVN branch under {p.svn_branch}", bool(p.svn_branch))) if on]
+    return f"{p.mode}" + (f" ({', '.join(kinds)})" if kinds else " (no kind named: nothing is written)")
+
+
+def _publish(args: argparse.Namespace) -> int:
+    from . import agent_publish
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't publish (work directly)")
+        return 3
+    job = _load(args.id)
+    if job is None:
+        return 1
+    try:
+        lines = agent_publish.publish(job, auto=False, even_failing=args.even_failing, dry_run=args.dry_run)
+    except agent_publish.PublishError as e:
+        _err(str(e))
+        return 1
+    for ln in lines:
+        print(ln)
+    done = any(": published " in ln or ": would publish " in ln for ln in lines)
+    return 0 if done else 3
 
 
 def _disallow(args: argparse.Namespace) -> int:
@@ -1170,6 +1215,18 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--review", choices=agent_registry.KNOWN_ENGINES, help="a second-opinion review by this engine")
     a.add_argument("--network", action="store_true", help="let the agent's commands and the checks use the network")
     a.set_defaults(fn=_allow)
+    pt = sub.add_parser("publish-to", help="what ws-agent may write back for a repository (your own terminal only)")
+    pt.add_argument("path")
+    pt.add_argument("--mode", default="manual", help="off, manual (default: only ws-agent publish <id>) or auto")
+    pt.add_argument("--comment", action="store_true", help="GitHub: the report as a comment on the issue or PR that asked")
+    pt.add_argument("--draft-pr", action="store_true", help="GitHub: the patch on a new branch, as a draft pull request")
+    pt.add_argument("--svn-branch", help="SVN: the parent of new branches, e.g. ^/branches/ws-agent")
+    pt.set_defaults(fn=_publish_to)
+    pb = sub.add_parser("publish", help="write a finished job's result back, as its repository's publish settings say")
+    pb.add_argument("id")
+    pb.add_argument("--even-failing", action="store_true", help="although its checks failed")
+    pb.add_argument("--dry-run", action="store_true", help="say what would be written; write nothing")
+    pb.set_defaults(fn=_publish)
     d = sub.add_parser("disallow")
     d.add_argument("path")
     d.set_defaults(fn=_disallow)
@@ -1266,7 +1323,7 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
+SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "publish-to", "publish", "repos", "run",
                "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "interrupt", "inbox", "accept", "dismiss", "ui", "fleet",
                "serve", "pause", "resume", "doctor", "--help")
 

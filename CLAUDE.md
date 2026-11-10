@@ -270,6 +270,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       `.claude/settings.json` hooks otherwise run in the job. A source job's title stays out of its prompts and
       event lines. Triage's `rule` reaches a prompt only if it's one of the watch's rules.
   - `cancel`, `retry` and `close` reload and re-check the job under `queue_lock`, as serve does.
+  - Publishing (`agent_publish.py`) is the only code that writes to a server, and only what `[repo.*.publish]`
+    names (`publish-to`, refused in a session; an unknown mode reads `off`).
+    - Every write goes through `allowed()`: succeeded, once per job and kind (`result/published.json`), and for
+      `auto` a source job with `checks: pass`, never SVN, ≤ 5 a day per source, ≤ 3 tries.
+    - It only creates: a comment (`gh api --method POST`), a new `ws-agent/<id>` branch plus `gh pr create --draft`,
+      a new SVN branch (`svn copy` then commit; manual, the person's own job only).
+    - The draft PR's commit is built with plumbing on a throwaway `GIT_INDEX_FILE` (`read-tree`, `apply --cached`,
+      `commit-tree`) and pushed to the remote's URL: a push to `origin` would write a remote-tracking ref.
+    - Posted text is fixed wording plus `inert()` model text (quoted, cut, `@`/`#` defused); a source job's title
+      never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):
     - quoted between `<untrusted>` tags (`agent_inbox.defuse`);
     - printed through `printable`;

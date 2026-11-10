@@ -70,8 +70,9 @@ follow-ups to a job. Apply a patch to my working copy only with my approval, the
 
 Watched work: `ws-agent serve` turns new SVN revisions and my GitHub `/agent` comments into
 inbox items (`ws-agent inbox`) or jobs, as each repository's `watch`/`github` mode says. Show
-me open inbox items when they matter to what we're doing; accept one only with my OK. Never
-change a source's settings yourself: like `allow`, they are mine to run.
+me open inbox items when they matter to what we're doing; accept one only with my OK. Source
+and `publish-to` settings are mine to run, like `allow`. `ws-agent publish <id>` writes a job's
+result to GitHub or SVN: run it only when I name that job.
 
 SVN: never run `svn commit`, `copy`, `merge`, `lock`, `propset --revprop`, or
 `move`/`mkdir`/`delete` on a URL (anything that writes to the server) without my explicit
