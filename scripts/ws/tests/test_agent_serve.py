@@ -287,7 +287,7 @@ class Sources(ServeScratch):
         j = self.job()
         self.write(jobs.job_dir(j.id) / "result" / "exit.json", json.dumps({"exit_code": 0, "status": "done",
                                                                            "kind": "ok"}))
-        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs")])):
+        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs", "ArrushC")])):
             serve.tick(time.time())
         self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(j.id))], ["and the docs"])
         self.assertEqual([a[-1] for a in self.adds()], ["--resume"])
@@ -379,6 +379,70 @@ class Disk(unittest.TestCase):
             self.assertIn("9 GiB free", agent_disk.low() or "")
         with mock.patch.object(agent_disk.shutil, "disk_usage", return_value=mock.Mock(total=1000 << 30, free=100 << 30)):
             self.assertIn("10%", agent_disk.low() or "")   # 100 GiB, but under 15 %
+
+
+class Followups(ServeScratch):
+    def test_log_lines_carry_no_escape_sequences(self) -> None:
+        with redirect_stdout(io.StringIO()) as out:
+            serve._log(["svn: E170013: \x1b[2Jbad\x07 server text"])
+        self.assertNotIn("\x1b", out.getvalue())
+        self.assertNotIn("\x1b", serve.log_path().read_text())
+
+    def test_up_during_a_long_tick(self) -> None:
+        now = time.time()
+        self.write(core.state_dir() / "agent-serve" / "status.json",
+                   json.dumps({"pid": os.getpid(), "last_tick": now - 400, "ticking_since": now - 200}))
+        self.assertTrue(serve.up())    # mid-tick (a slow triage or fetch)
+        self.write(core.state_dir() / "agent-serve" / "status.json",
+                   json.dumps({"pid": os.getpid(), "last_tick": now - 4000, "ticking_since": now - 3000}))
+        self.assertFalse(serve.up())   # stuck
+
+    def test_already_running_isnt_a_failure_for_the_unit(self) -> None:
+        lock = core.private_dir(core.state_dir() / "agent-serve") / "serve.lock"
+        holder = subprocess.Popen([sys.executable, "-c", "import fcntl, time\n"
+                                   f"f = open({str(lock)!r}, 'a+'); fcntl.flock(f, fcntl.LOCK_EX)\n"
+                                   "print('locked', flush=True); time.sleep(60)"], stdout=subprocess.PIPE, text=True)
+        self.addCleanup(holder.wait)
+        self.addCleanup(holder.kill)
+        assert holder.stdout is not None
+        holder.stdout.readline()
+        os.environ["INVOCATION_ID"] = "systemd-unit"   # systemd sets it for a unit's processes
+        self.addCleanup(os.environ.pop, "INVOCATION_ID", None)
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(serve.serve(once=True), 0)   # restart=on-failure must not loop on it
+
+    def test_the_registry_is_read_once_per_pass(self) -> None:
+        for i in range(6):
+            self.job(title=f"t{i}", pueue_id=None, closed=True)
+        self.pueue_status({})
+        real = reg.load
+        with mock.patch.object(reg, "load", side_effect=real) as load:
+            serve.tick(time.time())
+        self.assertLess(load.call_count, 6)
+
+    def test_a_github_followup_is_from_its_login(self) -> None:
+        self.github("act")
+        self.pueue_status({})
+        j = self.job()
+        self.write(jobs.job_dir(j.id) / "result" / "exit.json",
+                   json.dumps({"exit_code": 0, "status": "done", "kind": "ok"}))
+        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs", "octocat")])):
+            serve.tick(time.time())
+        msgs = jobs.undelivered(jobs.load(j.id))
+        self.assertEqual([(m["from"], m["text"]) for m in msgs], [("gh:octocat", "and the docs")])
+
+    def test_a_held_request_isnt_shown_as_triaged(self) -> None:
+        self.github("act")
+        self.pueue_status({})
+        with mock.patch.object(agent_sources, "poll_github", return_value=([self.gh_cand()], [])), \
+                mock.patch.object(agent_disk, "low", return_value="3 GiB free"):
+            serve.tick(time.time())
+        from wslib import agent
+        out = io.StringIO()
+        with redirect_stdout(out):
+            agent.main(["inbox", "--show", agent_inbox.items()[0].id])
+        self.assertNotIn("triage:", out.getvalue())
+        self.assertIn("disk low", out.getvalue())
 
 
 if __name__ == "__main__":

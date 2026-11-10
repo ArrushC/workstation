@@ -106,18 +106,29 @@ def _git_common_dir(wc: Path) -> Path | None:
     return gd.parent.parent if gd.parent.name == "worktrees" else gd
 
 
-def _base(bw: str, home: Path) -> list[str]:
-    return [bw, "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
-            "--tmpfs", "/tmp", "--tmpfs", str(home)]
+# Blank in every sandbox, whatever the registry says: Windows drives under WSL (/mnt), removable
+# media, and the other accounts' homes. Nothing an engine needs lives there, and whatever it can
+# read can reach its provider. What a run does need under one of them (its job directory, a
+# worktree's .git) is bound back after. A run that reads no code (triage) loses more.
+BLANK = ("/mnt", "/media", "/home", "/root")
+BLANK_SCRATCH = (*BLANK, "/srv", "/var/tmp")
+
+
+def _base(bw: str, home: Path, blank: Sequence[str] = BLANK) -> list[str]:
+    args = [bw, "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"]
+    for d in blank:   # before the home layer: /home goes blank, then the person's own home is made on it
+        if Path(d).is_dir() and not Path(d).is_symlink():
+            args += ["--tmpfs", d]
+    return [*args, "--tmpfs", str(home)]
 
 
 def _layout(bw: str, *, own: Path, keep: Sequence[Path], hidden: list[Path], rw: Sequence[Path],
-            ro: Sequence[Path]) -> list[str]:
+            ro: Sequence[Path], blank: Sequence[str] = BLANK) -> list[str]:
     """The layout every sandbox shares: everything read-only, /tmp and the home directory empty,
     the tools and `ro` bound back read-only, `own` and `rw` writable, and `hidden` (with the folders
     around outside registered copies) covered, except a path that holds `own` or `keep`."""
     home = core.home().resolve()
-    args = _base(bw, home)
+    args = _base(bw, home, blank)
     base_ro = [home / ".local" / "share" / "mise", home / ".local" / "bin", core.WS_DIR,
                Path(sys.prefix), Path(sys.base_prefix)]
     bound: list[Path] = []
@@ -131,7 +142,7 @@ def _layout(bw: str, *, own: Path, keep: Sequence[Path], hidden: list[Path], rw:
         if p.exists():
             args += ["--bind", str(p), str(p)]
             bound.append(p)
-    hidden_roots = (home, Path("/tmp"))
+    hidden_roots = (home, Path("/tmp"), *(Path(d) for d in blank))
     # Folders around outside registered copies go first and are skipped when they hold anything the
     # run needs (its directory, a bound tool); the named paths then go over them.
     candidates = [(h, True) for h in surrounding_paths()] + [(h, False) for h in hidden]
@@ -185,7 +196,7 @@ def wrap_scratch(argv: list[str], *, workdir: Path, ro: Sequence[Path] = (), rw:
     since the engine has to reach its provider."""
     bw = _bwrap_or_raise()
     workdir = workdir.resolve()
-    args = _layout(bw, own=workdir, keep=(), hidden=hidden_paths(""), rw=rw, ro=ro)
+    args = _layout(bw, own=workdir, keep=(), hidden=hidden_paths(""), rw=rw, ro=ro, blank=BLANK_SCRATCH)
     return [*args, "--chdir", str(workdir), "--", *argv]
 
 

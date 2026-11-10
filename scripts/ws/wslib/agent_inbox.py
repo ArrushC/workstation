@@ -21,7 +21,9 @@ from . import core, jobs
 
 STATUSES = ("open", "accepted", "dismissed")
 PRIVATE = 0o600
-_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+# C0/C1 controls (terminal escapes, \r), and the invisible Unicode that can reorder or hide text
+# on screen: zero-width characters, bidi embeddings, overrides and isolates, the BOM.
+_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 _TAG = re.compile(r"<\s*(/?)\s*untrusted\s*>", re.IGNORECASE)
 
 

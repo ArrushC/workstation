@@ -449,16 +449,29 @@ def _copy_unversioned(wc: Path, paths: list[str], dest: Path) -> tuple[list[str]
     return skipped, links
 
 
+def _vcs(argv: list[str], wc: Path, warnings: list[str]) -> bytes:
+    """A VCS command's output while collecting; a failure is a warning on the result (the patch
+    or manifest may be incomplete), never silence."""
+    try:
+        r = _run(argv, cwd=wc)
+    except OSError as e:
+        warnings.append(f"{' '.join(argv[:2])} failed ({e}): the result may be incomplete")
+        return b""
+    if r.returncode != 0:
+        tail = (r.stderr.decode("utf-8", "replace").strip().splitlines() or [""])[-1][:200]
+        warnings.append(f"{' '.join(argv[:2])} failed (exit {r.returncode}): the result may be incomplete: {tail}")
+    return r.stdout
+
+
 def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], list[str]]:
-    status = _run(["svn", "status", "--non-interactive"], cwd=wc)
-    (res / "status.txt").write_bytes(status.stdout)
-    diff = _run(["svn", "diff", "--non-interactive", "--git", "--show-copies-as-adds"], cwd=wc).stdout
-    binary = _binary_paths(diff.decode("utf-8", "replace"))
     manifest: list[str] = []
     warnings: list[str] = []
+    (res / "status.txt").write_bytes(_vcs(["svn", "status", "--non-interactive"], wc, warnings))
+    diff = _vcs(["svn", "diff", "--non-interactive", "--git", "--show-copies-as-adds"], wc, warnings)
+    binary = _binary_paths(diff.decode("utf-8", "replace"))
     prop_paths: list[str] = []
     unversioned: list[str] = []
-    xml = _run(["svn", "status", "--non-interactive", "--xml"], cwd=wc).stdout
+    xml = _vcs(["svn", "status", "--non-interactive", "--xml"], wc, warnings)
     try:
         entries = ET.fromstring(xml).iter("entry")
     except ET.ParseError:
@@ -522,15 +535,17 @@ def _collect_svn(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], 
 
 def _collect_git(job: jobs.Job, wc: Path, res: Path) -> tuple[bytes, list[str], list[str]]:
     base = job.base.get("commit", "HEAD")
-    _run(["git", "add", "-A", "--", ".", *(f":(exclude){f}" for f in ENGINE_FILES)], cwd=wc)
-    (res / "status.txt").write_bytes(_run(["git", "status", "--short"], cwd=wc).stdout)
-    diff = _run(["git", "diff", "--cached", "--binary", "-M", base], cwd=wc).stdout
-    names = _text(_run(["git", "diff", "--cached", "--name-status", "-M", base], cwd=wc)).splitlines()
+    warnings: list[str] = []
+    _vcs(["git", "add", "-A", "--", ".", *(f":(exclude){f}" for f in ENGINE_FILES)], wc, warnings)
+    (res / "status.txt").write_bytes(_vcs(["git", "status", "--short"], wc, warnings))
+    diff = _vcs(["git", "diff", "--cached", "--binary", "-M", base], wc, warnings)
+    names = _vcs(["git", "diff", "--cached", "--name-status", "-M", base], wc, warnings).decode(
+        "utf-8", "replace").splitlines()
     diff_path = res / "changes.diff"
     (res / "apply.txt").write_text(f"Base: commit {base}\nApply in your checkout:\n  git apply --check {diff_path}\n"
                                    f"  git apply --index {diff_path}\n",
                                    encoding="utf-8")
-    return diff, names, []
+    return diff, names, warnings
 
 
 def collect(job: jobs.Job, jobdir: Path) -> list[str]:
@@ -671,6 +686,12 @@ copy's state first (the turn may have left a change half done), then follow the 
 """
 
 
+def _told_line(m: Mapping[str, object]) -> str:
+    """One message for the engine; a GitHub follow-up says whose it is (a listed login, not always the person)."""
+    who = str(m.get("from") or "")
+    return f"- {m.get('text')}" if not who.startswith("gh:") else f"- (from GitHub login {who[3:]}) {m.get('text')}"
+
+
 def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> bool:
     """A message that arrived while the job was finishing (its checks, collecting, its review):
     the job goes on in its session. Under the queue lock, as `tell` decides under it whether to
@@ -781,6 +802,8 @@ def execute(job_id: str, *, resume: bool) -> int:
         return 1
     _archive_exit(job, res)
     attempt = job.attempts + 1
+    job.attempts = attempt   # counted now: an attempt that is killed still used its number (and its attempts/ folder)
+    jobs.save(job)
     with open(jd / "exec.log", "a", encoding="utf-8") as log:
         _log(log, f"--- attempt {attempt} {'resume' if resume else 'start'} {core.now_iso()}")
 
@@ -853,12 +876,12 @@ def execute(job_id: str, *, resume: bool) -> int:
             resumable = bool(sid) and engine.transcript_exists(sid)
             resume_sid: str | None = None
             pending = jobs.undelivered(job)
-            told = TELL.format(lines="\n".join(f"- {m.get('text')}" for m in pending)) if pending else ""
+            told = TELL.format(lines="\n".join(_told_line(m) for m in pending)) if pending else ""
             if told and cut_short:
                 told = INTERRUPTED + told
             cut_short = False
             if pending and intent in ("resume", "tell") and resumable and prev == engine.name and \
-                    (intent == "tell" or _prior_exit(res, job.attempts).get("kind") == "ok"):
+                    (intent == "tell" or _prior_exit(res, attempt - 1).get("kind") == "ok"):
                 # it finished or asked, and the person wrote: their words are the whole prompt
                 prompt, resume_sid, told = told, sid, ""
             elif prev and prev != engine.name:

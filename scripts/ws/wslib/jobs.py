@@ -112,7 +112,18 @@ def new_id() -> str:
 
 
 def save(job: Job) -> None:
+    """Write the record. A writer may hold a copy read long ago (an executor runs for hours), so
+    what only ever moves one way is merged from the file first: cancelled and closed stay set,
+    and auto_resumes never drops. The caller's copy learns them too."""
     core.private_dir(job_dir(job.id))
+    try:
+        old = _read(job_dir(job.id) / "job.json")
+    except (OSError, ValueError, TypeError):
+        old = None
+    if old is not None:
+        job.cancelled = job.cancelled or old.cancelled
+        job.closed = job.closed or old.closed
+        job.auto_resumes = max(job.auto_resumes, old.auto_resumes)
     core.atomic_write(job_dir(job.id) / "job.json", (json.dumps(asdict(job), indent=2) + "\n").encode("utf-8"))
 
 
@@ -194,7 +205,10 @@ def post(job: Job, sender: str, text: str, *, attempt: int | None = None) -> Non
 
 
 def undelivered(job: Job) -> list[dict[str, object]]:
-    return [m for m in thread(job) if m.get("from") == "you" and not m.get("delivered")]
+    """Messages to the job not yet handed to its engine: the person's ("you") and a GitHub
+    follow-up's ("gh:<login>")."""
+    return [m for m in thread(job) if (m.get("from") == "you" or str(m.get("from", "")).startswith("gh:"))
+            and not m.get("delivered")]
 
 
 def mark_delivered(job: Job, ids: list[object], attempt: int) -> None:

@@ -33,6 +33,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -47,6 +48,7 @@ from . import (agent_disk, agent_events, agent_exec, agent_inbox, agent_registry
                agent_sources, core, engines, jobs, vcs)
 
 MAX_CONTEXT = 400
+_DURATION = re.compile(r"^\s*\d+\s*[smhd]?\s*$")
 
 
 def _err(msg: str) -> None:
@@ -371,13 +373,19 @@ def queue_job(root: Path, title: str, prompt: str, *, rev: str | None = None, pa
         return Queued(None, "ws-agent: this is a queued job; it can't queue jobs (work directly)", 3, [])
     if not prompt.strip():
         return Queued(None, "ws-agent: the prompt is empty", 2, [])
-    p = vcs.probe(root, thorough=True)
+    if not _DURATION.match(timeout or ""):
+        return Queued(None, f"ws-agent: --timeout {timeout!r} isn't a duration like 30m or 2h", 2, [])
+    # A source hands over the base, so the copy's own state doesn't matter: the quick probe (no
+    # svnversion over the tree, no git status taking the person's index lock from inside serve).
+    p = vcs.probe(root, thorough=base is None)
     if p.kind == "none" or p.root is None:
         return Queued(None, f"ws-agent: {root} isn't in a git or SVN working copy", 3, [])
     key = core.tilde(p.root)
     if agent_registry.find(p.root) is None:
         return Queued(None, f"ws-agent: {key} isn't allowed for queued jobs; run 'ws-agent allow {key}' in your own "
                       "terminal", 3, [])
+    if rev and p.kind == "svn" and not rev.isdigit():
+        return Queued(None, f"ws-agent: --rev {rev!r} isn't an SVN revision number", 2, [])
     warnings: list[str] = []
     if base is None:
         base, why = _base(p, rev, warnings)
@@ -485,7 +493,9 @@ def _inbox_show(prefix: str) -> int:
              + (f"  {clean(str(c['url']))}" if c.get("url") else ""),
              f"  repo: {c.get('repo')}   found: {it.created}"]
     if d:
-        lines.append(f"  triage: {d.get('decision')}" + (f" (rule: {clean(str(d['rule']))})" if d.get("rule") else ""))
+        if not c.get("explicit"):   # an explicit request is never triaged: its decision only carries why it's held
+            lines.append(f"  triage: {d.get('decision')}"
+                         + (f" (rule: {clean(str(d['rule']))})" if d.get("rule") else ""))
         if d.get("reason"):
             lines.append(f"  reason: {clean(str(d['reason']))}")
     elif c.get("explicit"):
@@ -789,7 +799,7 @@ def _retry(args: argparse.Namespace) -> int:
     return 0
 
 
-def tell_job(job: jobs.Job, text: str) -> tuple[int, str]:
+def tell_job(job: jobs.Job, text: str, *, sender: str = "you") -> tuple[int, str]:
     """The person's words to a job, kept in its thread: delivered after its current turn if it
     runs, else by resuming its session now. (code, message): 0 told or requeued, 1 an error,
     2 an empty message, 3 refused."""
@@ -804,7 +814,7 @@ def tell_job(job: jobs.Job, text: str) -> tuple[int, str]:
             st = jobs.state(job, q.tasks if q else None)
             if st in ("closed", "cancelled"):
                 return 3, f"ws-agent: {job.id} is {st}; start a new job (ws-agent run)"
-            jobs.post(job, "you", text)
+            jobs.post(job, sender, text)
             if st in ("running", "queued"):
                 return 0, f"told {job.id}: delivered after its current turn"
             if q is None:
@@ -902,10 +912,18 @@ def _close_empty() -> int:
     for job in jobs.all_jobs():
         if jobs.state(job, tasks) != "succeeded":
             continue
+        res = jobs.job_dir(job.id) / "result"
         try:
-            empty = not (jobs.job_dir(job.id) / "result" / "changes.diff").read_bytes().strip()
+            empty = not (res / "changes.diff").read_bytes().strip()
         except OSError:
             continue   # no patch recorded: not known to be empty
+        try:
+            left = [w for w in (res / "warnings.txt").read_text(encoding="utf-8").splitlines()
+                    if w.strip() and not w.startswith("no changes")]
+        except OSError:
+            left = []
+        if left or (res / "unversioned").is_dir() and any((res / "unversioned").iterdir()):
+            continue   # an empty patch, but it left something (unversioned files, a conflict): yours to look at
         if empty:
             try:
                 with jobs.queue_lock():
@@ -1062,10 +1080,10 @@ def _doctor(args: argparse.Namespace) -> int:
             continue
         detail = ""
         if name == "claude":   # the method and plan only: never the account's email or organization
-            r = subprocess.run([path, "auth", "status"], capture_output=True, text=True, timeout=30)
             try:
+                r = subprocess.run([path, "auth", "status"], capture_output=True, text=True, timeout=30)
                 info = json.loads(r.stdout[r.stdout.find("{"):]) if "{" in r.stdout else {}
-            except ValueError:
+            except (OSError, subprocess.TimeoutExpired, ValueError):
                 info = {}
             detail = (f", signed in via {info.get('authMethod', '?')} ({info.get('apiProvider', '?')}, "
                       f"plan {info.get('subscriptionType', '?')})")
@@ -1104,7 +1122,7 @@ def _doctor(args: argparse.Namespace) -> int:
         st = agent_serve.status()
         ago = int(time.time() - float(st.get("last_tick") or 0))  # type: ignore[arg-type]
         row(True, f"serve: up since {st.get('started')} (last tick {ago} s ago)"
-            + (f"; last error: {st['last_error']}" if st.get("last_error") else ""))
+            + (f"; last error: {agent_inbox.printable(str(st['last_error']))}" if st.get("last_error") else ""))
     else:
         row(False, "serve: down (systemctl --user start dev.mise.ws-agent-serve)")
     return 1 if problems else 0

@@ -33,6 +33,7 @@ from . import (agent_admit, agent_disk, agent_events, agent_inbox, agent_registr
 TICK = 30
 MAX_AUTO_RESUMES = 2
 UP_WITHIN = 120
+LONG_TICK = 900
 LOG_MAX = 1 << 20
 
 
@@ -67,10 +68,14 @@ def _alive(pid: object) -> bool:
 
 
 def up() -> bool:
-    """serve ticked in the last UP_WITHIN seconds and its process is alive."""
+    """serve's process is alive and it ticked in the last UP_WITHIN seconds, or is inside a tick
+    that began less than LONG_TICK ago (a triage or a fetch can take minutes)."""
     st = status()
-    last = st.get("last_tick")
-    return isinstance(last, (int, float)) and time.time() - float(last) < UP_WITHIN and _alive(st.get("pid"))
+    now = time.time()
+    last, since = st.get("last_tick"), st.get("ticking_since")
+    fresh = isinstance(last, (int, float)) and now - float(last) < UP_WITHIN
+    ticking = isinstance(since, (int, float)) and now - float(since) < LONG_TICK
+    return (fresh or ticking) and _alive(st.get("pid"))
 
 
 def configured() -> bool:
@@ -90,7 +95,8 @@ def _log(lines: Iterable[str]) -> None:
     if not lines:
         return
     stamp = core.now_iso()
-    text = "".join(f"{stamp} {ln}\n" for ln in lines)
+    # lines quote svn/gh errors and triage reasons: someone else's text, on a terminal and in a log
+    text = "".join(f"{stamp} {agent_inbox.printable(ln)}\n" for ln in lines)
     sys.stdout.write(text)
     sys.stdout.flush()
     p = log_path()
@@ -104,8 +110,9 @@ def _log(lines: Iterable[str]) -> None:
 
 # --- recovery -------------------------------------------------------------------------------
 
-def _allowed(job: jobs.Job) -> agent_registry.Repo | None:
-    return agent_registry.find(core.expand(job.repo))
+def _allowed(job: jobs.Job, repos: dict[str, agent_registry.Repo]) -> agent_registry.Repo | None:
+    """The job's registry entry, from one read of the registry per pass (job.repo is its key)."""
+    return repos.get(job.repo)
 
 
 def _recover(q: jobs.Queue | None) -> list[str]:
@@ -113,8 +120,9 @@ def _recover(q: jobs.Queue | None) -> list[str]:
     if q is None or q.group == "Paused":
         return []
     out = []
+    repos = agent_registry.load()[0]
     for j in jobs.all_jobs():
-        if j.closed or j.cancelled or j.auto_resumes >= MAX_AUTO_RESUMES or _allowed(j) is None:
+        if j.closed or j.cancelled or j.auto_resumes >= MAX_AUTO_RESUMES or _allowed(j, repos) is None:
             continue
         with jobs.queue_lock():
             now_q = jobs.pueue_status()
@@ -147,8 +155,11 @@ def _requeue_waiting(q: jobs.Queue | None) -> list[str]:
     if q is None or q.group == "Paused":
         return []
     out = []
+    repos = agent_registry.load()[0]
     for j in jobs.all_jobs():
-        entry = _allowed(j)
+        if j.closed or j.cancelled:
+            continue
+        entry = _allowed(j, repos)
         if entry is None or jobs.state(j, q.tasks) != "waiting":
             continue
         engine, _ = engines.select(entry)
@@ -181,7 +192,7 @@ def _inbox(c: agent_inbox.Candidate, decision: dict[str, object] | None, why: st
 
 def _held(c: agent_inbox.Candidate, decision: dict[str, object] | None, reason: str) -> dict[str, object]:
     """The decision an accepted candidate keeps in the inbox when it couldn't become a job now."""
-    base = decision or {"decision": "accept", "rule": None, "title": c.title, "task": c.prompt}
+    base = decision or {"decision": "request", "rule": None, "title": c.title, "task": c.prompt}
     return {**base, "reason": reason}
 
 
@@ -232,13 +243,13 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     return _inbox(c, decision, "observe" if mode == "observe" else "triage asks")
 
 
-def _follow(job_id: str, text: str) -> str:
+def _follow(job_id: str, text: str, login: str) -> str:
     from . import agent
     try:
         job = jobs.load(job_id)
     except KeyError:
         return f"follow-up for {job_id}: no such job"
-    code, msg = agent.tell_job(job, text)
+    code, msg = agent.tell_job(job, text, sender=f"gh:{login}" if login else "you")
     return f"follow-up for {job_id}: " + (msg.splitlines()[0] if msg else f"exit {code}")
 
 
@@ -316,7 +327,7 @@ def _poll_svn(entry: agent_registry.Repo, now: float) -> list[str]:
 def _poll_github(entry: agent_registry.Repo, now: float) -> list[str]:
     found, follow = agent_sources.poll_github(entry, now)
     _push(found)
-    return [_follow(jid, text) for jid, text in follow] + _drain()
+    return [_follow(jid, text, login) for jid, text, login in follow] + _drain()
 
 
 def tick(now: float) -> list[str]:
@@ -357,7 +368,9 @@ def serve(*, once: bool) -> int:
         pid = lock.read().strip() or str(status().get("pid") or "?")
         lock.close()
         print(f"ws-agent serve is already running (pid {pid})")
-        return 3
+        # Under its unit (systemd sets INVOCATION_ID) this isn't a failure: Restart=on-failure would
+        # retry into the start limit and leave the unit failed after the other serve ends.
+        return 0 if os.environ.get("INVOCATION_ID") else 3
     lock.seek(0)
     lock.truncate()
     lock.write(f"{os.getpid()}\n")
@@ -375,9 +388,12 @@ def serve(*, once: bool) -> int:
         _log([f"serve started (pid {os.getpid()}, every {TICK} s)"])
         while True:
             now = time.time()
+            st["ticking_since"] = now
+            _write_status(st)
             lines = tick(now)
             errors = [ln for ln in lines if ": " in ln and ("Error" in ln or "not running" in ln)]
-            st.update(last_tick=time.time(), last_error=errors[-1] if errors else st.get("last_error", ""))
+            st.update(last_tick=time.time(), ticking_since=None,
+                      last_error=agent_inbox.printable(errors[-1]) if errors else st.get("last_error", ""))
             _write_status(st)
             _log(lines)
             if once or stopping:

@@ -137,8 +137,8 @@ class Layout(Sandbox):
         r = run("import os; open('out.txt', 'w').write(os.getcwd())")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual((work / "out.txt").read_text(), str(work.resolve()))
-        r = run(f"open({str(self.outside / 'state' / 'elsewhere')!r}, 'w').write('x')")
-        self.assertNotEqual(r.returncode, 0)   # only the workdir is writable
+        run(f"open({str(self.outside / 'state' / 'elsewhere')!r}, 'w').write('x')")
+        self.assertFalse((self.outside / "state" / "elsewhere").exists())   # only the workdir's writes are kept
         self.assertNotIn("--unshare-net", sbx.wrap_scratch(["true"], workdir=work))   # it has to reach its provider
 
     def test_extra_ro_and_rw_paths(self) -> None:
@@ -235,6 +235,32 @@ class Probe(Sandbox):
         self.assertNotIn(jobs.job_dir("aaa111"), hidden)
         self.assertIn(self.outside.resolve(), hidden)
         self.assertIn(Path("/data/svn"), hidden)
+
+
+@unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
+class ReadScope(Sandbox):
+    def test_windows_drives_and_other_homes_are_blank(self) -> None:
+        for argv in (sbx.wrap(["true"], job_id="aaa111", wc=self.wc),
+                     sbx.wrap_scratch(["true"], workdir=self.jd)):
+            pairs = list(zip(argv, argv[1:]))
+            for d in ("/mnt", "/media", "/home"):
+                if Path(d).is_dir():
+                    self.assertIn(("--tmpfs", d), pairs, d)
+            self.assertLess(argv.index("/home") if "/home" in argv else -1, len(argv))
+        r = self.run_in("import os; print(sorted(os.listdir('/mnt')) if os.path.isdir('/mnt') else [])")
+        self.assertEqual(r.stdout.strip(), "[]", r.stderr)
+
+    def test_scratch_reads_nothing_under_var_tmp(self) -> None:
+        loose = self.write(self.outside / "loose.txt", "not registered, not hidden")
+        os.environ["WS_STATE_DIR"] = str(self.outside / "state")
+        work = self.outside / "state" / "agent-triage" / "t-1"
+        work.mkdir(parents=True)
+        r = subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", f"open({str(loose)!r}).read()"], workdir=work),
+                           capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(r.returncode, 0)
+        r = subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", "open('ok.txt', 'w').write('x')"], workdir=work),
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
 
 
 if __name__ == "__main__":

@@ -362,9 +362,11 @@ deterministic `cid` (dedupe), subject to a per-source daily cap (default 10 tick
   person's gh login, every ≥ 60 s (honouring `X-Poll-Interval`). A comment or new issue body
   starting with `/agent ` by a login in `logins` is an explicit request: no triage. `cid =
   gh:<slug>:<comment or issue id>`.
-  - Base for an issue: `git fetch origin <default branch>` → `FETCH_HEAD`.
-  - Base for a PR: `git fetch origin pull/<n>/head` → `FETCH_HEAD`.
-  - Neither touches the person's branches or remote-tracking refs.
+  - Base: the commit `git ls-remote origin` names for the default branch (an issue) or
+    `pull/<n>/head` (a PR), fetched into the object store only (`--no-write-fetch-head --refmap=`,
+    gc off).
+  - That touches none of the person's branches, remote-tracking refs or `FETCH_HEAD`, and nothing
+    is fetched while `origin` isn't the configured repository.
   - The prompt carries the issue/PR title, body and thread as quoted, untrusted text, then the
     `/agent` instruction.
   - Nothing is posted back.
@@ -399,7 +401,7 @@ deterministic `cid` (dedupe), subject to a per-source daily cap (default 10 tick
   - Input: the candidate's text, quoted as untrusted, plus the rules. No code is read.
   - Output: `{decision: accept | ignore | ask, rule, title, task, reason}`.
   - Limits: 120 s timeout, at most 30 triage calls an hour per host.
-- Inbox: `<state>/agent-inbox/<cid>.json` (candidate, decision, status open / accepted /
+- Inbox: `<state>/agent-inbox/<id>.json`, `id = sha256(cid)[:10]`, since a cid isn't a safe file name (candidate, decision, status open / accepted /
   dismissed, job id). Commands:
   - `ws-agent inbox [--all] [--json]`;
   - `accept <cid> [--note TEXT]` creates a job through the normal `run` path;
@@ -461,8 +463,10 @@ Update the memory file.
 
 - After merging, `wsu` on a dev server installs and starts `ws-agent serve` as a user service,
   idle until a repository there is allowed and a source configured.
-- To keep it off a host, put `enabled = false` in that host's `config.local.toml`
-  `[bootstrap.services.ws-agent-serve]`.
+- To keep it off a host, copy the whole `[bootstrap.services.ws-agent-serve]` table from
+  `config.linux.toml` into that host's `config.local.toml` with `enabled = false` and
+  `state = "stopped"`. A partial table replaces the declared one instead of merging (measured on
+  mise 2026.9.9), so `enabled = false` alone doesn't work.
 - Jobs and watchers run as the person's account, with its svn credentials for checkouts, diffs
   and logs. That's read-only traffic to the SVN server: one `svn log` per watched URL per
   interval, plus one checkout per job.

@@ -104,5 +104,10 @@ class Admit(InboxScratch):
         self.assertIsNone(agent_admit.admit(cand("svn:u-2:201"), entry, "observe", ()))   # another source
 
 
+class Printable(unittest.TestCase):
+    def test_bidi_and_zero_width_characters_are_shown(self) -> None:
+        self.assertEqual(agent_inbox.printable("a\u202eb\u200bc\u2066d\ufeffe"), "a?b?c?d?e")
+
+
 if __name__ == "__main__":
     unittest.main()
