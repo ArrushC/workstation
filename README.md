@@ -664,11 +664,17 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     says an agent wrote it; the job's summary is quoted and can't mention or link anyone.
   - `--draft-pr`: the job's patch as one commit on a new branch `ws-agent/<id>`, opened as a draft pull request.
     Your branches, index and working tree aren't touched, and an existing branch is never written.
-  - `--svn-branch`: the patch committed to a new branch under that path, for a job you started yourself. A
-    watched revision's review is never committed.
+    - Only the job's own commit goes out. The job's base must already be on the target branch at origin, so a
+      fork pull request's commits and your own unpushed commits are never pushed.
+    - A patch that touches `.github/` (workflows run with the repository's secrets as soon as a branch is
+      pushed) is never published automatically; by hand it needs `--allow-workflows`.
+  - `--svn-branch`: the patch committed to a new branch under that path, in one revision, for a job you started
+    yourself. The path can't be trunk, inside it, or inside or above a watched URL. A watched revision's review
+    is never committed.
   - `manual`: only `ws-agent publish <id>` writes (`--dry-run` shows what it would write). `auto`: serve also
     publishes a job that came from a source once it succeeds with passing checks; a repository with no checks,
-    or a job of your own, is never published automatically. A job is published once, and at most 5 a day per
+    or a job of your own, is never published automatically. Neither is a job that finished before you switched
+    `auto` on, nor anything while the queue is paused. A job is published once, and at most 5 a day per
     source go out automatically.
   - `ws-agent publish-to <path> --mode off` stops it.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it

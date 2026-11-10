@@ -136,7 +136,14 @@ def auto_count(job: jobs.Job, today: dt.date | None = None) -> int:
     return n
 
 
-def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False) -> str | None:
+def touches_workflows(patch: bytes) -> bool:
+    """The patch adds or changes something under .github/ (workflows run with the repository's
+    secrets as soon as a branch is pushed, before anyone has reviewed the draft PR)."""
+    return re.search(rb"^(?:diff --git a/|\+\+\+ b/|--- a/)\.github/", patch, re.M) is not None
+
+
+def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False,
+            allow_workflows: bool = False) -> str | None:
     """None when this job may be published as `kind` now, else why not. Every publish asks."""
     entry = agent_registry.find(core.expand(job.repo))
     if entry is None:
@@ -149,10 +156,24 @@ def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False)
     if published(job, kind):
         return f"{job.id} was already published ({kind}): {published(job, kind)}"
     info = jobs.exit_info(job) or {}
-    if job.closed or job.cancelled or jobs.outcome_state(info) != "succeeded" or not info:
-        return f"{job.id} hasn't succeeded"
+    if job.closed or job.cancelled or jobs.live_run(job) is not None or not info \
+            or jobs.outcome_state(info) != "succeeded":
+        return f"{job.id} hasn't succeeded (or is running again)"
+    if kind == "svn_branch":   # checked when set, and again here: the file can be edited by hand
+        why = agent_registry.svn_branch_problem(p.svn_branch, entry.watch)
+        if why:
+            return f"svn_branch {p.svn_branch} {why}"
+    workflows = kind == "draft_pr" and touches_workflows(_patch(job))
+    rec = record(job).get(kind, {})
     checks = info.get("checks")
     if auto:
+        if not p.since or str(info.get("finished") or "") < p.since:
+            return "it finished before publishing became automatic here (ws-agent publish does it by hand)"
+        if workflows:
+            return "its patch touches .github/ (workflows run with the repository's secrets): yours to publish"
+        if kind == "comment" and rec.get("attempting") and not rec.get("url"):
+            return ("an earlier attempt may have reached GitHub: look at the issue, then ws-agent publish "
+                    f"{job.id} if it isn't there")
         if not job.origin:
             return "only a job a source made is published automatically"
         if job.vcs == "svn" or kind == "svn_branch":
@@ -168,6 +189,9 @@ def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False)
             return "a source's SVN job is a review: it stays local"
         if checks == "fail" and not even_failing:
             return "its checks failed (--even-failing publishes it anyway)"
+        if workflows and not allow_workflows:
+            return ("its patch touches .github/ (workflows run with the repository's secrets as soon as the "
+                    "branch is pushed): read it first, then --allow-workflows")
     if kind in ("draft_pr", "svn_branch") and not _patch(job).strip():
         return "its patch is empty"
     return None
@@ -175,12 +199,19 @@ def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False)
 
 # --- the text --------------------------------------------------------------------------------
 
-def inert(text: str, limit: int) -> str:
+def fenced(text: str, limit: int) -> str:
     """Model or third-party text made safe to post under the person's name: printable, cut, and
-    unable to mention a user or team (@), link an issue (#) or open a code fence or HTML."""
-    t = agent_inbox.printable(text, lines=True)[:limit]
-    t = re.sub(r"([@#])", "\\1\u200b", t)
-    return t.replace("```", "'''").replace("<", "&lt;")
+    inside a code fence longer than any run of backticks in it. GitHub renders nothing inside a
+    fence: no mention, no issue or commit reference, no link, image, HTML or entity."""
+    t = agent_inbox.printable(text, lines=True)[:limit].strip("\n")
+    run = max((len(m) for m in re.findall(r"`+", t)), default=0)
+    fence = "`" * max(3, run + 1)
+    return f"{fence}text\n{t}\n{fence}"
+
+
+def _word(value: object) -> str:
+    """A short field from a result file as plain words (the job's sandbox could write that file)."""
+    return re.sub(r"[^A-Za-z0-9 ._-]", "", str(value or ""))[:40].strip()
 
 
 def _files(job: jobs.Job) -> list[str]:
@@ -188,7 +219,7 @@ def _files(job: jobs.Job) -> list[str]:
         lines = (jobs.job_dir(job.id) / "result" / "manifest.txt").read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
-    return [inert(ln, 200) for ln in lines if ln.strip()]
+    return [ln for ln in lines if ln.strip()]
 
 
 def _summary(job: jobs.Job) -> str:
@@ -202,21 +233,18 @@ def _summary(job: jobs.Job) -> str:
 def comment_body(job: jobs.Job, pr_url: str = "") -> str:
     info = jobs.exit_info(job) or {}
     files = _files(job)
-    lines = [f"Posted by an agent (ws-agent job `{job.id}`, {info.get('engine') or job.engine or 'engine unknown'}), "
+    lines = [f"Posted by an agent (ws-agent job `{job.id}`, {_word(info.get('engine') or job.engine) or 'engine unknown'}), "
              "not written by a person.", "",
-             f"Checks: {info.get('checks') or 'none'}."]
-    if pr_url:
+             f"Checks: {_word(info.get('checks')) or 'none'}."]
+    if pr_url and re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+", pr_url):
         lines.append(f"Draft pull request: {pr_url}")
     if files:
-        lines += ["", f"Changed files ({len(files)}):", *(f"    {f}" for f in files[:FILES_MAX])]
-        if len(files) > FILES_MAX:
-            lines.append(f"    ... and {len(files) - FILES_MAX} more")
+        shown = files[:FILES_MAX] + ([f"... and {len(files) - FILES_MAX} more"] if len(files) > FILES_MAX else [])
+        lines += ["", f"Changed files ({len(files)}):", "", fenced("\n".join(shown), 200 * FILES_MAX)]
     else:
         lines += ["", "No files changed."]
-    summary = inert(_summary(job), SUMMARY_MAX)
-    if summary:
-        lines += ["", "The job's own summary (generated text, quoted as is):", "",
-                  *(f"> {ln}" for ln in summary.splitlines())]
+    if _summary(job).strip():
+        lines += ["", "The job's own summary (generated text, shown as written):", "", fenced(_summary(job), SUMMARY_MAX)]
     return "\n".join(lines) + "\n"
 
 
@@ -276,9 +304,27 @@ def _draft_pr(job: jobs.Job, entry: agent_registry.Repo, t: Target) -> str:
     if not re.fullmatch(r"[0-9a-f]{40,64}", base):
         raise PublishError(f"ws-agent: {job.id} has no base commit")
     ref = f"refs/heads/{branch}"
-    git = ["git", "-C", str(repo), "-c", "gc.auto=0", "-c", "maintenance.auto=false"]
+    git = ["git", "-C", str(repo), "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "push.followTags=false"]
     quiet = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    there = _ok(_run([*git, "ls-remote", "origin", ref], env=quiet), "git ls-remote").split()
+    # One URL for every check and for the push itself (a remote can push elsewhere than it fetches),
+    # and never the remote's name: a push to `origin` would write a remote-tracking ref here.
+    url = _ok(_run([*git, "remote", "get-url", "--push", "origin"], env=quiet), "git remote get-url")
+    into = _pr_base(job, slug)
+    if not agent_sources._REF.match(into):
+        raise PublishError(f"ws-agent: refusing the branch name {into!r}")
+    # Only the job's own commit may go out. The branch pushes everything its base reaches, so the
+    # base must already be on the target branch at origin: a fork pull request's commits (which
+    # would then run this repository's workflows with its secrets) and the person's unpushed
+    # local commits are not.
+    tip = (_ok(_run([*git, "ls-remote", url, f"refs/heads/{into}"], env=quiet), "git ls-remote").split() or [""])[0]
+    if not re.fullmatch(r"[0-9a-f]{40,64}", tip):
+        raise PublishError(f"ws-agent: {into} isn't a branch at origin")
+    _ok(_run([*git, "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "--refmap=",
+              url, f"refs/heads/{into}"], env=quiet), f"fetching {into}")
+    if _run([*git, "merge-base", "--is-ancestor", base, tip], env=quiet).returncode != 0:
+        raise PublishError(f"ws-agent: the job's base {base[:12]} isn't on {into} at origin, so a branch from it "
+                           "would push commits that aren't the job's (a fork's, or unpushed local ones); nothing pushed")
+    there = _ok(_run([*git, "ls-remote", url, ref], env=quiet), "git ls-remote").split()
     pushed = str(record(job).get("draft_pr", {}).get("commit") or "")
     if there and there[0] != pushed:
         raise PublishError(f"ws-agent: {branch} already exists on origin; nothing pushed")
@@ -293,13 +339,12 @@ def _draft_pr(job: jobs.Job, entry: agent_registry.Repo, t: Target) -> str:
                               stdin=commit_message(job).encode("utf-8")), "git commit-tree")
         finally:
             index.unlink(missing_ok=True)
-        # To the remote's URL, not its name: a push to `origin` would also write a remote-tracking
-        # ref into the person's repository. A new branch only: no force, and it was absent a moment ago.
-        url = _ok(_run([*git, "remote", "get-url", "--push", "origin"], env=quiet), "git remote get-url")
-        _ok(_run([*git, "push", "--quiet", url, f"{commit}:{ref}"], env=quiet), f"pushing {branch}")
+        # This one ref, and only if it still doesn't exist (an empty lease): never a tag, a
+        # submodule, a fast-forward onto someone's branch, or a forced update.
+        _ok(_run([*git, "push", "--quiet", "--no-follow-tags", "--recurse-submodules=no", f"--force-with-lease={ref}:",
+                  url, f"{commit}:{ref}"], env=quiet), f"pushing {branch}")
         # remembered, so a PR that fails to open is retried without pushing again
         _save(job, "draft_pr", {"branch": branch, "commit": commit})
-    into = _pr_base(job, slug)
     title = f"ws-agent {job.id}" + (f": {_instruction(job)}" if _instruction(job) else "")
     body = ("Draft, made by an agent (ws-agent), not written by a person. Review before merging.\n\n"
             + comment_body(job)).encode("utf-8")
@@ -317,40 +362,56 @@ def _pr_base(job: jobs.Job, slug: str) -> str:
         ref = r.stdout.decode("utf-8", "replace").strip() if r.returncode == 0 else ""
         if ref and agent_sources._REF.match(ref):
             return ref
-    elif job.base.get("branch") and agent_sources._REF.match(job.base["branch"]) and not job.origin:
-        pass   # the person's own job: its branch may not exist on origin; use the default branch
     return _ok(_run(["gh", "api", f"repos/{slug}", "--jq", ".default_branch"]), "reading the default branch")
 
 
 def _svn_branch(job: jobs.Job, entry: agent_registry.Repo) -> str:
-    """The patch committed to a NEW branch <svn_branch>/<id>, copied from the job's base URL@rev."""
-    root, url, rev = job.base.get("repos_root", ""), job.base.get("url", ""), job.base.get("rev", "")
+    """The job's patch as a NEW branch <svn_branch>/<id>, in one revision: a checkout of the job's
+    base URL@rev, the patch applied and verified there, then `svn copy <that copy> <branch URL>`,
+    which commits the branch and the change together. If anything fails before that, the server
+    was only read."""
+    import shutil
+    root, url, rev = job.base.get("repos_root", "").rstrip("/"), job.base.get("url", "").rstrip("/"), job.base.get("rev", "")
     parent = entry.publish.svn_branch
-    if not (root and url and rev.isdigit() and parent.startswith("^/")):
-        raise PublishError(f"ws-agent: {job.id} has no SVN base, or svn_branch isn't set")
-    dest_parent = root.rstrip("/") + parent[1:].rstrip("/")
+    why = agent_registry.svn_branch_problem(parent, entry.watch)
+    if why or not (root and url.startswith(root) and rev.isdigit()):
+        raise PublishError(f"ws-agent: {job.id} has no SVN base, or svn_branch {parent} {why or 'is unset'}")
+    dest_parent = root + parent[1:].rstrip("/")
     dest = f"{dest_parent}/{job.id}"
-    if url == dest_parent or url.startswith(dest_parent + "/") or dest_parent.startswith(url.rstrip("/") + "/"):
+    if url == dest_parent or url.startswith(dest_parent + "/") or dest_parent.startswith(url + "/"):
         raise PublishError(f"ws-agent: {parent} is inside (or holds) the job's own URL; branches must live elsewhere")
     svn = ["svn", "--non-interactive"]
-    if _run([*svn, "info", dest]).returncode == 0:
+    probe = _run([*svn, "info", dest])
+    if probe.returncode == 0:
         raise PublishError(f"ws-agent: {dest} already exists; nothing committed")
-    msg = commit_message(job)
-    _ok(_run([*svn, "copy", "--parents", f"{url}@{rev}", dest, "-m", msg.splitlines()[0] + " (branch)"]), "svn copy")
+    if not re.search(rb"E200009|W170000|E160013|non-existent|not found", probe.stderr):
+        _ok(probe, f"checking {dest}")   # the server didn't answer "no such path": don't guess
+    rel = url[len(root):].strip("/")
+    strip = str(len(rel.split("/")) if rel else 0)   # as apply.txt tells the person (agent_exec)
+    diff = str(jobs.job_dir(job.id) / "result" / "changes.diff")
     wc = jobs.job_dir(job.id) / "publish-wc"
+    shutil.rmtree(wc, ignore_errors=True)
     try:
-        _ok(_run([*svn, "checkout", "-q", dest, str(wc)]), "svn checkout")
-        _ok(_run([*svn, "patch", "--strip", "1", str(jobs.job_dir(job.id) / "result" / "changes.diff")], cwd=wc),
-            "svn patch")
-        out = _ok(_run([*svn, "commit", "-m", msg], cwd=wc), "svn commit")
+        _ok(_run([*svn, "checkout", "-q", f"{url}@{rev}", str(wc)]), "svn checkout")
+        dry = _ok(_run([*svn, "patch", "--dry-run", "--strip", strip, diff], cwd=wc), "svn patch --dry-run")
+        bad = [ln for ln in dry.splitlines() if ln.startswith(("C", "Skipped", ">")) or "rejected" in ln]
+        if bad or not any(ln[:1] in "UADG" and ln[1:2] in " U" for ln in dry.splitlines() if ln):
+            raise PublishError(f"ws-agent: the patch doesn't apply cleanly to {rel or '/'}@{rev}: "
+                               + agent_inbox.printable((bad or ['nothing applied'])[0])[:200])
+        _ok(_run([*svn, "patch", "--strip", strip, diff], cwd=wc), "svn patch")
+        if not _ok(_run([*svn, "status", "-q"], cwd=wc), "svn status") or any(wc.rglob("*.svnpatch.rej")):
+            raise PublishError("ws-agent: the patch changed nothing, or left rejected hunks; nothing committed")
+        out = _ok(_run([*svn, "copy", "--parents", str(wc), dest, "-m", commit_message(job)]), "svn copy")
     finally:
-        import shutil
         shutil.rmtree(wc, ignore_errors=True)
     m = re.search(r"Committed revision (\d+)", out)
-    return f"{dest}@{m.group(1)}" if m else dest
+    if not m:
+        raise PublishError(f"ws-agent: svn reported no committed revision for {dest}")
+    return f"{dest}@{m.group(1)}"
 
 
-def publish(job: jobs.Job, *, auto: bool, even_failing: bool = False, dry_run: bool = False) -> list[str]:
+def publish(job: jobs.Job, *, auto: bool, even_failing: bool = False, dry_run: bool = False,
+            allow_workflows: bool = False) -> list[str]:
     """Publish every kind the settings name for this job; one line per kind saying what happened.
     A refusal or a failure of one kind doesn't stop the others. Nothing is written with dry_run."""
     entry = agent_registry.find(core.expand(job.repo))
@@ -358,13 +419,14 @@ def publish(job: jobs.Job, *, auto: bool, even_failing: bool = False, dry_run: b
         return [f"{job.id}: {job.repo} is no longer allowed for queued jobs"]
     out: list[str] = []
     with _lock(job):
+        job = jobs.load(job.id)   # as it is now: closed or cancelled since the caller read it?
         kinds = kinds_for(job, entry)
         if not kinds:
             return [f"{job.id}: nothing to publish: {job.repo}'s publish settings name no kind for this job"]
         t = target(job)
         # the PR first, so the comment can link it
         for kind in sorted(kinds, key=lambda k: k != "draft_pr"):
-            why = allowed(job, kind, auto=auto, even_failing=even_failing)
+            why = allowed(job, kind, auto=auto, even_failing=even_failing, allow_workflows=allow_workflows)
             if why:
                 out.append(f"{job.id}: {kind} not published: {why}")
                 continue
@@ -373,15 +435,21 @@ def publish(job: jobs.Job, *, auto: bool, even_failing: bool = False, dry_run: b
                          "svn_branch": f"{entry.publish.svn_branch}/{job.id}"}[kind]
                 out.append(f"{job.id}: would publish {kind}: {where}")
                 continue
+            # Marked before the write (if this can't be saved, nothing is written): a crash or a lost
+            # reply after the server acted must not look like "never tried".
+            _save(job, kind, {"attempting": core.now_iso()})
             try:
                 url = {"comment": lambda: _post_comment(job, t, published(job, "draft_pr")),
                        "draft_pr": lambda: _draft_pr(job, entry, t),
                        "svn_branch": lambda: _svn_branch(job, entry)}[kind]()
             except PublishError as e:
                 tries = int(record(job).get(kind, {}).get("tries", 0) or 0) + 1  # type: ignore[call-overload]
-                _save(job, kind, {"tries": tries, "error": str(e), "at": core.now_iso()})
+                # a comment's failure can't be told from "created, then the reply was lost": it stays
+                # marked, and serve never posts it again; a branch or PR is safe to try again
+                keep = {} if kind == "comment" else {"attempting": ""}
+                _save(job, kind, {"tries": tries, "error": str(e), "at": core.now_iso(), **keep})
                 out.append(f"{job.id}: {kind} failed: {e}")
                 continue
-            _save(job, kind, {"url": url, "at": core.now_iso(), "auto": auto, "error": ""})
+            _save(job, kind, {"url": url, "at": core.now_iso(), "auto": auto, "error": "", "attempting": ""})
             out.append(f"{job.id}: published {kind}: {url}")
     return out

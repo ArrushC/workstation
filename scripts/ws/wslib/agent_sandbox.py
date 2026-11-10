@@ -111,14 +111,27 @@ def _git_common_dir(wc: Path) -> Path | None:
 # read can reach its provider. What a run does need under one of them (its job directory, a
 # worktree's .git) is bound back after. A run that reads no code (triage) loses more.
 BLANK = ("/mnt", "/media", "/home", "/root")
+NETWORK_FILES = ("/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf")
 BLANK_SCRATCH = (*BLANK, "/srv", "/var/tmp")
 
 
 def _base(bw: str, home: Path, blank: Sequence[str] = BLANK) -> list[str]:
-    args = [bw, "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"]
+    # Its own PID namespace: when the sandbox's first process ends, the kernel kills whatever it
+    # left behind (a daemon a check's code forked can't live on to rewrite the job's result files).
+    args = [bw, "--die-with-parent", "--unshare-pid", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+            "--tmpfs", "/tmp"]
     for d in blank:   # before the home layer: /home goes blank, then the person's own home is made on it
         if Path(d).is_dir() and not Path(d).is_symlink():
             args += ["--tmpfs", d]
+    # Name resolution must survive that: on WSL /etc/resolv.conf links into /mnt/wsl, and an engine
+    # that can't resolve its provider hangs until its timeout. The files themselves come back, read-only.
+    for f in NETWORK_FILES:
+        try:
+            real = Path(f).resolve(strict=True)
+        except OSError:
+            continue
+        if real.is_file() and any(_under(real, Path(d)) for d in blank):
+            args += ["--ro-bind", str(real), str(real)]
     return [*args, "--tmpfs", str(home)]
 
 

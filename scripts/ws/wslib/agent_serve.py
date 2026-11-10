@@ -334,6 +334,8 @@ def _publish_auto(q: jobs.Queue | None) -> list[str]:
     """Passing jobs that came from a source, in repositories whose publish mode is auto: written
     back once (agent_publish decides; a refusal that will never change is not repeated in the log)."""
     from . import agent_publish
+    if q is None or q.group == "Paused":   # paused means "do nothing by yourself"
+        return []
     out = []
     repos = agent_registry.load()[0]
     for j in jobs.all_jobs():
@@ -347,8 +349,9 @@ def _publish_auto(q: jobs.Queue | None) -> list[str]:
             continue
         try:
             lines = agent_publish.publish(j, auto=True)
-        except agent_publish.PublishError as e:
-            lines = [str(e)]
+        except Exception as e:  # noqa: BLE001 - one job's failure never stops the others, or repeats a write
+            out.append(f"{j.id}: publish: {type(e).__name__}: {e}")
+            continue
         for ln in lines:
             if ": published " in ln:
                 url = ln.rsplit(": ", 1)[-1]

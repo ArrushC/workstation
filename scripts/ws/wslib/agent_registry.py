@@ -74,6 +74,24 @@ class Publish:
     comment: bool = False     # GitHub: the report as a comment on the issue or PR that asked
     draft_pr: bool = False    # GitHub: the patch on a new branch ws-agent/<id>, as a draft pull request
     svn_branch: str = ""      # SVN: the parent of new branches (^/branches/ws-agent); "" = never commit
+    since: str = ""           # when mode became auto: jobs that finished before it are never published automatically
+
+
+def svn_branch_problem(path: str, watch: Watch | None) -> str | None:
+    """Why `path` can't be the parent of published SVN branches, or None. It is a plain repository
+    path (^/a/b: no empty, `.` or `..` segment), never trunk or inside it, and never a watched URL
+    or anything above or below one: a commit there would be a commit into watched code."""
+    if not re.fullmatch(r"\^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+", path) or any(s in (".", "..") for s in path.split("/")):
+        return "is not a plain repository path such as ^/branches/ws-agent"
+    parts = path[2:].split("/")
+    if "trunk" in parts:
+        return "is trunk or inside it"
+    for url in (watch.urls if watch else ()):
+        if url.startswith("^/"):
+            w = url[2:].strip("/").split("/")
+            if parts[:len(w)] == w or w[:len(parts)] == parts:
+                return f"is inside or above the watched {url}"
+    return None
 
 
 @dataclass(frozen=True)
@@ -167,7 +185,8 @@ def _publish(t: object) -> Publish:
         return Publish()
     mode = str(t.get("mode", "off"))
     return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
-                   t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")))
+                   t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")),
+                   str(t.get("since", "")))
 
 
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
@@ -271,7 +290,8 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
     if r.publish != Publish():
         prev_pub = old.get("publish")
         out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
-                          "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch}
+                          "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch,
+                          "since": r.publish.since}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
@@ -356,11 +376,15 @@ def set_publish(root: Path, pub: Publish) -> Repo:
         raise ValueError(f"ws-agent: {_key(root)} is an SVN copy; comments and draft PRs are GitHub's")
     if found is not None and found.vcs == "git" and pub.svn_branch:
         raise ValueError(f"ws-agent: {_key(root)} is a git repository; --svn-branch is for SVN copies")
-    if pub.svn_branch and not re.match(r"^\^/[A-Za-z0-9._/-]+$", pub.svn_branch):
-        raise ValueError("ws-agent: --svn-branch is a repository path such as ^/branches/ws-agent")
-    if ".." in pub.svn_branch.split("/"):
-        raise ValueError("ws-agent: --svn-branch can't contain ..")
-    return _set_source(root, publish=pub)
+    if pub.svn_branch:
+        why = svn_branch_problem(pub.svn_branch, found.watch if found else None)
+        if why:
+            raise ValueError(f"ws-agent: --svn-branch {pub.svn_branch} {why}")
+    # Automatic publishing starts from now: what finished earlier (while it was off, or left
+    # unpublished on purpose) never goes out by itself. Staying on auto keeps its start.
+    was = found.publish if found else Publish()
+    since = "" if pub.mode != "auto" else (was.since if was.mode == "auto" and was.since else core.now_iso())
+    return _set_source(root, publish=dataclasses.replace(pub, since=since))
 
 
 def set_github(root: Path, src: GitHubSource | None) -> Repo:

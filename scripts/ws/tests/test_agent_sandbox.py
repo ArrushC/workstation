@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -247,8 +248,20 @@ class ReadScope(Sandbox):
                 if Path(d).is_dir():
                     self.assertIn(("--tmpfs", d), pairs, d)
             self.assertLess(argv.index("/home") if "/home" in argv else -1, len(argv))
-        r = self.run_in("import os; print(sorted(os.listdir('/mnt')) if os.path.isdir('/mnt') else [])")
-        self.assertEqual(r.stdout.strip(), "[]", r.stderr)
+        # nothing of /mnt but the resolver file WSL keeps there (no drive such as /mnt/c)
+        r = self.run_in("import os\nfor d, _, fs in os.walk('/mnt'):\n    for f in fs: print(os.path.join(d, f))")
+        self.assertIn(r.stdout.strip(), ("", "/mnt/wsl/resolv.conf"), r.stderr)
+
+    @unittest.skipUnless(os.path.exists("/etc/resolv.conf"), "no resolv.conf on this host")
+    def test_name_resolution_survives_the_blank_directories(self) -> None:
+        # On WSL /etc/resolv.conf is a link into /mnt/wsl, and /mnt is blank in the sandbox: without
+        # the file an engine can't resolve its provider's name and hangs until its timeout.
+        want = open("/etc/resolv.conf").read()
+        r = self.run_in("print(open('/etc/resolv.conf').read(), end='')")
+        self.assertEqual((r.returncode, r.stdout), (0, want), r.stderr)
+        r = subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", "print(open('/etc/resolv.conf').read(), end='')"],
+                                            workdir=self.jd), capture_output=True, text=True, timeout=60)
+        self.assertEqual((r.returncode, r.stdout), (0, want), r.stderr)
 
     def test_scratch_reads_nothing_under_var_tmp(self) -> None:
         loose = self.write(self.outside / "loose.txt", "not registered, not hidden")
@@ -261,6 +274,25 @@ class ReadScope(Sandbox):
         r = subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", "open('ok.txt', 'w').write('x')"], workdir=work),
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
+
+
+@unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
+class NothingOutlivesTheSandbox(Sandbox):
+    def test_a_process_left_behind_dies_with_the_sandbox(self) -> None:
+        # A check runs the job's code with the job directory writable. A daemon it leaves must not
+        # live on to rewrite job.json or exit.json after ws-agent has read them (publish trusts both).
+        late = self.jd / "result" / "written-later.txt"
+        late.parent.mkdir(parents=True, exist_ok=True)
+        code = ("import os, sys, time\n"
+                "if os.fork() == 0:\n"
+                "    os.setsid()\n"
+                "    time.sleep(1.5)\n"
+                f"    open({str(late)!r}, 'w').write('after the sandbox ended')\n"
+                "    os._exit(0)\n")
+        r = self.run_in(code)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        time.sleep(2.5)
+        self.assertFalse(late.exists())
 
 
 if __name__ == "__main__":

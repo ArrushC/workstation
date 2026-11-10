@@ -317,7 +317,8 @@ def _publish(args: argparse.Namespace) -> int:
     if job is None:
         return 1
     try:
-        lines = agent_publish.publish(job, auto=False, even_failing=args.even_failing, dry_run=args.dry_run)
+        lines = agent_publish.publish(job, auto=False, even_failing=args.even_failing, dry_run=args.dry_run,
+                                      allow_workflows=args.allow_workflows)
     except agent_publish.PublishError as e:
         _err(str(e))
         return 1
@@ -1226,6 +1227,8 @@ def _parser() -> argparse.ArgumentParser:
     pb.add_argument("id")
     pb.add_argument("--even-failing", action="store_true", help="although its checks failed")
     pb.add_argument("--dry-run", action="store_true", help="say what would be written; write nothing")
+    pb.add_argument("--allow-workflows", action="store_true",
+                    help="although its patch touches .github/ (workflows run with the repository's secrets)")
     pb.set_defaults(fn=_publish)
     d = sub.add_parser("disallow")
     d.add_argument("path")
