@@ -287,6 +287,12 @@ def _post_comment(job: jobs.Job, t: Target, pr_url: str = "") -> str:
         return f"https://github.com/{t.slug}/issues/{t.number}"
 
 
+def _tracking(git: list[str], branch: str, env: dict[str, str]) -> set[str]:
+    """The remote-tracking refs for this branch name, under any remote."""
+    r = _run([*git, "for-each-ref", "--format=%(refname)", f"refs/remotes/*/{branch}"], env=env)
+    return set(r.stdout.decode("utf-8", "replace").split()) if r.returncode == 0 else set()
+
+
 def _draft_pr(job: jobs.Job, entry: agent_registry.Repo, t: Target) -> str:
     """The patch as one commit on the job's base, pushed as the new branch ws-agent/<id>, and a draft
     PR. Built with plumbing against a throwaway index: the person's branches, index, working tree
@@ -341,8 +347,13 @@ def _draft_pr(job: jobs.Job, entry: agent_registry.Repo, t: Target) -> str:
             index.unlink(missing_ok=True)
         # This one ref, and only if it still doesn't exist (an empty lease): never a tag, a
         # submodule, a fast-forward onto someone's branch, or a forced update.
+        tracking = _tracking(git, branch, quiet)
         _ok(_run([*git, "push", "--quiet", "--no-follow-tags", "--recurse-submodules=no", f"--force-with-lease={ref}:",
                   url, f"{commit}:{ref}"], env=quiet), f"pushing {branch}")
+        # git 2.56 writes a remote-tracking ref even for a push to a URL, when a remote has that
+        # URL. The person's refs stay as they were: drop the one this push made, if it is ours.
+        for made in _tracking(git, branch, quiet) - tracking:
+            _run([*git, "update-ref", "-d", made, commit], env=quiet)
         # remembered, so a PR that fails to open is retried without pushing again
         _save(job, "draft_pr", {"branch": branch, "commit": commit})
     title = f"ws-agent {job.id}" + (f": {_instruction(job)}" if _instruction(job) else "")
