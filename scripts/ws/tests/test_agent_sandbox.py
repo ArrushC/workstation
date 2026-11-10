@@ -247,8 +247,20 @@ class ReadScope(Sandbox):
                 if Path(d).is_dir():
                     self.assertIn(("--tmpfs", d), pairs, d)
             self.assertLess(argv.index("/home") if "/home" in argv else -1, len(argv))
-        r = self.run_in("import os; print(sorted(os.listdir('/mnt')) if os.path.isdir('/mnt') else [])")
-        self.assertEqual(r.stdout.strip(), "[]", r.stderr)
+        # nothing of /mnt but the resolver file WSL keeps there (no drive such as /mnt/c)
+        r = self.run_in("import os\nfor d, _, fs in os.walk('/mnt'):\n    for f in fs: print(os.path.join(d, f))")
+        self.assertIn(r.stdout.strip(), ("", "/mnt/wsl/resolv.conf"), r.stderr)
+
+    @unittest.skipUnless(os.path.exists("/etc/resolv.conf"), "no resolv.conf on this host")
+    def test_name_resolution_survives_the_blank_directories(self) -> None:
+        # On WSL /etc/resolv.conf is a link into /mnt/wsl, and /mnt is blank in the sandbox: without
+        # the file an engine can't resolve its provider's name and hangs until its timeout.
+        want = open("/etc/resolv.conf").read()
+        r = self.run_in("print(open('/etc/resolv.conf').read(), end='')")
+        self.assertEqual((r.returncode, r.stdout), (0, want), r.stderr)
+        r = subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", "print(open('/etc/resolv.conf').read(), end='')"],
+                                            workdir=self.jd), capture_output=True, text=True, timeout=60)
+        self.assertEqual((r.returncode, r.stdout), (0, want), r.stderr)
 
     def test_scratch_reads_nothing_under_var_tmp(self) -> None:
         loose = self.write(self.outside / "loose.txt", "not registered, not hidden")
