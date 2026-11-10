@@ -165,6 +165,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   Warp's `workstation-*.toml` are runtime.
 - Warp is primary; WT is compat (default terminal, Nushell).
 - `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
+- `ws-agent` on Windows (`dotfiles/windows/local/bin/ws-agent{,.ps1,.cmd}` -> `~\.local\bin`) forwards to WSL:
+  `wsl.exe [-d <distro> --cd <dir>] -- [env CLAUDECODE=1] ws-agent --argv-b64 <base64>`. `wsl.exe --` goes through
+  the login shell and PowerShell 5.1 drops quotes for native programs, so arguments cross only as that one word
+  (`agent.decode_argv`); the Git Bash script sets `MSYS_NO_PATHCONV`. Keep the bash and PowerShell copies in step
+  (`test_agent_winforward.py`, `scripts/test-ws-agent-forward.ps1`).
 - DeepSeek Harness: `scripts/deepseek-harness.ps1` (post-tools) installs the official desktop app only when Windows doesn't list it, from `dsh-desk/feeds/win-x64/nightly.yml` (its SHA-512, then the Hangzhou DeepSeek Authenticode signer); the app self-updates. Never winget: those ids are third-party repackages. A 5.1 child of pwsh inherits pwsh's PSModulePath and can't autoload core modules, so the script resets it.
 
 **zellij**

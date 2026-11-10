@@ -756,6 +756,10 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   nothing keeps running unseen). pueue may pause the group when its daemon stops
   (`ws-agent resume`). Jobs share the host's Claude Code plan and its usage limits with your
   interactive sessions. Windows runs tiers 1–2 only.
+- **From Windows**: `ws-agent` on Windows (`~\.local\bin`: Git Bash, PowerShell, cmd) forwards to the WSL
+  distribution the directory lives in, so a Claude Code session opened on `\\wsl.localhost\<distro>\...` gets the
+  `[orchestration]` line and queued jobs. Jobs still run in WSL. A repository on a Windows drive is refused: its
+  working copy has to live in WSL. `allow` and the source settings still refuse from a session.
 - **Remote dev servers**: everything is per host. A Linux host with this workstation applied
   (`wsu`) gets the same policy, hook and `ws agent`; jobs run where the working copies are,
   with that host's Claude Code login and its pueued. Nothing is deployed to a remote host by

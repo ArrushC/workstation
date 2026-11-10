@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# ws-agent on Windows, for Git Bash: Claude Code's Bash tool and its hooks (the
+# workstation-orchestration plugin's SessionStart line). Jobs run in WSL, where the sandbox is,
+# so this forwards to the ws-agent of the distribution the directory lives in:
+#   \\wsl.localhost\<distro>\home\me\src\foo  ->  wsl.exe -d <distro> --cd /home/me/src/foo -- ws-agent ...
+# - Outside a WSL directory `context` prints nothing (the session keeps direct work and
+#   subagents); other commands go to the default distribution.
+# - A repository on a Windows drive is refused: its working copy has to live in WSL.
+# - CLAUDECODE crosses over, so `allow` and the source settings still refuse from a session.
+# PowerShell and cmd use ws-agent.ps1 / ws-agent.cmd beside this file (same rules).
+unc='^//(wsl\.localhost|wsl\$)/([^/]+)(/.*)?$'
+win=${WS_AGENT_WINPWD:-$(pwd -W 2>/dev/null)}
+win=${win//\\//}
+distro='' dir=''
+if [[ $win =~ $unc ]]; then
+  distro=${BASH_REMATCH[2]}
+  dir=${BASH_REMATCH[3]:-/}
+fi
+args=()
+prev=''
+for a in "$@"; do
+  b=${a//\\//}
+  if [[ $b =~ $unc ]]; then
+    [ -n "$distro" ] || distro=${BASH_REMATCH[2]}
+    a=${BASH_REMATCH[3]:-/}
+  elif [[ $a =~ ^[A-Za-z]:[\\/] ]]; then
+    case "$prev" in
+    --repo | allow | disallow | watch | unwatch | github | ungithub)
+      echo "ws-agent: $a is on a Windows drive; a repository for queued jobs has to live in WSL (\\\\wsl.localhost\\<distro>\\...)" >&2
+      exit 3
+      ;;
+    esac
+  fi
+  args+=("$a")
+  prev=$a
+done
+if [ "${1:-}" = context ] && [ -z "$distro" ]; then
+  exit 0
+fi
+if ! command -v wsl.exe >/dev/null 2>&1; then
+  [ "${1:-}" = context ] && exit 0
+  echo "ws-agent: wsl.exe isn't on PATH; queued jobs run in WSL" >&2
+  exit 1
+fi
+# Git Bash rewrites arguments that look like POSIX paths (/home/me -> C:/Program Files/Git/home/me)
+# for native programs; these are Linux paths for wsl.exe and must cross as they are.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+export WSLENV="${WSLENV:+$WSLENV:}CLAUDECODE/u"
+where=()
+[ -n "$distro" ] && where+=(-d "$distro")
+[ -n "$dir" ] && where+=(--cd "$dir")
+# `wsl.exe --` hands its words to the distribution's login shell (so PATH has ~/.local/bin and
+# mise's shims), which would parse a prompt's quotes and metacharacters again. The arguments
+# cross as one base64 word (each NUL-ended) that ws-agent decodes; a session's marker crosses as
+# plain words too (WSLENV carries it as well; this doesn't depend on it).
+session=()
+[ "${CLAUDECODE:-}" = 1 ] && session=(env CLAUDECODE=1)
+packed=$(printf '%s\0' "${args[@]}" | base64 | tr -d '\n')
+exec wsl.exe "${where[@]}" -- "${session[@]}" ws-agent --argv-b64 "$packed"

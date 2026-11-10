@@ -120,6 +120,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-mise-env.ps1
+      - name: Test the ws-agent forwarder to WSL (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-ws-agent-forward.ps1
+      - name: Test the ws-agent forwarder to WSL (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-ws-agent-forward.ps1
       - name: Test winget GUI apps (Windows PowerShell 5.1)
         if: always()
         shell: powershell

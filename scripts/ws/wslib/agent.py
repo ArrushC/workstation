@@ -25,6 +25,7 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
 from __future__ import annotations
 
 import argparse
+import base64
 import dataclasses
 import datetime as dt
 import hashlib
@@ -1193,7 +1194,20 @@ SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwa
                "serve", "pause", "resume", "doctor", "--help")
 
 
+def decode_argv(packed: str) -> list[str]:
+    """The arguments a Windows forwarder sent: base64 of each argument followed by a NUL. They
+    cross WSL's login shell as that one inert word, never as text a shell could parse."""
+    raw = base64.b64decode(packed, validate=True).decode("utf-8")
+    return raw.split("\0")[:-1] if raw.endswith("\0") else []
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) == 2 and argv[0] == "--argv-b64":
+        try:
+            argv = decode_argv(argv[1])
+        except ValueError:
+            _err("ws-agent: --argv-b64 isn't what a forwarder sends")
+            return 2
     try:
         args = _parser().parse_args(argv)
     except SystemExit as e:
