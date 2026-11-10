@@ -1112,5 +1112,21 @@ class RealQueueCancel(Cli):
         self.assertEqual(q.running, 0)
 
 
+class InterruptCli(Manage):
+    def test_interrupt_a_finished_job_is_a_tell(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.finished(jid, {"exit_code": 0, "status": "done", "kind": "ok", "engine": "claude"})
+        rc, out, err = self.cli("interrupt", jid, "one", "more", "thing")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"requeued {jid}", out)
+        self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(jid))], ["one more thing"])
+
+    def test_interrupt_refusals(self) -> None:
+        jid = self.queued_run(self.repo)
+        self.assertEqual(self.cli("interrupt", jid, "  ")[0], 2)
+        os.environ["WS_AGENT_JOB"] = "abc123"
+        self.assertEqual(self.cli("interrupt", jid, "x")[0], 3)
+
+
 if __name__ == "__main__":
     unittest.main()

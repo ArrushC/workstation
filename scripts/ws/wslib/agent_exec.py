@@ -560,6 +560,9 @@ def _log(fh: IO[str], msg: str) -> None:
 def _die_with_parent() -> None:
     """In the child, before exec: get SIGTERM when _exec dies (pueue kill sends it SIGKILL), so
     `timeout` passes TERM on to the engine instead of leaving it running as an orphan."""
+    # SIGINT back to its default: a parent that ignores it (a CI runner, a service manager) hands
+    # that down, and `ws-agent interrupt` stops a turn with SIGINT first.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     try:
         import ctypes
 
@@ -660,6 +663,12 @@ TELL = """\
 The person wrote to this job:
 {lines}
 Take it into account and carry on; end with the structured report."""
+
+
+INTERRUPTED = """\
+The person stopped your previous turn before it finished, to tell you this. Check the working
+copy's state first (the turn may have left a change half done), then follow the message.
+"""
 
 
 def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> bool:
@@ -822,6 +831,7 @@ def execute(job_id: str, *, resume: bool) -> int:
         handoff_why = "it was interrupted"
         stopped: set[str] = set()   # engines that hit their usage limit during this attempt
         retries = run_no = fix_used = 0
+        cut_short = False   # the last turn was stopped by `ws-agent interrupt`
         outcome: engines.Outcome | None = None
         verdict = "none"
         fix_text = ""
@@ -844,6 +854,9 @@ def execute(job_id: str, *, resume: bool) -> int:
             resume_sid: str | None = None
             pending = jobs.undelivered(job)
             told = TELL.format(lines="\n".join(f"- {m.get('text')}" for m in pending)) if pending else ""
+            if told and cut_short:
+                told = INTERRUPTED + told
+            cut_short = False
             if pending and intent in ("resume", "tell") and resumable and prev == engine.name and \
                     (intent == "tell" or _prior_exit(res, job.attempts).get("kind") == "ok"):
                 # it finished or asked, and the person wrote: their words are the whole prompt
@@ -901,6 +914,15 @@ def execute(job_id: str, *, resume: bool) -> int:
                                 "started": core.now_iso(), "kind": outcome.kind})
             jobs.save(job)
             prev = engine.name
+            flag = jd / "interrupt"
+            if flag.exists():   # the person stopped this turn to say something: go on in the same session with it
+                flag.unlink(missing_ok=True)
+                # Whatever the exit code says (a `timeout` killed by our signal can report 124, as if
+                # time had run out): the person stopped it. Real time left is checked before the next turn.
+                if jobs.undelivered(job):
+                    _log(log, "ws-agent: the turn was interrupted by the person; resuming with their message")
+                    intent, retries, cut_short = "tell", 0, True
+                    continue
             if outcome.kind == "transient" and retries < len(BACKOFF):
                 wait = BACKOFF[retries]
                 retries += 1

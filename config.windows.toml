@@ -76,6 +76,14 @@
 # Dot-source shim that loads the PS7 profile above when present.
 "~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1" = { source = "dotfiles/windows/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1", mode = "copy" }
 
+# ws-agent on Windows forwards to WSL, where queued jobs run (the sandbox is bubblewrap):
+# `ws-agent` for Git Bash (Claude Code's Bash tool and the orchestration plugin's hooks),
+# ws-agent.ps1 for PowerShell, ws-agent.cmd for cmd. ~\.local\bin is on the user PATH
+# (bootstrap.ps1 adds it for Claude Code's launcher).
+"~/.local/bin/ws-agent" = { source = "dotfiles/windows/local/bin/ws-agent", mode = "copy" }
+"~/.local/bin/ws-agent.ps1" = { source = "dotfiles/windows/local/bin/ws-agent.ps1", mode = "copy" }
+"~/.local/bin/ws-agent.cmd" = { source = "dotfiles/windows/local/bin/ws-agent.cmd", mode = "copy" }
+
 # Edited only in-repo; the `wsl --shutdown` reminder after a change is a
 # bootstrap.ps1 sha256-marker step, not a dotfiles concern.
 "~/.wslconfig" = { source = "dotfiles/wslconfig", mode = "copy" }

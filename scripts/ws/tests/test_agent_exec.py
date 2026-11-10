@@ -839,5 +839,36 @@ class ClaudeOutput(unittest.TestCase):
             self.assertEqual(engines.claude_result(p), {})
 
 
+class Interrupt(Conversations):
+    def test_interrupt_stops_the_turn_and_resumes_with_the_message(self) -> None:
+        from wslib import agent
+        job = self.git_job()
+        self.claude_script('[ "$(wc -l <"$WS_FAKE_CLAUDE/calls")" -eq 1 ] && sleep 60\n')
+        said: list[tuple[int, str]] = []
+
+        def interrupt_during_the_run() -> None:
+            for _ in range(200):
+                if jobs.live_run(jobs.load(job.id)) is not None:
+                    break
+                time.sleep(0.02)
+            time.sleep(0.3)
+            said.append(agent.interrupt_job(jobs.load(job.id), "stop: do the empty case first"))
+        t = threading.Thread(target=interrupt_during_the_run)
+        t.start()
+        started = time.monotonic()
+        self.assertEqual(ax.execute(job.id, resume=False), 0)
+        t.join(10)
+        self.assertLess(time.monotonic() - started, 30)   # the 60 s turn was cut short
+        self.assertEqual(said[0][0], 0, said)
+        self.assertIn("interrupted", said[0][1])
+        self.assertEqual(self.claude_calls(), 2)
+        second = (self.fc / "stdin.2").read_text()
+        self.assertIn("stop: do the empty case first", second)
+        self.assertIn("stopped your previous turn", second)
+        self.assertIn("--resume", (self.fc / "argv.2").read_text().splitlines())
+        self.assertFalse((jobs.job_dir(job.id) / "interrupt").exists())
+        self.assertFalse(any(c[0] == "add" for c in self.pueue_calls()))   # in place, no new task
+
+
 if __name__ == "__main__":
     unittest.main()

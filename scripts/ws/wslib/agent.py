@@ -13,9 +13,12 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
         [--paths GLOB]... [--force]
     ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
+    interrupt <id> TEXT     stop the job's running turn now and resume it with the message
     inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
                             what a watched source found, waiting for the person
-    ui [--rows]             jobs and the inbox in one fzf list (enter result, alt-keys act)
+    ui [--rows] [--fleet]   jobs and the inbox in one fzf list (enter result, alt-keys act)
+    fleet [--json] | fleet add|remove <host>
+                            the same lists from this host and your other hosts, over your SSH
     serve [--once]          the always-on loop (the ws-agent-serve service): recovery, sources
     close --empty           close every succeeded job whose patch is empty
     cancel <id> | retry <id> | close <id> | pause | resume | doctor
@@ -24,12 +27,14 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
 from __future__ import annotations
 
 import argparse
+import base64
 import dataclasses
 import datetime as dt
 import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -820,6 +825,34 @@ def tell_job(job: jobs.Job, text: str) -> tuple[int, str]:
     return 0, msg
 
 
+def interrupt_job(job: jobs.Job, text: str) -> tuple[int, str]:
+    """Stop the job's running turn and have it go on, in the same session, with the person's
+    message. A job that isn't running gets the message as `tell` does. (code, message) as tell_job."""
+    if os.environ.get("WS_AGENT_JOB"):
+        return 3, "ws-agent: this is a queued job; it can't message jobs (work directly)"
+    text = text.strip()
+    if not text:
+        return 2, "ws-agent: the message is empty"
+    if jobs.live_run(job) is None:
+        return tell_job(job, text)
+    flag = jobs.job_dir(job.id) / "interrupt"
+    jobs.post(job, "you", text)          # first, so the executor finds it when the turn ends
+    flag.write_text(core.now_iso() + "\n", encoding="utf-8")
+    if not jobs.stop_run(job, first=signal.SIGINT):
+        flag.unlink(missing_ok=True)     # it finished by itself meanwhile: the message is delivered as a tell is
+        return 0, f"told {job.id}: its turn had just ended; delivered next"
+    return 0, f"interrupted {job.id}: its turn was stopped; it resumes its session with your message"
+
+
+def _interrupt(args: argparse.Namespace) -> int:
+    job = _load(args.id)
+    if job is None:
+        return 1
+    code, msg = interrupt_job(job, " ".join(args.text))
+    print(msg) if code == 0 else _err(msg)
+    return code
+
+
 def _tell(args: argparse.Namespace) -> int:
     if os.environ.get("WS_AGENT_JOB"):
         _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
@@ -906,19 +939,66 @@ def close_job(job: jobs.Job) -> str:
     return f"closed {job.id}: working copy removed; the result stays in {jd / 'result'}"
 
 
+def _fleet(args: argparse.Namespace) -> int:
+    from . import agent_fleet
+    if args.action in ("add", "remove"):
+        have = agent_registry.settings().fleet
+        want = (*have, args.host or "") if args.action == "add" else tuple(h for h in have if h != args.host)
+        try:
+            agent_registry.set_fleet(want)
+        except agent_registry.Refused as e:
+            _err(str(e))
+            return 3
+        except ValueError as e:
+            _err(str(e))
+            return 2
+        except agent_registry.Unreadable as e:
+            _err(str(e))
+            return 1
+        print("fleet: " + (", ".join(agent_registry.settings().fleet) or "this host only"))
+        return 0
+    table = agent_fleet.table()
+    if args.json:
+        print(json.dumps([dict(zip(("host", "kind", "id", "state", "title", "repo"), r)) for r in table], indent=2))
+        return 0
+    if not table:
+        print("no jobs and nothing in the inbox, here or on the fleet")
+    for host, kind, ident, state, title, repo in table:
+        what = state if kind != "inbox" else f"inbox:{state}"
+        print(f"{host:<12} {ident:<10} {what:<14} {title}" + (f"  ({repo})" if repo else ""))
+    return 0
+
+
+def _on(args: argparse.Namespace) -> int:
+    """`ws-agent <words>` on a fleet host (the fleet view's keys), or here for `local`."""
+    from . import agent_fleet
+    if os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: this is a queued job; it can't reach other hosts (work directly)")
+        return 3
+    try:
+        argv = agent_fleet.on(args.host, list(args.words), tty=sys.stdin.isatty())
+    except KeyError as e:
+        _err(str(e.args[0]))
+        return 3
+    if argv is None:
+        return main(list(args.words))
+    return subprocess.run(argv).returncode
+
+
 def _ui(args: argparse.Namespace) -> int:
-    from . import agent_ui
+    from . import agent_fleet, agent_ui
+    source = agent_fleet.rows if args.fleet else agent_ui.rows
     if args.rows:
-        for r in agent_ui.rows():
+        for r in source():
             print(r)
         return 0
     fzf = core.which("fzf")
     if not fzf:
         _err("ws-agent: fzf isn't installed (mise install fzf); ws-agent ls and ws-agent inbox show the same lists")
         return 1
-    argv = agent_ui.fzf_argv(core.shell_join(core.self_argv("agent")))
+    argv = agent_ui.fzf_argv(core.shell_join(core.self_argv("agent")), fleet=args.fleet)
     argv[0] = fzf
-    rows = agent_ui.rows()
+    rows = source()
     if not rows:
         print("no jobs and nothing in the inbox")
         return 0
@@ -1123,7 +1203,17 @@ def _parser() -> argparse.ArgumentParser:
     cl.set_defaults(fn=_close)
     ui = sub.add_parser("ui", help="jobs and the inbox in one fzf list")
     ui.add_argument("--rows", action="store_true", help="print the list fzf shows, and exit")
+    ui.add_argument("--fleet", action="store_true", help="this host and the fleet's hosts (ws-agent fleet add)")
     ui.set_defaults(fn=_ui)
+    fl = sub.add_parser("fleet", help="jobs and inbox items here and on your other hosts, over your SSH")
+    fl.add_argument("action", nargs="?", choices=("add", "remove"), help="change the host list (your own terminal only)")
+    fl.add_argument("host", nargs="?")
+    fl.add_argument("--json", action="store_true")
+    fl.set_defaults(fn=_fleet)
+    on = sub.add_parser("_on")
+    on.add_argument("host")
+    on.add_argument("words", nargs=argparse.REMAINDER)
+    on.set_defaults(fn=_on)
     sv = sub.add_parser("serve", help="the always-on loop: recovery and the watched sources (the ws-agent-serve service)")
     sv.add_argument("--once", action="store_true", help="one pass, then exit")
     sv.set_defaults(fn=_serve)
@@ -1132,6 +1222,10 @@ def _parser() -> argparse.ArgumentParser:
         t.add_argument("id")
         t.add_argument("text", nargs="+")
         t.set_defaults(fn=_tell)
+    it = sub.add_parser("interrupt", help="stop the job's running turn and resume it with your message")
+    it.add_argument("id")
+    it.add_argument("text", nargs="+")
+    it.set_defaults(fn=_interrupt)
     ib = sub.add_parser("inbox", help="what sources found, waiting for you to accept or dismiss")
     ib.add_argument("--all", action="store_true", help="accepted and dismissed items too")
     ib.add_argument("--json", action="store_true")
@@ -1155,11 +1249,24 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
-               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "ui",
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "interrupt", "inbox", "accept", "dismiss", "ui", "fleet",
                "serve", "pause", "resume", "doctor", "--help")
 
 
+def decode_argv(packed: str) -> list[str]:
+    """The arguments a Windows forwarder sent: base64 of each argument followed by a NUL. They
+    cross WSL's login shell as that one inert word, never as text a shell could parse."""
+    raw = base64.b64decode(packed, validate=True).decode("utf-8")
+    return raw.split("\0")[:-1] if raw.endswith("\0") else []
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) == 2 and argv[0] == "--argv-b64":
+        try:
+            argv = decode_argv(argv[1])
+        except ValueError:
+            _err("ws-agent: --argv-b64 isn't what a forwarder sends")
+            return 2
     try:
         args = _parser().parse_args(argv)
     except SystemExit as e:

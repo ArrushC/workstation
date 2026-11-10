@@ -165,6 +165,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   Warp's `workstation-*.toml` are runtime.
 - Warp is primary; WT is compat (default terminal, Nushell).
 - `TERM_PROGRAM != WarpTerminal` rc guards must never wrap a plugin `source` (`check_warp_guards`).
+- `ws-agent` on Windows (`dotfiles/windows/local/bin/ws-agent{,.ps1,.cmd}` -> `~\.local\bin`) forwards to WSL:
+  `wsl.exe [-d <distro> --cd <dir>] -- [env CLAUDECODE=1] ws-agent --argv-b64 <base64>`. `wsl.exe --` goes through
+  the login shell and PowerShell 5.1 drops quotes for native programs, so arguments cross only as that one word
+  (`agent.decode_argv`); the Git Bash script sets `MSYS_NO_PATHCONV`. Keep the bash and PowerShell copies in step
+  (`test_agent_winforward.py`, `scripts/test-ws-agent-forward.ps1`).
 - DeepSeek Harness: `scripts/deepseek-harness.ps1` (post-tools) installs the official desktop app only when Windows doesn't list it, from `dsh-desk/feeds/win-x64/nightly.yml` (its SHA-512, then the Hangzhou DeepSeek Authenticode signer); the app self-updates. Never winget: those ids are third-party repackages. A 5.1 child of pwsh inherits pwsh's PSModulePath and can't autoload core modules, so the script resets it.
 
 **zellij**
@@ -231,7 +236,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - Checks (`agent_checks.py`) run by ws-agent in the job sandbox (no network unless `--network`, bounded tail,
     no engine login), with `fix_rounds` resumes; `--review E` is a fresh read-only session into review.json.
   - `thread.jsonl` holds `tell`/`answer` messages (delivered by id, after the turn) and reports; a message that
-    lands while a job finishes requeues it under `queue_lock`. Events (`agent_events.py`) feed the plugin's
+    lands while a job finishes requeues it under `queue_lock`. `interrupt` posts the message, drops an `interrupt`
+    flag in the job directory and signals the engine's group (INT, then TERM, then KILL); the executor sees the flag
+    when the turn ends and resumes the same session with the message (`INTERRUPTED` note first). Events (`agent_events.py`) feed the plugin's
     UserPromptSubmit hook and `notify.sh` (detached, `NOTIFY_NO_MODAL`).
   - `serve` (`agent_serve.py`; the `dev.mise.ws-agent-serve` user unit in `config.linux.toml`, PATH via
     `/usr/bin/env`, held by `check_bootstrap_config`): one per host (`serve.lock`), a tick every 30 s.
@@ -268,6 +275,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     - printed through `printable`;
     - never in an event line, since those reach live sessions.
   - `ui` (`agent_ui.py`) is fzf with `--with-shell 'bash -c'`, and no `)` inside an `execute(...)`.
+  - `fleet` (`agent_fleet.py`; `[fleet] hosts`, set only by `fleet add/remove`, refused in a session): pull-only
+    over the person's SSH (`ssh -o BatchMode=yes -- <host> 'bash -lc "ws-agent ..."'`, arguments `shlex`-quoted,
+    hosts matched against `agent_registry.HOST` so none reads as an option). Remote text goes through `printable`.
+    `_on <host> <words>` runs one command on a listed host for `ui --fleet`'s keys.
   - `allow`/`disallow` refuse under `CLAUDECODE=1` (and the secret guard denies editing agents.toml); `run` and
     `tell` refuse under `WS_AGENT_JOB`. Tests use fake pueue/claude/codex (`tests/agent_helpers.py`) and patch
     `agent_sandbox.wrap`/`probe` (subprocess tests go through `no_sandbox_ws`), except the real-bwrap tests in
