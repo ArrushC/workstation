@@ -560,6 +560,9 @@ def _log(fh: IO[str], msg: str) -> None:
 def _die_with_parent() -> None:
     """In the child, before exec: get SIGTERM when _exec dies (pueue kill sends it SIGKILL), so
     `timeout` passes TERM on to the engine instead of leaving it running as an orphan."""
+    # SIGINT back to its default: a parent that ignores it (a CI runner, a service manager) hands
+    # that down, and `ws-agent interrupt` stops a turn with SIGINT first.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     try:
         import ctypes
 
@@ -914,7 +917,9 @@ def execute(job_id: str, *, resume: bool) -> int:
             flag = jd / "interrupt"
             if flag.exists():   # the person stopped this turn to say something: go on in the same session with it
                 flag.unlink(missing_ok=True)
-                if jobs.undelivered(job) and rc != 124:
+                # Whatever the exit code says (a `timeout` killed by our signal can report 124, as if
+                # time had run out): the person stopped it. Real time left is checked before the next turn.
+                if jobs.undelivered(job):
                     _log(log, "ws-agent: the turn was interrupted by the person; resuming with their message")
                     intent, retries, cut_short = "tell", 0, True
                     continue
