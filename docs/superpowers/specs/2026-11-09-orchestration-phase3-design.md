@@ -1,6 +1,6 @@
 # Orchestration phase 3: design
 
-Status: proposed 2026-11-09, awaiting the person's approval. Builds on phases 1, 2a and 2b
+Status: approved by the person 2026-11-09. Builds on phases 1, 2a and 2b
 (`2026-11-07-orchestration-phase2-design.md`), whose constraints stay in force except where
 "Decided by the person" below changes them.
 
@@ -199,10 +199,9 @@ creates, a `file://` SVN repository) before the person switches it on anywhere r
 - The fleet view has no cache and no remote component.
 - Interrupt uses SIGINT then SIGTERM on the engine's process group and the existing resume path.
 
-## Open questions for the person
+## Settled after the first draft (the person, 2026-11-09)
 
-- For an SVN review job from a watched revision that proposes fixes: commit them to a branch
-  when `svn_branch` is set, or keep reviews local always and commit only jobs the person started?
-  (The design above commits them when the patch is non-empty and checks pass.)
-- Should a published GitHub comment mention that it was written by an agent? (The design says
-  yes, in its first line.)
+- A watched SVN revision's review job is never committed, even where `svn_branch` is set: reviews
+  stay local. An SVN branch commit is only ever made by `ws-agent publish <id>` for a job the
+  person started, or automatically for no SVN job at all in this phase.
+- A published GitHub comment says in its first line that an agent wrote it.

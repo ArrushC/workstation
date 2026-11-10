@@ -231,7 +231,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - Checks (`agent_checks.py`) run by ws-agent in the job sandbox (no network unless `--network`, bounded tail,
     no engine login), with `fix_rounds` resumes; `--review E` is a fresh read-only session into review.json.
   - `thread.jsonl` holds `tell`/`answer` messages (delivered by id, after the turn) and reports; a message that
-    lands while a job finishes requeues it under `queue_lock`. Events (`agent_events.py`) feed the plugin's
+    lands while a job finishes requeues it under `queue_lock`. `interrupt` posts the message, drops an `interrupt`
+    flag in the job directory and signals the engine's group (INT, then TERM, then KILL); the executor sees the flag
+    when the turn ends and resumes the same session with the message (`INTERRUPTED` note first). Events (`agent_events.py`) feed the plugin's
     UserPromptSubmit hook and `notify.sh` (detached, `NOTIFY_NO_MODAL`).
   - `serve` (`agent_serve.py`; the `dev.mise.ws-agent-serve` user unit in `config.linux.toml`, PATH via
     `/usr/bin/env`, held by `check_bootstrap_config`): one per host (`serve.lock`), a tick every 30 s.

@@ -607,6 +607,7 @@ ws-agent ls [--all]          # jobs of this repository, with their state
 ws-agent result <id> [--diff] # the job's report, changes per file, how to apply; --diff prints the patch
 ws-agent show <id>           # base, attempts, session, the conversation, the end of its log
 ws-agent tell <id> "..."     # your follow-up: after its current turn, or resuming it (answer: to its question)
+ws-agent interrupt <id> "..." # stop its running turn now; it resumes the same session with your message
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
 ws-agent close <id>          # after review: delete the working copy, keep the result

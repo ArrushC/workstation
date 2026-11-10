@@ -369,17 +369,20 @@ def live_run(job: Job) -> int | None:
     return pgid if info and info[1] == start and info[0] != "Z" else None
 
 
-def stop_run(job: Job, grace: float = 10.0) -> bool:
-    """Stop the job's claude (its whole process group): TERM, then KILL after `grace` seconds.
-    False when nothing was running."""
+def stop_run(job: Job, grace: float = 10.0, *, first: int = signal.SIGTERM) -> bool:
+    """Stop the job's engine (its whole process group): `first` (TERM; INT for an interrupt, then
+    TERM), each given `grace` seconds, then KILL. False when nothing was running."""
     pgid = live_run(job)
     if pgid is None:
         return False
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(pgid, signal.SIGTERM)
-    deadline = time.monotonic() + grace
-    while live_run(job) is not None and time.monotonic() < deadline:
-        time.sleep(0.1)
+    for sig in dict.fromkeys((first, signal.SIGTERM)):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(pgid, sig)
+        deadline = time.monotonic() + grace
+        while live_run(job) is not None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if live_run(job) is None:
+            break
     if live_run(job) is not None:
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(pgid, signal.SIGKILL)

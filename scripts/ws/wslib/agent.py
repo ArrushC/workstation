@@ -13,6 +13,7 @@ session, a derived state and the review artifacts. pueue does the queueing, conc
         [--paths GLOB]... [--force]
     ls [--repo P | --all] [--json] | show <id> | result <id> [--diff]
     tell <id> TEXT | answer <id> TEXT   the person's words to a job (after its turn, or resuming it)
+    interrupt <id> TEXT     stop the job's running turn now and resume it with the message
     inbox [--all] [--json] [--show ID] | accept <id> [--note TEXT] | dismiss <id>
                             what a watched source found, waiting for the person
     ui [--rows]             jobs and the inbox in one fzf list (enter result, alt-keys act)
@@ -30,6 +31,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -820,6 +822,34 @@ def tell_job(job: jobs.Job, text: str) -> tuple[int, str]:
     return 0, msg
 
 
+def interrupt_job(job: jobs.Job, text: str) -> tuple[int, str]:
+    """Stop the job's running turn and have it go on, in the same session, with the person's
+    message. A job that isn't running gets the message as `tell` does. (code, message) as tell_job."""
+    if os.environ.get("WS_AGENT_JOB"):
+        return 3, "ws-agent: this is a queued job; it can't message jobs (work directly)"
+    text = text.strip()
+    if not text:
+        return 2, "ws-agent: the message is empty"
+    if jobs.live_run(job) is None:
+        return tell_job(job, text)
+    flag = jobs.job_dir(job.id) / "interrupt"
+    jobs.post(job, "you", text)          # first, so the executor finds it when the turn ends
+    flag.write_text(core.now_iso() + "\n", encoding="utf-8")
+    if not jobs.stop_run(job, first=signal.SIGINT):
+        flag.unlink(missing_ok=True)     # it finished by itself meanwhile: the message is delivered as a tell is
+        return 0, f"told {job.id}: its turn had just ended; delivered next"
+    return 0, f"interrupted {job.id}: its turn was stopped; it resumes its session with your message"
+
+
+def _interrupt(args: argparse.Namespace) -> int:
+    job = _load(args.id)
+    if job is None:
+        return 1
+    code, msg = interrupt_job(job, " ".join(args.text))
+    print(msg) if code == 0 else _err(msg)
+    return code
+
+
 def _tell(args: argparse.Namespace) -> int:
     if os.environ.get("WS_AGENT_JOB"):
         _err("ws-agent: this is a queued job; it can't message jobs (work directly)")
@@ -1132,6 +1162,10 @@ def _parser() -> argparse.ArgumentParser:
         t.add_argument("id")
         t.add_argument("text", nargs="+")
         t.set_defaults(fn=_tell)
+    it = sub.add_parser("interrupt", help="stop the job's running turn and resume it with your message")
+    it.add_argument("id")
+    it.add_argument("text", nargs="+")
+    it.set_defaults(fn=_interrupt)
     ib = sub.add_parser("inbox", help="what sources found, waiting for you to accept or dismiss")
     ib.add_argument("--all", action="store_true", help="accepted and dismissed items too")
     ib.add_argument("--json", action="store_true")
@@ -1155,7 +1189,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 SUBCOMMANDS = ("context", "events", "route", "allow", "disallow", "watch", "unwatch", "github", "ungithub", "repos", "run",
-               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "inbox", "accept", "dismiss", "ui",
+               "ls", "show", "result", "cancel", "retry", "close", "tell", "answer", "interrupt", "inbox", "accept", "dismiss", "ui",
                "serve", "pause", "resume", "doctor", "--help")
 
 

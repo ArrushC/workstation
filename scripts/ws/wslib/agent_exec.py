@@ -662,6 +662,12 @@ The person wrote to this job:
 Take it into account and carry on; end with the structured report."""
 
 
+INTERRUPTED = """\
+The person stopped your previous turn before it finished, to tell you this. Check the working
+copy's state first (the turn may have left a change half done), then follow the message.
+"""
+
+
 def _requeue_if_told(job: jobs.Job, res: Path, log: IO[str]) -> bool:
     """A message that arrived while the job was finishing (its checks, collecting, its review):
     the job goes on in its session. Under the queue lock, as `tell` decides under it whether to
@@ -822,6 +828,7 @@ def execute(job_id: str, *, resume: bool) -> int:
         handoff_why = "it was interrupted"
         stopped: set[str] = set()   # engines that hit their usage limit during this attempt
         retries = run_no = fix_used = 0
+        cut_short = False   # the last turn was stopped by `ws-agent interrupt`
         outcome: engines.Outcome | None = None
         verdict = "none"
         fix_text = ""
@@ -844,6 +851,9 @@ def execute(job_id: str, *, resume: bool) -> int:
             resume_sid: str | None = None
             pending = jobs.undelivered(job)
             told = TELL.format(lines="\n".join(f"- {m.get('text')}" for m in pending)) if pending else ""
+            if told and cut_short:
+                told = INTERRUPTED + told
+            cut_short = False
             if pending and intent in ("resume", "tell") and resumable and prev == engine.name and \
                     (intent == "tell" or _prior_exit(res, job.attempts).get("kind") == "ok"):
                 # it finished or asked, and the person wrote: their words are the whole prompt
@@ -901,6 +911,13 @@ def execute(job_id: str, *, resume: bool) -> int:
                                 "started": core.now_iso(), "kind": outcome.kind})
             jobs.save(job)
             prev = engine.name
+            flag = jd / "interrupt"
+            if flag.exists():   # the person stopped this turn to say something: go on in the same session with it
+                flag.unlink(missing_ok=True)
+                if jobs.undelivered(job) and rc != 124:
+                    _log(log, "ws-agent: the turn was interrupted by the person; resuming with their message")
+                    intent, retries, cut_short = "tell", 0, True
+                    continue
             if outcome.kind == "transient" and retries < len(BACKOFF):
                 wait = BACKOFF[retries]
                 retries += 1
