@@ -878,7 +878,7 @@ on_change = "restart"
 
 Verify with `mise bootstrap plan`, then `mise bootstrap status --missing` after a real run. Never add a `[bootstrap.linux.firewall]` table (see Troubleshooting).
 
-Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-pin dual edits, LF and executable bits, PowerShell BOMs, sentinel blocks, `[dotfiles]` tables), shellcheck, `shfmt -i 2` and gitleaks; `mise run install-hooks` installs mise's generated pre-commit hook (`.git/hooks/pre-commit`, runs `mise run lint`; run it once per clone, it also clears an old `core.hooksPath`), and CI (`.github/workflows/lint.yml`) runs the same checks.
+Before committing, `mise run lint` runs `scripts/check-invariants.sh` (version-pin dual edits, LF and executable bits, PowerShell BOMs, sentinel blocks, `[dotfiles]` tables), shellcheck, `shfmt -i 2` and gitleaks; `mise run install-hooks` installs mise's generated pre-commit hook (`.git/hooks/pre-commit`, runs `mise run lint`; run it once per clone, it also clears an old `core.hooksPath`; in a git worktree of this repository the hook checks that worktree's files, not the live checkout's), and CI (`.github/workflows/lint.yml`) runs the same checks.
 
 ## Troubleshooting
 

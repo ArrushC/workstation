@@ -180,10 +180,7 @@ JCODE_NO_TELEMETRY = "1"
 
 # Repo-maintenance tasks, run from this checkout. Tasks with real logic are
 # files in tasks/.
-[tasks.lint]
-description = "Run the repo's invariant checks (pins, LF/exec bits, BOMs, sentinels, shellcheck, shfmt, gitleaks)"
-dir = "{{ xdg_config_home }}/mise"
-run = "scripts/check-invariants.sh"
+# lint is tasks/lint: it checks the checkout it is run from (a worktree's commit hook included).
 
 [tasks.fmt]
 description = "shfmt -w -i 2 over the first-party shell scripts (the list lint checks)"

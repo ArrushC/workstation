@@ -19,7 +19,8 @@
 - **The checkout is live config:** `mise use -g`, `mise settings set`, `mise dot add`/`wsr`, `wse` and
   `mise bootstrap` write tracked files here. Commit or revert first; `wsu`'s `git pull --ff-only`
   fails on a dirty tree.
-- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the pre-commit hook run it) and
+- **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the pre-commit hook run it; `tasks/lint`
+  checks the worktree it is run from via `scripts/lib/lint-root.sh`, mise's own checks still read the live config) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
 - **Task names** must not collide with mise built-ins (`mise fmt` is one; ours: `mise run fmt`).
 - **Real `$HOME`:** agents never run `mise dot apply`, `wsa` or a bulk `mise bootstrap` against the
