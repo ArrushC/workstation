@@ -666,6 +666,9 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     Your branches, index and working tree aren't touched, and an existing branch is never written.
     - Only the job's own commit goes out. The job's base must already be on the target branch at origin, so a
       fork pull request's commits and your own unpushed commits are never pushed.
+    - Your repository's own `pre-push` hook runs for that push and can refuse it.
+    - A request made on a pull request from the same repository targets that pull request's branch; if GitHub
+      can't say which branch that is, nothing is published.
     - A patch that touches `.github/` (workflows run with the repository's secrets as soon as a branch is
       pushed) is never published automatically; by hand it needs `--allow-workflows`.
   - `--svn-branch`: the patch committed to a new branch under that path, in one revision, for a job you started
@@ -674,8 +677,10 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - `manual`: only `ws-agent publish <id>` writes (`--dry-run` shows what it would write). `auto`: serve also
     publishes a job that came from a source once it succeeds with passing checks; a repository with no checks,
     or a job of your own, is never published automatically. Neither is a job that finished before you switched
-    `auto` on, nor anything while the queue is paused. A job is published once, and at most 5 a day per
-    source go out automatically.
+    `auto` on, nor anything while the queue is paused. A job is published once, and at most 5 jobs a day per
+    source go out automatically. A job whose reviewer (`--review`) had concerns is left for you. If serve
+    gives up on a job (three failures, or a comment that may already have been posted), it tells you once;
+    `ws-agent publish <id>` is then yours to run.
   - `ws-agent publish-to <path> --mode off` stops it.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;

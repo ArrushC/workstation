@@ -283,6 +283,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     - A draft PR goes out only if the job's base is an ancestor of the target branch at origin (never a fork's
       commits or unpushed local ones); the push is `--no-follow-tags --recurse-submodules=no
       --force-with-lease=<ref>:` to the push URL. A patch touching `.github/` needs `--allow-workflows`, never auto.
+    - The cap counts jobs (not writes, never the job itself); only serve's failures count toward `MAX_TRIES`;
+      a reviewer's `concerns` blocks auto; when serve gives up (`gave_up`) it notifies once, in fixed words.
+      The person's `pre-push` hook is honoured (never `--no-verify`). A failed PR lookup is a failure, never
+      the default branch.
     - `auto` covers only jobs that finished after it was switched on (`publish.since`), never with the queue
       paused, and never re-posts a comment whose earlier attempt may have reached GitHub (`attempting`).
     - The SVN branch is one revision: checkout `url@rev`, `svn patch --strip <depth>` (dry run first), then
