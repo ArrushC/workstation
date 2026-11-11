@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run the repo's invariant checks (pins, LF/exec bits, BOMs, sentinels, shellcheck, shfmt, gitleaks) on the checkout it is run from"
+set -euo pipefail
+live="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+root="$("$live/scripts/lib/lint-root.sh" "$live")"
+[ "$root" = "$live" ] || printf 'lint: checking %s\n' "$root" >&2
+exec "$root/scripts/check-invariants.sh" "$@"
