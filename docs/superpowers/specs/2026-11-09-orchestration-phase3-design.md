@@ -199,6 +199,17 @@ creates, a `file://` SVN repository) before the person switches it on anywhere r
 - The fleet view has no cache and no remote component.
 - Interrupt uses SIGINT then SIGTERM on the engine's process group and the existing resume path.
 
+## As built (differences from the text above)
+
+- Windows: no `wsl_distro` setting and no profile functions. The distribution comes from the directory's
+  `\\wsl.localhost\<distro>\` path, and three launcher files on `PATH` cover Git Bash, PowerShell and cmd.
+  Arguments cross to WSL as one base64 word.
+- Publish: the draft PR's commit is built with git plumbing on a throwaway index in the person's repository
+  (new objects only), not in a clone, and pushed to the remote's URL so no remote-tracking ref is written.
+  The issue a job answers is found through the source's threads map, not stored on the job.
+- Publish: `publish <id> --dry-run` was added. A PR that fails to open after its branch was pushed is retried
+  without pushing again.
+
 ## Settled after the first draft (the person, 2026-11-09)
 
 - A watched SVN revision's review job is never committed, even where `svn_branch` is set: reviews

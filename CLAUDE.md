@@ -226,7 +226,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - The job sandbox (`agent_sandbox.wrap`, bwrap) is the read boundary: `$HOME` and `/tmp` are throwaway layers
     with the tools and the engine's own state bound back, other jobs, every registered copy and `[sandbox] hide`
     are hidden, `/mnt`, `/media`, `/home` and `/root` are blank (`BLANK`; triage's scratch also `/srv`, `/var/tmp`;
-    the resolver files come back read-only, `NETWORK_FILES`: WSL's `/etc/resolv.conf` links into `/mnt/wsl`), a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
+    the resolver files come back read-only, `NETWORK_FILES`: WSL's `/etc/resolv.conf` links into `/mnt/wsl`), it
+    has its own PID namespace (nothing a check forks outlives it), a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
     `sandbox` settings; Codex: workspace-write, `--ignore-rules`). No working sandbox → no job, never phase-1
     confinement. git in a job only reads (`GIT_OPTIONAL_LOCKS=0`; ws-agent stages); the svn shim refuses server
     writes; `.claude/.cc-writes` is engine bookkeeping, never in a patch.
@@ -271,6 +272,23 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       `.claude/settings.json` hooks otherwise run in the job. A source job's title stays out of its prompts and
       event lines. Triage's `rule` reaches a prompt only if it's one of the watch's rules.
   - `cancel`, `retry` and `close` reload and re-check the job under `queue_lock`, as serve does.
+  - Publishing (`agent_publish.py`) is the only code that writes to a server, and only what `[repo.*.publish]`
+    names (`publish-to`, refused in a session; an unknown mode reads `off`).
+    - Every write goes through `allowed()`: succeeded, once per job and kind (`result/published.json`), and for
+      `auto` a source job with `checks: pass`, never SVN, ≤ 5 a day per source, ≤ 3 tries.
+    - It only creates: a comment (`gh api --method POST`), a new `ws-agent/<id>` branch plus `gh pr create --draft`,
+      a new SVN branch (`svn copy` then commit; manual, the person's own job only).
+    - The draft PR's commit is built with plumbing on a throwaway `GIT_INDEX_FILE` (`read-tree`, `apply --cached`,
+      `commit-tree`) and pushed to the remote's URL: a push to `origin` would write a remote-tracking ref.
+    - A draft PR goes out only if the job's base is an ancestor of the target branch at origin (never a fork's
+      commits or unpushed local ones); the push is `--no-follow-tags --recurse-submodules=no
+      --force-with-lease=<ref>:` to the push URL. A patch touching `.github/` needs `--allow-workflows`, never auto.
+    - `auto` covers only jobs that finished after it was switched on (`publish.since`), never with the queue
+      paused, and never re-posts a comment whose earlier attempt may have reached GitHub (`attempting`).
+    - The SVN branch is one revision: checkout `url@rev`, `svn patch --strip <depth>` (dry run first), then
+      `svn copy <wc> <branch URL>`. `svn_branch_problem` (set time and publish time) refuses trunk and watched trees.
+    - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
+      in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):
     - quoted between `<untrusted>` tags (`agent_inbox.defuse`);
     - printed through `printable`;

@@ -610,6 +610,7 @@ ws-agent tell <id> "..."     # your follow-up: after its current turn, or resumi
 ws-agent interrupt <id> "..." # stop its running turn now; it resumes the same session with your message
 ws-agent cancel <id>         # stop it; the working copy stays for a look
 ws-agent retry <id>          # failed/interrupted: shows what is there, then resumes the same session
+ws-agent publish <id>        # write the result back as the repository's publish settings say (below)
 ws-agent close <id>          # after review: delete the working copy, keep the result
 ws-agent close --empty       # the same for every succeeded job whose patch is empty
 ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
@@ -656,6 +657,26 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     triage isn't sure about still goes to the inbox. So does a candidate that can't start now: the daily cap,
     low disk, or a base that couldn't be fetched three times. Turning a watch off and on again, or disallowing
     a repository and allowing it again, starts it from then: no backlog.
+- **Publishing** (off until you turn it on, per repository, from your own terminal): `ws-agent publish-to <path>
+  --mode manual|auto [--comment] [--draft-pr] [--svn-branch ^/branches/ws-agent]` names what ws-agent may write
+  back for that repository's jobs. Nothing else is ever written.
+  - `--comment`: the job's report as a comment on the GitHub issue or pull request that asked. Its first line
+    says an agent wrote it; the job's summary is quoted and can't mention or link anyone.
+  - `--draft-pr`: the job's patch as one commit on a new branch `ws-agent/<id>`, opened as a draft pull request.
+    Your branches, index and working tree aren't touched, and an existing branch is never written.
+    - Only the job's own commit goes out. The job's base must already be on the target branch at origin, so a
+      fork pull request's commits and your own unpushed commits are never pushed.
+    - A patch that touches `.github/` (workflows run with the repository's secrets as soon as a branch is
+      pushed) is never published automatically; by hand it needs `--allow-workflows`.
+  - `--svn-branch`: the patch committed to a new branch under that path, in one revision, for a job you started
+    yourself. The path can't be trunk, inside it, or inside or above a watched URL. A watched revision's review
+    is never committed.
+  - `manual`: only `ws-agent publish <id>` writes (`--dry-run` shows what it would write). `auto`: serve also
+    publishes a job that came from a source once it succeeds with passing checks; a repository with no checks,
+    or a job of your own, is never published automatically. Neither is a job that finished before you switched
+    `auto` on, nor anything while the queue is paused. A job is published once, and at most 5 a day per
+    source go out automatically.
+  - `ws-agent publish-to <path> --mode off` stops it.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
   - requeues jobs waiting for an engine once one is out of its cooldown;

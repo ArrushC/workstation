@@ -330,6 +330,37 @@ def _poll_github(entry: agent_registry.Repo, now: float) -> list[str]:
     return [_follow(jid, text, login) for jid, text, login in follow] + _drain()
 
 
+def _publish_auto(q: jobs.Queue | None) -> list[str]:
+    """Passing jobs that came from a source, in repositories whose publish mode is auto: written
+    back once (agent_publish decides; a refusal that will never change is not repeated in the log)."""
+    from . import agent_publish
+    if q is None or q.group == "Paused":   # paused means "do nothing by yourself"
+        return []
+    out = []
+    repos = agent_registry.load()[0]
+    for j in jobs.all_jobs():
+        entry = repos.get(j.repo)
+        if entry is None or entry.publish.mode != "auto" or not j.origin or j.closed or j.cancelled:
+            continue
+        if jobs.state(j, q.tasks if q else None) != "succeeded":
+            continue
+        todo = [k for k in agent_publish.kinds_for(j, entry) if agent_publish.allowed(j, k, auto=True) is None]
+        if not todo:
+            continue
+        try:
+            lines = agent_publish.publish(j, auto=True)
+        except Exception as e:  # noqa: BLE001 - one job's failure never stops the others, or repeats a write
+            out.append(f"{j.id}: publish: {type(e).__name__}: {e}")
+            continue
+        for ln in lines:
+            if ": published " in ln:
+                url = ln.rsplit(": ", 1)[-1]
+                agent_events.append("published", j, f"{j.id} published ({url})")
+                agent_events.notify(f"{j.id} published: {url}")
+        out += [ln for ln in lines if ": published " in ln or " failed: " in ln]
+    return out
+
+
 def tick(now: float) -> list[str]:
     """One pass; what it did, as log lines. Each step fails on its own."""
     lines: list[str] = []
@@ -345,6 +376,7 @@ def tick(now: float) -> list[str]:
     step("recover", lambda: _recover(q))
     step("waiting", lambda: _requeue_waiting(q))
     step("pending", _drain)   # what a serve killed mid-batch left
+    step("publish", lambda: _publish_auto(q))
     for key, entry in sorted(agent_registry.load()[0].items()):
         if entry.watch is not None and entry.watch.mode in ("observe", "act"):
             step(f"svn {key}", lambda e=entry: _poll_svn(e, now))

@@ -116,7 +116,10 @@ BLANK_SCRATCH = (*BLANK, "/srv", "/var/tmp")
 
 
 def _base(bw: str, home: Path, blank: Sequence[str] = BLANK) -> list[str]:
-    args = [bw, "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"]
+    # Its own PID namespace: when the sandbox's first process ends, the kernel kills whatever it
+    # left behind (a daemon a check's code forked can't live on to rewrite the job's result files).
+    args = [bw, "--die-with-parent", "--unshare-pid", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+            "--tmpfs", "/tmp"]
     for d in blank:   # before the home layer: /home goes blank, then the person's own home is made on it
         if Path(d).is_dir() and not Path(d).is_symlink():
             args += ["--tmpfs", d]
