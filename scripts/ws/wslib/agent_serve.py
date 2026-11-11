@@ -357,6 +357,10 @@ def _publish_auto(q: jobs.Queue | None) -> list[str]:
                 url = ln.rsplit(": ", 1)[-1]
                 agent_events.append("published", j, f"{j.id} published ({url})")
                 agent_events.notify(f"{j.id} published: {url}")
+        for kind in agent_publish.KINDS:   # told once: after this, allowed() refuses and nothing is tried
+            if any(ln.startswith(f"{j.id}: {kind} failed: ") for ln in lines) and agent_publish.gave_up(j, kind):
+                # fixed words only: the failure's own text can be a server's
+                agent_events.notify(f"{j.id}: {kind} wasn't published automatically (ws-agent publish {j.id})")
         out += [ln for ln in lines if ": published " in ln or " failed: " in ln]
     return out
 

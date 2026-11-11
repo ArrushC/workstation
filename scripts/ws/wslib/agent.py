@@ -296,9 +296,12 @@ def _publish_to(args: argparse.Namespace) -> int:
     rc, repo = _source_change(agent_registry.set_publish, root, pub)
     if repo is not None:
         print(f"publishing for {core.tilde(root)}: {_publish_words(repo.publish)}")
-        if pub.mode == "auto":
+        if pub.mode == "auto" and (pub.comment or pub.draft_pr):
             _err("ws-agent serve will now write these for passing jobs from this repository's sources, with your "
                  "credentials, without asking per job. ws-agent publish-to <path> --mode off stops it.")
+        if pub.mode == "auto" and pub.svn_branch:
+            _err("An SVN branch is never published automatically: ws-agent publish <id> commits one, for a job "
+                 "you started yourself.")
     return rc
 
 

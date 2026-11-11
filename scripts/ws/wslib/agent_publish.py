@@ -126,14 +126,29 @@ def kinds_for(job: jobs.Job, entry: agent_registry.Repo) -> list[str]:
 
 
 def auto_count(job: jobs.Job, today: dt.date | None = None) -> int:
-    """Automatic publishes today (UTC) for jobs of this job's source."""
+    """Other jobs of this job's source with something published automatically today (UTC). Jobs,
+    not writes: a job's draft PR and its comment are one; its own second kind is never capped."""
     day = (today or dt.datetime.now(dt.timezone.utc).date()).isoformat()
     key = agent_admit.source_key(job.origin)
-    n = 0
-    for j in jobs.all_jobs():
-        if j.origin.startswith(f"{key}:"):
-            n += sum(1 for e in record(j).values() if e.get("auto") is True and str(e.get("at", "")).startswith(day))
-    return n
+    return sum(1 for j in jobs.all_jobs()
+               if j.id != job.id and j.origin.startswith(f"{key}:")
+               and any(e.get("auto") is True and e.get("url") and str(e.get("at", "")).startswith(day)
+                       for e in record(j).values()))
+
+
+def _tries(rec: dict[str, object]) -> int:
+    """Automatic attempts so far; a value that isn't a count (a hand-edited file) reads as none."""
+    n = rec.get("tries")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
+def gave_up(job: jobs.Job, kind: str) -> bool:
+    """serve won't try this kind again by itself: a comment that may have been posted, or
+    MAX_TRIES failures. `ws-agent publish <id>` is the person's way on."""
+    rec = record(job).get(kind, {})
+    if rec.get("url"):
+        return False
+    return bool(kind == "comment" and rec.get("attempting")) or _tries(rec) >= MAX_TRIES
 
 
 def touches_workflows(patch: bytes) -> bool:
@@ -180,10 +195,13 @@ def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False,
             return "an SVN job is never published automatically (reviews stay local)"
         if checks != "pass":
             return f"its checks are {checks or 'none'}: only passing work is published automatically"
-        if auto_count(job) >= AUTO_CAP:
-            return f"the daily cap of {AUTO_CAP} automatic publishes for {agent_admit.source_key(job.origin)} is reached"
-        if int(record(job).get(kind, {}).get("tries", 0) or 0) >= MAX_TRIES:  # type: ignore[call-overload]
-            return f"{kind} failed {MAX_TRIES} times: {record(job).get(kind, {}).get('error')}"
+        if info.get("review") == "concerns":
+            return "its reviewer had concerns (ws-agent result shows them): yours to publish"
+        if _tries(rec) >= MAX_TRIES:
+            return f"{kind} failed {MAX_TRIES} times: {rec.get('error')}"
+        if auto_count(job) >= AUTO_CAP:   # last: it reads every job's record
+            return (f"the daily cap of {AUTO_CAP} automatically published jobs for "
+                    f"{agent_admit.source_key(job.origin)} is reached")
     else:
         if kind == "svn_branch" and job.origin:
             return "a source's SVN job is a review: it stays local"
@@ -236,6 +254,8 @@ def comment_body(job: jobs.Job, pr_url: str = "") -> str:
     lines = [f"Posted by an agent (ws-agent job `{job.id}`, {_word(info.get('engine') or job.engine) or 'engine unknown'}), "
              "not written by a person.", "",
              f"Checks: {_word(info.get('checks')) or 'none'}."]
+    if info.get("review") in ("ok", "concerns"):
+        lines.append(f"Review: {info['review']}.")
     if pr_url and re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+", pr_url):
         lines.append(f"Draft pull request: {pr_url}")
     if files:
@@ -368,9 +388,10 @@ def _pr_base(job: jobs.Job, slug: str) -> str:
     the same repository, else the repository's default branch."""
     m = re.fullmatch(r"pull/(\d+)/head", job.base.get("branch", ""))
     if m:
-        r = _run(["gh", "api", f"repos/{slug}/pulls/{m.group(1)}", "--jq",
-                  'if .head.repo.full_name == .base.repo.full_name then .head.ref else "" end'])
-        ref = r.stdout.decode("utf-8", "replace").strip() if r.returncode == 0 else ""
+        # no answer is a failure, never "the default branch then": the PR would target the wrong one
+        ref = _ok(_run(["gh", "api", f"repos/{slug}/pulls/{m.group(1)}", "--jq",
+                        'if .head.repo.full_name == .base.repo.full_name then .head.ref else "" end']),
+                  f"reading pull request {m.group(1)}")
         if ref and agent_sources._REF.match(ref):
             return ref
     return _ok(_run(["gh", "api", f"repos/{slug}", "--jq", ".default_branch"]), "reading the default branch")
@@ -454,7 +475,8 @@ def publish(job: jobs.Job, *, auto: bool, even_failing: bool = False, dry_run: b
                        "draft_pr": lambda: _draft_pr(job, entry, t),
                        "svn_branch": lambda: _svn_branch(job, entry)}[kind]()
             except PublishError as e:
-                tries = int(record(job).get(kind, {}).get("tries", 0) or 0) + 1  # type: ignore[call-overload]
+                # only serve's own attempts count toward MAX_TRIES: the person may try as often as they like
+                tries = _tries(record(job).get(kind, {})) + (1 if auto else 0)
                 # a comment's failure can't be told from "created, then the reply was lost": it stays
                 # marked, and serve never posts it again; a branch or PR is safe to try again
                 keep = {} if kind == "comment" else {"attempting": ""}

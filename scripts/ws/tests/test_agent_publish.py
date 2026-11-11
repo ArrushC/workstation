@@ -30,7 +30,7 @@ case "$1 $2" in
 "api --method") cat >"$d/body.$n"; [ -f "$d/post-then-fail" ] && { echo "HTTP 502" >&2; exit 1; }; echo '{"html_url": "https://github.com/ArrushC/proj/issues/7#issuecomment-1"}' ;;
 "pr create") cat >"$d/pr-body"; [ -f "$d/pr-fails" ] && { echo "pull request create failed" >&2; exit 1; }
   echo "https://github.com/ArrushC/proj/pull/8" ;;
-api\ repos/*/pulls/*) echo "" ;;
+api\ repos/*/pulls/*) [ -f "$d/pulls-fail" ] && { echo "HTTP 502 SERVER WORDS" >&2; exit 1; }; cat "$d/pulls-ref" 2>/dev/null || echo "" ;;
 api\ repos/*) echo main ;;
 *) exit 1 ;;
 esac
@@ -509,3 +509,125 @@ for _cls, _base in ((ReviewFindings, Publish), (ReviewFindingsSvn, PublishSvn)):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeferredMinors(Publish):
+    """The minor findings of the whole-branch review of publish."""
+
+    def set_exit(self, j: jobs.Job, **kw: object) -> None:
+        f = jobs.job_dir(j.id) / "result" / "exit.json"
+        f.write_text(json.dumps({**json.loads(f.read_text()), **kw}))
+
+    def test_the_daily_cap_counts_jobs_and_never_blocks_a_jobs_own_second_kind(self) -> None:
+        self.settings(mode="auto", comment=True, draft_pr=True)
+        now = {"at": core.now_iso(), "auto": True}
+        for _ in range(pub.AUTO_CAP - 1):   # four jobs, eight writes: still under a cap of five jobs
+            done = self.job()
+            pub._save(done, "comment", {"url": "u", **now})
+            pub._save(done, "draft_pr", {"url": "u", **now})
+        self.assertIsNone(pub.allowed(self.job(), "comment", auto=True))
+        half = self.job()
+        pub._save(half, "draft_pr", {"url": "u", **now})   # the fifth job today: its comment is still owed
+        self.assertIsNone(pub.allowed(half, "comment", auto=True))
+        self.assertIn("daily cap", pub.allowed(self.job(), "comment", auto=True) or "")
+
+    def test_a_request_on_a_pull_request_targets_its_branch_or_nothing(self) -> None:
+        self.settings(mode="manual", draft_pr=True)
+        git("push", "-q", "origin", f"{self.head}:refs/heads/feature", cwd=self.repo)
+        j = self.job()
+        j.base = {"commit": self.head, "branch": "pull/5/head"}
+        jobs.save(j)
+        self.write(self.gx / "pulls-fail", "")   # GitHub can't say which branch: never the default one instead
+        line = pub.publish(j, auto=False)[0]
+        self.assertIn("draft_pr failed", line)
+        self.assertEqual(set(self.remote_refs()), {"refs/heads/main", "refs/heads/feature"})
+        (self.gx / "pulls-fail").unlink()
+        self.write(self.gx / "pulls-ref", "feature\n")   # a pull request from the same repository
+        self.assertIn("published draft_pr", pub.publish(j, auto=False)[0])
+        create = next(c for c in self.gh_calls() if c[:2] == ["pr", "create"])
+        self.assertEqual(create[create.index("--base") + 1], "feature")
+
+    def test_the_person_is_told_once_when_serve_gives_up(self) -> None:
+        self.settings(mode="auto", draft_pr=True, comment=True)
+        self.write(self.gx / "pr-fails", "")
+        self.write(self.gx / "post-then-fail", "")
+        j = self.job()
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            for _ in range(pub.MAX_TRIES + 2):
+                serve.tick(time.time())
+        self.assertEqual(sorted(notices), [f"{j.id}: comment wasn't published automatically (ws-agent publish {j.id})",
+                                           f"{j.id}: draft_pr wasn't published automatically (ws-agent publish {j.id})"])
+
+    def test_a_failure_by_hand_doesnt_use_up_serves_tries(self) -> None:
+        self.settings(mode="auto", draft_pr=True)
+        self.write(self.gx / "pr-fails", "")
+        j = self.job()
+        for _ in range(pub.MAX_TRIES + 1):
+            self.assertIn("draft_pr failed", pub.publish(j, auto=False)[0])
+        self.assertIsNone(pub.allowed(j, "draft_pr", auto=True))
+
+    def test_a_damaged_try_count_reads_as_none(self) -> None:
+        self.settings(mode="auto", comment=True)
+        j = self.job()
+        pub._save(j, "comment", {"tries": "many"})
+        self.assertIsNone(pub.allowed(j, "comment", auto=True))
+
+    def test_the_persons_pre_push_hook_still_decides(self) -> None:
+        self.settings(mode="manual", draft_pr=True)
+        hook = self.repo / ".git" / "hooks" / "pre-push"
+        self.write(hook, "#!/bin/sh\necho 'the hook says no' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        j = self.job()
+        self.assertIn("draft_pr failed", pub.publish(j, auto=False)[0])
+        self.assertEqual(set(self.remote_refs()), {"refs/heads/main"})
+
+    def test_a_reviewers_concerns_leave_it_to_the_person_and_show_in_the_comment(self) -> None:
+        self.settings(mode="auto", comment=True)
+        j = self.job()
+        self.set_exit(j, review="concerns")
+        self.assertIn("reviewer had concerns", pub.allowed(j, "comment", auto=True) or "")
+        self.assertEqual(serve.tick(time.time()), [])
+        self.assertIn("published comment", pub.publish(j, auto=False)[0])
+        body = json.loads(next(self.gx.glob("body.*")).read_text())["body"]
+        self.assertIn("Review: concerns.", outside_fences(body))
+        fine = self.job()
+        self.set_exit(fine, review="ok")
+        self.assertIsNone(pub.allowed(fine, "comment", auto=True))
+
+    def test_only_a_job_that_succeeded_and_is_still_open_is_published(self) -> None:
+        self.settings(mode="manual", comment=True, draft_pr=True)
+        failed, asks, closed, cancelled = self.job(), self.job(), self.job(), self.job()
+        self.set_exit(failed, exit_code=1, status="failed")
+        self.set_exit(asks, status="question")
+        closed.closed = True
+        jobs.save(closed)
+        cancelled.cancelled = True
+        jobs.save(cancelled)
+        for j in (failed, asks, closed, cancelled):
+            lines = pub.publish(j, auto=False)
+            self.assertTrue(lines and all("hasn't succeeded" in ln for ln in lines), lines)
+        self.assertEqual((self.gh_calls(), set(self.remote_refs())), ([], {"refs/heads/main"}))
+
+
+class DeferredMinorsSvn(PublishSvn):
+    def test_auto_with_only_an_svn_branch_says_it_stays_by_hand(self) -> None:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err), chdir(self.root):
+            rc = agent.main(["publish-to", str(self.wc), "--mode", "auto", "--svn-branch", "^/branches/ws-agent"])
+        self.assertEqual(rc, 0, err.getvalue())
+        self.assertNotIn("without asking per job", err.getvalue())
+        self.assertIn("never published automatically", err.getvalue())
+
+    def test_a_commit_the_server_refuses_is_not_recorded(self) -> None:
+        reg.set_publish(self.wc, reg.Publish(mode="manual", svn_branch="^/branches/ws-agent"))
+        hook = self.root / "svnrepo" / "hooks" / "pre-commit"
+        self.write(hook, "#!/bin/sh\necho 'the server says no' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        j = self.job()
+        self.assertIn("svn_branch failed", pub.publish(j, auto=False)[0])
+        self.assertEqual((pub.published(j, "svn_branch"), svn("info", "--show-item", "revision", self.url)), ("", "1"))
+        self.assertFalse((jobs.job_dir(j.id) / "publish-wc").exists())
+        hook.unlink()
+        self.assertIn("published svn_branch", pub.publish(j, auto=False)[0])   # and it can be tried again
+

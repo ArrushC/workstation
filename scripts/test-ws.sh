@@ -17,6 +17,9 @@ if [ -z "$PY" ]; then
   echo "no python with tomllib (3.11+): skipped (CI runs it)"
   exit 0
 fi
+# A commit hook runs this with git's own variables exported (the committer's identity, the index of
+# the commit in progress). The tests' scratch repositories must not see them.
+unset "${!GIT_@}"
 if out=$(cd "$ROOT/scripts/ws/tests" && PYTHONDONTWRITEBYTECODE=1 "$PY" -m unittest discover -t . -p 'test_*.py' 2>&1); then
   printf 'PASS: ws: %s\n' "$(printf '%s\n' "$out" | sed -n 's/^Ran \([0-9]*\) tests\{0,1\} .*/\1 tests/p')"
 else
