@@ -225,7 +225,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     15/60/240 s; usage limit → cooldown and the next allowed engine, or `waiting`.
   - The job sandbox (`agent_sandbox.wrap`, bwrap) is the read boundary: `$HOME` and `/tmp` are throwaway layers
     with the tools and the engine's own state bound back, other jobs, every registered copy and `[sandbox] hide`
-    are hidden, `/mnt`, `/media`, `/home` and `/root` are blank (`BLANK`; triage's scratch also `/srv`, `/var/tmp`), a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
+    are hidden, `/mnt`, `/media`, `/home` and `/root` are blank (`BLANK`; triage's scratch also `/srv`, `/var/tmp`;
+    the resolver files come back read-only, `NETWORK_FILES`: WSL's `/etc/resolv.conf` links into `/mnt/wsl`), a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
     `sandbox` settings; Codex: workspace-write, `--ignore-rules`). No working sandbox → no job, never phase-1
     confinement. git in a job only reads (`GIT_OPTIONAL_LOCKS=0`; ws-agent stages); the svn shim refuses server
     writes; `.claude/.cc-writes` is engine bookkeeping, never in a patch.
