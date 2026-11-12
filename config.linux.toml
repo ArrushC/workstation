@@ -112,13 +112,14 @@ zig = "0.17.0"
 "pypi:glances" = "latest"
 "pypi:asciinema" = "latest"
 "pypi:harlequin" = "latest"
-# --- npm: (compiles at install: lazy, so `mise install` skips it and the first run installs it) ---
+# --- npm: (lazy, so `mise install` skips it and the first run installs it) ---
 # graft: a code graph for coding agents (`graft init` wires one repo into Claude Code).
-# EL9+ only: tree-sitter's prebuilt addon needs GLIBCXX_3.4.29 (EL8 has 3.4.25) and
-# tree-sitter-kotlin ships none, so it builds at install (allow_builds) with the host's g++.
-# Lazy, so an EL8 host never fails the tools phase on it. Windows needs MSVC (graft #323).
+# From 0.29 its parsers are WASM, so nothing compiles at install. Stay on 0.29+: up to 0.28
+# it built native tree-sitter addons, which fail against Node 26's V8 headers (C++20) with
+# EL8's g++ 8, and with a newer g++ unless CXXFLAGS=-std=gnu++20 is set.
+# Still lazy until an EL8 host has run this version.
 # The postinstall saves graft's telemetry opt-out; DO_NOT_TRACK keeps that run itself quiet.
-"npm:@nanonets/graft" = { version = "0.21.1", lazy = true, lazy_bins = ["graft"], allow_builds = ["tree-sitter-kotlin"], postinstall = "DO_NOT_TRACK=1 graft telemetry disable" }
+"npm:@nanonets/graft" = { version = "0.29.0", lazy = true, lazy_bins = ["graft"], postinstall = "DO_NOT_TRACK=1 graft telemetry disable" }
 
 # `graft init` otherwise writes a project statusLine, which hides the enforced ccstatusline
 # (dotfiles/claude/settings.enforced.json) in that repo.

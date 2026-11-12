@@ -999,13 +999,10 @@ url = "https://github.com/svenstaro/miniserve/releases/download/v0.35.0/miniserv
 url_api = "https://api.github.com/repos/svenstaro/miniserve/releases/assets/391553074"
 
 [[tools."npm:@nanonets/graft"]]
-version = "0.21.1"
-aube = { path = "locks/mise.linux/npm-nanonets-graft/0.21.1~b7f055f2", digest = "sha256:e29ec9dbbc1db6af132ac977cd01010637502e1a9d22e0c997b1ad99e7b543f6" }
+version = "0.29.0"
+aube = { path = "locks/mise.linux/npm-nanonets-graft/0.29.0", digest = "sha256:1aedc68dcfbf16803940869c057e14d614a1d5c341614cb8c6004bc14c4e29bf" }
 backend = "npm:@nanonets/graft"
-specifiers = ["0.21.1"]
-
-[tools."npm:@nanonets/graft".options]
-allow_builds = '["tree-sitter-kotlin"]'
+specifiers = ["0.29.0"]
 
 [[tools.numbat]]
 version = "1.24.0"

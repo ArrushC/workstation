@@ -110,7 +110,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 
 **`MISE_ENV` and sudo**
 - One catalogue for every host; the full toolbelt, including specialist tools, installs by default.
-  Only cht.sh (its site's outages) and graft (EL9+ only, compiles at install) stay lazy;
+  Only cht.sh (its site's outages) and graft (0.29's WASM parsers not yet run on EL8) stay lazy;
   `check_tool_environments` refuses any other `lazy = true`.
   `scripts/lib/mise-env.sh --write` writes the git-ignored
   `miserc.toml` (`env = ["linux"]`); `bootstrap.ps1` writes `["windows"]`. Every mise process reads it;
