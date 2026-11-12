@@ -10,33 +10,33 @@ checksum = "sha256:1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb
 url = "https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda"
 checksum = "sha256:1a0d382c515ebf55f8ee1f38c8b81bc95af5c2acc42ad53b66bc5df932032f96"
 
-[conda-packages.linux-x64."bzip3-1.5.4-hebe6cf0_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/bzip3-1.5.4-hebe6cf0_0.conda"
-checksum = "sha256:6817dc060c0c4bb5c3f03fb008a2d128675e18034deeeb5900671268dc236a86"
+[conda-packages.linux-x64."bzip3-1.5.5-hebe6cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/bzip3-1.5.5-hebe6cf0_0.conda"
+checksum = "sha256:a574cdc4828592e61be08f8f3d7f0165d50e565b7ee0ec12d993442416b8718f"
 
-[conda-packages.linux-x64."ca-certificates-2026.7.22-hbd8a1cb_0"]
-url = "https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda"
-checksum = "sha256:0a0544cf95f64394fe4959286f5c71f5444ad58feb0602e53becb27448d24da6"
+[conda-packages.linux-x64."ca-certificates-2026.10.23-hbd8a1cb_0"]
+url = "https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.10.23-hbd8a1cb_0.conda"
+checksum = "sha256:95619b9c1184be7175392eeb0ee7eeb5ccf25d280951f4225f2d62e725790be3"
 
-[conda-packages.linux-x64."libbrotlicommon-1.2.0-h39a168f_4"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlicommon-1.2.0-h39a168f_4.conda"
-checksum = "sha256:c4e9854c585f3ee1785f651287ecdf8c28f30a2ea1b159a513005f8a0f6453a3"
+[conda-packages.linux-x64."libbrotlicommon-1.2.1-h39a168f_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlicommon-1.2.1-h39a168f_0.conda"
+checksum = "sha256:8eccfbfdb8ecba32eabfb6ee92f70e818e5f3a35a01c507f7b6bd56e00e4c617"
 
-[conda-packages.linux-x64."libbrotlidec-1.2.0-ha411449_4"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlidec-1.2.0-ha411449_4.conda"
-checksum = "sha256:d5ed24da3e583a92227fe77280978b7933f07a39a2b60156c5ad95e5c76733fa"
+[conda-packages.linux-x64."libbrotlidec-1.2.1-ha411449_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlidec-1.2.1-ha411449_0.conda"
+checksum = "sha256:4b4bda6f70ad511bdff95fdd958dca74b6e0534ae335ddcb1d8c6569774d2429"
 
-[conda-packages.linux-x64."libbrotlienc-1.2.0-h018ffa1_4"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlienc-1.2.0-h018ffa1_4.conda"
-checksum = "sha256:b9f3cb510337655485c2e79ce5f7dd468991b19ad29723ffa1175a0aed1b69ae"
+[conda-packages.linux-x64."libbrotlienc-1.2.1-h018ffa1_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libbrotlienc-1.2.1-h018ffa1_0.conda"
+checksum = "sha256:61974cf9bb07115ed6725dacf83d0d985443d78dd123cc4f2758856fda5376ec"
 
 [conda-packages.linux-x64."libgcc-16.2.0-ha9f2e26_7"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgcc-16.2.0-ha9f2e26_7.conda"
 checksum = "sha256:e031634c3a928f9594eba868bc46ef5230d6571a364a0c63215b06c4563bfcea"
 
-[conda-packages.linux-x64."libgit2-1.9.7-hf27fc33_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libgit2-1.9.7-hf27fc33_1.conda"
-checksum = "sha256:5b213ad90ba7eb0ba3a23c32f413fe9a1163d492e218e7283a9f5ade67fa49aa"
+[conda-packages.linux-x64."libgit2-1.9.7-h07f4bfd_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libgit2-1.9.7-h07f4bfd_2.conda"
+checksum = "sha256:02be8bca68ec2c1bde38b741830d9cdbddaa85aa3c25f330eafe87771575ef0c"
 
 [conda-packages.linux-x64."libgomp-16.2.0-he0feb66_7"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda"
@@ -54,9 +54,9 @@ checksum = "sha256:7e463000fa1cba3f3a6597b776f6ab301d425a96e3bc20d0d9d76a3b9f237
 url = "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-16.2.0-h934c35e_7.conda"
 checksum = "sha256:fa7018298629fc429971fffd6ecba3d27a7b02e4e890d6a93ea01ffebe8cb745"
 
-[conda-packages.linux-x64."libxcb-1.17.0-hb83e432_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libxcb-1.17.0-hb83e432_2.conda"
-checksum = "sha256:7b49e6fd2a584b7f072943e6adf4149677af5121246975278804782d37752837"
+[conda-packages.linux-x64."libxcb-1.17.0-hb83e432_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libxcb-1.17.0-hb83e432_3.conda"
+checksum = "sha256:38021f35547021762c04860d1c9f2d3186b83e090e5f1773216045de06cf10cc"
 
 [conda-packages.linux-x64."libzlib-1.3.2-h25fd6f3_3"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda"
@@ -73,6 +73,10 @@ checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d0
 [conda-packages.linux-x64."pcre2-10.47-h8b3dc9c_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/pcre2-10.47-h8b3dc9c_1.conda"
 checksum = "sha256:9ebb10a4eb3be51ae67d85c679f5a7a50cb040ed25c783e6331a225ea09991d4"
+
+[conda-packages.linux-x64."pcre2-10.49-h8b3dc9c_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/pcre2-10.49-h8b3dc9c_0.conda"
+checksum = "sha256:63784a2dd0231cf8944b31a781b4ebab48954a94cd455d13585874370e46b658"
 
 [conda-packages.linux-x64."pthread-stubs-0.4-h7cc23a3_1004"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/pthread-stubs-0.4-h7cc23a3_1004.conda"
@@ -102,14 +106,14 @@ url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/53554190
 provenance = "github-attestations"
 
 [[tools.btop]]
-version = "1.4.7"
+version = "1.4.8"
 backend = "aqua:aristocratos/btop"
-specifiers = ["1.4.7"]
+specifiers = ["1.4.8"]
 
 [tools.btop."platforms.linux-x64"]
-checksum = "sha256:5099054dd6a101bd12eb6ff3702a9a6a3f57aaa27923a0da478ae5b517faf335"
-url = "https://github.com/aristocratos/btop/releases/download/v1.4.7/btop-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/aristocratos/btop/releases/assets/409963672"
+checksum = "sha256:af589cf82cc9ea9c29ce050b9239a13bef2d1492256d476156e1054a42ce89ad"
+url = "https://github.com/aristocratos/btop/releases/download/v1.4.8/btop-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/aristocratos/btop/releases/assets/674452462"
 
 [[tools.cheat]]
 version = "5.1.0"
@@ -122,16 +126,16 @@ url = "https://github.com/cheat/cheat/releases/download/5.1.0/cheat-linux-amd64.
 url_api = "https://api.github.com/repos/cheat/cheat/releases/assets/356479028"
 
 [[tools."conda:ast-grep"]]
-version = "0.45.3"
+version = "0.51.2"
 backend = "conda:ast-grep"
-specifiers = ["0.45.3"]
+specifiers = ["0.51.2"]
 
 [tools."conda:ast-grep".options]
 channel = "conda-forge"
 
 [tools."conda:ast-grep"."platforms.linux-x64"]
-checksum = "sha256:5f4cdbd6007a44a6f4573a020c5c40a105bada1cea934f9bd1c5fa97cb833066"
-url = "https://conda.anaconda.org/conda-forge/linux-64/ast-grep-0.45.3-he17df78_0.conda"
+checksum = "sha256:f248aa050051ad2880fc1b14fcbdaffd3c5e7b2a7adf9f035b7f0b2f7f618cd5"
+url = "https://conda.anaconda.org/conda-forge/linux-64/ast-grep-0.51.2-he17df78_0.conda"
 conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
     "libgcc-16.2.0-ha9f2e26_7",
@@ -174,28 +178,28 @@ conda_deps = [
 ]
 
 [[tools."conda:gitlogue"]]
-version = "0.12.0"
+version = "0.12.2"
 backend = "conda:gitlogue"
-specifiers = ["0.12.0"]
+specifiers = ["0.12.2"]
 
 [tools."conda:gitlogue".options]
 channel = "conda-forge"
 
 [tools."conda:gitlogue"."platforms.linux-x64"]
-checksum = "sha256:ddb2e096c6b7be1c610dfc04b01761468c0f69eb77d9c9d66b8469b37d6dca51"
-url = "https://conda.anaconda.org/conda-forge/linux-64/gitlogue-0.12.0-h64181f6_0.conda"
+checksum = "sha256:336647b20d3933b573753af789da4661631677843a38e2aa7bacac6e05a2c0c0"
+url = "https://conda.anaconda.org/conda-forge/linux-64/gitlogue-0.12.2-h64181f6_0.conda"
 conda_deps = [
+    "libgit2-1.9.7-h07f4bfd_2",
+    "pcre2-10.49-h8b3dc9c_0",
     "libgcc-16.2.0-ha9f2e26_7",
-    "libgit2-1.9.7-hf27fc33_1",
     "libstdcxx-16.2.0-h934c35e_7",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
-    "libssh2-1.11.1-h6154650_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "pcre2-10.47-h8b3dc9c_1",
+    "libssh2-1.11.1-h6154650_1",
     "openssl-3.6.5-h781a0a9_0",
-    "ca-certificates-2026.7.22-hbd8a1cb_0",
     "bzip2-1.0.8-hda65f42_10",
+    "ca-certificates-2026.10.23-hbd8a1cb_0",
 ]
 
 [[tools."conda:helix"]]
@@ -246,7 +250,7 @@ checksum = "sha256:500a9b80e900ee7c7512e3ae69055bfcf625565d5427519c3ce0f1ad2e624
 url = "https://conda.anaconda.org/conda-forge/linux-64/jless-0.9.0-h5014ea6_1.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
-    "libxcb-1.17.0-hb83e432_2",
+    "libxcb-1.17.0-hb83e432_3",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
     "pthread-stubs-0.4-h7cc23a3_1004",
@@ -272,16 +276,16 @@ conda_deps = [
 ]
 
 [[tools."conda:tree-sitter-cli"]]
-version = "0.27.1"
+version = "0.27.2"
 backend = "conda:tree-sitter-cli"
-specifiers = ["0.27.1"]
+specifiers = ["0.27.2"]
 
 [tools."conda:tree-sitter-cli".options]
 channel = "conda-forge"
 
 [tools."conda:tree-sitter-cli"."platforms.linux-x64"]
-checksum = "sha256:dd98cca00f70c120ed431c1a036888a6d07cb9f45ea32cf37bcd6ee0623db912"
-url = "https://conda.anaconda.org/conda-forge/linux-64/tree-sitter-cli-0.27.1-hc7555a6_0.conda"
+checksum = "sha256:86ef467d84625d866710e056471df1f3007e958bc16abd898400b25b7afd9867"
+url = "https://conda.anaconda.org/conda-forge/linux-64/tree-sitter-cli-0.27.2-hc7555a6_0.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -300,31 +304,31 @@ channel = "conda-forge"
 checksum = "sha256:6797edffa3ee57e35c6e0479d900ac46afd8a2b1a7644033ffedde56d6a55680"
 url = "https://conda.anaconda.org/conda-forge/linux-64/ugrep-7.8.5-h725a760_0.conda"
 conda_deps = [
-    "bzip3-1.5.4-hebe6cf0_0",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
     "liblzma-5.8.3-hb03c661_1",
     "lz4-c-1.10.0-hee9eb32_2",
+    "bzip3-1.5.5-hebe6cf0_0",
     "bzip2-1.0.8-hda65f42_10",
     "zstd-1.5.7-hb78ec9c_7",
-    "libbrotlicommon-1.2.0-h39a168f_4",
-    "libbrotlidec-1.2.0-ha411449_4",
-    "libbrotlienc-1.2.0-h018ffa1_4",
+    "libbrotlicommon-1.2.1-h39a168f_0",
+    "libbrotlidec-1.2.1-ha411449_0",
+    "libbrotlienc-1.2.1-h018ffa1_0",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
 ]
 
 [[tools.croc]]
-version = "11.5.4"
+version = "11.6.5"
 backend = "aqua:schollz/croc"
-specifiers = ["11.5.4"]
+specifiers = ["11.6.5"]
 
 [tools.croc."platforms.linux-x64"]
-checksum = "sha256:577f2c4170fac3f8ab244e325cdeea5644788e1cd7620f592a5d365ee349d556"
-url = "https://github.com/schollz/croc/releases/download/v11.5.4/croc_v11.5.4_Linux-64bit.tar.gz"
-url_api = "https://api.github.com/repos/schollz/croc/releases/assets/591524497"
+checksum = "sha256:01bbbb4eafe12c01ddb84ddebf556c35ea9989a976f4abc7e72933c2a6e5e61e"
+url = "https://github.com/schollz/croc/releases/download/v11.6.5/croc_v11.6.5_Linux-64bit.tar.gz"
+url_api = "https://api.github.com/repos/schollz/croc/releases/assets/722158291"
 
 [[tools.ctop]]
 version = "0.7.7"
@@ -347,77 +351,77 @@ url = "https://github.com/wagoodman/dive/releases/download/v0.13.1/dive_0.13.1_l
 url_api = "https://api.github.com/repos/wagoodman/dive/releases/assets/241842462"
 
 [[tools.doggo]]
-version = "1.4.0"
+version = "1.4.2"
 backend = "aqua:mr-karan/doggo"
-specifiers = ["1.4.0"]
+specifiers = ["1.4.2"]
 
 [tools.doggo."platforms.linux-x64"]
-checksum = "sha256:f85e2471737677a5fa65491b4241e0f46960aae6cc2211cc660ee6394a1a3d06"
-url = "https://github.com/mr-karan/doggo/releases/download/v1.4.0/doggo-linux-x86_64.tar.gz"
-url_api = "https://api.github.com/repos/mr-karan/doggo/releases/assets/539320012"
+checksum = "sha256:634d88c92e1e98a8e5f6bc9758ca39a797f4237e4c542156e48c441be702742c"
+url = "https://github.com/mr-karan/doggo/releases/download/v1.4.2/doggo-linux-x86_64.tar.gz"
+url_api = "https://api.github.com/repos/mr-karan/doggo/releases/assets/664895944"
 
 [[tools.fx]]
-version = "40.0.0"
+version = "40.0.1"
 backend = "aqua:antonmedv/fx"
-specifiers = ["40.0.0"]
+specifiers = ["40.0.1"]
 
 [tools.fx."platforms.linux-x64"]
-checksum = "sha256:c5cf146137d3d1819384356366913f1f98bcf5b334e5f100e4705c081f65ed8e"
-url = "https://github.com/antonmedv/fx/releases/download/40.0.0/fx_linux_amd64"
-url_api = "https://api.github.com/repos/antonmedv/fx/releases/assets/613037517"
+checksum = "sha256:9f0cc5a29d2940dd28fdc7df7b5e19bf16856d388e60d1c9f1116890967c604a"
+url = "https://github.com/antonmedv/fx/releases/download/40.0.1/fx_linux_amd64"
+url_api = "https://api.github.com/repos/antonmedv/fx/releases/assets/666017503"
 
 [[tools."github:Canop/broot"]]
-version = "1.61.0"
+version = "1.62.0"
 backend = "github:Canop/broot"
-specifiers = ["1.61.0"]
+specifiers = ["1.62.0"]
 
 [tools."github:Canop/broot".options]
 asset_pattern = "broot_{version}.zip"
 
 [tools."github:Canop/broot"."platforms.linux-x64"]
-checksum = "sha256:6cafe8e993fb8e5684eb25549703a4fb9dec61ac6a8f1947cbed6566cb4e58e5"
-url = "https://github.com/Canop/broot/releases/download/v1.61.0/broot_1.61.0.zip"
-url_api = "https://api.github.com/repos/Canop/broot/releases/assets/607821944"
+checksum = "sha256:13630ae5d3b011ddc81fca05cb80dbee6189dad3ba393dd477f5f687c7b5106d"
+url = "https://github.com/Canop/broot/releases/download/v1.62.0/broot_1.62.0.zip"
+url_api = "https://api.github.com/repos/Canop/broot/releases/assets/698888099"
 
 [[tools."github:Canop/dysk"]]
-version = "3.7.1"
+version = "3.8.2"
 backend = "github:Canop/dysk"
-specifiers = ["3.7.1"]
+specifiers = ["3.8.2"]
 
 [tools."github:Canop/dysk".options]
 asset_pattern = "dysk_{version}.zip"
 
 [tools."github:Canop/dysk"."platforms.linux-x64"]
-checksum = "sha256:19687580e4408e668be5b96f85861d47ababc1a225706746aa55b50e04ecc7ed"
-url = "https://github.com/Canop/dysk/releases/download/v3.7.1/dysk_3.7.1.zip"
-url_api = "https://api.github.com/repos/Canop/dysk/releases/assets/593128188"
+checksum = "sha256:fac5136d745fbcf1f85cb8524b1398185e8867d4fea86bcfb22e98b401f1ba7e"
+url = "https://github.com/Canop/dysk/releases/download/v3.8.2/dysk_3.8.2.zip"
+url_api = "https://api.github.com/repos/Canop/dysk/releases/assets/702492064"
 
 [[tools."github:ClementTsang/bottom"]]
-version = "0.14.9"
+version = "0.15.0"
 backend = "github:ClementTsang/bottom"
-specifiers = ["0.14.9"]
+specifiers = ["0.15.0"]
 
 [tools."github:ClementTsang/bottom".options]
 asset_pattern = "bottom_x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:ClementTsang/bottom"."platforms.linux-x64"]
-checksum = "sha256:b4bee5b193e7d3f6e090ac14f0ca15acec2e7fe4ef64988e0bfc492e16c28c9a"
-url = "https://github.com/ClementTsang/bottom/releases/download/0.14.9/bottom_x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/ClementTsang/bottom/releases/assets/531978168"
+checksum = "sha256:c66d6a0148102f107800919cd0ff6cce8767ae998f3c954b72e37a7f769e3ae2"
+url = "https://github.com/ClementTsang/bottom/releases/download/0.15.0/bottom_x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/ClementTsang/bottom/releases/assets/696808860"
 provenance = "github-attestations"
 
 [[tools."github:Wilfred/difftastic"]]
-version = "0.71.0"
+version = "0.72.0"
 backend = "github:Wilfred/difftastic"
-specifiers = ["0.71.0"]
+specifiers = ["0.72.0"]
 
 [tools."github:Wilfred/difftastic".options]
 asset_pattern = "difft-{version}-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:Wilfred/difftastic"."platforms.linux-x64"]
-checksum = "sha256:0a65e6715df992b0adae012e606bd9cc74fa6cfe90eaf13bbae165a0a19b3086"
-url = "https://github.com/Wilfred/difftastic/releases/download/0.71.0/difft-0.71.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/Wilfred/difftastic/releases/assets/573541111"
+checksum = "sha256:27b9c1fe038a95682eed241265a3cacb781227730f106104b617e10067d38ff4"
+url = "https://github.com/Wilfred/difftastic/releases/download/0.72.0/difft-0.72.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/Wilfred/difftastic/releases/assets/689922856"
 
 [[tools."github:YS-L/csvlens"]]
 version = "0.15.1"
@@ -459,17 +463,17 @@ url = "https://github.com/alexpasmantier/television/releases/download/0.15.9/tv-
 url_api = "https://api.github.com/repos/alexpasmantier/television/releases/assets/447569675"
 
 [[tools."github:bootandy/dust"]]
-version = "1.2.6"
+version = "1.2.7"
 backend = "github:bootandy/dust"
-specifiers = ["1.2.6"]
+specifiers = ["1.2.7"]
 
 [tools."github:bootandy/dust".options]
 asset_pattern = "dust-v{version}-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:bootandy/dust"."platforms.linux-x64"]
-checksum = "sha256:cbf2cb5c9d6227e46fc4b29c03dc43b8632020dfc5cf269d263d6e29c399e044"
-url = "https://github.com/bootandy/dust/releases/download/v1.2.6/dust-v1.2.6-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/568853682"
+checksum = "sha256:2f1a1106f1f14c0b684b2f0a5f4482c6d53e07a871df4afc11e3b91ade300b55"
+url = "https://github.com/bootandy/dust/releases/download/v1.2.7/dust-v1.2.7-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/699458387"
 
 [[tools."github:boyter/scc"]]
 version = "4.1.0"
@@ -511,17 +515,17 @@ url = "https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.1
 url_api = "https://api.github.com/repos/dalance/procs/releases/assets/457525859"
 
 [[tools."github:dathere/qsv"]]
-version = "24.0.0"
+version = "28.0.0"
 backend = "github:dathere/qsv"
-specifiers = ["24.0.0"]
+specifiers = ["28.0.0"]
 
 [tools."github:dathere/qsv".options]
 asset_pattern = "qsv-{version}-x86_64-unknown-linux-musl.zip"
 
 [tools."github:dathere/qsv"."platforms.linux-x64"]
-checksum = "sha256:0079acb8542af8b243fa861259746a6a88cef1aefc07214aaaf0f0a1b0593738"
-url = "https://github.com/dathere/qsv/releases/download/24.0.0/qsv-24.0.0-x86_64-unknown-linux-musl.zip"
-url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/611523906"
+checksum = "sha256:66619384e9bf9585a4cac7b800690ebfd006ae3ae4f515c4f7c326fb4dab0c43"
+url = "https://github.com/dathere/qsv/releases/download/28.0.0/qsv-28.0.0-x86_64-unknown-linux-musl.zip"
+url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/700542161"
 
 [[tools."github:dj95/zjstatus"]]
 version = "0.25.0"
@@ -537,30 +541,30 @@ url = "https://github.com/dj95/zjstatus/releases/download/v0.25.0/zjstatus.wasm"
 url_api = "https://api.github.com/repos/dj95/zjstatus/releases/assets/532710175"
 
 [[tools."github:dundee/gdu"]]
-version = "5.38.0"
+version = "5.39.0"
 backend = "github:dundee/gdu"
-specifiers = ["5.38.0"]
+specifiers = ["5.39.0"]
 
 [tools."github:dundee/gdu".options]
 asset_pattern = "gdu_linux_amd64_static.tgz"
 
 [tools."github:dundee/gdu"."platforms.linux-x64"]
-checksum = "sha256:e7b33d9a04597ac2caa2d7ff244023735617bb029a046ca5cf6154ef6bc1d4fe"
-url = "https://github.com/dundee/gdu/releases/download/v5.38.0/gdu_linux_amd64_static.tgz"
-url_api = "https://api.github.com/repos/dundee/gdu/releases/assets/612119552"
+checksum = "sha256:7e1036cba1696ecceda40ff79dacd43db9c157fa137ea5d50e4a198b047418a1"
+url = "https://github.com/dundee/gdu/releases/download/v5.39.0/gdu_linux_amd64_static.tgz"
+url_api = "https://api.github.com/repos/dundee/gdu/releases/assets/718887399"
 
 [[tools."github:fastfetch-cli/fastfetch"]]
-version = "2.69.0"
+version = "2.71.0"
 backend = "github:fastfetch-cli/fastfetch"
-specifiers = ["2.69.0"]
+specifiers = ["2.71.0"]
 
 [tools."github:fastfetch-cli/fastfetch".options]
 asset_pattern = "fastfetch-linux-amd64-polyfilled.tar.gz"
 
 [tools."github:fastfetch-cli/fastfetch"."platforms.linux-x64"]
-checksum = "sha256:3b97d4a18106987ed8fdae06f853a3381a1ba1623c97fe6261d32cd0e8514e1f"
-url = "https://github.com/fastfetch-cli/fastfetch/releases/download/2.69.0/fastfetch-linux-amd64-polyfilled.tar.gz"
-url_api = "https://api.github.com/repos/fastfetch-cli/fastfetch/releases/assets/588203827"
+checksum = "sha256:e9f5f79a8019ca6470d814eec11ab36eca6dc4e81da732c079f8f1efe33e5738"
+url = "https://github.com/fastfetch-cli/fastfetch/releases/download/2.71.0/fastfetch-linux-amd64-polyfilled.tar.gz"
+url_api = "https://api.github.com/repos/fastfetch-cli/fastfetch/releases/assets/715731458"
 
 [[tools."github:fujiapple852/trippy"]]
 version = "0.13.0"
@@ -665,32 +669,32 @@ url = "https://github.com/ouch-org/ouch/releases/download/0.8.3/ouch-x86_64-unkn
 url_api = "https://api.github.com/repos/ouch-org/ouch/releases/assets/561447591"
 
 [[tools."github:pwndbg/pwndbg"]]
-version = "2026.09.15"
+version = "2026.10.28"
 backend = "github:pwndbg/pwndbg"
-specifiers = ["2026.09.15"]
+specifiers = ["2026.10.28"]
 
 [tools."github:pwndbg/pwndbg".options]
 asset_pattern = "pwndbg_{version}_x86_64-portable.tar.xz"
 version_prefix = ""
 
 [tools."github:pwndbg/pwndbg"."platforms.linux-x64"]
-checksum = "sha256:7ba64666ee595885ba4b0e073f85e423829103e9fdbe921ba4eef1acd9150803"
-url = "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026.09.15_x86_64-portable.tar.xz"
-url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/566633367"
+checksum = "sha256:17049a23ba8cbcf4780c4bc9b4aeb519f2801ceabe7304b55d3d622acca03b8c"
+url = "https://github.com/pwndbg/pwndbg/releases/download/2026.10.28/pwndbg_2026.10.28_x86_64-portable.tar.xz"
+url_api = "https://api.github.com/repos/pwndbg/pwndbg/releases/assets/686271854"
 provenance = "github-attestations"
 
 [[tools."github:tealdeer-rs/tealdeer"]]
-version = "1.9.0"
+version = "1.9.1"
 backend = "github:tealdeer-rs/tealdeer"
-specifiers = ["1.9.0"]
+specifiers = ["1.9.1"]
 
 [tools."github:tealdeer-rs/tealdeer".options]
 asset_pattern = "tealdeer-linux-x86_64-musl"
 
 [tools."github:tealdeer-rs/tealdeer"."platforms.linux-x64"]
-checksum = "sha256:dc7263b550e90c0689ea2cb434e3144469805d5dddecbb1f7fc534e1185b7408"
-url = "https://github.com/tealdeer-rs/tealdeer/releases/download/v1.9.0/tealdeer-linux-x86_64-musl"
-url_api = "https://api.github.com/repos/tealdeer-rs/tealdeer/releases/assets/527792725"
+checksum = "sha256:5a9c3f0691b9cf375ee5c99de802885f3d50498cf686a539e2ddda028eb6b4f6"
+url = "https://github.com/tealdeer-rs/tealdeer/releases/download/v1.9.1/tealdeer-linux-x86_64-musl"
+url_api = "https://api.github.com/repos/tealdeer-rs/tealdeer/releases/assets/673323057"
 
 [[tools."github:theryangeary/choose"]]
 version = "1.3.7"
@@ -719,17 +723,17 @@ url = "https://github.com/tummychow/git-absorb/releases/download/0.9.0/git-absor
 url_api = "https://api.github.com/repos/tummychow/git-absorb/releases/assets/355709221"
 
 [[tools."github:walles/moor"]]
-version = "2.19.5"
+version = "2.19.6"
 backend = "github:walles/moor"
-specifiers = ["2.19.5"]
+specifiers = ["2.19.6"]
 
 [tools."github:walles/moor".options]
 asset_pattern = "moor-v{version}-linux-amd64"
 
 [tools."github:walles/moor"."platforms.linux-x64"]
-checksum = "sha256:0d0ce5ca95f3e9e208a9900898b9ec9465938a5abf2fa22f4c716a8573f90887"
-url = "https://github.com/walles/moor/releases/download/v2.19.5/moor-v2.19.5-linux-amd64"
-url_api = "https://api.github.com/repos/walles/moor/releases/assets/647837932"
+checksum = "sha256:48b82a5c8b8d59c8b88b4bbae496b8ac841ced82347951acda0176c8d6d31a96"
+url = "https://github.com/walles/moor/releases/download/v2.19.6/moor-v2.19.6-linux-amd64"
+url_api = "https://api.github.com/repos/walles/moor/releases/assets/689521847"
 
 [[tools."github:watchexec/watchexec"]]
 version = "2.8.0"
@@ -834,14 +838,14 @@ url_api = "https://api.github.com/repos/charmbracelet/gum/releases/assets/585508
 provenance = "cosign"
 
 [[tools.herdr]]
-version = "0.9.3"
+version = "0.9.5"
 backend = "aqua:herdrdev/herdr"
-specifiers = ["0.9.3"]
+specifiers = ["0.9.5"]
 
 [tools.herdr."platforms.linux-x64"]
-checksum = "sha256:18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7"
-url = "https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-linux-x86_64"
-url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/599036383"
+checksum = "sha256:14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d"
+url = "https://github.com/herdrdev/herdr/releases/download/v0.9.5/herdr-linux-x86_64"
+url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/640898235"
 
 [[tools.hexyl]]
 version = "0.17.0"
@@ -899,14 +903,14 @@ checksum = "blake3:a608d8ca6863c74eb1d32a57886e7c459313fed80c8473abce1dccf42a408
 url = "https://raw.githubusercontent.com/joehillen/sysz/1.4.3/sysz"
 
 [[tools.jj]]
-version = "0.46.0"
+version = "0.47.1"
 backend = "aqua:jj-vcs/jj"
-specifiers = ["0.46.0"]
+specifiers = ["0.47.1"]
 
 [tools.jj."platforms.linux-x64"]
-checksum = "sha256:fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08"
-url = "https://github.com/jj-vcs/jj/releases/download/v0.46.0/jj-v0.46.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jj-vcs/jj/releases/assets/619869961"
+checksum = "sha256:d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7"
+url = "https://github.com/jj-vcs/jj/releases/download/v0.47.1/jj-v0.47.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jj-vcs/jj/releases/assets/711489795"
 
 [[tools.k9s]]
 version = "0.51.0"
@@ -929,24 +933,24 @@ url = "https://github.com/jesseduffield/lazydocker/releases/download/v0.25.2/laz
 url_api = "https://api.github.com/repos/jesseduffield/lazydocker/releases/assets/399711577"
 
 [[tools.lazygit]]
-version = "0.66.1"
+version = "0.66.3"
 backend = "aqua:jesseduffield/lazygit"
-specifiers = ["0.66.1"]
+specifiers = ["0.66.3"]
 
 [tools.lazygit."platforms.linux-x64"]
-checksum = "sha256:7b3f30c2c06a42cf575280f907e58d7ea08411408b6b62bc926bc91cbc6c3f46"
-url = "https://github.com/jesseduffield/lazygit/releases/download/v0.66.1/lazygit_0.66.1_linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/jesseduffield/lazygit/releases/assets/630328438"
+checksum = "sha256:0a23f429a95f0d09db298b3c291536d818de066aa5a85c255806f0490ff6656b"
+url = "https://github.com/jesseduffield/lazygit/releases/download/v0.66.3/lazygit_0.66.3_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/jesseduffield/lazygit/releases/assets/722268995"
 
 [[tools.lazyjournal]]
-version = "0.8.6"
+version = "0.8.7"
 backend = "aqua:Lifailon/lazyjournal"
-specifiers = ["0.8.6"]
+specifiers = ["0.8.7"]
 
 [tools.lazyjournal."platforms.linux-x64"]
-checksum = "sha256:c264bbcb6b30fa6418bbfce2087d0e1ecdc7ad17421772c0f002e4cbf8cf4bd7"
-url = "https://github.com/Lifailon/lazyjournal/releases/download/0.8.6/lazyjournal-0.8.6-linux-amd64"
-url_api = "https://api.github.com/repos/Lifailon/lazyjournal/releases/assets/374974897"
+checksum = "sha256:e6f322d764450386ee24581965e9e3c4aad12b3fe926a9fcdc070619bc8d5b2b"
+url = "https://github.com/Lifailon/lazyjournal/releases/download/0.8.7/lazyjournal-0.8.7-linux-amd64"
+url_api = "https://api.github.com/repos/Lifailon/lazyjournal/releases/assets/714033825"
 
 [[tools.lnav]]
 version = "0.14.1"
@@ -1033,24 +1037,24 @@ specifiers = ["latest"]
 uv = { path = "locks/mise.linux/pypi-harlequin/2.14.0", digest = "sha256:45e3a3cb2b13902ff80ffb00e9620b3e547c6b50dce45db91eee7ad3335f313b" }
 
 [[tools.rclone]]
-version = "1.75.2"
+version = "1.76.0"
 backend = "aqua:rclone/rclone"
-specifiers = ["1.75.2"]
+specifiers = ["1.76.0"]
 
 [tools.rclone."platforms.linux-x64"]
-checksum = "sha256:349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702"
-url = "https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip"
-url_api = "https://api.github.com/repos/rclone/rclone/releases/assets/624695998"
+checksum = "sha256:b00f00b3266c3764413afe599d3ec316f6f43b3e0ea8a0bc1d186d2133e46df7"
+url = "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-linux-amd64.zip"
+url_api = "https://api.github.com/repos/rclone/rclone/releases/assets/717751926"
 
 [[tools.rust-analyzer]]
-version = "2026-10-05"
+version = "2026-11-09"
 backend = "aqua:rust-lang/rust-analyzer"
-specifiers = ["2026-10-05"]
+specifiers = ["2026-11-09"]
 
 [tools.rust-analyzer."platforms.linux-x64"]
-checksum = "sha256:28070188df63b6f217768040781decc8db43bc9d29b126847acb365575b09bc9"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-05/rust-analyzer-x86_64-unknown-linux-gnu.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/611796683"
+checksum = "sha256:8c039b25cb338b3970c731646677a4c9d4e9dd7a92c9ab9ae459c71467fbf4a9"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-11-09/rust-analyzer-x86_64-unknown-linux-gnu.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/726381773"
 
 [[tools.shfmt]]
 version = "3.14.1"
@@ -1106,41 +1110,41 @@ url = "https://github.com/pranshuparmar/witr/releases/download/v0.3.4/witr-linux
 url_api = "https://api.github.com/repos/pranshuparmar/witr/releases/assets/610282199"
 
 [[tools.xh]]
-version = "0.26.2"
+version = "0.26.3"
 backend = "aqua:ducaale/xh"
-specifiers = ["0.26.2"]
+specifiers = ["0.26.3"]
 
 [tools.xh."platforms.linux-x64"]
-checksum = "sha256:8c53b6a23435754f9e2ea8ab8c0d0296a1921404b88132cf9b364ff6e8c22a6e"
-url = "https://github.com/ducaale/xh/releases/download/v0.26.2/xh-v0.26.2-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/ducaale/xh/releases/assets/490410371"
+checksum = "sha256:cbbf53bd76007d57d95e4bed8ba7fb3b7fcec22af4bdfc1ff119cd5de351e74f"
+url = "https://github.com/ducaale/xh/releases/download/v0.26.3/xh-v0.26.3-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/ducaale/xh/releases/assets/661697813"
 
 [[tools.yq]]
-version = "4.54.1"
+version = "4.54.3"
 backend = "aqua:mikefarah/yq"
-specifiers = ["4.54.1"]
+specifiers = ["4.54.3"]
 
 [tools.yq."platforms.linux-x64"]
-checksum = "sha256:8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f"
-url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64"
-url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222595"
+checksum = "sha256:129534601871538efe0ba4c5e62a34fb1d5f469bcb975c4fddeb467d82974973"
+url = "https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_amd64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/726219936"
 provenance = "cosign"
 
 [[tools.zellij]]
-version = "0.45.1"
+version = "0.46.0"
 backend = "aqua:zellij-org/zellij"
-specifiers = ["0.45.1"]
+specifiers = ["0.46.0"]
 
 [tools.zellij."platforms.linux-x64"]
-checksum = "sha256:40bcc2e03f5d5ae8e054e39f676081fe12ab70871506996ba595834c3718eefc"
-url = "https://github.com/zellij-org/zellij/releases/download/v0.45.1/zellij-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/zellij-org/zellij/releases/assets/533538763"
+checksum = "sha256:0940e467f99ca57aec5a63edcad633450d49cd6f22e8a7d9c686771a0d9f86ae"
+url = "https://github.com/zellij-org/zellij/releases/download/v0.46.0/zellij-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zellij-org/zellij/releases/assets/734911871"
 
 [[tools.zig]]
-version = "0.17.0"
+version = "0.17.1"
 backend = "core:zig"
-specifiers = ["0.17.0"]
+specifiers = ["0.17.1"]
 
 [tools.zig."platforms.linux-x64"]
-checksum = "sha256:1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
-url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
+checksum = "sha256:3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
+url = "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"
