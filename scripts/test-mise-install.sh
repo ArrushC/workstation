@@ -12,6 +12,8 @@ cat >"$T/bin/mise" <<'EOF'
 log="${FAKE_LOG:?}"
 case "$1 ${2:-}" in
 "where node") [ -f "$FAKE_NODE" ] && exit 0 || exit 1 ;;
+"ls --prunable") [ -n "${FAKE_PRUNABLE:-}" ] && { printf '%s\n' "$FAKE_PRUNABLE"; exit 0; } || exit 1 ;;
+"prune --yes") shift 2; echo "prune $*" >>"$log"; : >"${FAKE_PRUNED:?}"; exit 0 ;;
 "ls --installed") [ -n "${FAKE_LS:-}" ] && { printf '%s\n' "$FAKE_LS"; exit 0; } || exit 1 ;;
 "install --dry-run-code") [ -n "${FAKE_NOTHING_MISSING:-}" ] && exit 0 || exit 1 ;;
 "install --force") echo "install --force $3" >>"$log"; exit 0 ;;
@@ -27,7 +29,10 @@ chmod +x "$T/bin/mise"
 cat >"$T/bin/df" <<'EOF'
 #!/usr/bin/env bash
 [ -n "${FAKE_DF_FAIL:-}" ] && exit 1
-printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/fake 999999999 1 %s 1%% /\n' "${FAKE_FREE_KB:-104857600}"
+free="${FAKE_FREE_KB:-104857600}"
+# Once the fake mise has pruned, FAKE_FREE_AFTER_KB is what is free.
+[ -e "${FAKE_PRUNED:-/nonexistent}" ] && free="${FAKE_FREE_AFTER_KB:-$free}"
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/fake 999999999 1 %s 1%% /\n' "$free"
 EOF
 cat >"$T/bin/du" <<'EOF'
 #!/usr/bin/env bash
@@ -38,6 +43,7 @@ esac
 EOF
 chmod +x "$T/bin/df" "$T/bin/du"
 export PATH="$T/bin:$PATH" HOME="$T/home" XDG_STATE_HOME="$T/home/.local/state"
+export FAKE_PRUNED="$T/pruned"
 export FAKE_LOG="$T/log" FAKE_NODE="$T/node-installed" FAKE_DECL='{ version = "26.8.1", postinstall = "npm install -g a@1" }'
 fail() {
   echo "FAIL: $*" >&2
@@ -111,15 +117,44 @@ FAKE_LS='{"zig":[{"version":"1","install_path":"/x/zig/1","installed":true,"acti
   FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
   fail "disk check: an installed current version must lower the need"
 rm -rf "$installs"
+# 11d-g. Short of room, superseded versions go first: every tool but the runtimes.
+prunable='{"btop":[{"version":"1"}],"node":[{"version":"1"}],"python":[{"version":"1"}],"uv":[{"version":"1"}],"zig":[{"version":"1"}]}'
+# 11d. 1 GB free, 7 GB once pruned: the install goes ahead, node/python/uv untouched.
+: >"$FAKE_LOG"
+out11d="$(FAKE_PRUNABLE="$prunable" FAKE_FREE_KB="$(gbkb 1)" FAKE_FREE_AFTER_KB="$(gbkb 7)" bash "$mi" 2>&1)" ||
+  fail "disk check: pruning superseded versions must let the install through: $out11d"
+grep -qx 'prune btop zig' "$FAKE_LOG" || fail "disk check: expected 'prune btop zig', log: $(cat "$FAKE_LOG")"
+grep -qx install "$FAKE_LOG" || fail "disk check (after pruning): mise install did not run"
+printf '%s\n' "$out11d" | grep -q 'removing the superseded versions of 2 tool(s)' || fail "disk check: pruning not announced: $out11d"
+rm -f "$FAKE_PRUNED"
+# 11e. still short after pruning: stops, with the usual message and the new figure.
+: >"$FAKE_LOG"
+rc11e=0
+out11e="$(FAKE_PRUNABLE="$prunable" FAKE_FREE_KB="$(gbkb 1)" FAKE_FREE_AFTER_KB="$(gbkb 2)" bash "$mi" 2>&1)" || rc11e=$?
+[ "$rc11e" = 1 ] || fail "disk check: still short after pruning must stop, got $rc11e"
+printf '%s\n' "$out11e" | grep -q 'Not enough disk space for the mise tools: 2.0 GB free' || fail "disk check (short after pruning): $out11e"
+grep -qx install "$FAKE_LOG" && fail "disk check (short after pruning): mise install ran"
+rm -f "$FAKE_PRUNED"
+# 11f. with room, nothing is pruned (old versions stay for rollback).
+: >"$FAKE_LOG"
+FAKE_PRUNABLE="$prunable" bash "$mi" >/dev/null 2>&1 || fail "disk check: plenty of room must install"
+grep -q '^prune' "$FAKE_LOG" && fail "disk check: pruned with room to spare"
+# 11g. only runtimes are prunable: nothing is removed and the run stops.
+: >"$FAKE_LOG"
+rc11g=0
+FAKE_PRUNABLE='{"node":[{"version":"1"}]}' FAKE_FREE_KB="$(gbkb 1)" bash "$mi" >/dev/null 2>&1 || rc11g=$?
+[ "$rc11g" = 1 ] || fail "disk check: only runtimes prunable must stop, got $rc11g"
+grep -q '^prune' "$FAKE_LOG" && fail "disk check: pruned a runtime"
 # 12. just short: 4.5 GB free, nothing installed, needs 5000 + 1024 MB.
 rc12=0
 FAKE_FREE_KB="$(gbkb 4.5)" bash "$mi" >/dev/null 2>&1 || rc12=$?
 [ "$rc12" = 1 ] || fail "disk check: 4.5 GB must not be enough (linux budget 5000 MB + 1 GB), got $rc12"
 # 13. the override goes ahead, with a warning.
 : >"$FAKE_LOG"
-out13="$(WORKSTATION_SKIP_DISK_CHECK=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" ||
+out13="$(FAKE_PRUNABLE="$prunable" WORKSTATION_SKIP_DISK_CHECK=1 FAKE_FREE_KB="$(gbkb 1)" bash "$mi" 2>&1)" ||
   fail "disk check: WORKSTATION_SKIP_DISK_CHECK=1 must go ahead"
 grep -qx install "$FAKE_LOG" || fail "disk check override: mise install did not run"
+grep -q '^prune' "$FAKE_LOG" && fail "disk check override: pruned"
 printf '%s\n' "$out13" | grep -q 'WORKSTATION_SKIP_DISK_CHECK=1, so going ahead' || fail "disk check override: no warning: $out13"
 # 14. an unreadable df skips the check.
 : >"$FAKE_LOG"
