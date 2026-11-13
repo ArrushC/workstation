@@ -14,7 +14,10 @@ reintroduce the smaller default. After the merge, WSL's `ws update` published py
 for `--clean`), and every eager tool was already installed there. After #113 (`6e0a751`) all
 three hosts ran `ws update` on 2026-11-03: WSL and Windows (python `d4860b36`, lsp `8b371edf`)
 had every declared tool, and atc-cache-dev10 built `ebd7de6a`/`c7239507` for the first time and
-installed process-compose and restic. `--clean` hasn't run on any host. The bullets below are
+installed process-compose and restic. `--clean` ran on atc-cache-dev10 on
+2026-11-13 (it removed lsp `c7239507`, node 26.11.1 and uv 0.13.0; lsp is now `950f0951`), after its 22 GB
+`/home` filled during the #98 pin bumps; it hasn't run on WSL or Windows. Since #128/#130 the disk check
+counts only current versions and, short of room, prunes superseded non-runtime tools itself. The bullets below are
 the pre-merge snapshot.
 
 Earlier on 2026-11-03 the simplification (lazy specialist tools, `environments/{python,lsp}` locks,
