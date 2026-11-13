@@ -87,6 +87,8 @@ grep -q install "$FAKE_LOG" && fail "disk check (1 GB free): mise install ran"
 printf '%s\n' "$out10" | grep -q 'Not enough disk space for the mise tools: 1.0 GB free.*about 5.9 GB needed' ||
   fail "disk check (1 GB free): wrong message: $out10"
 printf '%s\n' "$out10" | grep -q '7.5G.*/.cache' || fail "disk check: the largest folders are not listed: $out10"
+printf '%s\n' "$out10" | grep -qx ' *mise cache clear' || fail "disk check: no cache cleanup commands: $out10"
+printf '%s\n' "$out10" | grep -q 'mise run tool-env --clean' || fail "disk check: no pointer to tool-env --clean: $out10"
 printf '%s\n' "$out10" | grep -q "11G.*$HOME\$" && fail "disk check: the home total is listed as a folder: $out10"
 # 11. with 4 GB already installed needs 5000 - 4096 + 1024 = 1928 MB: 2 GB free is enough.
 mkdir -p "$installs"

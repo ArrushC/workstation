@@ -48,6 +48,13 @@ check_disk() {
     printf '    Nothing was installed. Free some space (the largest folders in %s are below), then re-run.\n' "$HOME"
     printf '    WORKSTATION_SKIP_DISK_CHECK=1 skips this check.\n'
     du -xh --max-depth=1 "$HOME" 2>/dev/null | sort -rh | sed -n '2,6p' | sed 's/^/      /' || true
+    # Caches their tools rebuild on demand: safe to clear, and often all an update is short of.
+    printf '    Caches that are safe to clear (they are rebuilt on demand):\n'
+    printf '      mise cache clear\n'
+    if command -v uv >/dev/null 2>&1; then printf '      uv cache clean\n'; fi
+    if command -v go >/dev/null 2>&1; then printf '      go clean -cache\n'; fi
+    printf '    After a successful update, this removes the old tool versions it leaves behind:\n'
+    printf '      mise run tool-env --clean\n'
   } >&2
   exit 1
 }

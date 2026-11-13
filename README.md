@@ -888,7 +888,7 @@ Install everything listed at once (the script collects every gap up front): `sud
 
 ### The tools step stops with "Not enough disk space for the mise tools"
 
-The check runs before `mise install` because a disk that fills mid-install leaves tools half-extracted that mise still counts as installed. The message gives the free and needed space and the largest folders in your home; IDE remote-server caches are the usual culprits (`~/.cache/JetBrains/RemoteDev`, old `~/.vscode-server/cli/servers/*`, `~/.local/share/zed`). Free the space and re-run. If an earlier run already filled the disk, force the tools it cut short (`mise install --force <tool>`, for example `go` when gopls fails with "package cmp is not in std").
+The check runs before `mise install` because a disk that fills mid-install leaves tools half-extracted that mise still counts as installed. The message gives the free and needed space and the largest folders in your home; IDE remote-server caches are the usual culprits (`~/.cache/JetBrains/RemoteDev`, old `~/.vscode-server/cli/servers/*`, `~/.local/share/zed`). It also lists the cache-clearing commands that are safe to run straight away (`mise cache clear`, plus `uv cache clean` and `go clean -cache` when those tools are installed); when an update is only slightly short, they are usually enough. Free the space and re-run. Once the update has succeeded, `mise run tool-env --clean` removes the superseded environments and old tool versions it left behind. If an earlier run already filled the disk, force the tools it cut short (`mise install --force <tool>`, for example `go` when gopls fails with "package cmp is not in std").
 
 ### Pull fails with "Authentication failed"
 
