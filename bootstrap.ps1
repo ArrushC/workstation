@@ -544,8 +544,11 @@ function Invoke-WslConfigReminder {
 # Room for the tools before `mise bootstrap` installs any, as scripts/lib/mise-install.sh
 # checks on Linux: a disk that fills mid-install leaves tools half-extracted that mise
 # still counts as installed. The budget is what a fresh Windows install writes, as
-# measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what is
-# already installed, plus 1 GB for the new versions an update installs beside the old ones.
+# measured by .github/workflows/disk-budget.yml into disk-budget.toml; less the installed
+# versions the config still asks for, plus 1 GB of headroom. A superseded version doesn't
+# count (an update installs its replacement beside it); when mise can't list them, all of
+# `installs` counts. Short of room, the superseded versions of ordinary tools go first
+# (Remove-SupersededTools), never the runtimes; with room nothing is pruned.
 # Nothing to install needs no room (the budget counts caches that `installs` doesn't).
 # $env:WORKSTATION_SKIP_DISK_CHECK = '1' goes ahead anyway; a missing budget or an
 # unreadable drive skips it.
@@ -561,15 +564,66 @@ function Assert-ToolsDiskSpace {
     }
     $budgetMB = [int]$line.Matches[0].Groups[1].Value
     $data = if ($env:MISE_DATA_DIR) { $env:MISE_DATA_DIR } else { Join-Path $env:LOCALAPPDATA 'mise' }
-    $needMB = [math]::Max($budgetMB - (Get-DirSizeMB (Join-Path $data 'installs')), 0) + 1024
+    $needMB = Get-ToolsNeedMB $budgetMB $data
     $freeMB = Get-FreeSpaceMB $data
     if (($null -eq $freeMB) -or ($freeMB -ge $needMB)) { return }
+    if (($env:WORKSTATION_SKIP_DISK_CHECK -ne '1') -and (Remove-SupersededTools)) {
+        $needMB = Get-ToolsNeedMB $budgetMB $data
+        $freeMB = Get-FreeSpaceMB $data
+        if (($null -eq $freeMB) -or ($freeMB -ge $needMB)) { return }
+    }
     $msg = '{0:N1} GB free on the drive holding {1}, about {2:N1} GB needed' -f ($freeMB / 1024), $data, ($needMB / 1024)
     if ($env:WORKSTATION_SKIP_DISK_CHECK -eq '1') {
         Write-Warn "Low disk space for the mise tools: $msg; WORKSTATION_SKIP_DISK_CHECK=1, so going ahead"
         return
     }
-    Write-Fail "Not enough disk space for the mise tools: $msg. Nothing was installed. Free some space (Settings > System > Storage), then re-run; `$env:WORKSTATION_SKIP_DISK_CHECK = '1' skips this check."
+    Write-Fail "Not enough disk space for the mise tools: $msg. Nothing was installed. Free some space (Settings > System > Storage), then re-run; `$env:WORKSTATION_SKIP_DISK_CHECK = '1' skips this check. Caches that are safe to clear (they are rebuilt on demand): mise cache clear; uv cache clean; go clean -cache."
+}
+
+# The budget less what the current versions already hold, plus 1 GB.
+function Get-ToolsNeedMB {
+    param([int]$BudgetMB, [string]$Data)
+    $usedMB = Get-CurrentToolsMB
+    if ($null -eq $usedMB) { $usedMB = Get-DirSizeMB (Join-Path $Data 'installs') }
+    [math]::Max($BudgetMB - $usedMB, 0) + 1024
+}
+
+# mise's `ls --json` (tool -> versions) for one filter flag; $null when mise can't say.
+function Get-MiseToolList {
+    param([string]$Flag)
+    $out = Invoke-Native { & mise -C $env:USERPROFILE ls $Flag --json 2> $null }
+    if (($LASTEXITCODE -ne 0) -or (-not $out)) { return $null }
+    try { (@($out) -join "`n") | ConvertFrom-Json } catch { $null }
+}
+
+# MB held by the installed versions the config asks for (mise's `active`); $null when
+# mise can't list them.
+function Get-CurrentToolsMB {
+    $tools = Get-MiseToolList '--installed'
+    if ($null -eq $tools) { return $null }
+    $mb = 0
+    foreach ($tool in $tools.PSObject.Properties) {
+        foreach ($v in @($tool.Value)) {
+            $active = $v.PSObject.Properties['active']
+            $path = $v.PSObject.Properties['install_path']
+            if ($active -and $active.Value -and $path -and $path.Value) { $mb += Get-DirSizeMB $path.Value }
+        }
+    }
+    $mb
+}
+
+# Short of room: remove the superseded versions of every tool except the runtimes the
+# published Python/LSP environments run on (and uv, which builds them); their cleanup
+# stays `mise run tool-env --clean`. $false when there was nothing it could remove.
+function Remove-SupersededTools {
+    $prunable = Get-MiseToolList '--prunable'
+    if ($null -eq $prunable) { return $false }
+    $names = @($prunable.PSObject.Properties | ForEach-Object { $_.Name } | Where-Object { @('node', 'python', 'uv') -notcontains $_ })
+    if ($names.Count -eq 0) { return $false }
+    Write-Warn "Short of disk space for the mise tools: removing the superseded versions of $($names.Count) tool(s) first (a shell already open may still point at a removed version: restart it)"
+    # A version still running can't be deleted on Windows; whatever did go is measured next.
+    Invoke-Native { & mise -C $env:USERPROFILE prune --yes @names | Out-Host }
+    return $true
 }
 
 function Get-DirSizeMB {

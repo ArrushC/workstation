@@ -22,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ast = Read-ScriptAst (Join-Path $repoRoot 'bootstrap.ps1')
 $refused = New-Object System.Collections.Generic.List[string]
-foreach ($f in (Get-AstFunction $ast 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Invoke-InstallClaudeCode', 'Invoke-Native', 'Write-Utf8NoBom')) {
+foreach ($f in (Get-AstFunction $ast 'Initialize-MiseEnv', 'Install-Mise', 'Invoke-MiseBootstrap', 'Assert-ToolsDiskSpace', 'Get-ToolsNeedMB', 'Get-MiseToolList', 'Get-CurrentToolsMB', 'Remove-SupersededTools', 'Invoke-InstallClaudeCode', 'Invoke-Native', 'Write-Utf8NoBom')) {
     if ($f.Extent.Text -match 'Environment\]::SetEnvironmentVariable') { $refused.Add($f.Name); continue }
     . ([scriptblock]::Create($f.Extent.Text))
 }
@@ -32,7 +32,13 @@ function Update-SessionPath { }
 # The disk: 100 GB free and nothing installed unless a case says otherwise.
 $script:freeMB = 102400
 $script:usedMB = 0
-function Get-FreeSpaceMB { param([string]$Path) $script:freeMB }
+# Once `mise prune --yes` has been called, $script:freeAfterPruneMB (when set) is what is free.
+$script:freeAfterPruneMB = $null
+function Get-FreeSpaceMB {
+    param([string]$Path)
+    if (($null -ne $script:freeAfterPruneMB) -and @($script:miseCalls | Where-Object { $_ -like 'mise *prune --yes*' }).Count) { return $script:freeAfterPruneMB }
+    $script:freeMB
+}
 function Get-DirSizeMB { param([string]$Path) $script:usedMB }
 function Invoke-EnsureConfigLocal { }
 function Invoke-WslConfigReminder { }
@@ -263,7 +269,7 @@ try {
     Test-Case 'disk: too little room stops before mise bootstrap installs anything' {
         $script:freeMB = 1024; $script:usedMB = 0
         $msg = Invoke-Bootstrap
-        Assert ($msg -like 'WRITE-FAIL:*Not enough disk space*1.0 GB free*about 3.9 GB needed*Nothing was installed*WORKSTATION_SKIP_DISK_CHECK*') "got: $msg"
+        Assert ($msg -like 'WRITE-FAIL:*Not enough disk space*1.0 GB free*about 3.9 GB needed*Nothing was installed*WORKSTATION_SKIP_DISK_CHECK*mise cache clear*') "got: $msg"
         Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran'
     }
 
@@ -272,6 +278,41 @@ try {
         $msg = Invoke-Bootstrap
         Assert ($msg -eq '') "failed: $msg"
         Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
+    }
+
+    Test-Case 'disk: a superseded version does not lower the need; the current one does' {
+        $script:freeMB = 2048; $script:usedMB = 2800
+        $script:miseReply['ls --installed'] = @{ Out = '{"zig":[{"version":"1","install_path":"C:\\x\\zig\\1","installed":true,"active":false}]}'; Exit = 0 }
+        try { $msg = Invoke-Bootstrap } finally { $script:miseReply.Remove('ls --installed') }
+        Assert ($msg -like 'WRITE-FAIL:*Not enough disk space*2.0 GB free*about 3.9 GB needed*') "superseded: $msg"
+        $script:miseReply['ls --installed'] = @{ Out = '{"zig":[{"version":"1","install_path":"C:\\x\\zig\\1","installed":true,"active":false},{"version":"2","install_path":"C:\\x\\zig\\2","installed":true,"active":true}]}'; Exit = 0 }
+        try { $msg = Invoke-Bootstrap } finally { $script:miseReply.Remove('ls --installed') }
+        Assert ($msg -eq '') "current: $msg"
+    }
+
+    Test-Case 'disk: short of room, superseded versions go first, never node, python or uv' {
+        $script:freeMB = 1024; $script:usedMB = 0; $script:freeAfterPruneMB = 7168
+        $script:miseReply['ls --prunable'] = @{ Out = '{"btop":[{"version":"1"}],"node":[{"version":"1"}],"python":[{"version":"1"}],"uv":[{"version":"1"}],"zig":[{"version":"1"}]}'; Exit = 0 }
+        try { $msg = Invoke-Bootstrap } finally { $script:freeAfterPruneMB = $null }
+        Assert ($msg -eq '') "failed: $msg"
+        Assert (@(Get-MiseCall 'prune --yes btop zig').Count -eq 1) "calls: $($script:miseCalls -join ' | ')"
+        Assert (($script:warnings -join ' ') -like '*removing the superseded versions of 2 tool(s)*') "warnings: $($script:warnings -join ' | ')"
+        Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
+
+        $script:freeAfterPruneMB = 2048
+        try { $msg = Invoke-Bootstrap } finally { $script:freeAfterPruneMB = $null }
+        Assert ($msg -like 'WRITE-FAIL:*Not enough disk space*2.0 GB free*') "still short: $msg"
+        Assert (@(Get-MiseCall 'bootstrap').Count -eq 0) 'mise bootstrap ran while still short'
+
+        $script:freeMB = 102400
+        $msg = Invoke-Bootstrap
+        Assert (@(Get-MiseCall 'prune').Count -eq 0) 'pruned with room to spare'
+
+        $script:freeMB = 1024
+        $script:miseReply['ls --prunable'] = @{ Out = '{"node":[{"version":"1"}]}'; Exit = 0 }
+        try { $msg = Invoke-Bootstrap } finally { $script:miseReply.Remove('ls --prunable') }
+        Assert ($msg -like 'WRITE-FAIL:*Not enough disk space*') "only runtimes prunable: $msg"
+        Assert (@(Get-MiseCall 'prune --yes').Count -eq 0) 'pruned a runtime'
     }
 
     Test-Case 'disk: nothing to install needs no room (1 GB free, every tool installed)' {
@@ -289,6 +330,7 @@ try {
         try { $msg = Invoke-Bootstrap } finally { Remove-Item Env:WORKSTATION_SKIP_DISK_CHECK }
         Assert ($msg -eq '') "failed: $msg"
         Assert (($script:warnings -join ' ') -like '*Low disk space*going ahead*') "warnings: $($script:warnings -join ' | ')"
+        Assert (@(Get-MiseCall 'ls --prunable').Count -eq 0) 'the override looked for versions to prune'
         Assert (@(Get-MiseCall 'bootstrap --only').Count -eq 1) 'mise bootstrap did not run'
     }
 
