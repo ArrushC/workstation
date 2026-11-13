@@ -89,7 +89,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   its content changes, and on Windows retries a rename for at most 1 s, only for WinError 5/32:
   Check Point's on-access scan opens each file as it closes and blocks the rename.
 - Both OSes run tool-env from post-tools, including routine updates. Never automatically
-  prune runtimes: old generations can still use them. The one cleanup is the explicit
+  prune runtimes: old generations can still use them. `mise-install.sh`'s disk check, when short of room, prunes superseded
+  versions of every tool but node, python and uv (`free_superseded`). The one other cleanup is the explicit
   `tool-env --clean` (sync, delete non-published generations, then `mise prune` only if every
   deletion succeeded; otherwise exit 1). `tool-env.py status` is health's "dependency envs" row.
   Windows update also calls bootstrap's `-MaintenanceOnly` path for fonts and user

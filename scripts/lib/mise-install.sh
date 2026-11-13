@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # mise-install.sh — install every tool this host's config set (miserc.toml) declares.
-# It first checks there is room for them (check_disk below). It never prunes: the
-# published Python/LSP environments still run on the old runtimes until the
-# post-tools hook moves them, so cleanup is `mise run tool-env --clean`.
+# It first checks there is room for them (check_disk below). With room it never
+# prunes; short of room it removes superseded versions of ordinary tools first
+# (free_superseded), never the runtimes: the published Python/LSP environments
+# still run on the old ones until the post-tools hook moves them, so their cleanup
+# is `mise run tool-env --clean`.
 set -euo pipefail
 repo="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
 export MISE_YES=1
@@ -35,16 +37,23 @@ current_kb() {
   done <<<"$paths"
   printf '%s\n' "$total"
 }
-check_disk() {
-  local data budget used=0 kb need probe have
-  # Exit 1 when something would install (or mise fails), which keeps the check.
-  if mise install --dry-run-code >/dev/null 2>&1; then return 0; fi
-  data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
-  budget="$(tr -d '\r' <"$repo/disk-budget.toml" 2>/dev/null | sed -n 's/^linux *= *\([0-9][0-9]*\) *$/\1/p' || true)"
-  if [ -z "$budget" ]; then
-    printf '  ! disk check skipped: no linux figure in %s\n' "$repo/disk-budget.toml" >&2
-    return 0
-  fi
+# Short of room: remove the superseded versions of every tool except the runtimes
+# the published environments run on (and uv, which builds them). Fails when there
+# is nothing it can remove.
+free_superseded() {
+  local tools=()
+  command -v jq >/dev/null 2>&1 || return 1
+  mapfile -t tools < <(mise ls --prunable --json 2>/dev/null |
+    jq -r 'keys[] | select(. != "node" and . != "python" and . != "uv")' 2>/dev/null)
+  [ "${#tools[@]}" -gt 0 ] || return 1
+  printf '  ! short of disk space for the mise tools: removing the superseded versions of %s tool(s) first\n' \
+    "${#tools[@]}" >&2
+  printf '    (a shell already open may still point at a removed version: restart it)\n' >&2
+  mise prune --yes "${tools[@]}" >&2 || return 1
+}
+# Sets need and have (MB); have is empty when df can't say.
+measure_disk() {
+  local used=0 kb probe
   if [ -d "$data/installs" ]; then
     kb="$(current_kb)" || kb=""
     if [ -z "$kb" ]; then kb="$(du -sk "$data/installs" 2>/dev/null | cut -f1)" || true; fi
@@ -54,7 +63,23 @@ check_disk() {
   probe="$data"
   until [ -e "$probe" ]; do probe="$(dirname "$probe")"; done
   have="$(df -Pk "$probe" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')" || true
+}
+check_disk() {
+  local data budget need have
+  # Exit 1 when something would install (or mise fails), which keeps the check.
+  if mise install --dry-run-code >/dev/null 2>&1; then return 0; fi
+  data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
+  budget="$(tr -d '\r' <"$repo/disk-budget.toml" 2>/dev/null | sed -n 's/^linux *= *\([0-9][0-9]*\) *$/\1/p' || true)"
+  if [ -z "$budget" ]; then
+    printf '  ! disk check skipped: no linux figure in %s\n' "$repo/disk-budget.toml" >&2
+    return 0
+  fi
+  measure_disk
   if [ -z "$have" ] || [ "$have" -ge "$need" ]; then return 0; fi
+  if [ "${WORKSTATION_SKIP_DISK_CHECK:-}" != 1 ] && free_superseded; then
+    measure_disk
+    if [ -z "$have" ] || [ "$have" -ge "$need" ]; then return 0; fi
+  fi
   if [ "${WORKSTATION_SKIP_DISK_CHECK:-}" = 1 ]; then
     printf '  ! %s free for the mise tools, about %s needed; WORKSTATION_SKIP_DISK_CHECK=1, so going ahead\n' \
       "$(gb "$have")" "$(gb "$need")" >&2
