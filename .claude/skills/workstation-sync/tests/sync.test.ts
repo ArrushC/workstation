@@ -25,7 +25,7 @@ const BAND = {
   plugin: 'workstation-sync',
   surface: 'terminal' as const,
   component: 'AbovePrompt' as const,
-  props: { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 160, scroll: { offset: 0, bodyRows: 6 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 6, bodyColumns: 160, scroll: { offset: 0, bodyRows: 6 }, view: {} },
 }
 
 // This host on main at origin's cafe863, every dotfile applied, the Windows checkout at
