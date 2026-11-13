@@ -12,6 +12,7 @@ cat >"$T/bin/mise" <<'EOF'
 log="${FAKE_LOG:?}"
 case "$1 ${2:-}" in
 "where node") [ -f "$FAKE_NODE" ] && exit 0 || exit 1 ;;
+"ls --installed") [ -n "${FAKE_LS:-}" ] && { printf '%s\n' "$FAKE_LS"; exit 0; } || exit 1 ;;
 "install --dry-run-code") [ -n "${FAKE_NOTHING_MISSING:-}" ] && exit 0 || exit 1 ;;
 "install --force") echo "install --force $3" >>"$log"; exit 0 ;;
 "install ") echo "install" >>"$log"; : >"$FAKE_NODE"; exit 0 ;;
@@ -90,12 +91,25 @@ printf '%s\n' "$out10" | grep -q '7.5G.*/.cache' || fail "disk check: the larges
 printf '%s\n' "$out10" | grep -qx ' *mise cache clear' || fail "disk check: no cache cleanup commands: $out10"
 printf '%s\n' "$out10" | grep -q 'mise run tool-env --clean' || fail "disk check: no pointer to tool-env --clean: $out10"
 printf '%s\n' "$out10" | grep -q "11G.*$HOME\$" && fail "disk check: the home total is listed as a folder: $out10"
-# 11. with 4 GB already installed needs 5000 - 4096 + 1024 = 1928 MB: 2 GB free is enough.
+# 11. (mise ls unreadable: all of `installs` counts) with 4 GB already installed needs 5000 - 4096 + 1024 = 1928 MB: 2 GB free is enough.
 mkdir -p "$installs"
 : >"$FAKE_LOG"
 FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
   fail "disk check: what is already installed must lower the need (2 GB free, 4 GB installed)"
 grep -qx install "$FAKE_LOG" || fail "disk check (2 GB free, 4 GB installed): mise install did not run"
+# 11b. only versions the config still asks for lower the need: the same 4 GB as a
+# superseded version leaves the full 5000 + 1024 MB, so 2 GB free stops the run.
+: >"$FAKE_LOG"
+rc11b=0
+out11b="$(FAKE_LS='{"zig":[{"version":"1","install_path":"/x/zig/1","installed":true,"active":false}]}' \
+  FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" 2>&1)" || rc11b=$?
+[ "$rc11b" = 1 ] || fail "disk check: a superseded version must not lower the need, got $rc11b"
+printf '%s\n' "$out11b" | grep -q 'about 5.9 GB needed' || fail "disk check (superseded version): wrong need: $out11b"
+grep -q install "$FAKE_LOG" && fail "disk check (superseded version): mise install ran"
+# 11c. the current version beside it does count: 4 GB current, 2 GB free is enough.
+FAKE_LS='{"zig":[{"version":"1","install_path":"/x/zig/1","installed":true,"active":false},{"version":"2","install_path":"/x/zig/2","installed":true,"active":true}]}' \
+  FAKE_FREE_KB="$(gbkb 2)" FAKE_USED_KB="$(gbkb 4)" bash "$mi" >/dev/null 2>&1 ||
+  fail "disk check: an installed current version must lower the need"
 rm -rf "$installs"
 # 12. just short: 4.5 GB free, nothing installed, needs 5000 + 1024 MB.
 rc12=0
