@@ -10,14 +10,31 @@ export MISE_YES=1
 # Room for the tools before installing any: a disk that fills mid-install leaves
 # tools half-extracted that mise still counts as installed (a go without its std
 # sources). The budget is what a fresh install writes on Linux, as
-# measured by .github/workflows/disk-budget.yml into disk-budget.toml; less what
-# is already installed, plus 1 GB for the new versions an update installs before
-# explicit cleanup drops the old ones. Nothing to install needs no room: the budget
+# measured by .github/workflows/disk-budget.yml into disk-budget.toml; less the
+# installed versions the config still asks for, plus 1 GB of headroom. A
+# superseded version doesn't count: an update installs its replacement beside it,
+# and counting it let a pin bump of the large tools (zig, pwndbg) pass with 1.8 GB
+# free and fill the disk. Without jq or a readable `mise ls`, everything under
+# `installs` counts, as before. Nothing to install needs no room: the budget
 # also counts the caches, which `installs` doesn't, so a host with every tool
 # already installed would otherwise still need about 2 GB free for an update that
 # writes nothing. WORKSTATION_SKIP_DISK_CHECK=1 goes ahead anyway; a missing
 # budget or an unreadable df skips the check.
 gb() { awk -v mb="$1" 'BEGIN { printf "%.1f GB", mb / 1024 }'; }
+# KB held by the installed versions the config asks for (mise's `active`); fails
+# when that can't be told.
+current_kb() {
+  local paths path kb total=0
+  command -v jq >/dev/null 2>&1 || return 1
+  paths="$(mise ls --installed --json 2>/dev/null |
+    jq -r '.[][] | select(.installed and .active) | .install_path' 2>/dev/null)" || return 1
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    kb="$(du -sk "$path/" 2>/dev/null | cut -f1)" || true
+    total=$((total + ${kb:-0}))
+  done <<<"$paths"
+  printf '%s\n' "$total"
+}
 check_disk() {
   local data budget used=0 kb need probe have
   # Exit 1 when something would install (or mise fails), which keeps the check.
@@ -29,7 +46,8 @@ check_disk() {
     return 0
   fi
   if [ -d "$data/installs" ]; then
-    kb="$(du -sk "$data/installs" 2>/dev/null | cut -f1)" || true
+    kb="$(current_kb)" || kb=""
+    if [ -z "$kb" ]; then kb="$(du -sk "$data/installs" 2>/dev/null | cut -f1)" || true; fi
     used=$((${kb:-0} / 1024))
   fi
   need=$((budget > used ? budget - used + 1024 : 1024))
