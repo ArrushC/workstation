@@ -84,6 +84,29 @@ try {
         Assert ((Test-Path -LiteralPath $dataDir) -and $r.Out -match 'created') "no $dataDir (the palette's recents): $($r.Out)"
     }
 
+    Test-Case "5.1 under pwsh's PSModulePath still checks the zip's SHA256 and installs" {
+        $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        # pwsh's own module folder: this shell's, the MSI's, or (a Store install lives under
+        # WindowsApps) wherever the pwsh on PATH says it is.
+        $mods = @($(if ($PSVersionTable.PSEdition -eq 'Core') { Join-Path $PSHOME 'Modules' }), (Join-Path $env:ProgramFiles 'PowerShell\7\Modules'),
+            $(if (Get-Command pwsh -ErrorAction SilentlyContinue) { Join-Path "$(& pwsh -NoProfile -NonInteractive -Command '$PSHOME')".Trim() 'Modules' })) |
+            Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'Microsoft.PowerShell.Utility')) } | Select-Object -First 1
+        if (-not $mods) { Write-Host '  skip  no pwsh 7 modules on this host'; return }
+        # Its own root, menu and keys: the cases below go on from the first install.
+        $at = Join-Path $tmp 'polluted'
+        $old = $env:PSModulePath
+        try {
+            $env:PSModulePath = "$mods;$old"
+            $out = & $ps51 -NoProfile -ExecutionPolicy Bypass -File $script -BaseUrl $base -Root "$at\root" -ShortcutDir "$at\menu" -ToastKey "$toastRoot\polluted-toast" -EnvKey "$toastRoot\polluted-env" -DataDir "$at\data" -NoConfigCheck 2>&1 | Out-String
+            $code = $LASTEXITCODE
+        } finally {
+            $env:PSModulePath = $old
+            if (Test-Path -LiteralPath "$at\root\current") { [IO.Directory]::Delete("$at\root\current") }
+        }
+        Assert ($code -eq 0) "exit ${code}: $out"
+        Assert ($out -notmatch 'is not recognized|could not be loaded|not updated') $out
+        Assert ((Read-Text "$at\root\current.sha256") -eq $first) "no stamp: $out"
+    }
     Test-Case 'the User environment: WEZTERM_CONFIG_FILE, and current\ on PATH with its kind kept' {
         $e = Get-Env
         Assert ($e.Config -eq $config -and (Test-Path -LiteralPath $e.Config)) "WEZTERM_CONFIG_FILE: $($e.Config)"

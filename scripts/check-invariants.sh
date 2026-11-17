@@ -388,6 +388,28 @@ check_ps_mise_comma_lists() {
   [ "$allgood" -eq 1 ] && ok "no bare a,b argument to mise in $n tracked PowerShell files"
 }
 
+# Windows PowerShell 5.1 whose parent isn't PowerShell (pwsh -> mise -> powershell, or
+# anything started from WSL) inherits pwsh 7's PSModulePath and then can't load its own
+# script modules: Get-FileHash and Get-AuthenticodeSignature are "not recognized"
+# (measured on the Windows host, 2026-11-13: wezterm-nightly and the fonts install both
+# failed under a wsu started that way). A script that calls either resets the path to
+# the machine value first. Tests are run by hand or CI with a clean path.
+check_ps_module_path() {
+  hdr "PowerShell: a script that hashes or checks a signature resets PSModulePath for 5.1"
+  local f allgood=1 n=0
+  local -a files
+  mapfile -t files < <(git ls-files '*.ps1' | grep -Ev '(^|/)(test-[^/]*|lib/test-helpers)\.ps1$')
+  for f in "${files[@]}"; do
+    grep -Eq '^[^#]*\b(Get-FileHash|Get-AuthenticodeSignature)\b' "$f" || continue
+    n=$((n + 1))
+    if ! grep -Fq "\$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')" "$f"; then
+      allgood=0
+      bad "$f calls Get-FileHash or Get-AuthenticodeSignature without resetting PSModulePath (see scripts/deepseek-harness.ps1)"
+    fi
+  done
+  [ "$allgood" -eq 1 ] && ok "$n script(s) that hash or check a signature reset PSModulePath under Windows PowerShell 5.1"
+}
+
 # Every pull of this checkout passes --prune, so the origin/* branches GitHub has deleted
 # (a merged PR's) don't pile up on the hosts. Each file must still have its pull.
 check_git_pull_prune() {
@@ -2553,6 +2575,7 @@ check_dotfiles_mode
 check_bom
 check_ps_variable_drive_refs
 check_ps_mise_comma_lists
+check_ps_module_path
 check_git_pull_prune
 check_sentinels
 check_tools_block

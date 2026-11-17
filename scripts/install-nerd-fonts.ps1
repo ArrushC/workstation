@@ -44,6 +44,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell 5.1 inherits pwsh 7's PSModulePath when its parent isn't PowerShell
+# (pwsh -> mise -> powershell: every post-tools task under a `wsu` typed in pwsh 7; also
+# anything started from WSL). pwsh's modules then come first and 5.1 can't load its own
+# (Get-FileHash "is not recognized"). Reset it to the machine value, as
+# scripts/deepseek-harness.ps1 does; check_ps_module_path holds this.
+if ($PSVersionTable.PSEdition -ne 'Core') {
+    $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+}
+
 $FontFamily = 'JetBrainsMonoNerdFontMono'
 $FontDir    = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
 $StampDir   = Join-Path $env:LOCALAPPDATA 'workstation'
