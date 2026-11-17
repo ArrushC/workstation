@@ -27,3 +27,7 @@ there before `wsu`. The repo's answer is the pin: graft 0.29.0 parses with WASM 
 nothing (branch `graft-0.29-wasm`). Once that reaches the host, the "keep both" rule above is
 moot; graft stays lazy until 0.29 has run on EL8, then it can go eager (lint's `lazy_exceptions`,
 README, CLAUDE.md).
+
+**2026-11-17:** the user ran `wsu` and `graft --version` on the EL8 host: 0.29.0 works there
+("has been done and works well"). graft is no longer lazy (branch `graft-eager`); the notes
+above about keeping the hand-installed copy and the empty 0.21.1 directory are history.

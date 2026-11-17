@@ -91,7 +91,7 @@ printf '%s\n' "$bootstrap_out" | sed 's/^/   /'
 #   `mise bootstrap` itself skips that service cleanly and exits 0;
 # - skipped: with sudo = "no" the dnf packages and /etc files are skipped on purpose
 #   (the system steps row above says so), and `mise bootstrap status` has no --skip;
-# - lazy: a `lazy = true` tool (graft) installs the first time its command runs, so
+# - lazy: a `lazy = true` tool (cht.sh) installs the first time its command runs, so
 #   it reads as missing until then. The names come from config.toml/config.linux.toml
 #   (`mise tool --json` reports lazy = null once a lock entry exists).
 lazy_tools=$(for f in "$root/config.toml" "$root/config.linux.toml"; do
