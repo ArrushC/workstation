@@ -2429,7 +2429,7 @@ packages = {p["name"]: p["version"] for p in locked["package"]}
 for dep in py["project"]["dependencies"]:
     name, version = dep.split("==")
     assert packages[name] == version, f"Python lock is stale: {name}"
-lazy_exceptions = {("config.linux.toml", "http:cht.sh"), ("config.linux.toml", "npm:@nanonets/graft")}
+lazy_exceptions = {("config.linux.toml", "http:cht.sh")}
 for f in ["config.toml", "config.linux.toml", "config.windows.toml"]:
     config = tomllib.loads((root / f).read_text())
     for name, value in config.get("tools", {}).items():
@@ -2450,7 +2450,7 @@ for part in py["project"]["requires-python"].split(","):
 for f, task in [("config.linux.toml", "tool-env"), ("config.windows.toml", "tool-env-win")]:
     config = tomllib.loads((root / f).read_text())
     assert task in config["bootstrap"]["hooks"]["post-tools"].split(), f"missing post-tools environment sync: {f}"
-print("locks match their manifests and tools.python; both OSes sync environments; full toolbelt installs except cht.sh/graft")
+print("locks match their manifests and tools.python; both OSes sync environments; full toolbelt installs except cht.sh")
 CHECK
   ); then ok "$out"; else bad "${out##*$'\n'}"; fi
 }
