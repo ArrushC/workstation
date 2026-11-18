@@ -230,7 +230,7 @@ refused="" # bumps reverted because `mise lock` refused the new version
 # locked mode (config.toml) that shim refuses a just-bumped uv the lock doesn't list
 # yet ("No version is set for shim: uv"; both platforms failed on 2026-10-05).
 lock_platform() {
-  local mise_env="$1" platform="$2" err tool reason tries=0
+  local mise_env="$1" platform="$2" err tool reason tries=0 waits=0 server_error
   err="$(mktemp)"
   for tool in $NO_SLSA; do
     [ -n "${bump_cur["$tool"]+x}" ] || continue
@@ -245,6 +245,19 @@ lock_platform() {
     fi
     cat "$err" >&2
     sed -i 's/\x1b\[[0-9;]*m//g' "$err"
+    # A server error isn't a refusal: on 2026-11-16 GitHub's release list for
+    # openai/codex returned 504 through mise's own three quick retries, and a
+    # good codex bump was dropped for the week. Wait and lock again, twice,
+    # before treating the failure as the tool's.
+    if [ "$waits" -lt 2 ] && grep -Eq 'HTTP status server error|\(transient\)' "$err"; then
+      waits=$((waits + 1))
+      printf '  ! mise lock hit a server error on %s — waiting %ss, then retrying (%s of 2)\n' \
+        "$platform" "${BUMP_LOCK_RETRY_WAIT:-60}" "$waits" >&2
+      sleep "${BUMP_LOCK_RETRY_WAIT:-60}"
+      continue
+    fi
+    server_error=""
+    grep -Eq 'HTTP status server error|\(transient\)' "$err" && server_error=1
     tool="$(sed -n 's/.*failed to resolve \([^ ]*\)@[^ ]* for .*/\1/p' "$err" | head -n1)"
     if [ -z "$tool" ] || [ -z "${bump_cur["$tool"]+x}" ] || [ "$tries" -ge 20 ]; then
       rm -f "$err"
@@ -255,6 +268,9 @@ lock_platform() {
     # so point the reader there.
     reason="$(sed -n 's/.*failed to resolve [^ ]* for [^;]*; \(.*\)/\1/p' "$err" | head -n1)"
     reason="${reason:-could not resolve it} on $platform; \`mise -v lock\` shows why"
+    [ -n "$server_error" ] &&
+      reason="a server error while resolving it on $platform, after two waits (the release may be fine: lock it by hand)"
+    waits=0
     if ! set_pin "${bump_file["$tool"]}" "$tool" "${bump_new["$tool"]}" "${bump_cur["$tool"]}"; then
       rm -f "$err"
       return 1
