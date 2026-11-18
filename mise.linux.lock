@@ -126,16 +126,16 @@ url = "https://github.com/cheat/cheat/releases/download/5.1.0/cheat-linux-amd64.
 url_api = "https://api.github.com/repos/cheat/cheat/releases/assets/356479028"
 
 [[tools."conda:ast-grep"]]
-version = "0.51.2"
+version = "0.51.3"
 backend = "conda:ast-grep"
-specifiers = ["0.51.2"]
+specifiers = ["0.51.3"]
 
 [tools."conda:ast-grep".options]
 channel = "conda-forge"
 
 [tools."conda:ast-grep"."platforms.linux-x64"]
-checksum = "sha256:f248aa050051ad2880fc1b14fcbdaffd3c5e7b2a7adf9f035b7f0b2f7f618cd5"
-url = "https://conda.anaconda.org/conda-forge/linux-64/ast-grep-0.51.2-he17df78_0.conda"
+checksum = "sha256:e6847ace9f09600b8734783084d037593976de30db7eb2fe419f6ab354065831"
+url = "https://conda.anaconda.org/conda-forge/linux-64/ast-grep-0.51.3-he17df78_0.conda"
 conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
     "libgcc-16.2.0-ha9f2e26_7",
@@ -515,17 +515,17 @@ url = "https://github.com/dalance/procs/releases/download/v0.14.12/procs-v0.14.1
 url_api = "https://api.github.com/repos/dalance/procs/releases/assets/457525859"
 
 [[tools."github:dathere/qsv"]]
-version = "28.0.0"
+version = "29.0.0"
 backend = "github:dathere/qsv"
-specifiers = ["28.0.0"]
+specifiers = ["29.0.0"]
 
 [tools."github:dathere/qsv".options]
 asset_pattern = "qsv-{version}-x86_64-unknown-linux-musl.zip"
 
 [tools."github:dathere/qsv"."platforms.linux-x64"]
-checksum = "sha256:66619384e9bf9585a4cac7b800690ebfd006ae3ae4f515c4f7c326fb4dab0c43"
-url = "https://github.com/dathere/qsv/releases/download/28.0.0/qsv-28.0.0-x86_64-unknown-linux-musl.zip"
-url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/700542161"
+checksum = "sha256:20439caaa82be28373051b70da2dc259d74b21b9ddc1c38bd1b34cee299cc435"
+url = "https://github.com/dathere/qsv/releases/download/29.0.0/qsv-29.0.0-x86_64-unknown-linux-musl.zip"
+url_api = "https://api.github.com/repos/dathere/qsv/releases/assets/749751248"
 
 [[tools."github:dj95/zjstatus"]]
 version = "0.25.0"
@@ -723,17 +723,17 @@ url = "https://github.com/tummychow/git-absorb/releases/download/0.9.0/git-absor
 url_api = "https://api.github.com/repos/tummychow/git-absorb/releases/assets/355709221"
 
 [[tools."github:walles/moor"]]
-version = "2.19.6"
+version = "2.19.7"
 backend = "github:walles/moor"
-specifiers = ["2.19.6"]
+specifiers = ["2.19.7"]
 
 [tools."github:walles/moor".options]
 asset_pattern = "moor-v{version}-linux-amd64"
 
 [tools."github:walles/moor"."platforms.linux-x64"]
-checksum = "sha256:48b82a5c8b8d59c8b88b4bbae496b8ac841ced82347951acda0176c8d6d31a96"
-url = "https://github.com/walles/moor/releases/download/v2.19.6/moor-v2.19.6-linux-amd64"
-url_api = "https://api.github.com/repos/walles/moor/releases/assets/689521847"
+checksum = "sha256:a801ef63117717a61d2b22d258ae0196fc399a87dc3f4770e029d5b1bc5a4988"
+url = "https://github.com/walles/moor/releases/download/v2.19.7/moor-v2.19.7-linux-amd64"
+url_api = "https://api.github.com/repos/walles/moor/releases/assets/747698938"
 
 [[tools."github:watchexec/watchexec"]]
 version = "2.8.0"
