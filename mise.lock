@@ -108,20 +108,20 @@ url = "https://github.com/junegunn/fzf/releases/download/v0.75.0/fzf-0.75.0-wind
 url_api = "https://api.github.com/repos/junegunn/fzf/releases/assets/720590885"
 
 [[tools.gh]]
-version = "2.103.3"
+version = "2.104.0"
 backend = "aqua:cli/cli"
-specifiers = ["2.103.3"]
+specifiers = ["2.104.0"]
 
 [tools.gh."platforms.linux-x64"]
-checksum = "sha256:4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d"
-url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/679195621"
+checksum = "sha256:98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e"
+url = "https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/740718892"
 provenance = "github-attestations"
 
 [tools.gh."platforms.windows-x64"]
-checksum = "sha256:98d0cfa794721665d7973dd728c78aff7bd836d58f10f6d7a03568eccb0a22e0"
-url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_windows_amd64.zip"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/679195750"
+checksum = "sha256:08c06d10482f12c478018cd259f64acbd5f625712cadf331aad19ba973c879e5"
+url = "https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/740719168"
 provenance = "github-attestations"
 
 [[tools."github:1jehuang/jcode"]]
@@ -195,47 +195,47 @@ url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpe
 url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
 
 [[tools."github:atuinsh/atuin"]]
-version = "18.24.6"
+version = "18.24.8"
 backend = "github:atuinsh/atuin"
-specifiers = ["18.24.6"]
+specifiers = ["18.24.8"]
 
 [tools."github:atuinsh/atuin".options]
 asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:atuinsh/atuin"."platforms.linux-x64"]
-checksum = "sha256:49b6e7a93cd6d8c77ee02bdb0eef0acff4c80ddaa0efb00c8179285771043698"
-url = "https://github.com/atuinsh/atuin/releases/download/v18.24.6/atuin-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/729825973"
+checksum = "sha256:f8dfc3f9d27cadc2e2c9d489394ef7c568291e2382a4d184865701bf1a4ac30a"
+url = "https://github.com/atuinsh/atuin/releases/download/v18.24.8/atuin-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/741927292"
 provenance = "github-attestations"
 
 [[tools."github:atuinsh/atuin"]]
-version = "18.24.6"
+version = "18.24.8"
 backend = "github:atuinsh/atuin"
-specifiers = ["18.24.6"]
+specifiers = ["18.24.8"]
 
 [tools."github:atuinsh/atuin".options]
 asset_pattern = "atuin-x86_64-pc-windows-msvc.zip"
 
 [tools."github:atuinsh/atuin"."platforms.windows-x64"]
-checksum = "sha256:d500e0dc85a85bb69513da6c9d933cf15dbeb2497ab404e0189ba47a5d829fe9"
-url = "https://github.com/atuinsh/atuin/releases/download/v18.24.6/atuin-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/729825916"
+checksum = "sha256:f6ff4e13feed0e49853618ab5f1ec849ccbb34dcab2df711c85d5f0333d8e717"
+url = "https://github.com/atuinsh/atuin/releases/download/v18.24.8/atuin-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/741927272"
 provenance = "github-attestations"
 
 [[tools."github:can1357/oh-my-pi"]]
-version = "18.18.8"
+version = "18.20.2"
 backend = "github:can1357/oh-my-pi"
-specifiers = ["18.18.8"]
+specifiers = ["18.20.2"]
 
 [tools."github:can1357/oh-my-pi"."platforms.linux-x64"]
-checksum = "sha256:bfb7a85cceade6e5580fad59ff87570b4de50039b0428ed30339cf4286bd052f"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.18.8/omp-linux-x64"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/733978600"
+checksum = "sha256:f34cfa57311ed67a45f01bb1a21519cad4d74875d181316f00fa0cd6a4abcaaa"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.20.2/omp-linux-x64"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/748638308"
 
 [tools."github:can1357/oh-my-pi"."platforms.windows-x64"]
-checksum = "sha256:88fe3410b3daefd7435a5915805563f3f9058ad1841de622f40bd4247601072a"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.18.8/omp-windows-x64.exe"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/733978599"
+checksum = "sha256:6dbb8ac30106f163fcb61d818e6756799a816cb58d63fc3e11a0d7af56abfb90"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v18.20.2/omp-windows-x64.exe"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/748638314"
 
 [[tools."github:carapace-sh/carapace-bin"]]
 version = "1.8.0"
@@ -520,19 +520,19 @@ url = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x
 url_api = "https://api.github.com/repos/nushell/nushell/releases/assets/433389998"
 
 [[tools.opencode]]
-version = "2.2.7"
+version = "2.3.0"
 backend = "aqua:anomalyco/opencode"
-specifiers = ["2.2.7"]
+specifiers = ["2.3.0"]
 
 [tools.opencode."platforms.linux-x64"]
-checksum = "sha256:89a6cee227b54bc011179c528a5e63176032462b1a5e21723b616801cddc2ca7"
-url = "https://github.com/anomalyco/opencode/releases/download/v2.2.7/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/731038589"
+checksum = "sha256:fc0f81522aceeabac47693d88389efa2bc517ce74c2c38fd6967819fcc6e4d3b"
+url = "https://github.com/anomalyco/opencode/releases/download/v2.3.0/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/742965383"
 
 [tools.opencode."platforms.windows-x64"]
-checksum = "sha256:91398e0e2c2bc72f6c93dbdae426a0710884ed3277a08558200753c7a995daa8"
-url = "https://github.com/anomalyco/opencode/releases/download/v2.2.7/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/731038629"
+checksum = "sha256:2e14eee53f4abad803d55fdc472c1b12dc3802d687ae204f81e7908bd2ab1895"
+url = "https://github.com/anomalyco/opencode/releases/download/v2.3.0/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/742965429"
 
 [[tools.process-compose]]
 version = "1.124.0"
@@ -633,20 +633,20 @@ url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/
 provenance = "github-attestations"
 
 [[tools.uv]]
-version = "0.13.7"
+version = "0.13.8"
 backend = "aqua:astral-sh/uv"
-specifiers = ["0.13.7"]
+specifiers = ["0.13.8"]
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/704009823"
+checksum = "sha256:5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/740313966"
 provenance = "github-attestations"
 
 [tools.uv."platforms.windows-x64"]
-checksum = "sha256:0cdc5b38fe5a8168ed6a25814f5ba43c21d313dd3187314fccb37b7cec46e021"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/704009796"
+checksum = "sha256:529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/740313927"
 provenance = "github-attestations"
 
 [[tools.zoxide]]
