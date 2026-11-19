@@ -6,6 +6,7 @@ real file:// repository, and `gh` is a stand-in that records what would be poste
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import os
@@ -777,6 +778,22 @@ class ConversationReview(Conversation):
         self.assertEqual(self.posts(), [])
         new = self.working()
         self.assertIsNone(pub.note_due(new, "ack"))
+
+    def test_a_request_is_acknowledged_the_moment_it_is_queued(self) -> None:
+        # Seen on real GitHub: a job that asked its question within serve's 30 s was never acknowledged.
+        self.settings(mode="auto", ack=True)
+        from wslib import agent_inbox
+        c = agent_inbox.Candidate(cid=f"gh:{SLUG}:c4242", source="github", repo="~/src/proj", explicit=True,
+                                  author="ArrushC", title=f"{SLUG}#7: do it", text="/agent do it",
+                                  base={"commit": self.head, "branch": "main"}, prompt="do it",
+                                  thread=f"gh:{SLUG}#7", url="")
+        line = serve._queue(c, None, "")
+        self.assertIn("queued job", line)
+        (body,) = self.posts()
+        self.assertTrue(body.startswith("Picked up by an agent (ws-agent job `"), body)
+        self.pueue_status({}, group="Paused")
+        serve._queue(dataclasses.replace(c, cid=f"gh:{SLUG}:c4243", thread=f"gh:{SLUG}#8"), None, "")
+        self.assertEqual(len(self.posts()), 1)   # a paused queue says nothing
 
     def test_a_job_that_already_finished_is_not_acknowledged(self) -> None:
         self.settings(mode="auto", comment=True, ack=True)

@@ -206,9 +206,25 @@ def _queue(c: agent_inbox.Candidate, decision: dict[str, object] | None, capped:
     q = agent.queue_job(core.expand(c.repo), c.title, c.prompt, origin=c.cid, base=c.base)
     if q.job is None:
         return _inbox(c, _held(c, decision, f"couldn't queue it: {q.error}"), q.error)
+    said = ""
     if c.thread:
         agent_sources.remember_thread(c.thread, q.job.id)
-    return f"{c.cid}: queued job {q.job.id}"
+        said = _acknowledge(q.job)
+    return f"{c.cid}: queued job {q.job.id}" + (f"; {said}" if said else "")
+
+
+def _acknowledge(job: jobs.Job) -> str:
+    """Say once, in the thread that asked, that the request is now a job: at once, not on the next
+    tick (a job can reach its question or its result sooner than that, and would never be
+    acknowledged). The converse step is the fallback, e.g. after a paused queue."""
+    from . import agent_publish
+    try:
+        q = jobs.pueue_status()
+        if q is None or q.group == "Paused" or agent_publish.note_due(job, "ack") is not None:
+            return ""
+        return agent_publish.post_note(job, "ack")
+    except Exception as e:  # noqa: BLE001 - the job is queued either way
+        return f"{job.id}: ack: {type(e).__name__}: {e}"
 
 
 def _same_rule(said: object, rules: tuple[str, ...]) -> str | None:
