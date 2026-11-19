@@ -1262,16 +1262,23 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-lint-root.sh, scripts/test-bump-lock-retry.sh, scripts/test-ws.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-lint-root.sh, scripts/test-bump-lock-retry.sh, scripts/test-ci-scope.sh, scripts/test-ws.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-lint-root.sh scripts/test-bump-lock-retry.sh scripts/test-ws.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-lint-root.sh scripts/test-bump-lock-retry.sh scripts/test-ci-scope.sh scripts/test-ws.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
+      continue
+    fi
+    # lint.yml sets this when no changed path reaches the ws suite (scripts/ci-scope.sh).
+    if [ "$t" = scripts/test-ws.sh ] && [ -n "${CHECK_INVARIANTS_SKIP_WS:-}" ]; then
+      note "ws suite skipped: CHECK_INVARIANTS_SKIP_WS is set (CI: no changed path reaches it)"
       continue
     fi
     # shellcheck disable=SC2086  # $t carries the script and its flag
     if out="$(env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE bash $t 2>&1)"; then
       ok "$(printf '%s\n' "$out" | tail -1 | sed -E 's/\x1b\[[0-9;]*m//g; s/^[^[:alnum:]]+//')"
+      # What the ws suite could not test on this host (no svn, bwrap, fzf, pueue, ...).
+      [ "$t" != scripts/test-ws.sh ] || while IFS= read -r out; do note "ws suite $out"; done < <(printf '%s\n' "$out" | sed -n 's/^  \(skipped [0-9]*: .*\)$/\1/p')
     else
       bad "${t%% *} failed:"
       # FAIL and ERROR lines with what follows them (a unittest traceback names the test and the
@@ -2549,6 +2556,50 @@ PY
   [ "$errs" -eq 0 ] && ok "ws, wsh and wsa in zshrc/bashrc (same ws body), config.nu and the PowerShell profile call scripts/ws/ws.py"
 }
 
+# Every test script is run by something, every PowerShell script is linted, and lint.yml's
+# jobs take their orders from the scope job: a new test or script can't sit outside CI unseen.
+check_ci_coverage() {
+  hdr "CI coverage (every test script runs, every .ps1 is linted, lint.yml's jobs are scoped)"
+  local wf=.github/workflows/lint.yml f errs=0 n=0 job
+  while IFS= read -r f; do
+    n=$((n + 1))
+    case "$f" in
+    scripts/test-*.ps1)
+      grep -qF "run: ./$f" "$wf" || {
+        bad "$f: no step in $wf runs it (windows-http: Windows PowerShell 5.1 and pwsh)"
+        errs=$((errs + 1))
+      }
+      ;;
+    *)
+      grep -qF "$f" "$wf" scripts/check-invariants.sh || {
+        bad "$f: neither $wf nor check-invariants.sh runs it"
+        errs=$((errs + 1))
+      }
+      ;;
+    esac
+  done < <(git ls-files 'scripts/test-*' 'scripts/lib/test-*.sh' '.claude/hooks/test-*.sh')
+  while IFS= read -r f; do
+    n=$((n + 1))
+    grep -qF "'$f'" scripts/check-ps.ps1 || {
+      bad "$f: not in scripts/check-ps.ps1's \$targets (PSScriptAnalyzer never sees it)"
+      errs=$((errs + 1))
+    }
+  done < <(git ls-files '*.ps1')
+  # Each job but scope waits for it and reads one of its outputs, failing open.
+  for job in dependency-environments:tool_env invariants:invariants powershell:powershell windows-http:windows templates:templates; do
+    if ! sed -n "/^  ${job%%:*}:\$/,/^  [a-z-]*:\$/p" "$wf" | sed -n '2,3p' | tr '\n' ' ' |
+      grep -qF "needs: scope     if: \${{ !cancelled() && needs.scope.outputs.${job##*:} != 'false' }}"; then
+      bad "$wf: job ${job%%:*} must start with \`needs: scope\` and \`if: \${{ !cancelled() && needs.scope.outputs.${job##*:} != 'false' }}\`"
+      errs=$((errs + 1))
+    fi
+  done
+  if [ "$(sed -n '/^jobs:$/,$p' "$wf" | grep -cE '^  [a-z-]+:$')" != 6 ]; then
+    bad "$wf: a job was added or removed; give it a scope in scripts/ci-scope.sh and a line in check_ci_coverage"
+    errs=$((errs + 1))
+  fi
+  [ "$errs" -eq 0 ] && ok "$n test and PowerShell scripts are all run or linted; lint.yml's 5 jobs follow scripts/ci-scope.sh"
+}
+
 run_parallel() {
   local d c
   d=$(mktemp -d)
@@ -2600,6 +2651,7 @@ check_wezterm_term
 check_claude_config
 check_disk_budget
 check_layout
+check_ci_coverage
 # The test suites and linters take most of the time and share nothing.
 run_parallel check_lsp_plugin check_claude_mods check_mise_install_lib check_bootstrap check_self_tests check_shellcheck check_shfmt check_gitleaks
 echo
