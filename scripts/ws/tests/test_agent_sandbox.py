@@ -277,6 +277,21 @@ class ReadScope(Sandbox):
 
 
 @unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
+class WhatTheJobCannotChange(Sandbox):
+    def test_the_private_directory_is_out_of_the_jobs_reach(self) -> None:
+        # The publish record decides what serve pushes and where; the job's own directory is writable
+        # from in here, so the record lives in a directory that isn't.
+        record = self.write(jobs.private_dir("aaa111") / "published.json", "{}")
+        code = (f"import os\np = {str(record)!r}\n"
+                "try:\n    open(p, 'w').write('forged')\nexcept OSError:\n    pass\n"
+                "try:\n    os.makedirs(os.path.dirname(p), exist_ok=True); open(p + '.new', 'w').write('x')\n"
+                "except OSError:\n    pass\n")
+        self.run_in(code)
+        self.assertEqual(record.read_text(), "{}")
+        self.assertEqual([f.name for f in record.parent.iterdir()], ["published.json"])
+
+
+@unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
 class NothingOutlivesTheSandbox(Sandbox):
     def test_a_process_left_behind_dies_with_the_sandbox(self) -> None:
         # A check runs the job's code with the job directory writable. A daemon it leaves must not

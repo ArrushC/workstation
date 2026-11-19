@@ -342,11 +342,17 @@ def _publish(args: argparse.Namespace) -> int:
     except agent_publish.PublishError as e:
         _err(str(e))
         return 1
-    if not args.dry_run and agent_publish.update_due(job, auto=False, allow_workflows=args.allow_workflows) is None:
-        lines.append(agent_publish.push_update(job, auto=False, allow_workflows=args.allow_workflows))
+    if agent_publish.update_due(job, auto=False, allow_workflows=args.allow_workflows) is None:
+        if args.dry_run:
+            lines.append(f"{job.id}: would push an update: one more commit on ws-agent/{job.id}")
+        else:
+            try:
+                lines.append(agent_publish.push_update(job, auto=False, allow_workflows=args.allow_workflows))
+            except agent_publish.PublishError as e:
+                lines.append(f"{job.id}: update not pushed: {e}")
     for ln in lines:
         print(ln)
-    done = any(": published " in ln or ": would publish " in ln or ": pushed update " in ln for ln in lines)
+    done = any(w in ln for ln in lines for w in (": published ", ": would publish ", ": pushed update ", ": would push "))
     return 0 if done else 3
 
 

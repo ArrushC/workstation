@@ -271,7 +271,7 @@ def _follow(job_id: str, text: str, login: str) -> str:
     today = core.now_iso()[:10]
     got = sum(1 for m in jobs.thread(job) if str(m.get("from", "")).startswith("gh:") and str(m.get("ts", "")).startswith(today))
     if got >= FOLLOW_UPS_A_DAY:
-        mark = jobs.job_dir(job.id) / "follow-limit"
+        mark = jobs.private_dir(job.id) / "follow-limit"
         if not (mark.exists() and mark.read_text(encoding="utf-8").strip() == today):
             mark.write_text(today + "\n", encoding="utf-8")
             agent_events.notify(f"{job.id}: {FOLLOW_UPS_A_DAY} comments reached it today; later ones today aren't "
@@ -288,7 +288,7 @@ def _stop(job_id: str, login: str) -> str:
         job = jobs.load(job_id)
     except KeyError:
         return f"stop for {job_id}: no such job"
-    (jobs.job_dir(job.id) / agent_publish.STOP_MARK).write_text(core.now_iso() + "\n", encoding="utf-8")
+    (jobs.private_dir(job.id) / agent_publish.STOP_MARK).write_text(core.now_iso() + "\n", encoding="utf-8")
     code, msg = agent.cancel_job(job, even_finished=True)   # the converse step says so in the thread
     return f"stop for {job_id} (gh:{login}): " + (msg.splitlines()[0] if msg else f"exit {code}")
 
@@ -429,6 +429,11 @@ def _update_prs(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] |
             agent_events.notify(f"{j.id} updated its pull request")
         elif "theirs now" in line:
             agent_events.notify(f"{j.id}: its branch has someone else's commits; nothing more is pushed to it")
+        elif ": update failed: " in line and agent_publish.update_gave_up(j):
+            agent_events.notify(f"{j.id}: its update couldn't be pushed (ws-agent publish {j.id} tries again)")
+        if "its note failed" in line:
+            agent_events.notify(f"{j.id}: a comment to its thread may not have been posted; look there, then "
+                                f"ws-agent publish {j.id} --seen")
     return out
 
 

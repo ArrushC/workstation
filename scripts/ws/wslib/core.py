@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import contextlib
 import os
 import shlex
 import shutil
@@ -139,6 +140,23 @@ def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:
     if mode is not None and not IS_WINDOWS:
         os.chmod(tmp, mode)  # noqa
     os.replace(tmp, path)
+
+
+def write_in(directory: Path, name: str, data: bytes) -> None:
+    """Write `directory/name` where someone untrusted can write too (a job's own directory, from
+    inside its sandbox): neither the directory nor the file may be a link, so nothing is ever
+    written through one to a file elsewhere. Raises OSError when either is."""
+    with contextlib.suppress(FileExistsError):
+        os.mkdir(directory, 0o700)
+    dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(name, dir_fd=dfd)      # a link there is removed, never followed
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dfd)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    finally:
+        os.close(dfd)
 
 
 def private_dir(path: Path) -> Path:

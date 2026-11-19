@@ -80,6 +80,7 @@ class Publish:
     questions: bool = False   # GitHub, auto only: a job's question as a comment on the thread that asked
     notes_since: str = ""     # when ack or questions was switched on: older jobs get neither
     pr_updates: bool = False  # GitHub: later work as new commits on the job's own ws-agent/<id> branch
+    updates_since: str = ""   # when pr_updates was switched on with auto: work finished earlier is never pushed by serve
 
 
 def svn_branch_problem(path: str, watch: Watch | None) -> str | None:
@@ -194,7 +195,7 @@ def _publish(t: object) -> Publish:
     return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
                    t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")),
                    str(t.get("since", "")), t.get("ack") is True, t.get("questions") is True,
-                   str(t.get("notes_since", "")), t.get("pr_updates") is True)
+                   str(t.get("notes_since", "")), t.get("pr_updates") is True, str(t.get("updates_since", "")))
 
 
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
@@ -300,7 +301,8 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
         out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
                           "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch,
                           "since": r.publish.since, "ack": r.publish.ack, "questions": r.publish.questions,
-                          "notes_since": r.publish.notes_since, "pr_updates": r.publish.pr_updates}
+                          "notes_since": r.publish.notes_since, "pr_updates": r.publish.pr_updates,
+                          "updates_since": r.publish.updates_since}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
@@ -402,7 +404,10 @@ def set_publish(root: Path, pub: Publish) -> Repo:
     if pub.mode == "auto" and (pub.ack or pub.questions):
         kept = was.mode == "auto" and was.notes_since and was.ack >= pub.ack and was.questions >= pub.questions
         notes = was.notes_since if kept else core.now_iso()
-    return _set_source(root, publish=dataclasses.replace(pub, since=since, notes_since=notes))
+    updates = ""
+    if pub.mode == "auto" and pub.pr_updates:
+        updates = was.updates_since if was.mode == "auto" and was.pr_updates and was.updates_since else core.now_iso()
+    return _set_source(root, publish=dataclasses.replace(pub, since=since, notes_since=notes, updates_since=updates))
 
 
 def set_github(root: Path, src: GitHubSource | None) -> Repo:

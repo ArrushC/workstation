@@ -515,7 +515,8 @@ class PullRequest(Conversation):
         self.answer("pulls/8", {"number": 8, "state": "closed", "merged": True})
         self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], [(job.id, "merged", "", "ended")]))
         self.answer("pulls/8", {"number": 8, "state": "closed", "merged": False})
-        self.assertEqual(src.poll_github(self.following(), self.t0 + 100), ([], [(job.id, "closed", "", "ended")]))
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1 + src.PR_READ_EVERY),
+                         ([], [(job.id, "closed", "", "ended")]))
 
     def test_failed_checks_on_the_pushed_commit_are_told_once_and_twice_at_most(self) -> None:
         job = self.delivered()
@@ -525,18 +526,89 @@ class PullRequest(Conversation):
         ok = {"id": 56, "name": "lint", "status": "completed", "conclusion": "success"}
         self.answer(f"commits/{self.SHA}/check-runs", {"check_runs": [dict(run, status="completed", conclusion="failure"), ok]})
         self.write(self.gx / f"repos_{SLUG.replace('/', '_')}_actions_jobs_55_logs.json", "line 1\nAssertionError: boom\n")
-        _, follow = src.poll_github(self.following(), self.t0 + 100)
+        _, follow = src.poll_github(self.following(), self.t0 + 1 + src.PR_READ_EVERY)
         ((jid, text, login, kind),) = follow
         self.assertEqual((jid, login, kind), (job.id, "", "ci"))
         self.assertIn("unit tests", text)
         self.assertNotIn("lint", text)
         self.assertIn("AssertionError: boom", (jobs.job_dir(job.id) / "input" / "ci-1.log").read_text())
-        self.assertEqual(src.poll_github(self.following(), self.t0 + 200), ([], []))   # once per commit
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1 + 2 * src.PR_READ_EVERY), ([], []))   # once per commit
         for n, sha in enumerate(("b" * 40, "c" * 40)):
-            src.remember_pr(SLUG, job.id, 8, sha)
+            src.remember_pr(SLUG, job.id, 8, sha)   # a new commit is looked at on the next poll
             self.answer(f"commits/{sha}/check-runs", {"check_runs": [dict(run, status="completed", conclusion="failure")]})
-            _, follow = src.poll_github(self.following(), self.t0 + 300 + 100 * n)
+            _, follow = src.poll_github(self.following(), self.t0 + 2 * src.PR_READ_EVERY + 100 * (n + 1))
             self.assertEqual(len(follow), 1 if n == 0 else 0, sha)   # two rounds, then it is the person's
+
+
+class PullRequestReview(PullRequest):
+    """One test per finding of the review of part B."""
+
+    def failing(self) -> None:
+        self.answer(f"commits/{self.SHA}/check-runs", {"check_runs": [
+            {"id": 55, "name": "unit tests", "status": "completed", "conclusion": "failure"}]})
+        self.write(self.gx / f"repos_{SLUG.replace('/', '_')}_actions_jobs_55_logs.json", "; touch /tmp/pwned\n")
+
+    def test_a_ci_log_is_never_written_through_a_link_the_job_planted(self) -> None:
+        job = self.delivered()   # the job's directory is writable from inside its sandbox
+        victim = self.write(self.root / "victim.rc", "the person's file\n")
+        inp = jobs.job_dir(job.id) / "input"
+        inp.mkdir(parents=True)
+        (inp / "ci-1.log").symlink_to(victim)
+        self.failing()
+        src.poll_github(self.following(), self.t0 + 1)
+        self.assertEqual(victim.read_text(), "the person's file\n")
+        self.assertFalse((inp / "ci-1.log").is_symlink())
+        self.assertIn("touch", (inp / "ci-1.log").read_text())
+
+    def test_nor_into_a_directory_the_job_swapped_for_a_link(self) -> None:
+        job = self.delivered()
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        (jobs.job_dir(job.id) / "input").symlink_to(elsewhere, target_is_directory=True)
+        self.failing()
+        _, follow = src.poll_github(self.following(), self.t0 + 1)
+        self.assertEqual(list(elsewhere.iterdir()), [])
+        self.assertEqual([k for *_, k in follow], ["ci"])   # it is still told; there is just no log file
+
+    def test_a_review_still_being_written_is_not_swallowed(self) -> None:
+        job = self.delivered()
+        mine = {"id": 71, "state": "PENDING", "body": "Needs a test.", "user": {"login": "ArrushC", "type": "User"}}
+        self.answer("pulls/8/reviews", [mine])
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], []))
+        self.answer("pulls/8/reviews", [dict(mine, state="CHANGES_REQUESTED", submitted_at=iso(self.t0 + 50))])
+        _, follow = src.poll_github(self.following(), self.t0 + 400)
+        self.assertEqual(follow, [(job.id, "Review (changes requested):\nNeeds a test.", "ArrushC", "tell")])
+
+    def test_an_old_review_never_comes_back(self) -> None:
+        self.delivered()
+        self.answer("pulls/8/reviews", [{"id": 71, "state": "COMMENTED", "body": "Once.", "submitted_at": iso(self.t0 + 6),
+                                         "user": {"login": "ArrushC", "type": "User"}}])
+        self.assertEqual(len(src.poll_github(self.following(), self.t0 + 1)[1]), 1)
+        # a busy repository: hundreds of other rows since then
+        src.patch_source(f"gh:{SLUG}", {"handled": [f"c{n}" for n in range(src.HANDLED_KEPT + 50)]})
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 400), ([], []))
+
+    def test_the_pull_request_is_found_whatever_the_case_of_its_address(self) -> None:
+        job = self.live_job()
+        src.remember_pr(SLUG.swapcase(), job.id, 8, self.SHA)
+        self.assertEqual(src.source_state()[f"gh:{SLUG}"]["prs"][job.id]["number"], 8)
+        self.assertNotIn(f"gh:{SLUG.swapcase()}", src.source_state())
+
+    def test_a_quiet_pull_request_is_read_every_few_minutes_not_every_poll(self) -> None:
+        self.delivered()
+
+        def reads() -> int:
+            return sum(1 for c in self.gh_calls() if any(a.endswith("/pulls/8") for a in c))
+        src.poll_github(self.following(), self.t0 + 1)
+        src.poll_github(self.following(), self.t0 + 100)
+        src.poll_github(self.following(), self.t0 + 200)
+        self.assertEqual(reads(), 1)
+        self.comment(body="Looks fine.", number=8, cid=950, at=self.t0 + 210)   # something happened on it
+        src.poll_github(self.following(), self.t0 + 300)
+        self.assertEqual(reads(), 2)
+        self.answer("issues/comments", [])
+        src.poll_github(self.following(), self.t0 + 300 + src.PR_READ_EVERY)
+        self.assertEqual(reads(), 3)
 
 
 if __name__ == "__main__":

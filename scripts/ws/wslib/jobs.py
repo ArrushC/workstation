@@ -170,12 +170,19 @@ def exit_info(job: Job) -> dict[str, object] | None:
 @contextlib.contextmanager
 def _thread_lock(job: Job) -> Iterator[None]:
     core.private_dir(job_dir(job.id))
-    fh = open(job_dir(job.id) / "thread.lock", "a+")  # noqa: SIM115 - held for the with-block
+    fh = os.fdopen(os.open(job_dir(job.id) / "thread.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600), "a+")
     try:
         fcntl.flock(fh, fcntl.LOCK_EX)
         yield
     finally:
         fh.close()
+
+
+def private_dir(job_id: str) -> Path:
+    """Where ws-agent keeps what a job must not be able to change or redirect: its publish record
+    and lock, temporary indexes and checkouts, marks. The job's own directory is writable from
+    inside its sandbox (a check runs the repository's code there); this one is outside it."""
+    return core.private_dir(core.state_dir() / "agent-private" / job_id)
 
 
 def _thread_path(job: Job) -> Path:
@@ -200,7 +207,9 @@ def thread(job: Job) -> list[dict[str, object]]:
 
 def post(job: Job, sender: str, text: str, *, attempt: int | None = None) -> None:
     msg = {"id": secrets.token_hex(4), "ts": core.now_iso(), "from": sender, "text": text, "attempt": attempt}
-    with _thread_lock(job), open(_thread_path(job), "a", encoding="utf-8") as fh:
+    # never through a link the job planted in its own directory
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+    with _thread_lock(job), os.fdopen(os.open(_thread_path(job), flags, 0o600), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(msg) + "\n")
 
 

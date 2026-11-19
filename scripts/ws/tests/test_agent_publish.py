@@ -30,8 +30,10 @@ n=$(wc -l <"$d/argv.log" | tr -d ' ')
 case "$1 $2" in
 "api --method") cat >"$d/body.$n"; [ -f "$d/post-then-fail" ] && { echo "HTTP 502" >&2; exit 1; }; echo "{\"id\": 7000$n, \"html_url\": \"https://github.com/ArrushC/proj/issues/7#issuecomment-1\"}" ;;
 "pr create") cat >"$d/pr-body"; [ -f "$d/pr-fails" ] && { echo "pull request create failed" >&2; exit 1; }
+  while [ $# -gt 1 ]; do [ "$1" = --head ] && printf '%s' "$2" >"$d/pr-head"; shift; done
   echo "https://github.com/ArrushC/proj/pull/8" ;;
-api\ repos/*/pulls/*) [ -f "$d/pulls-fail" ] && { echo "HTTP 502 SERVER WORDS" >&2; exit 1; }; cat "$d/pulls-ref" 2>/dev/null || echo "" ;;
+api\ repos/*/pulls/*) case "$*" in *.state*) if [ -f "$d/pull-state" ]; then cat "$d/pull-state"; else printf 'open\t%s\tArrushC/proj\tArrushC/proj\n' "$(cat "$d/pr-head")"; fi; exit 0 ;; esac
+   [ -f "$d/pulls-fail" ] && { echo "HTTP 502 SERVER WORDS" >&2; exit 1; }; cat "$d/pulls-ref" 2>/dev/null || echo "" ;;
 api\ repos/*) echo main ;;
 *) exit 1 ;;
 esac
@@ -189,7 +191,7 @@ class Publish(AgentScratch):
         self.assertTrue((self.gx / "pr-body").read_text().startswith("Draft, made by an agent"))
         self.assertIn("Draft pull request: https://github.com/ArrushC/proj/pull/8",
                       json.loads(next(self.gx.glob("body.*")).read_text())["body"])   # the comment links it
-        self.assertFalse((jobs.job_dir(j.id) / "result" / "publish.index").exists())
+        self.assertFalse((jobs.private_dir(j.id) / "publish.index").exists())
 
     def test_an_existing_branch_is_never_written(self) -> None:
         self.settings(mode="manual", draft_pr=True)
@@ -326,7 +328,7 @@ class PublishSvn(AgentScratch):
         self.assertEqual(svn("cat", f"{self.url}/trunk/a.txt"), "a")   # trunk is untouched
         self.assertEqual(svn("info", "--show-item", "last-changed-revision", f"{self.url}/trunk"), "1")
         self.assertEqual(svn("status", "-q", cwd=self.wc), "")          # so is the person's working copy
-        self.assertFalse((jobs.job_dir(j.id) / "publish-wc").exists())
+        self.assertFalse((jobs.private_dir(j.id) / "publish-wc").exists())
         self.assertIn("already published", pub.publish(j, auto=False)[0])
 
     def test_the_branch_parent_cant_be_the_jobs_own_tree(self) -> None:
@@ -628,7 +630,7 @@ class DeferredMinorsSvn(PublishSvn):
         j = self.job()
         self.assertIn("svn_branch failed", pub.publish(j, auto=False)[0])
         self.assertEqual((pub.published(j, "svn_branch"), svn("info", "--show-item", "revision", self.url)), ("", "1"))
-        self.assertFalse((jobs.job_dir(j.id) / "publish-wc").exists())
+        self.assertFalse((jobs.private_dir(j.id) / "publish-wc").exists())
         hook.unlink()
         self.assertIn("published svn_branch", pub.publish(j, auto=False)[0])   # and it can be tried again
 
@@ -875,7 +877,7 @@ class PullRequestUpdates(Publish):
         j = self.delivered()
         st = agent_sources.source_state()[f"gh:{SLUG}"]
         self.assertEqual(st["threads"]["#8"], j.id)
-        self.assertEqual(st["prs"][j.id], {"number": 8, "commit": self.tip(j)})
+        self.assertEqual((st["prs"][j.id]["number"], st["prs"][j.id]["commit"]), (8, self.tip(j)))
         self.assertIn("delivered", self.cli("ls", "--all")[1])
 
     def test_new_work_is_one_more_commit_on_its_own_branch(self) -> None:
@@ -945,4 +947,87 @@ class PullRequestUpdates(Publish):
             serve._poll_github(reg.find(self.repo), time.time())
         tell.assert_called_once()
         self.assertEqual(tell.call_args.kwargs["sender"], "gh:checks")
+
+
+class PullRequestUpdatesReview(PullRequestUpdates):
+    """One test per finding of the review of part B."""
+
+    def test_the_publish_record_is_out_of_the_jobs_reach(self) -> None:
+        j = self.delivered()
+        inside = jobs.job_dir(j.id) / "result" / "published.json"
+        self.assertFalse(inside.exists())
+        real = pub.record(j)["draft_pr"]
+        self.write(inside, json.dumps({"draft_pr": {"url": f"https://github.com/{SLUG}/pull/99", "commit": self.head,
+                                                    "updates": 0, "theirs": False}}))
+        self.assertEqual(pub.record(j)["draft_pr"], real)   # a forgery there is never read
+
+    def test_the_temporary_index_is_not_where_the_job_can_plant_a_link(self) -> None:
+        self.settings(mode="manual", draft_pr=True)
+        j = self.job()
+        victim = self.write(self.root / "victim.index", "the person's file\n")
+        (jobs.job_dir(j.id) / "result" / "publish.index").symlink_to(victim)
+        self.assertIn("published draft_pr", pub.publish(j, auto=False)[0])
+        self.assertEqual(victim.read_text(), "the person's file\n")
+
+    def test_a_push_that_landed_but_wasnt_recorded_is_finished_not_called_theirs(self) -> None:
+        j = self.delivered()
+        self.rework(j)
+        with unittest.mock.patch.object(agent_sources, "remember_pr", side_effect=RuntimeError("killed here")):
+            lines = serve.tick(time.time())                    # the push went out; nothing after it was saved
+        self.assertTrue(any("killed here" in ln for ln in lines), lines)
+        pushed = self.tip(j)
+        lines = serve.tick(time.time())
+        self.assertFalse(any("theirs" in ln for ln in lines), lines)
+        rec = pub.record(j)["draft_pr"]
+        self.assertEqual((rec["commit"], rec["updates"], rec.get("theirs")), (pushed, 1, None))
+        self.assertEqual(self.tip(j), pushed)                  # and nothing was pushed twice
+
+    def test_an_update_that_keeps_failing_is_left_to_the_person_with_one_notice(self) -> None:
+        j = self.delivered()
+        first = self.tip(j)
+        hook = self.repo / ".git" / "hooks" / "pre-push"
+        self.write(hook, f"#!/bin/sh\necho x >>{self.root}/pushes\nexit 1\n")
+        hook.chmod(0o755)
+        self.rework(j)
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            for _ in range(pub.MAX_TRIES + 3):
+                serve.tick(time.time())
+        self.assertEqual(len((self.root / "pushes").read_text().split()), pub.MAX_TRIES)
+        self.assertEqual((self.tip(j), len(notices)), (first, 1), notices)
+
+    def test_automatic_updates_keep_the_automatic_rules(self) -> None:
+        j = self.delivered()
+        self.rework(j)
+        f = jobs.job_dir(j.id) / "result" / "exit.json"
+        info = json.loads(f.read_text())
+        f.write_text(json.dumps({**info, "review": "concerns"}))
+        self.assertIn("concerns", pub.update_due(j, auto=True) or "")
+        f.write_text(json.dumps({**info, "finished": "2000-01-01T00:00:00+00:00"}))
+        self.assertIn("before", pub.update_due(j, auto=True) or "")
+
+    def test_nothing_is_pushed_to_a_pull_request_that_is_closed_or_not_its_own(self) -> None:
+        j = self.delivered()
+        first = self.tip(j)
+        self.rework(j)
+        for state in (f"closed\tws-agent/{j.id}\t{SLUG}\t{SLUG}", f"open\tsomeone-elses\t{SLUG}\t{SLUG}",
+                      f"open\tws-agent/{j.id}\tfork/proj\t{SLUG}"):
+            self.write(self.gx / "pull-state", state + "\n")
+            self.assertIn("not pushed", pub.push_update(j, auto=False), state)
+        self.assertEqual(self.tip(j), first)
+
+    def test_publish_by_hand_pushes_a_due_update(self) -> None:
+        self.settings(mode="manual", draft_pr=True, pr_updates=True)
+        j = self.job()
+        self.assertEqual(self.cli("publish", j.id)[0], 0)
+        self.rework(j)
+        self.assertEqual(serve.tick(time.time()), [])   # manual: serve pushes nothing
+        rc, out, _ = self.cli("publish", j.id)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("pushed update 1", out)
+
+    def test_questions_go_to_the_thread_that_asked_not_the_pull_request(self) -> None:
+        j = self.job(number=7)
+        agent_sources.remember_pr(SLUG, j.id, 12, self.head)   # "#12" sorts before "#7"
+        self.assertEqual(pub.target(j).number, 7)
 

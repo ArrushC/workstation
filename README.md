@@ -699,7 +699,9 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
       log beside its copy, at most twice per job;
     - when it has reworked the change and your checks pass, one more commit goes onto its own `ws-agent/<id>`
       branch with a short note on the pull request, at most 5 times. Only while that branch's tip at origin is
-      still the commit ws-agent pushed: once anyone else commits to it, nothing more is pushed.
+      still the commit ws-agent pushed: once anyone else commits to it, nothing more is pushed. Before each push
+      GitHub is asked whether the pull request is still open and still that branch; a push that fails three
+      times is left to you, with one notice (`ws-agent publish <id>` tries again).
     - when the pull request is merged or closed, the job is closed (its copy removed, its result kept).
     It never marks a pull request ready, merges it, or resolves a review thread.
   - `ws-agent publish-to <path> --mode off` stops it.

@@ -319,6 +319,17 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       as `"tell"`. `push_update` adds one commit whose parent is the last pushed one, with
       `--force-with-lease=<ref>:<last>`; a different tip marks the record `theirs` for good. `MAX_UPDATES` 5.
       `ls` shows `delivered` for a succeeded job with a PR (display only: `jobs.state` is unchanged).
+    - A job's own directory is writable from inside its sandbox (checks run the repository's code there), so
+      nothing that decides a write, and nothing ws-agent writes blind, lives in it: the publish record, its
+      lock, the temporary index, the SVN publish checkout and the stop / follow-limit marks are in
+      `jobs.private_dir(<id>)` (`<state>/agent-private/<id>`, 0700). What must be written into the job
+      directory goes through `core.write_in` (no link followed: CI log tails) or `O_NOFOLLOW` (`jobs.post`).
+    - `push_update` asks GitHub first (`_own_pull_request`: open, head is `ws-agent/<id>` of this repository),
+      records `pushing` before the push (a tip equal to it is its own, finished on the next run, never
+      "theirs"), counts serve's failures (`update_tries`, `MAX_TRIES`, one notice), and under auto keeps
+      `publish.updates_since` and the reviewer's verdict. A quiet pull request is read every `PR_READ_EVERY`
+      seconds, at once when its issue row or a comment shows in the poll; reviews and review comments are
+      remembered per pull request (`reviews_seen`, `comments_seen`), never in `handled`.
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):
