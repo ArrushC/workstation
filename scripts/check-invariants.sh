@@ -1026,6 +1026,16 @@ check_claude_mods() {
       rm -rf "$tmp" "$tmp.log"
     fi
   done
+  # A workflow that commits a file to main moves main under every open PR. /ship reads
+  # that as stale checks unless the file is in its GENERATED set.
+  local wf f
+  for wf in .github/workflows/*.yml; do
+    grep -q 'git push' "$wf" || continue
+    for f in $(sed -n 's/^ *git commit .* -- \(.*\)$/\1/p' "$wf"); do
+      grep -Eq "^const GENERATED = .*'$f'" .claude/skills/workstation-ship/hooks/register.ts ||
+        bad "$wf commits $f to main, but /ship's GENERATED set lacks it: each such commit would make every open PR's checks stale"
+    done
+  done
   [ "$n" -gt 0 ] || bad "no mods under .claude/skills (workstation-sync, workstation-ship, workstation-lint-fold)"
   command -v claude >/dev/null 2>&1 || note "claude not installed — skipped the mods' validate and tests (CI has no claude)"
   [ "$fails" -eq 0 ] && ok "$n project-scope mod(s) in .claude/skills, none under dotfiles or in settings.enforced.json: manifests, modules and tests present$(command -v claude >/dev/null 2>&1 && echo ', validated --strict, tests pass')"
