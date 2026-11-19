@@ -78,6 +78,7 @@ class Publish:
     since: str = ""           # when mode became auto: jobs that finished before it are never published automatically
     ack: bool = False         # GitHub, auto only: one comment when a request becomes a job (and when it is stopped)
     questions: bool = False   # GitHub, auto only: a job's question as a comment on the thread that asked
+    notes_since: str = ""     # when ack or questions was switched on: older jobs get neither
 
 
 def svn_branch_problem(path: str, watch: Watch | None) -> str | None:
@@ -180,7 +181,8 @@ def _watch(t: object) -> Watch | None:
 def _github(t: object) -> GitHubSource | None:
     if not isinstance(t, dict):
         return None
-    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")), _strings(t.get("logins", [])),
+    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")),
+                        tuple(x for x in _strings(t.get("logins", [])) if x.strip()),
                         t.get("follow") is True)
 
 
@@ -190,7 +192,8 @@ def _publish(t: object) -> Publish:
     mode = str(t.get("mode", "off"))
     return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
                    t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")),
-                   str(t.get("since", "")), t.get("ack") is True, t.get("questions") is True)
+                   str(t.get("since", "")), t.get("ack") is True, t.get("questions") is True,
+                   str(t.get("notes_since", "")))
 
 
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
@@ -295,7 +298,8 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
         prev_pub = old.get("publish")
         out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
                           "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch,
-                          "since": r.publish.since, "ack": r.publish.ack, "questions": r.publish.questions}
+                          "since": r.publish.since, "ack": r.publish.ack, "questions": r.publish.questions,
+                          "notes_since": r.publish.notes_since}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
@@ -389,7 +393,13 @@ def set_publish(root: Path, pub: Publish) -> Repo:
     # unpublished on purpose) never goes out by itself. Staying on auto keeps its start.
     was = found.publish if found else Publish()
     since = "" if pub.mode != "auto" else (was.since if was.mode == "auto" and was.since else core.now_iso())
-    return _set_source(root, publish=dataclasses.replace(pub, since=since))
+    # The same for what serve says in a thread: switching an acknowledgement or questions on (or
+    # adding one) starts from now, so nothing is said about jobs that were already there.
+    notes = ""
+    if pub.mode == "auto" and (pub.ack or pub.questions):
+        kept = was.mode == "auto" and was.notes_since and was.ack >= pub.ack and was.questions >= pub.questions
+        notes = was.notes_since if kept else core.now_iso()
+    return _set_source(root, publish=dataclasses.replace(pub, since=since, notes_since=notes))
 
 
 def set_github(root: Path, src: GitHubSource | None) -> Repo:
@@ -401,7 +411,7 @@ def set_github(root: Path, src: GitHubSource | None) -> Repo:
             raise ValueError(f"ws-agent: {_key(root)} is a {found.vcs} repository; GitHub needs a git one")
         if not src.slug:
             raise ValueError(f"ws-agent: {_key(root)} has no github.com remote")
-        if not src.logins:
+        if not src.logins or any(not x.strip() for x in src.logins):
             raise ValueError("ws-agent: name who may ask with --login (nobody can, otherwise)")
         if src.mode not in MODES:
             raise ValueError(f"ws-agent: --mode must be one of {', '.join(MODES)}")

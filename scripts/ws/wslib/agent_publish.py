@@ -38,6 +38,7 @@ KINDS = ("comment", "draft_pr", "svn_branch")
 AUTO_CAP = 5            # automatic publishes a day per source
 MAX_TRIES = 3           # automatic attempts per job and kind before it is left for the person
 NOTES = ("ack", "question", "stopped")   # what serve says in the thread while a job lives (phase 4)
+STOP_MARK = "stop-requested"             # in the job directory: `/agent stop` came from its thread
 MAX_QUESTIONS = 3       # questions posted per job; after that it waits for the person locally
 QUESTION_MAX = 1500
 SUMMARY_MAX = 2000
@@ -322,8 +323,8 @@ def note_due(job: jobs.Job, kind: str, entry: agent_registry.Repo | None = None)
     p = entry.publish
     if kind not in NOTES or not (p.questions if kind == "question" else p.ack):
         return f"{job.repo}'s publish settings don't name {kind}"
-    if p.mode != "auto" or not p.since or job.created < p.since:
-        return "publishing isn't automatic here, or the job is older than that"
+    if p.mode != "auto" or not p.notes_since or job.created < p.notes_since:
+        return "publishing isn't automatic here, or the job is older than this setting"
     if job.vcs != "git" or not target(job).number:
         return "no GitHub thread asked for this job"
     rec = record(job)
@@ -332,9 +333,12 @@ def note_due(job: jobs.Job, kind: str, entry: agent_registry.Repo | None = None)
     if _note_key(job, kind) in rec:
         return "already said"
     if kind == "stopped":
-        return None if job.cancelled else "it wasn't stopped"
+        asked = (jobs.job_dir(job.id) / STOP_MARK).exists()
+        return None if job.cancelled and asked else "it wasn't stopped from its thread"
     if job.closed or job.cancelled:
         return "the job is closed or cancelled"
+    if kind == "ack" and (jobs.exit_info(job) is not None or rec):
+        return "it has already finished or said something: an acknowledgement now would only be noise"
     if kind == "question":
         info = jobs.exit_info(job) or {}
         if jobs.live_run(job) is not None or not info or jobs.outcome_state(info) != "needs-you" or not _question(job):
@@ -347,7 +351,8 @@ def note_due(job: jobs.Job, kind: str, entry: agent_registry.Repo | None = None)
 def note_body(job: jobs.Job, kind: str, entry: agent_registry.Repo) -> str:
     """Fixed words; the first line names the job (agent_sources.AGENT_LINE keeps them from coming
     back as follow-ups). Only a question carries model text, inside a fence."""
-    who = f"(ws-agent job `{job.id}`, {_word((jobs.exit_info(job) or {}).get('engine') or job.engine) or 'engine unknown'})"
+    engine = _word((jobs.exit_info(job) or {}).get("engine") or job.engine)   # unknown until it starts
+    who = f"(ws-agent job `{job.id}`{', ' + engine if engine else ''})"
     follows = entry.github is not None and entry.github.follow
     if kind == "ack":
         more = ("Reply in this thread to add to the request. " if follows else "")
@@ -379,13 +384,34 @@ def post_note(job: jobs.Job, kind: str) -> str:
         except PublishError as e:
             _save(job, key, {"error": str(e), "at": core.now_iso()})
             return f"{job.id}: {kind} failed: {e}"
-        try:
-            url = str(json.loads(out).get("html_url") or "")
-        except ValueError:
-            url = ""
-        url = url or f"https://github.com/{t.slug}/issues/{t.number}"
+        url = _posted(out, t)
         _save(job, key, {"url": url, "at": core.now_iso(), "auto": True, "error": "", "attempting": ""})
         return f"{job.id}: posted {kind}: {url}"
+
+
+def _posted(out: str, t: Target) -> str:
+    """The new comment's URL from GitHub's reply; its id is remembered so it is never read back."""
+    try:
+        got = json.loads(out)
+    except ValueError:
+        got = {}
+    if isinstance(got, dict):
+        agent_sources.remember_posted(t.slug, got.get("id"))
+        if got.get("html_url"):
+            return str(got["html_url"])
+    return f"https://github.com/{t.slug}/issues/{t.number}"
+
+
+def mark_seen(job: jobs.Job) -> int:
+    """The person looked at the thread: this job's unconfirmed notes are settled (never sent again,
+    whether or not they arrived), so its later comments can go out. How many were settled."""
+    n = 0
+    with _lock(job):
+        for key, e in record(job).items():
+            if key != "comment" and _is_comment(key) and e.get("attempting") and not e.get("url"):
+                _save(job, key, {"url": "unconfirmed", "attempting": "", "seen": core.now_iso()})
+                n += 1
+    return n
 
 
 # --- the writes ------------------------------------------------------------------------------
@@ -409,10 +435,7 @@ def _post_comment(job: jobs.Job, t: Target, pr_url: str = "") -> str:
     body = json.dumps({"body": comment_body(job, pr_url)}).encode("utf-8")
     out = _ok(_run(["gh", "api", "--method", "POST", f"repos/{t.slug}/issues/{t.number}/comments", "--input", "-"],
                    stdin=body), f"posting to {t.slug}#{t.number}")
-    try:
-        return str(json.loads(out).get("html_url") or f"https://github.com/{t.slug}/issues/{t.number}")
-    except ValueError:
-        return f"https://github.com/{t.slug}/issues/{t.number}"
+    return _posted(out, t)
 
 
 def _tracking(git: list[str], branch: str, env: dict[str, str]) -> set[str]:

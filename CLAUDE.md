@@ -302,9 +302,16 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       `svn copy <wc> <branch URL>`. `svn_branch_problem` (set time and publish time) refuses trunk and watched trees.
     - Notes (phase 4: `ack`, `question:<finished>`, `stopped`; `note_due`/`post_note`, serve's `converse` step)
       are auto-only, for a GitHub request's job newer than `publish.since`; `note: true` keeps them out of the
-      daily cap; an unconfirmed comment (`held_back`) blocks the job's later comments. Every posted first line
-      names the job (`agent_sources.AGENT_LINE`): with `github.follow` the person's own login posts them, and
-      they must not come back as follow-ups. `poll_github` returns `(job, text, login, "tell" | "stop")`.
+      daily cap; they start at `publish.notes_since` (set when ack/questions is switched on), and an ack only
+      for a job with no exit.json yet. An unconfirmed comment (`held_back`) blocks the job's later comments
+      until `publish <id> --seen` (`mark_seen`); serve notifies once. `stopped` needs the job's `stop-requested`
+      mark and is posted by the converse step (never while paused).
+    - With `github.follow` the person's own login posts ws-agent's comments: each posted id is kept
+      (`remember_posted`, the source's `posted`), and `AGENT_LINE` (anchored to the fixed openings, so a quote
+      reply still counts) covers one whose reply was lost. A plain follow-up must be unedited, newer than the
+      job, and not from an app or bot (`_plain_follow_up`, `_automated`). `/agent stop` is matched before the
+      live check: on a thread with no job it is dropped, never a request. `poll_github` returns
+      `(job, text, login, "tell" | "stop")`, each handled on its own by serve.
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):

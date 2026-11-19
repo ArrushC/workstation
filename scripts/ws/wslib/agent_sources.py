@@ -249,9 +249,14 @@ COMMENTS_IN_PROMPT = 20
 HANDLED_KEPT = 500
 MAX_TRIES = 3   # polls a request's base may fail before it waits in the inbox instead
 _REQUEST = re.compile(r"^/agent(?:[ \t]+|$)")
-# What ws-agent itself posts starts with a line naming its job. Those comments carry the person's
-# own login (their gh posts them), so on a followed thread they'd come back as follow-ups.
-AGENT_LINE = re.compile(r"\(ws-agent job `[0-9a-f]{4,}`")
+# What ws-agent itself posts carries the person's own login (their gh posts it), so on a followed
+# thread it would come back as a follow-up. Each post's id is remembered (`remember_posted`); this
+# is for the one whose reply was lost: the fixed openings, at the very start, so a quote reply
+# ("> An agent ...") is still the person's answer.
+AGENT_LINE = re.compile(r"^(?:Posted by an agent|Picked up by an agent|An agent|Stopped on request) "
+                        r"\(ws-agent job `[0-9a-f]{4,}`")
+_STOP = re.compile(r"(?i)/agent\s+stop[.!]?")
+POSTED_KEPT = 500
 
 GITHUB_TASK = """\
 A request from {author} on GitHub, on {kind} {slug}#{number} ({url}):
@@ -308,6 +313,33 @@ def remember_thread(thread: str, job_id: str) -> None:
         threads[f"#{number}"] = job_id
         cur["threads"] = threads
         save_source_state(data)
+
+
+def remember_posted(slug: str, comment_id: object) -> None:
+    """A comment ws-agent posted on this repository: never read back as someone's words."""
+    if not isinstance(comment_id, int) or isinstance(comment_id, bool):
+        return
+    key = f"gh:{slug}"
+    with _locked():
+        data = source_state()
+        cur = data.setdefault(key, {})
+        posted = [i for i in cur.get("posted") or [] if isinstance(i, int)] if isinstance(cur.get("posted"), list) else []
+        cur["posted"] = [*posted, comment_id][-POSTED_KEPT:]
+        save_source_state(data)
+
+
+def _when(text: object) -> dt.datetime | None:
+    try:
+        t = dt.datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def _automated(item: dict[str, object]) -> bool:
+    """Posted by an app or a bot account, whatever login it carries: never a person's words."""
+    user = item.get("user")
+    return bool(item.get("performed_via_github_app")) or (isinstance(user, dict) and user.get("type") == "Bot")
 
 
 def _gh(endpoint: str, *, include: bool = False, jq: str = "") -> tuple[dict[str, str], object]:
@@ -451,6 +483,20 @@ def _held_request(entry: agent_registry.Repo, slug: str, rk: str, login: str, bo
                                  thread=f"gh:{slug}#{number}", url=url, note=note)
 
 
+def _plain_follow_up(row: dict[str, object], first: str, job_id: str, posted: set[int]) -> bool:
+    """A comment with no /agent that may reach the thread's job as the person's own words: not one
+    ws-agent posted, written after the job began, and never edited (a collaborator can edit someone
+    else's comment, and the API doesn't say who did)."""
+    if row.get("id") in posted or AGENT_LINE.match(first):
+        return False
+    created, updated = _when(row.get("created_at")), _when(row.get("updated_at"))
+    try:
+        began = _when(jobs.load(job_id).created)
+    except KeyError:
+        return False
+    return created is not None and updated == created and began is not None and created >= began
+
+
 def poll_github(entry: agent_registry.Repo, now: float
                 ) -> tuple[list[agent_inbox.Candidate], list[tuple[str, str, str, str]]]:
     """New `/agent` requests by the source's logins since the cursor, and what they said to threads
@@ -484,16 +530,20 @@ def poll_github(entry: agent_registry.Repo, now: float
     logins = {x.casefold() for x in g.logins}
     handled = [str(x) for x in st.get("handled") or [] if isinstance(x, str)] if isinstance(st.get("handled"), list) \
         else []
+    posted = {i for i in st.get("posted") or [] if isinstance(i, int)} if isinstance(st.get("posted"), list) else set()
     requests: list[tuple[str, str, str, int, str, str, dict[str, object] | None]] = []
+    rows_by_key: dict[str, dict[str, object]] = {}
     for c in comments if isinstance(comments, list) else []:
         if isinstance(c, dict) and str(c.get("updated_at") or "") >= cursor:
             num = str(c.get("issue_url") or "").rstrip("/").rsplit("/", 1)[-1]
             if num.isdigit():
+                rows_by_key[f"c{c.get('id')}"] = c
                 requests.append((f"c{c.get('id')}", _login(c), str(c.get("body") or ""), int(num),
                                  str(c.get("html_url") or ""), str(c.get("updated_at")), None))
     for i in issues if isinstance(issues, list) else []:
         # an issue updated since the cursor but opened before it isn't a new request
         if isinstance(i, dict) and str(i.get("created_at") or "") >= cursor and isinstance(i.get("number"), int):
+            rows_by_key[f"i{i['number']}"] = i
             requests.append((f"i{i['number']}", _login(i), str(i.get("body") or ""), int(i["number"]),
                              str(i.get("html_url") or ""), str(i.get("updated_at") or i.get("created_at")), i))
     # The cursor moves over every row read, request or not: rows are sorted by update time, so a
@@ -514,18 +564,24 @@ def poll_github(entry: agent_registry.Repo, now: float
         instruction = _instruction(body)
         jid = threads.get(f"#{number}")
         live = isinstance(jid, str) and _open_job(jid)
-        if login.casefold() not in logins or (instruction is None and not (live and g.follow)):
+        row = rows_by_key.get(rk, {})
+        if not login or login.casefold() not in logins or _automated(row) \
+                or (instruction is None and not (live and g.follow)):
+            handled.append(rk)
+            continue
+        text = body.replace("\r\n", "\n").strip()
+        first = text.partition("\n")[0]
+        if _STOP.fullmatch(first.strip()):   # stops the thread's job; with none, it is nobody's request
+            if live:
+                assert isinstance(jid, str)
+                follow.append((jid, "", login, "stop"))
             handled.append(rk)
             continue
         if live:
             assert isinstance(jid, str)
-            text = body.replace("\r\n", "\n").strip()
-            first = text.partition("\n")[0]
-            if instruction is not None and first.split() == ["/agent", "stop"]:
-                follow.append((jid, "", login, "stop"))
-            elif instruction:
+            if instruction:
                 follow.append((jid, instruction, login, "tell"))
-            elif instruction is None and text and not AGENT_LINE.search(first) and rk.startswith("c"):
+            elif instruction is None and text and rk.startswith("c") and _plain_follow_up(row, first, jid, posted):
                 follow.append((jid, text, login, "tell"))
             handled.append(rk)
             continue

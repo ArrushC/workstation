@@ -643,8 +643,9 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     the same issue goes to its open job. Polls use your gh login, read only: nothing is posted back.
   - `--follow` (GitHub): while a thread's job is open, a comment there by a listed login needs no `/agent`. It
     answers the job's question if it asked one, otherwise it adds to the request. Nobody else's comment ever
-    reaches a job, and at most 10 a day reach one job. A comment whose first line is `/agent stop` stops the
-    thread's job, with or without `--follow`.
+    reaches a job, nor one posted through an app or a bot account, nor one that was edited or written before
+    the job began. At most 10 a day reach one job. A comment whose first line is `/agent stop` stops the
+    thread's job, with or without `--follow`; on a thread with no open job it does nothing.
   - A job made from a source runs on someone else's code (a pull request, any committer's revision). It doesn't
     load that copy's own `.claude` settings (their hooks) or its `.mcp.json`. Jobs you start yourself still do.
   - `unwatch` and `ungithub` stop them.
@@ -688,7 +689,9 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
   - `--ack` and `--questions` (GitHub, `auto` only) let serve speak in the thread while a job lives: one
     comment when a request becomes a job (and one if it is stopped from the thread), and the job's question
     when it needs an answer, at most 3 per job. Fixed wording that names the job; a question's own text sits in
-    a code fence. A comment that may or may not have been posted holds back the job's later ones until you look.
+    a code fence. Switching either on says nothing about jobs that were already there. A comment that may or
+    may not have been posted is never sent again and holds back the job's later ones: you get a notice, and
+    `ws-agent publish <id> --seen` settles it once you've looked at the thread.
   - `ws-agent publish-to <path> --mode off` stops it.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;

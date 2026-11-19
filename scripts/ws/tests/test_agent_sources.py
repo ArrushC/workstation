@@ -407,5 +407,59 @@ class Conversation(GitHub):
         self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], []))
 
 
+class ConversationReview(Conversation):
+    """One test per finding of the review of part A."""
+
+    def test_stop_on_a_thread_with_no_live_job_starts_nothing(self) -> None:
+        self.comment(body="/agent stop")   # a second stop, or one on a thread that never had a job
+        self.assertEqual(src.poll_github(self.entry, self.t0 + 1), ([], []))
+        self.comment(body="/agent Stop.", cid=902, at=self.t0 + 50)
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 100), ([], []))
+
+    def test_stop_is_read_whatever_its_case_or_full_stop(self) -> None:
+        job = self.live_job()
+        self.comment(body="/agent Stop.")
+        self.assertEqual(src.poll_github(self.entry, self.t0 + 1), ([], [(job.id, "", "ArrushC", "stop")]))
+
+    def test_a_quote_reply_to_the_agents_question_is_an_answer(self) -> None:
+        job = self.live_job()
+        quoted = f"> An agent (ws-agent job `{job.id}`, claude) needs an answer to go on.\n\nThe old parser."
+        self.comment(body=quoted)
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], [(job.id, quoted, "ArrushC", "tell")]))
+
+    def test_a_comment_ws_agent_posted_is_skipped_by_its_id(self) -> None:
+        self.live_job()
+        src.remember_posted(SLUG, 901)
+        self.comment(body="Any words at all: the reply to the POST gave its id.", cid=901)
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], []))
+
+    def test_an_edited_or_older_comment_is_never_a_plain_follow_up(self) -> None:
+        job = self.live_job()   # a collaborator can edit someone else's comment; the API doesn't say who did
+        c = self.comment(body="Also drop the tests.")
+        c["updated_at"] = iso(self.t0 + 60)
+        self.answer("issues/comments", [c])
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], []))
+        old = self.comment(body="Written before the job existed.", cid=902, at=self.t0 + 70)
+        job.created = iso(self.t0 + 80)
+        jobs.save(job)
+        self.answer("issues/comments", [old])
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 100), ([], []))
+
+    def test_an_app_or_bot_posting_as_a_listed_login_reaches_nothing(self) -> None:
+        self.live_job()
+        c = self.comment(body="Automated: please also bump the version.")
+        c["performed_via_github_app"] = {"slug": "some-app"}
+        self.answer("issues/comments", [c])
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 1), ([], []))
+        c = self.comment(body="/agent do something", cid=902, at=self.t0 + 50)
+        c["user"] = {"login": "ArrushC", "type": "Bot"}
+        self.answer("issues/comments", [c])
+        self.assertEqual(src.poll_github(self.following(), self.t0 + 100), ([], []))
+
+    def test_an_empty_login_is_never_listed(self) -> None:
+        with self.assertRaises(ValueError):
+            reg.set_github(self.repo, reg.GitHubSource(slug=SLUG, mode="observe", logins=("",)))
+
+
 if __name__ == "__main__":
     unittest.main()

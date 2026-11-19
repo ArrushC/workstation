@@ -27,7 +27,7 @@ FAKE_GH = r"""d="$WS_FAKE_GH"
 ( IFS=$'\x1f'; printf '%s\n' "$*" ) >>"$d/argv.log"
 n=$(wc -l <"$d/argv.log" | tr -d ' ')
 case "$1 $2" in
-"api --method") cat >"$d/body.$n"; [ -f "$d/post-then-fail" ] && { echo "HTTP 502" >&2; exit 1; }; echo '{"html_url": "https://github.com/ArrushC/proj/issues/7#issuecomment-1"}' ;;
+"api --method") cat >"$d/body.$n"; [ -f "$d/post-then-fail" ] && { echo "HTTP 502" >&2; exit 1; }; echo "{\"id\": 7000$n, \"html_url\": \"https://github.com/ArrushC/proj/issues/7#issuecomment-1\"}" ;;
 "pr create") cat >"$d/pr-body"; [ -f "$d/pr-fails" ] && { echo "pull request create failed" >&2; exit 1; }
   echo "https://github.com/ArrushC/proj/pull/8" ;;
 api\ repos/*/pulls/*) [ -f "$d/pulls-fail" ] && { echo "HTTP 502 SERVER WORDS" >&2; exit 1; }; cat "$d/pulls-ref" 2>/dev/null || echo "" ;;
@@ -701,14 +701,16 @@ class Conversation(Publish):
         self.assertEqual((serve.tick(time.time()), self.posts()), ([], []))
 
     def test_a_comment_that_may_have_been_posted_holds_back_later_ones(self) -> None:
-        self.settings(mode="auto", ack=True, questions=True)
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
         self.write(self.gx / "post-then-fail", "")
         j = self.asking()
-        serve.tick(time.time())          # the acknowledgement: GitHub may have it, the reply was lost
+        serve.tick(time.time())          # its question: GitHub may have it, the reply was lost
         (self.gx / "post-then-fail").unlink()
         self.assertEqual(serve.tick(time.time()), [])
         self.assertEqual(len(self.posts()), 1)
-        self.assertEqual(pub.record(j)["ack"].get("url", ""), "")
+        self.assertTrue(pub.held_back(j))
+        self.set_exit(j, status="done")   # answered locally and finished: its result waits behind the question
+        self.assertIn("keep their order", pub.allowed(j, "comment", auto=True) or "")
 
     def test_notes_dont_use_up_the_daily_cap(self) -> None:
         self.settings(mode="auto", comment=True, ack=True)
@@ -722,6 +724,10 @@ class Conversation(Publish):
         with unittest.mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "", "ArrushC", "stop")])):
             lines = serve._poll_github(reg.find(self.repo), time.time())
         self.assertTrue(jobs.load(j.id).cancelled, lines)
+        self.pueue_status({}, group="Paused")
+        self.assertEqual((serve.tick(time.time()), self.posts()), ([], []))   # a paused queue says nothing
+        self.pueue_status({})
+        self.assertEqual(len([ln for ln in serve.tick(time.time()) if "posted stopped" in ln]), 1)
         (body,) = self.posts()
         self.assertTrue(body.startswith(f"Stopped on request (ws-agent job `{j.id}`)"), body)
         self.assertEqual(serve.tick(time.time()), [])
@@ -754,4 +760,71 @@ class Conversation(Publish):
         rc, out, err = self.cli("github", str(self.repo), "--mode", "act", "--login", "ArrushC", "--follow")
         self.assertEqual(rc, 0, err)
         self.assertIn("following", out)
+
+
+class ConversationReview(Conversation):
+    """One test per finding of the review of part A."""
+
+    def test_switching_notes_on_later_says_nothing_about_older_jobs(self) -> None:
+        self.settings(mode="auto", comment=True)
+        done, asking, working = self.job(), self.asking(), self.working()
+        pub._save(done, "comment", {"url": "u", "at": core.now_iso(), "auto": True})
+        time.sleep(1.1)   # the registry's times are whole seconds
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        for j in (done, asking, working):
+            for kind in ("ack", "question"):
+                self.assertIsNotNone(pub.note_due(j, kind), (j.id, kind))
+        self.assertEqual(self.posts(), [])
+        new = self.working()
+        self.assertIsNone(pub.note_due(new, "ack"))
+
+    def test_a_job_that_already_finished_is_not_acknowledged(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True)
+        self.assertIn("already", pub.note_due(self.job(), "ack") or "")
+
+    def test_a_job_with_no_engine_yet_says_nothing_about_one(self) -> None:
+        self.settings(mode="auto", ack=True)
+        j = self.working()
+        j.engine = ""
+        jobs.save(j)
+        serve.tick(time.time())
+        self.assertTrue(self.posts()[0].startswith(f"Picked up by an agent (ws-agent job `{j.id}`), not a person."))
+
+    def test_a_note_that_fails_tells_the_person_once_and_seen_releases_it(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        self.write(self.gx / "post-then-fail", "")
+        j = self.asking()
+        (jobs.job_dir(j.id) / "result" / "exit.json").rename(jobs.job_dir(j.id) / "exit.keep")
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            serve.tick(time.time())
+            serve.tick(time.time())
+        self.assertEqual(notices, [f"{j.id}: a comment to its thread may not have been posted; look there, then "
+                                   f"ws-agent publish {j.id} --seen"])
+        (self.gx / "post-then-fail").unlink()
+        (jobs.job_dir(j.id) / "exit.keep").rename(jobs.job_dir(j.id) / "result" / "exit.json")
+        self.assertEqual(serve.tick(time.time()), [])            # still held back
+        rc, out, _ = self.cli("publish", j.id, "--seen")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(len([ln for ln in serve.tick(time.time()) if "posted question" in ln]), 1)
+        self.assertEqual(len(self.posts()), 2)                   # the unconfirmed one was never sent again
+
+    def test_what_ws_agent_posts_is_remembered_by_id(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True)
+        self.working()
+        serve.tick(time.time())
+        done = self.job()
+        pub.publish(done, auto=False)
+        posted = agent_sources.source_state()[f"gh:{SLUG}"]["posted"]
+        self.assertEqual(len(posted), 2, posted)
+        self.assertTrue(all(isinstance(i, int) for i in posted))
+
+    def test_one_follow_up_that_fails_doesnt_lose_the_others(self) -> None:
+        a, b = self.job(), self.job()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=(
+                [], [("nosuch", "", "ArrushC", "stop"), (a.id, "x", "ArrushC", "tell"), (b.id, "", "ArrushC", "stop")])), \
+                unittest.mock.patch.object(agent, "tell_job", side_effect=RuntimeError("boom")):
+            lines = serve._poll_github(reg.find(self.repo), time.time())
+        self.assertTrue(jobs.load(b.id).cancelled, lines)
+        self.assertTrue(any("boom" in ln for ln in lines), lines)
 
