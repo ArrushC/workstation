@@ -312,6 +312,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       job, and not from an app or bot (`_plain_follow_up`, `_automated`). `/agent stop` is matched before the
       live check: on a thread with no job it is dropped, never a request. `poll_github` returns
       `(job, text, login, "tell" | "stop")`, each handled on its own by serve.
+    - Following a pull request (part B): publishing a draft PR calls `agent_sources.remember_pr` (the source's
+      `prs` and the PR's number in `threads`). With `github.follow`, `poll_github` also returns `"ended"` (merged
+      or closed: serve closes the job) and `"ci"` (failed check runs on the pushed commit, once per commit,
+      `CI_ROUNDS` per job, log tails in the job's `input/`; told as `gh:checks`), and reviews / review comments
+      as `"tell"`. `push_update` adds one commit whose parent is the last pushed one, with
+      `--force-with-lease=<ref>:<last>`; a different tip marks the record `theirs` for good. `MAX_UPDATES` 5.
+      `ls` shows `delivered` for a succeeded job with a PR (display only: `jobs.state` is unchanged).
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):

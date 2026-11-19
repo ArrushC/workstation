@@ -79,6 +79,7 @@ class Publish:
     ack: bool = False         # GitHub, auto only: one comment when a request becomes a job (and when it is stopped)
     questions: bool = False   # GitHub, auto only: a job's question as a comment on the thread that asked
     notes_since: str = ""     # when ack or questions was switched on: older jobs get neither
+    pr_updates: bool = False  # GitHub: later work as new commits on the job's own ws-agent/<id> branch
 
 
 def svn_branch_problem(path: str, watch: Watch | None) -> str | None:
@@ -193,7 +194,7 @@ def _publish(t: object) -> Publish:
     return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
                    t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")),
                    str(t.get("since", "")), t.get("ack") is True, t.get("questions") is True,
-                   str(t.get("notes_since", "")))
+                   str(t.get("notes_since", "")), t.get("pr_updates") is True)
 
 
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
@@ -299,7 +300,7 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
         out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
                           "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch,
                           "since": r.publish.since, "ack": r.publish.ack, "questions": r.publish.questions,
-                          "notes_since": r.publish.notes_since}
+                          "notes_since": r.publish.notes_since, "pr_updates": r.publish.pr_updates}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
@@ -381,6 +382,8 @@ def set_publish(root: Path, pub: Publish) -> Repo:
     found = find(root)
     if pub.mode not in PUBLISH_MODES:
         raise ValueError(f"ws-agent: --mode must be one of {', '.join(PUBLISH_MODES)}")
+    if pub.pr_updates and not pub.draft_pr:
+        raise ValueError("ws-agent: --pr-updates adds commits to a job's draft pull request: it needs --draft-pr")
     if found is not None and found.vcs == "svn" and (pub.comment or pub.draft_pr or pub.ack or pub.questions):
         raise ValueError(f"ws-agent: {_key(root)} is an SVN copy; comments and draft PRs are GitHub's")
     if found is not None and found.vcs == "git" and pub.svn_branch:

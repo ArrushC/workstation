@@ -692,6 +692,16 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     a code fence. Switching either on says nothing about jobs that were already there. A comment that may or
     may not have been posted is never sent again and holds back the job's later ones: you get a notice, and
     `ws-agent publish <id> --seen` settles it once you've looked at the thread.
+  - `--pr-updates` (with `--draft-pr`): a job whose draft pull request is open is *delivered* (`ws-agent ls` says
+    so) and, with `github --follow`, followed there:
+    - a comment, a review with words or a review comment by a listed login reaches the job as a follow-up;
+    - failed checks on the commit ws-agent pushed are told to it once per commit, with the end of each failing
+      log beside its copy, at most twice per job;
+    - when it has reworked the change and your checks pass, one more commit goes onto its own `ws-agent/<id>`
+      branch with a short note on the pull request, at most 5 times. Only while that branch's tip at origin is
+      still the commit ws-agent pushed: once anyone else commits to it, nothing more is pushed.
+    - when the pull request is merged or closed, the job is closed (its copy removed, its result kept).
+    It never marks a pull request ready, merges it, or resolves a review thread.
   - `ws-agent publish-to <path> --mode off` stops it.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;

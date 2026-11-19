@@ -24,7 +24,7 @@ import os
 import signal
 import sys
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
 from . import (agent_admit, agent_disk, agent_events, agent_inbox, agent_registry, agent_sources, agent_triage, core,
@@ -370,20 +370,76 @@ def _poll_github(entry: agent_registry.Repo, now: float) -> list[str]:
     out = []
     for jid, text, login, kind in follow:   # each on its own: the poll has already moved past them all
         try:
-            out.append(_stop(jid, login) if kind == "stop" else _follow(jid, text, login))
+            out.append(_stop(jid, login) if kind == "stop" else _ended(jid, text) if kind == "ended"
+                       else _ci(jid, text) if kind == "ci" else _follow(jid, text, login))
         except Exception as e:  # noqa: BLE001
             out.append(f"{kind} for {jid}: {type(e).__name__}: {e}")
     return out + _drain()
 
 
-def _converse(q: jobs.Queue | None) -> list[str]:
+def _ended(job_id: str, how: str) -> str:
+    """The job's pull request was merged or closed: its work is over. Close it (the copy goes, the
+    result stays); a comment there afterwards starts nothing."""
+    from . import agent
+    try:
+        job = jobs.load(job_id)
+    except KeyError:
+        return f"pull request {how} for {job_id}: no such job"
+    agent.cancel_job(job)   # a turn still running for it stops first (nothing to cancel otherwise)
+    with jobs.queue_lock():
+        job = jobs.load(job_id)
+        if job.closed:
+            return f"pull request {how} for {job_id}: already closed"
+        agent.close_job(job)
+    agent_events.notify(f"{job_id}: its pull request was {how}; the job is closed")
+    return f"pull request {how} for {job_id}: job closed"
+
+
+def _ci(job_id: str, text: str) -> str:
+    from . import agent
+    try:
+        job = jobs.load(job_id)
+    except KeyError:
+        return f"checks for {job_id}: no such job"
+    code, msg = agent.tell_job(job, text, sender="gh:checks")
+    return f"checks failed for {job_id}: " + (msg.splitlines()[0] if msg else f"exit {code}")
+
+
+def _update_prs(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] | None = None) -> list[str]:
+    """Delivered jobs whose work changed since the last push: one more commit on their own branch."""
+    from . import agent_publish
+    if q is None or q.group == "Paused":
+        return []
+    out = []
+    repos = agent_registry.load()[0] if repos is None else repos
+    for j in jobs.all_jobs():
+        entry = repos.get(j.repo)
+        if entry is None or entry.publish.mode != "auto" or not entry.publish.pr_updates or j.closed or j.cancelled \
+                or not j.origin.startswith("gh:") or not agent_publish.published(j, "draft_pr"):
+            continue
+        if agent_publish.update_due(j, auto=True) is not None:
+            continue
+        try:
+            line = agent_publish.push_update(j, auto=True)
+        except Exception as e:  # noqa: BLE001 - one job's failure never stops the others
+            line = f"{j.id}: update: {type(e).__name__}: {e}"
+        out.append(line)
+        if "pushed update" in line:
+            agent_events.append("published", j, f"{j.id} updated its pull request")
+            agent_events.notify(f"{j.id} updated its pull request")
+        elif "theirs now" in line:
+            agent_events.notify(f"{j.id}: its branch has someone else's commits; nothing more is pushed to it")
+    return out
+
+
+def _converse(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] | None = None) -> list[str]:
     """What a live job says in its GitHub thread: one acknowledgement, and its questions. Only
     where the repository's publish settings are automatic and name them."""
     from . import agent_publish
     if q is None or q.group == "Paused":
         return []
     out = []
-    repos = agent_registry.load()[0]
+    repos = agent_registry.load()[0] if repos is None else repos
     for j in jobs.all_jobs():
         entry = repos.get(j.repo)
         if entry is None or entry.publish.mode != "auto" or not j.origin.startswith("gh:") or j.closed:
@@ -403,14 +459,14 @@ def _converse(q: jobs.Queue | None) -> list[str]:
     return out
 
 
-def _publish_auto(q: jobs.Queue | None) -> list[str]:
+def _publish_auto(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] | None = None) -> list[str]:
     """Passing jobs that came from a source, in repositories whose publish mode is auto: written
     back once (agent_publish decides; a refusal that will never change is not repeated in the log)."""
     from . import agent_publish
     if q is None or q.group == "Paused":   # paused means "do nothing by yourself"
         return []
     out = []
-    repos = agent_registry.load()[0]
+    repos = agent_registry.load()[0] if repos is None else repos
     for j in jobs.all_jobs():
         entry = repos.get(j.repo)
         if entry is None or entry.publish.mode != "auto" or not j.origin or j.closed or j.cancelled:
@@ -453,9 +509,14 @@ def tick(now: float) -> list[str]:
     step("recover", lambda: _recover(q))
     step("waiting", lambda: _requeue_waiting(q))
     step("pending", _drain)   # what a serve killed mid-batch left
-    step("converse", lambda: _converse(q))
-    step("publish", lambda: _publish_auto(q))
-    for key, entry in sorted(agent_registry.load()[0].items()):
+    try:
+        repos = agent_registry.load()[0]   # one read for the steps below
+    except Exception as e:  # noqa: BLE001
+        return [*lines, f"registry: {type(e).__name__}: {e}"]
+    step("converse", lambda: _converse(q, repos))
+    step("publish", lambda: _publish_auto(q, repos))
+    step("update", lambda: _update_prs(q, repos))
+    for key, entry in sorted(repos.items()):
         if entry.watch is not None and entry.watch.mode in ("observe", "act"):
             step(f"svn {key}", lambda e=entry: _poll_svn(e, now))
         if entry.github is not None and entry.github.mode in ("observe", "act"):

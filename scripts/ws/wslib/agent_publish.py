@@ -41,6 +41,7 @@ NOTES = ("ack", "question", "stopped")   # what serve says in the thread while a
 STOP_MARK = "stop-requested"             # in the job directory: `/agent stop` came from its thread
 MAX_QUESTIONS = 3       # questions posted per job; after that it waits for the person locally
 QUESTION_MAX = 1500
+MAX_UPDATES = 5         # commits added to one job's pull request after the first
 SUMMARY_MAX = 2000
 FILES_MAX = 40
 TIMEOUT = 300
@@ -289,7 +290,7 @@ def commit_message(job: jobs.Job) -> str:
 # --- notes: what serve says in the thread while a job lives ------------------------------------
 
 def _is_comment(key: str) -> bool:
-    return key in ("comment", "ack", "stopped") or key.startswith("question:")
+    return key in ("comment", "ack", "stopped") or key.startswith(("question:", "update:"))
 
 
 def held_back(job: jobs.Job) -> bool:
@@ -506,12 +507,126 @@ def _draft_pr(job: jobs.Job, entry: agent_registry.Repo, t: Target) -> str:
         for made in _tracking(git, branch, quiet) - tracking:
             _run([*git, "update-ref", "-d", made, commit], env=quiet)
         # remembered, so a PR that fails to open is retried without pushing again
-        _save(job, "draft_pr", {"branch": branch, "commit": commit})
+        _save(job, "draft_pr", {"branch": branch, "commit": commit, "patch": _patch_sha(job)})
     title = f"ws-agent {job.id}" + (f": {_instruction(job)}" if _instruction(job) else "")
     body = ("Draft, made by an agent (ws-agent), not written by a person. Review before merging.\n\n"
             + comment_body(job)).encode("utf-8")
     return _ok(_run(["gh", "pr", "create", "--draft", "--repo", slug, "--head", branch, "--base", into, "--title", title,
                      "--body-file", "-"], stdin=body), "opening the draft PR").splitlines()[-1]
+
+
+def _patch_sha(job: jobs.Job) -> str:
+    import hashlib
+    return hashlib.sha256(_patch(job)).hexdigest()
+
+
+_PR_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
+
+
+def update_due(job: jobs.Job, *, auto: bool, allow_workflows: bool = False) -> str | None:
+    """None when this delivered job's work has changed and may go to its pull request as one more
+    commit on its own branch, else why not."""
+    entry = agent_registry.find(core.expand(job.repo))
+    if entry is None:
+        return f"{job.repo} is no longer allowed for queued jobs"
+    p = entry.publish
+    if p.mode == "off" or (auto and p.mode != "auto") or not (p.draft_pr and p.pr_updates):
+        return f"{job.repo}'s publish settings don't add commits to a pull request (publish-to --pr-updates)"
+    rec = record(job).get("draft_pr", {})
+    if not _PR_URL.fullmatch(str(rec.get("url") or "")) or not rec.get("commit"):
+        return f"{job.id} has no pull request of its own"
+    if rec.get("theirs"):
+        return f"someone else has committed to ws-agent/{job.id}: the branch is theirs now"
+    info = jobs.exit_info(job) or {}
+    if job.closed or job.cancelled or jobs.live_run(job) is not None or not info \
+            or jobs.outcome_state(info) != "succeeded":
+        return f"{job.id} hasn't succeeded (or is running again)"
+    if not _patch(job).strip() or _patch_sha(job) == rec.get("patch"):
+        return "its work hasn't changed since the last push"
+    if int(rec.get("updates") or 0) >= MAX_UPDATES:   # type: ignore[call-overload]
+        return f"{MAX_UPDATES} updates went to this pull request already: the rest is yours to push"
+    if held_back(job):
+        return "an earlier comment of this job may or may not have been posted"
+    checks = info.get("checks")
+    if (auto and checks != "pass") or checks == "fail":
+        return f"its checks are {checks or 'none'}: only passing work is pushed"
+    if touches_workflows(_patch(job)) and (auto or not allow_workflows):
+        return "its patch touches .github/ (workflows run with the repository's secrets): yours to push"
+    return None
+
+
+def push_update(job: jobs.Job, *, auto: bool, allow_workflows: bool = False) -> str:
+    """One more commit on the job's own branch, then a short note on its pull request. Only while
+    the branch's tip at origin is the commit ws-agent pushed last: a fast-forward of its own work,
+    never over anyone else's. A line saying what happened."""
+    with _lock(job):
+        job = jobs.load(job.id)
+        why = update_due(job, auto=auto, allow_workflows=allow_workflows)
+        if why:
+            return f"{job.id}: update not pushed: {why}"
+        rec = record(job)["draft_pr"]
+        m = _PR_URL.fullmatch(str(rec["url"]))
+        assert m is not None
+        slug, number, last = m.group(1), int(m.group(2)), str(rec["commit"])
+        repo, branch = core.expand(job.repo), f"ws-agent/{job.id}"
+        ref, base = f"refs/heads/{branch}", job.base.get("commit", "")
+        git = ["git", "-C", str(repo), "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "push.followTags=false"]
+        quiet = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        try:
+            agent_sources._check_origin(repo, slug)
+            url = _ok(_run([*git, "remote", "get-url", "--push", "origin"], env=quiet), "git remote get-url")
+            there = (_ok(_run([*git, "ls-remote", url, ref], env=quiet), "git ls-remote").split() or [""])[0]
+            if there != last:
+                _save(job, "draft_pr", {"theirs": True})
+                return (f"{job.id}: update not pushed: ws-agent/{job.id} at origin isn't the commit ws-agent pushed "
+                        "(someone committed to it, or it is gone): the branch is theirs now")
+            index = jobs.job_dir(job.id) / "result" / "publish.index"
+            env = {**quiet, "GIT_INDEX_FILE": str(index)}
+            try:
+                _ok(_run([*git, "read-tree", base], env=env), "git read-tree")
+                _ok(_run([*git, "apply", "--cached", "--binary", "-"], env=env, stdin=_patch(job)), "applying the patch")
+                tree = _ok(_run([*git, "write-tree"], env=env), "git write-tree")
+            finally:
+                index.unlink(missing_ok=True)
+            if tree == _ok(_run([*git, "rev-parse", f"{last}^{{tree}}"], env=quiet), "git rev-parse"):
+                _save(job, "draft_pr", {"patch": _patch_sha(job)})
+                return f"{job.id}: update not pushed: its work is what the pull request already has"
+            n = int(rec.get("updates") or 0) + 1   # type: ignore[call-overload]
+            msg = f"ws-agent {job.id}: update {n}\n\nMade by an agent (ws-agent); review before merging.\n"
+            commit = _ok(_run([*git, "commit-tree", tree, "-p", last], env=quiet, stdin=msg.encode("utf-8")),
+                         "git commit-tree")
+            names = _ok(_run([*git, "diff-tree", "-r", "--name-status", "--no-commit-id", last, commit], env=quiet),
+                        "git diff-tree")
+            tracking = _tracking(git, branch, quiet)
+            # a fast-forward of ws-agent's own commit, and only if it is still the tip (the lease)
+            _ok(_run([*git, "push", "--quiet", "--no-follow-tags", "--recurse-submodules=no",
+                      f"--force-with-lease={ref}:{last}", url, f"{commit}:{ref}"], env=quiet), f"pushing {branch}")
+            for made in _tracking(git, branch, quiet) - tracking:
+                _run([*git, "update-ref", "-d", made, commit], env=quiet)
+        except (PublishError, agent_sources.SourceError) as e:
+            return f"{job.id}: update failed: {e}"
+        _save(job, "draft_pr", {"commit": commit, "updates": n, "patch": _patch_sha(job), "at": core.now_iso()})
+        agent_sources.remember_pr(slug, job.id, number, commit)
+        # the note: marked first and kept marked if it fails, as every comment is
+        key = f"update:{n}"
+        _save(job, key, {"attempting": core.now_iso(), "note": True})
+        info = jobs.exit_info(job) or {}
+        engine = _word(info.get("engine") or job.engine)
+        lines = [f"Updated by an agent (ws-agent job `{job.id}`{', ' + engine if engine else ''}), not written by a person.",
+                 "", f"Checks: {_word(info.get('checks')) or 'none'}. One more commit is on the branch.", "",
+                 "Changed in this update:", "", fenced(names, 200 * FILES_MAX)]
+        if _summary(job).strip():
+            lines += ["", "The job's own summary (generated text, shown as written):", "", fenced(_summary(job), SUMMARY_MAX)]
+        body = json.dumps({"body": "\n".join(lines) + "\n"}).encode("utf-8")
+        try:
+            out = _ok(_run(["gh", "api", "--method", "POST", f"repos/{slug}/issues/{number}/comments", "--input", "-"],
+                           stdin=body), f"posting to {slug}#{number}")
+        except PublishError as e:
+            _save(job, key, {"error": str(e), "at": core.now_iso()})
+            return f"{job.id}: pushed update {n} to {branch}; its note failed: {e}"
+        _save(job, key, {"url": _posted(out, Target(slug, number)), "at": core.now_iso(), "auto": auto, "error": "",
+                         "attempting": ""})
+        return f"{job.id}: pushed update {n} to {branch}: {rec['url']}"
 
 
 def _pr_base(job: jobs.Job, slug: str) -> str:
@@ -616,4 +731,8 @@ def publish(job: jobs.Job, *, auto: bool, even_failing: bool = False, dry_run: b
                 continue
             _save(job, kind, {"url": url, "at": core.now_iso(), "auto": auto, "error": "", "attempting": ""})
             out.append(f"{job.id}: published {kind}: {url}")
+            pr = _PR_URL.fullmatch(url) if kind == "draft_pr" else None
+            if pr:   # its pull request is now a thread of this job, followed for review and checks
+                agent_sources.remember_pr(pr.group(1), job.id, int(pr.group(2)),
+                                          str(record(job).get("draft_pr", {}).get("commit") or ""))
     return out

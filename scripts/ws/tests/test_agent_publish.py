@@ -845,3 +845,104 @@ class ConversationReview(Conversation):
         self.assertTrue(jobs.load(b.id).cancelled, lines)
         self.assertTrue(any("boom" in ln for ln in lines), lines)
 
+
+class PullRequestUpdates(Publish):
+    """Phase 4 part B: a delivered job that changes its work again adds one commit to its own
+    branch, and only to it; its pull request's end closes it."""
+
+    def delivered(self, **kw: object) -> jobs.Job:
+        self.settings(**{"mode": "auto", "draft_pr": True, "pr_updates": True, **kw})
+        j = self.job()
+        serve.tick(time.time())
+        self.assertTrue(pub.published(j, "draft_pr"), pub.record(j))
+        return j
+
+    def rework(self, j: jobs.Job, value: int = 3, *, checks: str = "pass", path: str = "app.py") -> None:
+        res = jobs.job_dir(j.id) / "result"
+        diff = (f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1,2 +1,2 @@\n def f():\n"
+                f"-    return 1\n+    return {value}\n")
+        if path != "app.py":
+            diff = (f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1 @@\n+on: push\n"
+                    "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,2 @@\n def f():\n-    return 1\n+    return 2\n")
+        self.write(res / "changes.diff", diff)
+        f = res / "exit.json"
+        f.write_text(json.dumps({**json.loads(f.read_text()), "checks": checks, "finished": "2100-01-02T00:00:00+00:00"}))
+
+    def tip(self, j: jobs.Job) -> str:
+        return self.remote_refs()[f"refs/heads/ws-agent/{j.id}"]
+
+    def test_the_pull_request_becomes_a_thread_and_is_followed(self) -> None:
+        j = self.delivered()
+        st = agent_sources.source_state()[f"gh:{SLUG}"]
+        self.assertEqual(st["threads"]["#8"], j.id)
+        self.assertEqual(st["prs"][j.id], {"number": 8, "commit": self.tip(j)})
+        self.assertIn("delivered", self.cli("ls", "--all")[1])
+
+    def test_new_work_is_one_more_commit_on_its_own_branch(self) -> None:
+        j = self.delivered()
+        first, local = self.tip(j), self.local_state()
+        self.assertEqual(serve.tick(time.time()), [])            # nothing changed: nothing pushed
+        self.rework(j)
+        lines = serve.tick(time.time())
+        self.assertEqual(len([ln for ln in lines if "pushed update 1" in ln]), 1, lines)
+        second = self.tip(j)
+        self.assertEqual(git("rev-parse", f"{second}^", cwd=self.origin), first)
+        self.assertIn("return 3", git("show", f"{second}:app.py", cwd=self.origin))
+        self.assertEqual(set(self.remote_refs()), {"refs/heads/main", f"refs/heads/ws-agent/{j.id}"})
+        self.assertEqual(self.local_state(), local)
+        call = [c for c in self.gh_calls() if c[:2] == ["api", "--method"]][-1]
+        self.assertEqual(call[3], f"repos/{SLUG}/issues/8/comments")
+        body = json.loads(sorted(self.gx.glob("body.*"), key=lambda f: int(f.suffix[1:]))[-1].read_text())["body"]
+        self.assertTrue(body.startswith(f"Updated by an agent (ws-agent job `{j.id}`, claude), not written by a person."))
+        self.assertNotIn("Renamed f", outside_fences(body))
+        self.assertEqual(agent_sources.source_state()[f"gh:{SLUG}"]["prs"][j.id]["commit"], second)
+        self.assertEqual(serve.tick(time.time()), [])            # once
+
+    def test_a_branch_someone_else_committed_to_is_theirs(self) -> None:
+        j = self.delivered()
+        other = self.root / "other"
+        git("clone", "-q", str(self.origin), str(other), cwd=self.root)
+        git("checkout", "-q", f"ws-agent/{j.id}", cwd=other)
+        self.write(other / "note.txt", "mine\n")
+        git("add", "-A", cwd=other)
+        git("-c", "user.name=p", "-c", "user.email=p@example.invalid", "commit", "-qm", "the person's", cwd=other)
+        git("push", "-q", "origin", f"ws-agent/{j.id}", cwd=other)
+        theirs = self.tip(j)
+        self.rework(j)
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            lines = serve.tick(time.time())
+            self.assertEqual(serve.tick(time.time()), [])
+        self.assertTrue(any("theirs now" in ln for ln in lines), lines)
+        self.assertEqual((self.tip(j), len(notices)), (theirs, 1))
+
+    def test_no_update_without_the_switch_passing_checks_or_room(self) -> None:
+        j = self.delivered(pr_updates=False)
+        first = self.tip(j)
+        self.rework(j)
+        self.assertEqual(serve.tick(time.time()), [])
+        self.settings(mode="auto", draft_pr=True, pr_updates=True)
+        self.rework(j, checks="fail")
+        self.assertIn("checks", pub.update_due(j, auto=True) or "")
+        self.rework(j, path=".github/workflows/x.yml")
+        self.assertIn(".github/", pub.update_due(j, auto=True) or "")
+        self.rework(j)
+        pub._save(j, "draft_pr", {"updates": pub.MAX_UPDATES})
+        self.assertIn(str(pub.MAX_UPDATES), pub.update_due(j, auto=True) or "")
+        self.assertEqual((serve.tick(time.time()), self.tip(j)), ([], first))
+
+    def test_the_pull_requests_end_closes_the_job(self) -> None:
+        j = self.delivered()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "merged", "", "ended")])):
+            lines = serve._poll_github(reg.find(self.repo), time.time())
+        self.assertTrue(jobs.load(j.id).closed, lines)
+        self.assertTrue((jobs.job_dir(j.id) / "result" / "changes.diff").exists())
+
+    def test_failed_checks_are_told_to_the_job_as_ci_not_as_a_person(self) -> None:
+        j = self.delivered()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "CI failed: unit tests", "", "ci")])), \
+                unittest.mock.patch.object(agent, "tell_job", return_value=(0, "told")) as tell:
+            serve._poll_github(reg.find(self.repo), time.time())
+        tell.assert_called_once()
+        self.assertEqual(tell.call_args.kwargs["sender"], "gh:checks")
+

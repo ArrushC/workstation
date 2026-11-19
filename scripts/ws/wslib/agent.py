@@ -295,7 +295,8 @@ def _publish_to(args: argparse.Namespace) -> int:
     p = vcs.probe(Path(args.path))
     root = p.root or Path(args.path).resolve()
     pub = agent_registry.Publish(mode=args.mode, comment=bool(args.comment), draft_pr=bool(args.draft_pr),
-                                 svn_branch=args.svn_branch or "", ack=bool(args.ack), questions=bool(args.questions))
+                                 svn_branch=args.svn_branch or "", ack=bool(args.ack), questions=bool(args.questions),
+                                 pr_updates=bool(args.pr_updates))
     rc, repo = _source_change(agent_registry.set_publish, root, pub)
     if repo is not None:
         print(f"publishing for {core.tilde(root)}: {_publish_words(repo.publish)}")
@@ -313,7 +314,8 @@ def _publish_to(args: argparse.Namespace) -> int:
 def _publish_words(p: agent_registry.Publish) -> str:
     kinds = [w for w, on in (("GitHub comment", p.comment), ("draft PR", p.draft_pr),
                              (f"SVN branch under {p.svn_branch}", bool(p.svn_branch)),
-                             ("acknowledgement", p.ack), ("questions", p.questions)) if on]
+                             ("acknowledgement", p.ack), ("questions", p.questions),
+                             ("pull-request updates", p.pr_updates)) if on]
     return f"{p.mode}" + (f" ({', '.join(kinds)})" if kinds else " (no kind named: nothing is written)")
 
 
@@ -340,9 +342,11 @@ def _publish(args: argparse.Namespace) -> int:
     except agent_publish.PublishError as e:
         _err(str(e))
         return 1
+    if not args.dry_run and agent_publish.update_due(job, auto=False, allow_workflows=args.allow_workflows) is None:
+        lines.append(agent_publish.push_update(job, auto=False, allow_workflows=args.allow_workflows))
     for ln in lines:
         print(ln)
-    done = any(": published " in ln or ": would publish " in ln for ln in lines)
+    done = any(": published " in ln or ": would publish " in ln or ": pushed update " in ln for ln in lines)
     return 0 if done else 3
 
 
@@ -627,6 +631,11 @@ def _tasks() -> dict[int, str] | None:
     return q.tasks if q else None
 
 
+def _has_pr(job: jobs.Job) -> bool:
+    from . import agent_publish
+    return bool(agent_publish.published(job, "draft_pr"))
+
+
 def _ls(args: argparse.Namespace) -> int:
     tasks = _tasks()
     key = ""
@@ -643,7 +652,9 @@ def _ls(args: argparse.Namespace) -> int:
         info = jobs.exit_info(j) or {}
         rows.append({"id": j.id, "state": st, "checks": str(info.get("checks") or "-") if info else "-",
                      "engine": j.engine or "-", "title": j.title, "repo": j.repo, "vcs": j.vcs, "created": j.created,
-                     "attempts": j.attempts, "pueue_id": j.pueue_id})
+                     "attempts": j.attempts, "pueue_id": j.pueue_id,
+                     # delivered: its pull request is open, so it waits on review or CI, not on the person here
+                     "stage": "delivered" if st == "succeeded" and _has_pr(j) else st})
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -653,7 +664,8 @@ def _ls(args: argparse.Namespace) -> int:
     for r in rows:
         where = "" if key else f"  {r['repo']}"
         checks = f"checks {r['checks']}" if r["checks"] not in ("-", "none") else "-"
-        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  "
+        state = "delivered" if r["stage"] == "delivered" else r["state"]
+        print(f"{r['id']}  {state:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  "
               f"{agent_inbox.printable(r['title'])}{where}")
     if tasks is None:
         _err("warning: pueued isn't running, so live states are unknown")
@@ -1257,6 +1269,8 @@ def _parser() -> argparse.ArgumentParser:
     pt.add_argument("--ack", action="store_true",
                     help="GitHub, auto: one comment when a request becomes a job, and one if it is stopped from the thread")
     pt.add_argument("--questions", action="store_true", help="GitHub, auto: a job's question as a comment on its thread")
+    pt.add_argument("--pr-updates", action="store_true",
+                    help="GitHub: a delivered job's later work as new commits on its own ws-agent/<id> branch")
     pt.set_defaults(fn=_publish_to)
     pb = sub.add_parser("publish", help="write a finished job's result back, as its repository's publish settings say")
     pb.add_argument("id")
