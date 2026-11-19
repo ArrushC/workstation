@@ -287,7 +287,7 @@ class Sources(ServeScratch):
         j = self.job()
         self.write(jobs.job_dir(j.id) / "result" / "exit.json", json.dumps({"exit_code": 0, "status": "done",
                                                                            "kind": "ok"}))
-        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs", "ArrushC")])):
+        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs", "ArrushC", "tell")])):
             serve.tick(time.time())
         self.assertEqual([m["text"] for m in jobs.undelivered(jobs.load(j.id))], ["and the docs"])
         self.assertEqual([a[-1] for a in self.adds()], ["--resume"])
@@ -426,7 +426,7 @@ class Followups(ServeScratch):
         j = self.job()
         self.write(jobs.job_dir(j.id) / "result" / "exit.json",
                    json.dumps({"exit_code": 0, "status": "done", "kind": "ok"}))
-        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs", "octocat")])):
+        with mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "and the docs", "octocat", "tell")])):
             serve.tick(time.time())
         msgs = jobs.undelivered(jobs.load(j.id))
         self.assertEqual([(m["from"], m["text"]) for m in msgs], [("gh:octocat", "and the docs")])

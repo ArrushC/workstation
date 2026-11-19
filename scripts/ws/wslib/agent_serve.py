@@ -243,14 +243,40 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     return _inbox(c, decision, "observe" if mode == "observe" else "triage asks")
 
 
+FOLLOW_UPS_A_DAY = 10   # a thread's comments delivered to one job in a day; the rest wait for the person
+
+
 def _follow(job_id: str, text: str, login: str) -> str:
     from . import agent
     try:
         job = jobs.load(job_id)
     except KeyError:
         return f"follow-up for {job_id}: no such job"
+    today = core.now_iso()[:10]
+    got = sum(1 for m in jobs.thread(job) if str(m.get("from", "")).startswith("gh:") and str(m.get("ts", "")).startswith(today))
+    if got >= FOLLOW_UPS_A_DAY:
+        mark = jobs.job_dir(job.id) / "follow-limit"
+        if not (mark.exists() and mark.read_text(encoding="utf-8").strip() == today):
+            mark.write_text(today + "\n", encoding="utf-8")
+            agent_events.notify(f"{job.id}: {FOLLOW_UPS_A_DAY} comments reached it today; later ones wait for you "
+                                f"(ws-agent tell {job.id})")
+        return f"follow-up for {job_id}: not delivered: {FOLLOW_UPS_A_DAY} a day reached"
     code, msg = agent.tell_job(job, text, sender=f"gh:{login}" if login else "you")
     return f"follow-up for {job_id}: " + (msg.splitlines()[0] if msg else f"exit {code}")
+
+
+def _stop(job_id: str, login: str) -> str:
+    """`/agent stop` from a listed login on the job's thread: cancel it, and say so once there."""
+    from . import agent, agent_publish
+    try:
+        job = jobs.load(job_id)
+    except KeyError:
+        return f"stop for {job_id}: no such job"
+    code, msg = agent.cancel_job(job, even_finished=True)
+    out = f"stop for {job_id} (gh:{login}): " + (msg.splitlines()[0] if msg else f"exit {code}")
+    if code == 0 and agent_publish.note_due(jobs.load(job_id), "stopped") is None:
+        out += "; " + agent_publish.post_note(job, "stopped")
+    return out
 
 
 # Candidates a poll returned are kept in pending.json until handled: the poll has already moved
@@ -327,7 +353,30 @@ def _poll_svn(entry: agent_registry.Repo, now: float) -> list[str]:
 def _poll_github(entry: agent_registry.Repo, now: float) -> list[str]:
     found, follow = agent_sources.poll_github(entry, now)
     _push(found)
-    return [_follow(jid, text, login) for jid, text, login in follow] + _drain()
+    return [_stop(jid, login) if kind == "stop" else _follow(jid, text, login)
+            for jid, text, login, kind in follow] + _drain()
+
+
+def _converse(q: jobs.Queue | None) -> list[str]:
+    """What a live job says in its GitHub thread: one acknowledgement, and its questions. Only
+    where the repository's publish settings are automatic and name them."""
+    from . import agent_publish
+    if q is None or q.group == "Paused":
+        return []
+    out = []
+    repos = agent_registry.load()[0]
+    for j in jobs.all_jobs():
+        entry = repos.get(j.repo)
+        if entry is None or entry.publish.mode != "auto" or not j.origin.startswith("gh:") or j.closed or j.cancelled:
+            continue
+        for kind in ("ack", "question"):
+            if agent_publish.note_due(j, kind, entry) is not None:
+                continue
+            try:
+                out.append(agent_publish.post_note(j, kind))
+            except Exception as e:  # noqa: BLE001 - one job's failure never stops the others
+                out.append(f"{j.id}: {kind}: {type(e).__name__}: {e}")
+    return out
 
 
 def _publish_auto(q: jobs.Queue | None) -> list[str]:
@@ -380,6 +429,7 @@ def tick(now: float) -> list[str]:
     step("recover", lambda: _recover(q))
     step("waiting", lambda: _requeue_waiting(q))
     step("pending", _drain)   # what a serve killed mid-batch left
+    step("converse", lambda: _converse(q))
     step("publish", lambda: _publish_auto(q))
     for key, entry in sorted(agent_registry.load()[0].items()):
         if entry.watch is not None and entry.watch.mode in ("observe", "act"):

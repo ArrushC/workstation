@@ -300,6 +300,11 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       paused, and never re-posts a comment whose earlier attempt may have reached GitHub (`attempting`).
     - The SVN branch is one revision: checkout `url@rev`, `svn patch --strip <depth>` (dry run first), then
       `svn copy <wc> <branch URL>`. `svn_branch_problem` (set time and publish time) refuses trunk and watched trees.
+    - Notes (phase 4: `ack`, `question:<finished>`, `stopped`; `note_due`/`post_note`, serve's `converse` step)
+      are auto-only, for a GitHub request's job newer than `publish.since`; `note: true` keeps them out of the
+      daily cap; an unconfirmed comment (`held_back`) blocks the job's later comments. Every posted first line
+      names the job (`agent_sources.AGENT_LINE`): with `github.follow` the person's own login posts them, and
+      they must not come back as follow-ups. `poll_github` returns `(job, text, login, "tell" | "stop")`.
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):

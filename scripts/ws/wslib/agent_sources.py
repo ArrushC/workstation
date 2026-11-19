@@ -249,6 +249,9 @@ COMMENTS_IN_PROMPT = 20
 HANDLED_KEPT = 500
 MAX_TRIES = 3   # polls a request's base may fail before it waits in the inbox instead
 _REQUEST = re.compile(r"^/agent(?:[ \t]+|$)")
+# What ws-agent itself posts starts with a line naming its job. Those comments carry the person's
+# own login (their gh posts them), so on a followed thread they'd come back as follow-ups.
+AGENT_LINE = re.compile(r"\(ws-agent job `[0-9a-f]{4,}`")
 
 GITHUB_TASK = """\
 A request from {author} on GitHub, on {kind} {slug}#{number} ({url}):
@@ -449,9 +452,11 @@ def _held_request(entry: agent_registry.Repo, slug: str, rk: str, login: str, bo
 
 
 def poll_github(entry: agent_registry.Repo, now: float
-                ) -> tuple[list[agent_inbox.Candidate], list[tuple[str, str, str]]]:
-    """New `/agent` requests by the source's logins since the cursor, and follow-ups ((job id, text, login))
-    for threads whose job is still open. Polls once max(60 s, GitHub's X-Poll-Interval) has passed.
+                ) -> tuple[list[agent_inbox.Candidate], list[tuple[str, str, str, str]]]:
+    """New `/agent` requests by the source's logins since the cursor, and what they said to threads
+    whose job is still open: (job id, text, login, "tell" | "stop"). A first line `/agent stop` stops
+    the job. With `follow`, a comment there needs no `/agent`: it answers the job's question or
+    adds to its request. Polls once max(60 s, GitHub's X-Poll-Interval) has passed.
     A request whose base can't be fetched is tried again next poll (the cursor stops before it)."""
     g = entry.github
     if g is None or not g.slug or g.mode not in agent_registry.MODES or g.mode == "off":
@@ -501,21 +506,30 @@ def poll_github(entry: agent_registry.Repo, now: float
     failures = st.get("failures") if isinstance(st.get("failures"), dict) else {}
     assert isinstance(failures, dict)
     found: list[agent_inbox.Candidate] = []
-    follow: list[tuple[str, str, str]] = []
+    follow: list[tuple[str, str, str, str]] = []
     errors: list[tuple[str, str]] = []
     for rk, login, body, number, url, updated, issue in sorted(requests, key=lambda r: r[5]):
         if rk in handled:
             continue
         instruction = _instruction(body)
-        if instruction is None or login.casefold() not in logins:
-            handled.append(rk)
-            continue
         jid = threads.get(f"#{number}")
-        if isinstance(jid, str) and _open_job(jid):
-            if instruction:
-                follow.append((jid, instruction, login))
+        live = isinstance(jid, str) and _open_job(jid)
+        if login.casefold() not in logins or (instruction is None and not (live and g.follow)):
             handled.append(rk)
             continue
+        if live:
+            assert isinstance(jid, str)
+            text = body.replace("\r\n", "\n").strip()
+            first = text.partition("\n")[0]
+            if instruction is not None and first.split() == ["/agent", "stop"]:
+                follow.append((jid, "", login, "stop"))
+            elif instruction:
+                follow.append((jid, instruction, login, "tell"))
+            elif instruction is None and text and not AGENT_LINE.search(first) and rk.startswith("c"):
+                follow.append((jid, text, login, "tell"))
+            handled.append(rk)
+            continue
+        assert instruction is not None
         try:
             found.append(_request(entry, g.slug, rk, login, body, instruction, number, url, issue))
             handled.append(rk)

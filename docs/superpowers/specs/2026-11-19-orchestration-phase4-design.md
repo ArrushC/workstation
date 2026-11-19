@@ -1,6 +1,6 @@
 # Orchestration phase 4: design
 
-Status: draft for the person's approval (2026-11-19, second version). Builds on phases 1 to 3
+Status: approved by the person 2026-11-19 (second version, including the three loosened rules). Builds on phases 1 to 3
 (`2026-11-07-orchestration-phase2-design.md`, `2026-11-09-orchestration-phase3-design.md`), whose
 constraints stay in force except where "Rules this loosens" below says otherwise.
 

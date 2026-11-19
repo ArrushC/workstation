@@ -216,7 +216,8 @@ def _repo_words(r: agent_registry.Repo) -> list[str]:
         n = len(r.watch.rules)
         words.append(f"watch: {', '.join(r.watch.urls)} ({r.watch.mode}, {n} rule{'' if n == 1 else 's'})")
     if r.github is not None:
-        words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)})")
+        words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)}"
+                     f"{', following live threads' if r.github.follow else ''})")
     if r.publish != agent_registry.Publish():
         words.append(f"publish: {_publish_words(r.publish)}")
     return words
@@ -274,12 +275,14 @@ def _github(args: argparse.Namespace) -> int:
             r = subprocess.run([gh, "api", "user", "--jq", ".login"], capture_output=True, text=True, timeout=30) \
                 if gh else None
             logins = [r.stdout.strip()] if r is not None and r.returncode == 0 and r.stdout.strip() else []
-        src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins))
+        src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins),
+                                          follow=bool(args.follow))
     prev = agent_registry.find(root)
     rc, repo = _source_change(agent_registry.set_github, root, src)
     if repo is not None:
         print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
-              + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)})" if src else ""))
+              + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)}"
+                 f"{', following live threads' if src.follow else ''})" if src else ""))
         if src is not None:
             if src.mode != "off":   # from now: new, or back from off, brings nothing from meanwhile
                 agent_sources.start_github(repo, fresh=prev is None or prev.github is None or prev.github.mode == "off")
@@ -292,11 +295,13 @@ def _publish_to(args: argparse.Namespace) -> int:
     p = vcs.probe(Path(args.path))
     root = p.root or Path(args.path).resolve()
     pub = agent_registry.Publish(mode=args.mode, comment=bool(args.comment), draft_pr=bool(args.draft_pr),
-                                 svn_branch=args.svn_branch or "")
+                                 svn_branch=args.svn_branch or "", ack=bool(args.ack), questions=bool(args.questions))
     rc, repo = _source_change(agent_registry.set_publish, root, pub)
     if repo is not None:
         print(f"publishing for {core.tilde(root)}: {_publish_words(repo.publish)}")
-        if pub.mode == "auto" and (pub.comment or pub.draft_pr):
+        if pub.mode != "auto" and (pub.ack or pub.questions):
+            _err("An acknowledgement and a question are only ever posted by serve: they need --mode auto.")
+        if pub.mode == "auto" and (pub.comment or pub.draft_pr or pub.ack or pub.questions):
             _err("ws-agent serve will now write these for passing jobs from this repository's sources, with your "
                  "credentials, without asking per job. ws-agent publish-to <path> --mode off stops it.")
         if pub.mode == "auto" and pub.svn_branch:
@@ -307,7 +312,8 @@ def _publish_to(args: argparse.Namespace) -> int:
 
 def _publish_words(p: agent_registry.Publish) -> str:
     kinds = [w for w, on in (("GitHub comment", p.comment), ("draft PR", p.draft_pr),
-                             (f"SVN branch under {p.svn_branch}", bool(p.svn_branch))) if on]
+                             (f"SVN branch under {p.svn_branch}", bool(p.svn_branch)),
+                             ("acknowledgement", p.ack), ("questions", p.questions)) if on]
     return f"{p.mode}" + (f" ({', '.join(kinds)})" if kinds else " (no kind named: nothing is written)")
 
 
@@ -787,28 +793,42 @@ def _print_review(res: Path) -> None:
             print(f"  {where}: {f.get('issue')}")
 
 
-def _cancel(args: argparse.Namespace) -> int:
-    job = _load(args.id)
-    if job is None:
-        return 1
+def cancel_job(job: jobs.Job, *, even_finished: bool = False) -> tuple[int, str]:
+    """Stop a job: (code, message), 0 cancelled, 1 an error, 3 nothing to cancel. `even_finished`
+    (a stop from the job's own thread) also marks a finished job cancelled, so nothing more is
+    published for it and its thread is no longer live."""
     try:
         with jobs.queue_lock():   # serve recovers and requeues under it: it never writes an older copy back
             job = jobs.load(job.id)
             st = jobs.state(job, _tasks())
-            if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
-                _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
-                return 3
+            if st in ("closed", "cancelled") or (
+                    st not in ("queued", "running", "interrupted", "unknown", "waiting") and not even_finished):
+                return 3, f"ws-agent: {job.id} is {st}; nothing to cancel"
             job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
             jobs.save(job)
             confirmed = jobs.kill(job)
     except jobs.QueueError as e:
-        _err(str(e))
-        return 1
+        return 1, str(e)
     stopped = jobs.stop_run(job)   # outside the lock: it waits up to 10 s for the engine
-    print(f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
-          f"(ws-agent close {job.id} removes the copy)")
+    msg = (f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
+           f"(ws-agent close {job.id} removes the copy)")
     if not confirmed:
-        _err("warning: pueue didn't confirm removing the task; if it starts later it refuses to run (cancelled)")
+        msg += "\nwarning: pueue didn't confirm removing the task; if it starts later it refuses to run (cancelled)"
+    return 0, msg
+
+
+def _cancel(args: argparse.Namespace) -> int:
+    job = _load(args.id)
+    if job is None:
+        return 1
+    code, msg = cancel_job(job)
+    if code != 0:
+        _err(msg)
+        return code
+    first, _, warning = msg.partition("\n")
+    print(first)
+    if warning:
+        _err(warning)
     return 0
 
 
@@ -1225,6 +1245,9 @@ def _parser() -> argparse.ArgumentParser:
     pt.add_argument("--comment", action="store_true", help="GitHub: the report as a comment on the issue or PR that asked")
     pt.add_argument("--draft-pr", action="store_true", help="GitHub: the patch on a new branch, as a draft pull request")
     pt.add_argument("--svn-branch", help="SVN: the parent of new branches, e.g. ^/branches/ws-agent")
+    pt.add_argument("--ack", action="store_true",
+                    help="GitHub, auto: one comment when a request becomes a job, and one if it is stopped from the thread")
+    pt.add_argument("--questions", action="store_true", help="GitHub, auto: a job's question as a comment on its thread")
     pt.set_defaults(fn=_publish_to)
     pb = sub.add_parser("publish", help="write a finished job's result back, as its repository's publish settings say")
     pb.add_argument("id")
@@ -1251,6 +1274,8 @@ def _parser() -> argparse.ArgumentParser:
     gh.add_argument("path")
     gh.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
     gh.add_argument("--login", action="append", help="who may ask (repeatable; default: your gh login)")
+    gh.add_argument("--follow", action="store_true",
+                    help="on a thread with a live job, these logins' comments reach it without /agent (an answer, a follow-up)")
     gh.set_defaults(fn=_github)
     ugh = sub.add_parser("ungithub")
     ugh.add_argument("path")

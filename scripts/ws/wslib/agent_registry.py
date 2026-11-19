@@ -61,6 +61,7 @@ class GitHubSource:
     slug: str = ""
     mode: str = "observe"
     logins: tuple[str, ...] = ()
+    follow: bool = False      # on a thread with a live job, these logins' comments reach it without /agent
 
 
 PUBLISH_MODES = ("off", "manual", "auto")
@@ -75,6 +76,8 @@ class Publish:
     draft_pr: bool = False    # GitHub: the patch on a new branch ws-agent/<id>, as a draft pull request
     svn_branch: str = ""      # SVN: the parent of new branches (^/branches/ws-agent); "" = never commit
     since: str = ""           # when mode became auto: jobs that finished before it are never published automatically
+    ack: bool = False         # GitHub, auto only: one comment when a request becomes a job (and when it is stopped)
+    questions: bool = False   # GitHub, auto only: a job's question as a comment on the thread that asked
 
 
 def svn_branch_problem(path: str, watch: Watch | None) -> str | None:
@@ -177,7 +180,8 @@ def _watch(t: object) -> Watch | None:
 def _github(t: object) -> GitHubSource | None:
     if not isinstance(t, dict):
         return None
-    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")), _strings(t.get("logins", [])))
+    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")), _strings(t.get("logins", [])),
+                        t.get("follow") is True)
 
 
 def _publish(t: object) -> Publish:
@@ -186,7 +190,7 @@ def _publish(t: object) -> Publish:
     mode = str(t.get("mode", "off"))
     return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
                    t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")),
-                   str(t.get("since", "")))
+                   str(t.get("since", "")), t.get("ack") is True, t.get("questions") is True)
 
 
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
@@ -291,12 +295,13 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
         prev_pub = old.get("publish")
         out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
                           "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch,
-                          "since": r.publish.since}
+                          "since": r.publish.since, "ack": r.publish.ack, "questions": r.publish.questions}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
             ("github", None if r.github is None else {
-                "slug": r.github.slug, "mode": r.github.mode, "logins": list(r.github.logins)})):
+                "slug": r.github.slug, "mode": r.github.mode, "logins": list(r.github.logins),
+                "follow": r.github.follow})):
         if table is not None:   # keys a newer ws wrote inside the table survive too
             prev = old.get(name)
             out[name] = {**(prev if isinstance(prev, dict) else {}), **table}
@@ -372,7 +377,7 @@ def set_publish(root: Path, pub: Publish) -> Repo:
     found = find(root)
     if pub.mode not in PUBLISH_MODES:
         raise ValueError(f"ws-agent: --mode must be one of {', '.join(PUBLISH_MODES)}")
-    if found is not None and found.vcs == "svn" and (pub.comment or pub.draft_pr):
+    if found is not None and found.vcs == "svn" and (pub.comment or pub.draft_pr or pub.ack or pub.questions):
         raise ValueError(f"ws-agent: {_key(root)} is an SVN copy; comments and draft PRs are GitHub's")
     if found is not None and found.vcs == "git" and pub.svn_branch:
         raise ValueError(f"ws-agent: {_key(root)} is a git repository; --svn-branch is for SVN copies")

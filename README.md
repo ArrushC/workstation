@@ -641,6 +641,10 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     `git ls-remote origin` and fetched into the object store only: your branches, remote-tracking refs and
     `FETCH_HEAD` stay as they are. Nothing is fetched while `origin` isn't that GitHub repository. A later `/agent` on
     the same issue goes to its open job. Polls use your gh login, read only: nothing is posted back.
+  - `--follow` (GitHub): while a thread's job is open, a comment there by a listed login needs no `/agent`. It
+    answers the job's question if it asked one, otherwise it adds to the request. Nobody else's comment ever
+    reaches a job, and at most 10 a day reach one job. A comment whose first line is `/agent stop` stops the
+    thread's job, with or without `--follow`.
   - A job made from a source runs on someone else's code (a pull request, any committer's revision). It doesn't
     load that copy's own `.claude` settings (their hooks) or its `.mcp.json`. Jobs you start yourself still do.
   - `unwatch` and `ungithub` stop them.
@@ -681,6 +685,10 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     source go out automatically. A job whose reviewer (`--review`) had concerns is left for you. If serve
     gives up on a job (three failures, or a comment that may already have been posted), it tells you once;
     `ws-agent publish <id>` is then yours to run.
+  - `--ack` and `--questions` (GitHub, `auto` only) let serve speak in the thread while a job lives: one
+    comment when a request becomes a job (and one if it is stopped from the thread), and the job's question
+    when it needs an answer, at most 3 per job. Fixed wording that names the job; a question's own text sits in
+    a code fence. A comment that may or may not have been posted holds back the job's later ones until you look.
   - `ws-agent publish-to <path> --mode off` stops it.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;

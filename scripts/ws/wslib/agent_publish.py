@@ -37,6 +37,9 @@ from . import agent_admit, agent_inbox, agent_registry, agent_sources, core, job
 KINDS = ("comment", "draft_pr", "svn_branch")
 AUTO_CAP = 5            # automatic publishes a day per source
 MAX_TRIES = 3           # automatic attempts per job and kind before it is left for the person
+NOTES = ("ack", "question", "stopped")   # what serve says in the thread while a job lives (phase 4)
+MAX_QUESTIONS = 3       # questions posted per job; after that it waits for the person locally
+QUESTION_MAX = 1500
 SUMMARY_MAX = 2000
 FILES_MAX = 40
 TIMEOUT = 300
@@ -132,8 +135,8 @@ def auto_count(job: jobs.Job, today: dt.date | None = None) -> int:
     key = agent_admit.source_key(job.origin)
     return sum(1 for j in jobs.all_jobs()
                if j.id != job.id and j.origin.startswith(f"{key}:")
-               and any(e.get("auto") is True and e.get("url") and str(e.get("at", "")).startswith(day)
-                       for e in record(j).values()))
+               and any(e.get("auto") is True and e.get("url") and not e.get("note")
+                       and str(e.get("at", "")).startswith(day) for e in record(j).values()))
 
 
 def _tries(rec: dict[str, object]) -> int:
@@ -189,6 +192,8 @@ def allowed(job: jobs.Job, kind: str, *, auto: bool, even_failing: bool = False,
         if kind == "comment" and rec.get("attempting") and not rec.get("url"):
             return ("an earlier attempt may have reached GitHub: look at the issue, then ws-agent publish "
                     f"{job.id} if it isn't there")
+        if kind == "comment" and held_back(job):
+            return "an earlier comment of this job may or may not have been posted: its comments keep their order"
         if not job.origin:
             return "only a job a source made is published automatically"
         if job.vcs == "svn" or kind == "svn_branch":
@@ -278,6 +283,109 @@ def _instruction(job: jobs.Job) -> str:
 def commit_message(job: jobs.Job) -> str:
     head = _instruction(job)
     return f"ws-agent {job.id}" + (f": {head}" if head else "") + "\n\nMade by an agent (ws-agent); review before merging.\n"
+
+
+# --- notes: what serve says in the thread while a job lives ------------------------------------
+
+def _is_comment(key: str) -> bool:
+    return key in ("comment", "ack", "stopped") or key.startswith("question:")
+
+
+def held_back(job: jobs.Job) -> bool:
+    """A comment of this job was sent and never confirmed. It is never sent again by itself, and
+    nothing later is posted past it: a thread reads in the order things happened."""
+    return any(_is_comment(k) and e.get("attempting") and not e.get("url") for k, e in record(job).items())
+
+
+def _question(job: jobs.Job) -> str:
+    try:
+        rep = json.loads((jobs.job_dir(job.id) / "result" / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(rep, dict):
+        return ""
+    return str(rep.get("question") or rep.get("summary") or "").strip()
+
+
+def _note_key(job: jobs.Job, kind: str) -> str:
+    if kind != "question":
+        return kind
+    return f"question:{(jobs.exit_info(job) or {}).get('finished') or job.attempts}"   # one per time it asks
+
+
+def note_due(job: jobs.Job, kind: str, entry: agent_registry.Repo | None = None) -> str | None:
+    """None when serve should post this note for the job now, else why not. Notes are automatic by
+    nature: only in auto mode, only for a GitHub request's job made since auto was switched on."""
+    entry = entry or agent_registry.find(core.expand(job.repo))
+    if entry is None:
+        return f"{job.repo} is no longer allowed for queued jobs"
+    p = entry.publish
+    if kind not in NOTES or not (p.questions if kind == "question" else p.ack):
+        return f"{job.repo}'s publish settings don't name {kind}"
+    if p.mode != "auto" or not p.since or job.created < p.since:
+        return "publishing isn't automatic here, or the job is older than that"
+    if job.vcs != "git" or not target(job).number:
+        return "no GitHub thread asked for this job"
+    rec = record(job)
+    if held_back(job):
+        return "an earlier comment of this job may or may not have been posted"
+    if _note_key(job, kind) in rec:
+        return "already said"
+    if kind == "stopped":
+        return None if job.cancelled else "it wasn't stopped"
+    if job.closed or job.cancelled:
+        return "the job is closed or cancelled"
+    if kind == "question":
+        info = jobs.exit_info(job) or {}
+        if jobs.live_run(job) is not None or not info or jobs.outcome_state(info) != "needs-you" or not _question(job):
+            return "it isn't asking anything"
+        if sum(1 for k, e in rec.items() if k.startswith("question:") and e.get("url")) >= MAX_QUESTIONS:
+            return f"it has asked {MAX_QUESTIONS} times in the thread already: the rest waits for you here"
+    return None
+
+
+def note_body(job: jobs.Job, kind: str, entry: agent_registry.Repo) -> str:
+    """Fixed words; the first line names the job (agent_sources.AGENT_LINE keeps them from coming
+    back as follow-ups). Only a question carries model text, inside a fence."""
+    who = f"(ws-agent job `{job.id}`, {_word((jobs.exit_info(job) or {}).get('engine') or job.engine) or 'engine unknown'})"
+    follows = entry.github is not None and entry.github.follow
+    if kind == "ack":
+        more = ("Reply in this thread to add to the request. " if follows else "")
+        return (f"Picked up by an agent {who}, not a person. It will write here again with a result or a question.\n\n"
+                f"{more}A comment whose first line is `/agent stop` stops it.\n")
+    if kind == "stopped":
+        return f"Stopped on request (ws-agent job `{job.id}`). Nothing more will be posted for it.\n"
+    how = ("Reply in this thread to answer." if follows
+           else "The person running it has been asked; it waits for their answer.")
+    return (f"An agent {who} needs an answer to go on. This was not written by a person.\n\n"
+            f"{fenced(_question(job), QUESTION_MAX)}\n\n{how}\n")
+
+
+def post_note(job: jobs.Job, kind: str) -> str:
+    """Post one note; a line saying what happened. Marked before the write and kept marked if it
+    fails, as a result comment is: it may have reached GitHub."""
+    entry = agent_registry.find(core.expand(job.repo))
+    with _lock(job):
+        job = jobs.load(job.id)
+        why = note_due(job, kind, entry)
+        if why or entry is None:
+            return f"{job.id}: {kind} not posted: {why}"
+        key, t = _note_key(job, kind), target(job)
+        _save(job, key, {"attempting": core.now_iso(), "note": True})
+        body = json.dumps({"body": note_body(job, kind, entry)}).encode("utf-8")
+        try:
+            out = _ok(_run(["gh", "api", "--method", "POST", f"repos/{t.slug}/issues/{t.number}/comments", "--input", "-"],
+                           stdin=body), f"posting to {t.slug}#{t.number}")
+        except PublishError as e:
+            _save(job, key, {"error": str(e), "at": core.now_iso()})
+            return f"{job.id}: {kind} failed: {e}"
+        try:
+            url = str(json.loads(out).get("html_url") or "")
+        except ValueError:
+            url = ""
+        url = url or f"https://github.com/{t.slug}/issues/{t.number}"
+        _save(job, key, {"url": url, "at": core.now_iso(), "auto": True, "error": "", "attempting": ""})
+        return f"{job.id}: posted {kind}: {url}"
 
 
 # --- the writes ------------------------------------------------------------------------------
