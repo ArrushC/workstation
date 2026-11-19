@@ -36,6 +36,12 @@ expect - "scripts/check-invariants.sh"
 expect - ".github/workflows/disk-budget.yml .github/workflows/version-bumps.yml"
 expect - "configs/wsl/wsl.conf"
 
+# Documents are documents wherever they sit, except under dotfiles/ and tasks/.
+expect - "CHANGELOG.md notes.html"
+expect - "scripts/ws/README.md newdir/page.htm"
+expect "ws templates" "dotfiles/claude/CLAUDE.md"
+expect "ws templates" "tasks/notes.md"
+
 # A pin bump touches the catalogue: everything that reads it, not the PowerShell lint.
 expect "ws templates windows tool_env" "config.linux.toml mise.linux.lock"
 expect "ws templates windows tool_env" "config.toml"

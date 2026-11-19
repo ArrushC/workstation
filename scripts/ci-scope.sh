@@ -52,6 +52,10 @@ classify() {
   # Tasks are the bootstrap hooks the bulk apply runs; ws lists and runs them.
   tasks/*) need ws templates ;;
 
+  # Documents, wherever they sit outside dotfiles/ and tasks/ (those are deployed or run, and
+  # matched above): the invariants job's checks and secret scan are all that read them.
+  *.md | *.html | *.htm) ;;
+
   # ws itself: the palette and reconcile (config.nu's tests, the dotfiles hooks) and the
   # Windows ws-agent forwarder's argv decoding.
   scripts/ws/* | scripts/test-ws.sh) need ws templates windows ;;
@@ -69,7 +73,7 @@ classify() {
   # Covered by the invariants job alone: its own checks, the shell self-tests it runs
   # (test-bootstrap.sh, test-mise-install.sh, ...), shellcheck, shfmt and gitleaks.
   bootstrap.sh | scripts/*.sh) ;;
-  README.md | CLAUDE.md | docs/* | .claude/* | .gitignore | .gitleaks.toml) ;;
+  docs/* | .claude/* | .gitignore | .gitleaks.toml) ;;
   mise.lock | mise.*.lock | locks/* | configs/*) ;;
   .github/workflows/*) ;;
 
