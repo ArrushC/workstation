@@ -1,224 +1,213 @@
 # Orchestration phase 4: design
 
-Status: draft for the person's approval (2026-11-19). Builds on phases 1 to 3
+Status: draft for the person's approval (2026-11-19, second version). Builds on phases 1 to 3
 (`2026-11-07-orchestration-phase2-design.md`, `2026-11-09-orchestration-phase3-design.md`), whose
-constraints stay in force.
+constraints stay in force except where "Rules this loosens" below says otherwise.
+
+The first version of this document proposed more engines, a panel and a planner. A reading of
+DSH's own documents (`deepseek-ai/dsh-superagent-prototype`: philosophy, domain model,
+authorization, execution, panel) showed that two of those aren't what DSH has, and that what it
+does have, and `ws agent` lacks, is the conversation around a piece of work. The person asked
+for the design to be rewritten around that.
 
 ## Intent
 
-Three things DSH's super agent has and `ws agent` doesn't. The person wants them added:
+Adopt the super agent's way of working without losing its value: a request made in a GitHub
+conversation is acknowledged there, questions are asked and answered there, later comments reach
+the work without calling the agent again, its pull request is followed through review and CI
+until it is merged or closed, and one place shows what waits for the person. All of it on
+`ws agent`'s own ground: sandboxed jobs, any repository, the engines a repository allows, checks
+before anything is written.
 
-1. more engines: opencode, oh-my-pi (`omp`) and jcode;
-2. a web panel with an API, where today there is only a terminal picker;
-3. a coordinator that is a model session, for requests too big for one job.
+DSH's principle is kept as the test for every part: take as little human attention as possible.
+A comment is posted only when someone must act or can use a result.
 
-## Decided by the person (2026-11-19)
+## What DSH does, and where this stands
 
-- All three engines get an adapter.
-- Each host serves its own panel. No panel aggregates other hosts.
-- The panel and its API can view everything and do what `ws-agent ui` does: tell, interrupt,
-  cancel, retry, close, accept, dismiss. Never `run`, `allow`, `watch`, `github`, `publish-to`,
-  `publish` or `fleet add`.
-- The coordinator is a planner with follow-up: for a request the person marks as big, a model
-  session splits it into jobs, picks among the engines the repository allows, reads each report
-  and decides whether to retry, send a follow-up or ask the person. It has only the powers a
-  session has. It is not always on.
-
-## Still in force
-
-No proprietary code to a provider the repository doesn't allow. No write to a server except
-through publish, which only the person switches on. Nothing is installed or left running on a
-remote dev server without the person's separate approval. If isolation can't be established, the
-feature is off and says why.
-
-## Part A: engines
-
-### What an engine entry means now
-
-opencode, omp and jcode are harnesses: each can send code to many providers. Allowing "opencode"
-would say nothing about where code goes. So for these three, a repository's entry names the
-provider and model, and that is the only one the adapter will start:
-
-    ws-agent allow ~/src/foo --engine claude --engine opencode:openai/gpt-5.2
-
-- `claude` and `codex` stay as they are (their provider is implied).
-- `opencode`, `omp` or `jcode` without `:provider/model` is refused at `allow`, and reads as absent
-  from a hand-edited file.
-- The adapter always passes that model explicitly, never the harness's default or "auto".
-- `repos`, `ls`, `show`, `exit.json`, the published comment and the panel show the full entry.
-- Usage-limit cooldowns are kept per full entry.
-
-### The adapters
-
-Each implements the existing `Engine` protocol in `engines.py` (argv from a `Confinement`, output
-to an `Outcome`), one class per harness:
-
-| Harness | Headless form | Session |
+| DSH behaviour | Today | This phase |
 |---|---|---|
-| opencode | `opencode run --format json --model P/M --session ID` | its session id |
-| omp | `omp -p --mode json --model P/M --session-dir <job dir>` | `--resume ID` |
-| jcode | `jcode run --json --provider P` | to be measured |
+| Acknowledges a request once, in the thread | Silent until the result | Part A |
+| A worker's question goes to the thread; a reply there answers it | Local only, `ws-agent answer` | Part A |
+| Later comments reach the work without a mention | Only `/agent ...` | Part A |
+| "Stop" in the thread stops the work | `ws-agent cancel` | Part A |
+| Review comments and CI on its pull request wake the worker, which pushes fixes | Published once, never updated | Part B |
+| Work ends when its pull request is merged or closed | Ends when the engine stops | Part B |
+| Unasked work from new issues, default-branch CI, listed bots, recorded first | SVN revisions only | Part C |
+| Every decision kept with its reason | Log lines, open inbox items | Part C |
+| Panel: what needs a person, health, history | Terminal picker | Part D |
+| Chat source (Feishu) | none | not in this phase |
+| Auto-merge of small approved pull requests | none | never (the person's rule) |
+| Settings and prompts edited in the panel | terminal only | never (see Part D) |
+| Main session: a model that routes and replies | fixed code + Haiku triage | kept as is |
 
-- **Report.** None of the three takes a JSON schema. The prompt asks for the report as one final
-  fenced JSON block; `conform()` validates it. A missing or invalid report gets one more turn in
-  the same session asking only for the report, then the attempt is an `error`.
-- **State.** Each adapter binds only its own harness's config and login directories into the
-  sandbox (`ro_paths`, `rw_paths`), as Claude's and Codex's do. Sessions live in the job directory
-  where the harness allows it.
-- **Failures.** Each adapter maps its harness's auth, usage-limit and transient errors onto
-  `Outcome.kind`. What it can't classify is `error`, never a retry.
+What `ws agent` has that DSH doesn't, and keeps: a read-hiding sandbox (DSH's workers run with
+full access and its wrappers "establish defaults, not a security boundary"), SVN, every
+repository instead of one, more than one engine, the repository's own checks before publishing,
+new branches only.
 
-### Confinement
+## Rules this loosens (the person's to approve, each a per-repository switch, off by default)
 
-The job sandbox (`agent_sandbox.wrap`) stays the read and write boundary for every engine. What
-differs is the inner sandbox that keeps the model's shell commands offline: Claude and Codex have
-one, these three may not.
+1. **More automatic comments.** Today one comment per job, with the result. With the switches
+   below: an acknowledgement, a question, and a short note per pull-request update.
+2. **Pushing to a branch that exists.** Today a job's `ws-agent/<id>` branch is written once.
+   With `--pr-updates`, new commits are added to that same branch, and only to it.
+3. **Reading more of GitHub.** With `--follow`, comments and reviews on a job's own issue and
+   pull request, and its check runs. With `--infer`, new issues and default-branch CI.
 
-- Each adapter declares what it enforces (`Engine.enforces`). An adapter that can't keep commands
-  offline is refused for a repository unless that repository already has `--network`. The refusal
-  names the reason. Nothing is silently weaker.
-- An adapter whose harness can't run inside the job sandbox at all is not registered, and `allow`
-  says why. jcode is the likely case: it is built around a background daemon. If `jcode run` needs
-  a daemon outside the sandbox, jcode ships as "not supported, because…" and nothing else.
-- jcode's `claude` provider reads Claude Code's own credential file. Whether a subscription login
-  may be used through another harness is the person's to check with that plan's terms. The
-  adapter never selects it implicitly; it is used only if an entry names it.
+Switches are set with `publish-to` (writes) and `github` (reads), in the person's own terminal,
+refused in a session, as today. `--mode manual` still means serve writes nothing by itself.
 
-### Out of scope for part A
+## Who can drive a job
 
-Triage stays Claude Haiku. `--review` stays limited to an engine in the repository's list.
-Engines beyond these three.
+Only the logins the repository lists (`ws-agent github --login`), as today. A comment from
+anyone else, or from a bot, never reaches a job and never answers a question. DSH delivers every
+message on a subscribed thread as context; here other people's words go to an agent only when an
+allowed person wrote them. CI results reach a job as facts ws-agent reads from the API (check
+name, conclusion, commit), with the failing log's tail as an untrusted file beside the copy.
 
-## Part B: the panel and its API
+## Part A: the conversation
 
-### Shape
+Settings: `ws-agent github <path> --follow`; `ws-agent publish-to <path> --ack --questions`.
 
-`ws-agent panel` serves one host's jobs, inbox and status over HTTP, with a single static page on
-top of a JSON API. Python stdlib only (`http.server`), no build step, no external assets.
+- **Acknowledgement** (`--ack`, auto mode): when a request becomes a job, one comment in fixed
+  words: an agent picked it up (job id, engine entry), and it will write again with a result or
+  a question. Never for a request that went to the inbox, was refused or is a duplicate.
+- **Questions** (`--questions`): a job that ends `question` or `blocked` and came from GitHub
+  posts its question on the thread. The model's words sit in a code fence, as all posted model
+  text does. The job shows as awaiting answer.
+- **Answers and follow-ups** (`--follow`): on a thread with a live job, a comment by an allowed
+  login needs no `/agent`:
+  - the job is awaiting an answer: the comment is the answer (`answer`), and the job resumes;
+  - otherwise it is a follow-up (`tell`): delivered after the current turn, or resuming a
+    finished job in the same session and copy.
+- **Stop:** a comment from an allowed login whose first line is `/agent stop` cancels the job.
+  With `--ack`, one comment says it stopped. Nothing else in a comment is read as a command.
+- **Order.** A job's comments to one thread go out in the order they were queued. One that may
+  have been posted but wasn't confirmed is never posted again automatically (phase 3's rule),
+  and holds back later ones until the person looks.
+- **Limits per job:** 1 acknowledgement, 3 questions, 10 delivered follow-ups a day. Past a
+  limit the job waits for the person locally, with a notice.
 
-- **It listens on a Unix socket, never on a TCP port:** `$XDG_RUNTIME_DIR/ws-agent/panel.sock`,
-  in a 0700 directory. On a shared dev server, a localhost port is open to every user there; a
-  socket in the person's own runtime directory is not.
-- **`ws-agent panel open [host]` is how a browser reaches it.** It makes a listener on
-  `127.0.0.1:<port>` on the machine the person is sitting at and connects it to the socket:
-  - this host: a small relay inside the same process;
-  - another host: `ssh -N -L 127.0.0.1:<port>:<socket path> <host>`, with the panel started by
-    that same SSH session and ending with it.
-- **Nothing is installed or left running on a dev server.** No unit, no port, no daemon: the
-  remote panel lives exactly as long as the person's `panel open <host>`. The host must be one of
-  `[fleet] hosts`, as the fleet view requires.
-- On Windows, `ws-agent panel open` forwards to WSL like every other command; the Windows browser
-  reaches WSL's `127.0.0.1` through WSL's localhost forwarding.
+A thread is "live" while its job is neither closed nor cancelled. `unwatch`-style forgetting,
+admission (daily caps, still allowed, login listed) and `handled` apply to follow-ups as they do
+to requests.
 
-### Access
+## Part B: following the pull request
 
-- A random token per panel run, printed once as part of the URL `panel open` shows. The first
-  request trades it for an `HttpOnly`, `SameSite=Strict` cookie. Every other request without the
-  cookie is `403`.
-- `Host` must be `127.0.0.1:<port>` or `localhost:<port>` (DNS rebinding). A `POST` must carry a
-  matching `Origin` and a header a plain form can't send.
-- `Content-Security-Policy: default-src 'self'`. Titles, reports, log lines and inbox text are
-  other people's or a model's words: the API returns them as JSON strings and the page inserts
-  them as text, never as HTML.
+Settings: `ws-agent publish-to <path> --draft-pr --pr-updates`; reads need `--follow`.
 
-### API
+Once a job's draft pull request is open, the job is **delivered**: it waits on people, not on an
+engine. serve follows that pull request:
 
-Read:
+- **Review feedback.** A review with a body, a review comment or a pull-request comment by an
+  allowed login is a follow-up to the job (Part A). Approvals without text wake nothing.
+- **CI.** When check runs on the commit ws-agent pushed conclude with a failure, the job is told
+  once per commit, in fixed words naming the checks, with each failing log's tail (bounded) in
+  its input folder. At most 2 CI rounds per job; after that it is the person's.
+- **Updating.** When a resumed turn ends `done` with changes and the repository's checks pass:
+  one new commit on top of the branch, pushed to `ws-agent/<id>`, and one comment in fixed words
+  with the changed files and the summary fenced.
+  - Only if the branch's tip at origin is still the commit ws-agent pushed last. If anyone else
+    has committed to it, nothing is pushed and the job says the branch is now theirs.
+  - Fast-forward only, never forced, to the push URL, one ref, no tags (phase 3's push rules).
+  - A patch touching `.github/` is never pushed automatically.
+  - At most 5 updates per pull request.
+  - With failing checks nothing is pushed: the job waits for the person, as today.
+- **The end.** Merged or closed: the job is closed (its copy removed, its result kept), and its
+  thread is no longer live. A comment after that starts nothing; a new `/agent` does.
+- ws-agent never marks a pull request ready, never merges, never enables auto-merge, never
+  resolves a review thread.
 
-    GET /api/status                 serve, queue, engines, cooldowns, disk
-    GET /api/jobs                   id, state, checks, engine, title, repo, created
-    GET /api/jobs/<id>              what `show` prints, as fields
-    GET /api/jobs/<id>/result       report, changed files, checks, review
-    GET /api/jobs/<id>/diff         the patch
-    GET /api/jobs/<id>/log?tail=N   the end of exec.log
-    GET /api/inbox, /api/inbox/<id>
-    GET /api/plans, /api/plans/<id> (part C)
+`ws-agent publish <id>` by hand can push an update too, under the same rules, when the mode is
+manual.
 
-Act (each calls the function the CLI command calls, under the same locks):
+### States
 
-    POST /api/jobs/<id>/tell | interrupt | cancel | retry | close
-    POST /api/inbox/<id>/accept | dismiss
+`ls`, `ui` and the panel say whom a job waits for, as DSH's stages do:
 
-Anything else is `404`. There is no route for `run`, `allow`, `disallow`, `watch`, `github`,
-`publish-to`, `publish`, `fleet` or a plan's start. The page polls every 5 s.
+| State | Means | Waits for |
+|---|---|---|
+| queued, running | as today | the engine |
+| needs-you | a question, or blocked | the person's answer |
+| delivered | a pull request is open | review, or CI |
+| succeeded | a result with nothing published | the person (apply, publish or close) |
+| failed, waiting, interrupted | as today | the person, or a cooldown |
 
-### Page
+## Part C: unasked work on GitHub, and a record of decisions
 
-One screen: jobs (state, checks, engine, title, repository) and the open inbox, a detail pane
-with report, files, diff and log, and the action buttons the row allows. Light and dark.
+- **Inferred candidates** (`ws-agent github <path> --infer issues,ci`): a new issue by an allowed
+  login that doesn't address the agent, and a failed default-branch CI run, become candidates.
+  They take the path SVN revisions take: admission rules, Haiku triage against the watch's
+  plain-language rules, then the inbox in observe mode, a job in act mode. No backlog: only what
+  appears after the switch is set.
+- **Decision record.** Every candidate's fate is appended to `agent-serve/decisions.jsonl`
+  (bounded): what arrived, from which thread, admitted or refused and why, triage's decision and
+  the rule it matched, the job or inbox item it became, and each publish. `ws-agent history
+  [thread or job]` prints it. This is what the panel's history reads.
 
-## Part C: the coordinator
+Bots as a source of candidates (DSH's bot list) are left out.
 
-### What the person sees
+## Part D: the panel
 
-    ws-agent plan --title T --prompt P [--repo R] [--go]
+One host's panel, as decided: each host serves its own, and it can view everything and do what
+`ws-agent ui` does (tell, interrupt, cancel, retry, close, accept, dismiss), nothing else.
 
-1. A model session reads the repository (read-only, in the job sandbox, on a private copy) and
-   returns a plan: at most 6 tasks, each with a title, a prompt, the paths it will change, the
-   engine entry to use (from the repository's list) and the tasks it depends on.
-2. Without `--go` the plan waits: `ws-agent plans`, `ws-agent plan --show <id>`, then
-   `ws-agent accept <id>` or `dismiss <id>`. With `--go` it starts.
-3. Tasks become ordinary jobs. Tasks with no dependency between them run in parallel only if
-   their paths don't overlap (the check `run --paths` already makes); otherwise in order.
-4. When a job of the plan ends, the coordinator session is resumed with that job's report and
-   check verdict and returns exactly one decision:
-   - `continue`: start the tasks that were waiting on it;
-   - `tell <task> <text>`: a follow-up to that job (at most 2 per task);
-   - `retry <task>` (at most 1 per task);
-   - `ask <question>`: the plan shows as needs-you; `ws-agent answer <plan> "..."` resumes it;
-   - `done <summary>` or `give-up <why>`.
-5. `ws-agent result <plan>` shows the summary, each job's result, and one combined patch.
+- **Three questions, in DSH's order.**
+  1. *Does anything need me?* Jobs awaiting an answer, delivered and awaiting review, failed or
+     with a comment or push that gave up, and open inbox items. Each row offers its action.
+  2. *Is it healthy?* serve, each source's last poll and error, engines and cooldowns, the queue,
+     disk. A healthy line takes no space.
+  3. *What happened to this piece of work?* A thread's history from the decision record: what
+     arrived, the decision and reason, the job, its turns, what was posted and pushed.
+- A filter box finds jobs and threads by id, `#number`, title or repository.
+- **Settings are shown, never edited.** `allow`, sources and publish settings stay in the
+  person's terminal: a web page that can widen what agents may touch is the thing phases 1 to 3
+  were built to prevent. DSH's panel edits them; this is a deliberate difference.
+- **Transport.** It listens on a Unix socket in the person's runtime directory (0700), never a
+  TCP port: on a shared dev server a localhost port is open to every user. `ws-agent panel open
+  [host]` gives the browser a `127.0.0.1` address: a relay for this host, `ssh -L` to the socket
+  for a `[fleet]` host, where the panel lives only as long as that command. Nothing is installed
+  or left running on a dev server.
+- **Access.** A token per run in the URL `panel open` prints, traded for an `HttpOnly`,
+  `SameSite=Strict` cookie; `Host` and `Origin` checked; `Content-Security-Policy: default-src
+  'self'`; other people's and models' words inserted as text, never HTML.
+- **API.** `GET /api/status`, `/api/needs`, `/api/jobs[/<id>[/result|/diff|/log]]`,
+  `/api/inbox[/<id>]`, `/api/history?thread=`; `POST /api/jobs/<id>/tell|interrupt|cancel|retry|
+  close`, `POST /api/inbox/<id>/accept|dismiss`. No other route exists. Python stdlib, one
+  static page, no build step, no external assets.
 
-### How it is held
+## Not in this phase
 
-- The coordinator only reads and answers in a fixed schema. Fixed code starts, tells and retries
-  jobs and enforces every limit. The coordinator has no shell that writes and no `ws-agent`.
-- It runs on the first engine the repository allows that can run (`engines.select`), since it
-  reads the code. Its session, like a job's, is one private copy in the job sandbox.
-- It never widens anything: no engine outside the repository's list, no network the repository
-  lacks, no `allow`, no source or publish setting, no publish.
-- Limits per plan: 6 tasks, 20 coordinator turns, 2 tells and 1 retry per task, the plan's own
-  timeout. Past any of them the plan stops as needs-you with what it has.
-- A dependent task's copy starts from its base with the earlier tasks' patches applied, so its
-  own patch is the difference on top. The plan's result is the ordered series and their sum, and
-  the repository's checks run once more on the sum.
-- Reports fed back to the coordinator are quoted as untrusted, as elsewhere.
-- serve drives step 4 on its tick. With serve stopped a plan stands still; nothing is lost.
-
-### Not in this part
-
-- Source requests (GitHub `/agent`, SVN revisions) don't go through the coordinator.
-- A plan, and a job that belongs to one, is not published. `publish` refuses with that reason.
-- No plan across repositories.
-
-## Session policy
-
-`dotfiles/claude/CLAUDE.md`'s `## Orchestration` gains one line within its 50-line cap: work that
-is big and separable and meant for the background goes to `ws-agent plan`, never started with
-`--go` unless the person said so. Starting the panel is the person's.
-
-## Order and size
-
-Three pull requests, each usable alone: A engines, B panel, C coordinator (the panel's plan
-routes land with C). Each is built test-first with stand-in binaries, as phases 2 and 3 were,
-then tried for real on a scratch repository before it is marked ready.
+- **More engines** (opencode, oh-my-pi, jcode) and **a planner**. Neither is something DSH's
+  super agent has: it runs on one executor, and its main session routes and replies but doesn't
+  split work. Both can follow as their own phase if the person still wants them; the draft for
+  them is in this file's history (`af070a2`).
+- A chat source (DSH's Feishu). The source interface allows one later.
+- SVN in the loop: a watched revision's review stays local.
+- A model as the main session. Admission stays fixed rules, triage stays Haiku with no tools,
+  replies stay fixed words: nothing an untrusted comment can talk into a write.
+- Context-only subscriptions and cross-thread correlation.
 
 ## Anti-goals
 
-- Code reaching a provider no entry names, through a harness default, "auto", a fallback or the
-  coordinator's choice.
-- A listener another user or another machine can reach, or a web page that can start work,
-  change what agents may touch, or publish.
-- A coordinator that loops, spends without bound, or acts on a request nobody marked.
-- An engine that runs with less confinement than the others without the repository saying so.
+- A comment or commit nobody could use: noise, repeats, a post after the person said stop.
+- Someone who isn't on the list steering a job through a comment, a review or a bot.
+- A push that moves a branch a person has committed to, or any branch but the job's own.
+- A job that loops on CI or review without bound.
+- A listener another user or machine can reach, or a page that can change what agents may do.
+
+## Order
+
+Four pull requests, each usable alone and each tried for real on a scratch GitHub repository
+before it is marked ready: A conversation, B pull-request following, C inferred candidates and
+the decision record, D the panel.
 
 ## Calls made by the builder (the person can overturn any)
 
-1. Provider and model are part of the engine entry and required for the three harnesses.
-2. The panel listens on a Unix socket and exists only while `panel open` runs; there is no
-   always-on panel service, on any host.
-3. A token and same-origin checks even though the listener is local.
-4. A harness that can't keep commands offline needs the repository's `--network`; one that can't
-   run in the sandbox isn't offered.
-5. A plan waits for `accept` unless `--go`.
-6. Plans aren't published in this phase.
+1. Only allowed logins' comments reach a job; others' never do, even as context.
+2. `/agent stop` is the one command read from a comment; no model interprets "please stop".
+3. A model's question is posted inside a code fence, like every other posted model text.
+4. After a pull request is merged or closed, a new `/agent` is needed; nothing resumes by itself.
+5. An update is pushed only while ws-agent's commit is still the branch tip.
+6. The panel never edits settings and is never always-on.
+7. More engines and the planner are out of this phase.
