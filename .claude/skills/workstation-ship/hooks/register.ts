@@ -164,7 +164,10 @@ export const register: Register = on => {
           }
         }
         if (pr.mergeStateStatus === 'UNKNOWN') return { kind: 'wait', why: 'GitHub is still working out whether it can merge' }
-        return { kind: 'ready', line: `✓ ${checks.length} checks passed on ${short(head)}, ${fresh}` }
+        // A job a change doesn't reach is skipped (lint.yml's scope job): say so, don't call it passed.
+        const skipped = checks.filter(c => c.conclusion === 'skipped').length
+        const ran = `${checks.length - skipped} checks passed${skipped > 0 ? ` (${skipped} skipped)` : ''}`
+        return { kind: 'ready', line: `✓ ${ran} on ${short(head)}, ${fresh}` }
       }
 
       let polls = 0

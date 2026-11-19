@@ -231,6 +231,14 @@ describe('/ship', () => {
     expect(text).toContain('holding lint for approval')
   })
 
+  // lint.yml's scope job skips the jobs a change doesn't reach.
+  test('skipped checks are counted apart from the ones that ran', async ($, on) => {
+    const calls = world(on, { checks: [pass('scope'), pass('invariants'), { ...pass('windows-http'), conclusion: 'skipped' }] })
+    const { text } = await ship($)
+    expect(merged(calls)).toHaveLength(1)
+    expect(text).toContain('✓ 2 checks passed (1 skipped) on 281480c')
+  })
+
   test('a failing check: nothing merged, and it is named', async ($, on) => {
     const calls = world(on, { checks: [pass('invariants'), { ...pass('windows'), conclusion: 'failure' }] })
     const { text } = await ship($)
