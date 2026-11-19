@@ -24,6 +24,9 @@ $targets = @(
     'scripts/deepseek-harness.ps1',
     'scripts/test-deepseek-harness.ps1',
     'scripts/test-wezterm-config.ps1',
+    'scripts/test-ws-agent-forward.ps1',
+    'dotfiles/windows/local/bin/ws-agent.ps1',
+    'dotfiles/windows/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1',
     'scripts/lib/test-helpers.ps1',
     'scripts/check-ps.ps1'
 ) | ForEach-Object { Join-Path $repoRoot $_ }

@@ -22,6 +22,12 @@
 - **Checks:** `mise run lint` (`scripts/check-invariants.sh`; CI and the pre-commit hook run it; `tasks/lint`
   checks the worktree it is run from via `scripts/lib/lint-root.sh`, mise's own checks still read the live config) and
   `bash scripts/check-templates.sh`. Add a check for any new mechanically checkable rule.
+- **CI scope:** `lint.yml`'s `scope` job runs `scripts/ci-scope.sh` on the changed paths; every other job reads
+  its output (`!= 'false'` under `!cancelled()`, so a failed scope job runs everything). A test that starts
+  reading a new path gets that path in its scope plus a case in `scripts/test-ci-scope.sh`; an unlisted path
+  runs everything. A new `scripts/test-*` must be run by `lint.yml` or `check-invariants.sh`, and a new `.ps1`
+  listed in `scripts/check-ps.ps1` (`check_ci_coverage`). `scripts/test-ws.sh` runs one test class per process
+  (`scripts/ws/tests/run_parallel.py`): ws tests must not share state outside their scratch homes.
 - **Task names** must not collide with mise built-ins (`mise fmt` is one; ours: `mise run fmt`).
 - **Real `$HOME`:** agents never run `mise dot apply`, `wsa` or a bulk `mise bootstrap` against the
   real `$HOME` or host. Render into a scratch `$HOME` (`docs/claude/verification.md`) and hand real

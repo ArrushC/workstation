@@ -34,7 +34,10 @@ class Scratch(unittest.TestCase):
                "PATH": f"{self.bin}{os.pathsep}{os.environ.get('PATH', '')}", "WS_SHELL": "zsh"}
         self._env = mock.patch.dict(os.environ, env)
         self._env.start()
-        for k in ("WS_OUT", "ZELLIJ", "ZELLIJ_SESSION_NAME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "EDITOR", "VISUAL"):
+        # INVOCATION_ID: systemd sets it for a unit's processes (a CI runner is one), and ws-agent serve
+        # reads it; a test that means it sets it.
+        for k in ("WS_OUT", "ZELLIJ", "ZELLIJ_SESSION_NAME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "EDITOR", "VISUAL",
+                  "INVOCATION_ID"):
             os.environ.pop(k, None)
         self.config = self.repo / "config.toml"
         self.config.write_text("[dotfiles]\n", encoding="utf-8")

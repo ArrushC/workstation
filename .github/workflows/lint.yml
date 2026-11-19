@@ -1,10 +1,20 @@
 name: lint
 # A branch with a PR runs once, as the PR; main runs on the merge push. A newer push to a
 # PR cancels its older run.
+#
+# The `scope` job decides which jobs a change needs (scripts/ci-scope.sh maps changed paths
+# to jobs), so a pin bump or a README edit doesn't start the Windows runners. The
+# invariants job always runs. Everything runs on the weekly schedule (which also catches what
+# no change here causes, such as a WezTerm nightly that drops something wezterm.lua uses), on
+# a manual run, and for a change to this file or to the map. A push to main whose tree
+# already passed as its pull request runs nothing again.
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 4 * * 4' # Thursdays 04:17 UTC
+  workflow_dispatch:
 
 concurrency:
   group: lint-${{ github.event.pull_request.number || github.ref }}
@@ -15,7 +25,112 @@ permissions:
   contents: read
 
 jobs:
+  # Every job below reads this job's outputs as `!= 'false'` under `!cancelled()`: if this job
+  # fails or an output is missing, the job runs.
+  scope:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # the pull request a push to main merged
+      actions: read # that pull request's lint run
+    outputs:
+      invariants: ${{ steps.scope.outputs.invariants }}
+      ws: ${{ steps.scope.outputs.ws }}
+      templates: ${{ steps.scope.outputs.templates }}
+      powershell: ${{ steps.scope.outputs.powershell }}
+      windows: ${{ steps.scope.outputs.windows }}
+      tool_env: ${{ steps.scope.outputs.tool_env }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2 # a pull request's merge commit and its parents
+      - name: Decide which jobs this change needs
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          why=""
+          changed=""
+          case "$EVENT" in
+            pull_request)
+              # HEAD is the merge of the branch into its base: its first parent is the base.
+              changed=$(git diff --name-only --no-renames HEAD^1 HEAD) || why="the change list could not be read"
+              ;;
+            push)
+              { git cat-file -e "$BEFORE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth=1 origin "$BEFORE"; } &&
+                changed=$(git diff --name-only --no-renames "$BEFORE" HEAD) || why="the change list could not be read"
+              ;;
+            *) why="a $EVENT run checks everything" ;;
+          esac
+          if [ -z "$why" ] && [ -z "$changed" ]; then why="the change list is empty"; fi
+          if [ -z "$why" ] && printf '%s\n' "$changed" | grep -qxE '\.github/workflows/lint\.yml|scripts/ci-scope\.sh'; then
+            why="the workflow or scripts/ci-scope.sh changed"
+          fi
+          if [ -n "$why" ]; then
+            scopes=$(bash scripts/ci-scope.sh --all)
+          else
+            scopes=$(printf '%s\n' "$changed" | bash scripts/ci-scope.sh) || scopes=""
+          fi
+          for s in ws templates powershell windows tool_env; do
+            printf '%s\n' "$scopes" | grep -qxE "$s=(true|false)" || scopes="$scopes"$'\n'"$s=true"
+          done
+          invariants=true
+
+          # A push to main that is a merged pull request: when main's tree is the tree of that
+          # pull request's head commit, and lint passed on that commit, these exact files have
+          # been checked already. Anything else (no pull request, a different tree, a lookup
+          # that fails) runs as usual.
+          verified=""
+          if [ "$EVENT" = push ]; then
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+              --jq "[.[] | select(.merge_commit_sha == \"$GITHUB_SHA\")][0] | select(. != null) | \"\(.number) \(.head.sha)\"") || pr=""
+            num=${pr%% *}
+            head=${pr##* }
+            if [ -n "$head" ] &&
+              { git cat-file -e "$head^{commit}" 2>/dev/null || git fetch -q --no-tags --depth=1 origin "$head"; } &&
+              [ "$(git rev-parse "$head^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+              run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/lint.yml/runs?head_sha=$head&event=pull_request&status=success&per_page=1" \
+                --jq '.workflow_runs[0].html_url // empty') || run=""
+              [ -z "$run" ] || verified="this tree passed as pull request #$num: $run"
+            fi
+          fi
+          if [ -n "$verified" ]; then
+            scopes=$(printf '%s\n' "$scopes" | sed 's/=true$/=false/')
+            invariants=false
+          fi
+
+          {
+            echo "invariants=$invariants"
+            printf '%s\n' "$scopes"
+          } | grep -E '^[a-z_]+=(true|false)$' | tee -a "$GITHUB_OUTPUT"
+          {
+            echo '### What this run checks'
+            if [ -n "$verified" ]; then
+              echo "Nothing: $verified"
+            else
+              [ -z "$why" ] || echo "Everything: $why."
+              echo
+              echo '| job | runs |'
+              echo '|---|---|'
+              echo "| invariants | yes |"
+              printf '%s\n' "$scopes" | sed -E 's/^ws=/ws suite (in invariants)=/; s/^tool_env=/dependency-environments=/; s/^windows=/windows-http=/; s/=true$/ | yes |/; s/=false$/ | no |/; s/^/| /'
+              if [ -z "$why" ]; then
+                echo
+                echo '<details><summary>Changed paths</summary>'
+                echo
+                echo '```'
+                printf '%s\n' "$changed"
+                echo '```'
+                echo '</details>'
+              fi
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
   dependency-environments:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.tool_env != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -43,13 +158,22 @@ jobs:
           mise exec python -- python scripts/test-tool-env.py
           mise exec python -- python scripts/test-tool-env-real.py
   invariants:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.invariants != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       # luajit runs dotfiles/config/wezterm/wezterm.lua (check_wezterm_config); zsh runs the rc
       # files' TERM fallbacks (scripts/test-term-fallback.sh) under zsh as well as bash.
-      - name: Install shellcheck, luajit, zsh
-        run: sudo apt-get update && sudo apt-get install -y shellcheck luajit zsh
+      # shellcheck ships with the runner image. The image's package lists are recent enough
+      # to install from; `apt-get update` (20 s or more) runs only if they turn out not to be.
+      - name: Install luajit, zsh (and shellcheck if the image lacks it)
+        run: |
+          pkgs="luajit zsh"
+          command -v shellcheck >/dev/null || pkgs="$pkgs shellcheck"
+          # shellcheck disable=SC2086
+          sudo apt-get install -y --no-install-recommends $pkgs ||
+            { sudo apt-get update && sudo apt-get install -y --no-install-recommends $pkgs; }
       - uses: jdx/mise-action@v4
         with:
           version: 2026.9.9
@@ -66,12 +190,17 @@ jobs:
           MISE_ENV: linux
           MISE_LOCKFILE: "false"
           MISE_LOCKED: "0" # config.toml's locked = true refuses a lock-file-off install
+      # scripts/test-ws.sh (the ws suite, the longest check by far) runs when the change can
+      # reach it; check-invariants.sh notes the skip otherwise.
       - name: Run invariant checks
         run: bash scripts/check-invariants.sh
         env:
           MISE_CONFIG_DIR: ${{ github.workspace }}
           MISE_ENV: linux
+          CHECK_INVARIANTS_SKIP_WS: ${{ needs.scope.outputs.ws == 'false' && '1' || '' }}
   powershell:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.powershell != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -86,6 +215,8 @@ jobs:
   # so the two legs are explicit steps; `if: always()` makes the pwsh leg
   # report even when the 5.1 leg fails.
   windows-http:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.windows != 'false' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -175,6 +306,8 @@ jobs:
         shell: pwsh
         run: ./scripts/test-wezterm-config.ps1
   templates:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.templates != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -188,7 +321,9 @@ jobs:
           install: false
           cache: true
       - name: Install zsh
-        run: sudo apt-get update && sudo apt-get install -y zsh
+        run: |
+          sudo apt-get install -y --no-install-recommends zsh ||
+            { sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh; }
       # nushell here is a CI-ONLY syntax checker for config.nu.tera — NOT a
       # Linux fleet tool, deliberately NOT an enforced dual-edit with the
       # Windows-only nushell pin in config.toml (drift is harmless; this

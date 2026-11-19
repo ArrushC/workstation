@@ -3,6 +3,9 @@
 > Recipes for verifying a change, grouped by subsystem. The rules they protect are in CLAUDE.md.
 > Automated checks (`mise run lint` = `scripts/check-invariants.sh`, `bash scripts/check-templates.sh`,
 > and the `lint.yml` CI jobs; lint also runs the hook and pin self-tests) cover most static invariants; the recipes below are what they don't.
+> CI runs a job only when `scripts/ci-scope.sh` says the change reaches it (`printf '%s\n' <paths> | bash scripts/ci-scope.sh`
+> prints the answer); locally `mise run lint` always runs everything. The ws suite's `skipped N: <reason>` notes
+> say what a host without svn, bwrap, fzf or pueue didn't test.
 
 ## Host state and tools (read-only, no sudo)
 
