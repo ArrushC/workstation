@@ -560,6 +560,19 @@ class PullRequestReview(PullRequest):
         self.assertFalse((inp / "ci-1.log").is_symlink())
         self.assertIn("touch", (inp / "ci-1.log").read_text())
 
+    def test_a_real_ci_log_has_colour_codes_and_arrives_without_them(self) -> None:
+        # Seen on real GitHub: gh refuses to print a log with escape sequences unless told to, so no
+        # log ever reached the job.
+        job = self.delivered()
+        self.failing()
+        self.write(self.gx / f"repos_{SLUG.replace('/', '_')}_actions_jobs_55_logs.json",
+                   "2026-11-19T18:51:52Z \x1b[31mFAIL\x1b[0m: value.txt must be 42\r\n\x07done\n")
+        src.poll_github(self.following(), self.t0 + 1)
+        text = (jobs.job_dir(job.id) / "input" / "ci-1.log").read_text()
+        self.assertEqual(text, "2026-11-19T18:51:52Z FAIL: value.txt must be 42\ndone\n")
+        call = next(c for c in self.gh_calls() if any("actions/jobs/55/logs" in a for a in c))
+        self.assertIn("--allow-escape-sequences", call)
+
     def test_nor_into_a_directory_the_job_swapped_for_a_link(self) -> None:
         job = self.delivered()
         elsewhere = self.root / "elsewhere"

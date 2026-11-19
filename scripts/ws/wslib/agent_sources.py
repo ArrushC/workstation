@@ -360,6 +360,9 @@ def remember_pr(slug: str, job_id: str, number: int, commit: str) -> None:
         save_source_state(data)
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\\\)?")
+
+
 def _ci_logs(slug: str, job_id: str, failed: list[dict[str, object]]) -> str:
     """The end of each failing check's log, in the job's input folder; the sentence naming them."""
     gh = core.which("gh")
@@ -369,13 +372,16 @@ def _ci_logs(slug: str, job_id: str, failed: list[dict[str, object]]) -> str:
         if not gh or not isinstance(run.get("id"), int):
             continue
         try:
-            r = subprocess.run([gh, "api", f"repos/{slug}/actions/jobs/{run['id']}/logs"], capture_output=True,
-                               timeout=GH_TIMEOUT)
+            # a CI log is full of colour codes, and gh prints nothing of one unless told it may
+            r = subprocess.run([gh, "api", "--allow-escape-sequences", f"repos/{slug}/actions/jobs/{run['id']}/logs"],
+                               capture_output=True, timeout=GH_TIMEOUT)
         except (OSError, subprocess.TimeoutExpired):
             continue
         if r.returncode != 0 or not r.stdout.strip():
             continue
-        tail = b"\n".join(r.stdout[-CI_LOG_BYTES:].splitlines()[-CI_LOG_LINES:])
+        text = _ANSI.sub("", r.stdout[-CI_LOG_BYTES:].decode("utf-8", "replace"))
+        tail = "\n".join("".join(ch for ch in ln if ch == "\t" or ch.isprintable())
+                         for ln in text.splitlines()[-CI_LOG_LINES:]).encode("utf-8")
         try:   # the job can write here: never through a link it left
             core.write_in(inp, f"ci-{n}.log", tail + b"\n")
         except OSError:
