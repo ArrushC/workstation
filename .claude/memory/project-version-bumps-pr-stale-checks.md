@@ -28,6 +28,8 @@ which may have run against an older tree or an older set of repo invariants;
 auto-PR), confirm the checks are fresh — compare the check-run `head_sha` to the
 PR head and to current `main`, e.g. `gh pr view <n> --json statusCheckRollup,headRefOid`
 and `gh api repos/{owner}/{repo}/commits/<pr-head>/check-runs --jq '.check_runs[].head_sha'`.
-If they lag, push an empty commit / re-run CI (or just run `mise run lint`
+`/ship` now does this itself (2026-11-19): it compares the checks' start to `main`'s
+last commit, merges `main` into the branch when they predate it, and waits for the new
+run. By hand: if they lag, push an empty commit / re-run CI (or just run `mise run lint`
 locally on the merged tree) before merging. Relates to
 [[project-verify-tool-bumps-at-runtime]] and [[feedback-use-pr-review-workflow]].

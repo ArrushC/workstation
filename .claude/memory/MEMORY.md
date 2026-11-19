@@ -14,7 +14,7 @@
 - [WSL interop binfmt dropped](project-wsl-interop-binfmt-dropped.md) — every .exe failing with Exec format error means the WSLInterop handler is unregistered; user re-registers via sudo.
 - [Windows apply-via-WSL gotchas](project-windows-apply-via-wsl-gotchas.md) — never render Windows targets with the WSL mise; pin `mise -C`; one bootstrap.ps1 at a time; how to validate nu config.
 - [Windows Nerd Font name + activation](project-windows-nerdfont-activation.md) — WT needs the family name `JetBrainsMono NFM`; per-user fonts need AddFontResourceW + WM_FONTCHANGE to go live.
-- [version-bumps PR checks can be stale](project-version-bumps-pr-stale-checks.md) — the bot reuses a branch and GitHub skips re-running checks; compare check head_sha to PR head before merging.
+- [version-bumps PR checks can be stale](project-version-bumps-pr-stale-checks.md) — the bot reuses a branch and GitHub skips re-running checks; `/ship` updates the branch and waits; by hand, compare check head_sha to PR head before merging.
 - [shfmt mangles assoc-array keys](project-shfmt-mangles-assoc-array-keys.md) — unquoted hyphenated keys become arithmetic (`[a-b]` to `[a - b]`); quote keys, treat that diff as a behavior change.
 - [Warp coexists with Windows Terminal](project-warp-coexist-shipped.md) — Warp is primary; the R1 `echo $TERM_PROGRAM` probe is still unrun; Warp writes TOML v1.1 that tomllib cannot parse.
 - [Recommend, don't poll](feedback-recommend-dont-poll.md) — give a decision table (decision, recommendation, why) the user can override instead of an AskUserQuestion menu.
