@@ -705,7 +705,9 @@ def _svn_branch(job: jobs.Job, entry: agent_registry.Repo) -> str:
         _ok(probe, f"checking {dest}")   # the server didn't answer "no such path": don't guess
     rel = url[len(root):].strip("/")
     strip = str(len(rel.split("/")) if rel else 0)   # as apply.txt tells the person (agent_exec)
-    diff = str(jobs.job_dir(job.id) / "result" / "changes.diff")
+    # svn reads the patch by path: a copy of what was read without following a link, where the job can't reach
+    diff = str(jobs.private_dir(job.id) / "publish.diff")
+    core.atomic_write(Path(diff), _patch(job), 0o600)
     wc = jobs.private_dir(job.id) / "publish-wc"
     shutil.rmtree(wc, ignore_errors=True)
     try:

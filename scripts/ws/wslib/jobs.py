@@ -128,8 +128,37 @@ def save(job: Job) -> None:
 
 
 def _read(path: Path) -> Job:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return Job(**{k: v for k, v in data.items() if k in Job.__dataclass_fields__})
+    """The record in a job's directory. That directory is writable from inside the job's sandbox:
+    the record is never read through a link, and it must be the record of that very directory."""
+    data = json.loads(core.read_in(path.parent, path.name).decode("utf-8"))
+    job = Job(**{k: v for k, v in data.items() if k in Job.__dataclass_fields__})
+    if job.id != path.parent.name:
+        raise ValueError(f"ws-agent: {path} says it is job {job.id!r}")
+    return job
+
+
+def result_bytes(job_id: str, *names: str, limit: int = 4_000_000) -> bytes:
+    """A file of the job's directory as something outside the sandbox may read it and pass on (post
+    in a comment, show to the person): b"" if it is missing or reached through a link the job left."""
+    try:
+        return core.read_in(job_dir(job_id), *names, limit=limit)
+    except OSError:
+        return b""
+
+
+def result_json(job_id: str, name: str) -> dict[str, object]:
+    try:
+        data = json.loads(result_bytes(job_id, "result", name).decode("utf-8", "replace") or "null")
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def private_dir(job_id: str) -> Path:
+    """Where ws-agent keeps what a job must not be able to change or redirect: its publish record
+    and lock, temporary indexes and checkouts. The job's own directory is writable from inside its
+    sandbox (a check runs the repository's code there); this one is outside it."""
+    return core.private_dir(core.state_dir() / "agent-private" / job_id)
 
 
 def load(prefix: str) -> Job:
@@ -176,30 +205,6 @@ def _thread_lock(job: Job) -> Iterator[None]:
         yield
     finally:
         fh.close()
-
-
-def result_bytes(job_id: str, *names: str, limit: int = 4_000_000) -> bytes:
-    """A file of the job's directory as something outside the sandbox may read it and pass on (post
-    in a comment, show in the panel): b"" if it is missing or reached through a link the job left."""
-    try:
-        return core.read_in(job_dir(job_id), *names, limit=limit)
-    except OSError:
-        return b""
-
-
-def result_json(job_id: str, name: str) -> dict[str, object]:
-    try:
-        data = json.loads(result_bytes(job_id, "result", name).decode("utf-8", "replace") or "null")
-    except ValueError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def private_dir(job_id: str) -> Path:
-    """Where ws-agent keeps what a job must not be able to change or redirect: its publish record
-    and lock, temporary indexes and checkouts, marks. The job's own directory is writable from
-    inside its sandbox (a check runs the repository's code there); this one is outside it."""
-    return core.private_dir(core.state_dir() / "agent-private" / job_id)
 
 
 def _thread_path(job: Job) -> Path:
