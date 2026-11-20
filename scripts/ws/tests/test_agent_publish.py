@@ -6,6 +6,7 @@ real file:// repository, and `gh` is a stand-in that records what would be poste
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import os
@@ -27,10 +28,12 @@ FAKE_GH = r"""d="$WS_FAKE_GH"
 ( IFS=$'\x1f'; printf '%s\n' "$*" ) >>"$d/argv.log"
 n=$(wc -l <"$d/argv.log" | tr -d ' ')
 case "$1 $2" in
-"api --method") cat >"$d/body.$n"; [ -f "$d/post-then-fail" ] && { echo "HTTP 502" >&2; exit 1; }; echo '{"html_url": "https://github.com/ArrushC/proj/issues/7#issuecomment-1"}' ;;
+"api --method") cat >"$d/body.$n"; [ -f "$d/post-then-fail" ] && { echo "HTTP 502" >&2; exit 1; }; echo "{\"id\": 7000$n, \"html_url\": \"https://github.com/ArrushC/proj/issues/7#issuecomment-1\"}" ;;
 "pr create") cat >"$d/pr-body"; [ -f "$d/pr-fails" ] && { echo "pull request create failed" >&2; exit 1; }
+  while [ $# -gt 1 ]; do [ "$1" = --head ] && printf '%s' "$2" >"$d/pr-head"; shift; done
   echo "https://github.com/ArrushC/proj/pull/8" ;;
-api\ repos/*/pulls/*) [ -f "$d/pulls-fail" ] && { echo "HTTP 502 SERVER WORDS" >&2; exit 1; }; cat "$d/pulls-ref" 2>/dev/null || echo "" ;;
+api\ repos/*/pulls/*) case "$*" in *.state*) if [ -f "$d/pull-state" ]; then cat "$d/pull-state"; else printf 'open\t%s\tArrushC/proj\tArrushC/proj\n' "$(cat "$d/pr-head")"; fi; exit 0 ;; esac
+   [ -f "$d/pulls-fail" ] && { echo "HTTP 502 SERVER WORDS" >&2; exit 1; }; cat "$d/pulls-ref" 2>/dev/null || echo "" ;;
 api\ repos/*) echo main ;;
 *) exit 1 ;;
 esac
@@ -632,6 +635,452 @@ class DeferredMinorsSvn(PublishSvn):
         self.assertIn("published svn_branch", pub.publish(j, auto=False)[0])   # and it can be tried again
 
 
+class Conversation(Publish):
+    """Phase 4 part A: what serve says in the thread while a job lives."""
+
+    def set_exit(self, j: jobs.Job, **kw: object) -> None:
+        f = jobs.job_dir(j.id) / "result" / "exit.json"
+        f.write_text(json.dumps({**json.loads(f.read_text()), **kw}))
+
+    def working(self) -> jobs.Job:
+        j = self.job()
+        for name in ("exit.json", "report.json", "changes.diff", "manifest.txt"):
+            (jobs.job_dir(j.id) / "result" / name).unlink()
+        self.tasks = {**getattr(self, "tasks", {}), 40 + len(getattr(self, "tasks", {})): {"status": {"Queued": {"enqueued_at": "2026-11-06T23:48:51Z"}}}}
+        j.pueue_id = max(self.tasks)   # still in the queue: serve has nothing to recover
+        jobs.save(j)
+        self.pueue_status(self.tasks)
+        return j
+
+    def asking(self, question: str = "Which parser, the old one? cc @everyone") -> jobs.Job:
+        j = self.job(change=False)
+        self.set_exit(j, status="question")
+        self.write(jobs.job_dir(j.id) / "result" / "report.json",
+                   json.dumps({"status": "question", "summary": "stuck", "question": question}))
+        return j
+
+    def posts(self) -> list[str]:
+        return [json.loads(f.read_text())["body"] for f in sorted(self.gx.glob("body.*"), key=lambda f: int(f.suffix[1:]))]
+
+    def test_a_request_that_became_a_job_is_acknowledged_once(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True)
+        j = self.working()
+        self.assertTrue(any(f"{j.id}: posted ack" in ln for ln in serve.tick(time.time())))
+        self.assertEqual(serve.tick(time.time()), [])
+        (body,) = self.posts()
+        self.assertTrue(body.startswith(f"Picked up by an agent (ws-agent job `{j.id}`, claude), not a person."), body)
+        self.assertNotIn("SOMEONE ELSE", body)
+        self.assertEqual(self.gh_calls()[-1][:4], ["api", "--method", "POST", f"repos/{SLUG}/issues/7/comments"])
+
+    def test_no_acknowledgement_unless_it_is_switched_on_and_automatic(self) -> None:
+        j = self.working()
+        for kw in ({"mode": "auto", "comment": True}, {"mode": "manual", "comment": True, "ack": True},
+                   {"mode": "off", "ack": True}):
+            self.settings(**kw)
+            self.assertEqual(serve.tick(time.time()), [], kw)
+        self.settings(mode="auto", ack=True)
+        mine = self.job(origin="", title="my own")
+        j.closed = True
+        jobs.save(j)
+        self.assertEqual((serve.tick(time.time()), self.posts(), mine.origin), ([], [], ""))
+
+    def test_a_question_is_asked_in_the_thread_inside_a_fence(self) -> None:
+        self.settings(mode="auto", questions=True)
+        j = self.asking()
+        self.assertTrue(any(f"{j.id}: posted question" in ln for ln in serve.tick(time.time())))
+        self.assertEqual(serve.tick(time.time()), [])   # the same question, once
+        (body,) = self.posts()
+        self.assertIn(f"(ws-agent job `{j.id}`", body.splitlines()[0])
+        self.assertIn("Which parser, the old one? cc @everyone", body)
+        self.assertNotIn("everyone", outside_fences(body))
+        self.set_exit(j, finished="2100-01-02T00:00:00+00:00")   # it was answered, worked, and asks again
+        self.assertEqual(len([ln for ln in serve.tick(time.time()) if "posted question" in ln]), 1)
+
+    def test_at_most_three_questions_per_job(self) -> None:
+        self.settings(mode="auto", questions=True)
+        j = self.asking()
+        for n in range(pub.MAX_QUESTIONS):
+            pub._save(j, f"question:{n}", {"url": "u", "at": core.now_iso(), "note": True})
+        self.assertEqual((serve.tick(time.time()), self.posts()), ([], []))
+
+    def test_a_comment_that_may_have_been_posted_holds_back_later_ones(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        self.write(self.gx / "post-then-fail", "")
+        j = self.asking()
+        serve.tick(time.time())          # its question: GitHub may have it, the reply was lost
+        (self.gx / "post-then-fail").unlink()
+        self.assertEqual(serve.tick(time.time()), [])
+        self.assertEqual(len(self.posts()), 1)
+        self.assertTrue(pub.held_back(j))
+        self.set_exit(j, status="done")   # answered locally and finished: its result waits behind the question
+        self.assertIn("keep their order", pub.allowed(j, "comment", auto=True) or "")
+
+    def test_notes_dont_use_up_the_daily_cap(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True)
+        for _ in range(pub.AUTO_CAP):
+            pub._save(self.working(), "ack", {"url": "u", "at": core.now_iso(), "auto": True, "note": True})
+        self.assertIsNone(pub.allowed(self.job(), "comment", auto=True))
+
+    def test_stop_from_the_thread_cancels_and_says_so_once(self) -> None:
+        self.settings(mode="auto", ack=True)
+        j = self.job()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "", "ArrushC", "stop")])):
+            lines = serve._poll_github(reg.find(self.repo), time.time())
+        self.assertTrue(jobs.load(j.id).cancelled, lines)
+        self.pueue_status({}, group="Paused")
+        self.assertEqual((serve.tick(time.time()), self.posts()), ([], []))   # a paused queue says nothing
+        self.pueue_status({})
+        self.assertEqual(len([ln for ln in serve.tick(time.time()) if "posted stopped" in ln]), 1)
+        (body,) = self.posts()
+        self.assertTrue(body.startswith(f"Stopped on request (ws-agent job `{j.id}`)"), body)
+        self.assertEqual(serve.tick(time.time()), [])
+
+    def test_follow_ups_past_the_daily_limit_wait_for_the_person(self) -> None:
+        j = self.job()
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent, "tell_job", return_value=(0, "told")) as tell, \
+                unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            for n in range(serve.FOLLOW_UPS_A_DAY + 2):
+                serve._follow(j.id, f"message {n}", "ArrushC")
+                if n < serve.FOLLOW_UPS_A_DAY:
+                    jobs.post(j, "gh:ArrushC", f"message {n}")   # what a delivered follow-up leaves in the thread
+        self.assertEqual(tell.call_count, serve.FOLLOW_UPS_A_DAY)
+        self.assertEqual(len(notices), 1, notices)
+
+    def test_the_switches_are_the_persons_and_show_in_repos(self) -> None:
+        rc, out, err = self.cli("publish-to", str(self.repo), "--mode", "auto", "--comment", "--ack", "--questions")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("acknowledgement", out)
+        self.assertIn("questions", out)
+        found = reg.find(self.repo)
+        assert found is not None
+        self.assertEqual((found.publish.ack, found.publish.questions), (True, True))
+        reg.set_github(self.repo, reg.GitHubSource(slug=SLUG, mode="act", logins=("ArrushC",), follow=True))
+        found = reg.find(self.repo)
+        assert found is not None and found.github is not None
+        self.assertTrue(found.github.follow)
+        self.assertIn("following", self.cli("repos")[1])
+        rc, out, err = self.cli("github", str(self.repo), "--mode", "act", "--login", "ArrushC", "--follow")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("following", out)
+
+
+class ConversationReview(Conversation):
+    """One test per finding of the review of part A."""
+
+    def test_switching_notes_on_later_says_nothing_about_older_jobs(self) -> None:
+        self.settings(mode="auto", comment=True)
+        done, asking, working = self.job(), self.asking(), self.working()
+        pub._save(done, "comment", {"url": "u", "at": core.now_iso(), "auto": True})
+        time.sleep(1.1)   # the registry's times are whole seconds
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        for j in (done, asking, working):
+            for kind in ("ack", "question"):
+                self.assertIsNotNone(pub.note_due(j, kind), (j.id, kind))
+        self.assertEqual(self.posts(), [])
+        new = self.working()
+        self.assertIsNone(pub.note_due(new, "ack"))
+
+    def test_inferring_needs_a_rule_and_shows_in_repos(self) -> None:
+        self.assertEqual(self.cli("github", str(self.repo), "--login", "ArrushC", "--infer", "issues")[0], 2)
+        rc, out, err = self.cli("github", str(self.repo), "--login", "ArrushC", "--infer", "issues", "--infer", "ci",
+                                "--rule", "parser bugs")
+        self.assertEqual(rc, 0, err)
+        found = reg.find(self.repo)
+        assert found is not None and found.github is not None
+        self.assertEqual((found.github.infer, found.github.rules), (("issues", "ci"), ("parser bugs",)))
+        self.assertIn("inferring from issues and ci", self.cli("repos")[1])
+
+    def test_a_request_is_acknowledged_the_moment_it_is_queued(self) -> None:
+        # Seen on real GitHub: a job that asked its question within serve's 30 s was never acknowledged.
+        self.settings(mode="auto", ack=True)
+        from wslib import agent_inbox
+        c = agent_inbox.Candidate(cid=f"gh:{SLUG}:c4242", source="github", repo="~/src/proj", explicit=True,
+                                  author="ArrushC", title=f"{SLUG}#7: do it", text="/agent do it",
+                                  base={"commit": self.head, "branch": "main"}, prompt="do it",
+                                  thread=f"gh:{SLUG}#7", url="")
+        line = serve._queue(c, None, "")
+        self.assertIn("queued job", line)
+        (body,) = self.posts()
+        self.assertTrue(body.startswith("Picked up by an agent (ws-agent job `"), body)
+        self.pueue_status({}, group="Paused")
+        serve._queue(dataclasses.replace(c, cid=f"gh:{SLUG}:c4243", thread=f"gh:{SLUG}#8"), None, "")
+        self.assertEqual(len(self.posts()), 1)   # a paused queue says nothing
+
+    def test_a_job_that_already_finished_is_not_acknowledged(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True)
+        self.assertIn("already", pub.note_due(self.job(), "ack") or "")
+
+    def test_a_job_with_no_engine_yet_says_nothing_about_one(self) -> None:
+        self.settings(mode="auto", ack=True)
+        j = self.working()
+        j.engine = ""
+        jobs.save(j)
+        serve.tick(time.time())
+        self.assertTrue(self.posts()[0].startswith(f"Picked up by an agent (ws-agent job `{j.id}`), not a person."))
+
+    def test_a_note_that_fails_tells_the_person_once_and_seen_releases_it(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        self.write(self.gx / "post-then-fail", "")
+        j = self.asking()
+        (jobs.job_dir(j.id) / "result" / "exit.json").rename(jobs.job_dir(j.id) / "exit.keep")
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            serve.tick(time.time())
+            serve.tick(time.time())
+        self.assertEqual(notices, [f"{j.id}: a comment to its thread may not have been posted; look there, then "
+                                   f"ws-agent publish {j.id} --seen"])
+        (self.gx / "post-then-fail").unlink()
+        (jobs.job_dir(j.id) / "exit.keep").rename(jobs.job_dir(j.id) / "result" / "exit.json")
+        self.assertEqual(serve.tick(time.time()), [])            # still held back
+        rc, out, _ = self.cli("publish", j.id, "--seen")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(len([ln for ln in serve.tick(time.time()) if "posted question" in ln]), 1)
+        self.assertEqual(len(self.posts()), 2)                   # the unconfirmed one was never sent again
+
+    def test_what_ws_agent_posts_is_remembered_by_id(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True)
+        self.working()
+        serve.tick(time.time())
+        done = self.job()
+        pub.publish(done, auto=False)
+        posted = agent_sources.source_state()[f"gh:{SLUG}"]["posted"]
+        self.assertEqual(len(posted), 2, posted)
+        self.assertTrue(all(isinstance(i, int) for i in posted))
+
+    def test_one_follow_up_that_fails_doesnt_lose_the_others(self) -> None:
+        a, b = self.job(), self.job()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=(
+                [], [("nosuch", "", "ArrushC", "stop"), (a.id, "x", "ArrushC", "tell"), (b.id, "", "ArrushC", "stop")])), \
+                unittest.mock.patch.object(agent, "tell_job", side_effect=RuntimeError("boom")):
+            lines = serve._poll_github(reg.find(self.repo), time.time())
+        self.assertTrue(jobs.load(b.id).cancelled, lines)
+        self.assertTrue(any("boom" in ln for ln in lines), lines)
+
+
+class PullRequestUpdates(Publish):
+    """Phase 4 part B: a delivered job that changes its work again adds one commit to its own
+    branch, and only to it; its pull request's end closes it."""
+
+    def delivered(self, **kw: object) -> jobs.Job:
+        self.settings(**{"mode": "auto", "draft_pr": True, "pr_updates": True, **kw})
+        j = self.job()
+        serve.tick(time.time())
+        self.assertTrue(pub.published(j, "draft_pr"), pub.record(j))
+        return j
+
+    def rework(self, j: jobs.Job, value: int = 3, *, checks: str = "pass", path: str = "app.py") -> None:
+        res = jobs.job_dir(j.id) / "result"
+        diff = (f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1,2 +1,2 @@\n def f():\n"
+                f"-    return 1\n+    return {value}\n")
+        if path != "app.py":
+            diff = (f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1 @@\n+on: push\n"
+                    "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,2 @@\n def f():\n-    return 1\n+    return 2\n")
+        self.write(res / "changes.diff", diff)
+        f = res / "exit.json"
+        f.write_text(json.dumps({**json.loads(f.read_text()), "checks": checks, "finished": "2100-01-02T00:00:00+00:00"}))
+
+    def tip(self, j: jobs.Job) -> str:
+        return self.remote_refs()[f"refs/heads/ws-agent/{j.id}"]
+
+    def test_the_pull_request_becomes_a_thread_and_is_followed(self) -> None:
+        j = self.delivered()
+        st = agent_sources.source_state()[f"gh:{SLUG}"]
+        self.assertEqual(st["threads"]["#8"], j.id)
+        self.assertEqual((st["prs"][j.id]["number"], st["prs"][j.id]["commit"]), (8, self.tip(j)))
+        self.assertIn("delivered", self.cli("ls", "--all")[1])
+
+    def test_new_work_is_one_more_commit_on_its_own_branch(self) -> None:
+        j = self.delivered()
+        first, local = self.tip(j), self.local_state()
+        self.assertEqual(serve.tick(time.time()), [])            # nothing changed: nothing pushed
+        self.rework(j)
+        lines = serve.tick(time.time())
+        self.assertEqual(len([ln for ln in lines if "pushed update 1" in ln]), 1, lines)
+        second = self.tip(j)
+        self.assertEqual(git("rev-parse", f"{second}^", cwd=self.origin), first)
+        self.assertIn("return 3", git("show", f"{second}:app.py", cwd=self.origin))
+        self.assertEqual(set(self.remote_refs()), {"refs/heads/main", f"refs/heads/ws-agent/{j.id}"})
+        self.assertEqual(self.local_state(), local)
+        call = [c for c in self.gh_calls() if c[:2] == ["api", "--method"]][-1]
+        self.assertEqual(call[3], f"repos/{SLUG}/issues/8/comments")
+        body = json.loads(sorted(self.gx.glob("body.*"), key=lambda f: int(f.suffix[1:]))[-1].read_text())["body"]
+        self.assertTrue(body.startswith(f"Updated by an agent (ws-agent job `{j.id}`, claude), not written by a person."))
+        self.assertNotIn("Renamed f", outside_fences(body))
+        self.assertEqual(agent_sources.source_state()[f"gh:{SLUG}"]["prs"][j.id]["commit"], second)
+        self.assertEqual(serve.tick(time.time()), [])            # once
+
+    def test_a_branch_someone_else_committed_to_is_theirs(self) -> None:
+        j = self.delivered()
+        other = self.root / "other"
+        git("clone", "-q", str(self.origin), str(other), cwd=self.root)
+        git("checkout", "-q", f"ws-agent/{j.id}", cwd=other)
+        self.write(other / "note.txt", "mine\n")
+        git("add", "-A", cwd=other)
+        git("-c", "user.name=p", "-c", "user.email=p@example.invalid", "commit", "-qm", "the person's", cwd=other)
+        git("push", "-q", "origin", f"ws-agent/{j.id}", cwd=other)
+        theirs = self.tip(j)
+        self.rework(j)
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            lines = serve.tick(time.time())
+            self.assertEqual(serve.tick(time.time()), [])
+        self.assertTrue(any("theirs now" in ln for ln in lines), lines)
+        self.assertEqual((self.tip(j), len(notices)), (theirs, 1))
+
+    def test_no_update_without_the_switch_passing_checks_or_room(self) -> None:
+        j = self.delivered(pr_updates=False)
+        first = self.tip(j)
+        self.rework(j)
+        self.assertEqual(serve.tick(time.time()), [])
+        self.settings(mode="auto", draft_pr=True, pr_updates=True)
+        self.rework(j, checks="fail")
+        self.assertIn("checks", pub.update_due(j, auto=True) or "")
+        self.rework(j, path=".github/workflows/x.yml")
+        self.assertIn(".github/", pub.update_due(j, auto=True) or "")
+        self.rework(j)
+        pub._save(j, "draft_pr", {"updates": pub.MAX_UPDATES})
+        self.assertIn(str(pub.MAX_UPDATES), pub.update_due(j, auto=True) or "")
+        self.assertEqual((serve.tick(time.time()), self.tip(j)), ([], first))
+
+    def test_the_pull_requests_end_closes_the_job(self) -> None:
+        j = self.delivered()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "merged", "", "ended")])):
+            lines = serve._poll_github(reg.find(self.repo), time.time())
+        self.assertTrue(jobs.load(j.id).closed, lines)
+        self.assertTrue((jobs.job_dir(j.id) / "result" / "changes.diff").exists())
+
+    def test_failed_checks_are_told_to_the_job_as_ci_not_as_a_person(self) -> None:
+        j = self.delivered()
+        with unittest.mock.patch.object(agent_sources, "poll_github", return_value=([], [(j.id, "CI failed: unit tests", "", "ci")])), \
+                unittest.mock.patch.object(agent, "tell_job", return_value=(0, "told")) as tell:
+            serve._poll_github(reg.find(self.repo), time.time())
+        tell.assert_called_once()
+        self.assertEqual(tell.call_args.kwargs["sender"], "gh:checks")
+
+
+class PullRequestUpdatesReview(PullRequestUpdates):
+    """One test per finding of the review of part B."""
+
+    def test_the_publish_record_is_out_of_the_jobs_reach(self) -> None:
+        j = self.delivered()
+        inside = jobs.job_dir(j.id) / "result" / "published.json"
+        self.assertFalse(inside.exists())
+        real = pub.record(j)["draft_pr"]
+        self.write(inside, json.dumps({"draft_pr": {"url": f"https://github.com/{SLUG}/pull/99", "commit": self.head,
+                                                    "updates": 0, "theirs": False}}))
+        self.assertEqual(pub.record(j)["draft_pr"], real)   # a forgery there is never read
+
+    def test_a_result_file_swapped_for_a_link_never_leaks_the_persons_file(self) -> None:
+        # serve reads the result outside the sandbox; the job can't read the person's home, but it
+        # can leave a link to it where the changed-files list or the report should be
+        self.settings(mode="manual", comment=True)
+        secret = self.write(self.root / "id_ed25519", "-----BEGIN OPENSSH PRIVATE KEY-----\nTOPSECRET\n")
+        note = self.write(self.root / "private.json", json.dumps({"summary": "TOPSECRET summary", "question": "TOPSECRET q"}))
+        for name, target in (("manifest.txt", secret), ("report.json", note)):
+            j = self.job()
+            f = jobs.job_dir(j.id) / "result" / name
+            f.unlink()
+            f.symlink_to(target)
+            pub.publish(j, auto=False)
+        j = self.job()
+        res = jobs.job_dir(j.id) / "result"
+        moved = self.root / "elsewhere"
+        res.rename(moved)
+        self.write(moved / "manifest.txt", "TOPSECRET through a linked directory\n")
+        res.symlink_to(moved, target_is_directory=True)
+        pub.comment_body(j)
+        bodies = "".join(f.read_text() for f in self.gx.glob("body.*")) + pub.comment_body(j)
+        self.assertNotIn("TOPSECRET", bodies)
+        self.assertEqual(pub._patch(j), b"")
+
+    def test_the_temporary_index_is_not_where_the_job_can_plant_a_link(self) -> None:
+        self.settings(mode="manual", draft_pr=True)
+        j = self.job()
+        victim = self.write(self.root / "victim.index", "the person's file\n")
+        (jobs.job_dir(j.id) / "result" / "publish.index").symlink_to(victim)
+        self.assertIn("published draft_pr", pub.publish(j, auto=False)[0])
+        self.assertEqual(victim.read_text(), "the person's file\n")
+
+    def test_a_push_that_landed_but_wasnt_recorded_is_finished_not_called_theirs(self) -> None:
+        j = self.delivered()
+        self.rework(j)
+        with unittest.mock.patch.object(agent_sources, "remember_pr", side_effect=RuntimeError("killed here")):
+            lines = serve.tick(time.time())                    # the push went out; nothing after it was saved
+        self.assertTrue(any("killed here" in ln for ln in lines), lines)
+        pushed = self.tip(j)
+        lines = serve.tick(time.time())
+        self.assertFalse(any("theirs" in ln for ln in lines), lines)
+        rec = pub.record(j)["draft_pr"]
+        self.assertEqual((rec["commit"], rec["updates"], rec.get("theirs")), (pushed, 1, None))
+        self.assertEqual(self.tip(j), pushed)                  # and nothing was pushed twice
+
+    def test_an_update_that_keeps_failing_is_left_to_the_person_with_one_notice(self) -> None:
+        j = self.delivered()
+        first = self.tip(j)
+        hook = self.repo / ".git" / "hooks" / "pre-push"
+        self.write(hook, f"#!/bin/sh\necho x >>{self.root}/pushes\nexit 1\n")
+        hook.chmod(0o755)
+        self.rework(j)
+        notices: list[str] = []
+        with unittest.mock.patch.object(agent_events, "notify", side_effect=notices.append):
+            for _ in range(pub.MAX_TRIES + 3):
+                serve.tick(time.time())
+        self.assertEqual(len((self.root / "pushes").read_text().split()), pub.MAX_TRIES)
+        self.assertEqual((self.tip(j), len(notices)), (first, 1), notices)
+
+    def test_automatic_updates_keep_the_automatic_rules(self) -> None:
+        j = self.delivered()
+        self.rework(j)
+        f = jobs.job_dir(j.id) / "result" / "exit.json"
+        info = json.loads(f.read_text())
+        f.write_text(json.dumps({**info, "review": "concerns"}))
+        self.assertIn("concerns", pub.update_due(j, auto=True) or "")
+        f.write_text(json.dumps({**info, "finished": "2000-01-01T00:00:00+00:00"}))
+        self.assertIn("before", pub.update_due(j, auto=True) or "")
+
+    def test_nothing_is_pushed_to_a_pull_request_that_is_closed_or_not_its_own(self) -> None:
+        j = self.delivered()
+        first = self.tip(j)
+        self.rework(j)
+        for state in (f"closed\tws-agent/{j.id}\t{SLUG}\t{SLUG}", f"open\tsomeone-elses\t{SLUG}\t{SLUG}",
+                      f"open\tws-agent/{j.id}\tfork/proj\t{SLUG}"):
+            self.write(self.gx / "pull-state", state + "\n")
+            self.assertIn("not pushed", pub.push_update(j, auto=False), state)
+        self.assertEqual(self.tip(j), first)
+
+    def test_publish_by_hand_pushes_a_due_update(self) -> None:
+        self.settings(mode="manual", draft_pr=True, pr_updates=True)
+        j = self.job()
+        self.assertEqual(self.cli("publish", j.id)[0], 0)
+        self.rework(j)
+        self.assertEqual(serve.tick(time.time()), [])   # manual: serve pushes nothing
+        rc, out, _ = self.cli("publish", j.id)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("pushed update 1", out)
+
+    def test_questions_go_to_the_thread_that_asked_not_the_pull_request(self) -> None:
+        j = self.job(number=7)
+        agent_sources.remember_pr(SLUG, j.id, 12, self.head)   # "#12" sorts before "#7"
+        self.assertEqual(pub.target(j).number, 7)
+
+
+class UnaskedWork(Conversation):
+    """Part C's review: a job nobody asked for by name is never acknowledged or questioned in public."""
+
+    def test_no_acknowledgement_or_question_on_an_issue_nobody_addressed_to_the_agent(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        working = self.working()
+        working.origin = f"gh:{SLUG}:u7"
+        jobs.save(working)
+        asking = self.asking()
+        asking.origin = f"gh:{SLUG}:u7"
+        jobs.save(asking)
+        for j, kind in ((working, "ack"), (asking, "question")):
+            self.assertIn("nobody asked", pub.note_due(j, kind) or "", kind)
+        self.assertEqual((serve.tick(time.time()), self.posts()), ([], []))
+
+
 class JobDirectoryTrust(Publish):
     """A job's own directory is writable from inside its sandbox (its checks run the repository's
     code there), and serve reads and writes there from outside. Nothing that decides a write lives
@@ -686,4 +1135,3 @@ class JobDirectoryTrust(Publish):
             jobs.post(j, "job", "done: $(touch /tmp/pwned)")
         self.assertEqual(victim.read_text(), "the person's file\n")
         self.assertEqual(jobs.thread(j), [])
-

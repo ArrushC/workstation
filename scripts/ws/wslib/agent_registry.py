@@ -61,9 +61,13 @@ class GitHubSource:
     slug: str = ""
     mode: str = "observe"
     logins: tuple[str, ...] = ()
+    follow: bool = False      # on a thread with a live job, these logins' comments reach it without /agent
+    infer: tuple[str, ...] = ()   # unasked work to triage: "issues" (new ones by these logins), "ci" (default branch)
+    rules: tuple[str, ...] = ()   # what triage judges an inferred candidate against, in the person's words
 
 
 PUBLISH_MODES = ("off", "manual", "auto")
+INFER = ("issues", "ci")
 
 
 @dataclass(frozen=True)
@@ -75,6 +79,11 @@ class Publish:
     draft_pr: bool = False    # GitHub: the patch on a new branch ws-agent/<id>, as a draft pull request
     svn_branch: str = ""      # SVN: the parent of new branches (^/branches/ws-agent); "" = never commit
     since: str = ""           # when mode became auto: jobs that finished before it are never published automatically
+    ack: bool = False         # GitHub, auto only: one comment when a request becomes a job (and when it is stopped)
+    questions: bool = False   # GitHub, auto only: a job's question as a comment on the thread that asked
+    notes_since: str = ""     # when ack or questions was switched on: older jobs get neither
+    pr_updates: bool = False  # GitHub: later work as new commits on the job's own ws-agent/<id> branch
+    updates_since: str = ""   # when pr_updates was switched on with auto: work finished earlier is never pushed by serve
 
 
 def svn_branch_problem(path: str, watch: Watch | None) -> str | None:
@@ -177,7 +186,11 @@ def _watch(t: object) -> Watch | None:
 def _github(t: object) -> GitHubSource | None:
     if not isinstance(t, dict):
         return None
-    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")), _strings(t.get("logins", [])))
+    return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")),
+                        tuple(x for x in _strings(t.get("logins", [])) if x.strip()),
+                        t.get("follow") is True,
+                        tuple(x for x in _strings(t.get("infer", [])) if x in INFER),
+                        _strings(t.get("rules", [])))
 
 
 def _publish(t: object) -> Publish:
@@ -186,7 +199,8 @@ def _publish(t: object) -> Publish:
     mode = str(t.get("mode", "off"))
     return Publish(mode if mode in PUBLISH_MODES else "off",   # a typo never publishes
                    t.get("comment") is True, t.get("draft_pr") is True, str(t.get("svn_branch", "")),
-                   str(t.get("since", "")))
+                   str(t.get("since", "")), t.get("ack") is True, t.get("questions") is True,
+                   str(t.get("notes_since", "")), t.get("pr_updates") is True, str(t.get("updates_since", "")))
 
 
 def _repo(key: str, entry: Mapping[str, object]) -> Repo:
@@ -291,12 +305,15 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
         prev_pub = old.get("publish")
         out["publish"] = {**(prev_pub if isinstance(prev_pub, dict) else {}), "mode": r.publish.mode,
                           "comment": r.publish.comment, "draft_pr": r.publish.draft_pr, "svn_branch": r.publish.svn_branch,
-                          "since": r.publish.since}
+                          "since": r.publish.since, "ack": r.publish.ack, "questions": r.publish.questions,
+                          "notes_since": r.publish.notes_since, "pr_updates": r.publish.pr_updates,
+                          "updates_since": r.publish.updates_since}
     for name, table in (("watch", None if r.watch is None else {
             "urls": list(r.watch.urls), "mode": r.watch.mode, "authors": list(r.watch.authors),
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
             ("github", None if r.github is None else {
-                "slug": r.github.slug, "mode": r.github.mode, "logins": list(r.github.logins)})):
+                "slug": r.github.slug, "mode": r.github.mode, "logins": list(r.github.logins),
+                "follow": r.github.follow, "infer": list(r.github.infer), "rules": list(r.github.rules)})):
         if table is not None:   # keys a newer ws wrote inside the table survive too
             prev = old.get(name)
             out[name] = {**(prev if isinstance(prev, dict) else {}), **table}
@@ -372,7 +389,9 @@ def set_publish(root: Path, pub: Publish) -> Repo:
     found = find(root)
     if pub.mode not in PUBLISH_MODES:
         raise ValueError(f"ws-agent: --mode must be one of {', '.join(PUBLISH_MODES)}")
-    if found is not None and found.vcs == "svn" and (pub.comment or pub.draft_pr):
+    if pub.pr_updates and not pub.draft_pr:
+        raise ValueError("ws-agent: --pr-updates adds commits to a job's draft pull request: it needs --draft-pr")
+    if found is not None and found.vcs == "svn" and (pub.comment or pub.draft_pr or pub.ack or pub.questions):
         raise ValueError(f"ws-agent: {_key(root)} is an SVN copy; comments and draft PRs are GitHub's")
     if found is not None and found.vcs == "git" and pub.svn_branch:
         raise ValueError(f"ws-agent: {_key(root)} is a git repository; --svn-branch is for SVN copies")
@@ -384,7 +403,16 @@ def set_publish(root: Path, pub: Publish) -> Repo:
     # unpublished on purpose) never goes out by itself. Staying on auto keeps its start.
     was = found.publish if found else Publish()
     since = "" if pub.mode != "auto" else (was.since if was.mode == "auto" and was.since else core.now_iso())
-    return _set_source(root, publish=dataclasses.replace(pub, since=since))
+    # The same for what serve says in a thread: switching an acknowledgement or questions on (or
+    # adding one) starts from now, so nothing is said about jobs that were already there.
+    notes = ""
+    if pub.mode == "auto" and (pub.ack or pub.questions):
+        kept = was.mode == "auto" and was.notes_since and was.ack >= pub.ack and was.questions >= pub.questions
+        notes = was.notes_since if kept else core.now_iso()
+    updates = ""
+    if pub.mode == "auto" and pub.pr_updates:
+        updates = was.updates_since if was.mode == "auto" and was.pr_updates and was.updates_since else core.now_iso()
+    return _set_source(root, publish=dataclasses.replace(pub, since=since, notes_since=notes, updates_since=updates))
 
 
 def set_github(root: Path, src: GitHubSource | None) -> Repo:
@@ -396,10 +424,14 @@ def set_github(root: Path, src: GitHubSource | None) -> Repo:
             raise ValueError(f"ws-agent: {_key(root)} is a {found.vcs} repository; GitHub needs a git one")
         if not src.slug:
             raise ValueError(f"ws-agent: {_key(root)} has no github.com remote")
-        if not src.logins:
+        if not src.logins or any(not x.strip() for x in src.logins):
             raise ValueError("ws-agent: name who may ask with --login (nobody can, otherwise)")
         if src.mode not in MODES:
             raise ValueError(f"ws-agent: --mode must be one of {', '.join(MODES)}")
+        if any(x not in INFER for x in src.infer):
+            raise ValueError(f"ws-agent: --infer takes {' or '.join(INFER)}")
+        if src.infer and not src.rules:
+            raise ValueError("ws-agent: --infer needs at least one --rule: triage judges unasked work against your rules")
     return _set_source(root, github=src)
 
 

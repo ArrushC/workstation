@@ -107,10 +107,25 @@ def lines_for(session_id: str, repo_key: str) -> list[str]:
         return []
     events = _tail_events(events_path().with_suffix(".jsonl.1")) + _tail_events(events_path())
     seen = [e for e in events if isinstance(e.get("ts"), (int, float)) and since < float(e["ts"]) <= now  # type: ignore[arg-type]
-            and (e.get("repo") == repo_key or e.get("kind") == "needs-you")]
+            and (e.get("repo") == repo_key or e.get("kind") == "needs-you") and not _over(e)]
     return [f"[orchestration] {e.get('text')}: "
             + (f"ws-agent inbox --show {e.get('item')}" if e.get("kind") == "inbox" else f"ws-agent result {e.get('job')}")
             for e in seen[-MAX_LINES:]]
+
+
+def _over(event: dict[str, object]) -> bool:
+    """The event's job is closed or cancelled since, or no longer asks: nothing to bring up now.
+    Read from the job's files only (this runs in the per-prompt hook)."""
+    if not isinstance(event.get("job"), str):
+        return False
+    try:
+        job = jobs.load(str(event["job"]))
+        if job.closed or job.cancelled:
+            return True
+        info = jobs.exit_info(job)
+    except Exception:  # noqa: BLE001 - a record that can't be read hides nothing (and never fails the hook)
+        return False
+    return event.get("kind") == "needs-you" and info is not None and jobs.outcome_state(info) != "needs-you"
 
 
 def _plain(text: str) -> str:

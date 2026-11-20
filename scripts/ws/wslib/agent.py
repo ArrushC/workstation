@@ -216,7 +216,9 @@ def _repo_words(r: agent_registry.Repo) -> list[str]:
         n = len(r.watch.rules)
         words.append(f"watch: {', '.join(r.watch.urls)} ({r.watch.mode}, {n} rule{'' if n == 1 else 's'})")
     if r.github is not None:
-        words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)})")
+        words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)}"
+                     f"{', following live threads' if r.github.follow else ''}"
+                     f"{', inferring from ' + ' and '.join(r.github.infer) if r.github.infer else ''})")
     if r.publish != agent_registry.Publish():
         words.append(f"publish: {_publish_words(r.publish)}")
     return words
@@ -274,12 +276,15 @@ def _github(args: argparse.Namespace) -> int:
             r = subprocess.run([gh, "api", "user", "--jq", ".login"], capture_output=True, text=True, timeout=30) \
                 if gh else None
             logins = [r.stdout.strip()] if r is not None and r.returncode == 0 and r.stdout.strip() else []
-        src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins))
+        src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins),
+                                          follow=bool(args.follow), infer=tuple(dict.fromkeys(args.infer or [])),
+                                          rules=tuple(args.rule or []))
     prev = agent_registry.find(root)
     rc, repo = _source_change(agent_registry.set_github, root, src)
     if repo is not None:
         print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
-              + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)})" if src else ""))
+              + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)}"
+                 f"{', following live threads' if src.follow else ''})" if src else ""))
         if src is not None:
             if src.mode != "off":   # from now: new, or back from off, brings nothing from meanwhile
                 agent_sources.start_github(repo, fresh=prev is None or prev.github is None or prev.github.mode == "off")
@@ -292,11 +297,14 @@ def _publish_to(args: argparse.Namespace) -> int:
     p = vcs.probe(Path(args.path))
     root = p.root or Path(args.path).resolve()
     pub = agent_registry.Publish(mode=args.mode, comment=bool(args.comment), draft_pr=bool(args.draft_pr),
-                                 svn_branch=args.svn_branch or "")
+                                 svn_branch=args.svn_branch or "", ack=bool(args.ack), questions=bool(args.questions),
+                                 pr_updates=bool(args.pr_updates))
     rc, repo = _source_change(agent_registry.set_publish, root, pub)
     if repo is not None:
         print(f"publishing for {core.tilde(root)}: {_publish_words(repo.publish)}")
-        if pub.mode == "auto" and (pub.comment or pub.draft_pr):
+        if pub.mode != "auto" and (pub.ack or pub.questions):
+            _err("An acknowledgement and a question are only ever posted by serve: they need --mode auto.")
+        if pub.mode == "auto" and (pub.comment or pub.draft_pr or pub.ack or pub.questions):
             _err("ws-agent serve will now write these for passing jobs from this repository's sources, with your "
                  "credentials, without asking per job. ws-agent publish-to <path> --mode off stops it.")
         if pub.mode == "auto" and pub.svn_branch:
@@ -307,7 +315,9 @@ def _publish_to(args: argparse.Namespace) -> int:
 
 def _publish_words(p: agent_registry.Publish) -> str:
     kinds = [w for w, on in (("GitHub comment", p.comment), ("draft PR", p.draft_pr),
-                             (f"SVN branch under {p.svn_branch}", bool(p.svn_branch))) if on]
+                             (f"SVN branch under {p.svn_branch}", bool(p.svn_branch)),
+                             ("acknowledgement", p.ack), ("questions", p.questions),
+                             ("pull-request updates", p.pr_updates)) if on]
     return f"{p.mode}" + (f" ({', '.join(kinds)})" if kinds else " (no kind named: nothing is written)")
 
 
@@ -319,15 +329,32 @@ def _publish(args: argparse.Namespace) -> int:
     job = _load(args.id)
     if job is None:
         return 1
+    if args.seen:
+        try:
+            n = agent_publish.mark_seen(job)
+        except agent_publish.PublishError as e:
+            _err(str(e))
+            return 1
+        print(f"{job.id}: {n} unconfirmed comment{'s' if n != 1 else ''} settled; none is sent again, and its "
+              "later comments can go out")
+        return 0
     try:
         lines = agent_publish.publish(job, auto=False, even_failing=args.even_failing, dry_run=args.dry_run,
                                       allow_workflows=args.allow_workflows)
     except agent_publish.PublishError as e:
         _err(str(e))
         return 1
+    if agent_publish.update_due(job, auto=False, allow_workflows=args.allow_workflows) is None:
+        if args.dry_run:
+            lines.append(f"{job.id}: would push an update: one more commit on ws-agent/{job.id}")
+        else:
+            try:
+                lines.append(agent_publish.push_update(job, auto=False, allow_workflows=args.allow_workflows))
+            except agent_publish.PublishError as e:
+                lines.append(f"{job.id}: update not pushed: {e}")
     for ln in lines:
         print(ln)
-    done = any(": published " in ln or ": would publish " in ln for ln in lines)
+    done = any(w in ln for ln in lines for w in (": published ", ": would publish ", ": pushed update ", ": would push "))
     return 0 if done else 3
 
 
@@ -612,6 +639,58 @@ def _tasks() -> dict[int, str] | None:
     return q.tasks if q else None
 
 
+def _history(args: argparse.Namespace) -> int:
+    """What became of each candidate a source found, and what was written for each job."""
+    from . import agent_serve
+    rows = agent_serve.decisions()
+    what = (args.what or "").strip()
+    if what:
+        hit = [r for r in rows if what in (r.get("job"), r.get("item")) or what in str(r.get("cid") or "")
+               or str(r.get("thread") or "").endswith(what) or what == r.get("repo")]
+        its_jobs = {r.get("job") for r in hit if r.get("job")}      # and what was written for those jobs
+        rows = [r for r in rows if r in hit or r.get("job") in its_jobs]
+    rows = rows[-args.n:] if args.n > 0 else []
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("nothing recorded" + (f" for {agent_inbox.printable(what)}" if what else "")
+              + " (ws-agent serve records what it decides from now on)")
+        return 0
+    for r in rows:
+        where = " ".join(f"{k} {r[k]}" for k in ("job", "item") if r.get(k))
+        subject = str(r.get("cid") or "") + (f" by {r['author']}" if r.get("author") else "")
+        rule = f" [rule: {r['rule']}]" if r.get("rule") else ""
+        text = f"{str(r.get('ts') or '')[:16]}  {str(r.get('outcome') or ''):<12} {subject} {where}".rstrip()
+        reason = f": {r['reason']}" if r.get("reason") else ""
+        print(agent_inbox.printable(f"{text}{rule}{reason}")[:400])
+    return 0
+
+
+def _panel(args: argparse.Namespace) -> int:
+    from . import agent_panel
+    if args.action == "path":
+        try:
+            print(agent_panel.socket_path())
+        except OSError as e:
+            _err(f"ws-agent panel: {e}")
+            return 1
+        return 0
+    if os.environ.get("CLAUDECODE") == "1" or os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: the panel is yours to open, in your own terminal (it can act on jobs)")
+        return 3
+    if args.action == "serve":
+        return agent_panel.serve_stdin()
+    if args.host:
+        return agent_panel.open_remote(args.host, args.port)
+    return agent_panel.open_local(args.port)
+
+
+def _has_pr(job: jobs.Job) -> bool:
+    from . import agent_publish
+    return bool(agent_publish.published(job, "draft_pr"))
+
+
 def _ls(args: argparse.Namespace) -> int:
     tasks = _tasks()
     key = ""
@@ -628,7 +707,9 @@ def _ls(args: argparse.Namespace) -> int:
         info = jobs.exit_info(j) or {}
         rows.append({"id": j.id, "state": st, "checks": str(info.get("checks") or "-") if info else "-",
                      "engine": j.engine or "-", "title": j.title, "repo": j.repo, "vcs": j.vcs, "created": j.created,
-                     "attempts": j.attempts, "pueue_id": j.pueue_id})
+                     "attempts": j.attempts, "pueue_id": j.pueue_id,
+                     # delivered: its pull request is open, so it waits on review or CI, not on the person here
+                     "stage": "delivered" if st == "succeeded" and _has_pr(j) else st})
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -638,7 +719,8 @@ def _ls(args: argparse.Namespace) -> int:
     for r in rows:
         where = "" if key else f"  {r['repo']}"
         checks = f"checks {r['checks']}" if r["checks"] not in ("-", "none") else "-"
-        print(f"{r['id']}  {r['state']:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  "
+        state = "delivered" if r["stage"] == "delivered" else r["state"]
+        print(f"{r['id']}  {state:<11} {checks:<14} {r['engine']:<7} {r['created'][:16]}  "
               f"{agent_inbox.printable(r['title'])}{where}")
     if tasks is None:
         _err("warning: pueued isn't running, so live states are unknown")
@@ -787,28 +869,42 @@ def _print_review(res: Path) -> None:
             print(f"  {where}: {f.get('issue')}")
 
 
-def _cancel(args: argparse.Namespace) -> int:
-    job = _load(args.id)
-    if job is None:
-        return 1
+def cancel_job(job: jobs.Job, *, even_finished: bool = False) -> tuple[int, str]:
+    """Stop a job: (code, message), 0 cancelled, 1 an error, 3 nothing to cancel. `even_finished`
+    (a stop from the job's own thread) also marks a finished job cancelled, so nothing more is
+    published for it and its thread is no longer live."""
     try:
         with jobs.queue_lock():   # serve recovers and requeues under it: it never writes an older copy back
             job = jobs.load(job.id)
             st = jobs.state(job, _tasks())
-            if st not in ("queued", "running", "interrupted", "unknown", "waiting"):
-                _err(f"ws-agent: {job.id} is {st}; nothing to cancel")
-                return 3
+            if st in ("closed", "cancelled") or (
+                    st not in ("queued", "running", "interrupted", "unknown", "waiting") and not even_finished):
+                return 3, f"ws-agent: {job.id} is {st}; nothing to cancel"
             job.cancelled = True   # first, so an _exec that starts meanwhile refuses it
             jobs.save(job)
             confirmed = jobs.kill(job)
     except jobs.QueueError as e:
-        _err(str(e))
-        return 1
+        return 1, str(e)
     stopped = jobs.stop_run(job)   # outside the lock: it waits up to 10 s for the engine
-    print(f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
-          f"(ws-agent close {job.id} removes the copy)")
+    msg = (f"cancelled {job.id}{' and stopped its claude' if stopped else ''}; its working copy and log are kept "
+           f"(ws-agent close {job.id} removes the copy)")
     if not confirmed:
-        _err("warning: pueue didn't confirm removing the task; if it starts later it refuses to run (cancelled)")
+        msg += "\nwarning: pueue didn't confirm removing the task; if it starts later it refuses to run (cancelled)"
+    return 0, msg
+
+
+def _cancel(args: argparse.Namespace) -> int:
+    job = _load(args.id)
+    if job is None:
+        return 1
+    code, msg = cancel_job(job)
+    if code != 0:
+        _err(msg)
+        return code
+    first, _, warning = msg.partition("\n")
+    print(first)
+    if warning:
+        _err(warning)
     return 0
 
 
@@ -1225,11 +1321,18 @@ def _parser() -> argparse.ArgumentParser:
     pt.add_argument("--comment", action="store_true", help="GitHub: the report as a comment on the issue or PR that asked")
     pt.add_argument("--draft-pr", action="store_true", help="GitHub: the patch on a new branch, as a draft pull request")
     pt.add_argument("--svn-branch", help="SVN: the parent of new branches, e.g. ^/branches/ws-agent")
+    pt.add_argument("--ack", action="store_true",
+                    help="GitHub, auto: one comment when a request becomes a job, and one if it is stopped from the thread")
+    pt.add_argument("--questions", action="store_true", help="GitHub, auto: a job's question as a comment on its thread")
+    pt.add_argument("--pr-updates", action="store_true",
+                    help="GitHub: a delivered job's later work as new commits on its own ws-agent/<id> branch")
     pt.set_defaults(fn=_publish_to)
     pb = sub.add_parser("publish", help="write a finished job's result back, as its repository's publish settings say")
     pb.add_argument("id")
     pb.add_argument("--even-failing", action="store_true", help="although its checks failed")
     pb.add_argument("--dry-run", action="store_true", help="say what would be written; write nothing")
+    pb.add_argument("--seen", action="store_true",
+                    help="you looked at the thread: settle this job's unconfirmed comments (publishes nothing)")
     pb.add_argument("--allow-workflows", action="store_true",
                     help="although its patch touches .github/ (workflows run with the repository's secrets)")
     pb.set_defaults(fn=_publish)
@@ -1251,11 +1354,28 @@ def _parser() -> argparse.ArgumentParser:
     gh.add_argument("path")
     gh.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
     gh.add_argument("--login", action="append", help="who may ask (repeatable; default: your gh login)")
+    gh.add_argument("--infer", action="append", choices=agent_registry.INFER,
+                    help="unasked work to triage against --rule: issues (new ones by these logins), ci (failed "
+                         "runs on the default branch); repeatable")
+    gh.add_argument("--rule", action="append", help="what unasked work is worth a job, in plain words (repeatable)")
+    gh.add_argument("--follow", action="store_true",
+                    help="on a thread with a live job, these logins' comments reach it without /agent (an answer, a follow-up)")
     gh.set_defaults(fn=_github)
     ugh = sub.add_parser("ungithub")
     ugh.add_argument("path")
     ugh.set_defaults(fn=_github)
     sub.add_parser("repos").set_defaults(fn=_repos)
+    pn = sub.add_parser("panel", help="this host's jobs and inbox in a browser, while the command runs")
+    pn.add_argument("action", choices=("open", "serve", "path"),
+                    help="open: print an address for your browser; serve and path are what open runs on another host")
+    pn.add_argument("host", nargs="?", help="open: one of your fleet hosts (its panel, through ssh -L)")
+    pn.add_argument("--port", type=int, default=0, help="the local port to listen on (default: any free one)")
+    pn.set_defaults(fn=_panel)
+    hi = sub.add_parser("history", help="what serve decided about each request and wrote for each job")
+    hi.add_argument("what", nargs="?", help="a job or inbox id, #number, or part of a request's id")
+    hi.add_argument("-n", type=int, default=40, help="how many of the latest rows (default 40)")
+    hi.add_argument("--json", action="store_true")
+    hi.set_defaults(fn=_history)
     run = sub.add_parser("run", help="queue a job")
     run.add_argument("--title", required=True)
     g = run.add_mutually_exclusive_group(required=True)

@@ -21,10 +21,11 @@ import dataclasses
 import fcntl
 import json
 import os
+import re
 import signal
 import sys
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
 from . import (agent_admit, agent_disk, agent_events, agent_inbox, agent_registry, agent_sources, agent_triage, core,
@@ -183,8 +184,55 @@ def _requeue_waiting(q: jobs.Queue | None) -> list[str]:
 _new_items: list[str] = []   # inbox items this tick added: one notice for all of them
 
 
+DECISIONS_KEPT = 4000
+_DECISIONS_BYTES = 4_000_000
+
+
+def _decisions_path() -> Path:
+    return _dir() / "decisions.jsonl"
+
+
+def decisions() -> list[dict[str, object]]:
+    """What became of each candidate and what was written for each job, oldest first."""
+    try:
+        lines = _decisions_path().read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for ln in lines[-DECISIONS_KEPT:]:
+        try:
+            row = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out
+
+
+def record_decision(row: dict[str, object]) -> None:
+    """Append one row to the record. It never fails a step: the record is for looking back."""
+    try:
+        core.private_dir(_dir())
+        path = _decisions_path()
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": core.now_iso(), **row}) + "\n")
+        if path.stat().st_size > _DECISIONS_BYTES:   # down to half the cap, by size: rows vary a lot
+            data = path.read_bytes()[-(_DECISIONS_BYTES // 2):]
+            core.atomic_write(path, data[data.find(b"\n") + 1:], 0o600)
+    except OSError:
+        pass
+
+
+def _fate(c: agent_inbox.Candidate, outcome: str, reason: str = "", decision: dict[str, object] | None = None,
+          **more: object) -> None:
+    record_decision({"cid": c.cid, "source": c.source, "repo": c.repo, "thread": c.thread, "author": c.author,
+                     "title": c.title, "explicit": c.explicit, "outcome": outcome, "reason": reason,
+                     "rule": (decision or {}).get("rule"), **more})
+
+
 def _inbox(c: agent_inbox.Candidate, decision: dict[str, object] | None, why: str) -> str:
     item = agent_inbox.add(c, decision)
+    _fate(c, "inbox", why if decision is None else str(decision.get("reason") or why), decision, item=item.id)
     agent_events.append_inbox(item.id, c.repo, f"inbox: {item.id} ({c.source}) waits for you")
     _new_items.append(item.id)
     return f"{c.cid}: in the inbox as {item.id} ({why})"
@@ -206,9 +254,28 @@ def _queue(c: agent_inbox.Candidate, decision: dict[str, object] | None, capped:
     q = agent.queue_job(core.expand(c.repo), c.title, c.prompt, origin=c.cid, base=c.base)
     if q.job is None:
         return _inbox(c, _held(c, decision, f"couldn't queue it: {q.error}"), q.error)
+    said = ""
     if c.thread:
         agent_sources.remember_thread(c.thread, q.job.id)
-    return f"{c.cid}: queued job {q.job.id}"
+        said = _acknowledge(q.job)
+    _fate(c, "queued", "" if decision is None else str(decision.get("reason") or ""), decision, job=q.job.id)
+    if said and _WROTE.match(said):
+        record_decision({"job": q.job.id, "outcome": "wrote", "reason": said[len(q.job.id) + 2:]})
+    return f"{c.cid}: queued job {q.job.id}" + (f"; {said}" if said else "")
+
+
+def _acknowledge(job: jobs.Job) -> str:
+    """Say once, in the thread that asked, that the request is now a job: at once, not on the next
+    tick (a job can reach its question or its result sooner than that, and would never be
+    acknowledged). The converse step is the fallback, e.g. after a paused queue."""
+    from . import agent_publish
+    try:
+        q = jobs.pueue_status()
+        if q is None or q.group == "Paused" or agent_publish.note_due(job, "ack") is not None:
+            return ""
+        return agent_publish.post_note(job, "ack")
+    except Exception as e:  # noqa: BLE001 - the job is queued either way
+        return f"{job.id}: ack: {type(e).__name__}: {e}"
 
 
 def _same_rule(said: object, rules: tuple[str, ...]) -> str | None:
@@ -225,13 +292,17 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     why = agent_admit.admit(c, agent_registry.find(entry.path), mode, authors)
     capped = why if why and agent_admit.is_cap(why) else ""
     if why and not capped:
+        _fate(c, "not admitted", why)
         return f"{c.cid}: not admitted: {why}"
     if c.note:   # the source couldn't finish it (no base): the person decides
         return _inbox(c, _held(c, None, c.note), "held")
     decision: dict[str, object] | None = None
     if not c.explicit:
         decision = agent_triage.triage(c, rules, entry)
+        # the rule kept (inbox, record) is one the person wrote, or none: never the model's wording
+        decision = {**decision, "rule": _same_rule(decision.get("rule"), rules)}
         if decision.get("decision") == "ignore":
+            _fate(c, "ignored", str(decision.get("reason") or ""), decision)
             return f"{c.cid}: ignored by triage: {decision.get('reason')}"
         rule = _same_rule(decision.get("rule"), rules)
         if decision.get("decision") == "accept" and c.source == "svn" and rule:
@@ -243,14 +314,38 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     return _inbox(c, decision, "observe" if mode == "observe" else "triage asks")
 
 
+FOLLOW_UPS_A_DAY = 10   # a thread's comments delivered to one job in a day; the rest wait for the person
+
+
 def _follow(job_id: str, text: str, login: str) -> str:
     from . import agent
     try:
         job = jobs.load(job_id)
     except KeyError:
         return f"follow-up for {job_id}: no such job"
+    today = core.now_iso()[:10]
+    got = sum(1 for m in jobs.thread(job) if str(m.get("from", "")).startswith("gh:") and str(m.get("ts", "")).startswith(today))
+    if got >= FOLLOW_UPS_A_DAY:
+        mark = jobs.private_dir(job.id) / "follow-limit"
+        if not (mark.exists() and mark.read_text(encoding="utf-8").strip() == today):
+            mark.write_text(today + "\n", encoding="utf-8")
+            agent_events.notify(f"{job.id}: {FOLLOW_UPS_A_DAY} comments reached it today; later ones today aren't "
+                                f"delivered (ws-agent tell {job.id} passes one on)")
+        return f"follow-up for {job_id}: not delivered: {FOLLOW_UPS_A_DAY} a day reached"
     code, msg = agent.tell_job(job, text, sender=f"gh:{login}" if login else "you")
     return f"follow-up for {job_id}: " + (msg.splitlines()[0] if msg else f"exit {code}")
+
+
+def _stop(job_id: str, login: str) -> str:
+    """`/agent stop` from a listed login on the job's thread: cancel it, and say so once there."""
+    from . import agent, agent_publish
+    try:
+        job = jobs.load(job_id)
+    except KeyError:
+        return f"stop for {job_id}: no such job"
+    (jobs.private_dir(job.id) / agent_publish.STOP_MARK).write_text(core.now_iso() + "\n", encoding="utf-8")
+    code, msg = agent.cancel_job(job, even_finished=True)   # the converse step says so in the thread
+    return f"stop for {job_id} (gh:{login}): " + (msg.splitlines()[0] if msg else f"exit {code}")
 
 
 # Candidates a poll returned are kept in pending.json until handled: the poll has already moved
@@ -292,7 +387,7 @@ def _settings_for(c: agent_inbox.Candidate) -> tuple[agent_registry.Repo, str, t
     if c.source == "svn" and entry.watch is not None:
         return entry, entry.watch.mode, entry.watch.authors, entry.watch.rules
     if c.source == "github" and entry.github is not None:
-        return entry, entry.github.mode, entry.github.logins, ()
+        return entry, entry.github.mode, entry.github.logins, entry.github.rules
     return None
 
 
@@ -327,17 +422,111 @@ def _poll_svn(entry: agent_registry.Repo, now: float) -> list[str]:
 def _poll_github(entry: agent_registry.Repo, now: float) -> list[str]:
     found, follow = agent_sources.poll_github(entry, now)
     _push(found)
-    return [_follow(jid, text, login) for jid, text, login in follow] + _drain()
+    out = []
+    for jid, text, login, kind in follow:   # each on its own: the poll has already moved past them all
+        try:
+            out.append(_stop(jid, login) if kind == "stop" else _ended(jid, text) if kind == "ended"
+                       else _ci(jid, text) if kind == "ci" else _follow(jid, text, login))
+        except Exception as e:  # noqa: BLE001
+            out.append(f"{kind} for {jid}: {type(e).__name__}: {e}")
+    return out + _drain()
 
 
-def _publish_auto(q: jobs.Queue | None) -> list[str]:
+def _ended(job_id: str, how: str) -> str:
+    """The job's pull request was merged or closed: its work is over. Close it (the copy goes, the
+    result stays); a comment there afterwards starts nothing."""
+    from . import agent
+    try:
+        job = jobs.load(job_id)
+    except KeyError:
+        return f"pull request {how} for {job_id}: no such job"
+    agent.cancel_job(job)   # a turn still running for it stops first (nothing to cancel otherwise)
+    with jobs.queue_lock():
+        job = jobs.load(job_id)
+        if job.closed:
+            return f"pull request {how} for {job_id}: already closed"
+        agent.close_job(job)
+    agent_events.notify(f"{job_id}: its pull request was {how}; the job is closed")
+    return f"pull request {how} for {job_id}: job closed"
+
+
+def _ci(job_id: str, text: str) -> str:
+    from . import agent
+    try:
+        job = jobs.load(job_id)
+    except KeyError:
+        return f"checks for {job_id}: no such job"
+    code, msg = agent.tell_job(job, text, sender="gh:checks")
+    return f"checks failed for {job_id}: " + (msg.splitlines()[0] if msg else f"exit {code}")
+
+
+def _update_prs(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] | None = None) -> list[str]:
+    """Delivered jobs whose work changed since the last push: one more commit on their own branch."""
+    from . import agent_publish
+    if q is None or q.group == "Paused":
+        return []
+    out = []
+    repos = agent_registry.load()[0] if repos is None else repos
+    for j in jobs.all_jobs():
+        entry = repos.get(j.repo)
+        if entry is None or entry.publish.mode != "auto" or not entry.publish.pr_updates or j.closed or j.cancelled \
+                or not j.origin.startswith("gh:") or not agent_publish.published(j, "draft_pr"):
+            continue
+        if agent_publish.update_due(j, auto=True) is not None:
+            continue
+        try:
+            line = agent_publish.push_update(j, auto=True)
+        except Exception as e:  # noqa: BLE001 - one job's failure never stops the others
+            line = f"{j.id}: update: {type(e).__name__}: {e}"
+        out.append(line)
+        if "pushed update" in line:
+            agent_events.append("published", j, f"{j.id} updated its pull request")
+            agent_events.notify(f"{j.id} updated its pull request")
+        elif "theirs now" in line:
+            agent_events.notify(f"{j.id}: its branch has someone else's commits; nothing more is pushed to it")
+        elif ": update failed: " in line and agent_publish.update_gave_up(j):
+            agent_events.notify(f"{j.id}: its update couldn't be pushed (ws-agent publish {j.id} tries again)")
+        if "its note failed" in line:
+            agent_events.notify(f"{j.id}: a comment to its thread may not have been posted; look there, then "
+                                f"ws-agent publish {j.id} --seen")
+    return out
+
+
+def _converse(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] | None = None) -> list[str]:
+    """What a live job says in its GitHub thread: one acknowledgement, and its questions. Only
+    where the repository's publish settings are automatic and name them."""
+    from . import agent_publish
+    if q is None or q.group == "Paused":
+        return []
+    out = []
+    repos = agent_registry.load()[0] if repos is None else repos
+    for j in jobs.all_jobs():
+        entry = repos.get(j.repo)
+        if entry is None or entry.publish.mode != "auto" or not j.origin.startswith("gh:") or j.closed:
+            continue
+        for kind in agent_publish.NOTES:
+            if agent_publish.note_due(j, kind, entry) is not None:
+                continue
+            try:
+                line = agent_publish.post_note(j, kind)
+            except Exception as e:  # noqa: BLE001 - one job's failure never stops the others
+                line = f"{j.id}: {kind}: {type(e).__name__}: {e}"
+            out.append(line)
+            if f"{j.id}: {kind} failed: " in line:
+                # Once: it stays marked, so nothing of this job is tried again until the person looks.
+                agent_events.notify(f"{j.id}: a comment to its thread may not have been posted; look there, then "
+                                    f"ws-agent publish {j.id} --seen")
+    return out
+
+
+def _publish_auto(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo] | None = None) -> list[str]:
     """Passing jobs that came from a source, in repositories whose publish mode is auto: written
     back once (agent_publish decides; a refusal that will never change is not repeated in the log)."""
     from . import agent_publish
     if q is None or q.group == "Paused":   # paused means "do nothing by yourself"
         return []
     out = []
-    repos = agent_registry.load()[0]
+    repos = agent_registry.load()[0] if repos is None else repos
     for j in jobs.all_jobs():
         entry = repos.get(j.repo)
         if entry is None or entry.publish.mode != "auto" or not j.origin or j.closed or j.cancelled:
@@ -365,6 +554,9 @@ def _publish_auto(q: jobs.Queue | None) -> list[str]:
     return out
 
 
+_WROTE = re.compile(r"([0-9a-f]{6}): (?:posted|published|pushed update) ")
+
+
 def tick(now: float) -> list[str]:
     """One pass; what it did, as log lines. Each step fails on its own."""
     lines: list[str] = []
@@ -380,8 +572,19 @@ def tick(now: float) -> list[str]:
     step("recover", lambda: _recover(q))
     step("waiting", lambda: _requeue_waiting(q))
     step("pending", _drain)   # what a serve killed mid-batch left
-    step("publish", lambda: _publish_auto(q))
-    for key, entry in sorted(agent_registry.load()[0].items()):
+    try:
+        repos = agent_registry.load()[0]   # one read for the steps below
+    except Exception as e:  # noqa: BLE001
+        return [*lines, f"registry: {type(e).__name__}: {e}"]
+    before = len(lines)
+    step("converse", lambda: _converse(q, repos))
+    step("publish", lambda: _publish_auto(q, repos))
+    step("update", lambda: _update_prs(q, repos))
+    for ln in lines[before:]:   # what was written for a job, beside what became of its request
+        m = _WROTE.match(ln)
+        if m:
+            record_decision({"job": m.group(1), "outcome": "wrote", "reason": ln[len(m.group(1)) + 2:]})
+    for key, entry in sorted(repos.items()):
         if entry.watch is not None and entry.watch.mode in ("observe", "act"):
             step(f"svn {key}", lambda e=entry: _poll_svn(e, now))
         if entry.github is not None and entry.github.mode in ("observe", "act"):

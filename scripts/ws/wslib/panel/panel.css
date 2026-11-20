@@ -1,0 +1,77 @@
+/* The person's own palette: Catppuccin Mocha with mauve, Latte in the light. */
+:root {
+  --base: #1e1e2e; --mantle: #181825; --surface: #313244; --overlay: #6c7086;
+  --text: #cdd6f4; --subtext: #a6adc8; --mauve: #cba6f7; --red: #f38ba8; --peach: #fab387;
+  --yellow: #f9e2af; --green: #a6e3a1; --blue: #89b4fa;
+  --mono: ui-monospace, "JetBrainsMono Nerd Font", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --base: #eff1f5; --mantle: #e6e9ef; --surface: #ccd0da; --overlay: #8c8fa1;
+    --text: #4c4f69; --subtext: #6c6f85; --mauve: #8839ef; --red: #d20f39; --peach: #fe640b;
+    --yellow: #df8e1d; --green: #40a02b; --blue: #1e66f5;
+  }
+}
+* { box-sizing: border-box; }
+html { font: 15px/1.5 var(--sans); color: var(--text); background: var(--base); }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; gap: 1rem; align-items: baseline; padding: .8rem 1.25rem; background: var(--mantle); }
+h1 { font-size: 1rem; font-weight: 600; margin: 0; white-space: nowrap; }
+h1 span { color: var(--subtext); font-weight: 400; }
+#filter { flex: 1; max-width: 30rem; font: inherit; color: inherit; background: var(--base);
+  border: 1px solid var(--surface); border-radius: 4px; padding: .3rem .6rem; }
+#clock { margin-left: auto; color: var(--subtext); font-size: .87rem; }
+main { flex: 1; display: grid; grid-template-columns: minmax(22rem, 2fr) 3fr; min-height: 0; }
+#lists { padding: .5rem 1.25rem 2rem; overflow: auto; border-right: 1px solid var(--surface); }
+#detail { padding: 1rem 1.5rem 3rem; overflow: auto; min-width: 0; }
+h2 { font-size: .87rem; font-weight: 600; color: var(--subtext); margin: 1.5rem 0 .4rem; }
+h3 { font-size: 1.15rem; font-weight: 600; margin: 0 0 .2rem; overflow-wrap: anywhere; }
+h4 { font-size: .87rem; font-weight: 600; color: var(--subtext); margin: 1.4rem 0 .35rem; }
+.quiet { color: var(--subtext); margin: .3rem 0; }
+ul { list-style: none; margin: 0; padding: 0; }
+.rows li { border-left: 3px solid var(--surface); margin: 0 0 .35rem; }
+.rows button.row { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: none;
+  border: 0; padding: .4rem .7rem; cursor: pointer; border-radius: 0 4px 4px 0; }
+.rows button.row:hover, .rows li.on button.row { background: var(--mantle); }
+/* whom it waits for leads every row: the one thing to read first */
+.waits { display: block; font-weight: 600; }
+.title { display: block; overflow-wrap: anywhere; }
+.meta { display: block; color: var(--subtext); font-size: .87rem; }
+.meta code, code, pre { font-family: var(--mono); font-size: .87rem; }
+.rows li.you { border-left-color: var(--mauve); } .rows li.you .waits { color: var(--mauve); }
+.rows li.bad { border-left-color: var(--red); } .rows li.bad .waits { color: var(--red); }
+.rows li.others .waits { color: var(--blue); }
+.rows li.engine .waits { color: var(--subtext); }
+.note { display: block; color: var(--peach); font-size: .87rem; }
+.health li { padding: .15rem 0 .15rem .8rem; border-left: 3px solid var(--yellow); margin-bottom: .3rem; overflow-wrap: anywhere; }
+.health li.bad { border-left-color: var(--red); }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .9rem 0 .4rem; }
+.actions button, .say button { font: inherit; color: var(--base); background: var(--mauve); border: 0; border-radius: 4px;
+  padding: .3rem .8rem; cursor: pointer; }
+.actions button.plain { color: var(--text); background: var(--surface); }
+.actions button:disabled, .say button:disabled { opacity: .5; cursor: default; }
+.say { display: flex; gap: .5rem; margin: .5rem 0; }
+.say textarea { flex: 1; font: inherit; color: inherit; background: var(--mantle); border: 1px solid var(--surface);
+  border-radius: 4px; padding: .4rem .6rem; min-height: 2.6rem; resize: vertical; }
+.result { margin: .4rem 0; padding: .4rem .7rem; background: var(--mantle); border-radius: 4px; white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.result.bad { color: var(--red); }
+.prose { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch; margin: .2rem 0; }
+pre { background: var(--mantle); padding: .7rem .9rem; border-radius: 4px; overflow: auto; max-height: 28rem; margin: .3rem 0; }
+.add { color: var(--green); } .del { color: var(--red); } .hunk { color: var(--blue); }
+/* history is a sequence in time, so it is drawn as one */
+ol.timeline { list-style: none; margin: .3rem 0; padding: 0 0 0 1rem; border-left: 2px solid var(--surface); }
+ol.timeline li { position: relative; padding: .15rem 0 .6rem .4rem; overflow-wrap: anywhere; }
+ol.timeline li::before { content: ""; position: absolute; left: -1.38rem; top: .55rem; width: .55rem; height: .55rem;
+  border-radius: 50%; background: var(--overlay); }
+ol.timeline li.said::before { background: var(--mauve); }
+ol.timeline time { color: var(--subtext); font-size: .87rem; margin-right: .5rem; }
+a { color: var(--blue); }
+#lost { position: fixed; inset: auto 0 0 0; margin: 0; padding: .7rem 1.25rem; background: var(--red); color: var(--base); }
+:focus-visible { outline: 2px solid var(--mauve); outline-offset: 2px; }
+@media (max-width: 52rem) {
+  main { grid-template-columns: 1fr; }
+  #lists { border-right: 0; border-bottom: 1px solid var(--surface); }
+  header { flex-wrap: wrap; }
+}
