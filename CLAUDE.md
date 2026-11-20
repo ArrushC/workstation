@@ -354,8 +354,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `ui` (`agent_ui.py`) is fzf with `--with-shell 'bash -c'`, and no `)` inside an `execute(...)`.
   - `panel` (`agent_panel.py`, static files in `wslib/panel/`; refused in a session): a Unix socket in
     `$XDG_RUNTIME_DIR/ws-agent` (0700), never TCP; `panel open` relays `127.0.0.1:<port>` to it, or runs
-    `panel serve` on a fleet host through `ssh -L` (key and port on stdin, ends with stdin). Every request needs
-    the run's key (cookie), the printed `Host`; a POST also the `Origin`, `X-WS-Panel` and JSON. Routes are a
+    `panel serve` on a fleet host through `ssh -L <local socket>:<remote socket>` (key and port on stdin, ends
+    with stdin). The relay lets in this uid only (`peer_uid` from /proc/net/tcp; under WSL a peer the table
+    doesn't list is the Windows browser, measured). The key travels in the address's fragment, lives in the
+    page's `sessionStorage` and is sent as `X-WS-Key`: never a cookie (cookies go to every local port). Every
+    API request needs it and the printed `Host`; a POST also the `Origin`, `X-WS-Panel` and JSON. A refusal
+    closes its connection (an unread body would be parsed as the next request). `socket_path` uses only a
+    directory that is this user's alone and no link. Routes are a
     fixed list: reads, and `tell|interrupt|cancel|retry|close` / `accept|dismiss` run as `ws-agent` subprocesses
     (`run_cli`); never `run`, `allow`, a source or publish setting, or `publish`. The page inserts text with
     `textContent` only and loads nothing from elsewhere (CSP `default-src 'none'`; `test_agent_panel` greps for it).

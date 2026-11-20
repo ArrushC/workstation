@@ -670,7 +670,11 @@ def _history(args: argparse.Namespace) -> int:
 def _panel(args: argparse.Namespace) -> int:
     from . import agent_panel
     if args.action == "path":
-        print(agent_panel.socket_path())
+        try:
+            print(agent_panel.socket_path())
+        except OSError as e:
+            _err(f"ws-agent panel: {e}")
+            return 1
         return 0
     if os.environ.get("CLAUDECODE") == "1" or os.environ.get("WS_AGENT_JOB"):
         _err("ws-agent: the panel is yours to open, in your own terminal (it can act on jobs)")

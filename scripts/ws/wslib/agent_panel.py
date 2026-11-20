@@ -8,8 +8,9 @@ that starts work, changes what agents may touch, or publishes.
 It listens on a Unix socket in the person's runtime directory, never on a TCP port: on a shared
 host a localhost port is open to every user. `panel open` gives a browser a 127.0.0.1 address
 that is relayed to that socket (for another host, through `ssh -L`), and the panel lives exactly
-as long as that command. Every request needs the run's token (traded once for a cookie), the
-right Host, and for a write the right Origin and a header no plain form can send.
+as long as that command. Everything of the person's needs the run's key in a header (the page keeps
+it in its own storage; never a cookie, which a browser sends to every local port), the right Host,
+and for a write the right Origin. A refused request ends its connection.
 
 Titles, reports, log lines and inbox text are other people's or a model's words: they leave here
 as JSON strings and the page inserts them as text, never as HTML.
@@ -26,6 +27,7 @@ import re
 import secrets
 import socket
 import socketserver
+import stat
 import subprocess
 import sys
 import threading
@@ -42,7 +44,8 @@ FILES = {"/": ("index.html", "text/html; charset=utf-8"),
          "/panel.css": ("panel.css", "text/css; charset=utf-8")}
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
-COOKIE = "ws_panel"
+KEY_HEADER = "X-WS-Key"
+REQUEST_TIMEOUT = 30     # seconds an idle or half-sent request may hold a thread
 JOB_ACTIONS = ("tell", "interrupt", "cancel", "retry", "close")
 INBOX_ACTIONS = ("accept", "dismiss")
 _ID = re.compile(r"[0-9a-f]{6,16}")
@@ -62,12 +65,28 @@ ALLOWED = {"needs-you": ("tell", "cancel", "close"), "delivered": ("tell", "clos
            "unknown": ("cancel",), "cancelled": ("close",)}
 
 
-def socket_path() -> Path:
-    """The panel's socket: in the user's runtime directory (theirs alone, gone at logout), else in
-    the state directory. The directory is 0700 either way."""
+def _mine_alone(d: Path) -> bool:
+    """A real directory (not a link) that this user owns and nobody else can write or enter."""
+    try:
+        st = os.lstat(d)
+    except OSError:
+        return False
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and not st.st_mode & 0o077
+
+
+def socket_path(name: str = "panel") -> Path:
+    """Where the panel's socket goes: `ws-agent/` in the user's runtime directory when that is
+    theirs alone (as /run/user/<uid> is), else under the state directory. Raises OSError rather
+    than use a directory someone else could have put there or can reach."""
     run = os.environ.get("XDG_RUNTIME_DIR")
-    base = Path(run) if run and os.path.isdir(run) else core.state_dir()
-    return core.private_dir(base / "ws-agent") / "panel.sock"
+    base = Path(run) if run and _mine_alone(Path(run)) else core.state_dir()
+    d = base / "ws-agent"
+    with contextlib.suppress(FileExistsError):
+        os.makedirs(d, 0o700)
+    if not _mine_alone(d):
+        raise OSError(f"{d} isn't a directory of yours alone (a link, or open to others): the panel won't put its socket there")
+    host = "" if base != core.state_dir() else "-" + re.sub(r"[^\w.-]", "", socket.gethostname())[:40]   # a shared home
+    return d / f"{name}{host}.sock"
 
 
 # --- what the page reads ---------------------------------------------------------------------
@@ -85,10 +104,14 @@ def _row(job: jobs.Job, state: str) -> dict[str, object]:
             "created": job.created, "from_source": bool(job.origin), "actions": list(ALLOWED.get(stage, ()))}
 
 
-def job_rows() -> list[dict[str, object]]:
+def _open_jobs() -> list[tuple[jobs.Job, dict[str, object]]]:
     q = jobs.pueue_status()
     tasks = q.tasks if q else None
-    return [_row(j, st) for j in jobs.all_jobs() if (st := jobs.state(j, tasks)) != "closed"]
+    return [(j, _row(j, st)) for j in jobs.all_jobs() if (st := jobs.state(j, tasks)) != "closed"]
+
+
+def job_rows() -> list[dict[str, object]]:
+    return [r for _, r in _open_jobs()]
 
 
 def _inbox_row(it: agent_inbox.Item) -> dict[str, object]:
@@ -133,18 +156,19 @@ def health() -> list[dict[str, str]]:
 def needs() -> dict[str, object]:
     from . import agent_publish
     rows: list[dict[str, object]] = []
-    for r in job_rows():
-        if r["stage"] in NEEDS:
-            rows.append(r)
-            job = jobs.load(str(r["id"]))
-            if agent_publish.held_back(job):
-                r["note"] = "a comment to its thread may not have been posted: look there, then ws-agent publish --seen"
-            elif agent_publish.update_gave_up(job):
-                r["note"] = "its update couldn't be pushed: ws-agent publish tries again"
+    working: list[dict[str, object]] = []
+    for job, r in _open_jobs():   # the records as read once: a job can damage its own, never the list
+        if r["stage"] not in NEEDS:
+            working.append(r)
+            continue
+        rows.append(r)
+        if agent_publish.held_back(job):
+            r["note"] = "a comment to its thread may not have been posted: look there, then ws-agent publish --seen"
+        elif agent_publish.update_gave_up(job):
+            r["note"] = "its update couldn't be pushed: ws-agent publish tries again"
     order = {s: n for n, s in enumerate(NEEDS)}
     rows.sort(key=lambda r: (order.get(str(r["stage"]), 9), str(r["created"])))
     inbox = [_inbox_row(it) for it in agent_inbox.items()]
-    working = [r for r in job_rows() if r["stage"] not in NEEDS]
     return {"needs": inbox + rows, "working": working, "health": health(),
             "host": socket.gethostname(), "at": core.now_iso()}
 
@@ -167,7 +191,9 @@ def job_detail(job_id: str) -> dict[str, object] | None:
     from . import agent_publish
     try:
         job = jobs.load(job_id)
-    except (KeyError, OSError, ValueError):
+    except (KeyError, OSError, ValueError, TypeError):
+        return None
+    if job.id != job_id:      # the id asked for, exactly: never a prefix, never what a record claims
         return None
     q = jobs.pueue_status()
     info = jobs.exit_info(job) or {}
@@ -199,11 +225,10 @@ def inbox_detail(item_id: str) -> dict[str, object] | None:
 def run_cli(words: list[str]) -> tuple[int, str]:
     """One ws-agent command, as the person: (exit code, what it printed). A subprocess, as `ui`
     does it, so every action takes the locks and the checks the command line takes."""
-    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "WS_AGENT_JOB")}
     ws = Path(__file__).resolve().parents[1] / "ws.py"
     try:
         r = subprocess.run([sys.executable, str(ws), "agent", *words], capture_output=True, text=True,
-                           timeout=ACTION_TIMEOUT, env=env, stdin=subprocess.DEVNULL)
+                           timeout=ACTION_TIMEOUT, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired) as e:
         return 1, f"ws-agent {words[0]}: {e}"
     return r.returncode, (r.stdout + r.stderr).strip()
@@ -218,9 +243,9 @@ def act(kind: str, ident: str, action: str, body: dict[str, object]) -> tuple[in
         words = [action, ident]
         if action in ("tell", "interrupt"):
             text = str(body.get("text") or "").strip()
-            if not text:
-                return 400, {"error": "say what to tell it"}
-            words.append(text)
+            if not text or any(ord(ch) < 32 and ch not in "\n\t" for ch in text):
+                return 400, {"error": "say what to tell it, in plain text"}
+            words += ["--", text]      # after --, so words that start with a dash are still words
     elif kind == "inbox" and action in INBOX_ACTIONS:
         words = [action, ident]
     else:
@@ -241,10 +266,11 @@ class Panel:
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    panel: Panel = Panel("", 0)   # each server's own, set by make_server
+    panel: Panel = Panel("", 0)   # each server's own, set by make_server; this one refuses everything
     server_version = "ws-agent-panel"
     sys_version = ""
     protocol_version = "HTTP/1.1"
+    timeout = REQUEST_TIMEOUT
 
     def log_message(self, format: str, *args: object) -> None:   # noqa: A002 - the base class's name
         return   # nothing on stderr: paths carry ids, and the terminal belongs to `panel open`
@@ -271,23 +297,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(status, text.encode("utf-8"), "text/plain; charset=utf-8")
 
     def _refuse(self, status: int, why: str) -> None:
-        self._text(status, why + "\n")
+        # The connection ends with a refusal. Its body was never read: left open, those bytes would
+        # be taken for the next request, which a page on another local port could use to ride in on
+        # the person's own next poll.
+        self.close_connection = True
+        self._send(status, (why + "\n").encode("utf-8"), "text/plain; charset=utf-8", {"Connection": "close"})
 
     # -- who is asking
 
-    def _cookie(self) -> str:
-        for part in (self.headers.get("Cookie") or "").split(";"):
-            name, _, value = part.strip().partition("=")
-            if name == COOKIE:
-                return value
-        return ""
-
-    def _allowed(self) -> bool:
-        """The right Host (a page elsewhere that resolves to 127.0.0.1 has another), and the token."""
+    def _here(self) -> bool:
+        """The right Host (a page elsewhere that resolves to 127.0.0.1 has another), and no body in
+        a framing this server doesn't read."""
+        if self.headers.get("Transfer-Encoding"):
+            self._refuse(400, "send a Content-Length")
+            return False
         if (self.headers.get("Host") or "") not in self.panel.hosts:
             self._refuse(403, "this panel answers only at the address `ws-agent panel open` printed")
             return False
-        if not hmac.compare_digest(self._cookie().encode(), self.panel.token.encode()):
+        return True
+
+    def _allowed(self) -> bool:
+        """Also this run's key, in a header: only the panel's own page has it, and a page elsewhere
+        can't send a header of this name without asking first (and is told no)."""
+        if not self._here():
+            return False
+        key = self.headers.get(KEY_HEADER) or ""
+        if not self.panel.token or not hmac.compare_digest(key.encode(), self.panel.token.encode()):
             self._refuse(403, "open the panel with the address `ws-agent panel open` printed (it carries this run's key)")
             return False
         return True
@@ -297,19 +332,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self) -> None:   # noqa: N802 - http.server's name
         url = urlsplit(self.path)
         query = parse_qs(url.query)
-        if url.path == "/" and "t" in query:   # the printed address: trade its key for a cookie, once
-            if (self.headers.get("Host") or "") not in self.panel.hosts or \
-                    not hmac.compare_digest(query["t"][0].encode(), self.panel.token.encode()):
-                self._refuse(403, "that key isn't this run's: use the address `ws-agent panel open` printed")
-                return
-            self._send(303, b"", "text/plain", {"Location": "/",
-                                                 "Set-Cookie": f"{COOKIE}={self.panel.token}; HttpOnly; SameSite=Strict; Path=/"})
+        if url.path in FILES:   # the page itself: the same for everyone, nothing of the person's in it
+            if self._here():
+                name, ctype = FILES[url.path]
+                self._send(200, (STATIC / name).read_bytes(), ctype)
             return
         if not self._allowed():
-            return
-        if url.path in FILES:
-            name, ctype = FILES[url.path]
-            self._send(200, (STATIC / name).read_bytes(), ctype)
             return
         parts = [p for p in url.path.split("/") if p]
         if parts[:1] != ["api"]:
@@ -327,8 +355,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif len(parts) == 3 and parts[1] == "inbox" and _ID.fullmatch(parts[2]):
             route = lambda: inbox_detail(parts[2])   # noqa: E731
         elif len(parts) == 4 and parts[1] == "jobs" and _ID.fullmatch(parts[2]) and parts[3] in ("diff", "log"):
-            jd = jobs.job_dir(parts[2])
-            if not (jd / "job.json").is_file():
+            if job_detail(parts[2]) is None:
                 self._refuse(404, "no such job")
                 return
             if parts[3] == "diff":
@@ -406,7 +433,7 @@ def make_server(path: Path, token: str, port: int) -> _SocketServer:
     died is replaced; one a live panel holds is left alone."""
     core.private_dir(path.parent)
     if len(os.fsencode(path)) > 100:   # sun_path holds about 107 bytes
-        raise OSError(f"the socket's path is too long for a Unix socket ({path}); set XDG_RUNTIME_DIR to a short directory")
+        raise OSError(f"the socket's path is too long for a Unix socket ({path})")
     if path.exists() or path.is_symlink():
         probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
@@ -436,13 +463,49 @@ def _pipe(a: socket.socket, b: socket.socket) -> None:
             s.shutdown(socket.SHUT_RDWR)
 
 
+def peer_uid(peer_port: int, local_port: int) -> int | None:
+    """The user whose process holds the other end of a loopback connection to `local_port`, from
+    the kernel's table; None when it lists no such connection."""
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            rows = Path(table).read_text(encoding="ascii", errors="replace").splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            f = row.split()
+            try:
+                if int(f[1].rsplit(":", 1)[1], 16) == peer_port and int(f[2].rsplit(":", 1)[1], 16) == local_port:
+                    return int(f[7])
+            except (IndexError, ValueError):
+                continue
+    return None
+
+
+def _is_wsl() -> bool:
+    try:
+        return "microsoft" in Path("/proc/version").read_text(encoding="utf-8", errors="replace").lower()
+    except OSError:
+        return False
+
+
+def peer_allowed(uid: int | None, *, wsl: bool) -> bool:
+    """A loopback port is open to every user of the machine: only this user's own processes may
+    use this one. Under WSL the Windows browser arrives through WSL's own relay, from outside this
+    kernel's table (measured): a peer it can't name is that, and is let in."""
+    return uid == os.getuid() or (uid is None and wsl)
+
+
 def relay(listener: socket.socket, path: Path) -> None:
     """127.0.0.1:<port> to the socket, byte for byte, until the listener closes."""
+    wsl, port = _is_wsl(), listener.getsockname()[1]
     while True:
         try:
-            conn, _ = listener.accept()
+            conn, addr = listener.accept()
         except OSError:
             return
+        if not peer_allowed(peer_uid(addr[1], port), wsl=wsl):
+            conn.close()
+            continue
         up = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             up.connect(str(path))
@@ -474,8 +537,8 @@ def serve_stdin() -> int:
     if len(token) < 32:
         print("ws-agent panel serve: expected the key and the port on stdin", file=sys.stderr)
         return 2
-    path = socket_path()
     try:
+        path = socket_path()
         srv = make_server(path, token, port)
     except OSError as e:
         print(f"ws-agent panel: {e}", file=sys.stderr)
@@ -499,8 +562,8 @@ def open_local(port: int) -> int:
         print(f"ws-agent panel: can't listen on 127.0.0.1:{port}: {e}", file=sys.stderr)
         return 1
     port = listener.getsockname()[1]
-    path = socket_path()
     try:
+        path = socket_path()
         srv = make_server(path, token, port)
     except OSError as e:
         listener.close()
@@ -508,7 +571,7 @@ def open_local(port: int) -> int:
         return 1
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     threading.Thread(target=relay, args=(listener, path), daemon=True).start()
-    print(f"panel for {socket.gethostname()}: http://127.0.0.1:{port}/?t={token}")
+    print(f"panel for {socket.gethostname()}: http://127.0.0.1:{port}/#t={token}")
     print("It is open while this command runs (ctrl-c closes it). The address carries this run's key.", flush=True)
     try:
         threading.Event().wait()
@@ -531,34 +594,50 @@ def open_remote(host: str, port: int) -> int:
               file=sys.stderr)
         return 3
     token = secrets.token_urlsafe(32)
-    with contextlib.closing(listen_local(port)) as probe:   # find a free port, then hand it to ssh
-        port = probe.getsockname()[1]
+    try:
+        listener = listen_local(port)
+        local = socket_path("to-" + re.sub(r"[^\w.-]", "_", host)[:40])
+    except OSError as e:
+        print(f"ws-agent panel: {e}", file=sys.stderr)
+        return 1
+    port = listener.getsockname()[1]
+    with contextlib.suppress(OSError):
+        local.unlink()
     ask = subprocess.run(["ssh", "-o", "BatchMode=yes", "--", host, "bash -lc " + shlex.quote("ws-agent panel path")],
                          capture_output=True, text=True, timeout=60)
     remote = ask.stdout.strip().splitlines()[-1] if ask.returncode == 0 and ask.stdout.strip() else ""
     if not remote.startswith("/") or not re.fullmatch(r"[\w./@+-]+", remote):
+        listener.close()
         print(f"ws-agent panel: {host} didn't say where its panel listens: "
               f"{agent_inbox.printable(ask.stderr.strip() or ask.stdout.strip())[:300]}", file=sys.stderr)
         return 1
+    # ssh forwards a socket of ours alone to that host's socket; the port a browser needs is this
+    # process's own relay in front of it, which lets in this user only (ssh's own port would let in anyone here).
     proc = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
-                             "-L", f"127.0.0.1:{port}:{remote}", "--", host,
+                             "-o", "StreamLocalBindMask=0177", "-o", "ServerAliveInterval=30",
+                             "-L", f"{local}:{remote}", "--", host,
                              "bash -lc " + shlex.quote("ws-agent panel serve")],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     assert proc.stdin is not None and proc.stdout is not None
     proc.stdin.write(f"{token}\n{port}\n")
     proc.stdin.flush()
     first = proc.stdout.readline().strip()
-    if not first.startswith("ready "):
+    if first != f"ready {remote}":
         proc.terminate()
+        listener.close()
         print(f"ws-agent panel: {host}'s panel didn't start: {agent_inbox.printable(first)[:300]}", file=sys.stderr)
         return 1
-    print(f"panel for {host}: http://127.0.0.1:{port}/?t={token}")
+    threading.Thread(target=relay, args=(listener, local), daemon=True).start()
+    print(f"panel for {host}: http://127.0.0.1:{port}/#t={token}")
     print("It is open while this command runs (ctrl-c closes it, and the panel on that host with it).", flush=True)
     try:
         proc.wait()
     except KeyboardInterrupt:
         print()
     finally:
+        listener.close()
+        with contextlib.suppress(OSError):
+            local.unlink()
         with contextlib.suppress(OSError):
             proc.stdin.close()      # the remote panel ends when its stdin does
         with contextlib.suppress(subprocess.TimeoutExpired):

@@ -722,10 +722,11 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     what happened to it. A row's `#id` in the address returns to it.
   - It can do what `ws-agent ui` does: tell or answer, interrupt, cancel, retry, close, accept, dismiss. There is
     no way in it to start work, to change what agents may touch or where they publish, or to publish.
-  - It listens on a Unix socket in your runtime directory, never on a network port; the address is
-    `127.0.0.1` on the machine you sit at and carries a key for that run. `ws-agent panel open <host>` shows
-    one of your fleet hosts' panels through `ssh -L`: nothing is installed or left running there, and it ends
-    when the command does.
+  - It listens on a Unix socket in your runtime directory. What your browser opens is a `127.0.0.1` port on
+    the machine you sit at, relayed to that socket: it lets in your own user only, and the address carries a
+    key for that run (kept by the page, never in a cookie). `ws-agent panel open <host>` shows one of your
+    fleet hosts' panels through `ssh -L` between two sockets: nothing is installed or left running there, and
+    it ends when the command does.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
   - requeues jobs waiting for an engine once one is out of its cooldown;

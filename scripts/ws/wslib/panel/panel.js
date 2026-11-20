@@ -3,6 +3,17 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+const ID = /^[0-9a-f]{6,16}$/;
+
+// This run's key arrives in the address's fragment (which a browser never sends to a server),
+// moves to this page's own storage (kept per port, unlike a cookie), and leaves the address.
+let key = "";
+try { key = sessionStorage.getItem("ws-key") || ""; } catch (e) { key = ""; }
+if (location.hash.startsWith("#t=")) {
+  key = location.hash.slice(3);
+  try { sessionStorage.setItem("ws-key", key); } catch (e) { /* the key then lives for this page view only */ }
+  history.replaceState(null, "", location.pathname);
+}
 let selected = null;      // {kind, id}
 let latest = null;        // the last /api/needs answer
 let busy = false;
@@ -15,15 +26,15 @@ function el(tag, cls, text) {
 }
 
 async function get(path, asText) {
-  const r = await fetch(path, { credentials: "same-origin", cache: "no-store" });
+  const r = await fetch(path, { credentials: "omit", cache: "no-store", headers: { "X-WS-Key": key } });
   if (!r.ok) throw new Error(`${r.status}`);
   return asText ? r.text() : r.json();
 }
 
 async function post(path, body) {
   const r = await fetch(path, {
-    method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json", "X-WS-Panel": "1" },
+    method: "POST", credentials: "omit",
+    headers: { "Content-Type": "application/json", "X-WS-Panel": "1", "X-WS-Key": key },
     body: JSON.stringify(body || {}),
   });
   return r.json().catch(() => ({ ok: false, message: `The panel answered ${r.status}.` }));
@@ -126,14 +137,20 @@ function actionBar(d) {
   const out = el("div", "result");
   out.hidden = true;
   const run = async (action, text) => {
-    if (busy) return;
+    if (busy || !ID.test(d.id)) return;
     busy = true;
     const base = d.kind === "inbox" ? "inbox" : "jobs";
-    const answer = await post(`/api/${base}/${d.id}/${action}`, text ? { text } : {});
+    let answer;
+    try {
+      answer = await post(`/api/${base}/${encodeURIComponent(d.id)}/${action}`, text ? { text } : {});
+    } catch (e) {
+      answer = { ok: false, message: "The panel didn't answer." };
+    } finally {
+      busy = false;
+    }
     out.hidden = false;
     out.className = "result" + (answer.ok ? "" : " bad");
     out.textContent = answer.message || answer.error || (answer.ok ? "Done." : "It didn't work.");
-    busy = false;
     await refresh();
     if (answer.ok) setTimeout(() => choose(d.kind, d.id, true), 600);
   };
@@ -170,6 +187,7 @@ function actionBar(d) {
 }
 
 async function choose(kind, id, keep) {
+  if (!ID.test(id)) return;
   selected = { kind, id };
   if (location.hash.slice(1) !== id) history.replaceState(null, "", `#${id}`);
   render();
@@ -232,7 +250,7 @@ async function choose(kind, id, keep) {
 // The address remembers which piece of work is open (#<id>), so a reload or a bookmark returns to it.
 function fromAddress() {
   const id = location.hash.slice(1);
-  if (!/^[0-9a-f]{6,16}$/.test(id) || !latest) return;
+  if (!ID.test(id) || !latest) return;
   const row = [...latest.needs, ...latest.working].find((r) => r.id === id);
   choose(row ? row.kind : "job", id);
 }
