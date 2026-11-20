@@ -188,7 +188,7 @@ class Publish(AgentScratch):
         self.assertTrue((self.gx / "pr-body").read_text().startswith("Draft, made by an agent"))
         self.assertIn("Draft pull request: https://github.com/ArrushC/proj/pull/8",
                       json.loads(next(self.gx.glob("body.*")).read_text())["body"])   # the comment links it
-        self.assertFalse((jobs.job_dir(j.id) / "result" / "publish.index").exists())
+        self.assertFalse((jobs.private_dir(j.id) / "publish.index").exists())
 
     def test_an_existing_branch_is_never_written(self) -> None:
         self.settings(mode="manual", draft_pr=True)
@@ -325,7 +325,7 @@ class PublishSvn(AgentScratch):
         self.assertEqual(svn("cat", f"{self.url}/trunk/a.txt"), "a")   # trunk is untouched
         self.assertEqual(svn("info", "--show-item", "last-changed-revision", f"{self.url}/trunk"), "1")
         self.assertEqual(svn("status", "-q", cwd=self.wc), "")          # so is the person's working copy
-        self.assertFalse((jobs.job_dir(j.id) / "publish-wc").exists())
+        self.assertFalse((jobs.private_dir(j.id) / "publish-wc").exists())
         self.assertIn("already published", pub.publish(j, auto=False)[0])
 
     def test_the_branch_parent_cant_be_the_jobs_own_tree(self) -> None:
@@ -627,7 +627,63 @@ class DeferredMinorsSvn(PublishSvn):
         j = self.job()
         self.assertIn("svn_branch failed", pub.publish(j, auto=False)[0])
         self.assertEqual((pub.published(j, "svn_branch"), svn("info", "--show-item", "revision", self.url)), ("", "1"))
-        self.assertFalse((jobs.job_dir(j.id) / "publish-wc").exists())
+        self.assertFalse((jobs.private_dir(j.id) / "publish-wc").exists())
         hook.unlink()
         self.assertIn("published svn_branch", pub.publish(j, auto=False)[0])   # and it can be tried again
+
+
+class JobDirectoryTrust(Publish):
+    """A job's own directory is writable from inside its sandbox (its checks run the repository's
+    code there), and serve reads and writes there from outside. Nothing that decides a write lives
+    in it, and a link left in it is never followed."""
+
+    def test_the_publish_record_is_out_of_the_jobs_reach(self) -> None:
+        self.settings(mode="manual", comment=True)
+        j = self.job()
+        pub.publish(j, auto=False)
+        inside = jobs.job_dir(j.id) / "result" / "published.json"
+        self.assertFalse(inside.exists())
+        self.write(inside, "{}")                                   # "never published": it still was
+        self.assertTrue(pub.published(j, "comment"))
+        forged = self.job()
+        self.write(jobs.job_dir(forged.id) / "result" / "published.json",
+                   json.dumps({"comment": {"url": "https://example.invalid/already"}}))
+        self.assertEqual(pub.published(forged, "comment"), "")     # "already published": it wasn't
+        self.assertIn("published comment", pub.publish(forged, auto=False)[0])
+
+    def test_a_result_file_swapped_for_a_link_never_leaks_the_persons_file(self) -> None:
+        self.settings(mode="manual", comment=True)
+        secret = self.write(self.root / "id_ed25519", "-----BEGIN OPENSSH PRIVATE KEY-----\nTOPSECRET\n")
+        note = self.write(self.root / "private.json", json.dumps({"summary": "TOPSECRET summary"}))
+        for name, target in (("manifest.txt", secret), ("report.json", note)):
+            j = self.job()
+            f = jobs.job_dir(j.id) / "result" / name
+            f.unlink()
+            f.symlink_to(target)
+            pub.publish(j, auto=False)
+        j = self.job()
+        res, moved = jobs.job_dir(j.id) / "result", self.root / "elsewhere"
+        res.rename(moved)
+        self.write(moved / "manifest.txt", "TOPSECRET through a linked directory\n")
+        res.symlink_to(moved, target_is_directory=True)
+        bodies = "".join(f.read_text() for f in self.gx.glob("body.*")) + pub.comment_body(j)
+        self.assertNotIn("TOPSECRET", bodies)
+        self.assertEqual(pub._patch(j), b"")
+
+    def test_the_temporary_index_is_not_where_the_job_can_plant_a_link(self) -> None:
+        self.settings(mode="manual", draft_pr=True)
+        j = self.job()
+        victim = self.write(self.root / "victim.index", "the person's file\n")
+        (jobs.job_dir(j.id) / "result" / "publish.index").symlink_to(victim)
+        self.assertIn("published draft_pr", pub.publish(j, auto=False)[0])
+        self.assertEqual(victim.read_text(), "the person's file\n")
+
+    def test_a_message_is_never_appended_through_a_link(self) -> None:
+        j = self.job()
+        victim = self.write(self.root / "victim.rc", "the person's file\n")
+        (jobs.job_dir(j.id) / "thread.jsonl").symlink_to(victim)
+        with self.assertRaises(OSError):
+            jobs.post(j, "job", "done: $(touch /tmp/pwned)")
+        self.assertEqual(victim.read_text(), "the person's file\n")
+        self.assertEqual(jobs.thread(j), [])
 

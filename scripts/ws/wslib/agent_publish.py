@@ -55,7 +55,9 @@ class Target:
 # --- the record ----------------------------------------------------------------------------
 
 def _record_path(job: jobs.Job) -> Path:
-    return jobs.job_dir(job.id) / "result" / "published.json"
+    # Not in the job's own directory: that one is writable from inside the job's sandbox, and this
+    # record decides what is written and whether it already was.
+    return jobs.private_dir(job.id) / "published.json"
 
 
 def record(job: jobs.Job) -> dict[str, dict[str, object]]:
@@ -80,9 +82,7 @@ def published(job: jobs.Job, kind: str) -> str:
 @contextlib.contextmanager
 def _lock(job: jobs.Job) -> Iterator[None]:
     """One publisher per job (serve and the person's `publish` at once): the other is refused."""
-    res = jobs.job_dir(job.id) / "result"
-    res.mkdir(parents=True, exist_ok=True)
-    with open(res / "publish.lock", "a+") as fh:
+    with open(jobs.private_dir(job.id) / "publish.lock", "a+") as fh:
         try:
             fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -106,10 +106,7 @@ def target(job: jobs.Job) -> Target:
 
 
 def _patch(job: jobs.Job) -> bytes:
-    try:
-        return (jobs.job_dir(job.id) / "result" / "changes.diff").read_bytes()
-    except OSError:
-        return b""
+    return jobs.result_bytes(job.id, "result", "changes.diff", limit=50_000_000)
 
 
 def kinds_for(job: jobs.Job, entry: agent_registry.Repo) -> list[str]:
@@ -233,19 +230,12 @@ def _word(value: object) -> str:
 
 
 def _files(job: jobs.Job) -> list[str]:
-    try:
-        lines = (jobs.job_dir(job.id) / "result" / "manifest.txt").read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
+    lines = jobs.result_bytes(job.id, "result", "manifest.txt").decode("utf-8", "replace").splitlines()
     return [ln for ln in lines if ln.strip()]
 
 
 def _summary(job: jobs.Job) -> str:
-    try:
-        rep = json.loads((jobs.job_dir(job.id) / "result" / "report.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ""
-    return str(rep.get("summary") or "") if isinstance(rep, dict) else ""
+    return str(jobs.result_json(job.id, "report.json").get("summary") or "")
 
 
 def comment_body(job: jobs.Job, pr_url: str = "") -> str:
@@ -355,7 +345,7 @@ def _draft_pr(job: jobs.Job, entry: agent_registry.Repo, t: Target) -> str:
     if there and there[0] != pushed:
         raise PublishError(f"ws-agent: {branch} already exists on origin; nothing pushed")
     if not there:
-        index = jobs.job_dir(job.id) / "result" / "publish.index"
+        index = jobs.private_dir(job.id) / "publish.index"   # git follows a link here: never where the job writes
         env = {**quiet, "GIT_INDEX_FILE": str(index)}
         try:
             _ok(_run([*git, "read-tree", base], env=env), "git read-tree")
@@ -420,8 +410,10 @@ def _svn_branch(job: jobs.Job, entry: agent_registry.Repo) -> str:
         _ok(probe, f"checking {dest}")   # the server didn't answer "no such path": don't guess
     rel = url[len(root):].strip("/")
     strip = str(len(rel.split("/")) if rel else 0)   # as apply.txt tells the person (agent_exec)
-    diff = str(jobs.job_dir(job.id) / "result" / "changes.diff")
-    wc = jobs.job_dir(job.id) / "publish-wc"
+    # svn reads the patch by path: a copy of what was read without following a link, where the job can't reach
+    diff = str(jobs.private_dir(job.id) / "publish.diff")
+    core.atomic_write(Path(diff), _patch(job), 0o600)
+    wc = jobs.private_dir(job.id) / "publish-wc"
     shutil.rmtree(wc, ignore_errors=True)
     try:
         _ok(_run([*svn, "checkout", "-q", f"{url}@{rev}", str(wc)]), "svn checkout")

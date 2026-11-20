@@ -236,7 +236,8 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     with the tools and the engine's own state bound back, other jobs, every registered copy and `[sandbox] hide`
     are hidden, `/mnt`, `/media`, `/home` and `/root` are blank (`BLANK`; triage's scratch also `/srv`, `/var/tmp`;
     the resolver files come back read-only, `NETWORK_FILES`: WSL's `/etc/resolv.conf` links into `/mnt/wsl`), it
-    has its own PID namespace (nothing a check forks outlives it), a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
+    has its own PID namespace (nothing a check forks outlives it), an empty `/run/user/<uid>` (the session
+    bus and editors' control sockets live there: `systemd --user` would start anything asked of it), a worktree's `.git` is read-only. The engine's own sandbox nests inside it for commands (Claude:
     `sandbox` settings; Codex: workspace-write, `--ignore-rules`). No working sandbox → no job, never phase-1
     confinement. git in a job only reads (`GIT_OPTIONAL_LOCKS=0`; ws-agent stages); the svn shim refuses server
     writes; `.claude/.cc-writes` is engine bookkeeping, never in a patch.
@@ -300,6 +301,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       paused, and never re-posts a comment whose earlier attempt may have reached GitHub (`attempting`).
     - The SVN branch is one revision: checkout `url@rev`, `svn patch --strip <depth>` (dry run first), then
       `svn copy <wc> <branch URL>`. `svn_branch_problem` (set time and publish time) refuses trunk and watched trees.
+    - A job's own directory is writable from inside its sandbox (checks run the repository's code there), so
+      nothing that decides a write, and nothing ws-agent writes blind, lives in it: the publish record, its
+      lock, the temporary index and the SVN publish checkout are in `jobs.private_dir(<id>)`
+      (`<state>/agent-private/<id>`, 0700). What is read from it to be passed on (the patch, manifest, report,
+      exit record, thread) goes through `core.read_in` (`jobs.result_bytes` / `result_json`): a link the job
+      left reads as nothing. `jobs._read` refuses a record that isn't its directory's; `jobs.post` opens with
+      `O_NOFOLLOW`.
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):

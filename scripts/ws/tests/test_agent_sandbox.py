@@ -277,6 +277,35 @@ class ReadScope(Sandbox):
 
 
 @unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
+class WhatTheJobCannotChange(Sandbox):
+    def test_the_private_directory_is_out_of_the_jobs_reach(self) -> None:
+        # The publish record decides what serve writes and where; the job's own directory is writable
+        # from in here, so the record lives in a directory that isn't.
+        record = self.write(jobs.private_dir("aaa111") / "published.json", "{}")
+        code = (f"import os\np = {str(record)!r}\n"
+                "try:\n    open(p, 'w').write('forged')\nexcept OSError:\n    pass\n"
+                "try:\n    os.makedirs(os.path.dirname(p), exist_ok=True); open(p + '.new', 'w').write('x')\n"
+                "except OSError:\n    pass\n")
+        self.run_in(code)
+        self.assertEqual(record.read_text(), "{}")
+        self.assertEqual([f.name for f in record.parent.iterdir()], ["published.json"])
+
+
+@unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
+class NoWayOutThroughTheSession(Sandbox):
+    @unittest.skipUnless(os.path.isdir(f"/run/user/{os.getuid()}"), "no user runtime directory on this host")
+    def test_the_users_runtime_directory_is_empty_in_the_sandbox(self) -> None:
+        # /run/user/<uid> holds the session bus (systemd --user would start any command asked of it,
+        # outside the sandbox), and editors' and multiplexers' control sockets.
+        code = (f"import os\nd = '/run/user/{os.getuid()}'\n"
+                "print(sorted(os.listdir(d)) if os.path.isdir(d) else 'absent')")
+        r = self.run_in(code)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"), r.stderr)
+        r = subprocess.run(sbx.wrap_scratch([PY, "-I", "-c", code], workdir=self.jd), capture_output=True, text=True, timeout=60)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"), r.stderr)
+
+
+@unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
 class NothingOutlivesTheSandbox(Sandbox):
     def test_a_process_left_behind_dies_with_the_sandbox(self) -> None:
         # A check runs the job's code with the job directory writable. A daemon it leaves must not
