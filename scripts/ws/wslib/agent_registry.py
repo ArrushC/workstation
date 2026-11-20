@@ -62,9 +62,12 @@ class GitHubSource:
     mode: str = "observe"
     logins: tuple[str, ...] = ()
     follow: bool = False      # on a thread with a live job, these logins' comments reach it without /agent
+    infer: tuple[str, ...] = ()   # unasked work to triage: "issues" (new ones by these logins), "ci" (default branch)
+    rules: tuple[str, ...] = ()   # what triage judges an inferred candidate against, in the person's words
 
 
 PUBLISH_MODES = ("off", "manual", "auto")
+INFER = ("issues", "ci")
 
 
 @dataclass(frozen=True)
@@ -185,7 +188,9 @@ def _github(t: object) -> GitHubSource | None:
         return None
     return GitHubSource(str(t.get("slug", "")), _mode(t.get("mode", "observe")),
                         tuple(x for x in _strings(t.get("logins", [])) if x.strip()),
-                        t.get("follow") is True)
+                        t.get("follow") is True,
+                        tuple(x for x in _strings(t.get("infer", [])) if x in INFER),
+                        _strings(t.get("rules", [])))
 
 
 def _publish(t: object) -> Publish:
@@ -308,7 +313,7 @@ def _entry(r: Repo, old: Mapping[str, object]) -> dict[str, object]:
             "rules": list(r.watch.rules), "interval": r.watch.interval}),
             ("github", None if r.github is None else {
                 "slug": r.github.slug, "mode": r.github.mode, "logins": list(r.github.logins),
-                "follow": r.github.follow})):
+                "follow": r.github.follow, "infer": list(r.github.infer), "rules": list(r.github.rules)})):
         if table is not None:   # keys a newer ws wrote inside the table survive too
             prev = old.get(name)
             out[name] = {**(prev if isinstance(prev, dict) else {}), **table}
@@ -423,6 +428,10 @@ def set_github(root: Path, src: GitHubSource | None) -> Repo:
             raise ValueError("ws-agent: name who may ask with --login (nobody can, otherwise)")
         if src.mode not in MODES:
             raise ValueError(f"ws-agent: --mode must be one of {', '.join(MODES)}")
+        if any(x not in INFER for x in src.infer):
+            raise ValueError(f"ws-agent: --infer takes {' or '.join(INFER)}")
+        if src.infer and not src.rules:
+            raise ValueError("ws-agent: --infer needs at least one --rule: triage judges unasked work against your rules")
     return _set_source(root, github=src)
 
 

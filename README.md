@@ -646,6 +646,12 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     reaches a job, nor one posted through an app or a bot account, nor one that was edited or written before
     the job began. At most 10 a day reach one job. A comment whose first line is `/agent stop` stops the
     thread's job, with or without `--follow`; on a thread with no open job it does nothing.
+  - `--infer issues` and `--infer ci` (GitHub, with at least one `--rule "…"`): work nobody asked the agent for
+    by name. A new issue by a listed login, and a failed run on the default branch pushed by one, become
+    candidates. They take the path SVN revisions take: your rules, a triage check, then the inbox in `observe`
+    mode or a job in `act`. From when you switch it on: no backlog.
+  - `ws-agent history [job | inbox id | #number]` shows what serve decided about each request (queued, in the
+    inbox, ignored by triage, not admitted, and why) and what it wrote for each job.
   - A job made from a source runs on someone else's code (a pull request, any committer's revision). It doesn't
     load that copy's own `.claude` settings (their hooks) or its `.mcp.json`. Jobs you start yourself still do.
   - `unwatch` and `ungithub` stop them.

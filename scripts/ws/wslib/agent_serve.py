@@ -21,6 +21,7 @@ import dataclasses
 import fcntl
 import json
 import os
+import re
 import signal
 import sys
 import time
@@ -183,8 +184,55 @@ def _requeue_waiting(q: jobs.Queue | None) -> list[str]:
 _new_items: list[str] = []   # inbox items this tick added: one notice for all of them
 
 
+DECISIONS_KEPT = 4000
+_DECISIONS_BYTES = 4_000_000
+
+
+def _decisions_path() -> Path:
+    return _dir() / "decisions.jsonl"
+
+
+def decisions() -> list[dict[str, object]]:
+    """What became of each candidate and what was written for each job, oldest first."""
+    try:
+        lines = _decisions_path().read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for ln in lines[-DECISIONS_KEPT:]:
+        try:
+            row = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out
+
+
+def record_decision(row: dict[str, object]) -> None:
+    """Append one row to the record. It never fails a step: the record is for looking back."""
+    try:
+        core.private_dir(_dir())
+        path = _decisions_path()
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": core.now_iso(), **row}) + "\n")
+        if path.stat().st_size > _DECISIONS_BYTES:
+            keep = path.read_text(encoding="utf-8").splitlines()[-DECISIONS_KEPT:]
+            core.atomic_write(path, ("\n".join(keep) + "\n").encode("utf-8"), 0o600)
+    except OSError:
+        pass
+
+
+def _fate(c: agent_inbox.Candidate, outcome: str, reason: str = "", decision: dict[str, object] | None = None,
+          **more: object) -> None:
+    record_decision({"cid": c.cid, "source": c.source, "repo": c.repo, "thread": c.thread, "author": c.author,
+                     "title": c.title, "explicit": c.explicit, "outcome": outcome, "reason": reason,
+                     "rule": (decision or {}).get("rule"), **more})
+
+
 def _inbox(c: agent_inbox.Candidate, decision: dict[str, object] | None, why: str) -> str:
     item = agent_inbox.add(c, decision)
+    _fate(c, "inbox", why if decision is None else str(decision.get("reason") or why), decision, item=item.id)
     agent_events.append_inbox(item.id, c.repo, f"inbox: {item.id} ({c.source}) waits for you")
     _new_items.append(item.id)
     return f"{c.cid}: in the inbox as {item.id} ({why})"
@@ -210,6 +258,7 @@ def _queue(c: agent_inbox.Candidate, decision: dict[str, object] | None, capped:
     if c.thread:
         agent_sources.remember_thread(c.thread, q.job.id)
         said = _acknowledge(q.job)
+    _fate(c, "queued", "" if decision is None else str(decision.get("reason") or ""), decision, job=q.job.id)
     return f"{c.cid}: queued job {q.job.id}" + (f"; {said}" if said else "")
 
 
@@ -241,6 +290,7 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     why = agent_admit.admit(c, agent_registry.find(entry.path), mode, authors)
     capped = why if why and agent_admit.is_cap(why) else ""
     if why and not capped:
+        _fate(c, "not admitted", why)
         return f"{c.cid}: not admitted: {why}"
     if c.note:   # the source couldn't finish it (no base): the person decides
         return _inbox(c, _held(c, None, c.note), "held")
@@ -248,6 +298,7 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     if not c.explicit:
         decision = agent_triage.triage(c, rules, entry)
         if decision.get("decision") == "ignore":
+            _fate(c, "ignored", str(decision.get("reason") or ""), decision)
             return f"{c.cid}: ignored by triage: {decision.get('reason')}"
         rule = _same_rule(decision.get("rule"), rules)
         if decision.get("decision") == "accept" and c.source == "svn" and rule:
@@ -332,7 +383,7 @@ def _settings_for(c: agent_inbox.Candidate) -> tuple[agent_registry.Repo, str, t
     if c.source == "svn" and entry.watch is not None:
         return entry, entry.watch.mode, entry.watch.authors, entry.watch.rules
     if c.source == "github" and entry.github is not None:
-        return entry, entry.github.mode, entry.github.logins, ()
+        return entry, entry.github.mode, entry.github.logins, entry.github.rules
     return None
 
 
@@ -499,6 +550,9 @@ def _publish_auto(q: jobs.Queue | None, repos: Mapping[str, agent_registry.Repo]
     return out
 
 
+_WROTE = re.compile(r"([0-9a-f]{6}): (?:posted|published|pushed update) ")
+
+
 def tick(now: float) -> list[str]:
     """One pass; what it did, as log lines. Each step fails on its own."""
     lines: list[str] = []
@@ -518,9 +572,14 @@ def tick(now: float) -> list[str]:
         repos = agent_registry.load()[0]   # one read for the steps below
     except Exception as e:  # noqa: BLE001
         return [*lines, f"registry: {type(e).__name__}: {e}"]
+    before = len(lines)
     step("converse", lambda: _converse(q, repos))
     step("publish", lambda: _publish_auto(q, repos))
     step("update", lambda: _update_prs(q, repos))
+    for ln in lines[before:]:   # what was written for a job, beside what became of its request
+        m = _WROTE.match(ln)
+        if m:
+            record_decision({"job": m.group(1), "outcome": "wrote", "reason": ln[len(m.group(1)) + 2:]})
     for key, entry in sorted(repos.items()):
         if entry.watch is not None and entry.watch.mode in ("observe", "act"):
             step(f"svn {key}", lambda e=entry: _poll_svn(e, now))

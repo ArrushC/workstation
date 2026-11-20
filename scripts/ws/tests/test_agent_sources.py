@@ -624,5 +624,70 @@ class PullRequestReview(PullRequest):
         self.assertEqual(reads(), 3)
 
 
+class Inferred(GitHub):
+    """Phase 4 part C: work nobody asked for by name. A new issue by a listed login, and a failed
+    run on the default branch, become candidates for triage: never jobs by themselves here."""
+
+    def inferring(self, *what: str) -> reg.Repo:
+        return reg.Repo(path=self.repo, vcs="git", github=reg.GitHubSource(
+            slug=SLUG, mode="observe", logins=("ArrushC",), infer=what, rules=("parser bugs",)))
+
+    def issue(self, body: str = "The parser drops comments in strings.", login: str = "ArrushC", n: int = 9) -> None:
+        issue = json.loads((FIXTURES / "gh-issue.json").read_text())
+        issue.pop("pull_request", None)
+        row = dict(issue, number=n, title="Parser bug", body=body, user={"login": login, "type": "User"},
+                   created_at=iso(self.t0 + 5), updated_at=iso(self.t0 + 5),
+                   html_url=f"https://github.com/{SLUG}/issues/{n}")
+        self.answer("issues", [row])
+        self.answer(f"issues/{n}", row)
+        self.answer(f"issues/{n}/comments", [])
+        self.answer("issues/comments", [])
+
+    def test_a_new_issue_by_a_listed_login_is_a_candidate_for_triage(self) -> None:
+        self.issue()
+        self.assertEqual(src.poll_github(self.entry, self.t0 + 1), ([], []))   # not inferring: /agent only
+        self.issue(n=10)
+        (c,), _ = src.poll_github(self.inferring("issues"), self.t0 + 100)
+        self.assertEqual((c.cid, c.explicit, c.author, c.thread), (f"gh:{SLUG}:i10", False, "ArrushC", f"gh:{SLUG}#10"))
+        self.assertIn("drops comments", c.text)
+        self.assertIn("<untrusted>", c.prompt)
+        self.assertEqual(c.base["commit"], self.origin_main)
+
+    def test_an_issue_by_anyone_else_or_a_bot_is_not(self) -> None:
+        self.issue(login="mallory")
+        self.assertEqual(src.poll_github(self.inferring("issues"), self.t0 + 1), ([], []))
+
+    def test_an_agent_issue_is_still_an_explicit_request(self) -> None:
+        self.issue(body="/agent fix the parser")
+        (c,), _ = src.poll_github(self.inferring("issues"), self.t0 + 1)
+        self.assertTrue(c.explicit)
+
+    def run_row(self, rid: int, at: float, login: str = "ArrushC") -> dict[str, object]:
+        return {"id": rid, "name": "ci", "head_branch": "main", "head_sha": self.origin_main, "conclusion": "failure",
+                "status": "completed", "event": "push", "created_at": iso(at), "html_url": f"https://github.com/{SLUG}/actions/runs/{rid}",
+                "display_title": "two", "actor": {"login": login, "type": "User"}}
+
+    def test_a_failed_run_on_the_default_branch_is_a_candidate_once(self) -> None:
+        self.answer("issues/comments", [])
+        self.answer("actions/runs", {"workflow_runs": [self.run_row(70, self.t0 - 500)]})
+        self.assertEqual(src.poll_github(self.inferring("ci"), self.t0 + 1), ([], []))   # it starts now: no backlog
+        every = src.PR_READ_EVERY
+        self.answer("actions/runs", {"workflow_runs": [self.run_row(70, self.t0 - 500), self.run_row(71, self.t0 + 5)]})
+        self.answer("actions/runs/71/jobs", {"jobs": [{"id": 9, "name": "unit", "conclusion": "failure"},
+                                                      {"id": 10, "name": "lint", "conclusion": "success"}]})
+        self.write(self.gx / f"repos_{SLUG.replace('/', '_')}_actions_jobs_9_logs.json", "\x1b[31mAssertionError: boom\x1b[0m\n")
+
+        def reads() -> int:
+            return sum(1 for call in self.gh_calls() if any("actions/runs?" in a for a in call))
+        self.assertEqual(src.poll_github(self.inferring("ci"), self.t0 + 100), ([], []))   # not on every poll
+        self.assertEqual(reads(), 0)
+        (c,), _ = src.poll_github(self.inferring("ci"), self.t0 + 1 + every)
+        self.assertEqual((c.cid, c.explicit, c.author, c.thread), (f"gh:{SLUG}:run71", False, "ArrushC", ""))
+        self.assertIn("unit", c.text)
+        self.assertIn("AssertionError: boom", c.prompt)
+        self.assertNotIn("\x1b", c.prompt)
+        self.assertEqual(src.poll_github(self.inferring("ci"), self.t0 + 2 + 2 * every), ([], []))   # once
+        self.assertEqual(reads(), 2)
+
 if __name__ == "__main__":
     unittest.main()

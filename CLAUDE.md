@@ -330,6 +330,12 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       `publish.updates_since` and the reviewer's verdict. A quiet pull request is read every `PR_READ_EVERY`
       seconds, at once when its issue row or a comment shows in the poll; reviews and review comments are
       remembered per pull request (`reviews_seen`, `comments_seen`), never in `handled`.
+    - Inferred GitHub candidates (part C): `github.infer` (`issues`, `ci`) with `github.rules`; `explicit=False`,
+      so they go through `agent_admit` and `agent_triage` like SVN revisions (`_settings_for` passes the
+      source's rules). CI runs are read every `PR_READ_EVERY` s from `ci_since` (no backlog), once each
+      (`ci_runs`), never a bot's push. serve appends each candidate's fate and each write to
+      `agent-serve/decisions.jsonl` (`record_decision`, bounded; `ws-agent history`). An event whose job is
+      closed, cancelled or no longer asking isn't shown to a session (`agent_events._over`).
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):

@@ -5,6 +5,7 @@ space and a paused queue hold it back; one failing source never stops the others
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import os
@@ -17,7 +18,7 @@ from unittest import mock
 
 from agent_helpers import CLAUDE_AUTH_OK, HAVE_SVN, AgentScratch, git
 
-from wslib import (agent_admit, agent_disk, agent_events, agent_inbox, agent_sandbox, agent_sources, agent_triage, core,
+from wslib import (agent, agent_admit, agent_disk, agent_events, agent_inbox, agent_sandbox, agent_sources, agent_triage, core,
                    engines, jobs)
 from wslib import agent_exec as ax
 from wslib import agent_registry as reg
@@ -443,6 +444,56 @@ class Followups(ServeScratch):
             agent.main(["inbox", "--show", agent_inbox.items()[0].id])
         self.assertNotIn("triage:", out.getvalue())
         self.assertIn("disk low", out.getvalue())
+
+
+class Decisions(ServeScratch):
+    """Phase 4 part C: an inferred GitHub candidate is triaged against the source's own rules, and
+    what became of every candidate is kept."""
+
+    def inferred(self) -> agent_inbox.Candidate:
+        return dataclasses.replace(self.gh_cand(), explicit=False, cid="gh:ArrushC/proj:i9", thread="gh:ArrushC/proj#9")
+
+    def test_an_inferred_github_candidate_is_triaged_against_the_sources_rules(self) -> None:
+        reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",),
+                                                   infer=("issues",), rules=("parser bugs",)))
+        self.pueue_status({})
+        with mock.patch.object(agent_sources, "poll_github", return_value=([self.inferred()], [])), \
+                mock.patch.object(agent_triage, "triage", return_value=dict(ACCEPT, rule="parser bugs")) as tri:
+            lines = serve.tick(time.time())
+        self.assertEqual(tri.call_args.args[1], ("parser bugs",))
+        self.assertTrue(any("in the inbox" in ln for ln in lines), lines)   # observe: recorded, not started
+        self.assertEqual(jobs.all_jobs(), [])
+
+    def test_every_candidates_fate_is_recorded_and_shown(self) -> None:
+        self.github("act")
+        self.pueue_status({})
+        asked, stranger = self.gh_cand(), dataclasses.replace(self.gh_cand(), cid="gh:ArrushC/proj:c2", author="mallory")
+        with mock.patch.object(agent_sources, "poll_github", return_value=([asked, stranger], [])):
+            serve.tick(time.time())
+        rows = serve.decisions()
+        self.assertEqual([(r["cid"], r["outcome"]) for r in rows],
+                         [(asked.cid, "queued"), (stranger.cid, "not admitted")])
+        self.assertEqual(rows[0]["job"], jobs.all_jobs()[0].id)
+        self.assertIn("mallory", str(rows[1]["reason"]))
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = agent.main(["history"])
+        self.assertEqual(rc, 0, err.getvalue())
+        self.assertIn("queued", out.getvalue())
+        self.assertIn("not admitted", out.getvalue())
+        with redirect_stdout(out := io.StringIO()):
+            agent.main(["history", "#7"])
+        self.assertIn(asked.cid, out.getvalue())
+        with redirect_stdout(out := io.StringIO()):
+            agent.main(["history", "nothing-like-this"])
+        self.assertIn("nothing recorded", out.getvalue())
+
+    def test_the_record_stays_bounded(self) -> None:
+        for n in range(serve.DECISIONS_KEPT + 50):
+            serve.record_decision({"cid": f"c{n}", "outcome": "ignored"})
+        rows = serve.decisions()
+        self.assertLessEqual(len(rows), serve.DECISIONS_KEPT)
+        self.assertEqual(rows[-1]["cid"], f"c{serve.DECISIONS_KEPT + 49}")
 
 
 if __name__ == "__main__":

@@ -42,6 +42,15 @@ class Events(AgentScratch):
         self.assertIn("eee004", lines[-1])   # the newest last
         self.assertEqual(ev.lines_for("S2", "~/src/proj"), [])   # another session starts fresh
 
+    def test_a_question_from_a_job_that_is_over_is_not_brought_up_again(self) -> None:
+        self.assertEqual(ev.lines_for("S1", "~/src/proj"), [])
+        gone, live = _job("aaa111"), _job("bbb222")
+        ev.append("needs-you", gone, "aaa111 needs you (asks)")
+        ev.append("needs-you", live, "bbb222 needs you (asks)")
+        gone.closed = True
+        jobs.save(gone)
+        self.assertEqual(ev.lines_for("S1", "~/src/proj"), ["[orchestration] bbb222 needs you (asks): ws-agent result bbb222"])
+
     def test_inbox_event_line(self) -> None:
         self.assertEqual(ev.lines_for("S1", "~/src/proj"), [])
         ev.append_inbox("a1b2c3d4e5", "~/src/proj", "inbox: a1b2c3d4e5 (svn) waits for you")

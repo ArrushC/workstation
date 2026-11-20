@@ -781,6 +781,16 @@ class ConversationReview(Conversation):
         new = self.working()
         self.assertIsNone(pub.note_due(new, "ack"))
 
+    def test_inferring_needs_a_rule_and_shows_in_repos(self) -> None:
+        self.assertEqual(self.cli("github", str(self.repo), "--login", "ArrushC", "--infer", "issues")[0], 2)
+        rc, out, err = self.cli("github", str(self.repo), "--login", "ArrushC", "--infer", "issues", "--infer", "ci",
+                                "--rule", "parser bugs")
+        self.assertEqual(rc, 0, err)
+        found = reg.find(self.repo)
+        assert found is not None and found.github is not None
+        self.assertEqual((found.github.infer, found.github.rules), (("issues", "ci"), ("parser bugs",)))
+        self.assertIn("inferring from issues and ci", self.cli("repos")[1])
+
     def test_a_request_is_acknowledged_the_moment_it_is_queued(self) -> None:
         # Seen on real GitHub: a job that asked its question within serve's 30 s was never acknowledged.
         self.settings(mode="auto", ack=True)

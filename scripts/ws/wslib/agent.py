@@ -217,7 +217,8 @@ def _repo_words(r: agent_registry.Repo) -> list[str]:
         words.append(f"watch: {', '.join(r.watch.urls)} ({r.watch.mode}, {n} rule{'' if n == 1 else 's'})")
     if r.github is not None:
         words.append(f"github: {r.github.slug} ({r.github.mode}, logins: {', '.join(r.github.logins)}"
-                     f"{', following live threads' if r.github.follow else ''})")
+                     f"{', following live threads' if r.github.follow else ''}"
+                     f"{', inferring from ' + ' and '.join(r.github.infer) if r.github.infer else ''})")
     if r.publish != agent_registry.Publish():
         words.append(f"publish: {_publish_words(r.publish)}")
     return words
@@ -276,7 +277,8 @@ def _github(args: argparse.Namespace) -> int:
                 if gh else None
             logins = [r.stdout.strip()] if r is not None and r.returncode == 0 and r.stdout.strip() else []
         src = agent_registry.GitHubSource(slug=p.github or "", mode=args.mode, logins=tuple(logins),
-                                          follow=bool(args.follow))
+                                          follow=bool(args.follow), infer=tuple(dict.fromkeys(args.infer or [])),
+                                          rules=tuple(args.rule or []))
     prev = agent_registry.find(root)
     rc, repo = _source_change(agent_registry.set_github, root, src)
     if repo is not None:
@@ -635,6 +637,32 @@ def _load(ident: str) -> jobs.Job | None:
 def _tasks() -> dict[int, str] | None:
     q = jobs.pueue_status()
     return q.tasks if q else None
+
+
+def _history(args: argparse.Namespace) -> int:
+    """What became of each candidate a source found, and what was written for each job."""
+    from . import agent_serve
+    rows = agent_serve.decisions()
+    what = (args.what or "").strip()
+    if what:
+        rows = [r for r in rows if what in (r.get("job"), r.get("item")) or what in str(r.get("cid") or "")
+                or str(r.get("thread") or "").endswith(what) or what == r.get("repo")]
+    rows = rows[-args.n:]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("nothing recorded" + (f" for {agent_inbox.printable(what)}" if what else "")
+              + " (ws-agent serve records what it decides from now on)")
+        return 0
+    for r in rows:
+        where = " ".join(f"{k} {r[k]}" for k in ("job", "item") if r.get(k))
+        subject = str(r.get("cid") or "") + (f" by {r['author']}" if r.get("author") else "")
+        rule = f" [rule: {r['rule']}]" if r.get("rule") else ""
+        text = f"{str(r.get('ts') or '')[:16]}  {str(r.get('outcome') or ''):<12} {subject} {where}".rstrip()
+        reason = f": {r['reason']}" if r.get("reason") else ""
+        print(agent_inbox.printable(f"{text}{rule}{reason}")[:400])
+    return 0
 
 
 def _has_pr(job: jobs.Job) -> bool:
@@ -1305,6 +1333,10 @@ def _parser() -> argparse.ArgumentParser:
     gh.add_argument("path")
     gh.add_argument("--mode", default="observe", help="off, observe (default: inbox only) or act")
     gh.add_argument("--login", action="append", help="who may ask (repeatable; default: your gh login)")
+    gh.add_argument("--infer", action="append", choices=agent_registry.INFER,
+                    help="unasked work to triage against --rule: issues (new ones by these logins), ci (failed "
+                         "runs on the default branch); repeatable")
+    gh.add_argument("--rule", action="append", help="what unasked work is worth a job, in plain words (repeatable)")
     gh.add_argument("--follow", action="store_true",
                     help="on a thread with a live job, these logins' comments reach it without /agent (an answer, a follow-up)")
     gh.set_defaults(fn=_github)
@@ -1312,6 +1344,11 @@ def _parser() -> argparse.ArgumentParser:
     ugh.add_argument("path")
     ugh.set_defaults(fn=_github)
     sub.add_parser("repos").set_defaults(fn=_repos)
+    hi = sub.add_parser("history", help="what serve decided about each request and wrote for each job")
+    hi.add_argument("what", nargs="?", help="a job or inbox id, #number, or part of a request's id")
+    hi.add_argument("-n", type=int, default=40, help="how many of the latest rows (default 40)")
+    hi.add_argument("--json", action="store_true")
+    hi.set_defaults(fn=_history)
     run = sub.add_parser("run", help="queue a job")
     run.add_argument("--title", required=True)
     g = run.add_mutually_exclusive_group(required=True)
