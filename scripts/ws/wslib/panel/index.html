@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ws-agent</title>
+<link rel="stylesheet" href="/panel.css">
+</head>
+<body>
+<header>
+  <h1>ws-agent <span id="host"></span></h1>
+  <input id="filter" type="search" placeholder="Find by id, #number, title or repository" aria-label="Filter">
+  <span id="clock" aria-live="polite"></span>
+</header>
+<main>
+  <section id="lists" aria-label="Work">
+    <h2>Waiting on someone</h2>
+    <ul id="needs" class="rows"></ul>
+    <p id="needs-empty" class="quiet" hidden>Nothing waits for you.</p>
+    <h2>Health</h2>
+    <ul id="health" class="health"></ul>
+    <p id="health-empty" class="quiet" hidden>Sources are being read, the queue is running, and there is room on disk.</p>
+    <h2>Working</h2>
+    <ul id="working" class="rows"></ul>
+    <p id="working-empty" class="quiet" hidden>No job is queued or running.</p>
+  </section>
+  <section id="detail" aria-label="One piece of work" aria-live="polite">
+    <p class="quiet" id="detail-empty">Choose a row to see its report, its changes and what happened to it.</p>
+    <div id="detail-body" hidden></div>
+  </section>
+</main>
+<p id="lost" role="alert" hidden>The panel isn't answering. It closes when <code>ws-agent panel open</code> ends: run it again for a new address.</p>
+<script src="/panel.js"></script>
+</body>
+</html>

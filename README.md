@@ -615,6 +615,7 @@ ws-agent close <id>          # after review: delete the working copy, keep the r
 ws-agent close --empty       # the same for every succeeded job whose patch is empty
 ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
 ws-agent ui                  # jobs and the inbox in one fzf list: enter pages a result, alt-t/r/c/x/a/d act
+ws-agent panel open [host]   # the same in a browser, while the command runs (below)
 ws-agent fleet               # the same lists from this host and your other hosts (ws-agent ui --fleet: the picker)
 ws-agent fleet add <host>    # an SSH alias from your ~/.ssh/config; your own terminal only
 ws-agent serve [--once]      # the always-on loop the ws-agent-serve service runs (below)
@@ -714,6 +715,17 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     - when the pull request is merged or closed, the job is closed (its copy removed, its result kept).
     It never marks a pull request ready, merges it, or resolves a review thread.
   - `ws-agent publish-to <path> --mode off` stops it.
+- **The panel** (`ws-agent panel open`, in your own terminal): prints an address for your browser and serves
+  this host's jobs and inbox there until you press ctrl-c.
+  - It shows, in this order: what waits and for whom (your answer, your review, CI, the engine), what is
+    wrong (nothing when all is well), and one piece of work with its report, changed files, patch, log and
+    what happened to it. A row's `#id` in the address returns to it.
+  - It can do what `ws-agent ui` does: tell or answer, interrupt, cancel, retry, close, accept, dismiss. There is
+    no way in it to start work, to change what agents may touch or where they publish, or to publish.
+  - It listens on a Unix socket in your runtime directory, never on a network port; the address is
+    `127.0.0.1` on the machine you sit at and carries a key for that run. `ws-agent panel open <host>` shows
+    one of your fleet hosts' panels through `ssh -L`: nothing is installed or left running there, and it ends
+    when the command does.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
   - requeues jobs waiting for an engine once one is out of its cooldown;

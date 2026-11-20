@@ -348,6 +348,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     - printed through `printable`;
     - never in an event line, since those reach live sessions.
   - `ui` (`agent_ui.py`) is fzf with `--with-shell 'bash -c'`, and no `)` inside an `execute(...)`.
+  - `panel` (`agent_panel.py`, static files in `wslib/panel/`; refused in a session): a Unix socket in
+    `$XDG_RUNTIME_DIR/ws-agent` (0700), never TCP; `panel open` relays `127.0.0.1:<port>` to it, or runs
+    `panel serve` on a fleet host through `ssh -L` (key and port on stdin, ends with stdin). Every request needs
+    the run's key (cookie), the printed `Host`; a POST also the `Origin`, `X-WS-Panel` and JSON. Routes are a
+    fixed list: reads, and `tell|interrupt|cancel|retry|close` / `accept|dismiss` run as `ws-agent` subprocesses
+    (`run_cli`); never `run`, `allow`, a source or publish setting, or `publish`. The page inserts text with
+    `textContent` only and loads nothing from elsewhere (CSP `default-src 'none'`; `test_agent_panel` greps for it).
   - `fleet` (`agent_fleet.py`; `[fleet] hosts`, set only by `fleet add/remove`, refused in a session): pull-only
     over the person's SSH (`ssh -o BatchMode=yes -- <host> 'bash -lc "ws-agent ..."'`, arguments `shlex`-quoted,
     hosts matched against `agent_registry.HOST` so none reads as an option). Remote text goes through `printable`.
