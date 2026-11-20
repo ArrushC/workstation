@@ -149,19 +149,9 @@ def needs() -> dict[str, object]:
             "host": socket.gethostname(), "at": core.now_iso()}
 
 
-def _json_file(path: Path) -> dict[str, object]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _text_file(path: Path, limit: int = 400_000) -> str:
-    try:
-        return path.read_bytes()[-limit:].decode("utf-8", "replace")
-    except OSError:
-        return ""
+def _text(job_id: str, *names: str, limit: int = 400_000) -> str:
+    """A file of the job's directory, never through a link the job left there (jobs.result_bytes)."""
+    return jobs.result_bytes(job_id, *names, limit=limit).decode("utf-8", "replace")
 
 
 def history(what: str) -> list[dict[str, object]]:
@@ -180,15 +170,14 @@ def job_detail(job_id: str) -> dict[str, object] | None:
     except (KeyError, OSError, ValueError):
         return None
     q = jobs.pueue_status()
-    res = jobs.job_dir(job.id) / "result"
     info = jobs.exit_info(job) or {}
     published = {k: {"url": str(v.get("url") or ""), "at": str(v.get("at") or v.get("updated_at") or ""),
                      "pending": bool(v.get("attempting") and not v.get("url"))}
                  for k, v in agent_publish.record(job).items()}
     return {**_row(job, jobs.state(job, q.tasks if q else None)), "base": job.base, "attempts": job.attempts,
-            "origin": job.origin, "report": _json_file(res / "report.json"), "review": _json_file(res / "review.json"),
-            "review_verdict": str(info.get("review") or ""),
-            "files": _text_file(res / "manifest.txt", 20_000).splitlines(),
+            "origin": job.origin, "report": jobs.result_json(job.id, "report.json"),
+            "review": jobs.result_json(job.id, "review.json"), "review_verdict": str(info.get("review") or ""),
+            "files": _text(job.id, "result", "manifest.txt", limit=20_000).splitlines(),
             "published": published,
             "thread": [{"from": str(m.get("from") or ""), "ts": str(m.get("ts") or ""), "text": str(m.get("text") or "")}
                        for m in jobs.thread(job)],
@@ -343,9 +332,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._refuse(404, "no such job")
                 return
             if parts[3] == "diff":
-                self._text(200, _text_file(jd / "result" / "changes.diff"))
+                self._text(200, _text(parts[2], "result", "changes.diff"))
             else:
-                self._text(200, "\n".join(_text_file(jd / "exec.log").splitlines()[-LOG_TAIL:]) + "\n")
+                self._text(200, "\n".join(_text(parts[2], "exec.log").splitlines()[-LOG_TAIL:]) + "\n")
             return
         if route is None:
             self._refuse(404, "no such page")

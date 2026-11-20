@@ -156,8 +156,8 @@ def all_jobs() -> list[Job]:
 
 
 def exit_info(job: Job) -> dict[str, object] | None:
-    try:
-        data = json.loads((job_dir(job.id) / "result" / "exit.json").read_text(encoding="utf-8"))
+    try:   # as every result file is read: never through a link the job left in its directory
+        data = json.loads(core.read_in(job_dir(job.id), "result", "exit.json").decode("utf-8", "replace"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -178,6 +178,23 @@ def _thread_lock(job: Job) -> Iterator[None]:
         fh.close()
 
 
+def result_bytes(job_id: str, *names: str, limit: int = 4_000_000) -> bytes:
+    """A file of the job's directory as something outside the sandbox may read it and pass on (post
+    in a comment, show in the panel): b"" if it is missing or reached through a link the job left."""
+    try:
+        return core.read_in(job_dir(job_id), *names, limit=limit)
+    except OSError:
+        return b""
+
+
+def result_json(job_id: str, name: str) -> dict[str, object]:
+    try:
+        data = json.loads(result_bytes(job_id, "result", name).decode("utf-8", "replace") or "null")
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def private_dir(job_id: str) -> Path:
     """Where ws-agent keeps what a job must not be able to change or redirect: its publish record
     and lock, temporary indexes and checkouts, marks. The job's own directory is writable from
@@ -191,7 +208,7 @@ def _thread_path(job: Job) -> Path:
 
 def thread(job: Job) -> list[dict[str, object]]:
     try:
-        lines = _thread_path(job).read_text(encoding="utf-8").splitlines()
+        lines = core.read_in(job_dir(job.id), "thread.jsonl").decode("utf-8", "replace").splitlines()
     except OSError:
         return []
     found = []

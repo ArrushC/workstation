@@ -971,6 +971,29 @@ class PullRequestUpdatesReview(PullRequestUpdates):
                                                     "updates": 0, "theirs": False}}))
         self.assertEqual(pub.record(j)["draft_pr"], real)   # a forgery there is never read
 
+    def test_a_result_file_swapped_for_a_link_never_leaks_the_persons_file(self) -> None:
+        # serve reads the result outside the sandbox; the job can't read the person's home, but it
+        # can leave a link to it where the changed-files list or the report should be
+        self.settings(mode="manual", comment=True)
+        secret = self.write(self.root / "id_ed25519", "-----BEGIN OPENSSH PRIVATE KEY-----\nTOPSECRET\n")
+        note = self.write(self.root / "private.json", json.dumps({"summary": "TOPSECRET summary", "question": "TOPSECRET q"}))
+        for name, target in (("manifest.txt", secret), ("report.json", note)):
+            j = self.job()
+            f = jobs.job_dir(j.id) / "result" / name
+            f.unlink()
+            f.symlink_to(target)
+            pub.publish(j, auto=False)
+        j = self.job()
+        res = jobs.job_dir(j.id) / "result"
+        moved = self.root / "elsewhere"
+        res.rename(moved)
+        self.write(moved / "manifest.txt", "TOPSECRET through a linked directory\n")
+        res.symlink_to(moved, target_is_directory=True)
+        pub.comment_body(j)
+        bodies = "".join(f.read_text() for f in self.gx.glob("body.*")) + pub.comment_body(j)
+        self.assertNotIn("TOPSECRET", bodies)
+        self.assertEqual(pub._patch(j), b"")
+
     def test_the_temporary_index_is_not_where_the_job_can_plant_a_link(self) -> None:
         self.settings(mode="manual", draft_pr=True)
         j = self.job()

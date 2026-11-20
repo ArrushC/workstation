@@ -324,6 +324,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       lock, the temporary index, the SVN publish checkout and the stop / follow-limit marks are in
       `jobs.private_dir(<id>)` (`<state>/agent-private/<id>`, 0700). What must be written into the job
       directory goes through `core.write_in` (no link followed: CI log tails) or `O_NOFOLLOW` (`jobs.post`).
+      What is read from it to be passed on (posted in a comment, shown in the panel: the patch, manifest,
+      report, exit record, thread, log) goes through `core.read_in` (`jobs.result_bytes` / `result_json`): a
+      link the job left there reads as nothing, never as the file it points to.
     - `push_update` asks GitHub first (`_own_pull_request`: open, head is `ws-agent/<id>` of this repository),
       records `pushing` before the push (a tip equal to it is its own, finished on the next run, never
       "theirs"), counts serve's failures (`update_tries`, `MAX_TRIES`, one notice), and under auto keeps

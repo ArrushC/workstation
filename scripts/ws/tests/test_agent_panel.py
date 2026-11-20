@@ -159,6 +159,20 @@ class Reads(PanelScratch):
             self.assertEqual((status, headers["content-type"]), (200, "text/plain; charset=utf-8"), part)
         self.assertIn(b"<script>alert(3)</script>", body)   # as plain text, with nosniff: never a page
 
+    def test_a_result_file_swapped_for_a_link_is_never_served(self) -> None:
+        j = self.job()
+        secret = self.write(self.root / "id_ed25519", "TOPSECRET\n")
+        note = self.write(self.root / "private.json", json.dumps({"summary": "TOPSECRET"}))
+        res = jobs.job_dir(j.id) / "result"
+        for name, target in (("changes.diff", secret), ("manifest.txt", secret), ("report.json", note)):
+            (res / name).unlink(missing_ok=True)
+            (res / name).symlink_to(target)
+        log = jobs.job_dir(j.id) / "exec.log"
+        log.unlink()
+        log.symlink_to(secret)
+        seen = b"".join(self.ask("GET", f"/api/jobs/{j.id}{part}")[2] for part in ("", "/diff", "/log"))
+        self.assertNotIn(b"TOPSECRET", seen)
+
     def test_unknown_things_are_not_found(self) -> None:
         for url in ("/api/jobs/zzzzzz", "/api/jobs/abc123", "/api/inbox/abc123", "/api/jobs/abc123/diff",
                     "/api/nothing", "/etc/passwd", "/api/jobs/../../x", "/panel.py"):
