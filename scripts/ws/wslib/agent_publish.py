@@ -326,6 +326,8 @@ def note_due(job: jobs.Job, kind: str, entry: agent_registry.Repo | None = None)
         return f"{job.repo}'s publish settings don't name {kind}"
     if p.mode != "auto" or not p.notes_since or job.created < p.notes_since:
         return "publishing isn't automatic here, or the job is older than this setting"
+    if kind != "stopped" and agent_sources.unasked(job):
+        return "nobody asked the agent on that thread: it says nothing there until it has a result"
     if job.vcs != "git" or not target(job).number:
         return "no GitHub thread asked for this job"
     rec = record(job)

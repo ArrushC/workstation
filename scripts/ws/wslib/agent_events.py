@@ -120,11 +120,11 @@ def _over(event: dict[str, object]) -> bool:
         return False
     try:
         job = jobs.load(str(event["job"]))
-    except (KeyError, OSError, ValueError):
+        if job.closed or job.cancelled:
+            return True
+        info = jobs.exit_info(job)
+    except Exception:  # noqa: BLE001 - a record that can't be read hides nothing (and never fails the hook)
         return False
-    if job.closed or job.cancelled:
-        return True
-    info = jobs.exit_info(job)
     return event.get("kind") == "needs-you" and info is not None and jobs.outcome_state(info) != "needs-you"
 
 

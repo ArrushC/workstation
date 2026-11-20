@@ -645,9 +645,11 @@ def _history(args: argparse.Namespace) -> int:
     rows = agent_serve.decisions()
     what = (args.what or "").strip()
     if what:
-        rows = [r for r in rows if what in (r.get("job"), r.get("item")) or what in str(r.get("cid") or "")
-                or str(r.get("thread") or "").endswith(what) or what == r.get("repo")]
-    rows = rows[-args.n:]
+        hit = [r for r in rows if what in (r.get("job"), r.get("item")) or what in str(r.get("cid") or "")
+               or str(r.get("thread") or "").endswith(what) or what == r.get("repo")]
+        its_jobs = {r.get("job") for r in hit if r.get("job")}      # and what was written for those jobs
+        rows = [r for r in rows if r in hit or r.get("job") in its_jobs]
+    rows = rows[-args.n:] if args.n > 0 else []
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -663,6 +665,21 @@ def _history(args: argparse.Namespace) -> int:
         reason = f": {r['reason']}" if r.get("reason") else ""
         print(agent_inbox.printable(f"{text}{rule}{reason}")[:400])
     return 0
+
+
+def _panel(args: argparse.Namespace) -> int:
+    from . import agent_panel
+    if args.action == "path":
+        print(agent_panel.socket_path())
+        return 0
+    if os.environ.get("CLAUDECODE") == "1" or os.environ.get("WS_AGENT_JOB"):
+        _err("ws-agent: the panel is yours to open, in your own terminal (it can act on jobs)")
+        return 3
+    if args.action == "serve":
+        return agent_panel.serve_stdin()
+    if args.host:
+        return agent_panel.open_remote(args.host, args.port)
+    return agent_panel.open_local(args.port)
 
 
 def _has_pr(job: jobs.Job) -> bool:
@@ -1344,6 +1361,12 @@ def _parser() -> argparse.ArgumentParser:
     ugh.add_argument("path")
     ugh.set_defaults(fn=_github)
     sub.add_parser("repos").set_defaults(fn=_repos)
+    pn = sub.add_parser("panel", help="this host's jobs and inbox in a browser, while the command runs")
+    pn.add_argument("action", choices=("open", "serve", "path"),
+                    help="open: print an address for your browser; serve and path are what open runs on another host")
+    pn.add_argument("host", nargs="?", help="open: one of your fleet hosts (its panel, through ssh -L)")
+    pn.add_argument("--port", type=int, default=0, help="the local port to listen on (default: any free one)")
+    pn.set_defaults(fn=_panel)
     hi = sub.add_parser("history", help="what serve decided about each request and wrote for each job")
     hi.add_argument("what", nargs="?", help="a job or inbox id, #number, or part of a request's id")
     hi.add_argument("-n", type=int, default=40, help="how many of the latest rows (default 40)")

@@ -216,9 +216,9 @@ def record_decision(row: dict[str, object]) -> None:
         path = _decisions_path()
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600), "a", encoding="utf-8") as fh:
             fh.write(json.dumps({"ts": core.now_iso(), **row}) + "\n")
-        if path.stat().st_size > _DECISIONS_BYTES:
-            keep = path.read_text(encoding="utf-8").splitlines()[-DECISIONS_KEPT:]
-            core.atomic_write(path, ("\n".join(keep) + "\n").encode("utf-8"), 0o600)
+        if path.stat().st_size > _DECISIONS_BYTES:   # down to half the cap, by size: rows vary a lot
+            data = path.read_bytes()[-(_DECISIONS_BYTES // 2):]
+            core.atomic_write(path, data[data.find(b"\n") + 1:], 0o600)
     except OSError:
         pass
 
@@ -259,6 +259,8 @@ def _queue(c: agent_inbox.Candidate, decision: dict[str, object] | None, capped:
         agent_sources.remember_thread(c.thread, q.job.id)
         said = _acknowledge(q.job)
     _fate(c, "queued", "" if decision is None else str(decision.get("reason") or ""), decision, job=q.job.id)
+    if said and _WROTE.match(said):
+        record_decision({"job": q.job.id, "outcome": "wrote", "reason": said[len(q.job.id) + 2:]})
     return f"{c.cid}: queued job {q.job.id}" + (f"; {said}" if said else "")
 
 
@@ -297,6 +299,8 @@ def _handle(c: agent_inbox.Candidate, entry: agent_registry.Repo, mode: str, aut
     decision: dict[str, object] | None = None
     if not c.explicit:
         decision = agent_triage.triage(c, rules, entry)
+        # the rule kept (inbox, record) is one the person wrote, or none: never the model's wording
+        decision = {**decision, "rule": _same_rule(decision.get("rule"), rules)}
         if decision.get("decision") == "ignore":
             _fate(c, "ignored", str(decision.get("reason") or ""), decision)
             return f"{c.cid}: ignored by triage: {decision.get('reason')}"

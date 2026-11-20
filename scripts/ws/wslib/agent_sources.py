@@ -297,7 +297,9 @@ def start_github(entry: agent_registry.Repo, *, fresh: bool = False) -> None:
         data = source_state()
         cur = data.get(key, {})
         if fresh or not (isinstance(cur.get("cursor"), str) and cur.get("cursor")):
-            data[key] = {**cur, "cursor": _iso(time.time()), "last_poll": 0.0, "interval": MIN_INTERVAL}
+            # the watch on CI starts over too: nothing that failed while this was off
+            data[key] = {**cur, "cursor": _iso(time.time()), "last_poll": 0.0, "interval": MIN_INTERVAL,
+                         "ci_since": "", "ci_runs": [], "ci_failures": {}}
             save_source_state(data)
 
 
@@ -599,10 +601,14 @@ def _fetch(repo: Path, ref: str) -> str:
     return sha
 
 
-def _thread_text(issue: dict[str, object], comments: list[object]) -> str:
+def _thread_text(issue: dict[str, object], comments: list[object], only: set[str] | None = None) -> str:
+    """The thread as untrusted text. `only`: just these logins' comments (for work nobody asked for,
+    where the text is the task: nobody else's words go into it, not even as context)."""
     parts = [f"Title: {issue.get('title') or ''}", f"Opened by {_login(issue) or '?'} on {issue.get('created_at')}:",
              str(issue.get("body") or "(no description)")]
-    for c in [c for c in comments if isinstance(c, dict)][-COMMENTS_IN_PROMPT:]:
+    kept = [c for c in comments if isinstance(c, dict)
+            and (only is None or (_login(c).casefold() in only and not _automated(c)))]
+    for c in kept[-COMMENTS_IN_PROMPT:]:
         parts += ["", f"--- {_login(c) or '?'} on {c.get('created_at')}:", str(c.get("body") or "")]
     return agent_inbox.defuse("\n".join(parts).replace("\r\n", "\n"))
 
@@ -652,9 +658,12 @@ def _plain_follow_up(row: dict[str, object], first: str, job_id: str, posted: se
         return False
     created, updated = _when(row.get("created_at")), _when(row.get("updated_at"))
     try:
-        began = _when(jobs.load(job_id).created)
+        job = jobs.load(job_id)
     except KeyError:
         return False
+    if unasked(job):     # talk on an issue nobody addressed to the agent stays talk: /agent reaches its job
+        return False
+    began = _when(job.created)
     return created is not None and updated == created and began is not None and created >= began
 
 
@@ -688,19 +697,18 @@ Work in this working copy: the result is a patch the person reviews."""
 CI_PROMPT_LINES = 60
 
 
-def _inferred_issue(entry: agent_registry.Repo, slug: str, rk: str, login: str, body: str, number: int, url: str,
-                    issue: dict[str, object]) -> agent_inbox.Candidate:
-    is_pr = bool(issue.get("pull_request"))
-    ref = f"pull/{number}/head" if is_pr else str(_gh(f"repos/{slug}", jq=".default_branch")[1] or "")
+def _inferred_issue(entry: agent_registry.Repo, slug: str, login: str, body: str, number: int, url: str,
+                    issue: dict[str, object], logins: set[str]) -> agent_inbox.Candidate:
+    ref = str(_gh(f"repos/{slug}", jq=".default_branch")[1] or "")
     if not ref:
         raise SourceError(f"gh api repos/{slug}: no default branch")
     commit = _fetch(entry.path, ref)
     _, comments = _gh(f"repos/{slug}/issues/{number}/comments?per_page=100")
-    kind = "pull request" if is_pr else "issue"
     title = str(issue.get("title") or "")
-    prompt = INFERRED_ISSUE.format(kind=kind, slug=slug, number=number, url=url, author=login,
-                                   thread=_thread_text(issue, comments if isinstance(comments, list) else []))
-    return agent_inbox.Candidate(cid=f"gh:{slug}:{rk}", source="github", repo=core.tilde(entry.path), explicit=False,
+    prompt = INFERRED_ISSUE.format(kind="issue", slug=slug, number=number, url=url, author=login,
+                                   thread=_thread_text(issue, comments if isinstance(comments, list) else [], logins))
+    # "u": unasked. Its id says so for as long as the job lives (`unasked`).
+    return agent_inbox.Candidate(cid=f"gh:{slug}:u{number}", source="github", repo=core.tilde(entry.path), explicit=False,
                                  author=login, title=f"{slug}#{number}: {title}"[:160],
                                  text=f"{title}\n\n{body}".replace("\r\n", "\n"),
                                  base={"commit": commit, "branch": ref}, prompt=prompt, thread=f"gh:{slug}#{number}",
@@ -722,50 +730,99 @@ def _log_tail(slug: str, job_id: object, lines: int) -> str:
     return "\n".join("".join(ch for ch in ln if ch == "\t" or ch.isprintable()) for ln in text.splitlines()[-lines:])
 
 
+def unasked(job: jobs.Job) -> bool:
+    """The job came from work nobody addressed to the agent (an inferred issue, a CI failure)."""
+    return job.origin.startswith("gh:") and job.origin.rsplit(":", 1)[-1].startswith(("u", "ci"))
+
+
+CI_TRIES = 3
+
+
 def _failed_runs(entry: agent_registry.Repo, g: agent_registry.GitHubSource, st: dict[str, object], now: float
-                 ) -> tuple[list[agent_inbox.Candidate], dict[str, object]]:
-    """Failed runs on the default branch since the source began inferring, each once; what to save.
-    Read every PR_READ_EVERY seconds: CI results don't show among the issue rows."""
+                 ) -> tuple[list[agent_inbox.Candidate], dict[str, object], str]:
+    """A commit at the tip of the default branch whose push runs failed, since the source began
+    inferring: one candidate per commit, whatever number of workflows failed on it. What to save,
+    and the last read error. Read every PR_READ_EVERY seconds (CI results don't show among the
+    issue rows). A commit the branch has moved past is skipped: it may be fixed already."""
     since = st.get("ci_since")
     if not (isinstance(since, str) and since):
-        return [], {"ci_since": _iso(now), "ci_read": now}      # from now: no backlog
+        return [], {"ci_since": _iso(now), "ci_read": now, "ci_runs": [], "ci_failures": {}}, ""   # from now: no backlog
     read = st.get("ci_read")
     if isinstance(read, (int, float)) and now - float(read) < PR_READ_EVERY:
-        return [], {}
-    branch = str(_gh(f"repos/{g.slug}", jq=".default_branch")[1] or "")
-    if not _REF.match(branch):
-        raise SourceError(f"gh api repos/{g.slug}: no default branch")
-    _, got = _gh(f"repos/{g.slug}/actions/runs?branch={branch}&status=failure&event=push&per_page=20")
-    runs = [r for r in (got.get("workflow_runs") if isinstance(got, dict) else None) or [] if isinstance(r, dict)]
+        return [], {}, ""
     done = _ids(st.get("ci_runs"))
-    found = []
+    fails = st.get("ci_failures") if isinstance(st.get("ci_failures"), dict) else {}
+    assert isinstance(fails, dict)
+    save: dict[str, object] = {"ci_read": now}
+    try:
+        branch = str(_gh(f"repos/{g.slug}", jq=".default_branch")[1] or "")
+        if not _REF.match(branch):
+            raise SourceError(f"gh api repos/{g.slug}: no default branch")
+        _, got = _gh(f"repos/{g.slug}/actions/runs?branch={branch}&status=failure&event=push&per_page=20")
+        tip = _fetch(entry.path, branch)
+    except SourceError as e:
+        return [], save, str(e)
+    logins = {x.casefold() for x in g.logins}
+    runs = [r for r in (got.get("workflow_runs") if isinstance(got, dict) else None) or [] if isinstance(r, dict)]
+    mine: list[dict[str, object]] = []
     for run in sorted(runs, key=lambda r: str(r.get("created_at") or "")):
-        rid, sha = run.get("id"), str(run.get("head_sha") or "")
-        if not isinstance(rid, int) or rid in done or str(run.get("created_at") or "") < since or not _SHA.match(sha):
+        rid = run.get("id")
+        if not isinstance(rid, int) or rid in done or str(run.get("created_at") or "") < since:
             continue
-        done.append(rid)
         actor = run.get("actor") if isinstance(run.get("actor"), dict) else {}
         assert isinstance(actor, dict)
-        if actor.get("type") == "Bot":
+        # before anything is downloaded for it: a listed person's push of the commit the branch is at
+        if actor.get("type") == "Bot" or str(actor.get("login") or "").casefold() not in logins \
+                or run.get("head_sha") != tip:
+            done.append(rid)
             continue
-        _, jobs_got = _gh(f"repos/{g.slug}/actions/runs/{rid}/jobs?per_page=50")
-        failed = [j for j in (jobs_got.get("jobs") if isinstance(jobs_got, dict) else None) or []
-                  if isinstance(j, dict) and j.get("conclusion") in ("failure", "timed_out")]
-        names = ", ".join(str(j.get("name") or "?")[:60] for j in failed[:10]) or "(none named)"
-        report = [f"Workflow: {run.get('name')}", f"Commit title: {run.get('display_title')}", f"Failing jobs: {names}"]
-        for j in failed[:2]:
-            tail = _log_tail(g.slug, j.get("id"), CI_PROMPT_LINES)
-            if tail:
-                report += ["", f"--- the end of the log of {str(j.get('name') or '?')[:60]}:", tail]
-        text = "\n".join(report)
-        commit = _fetch(entry.path, branch)
-        url = str(run.get("html_url") or "")
-        found.append(agent_inbox.Candidate(
-            cid=f"gh:{g.slug}:run{rid}", source="github", repo=core.tilde(entry.path), explicit=False,
-            author=str(actor.get("login") or ""), title=f"{g.slug}: CI failed on {branch} ({str(run.get('name') or '')[:40]})"[:160],
-            text=text, base={"commit": commit, "branch": branch},
-            prompt=CI_RUN.format(branch=branch, sha=sha[:12], url=url, report=agent_inbox.defuse(text)), url=url))
-    return found, {"ci_read": now, "ci_runs": done[-SEEN_KEPT:]}
+        mine.append(run)
+    found: list[agent_inbox.Candidate] = []
+    error = ""
+    if mine:
+        report, read_ok = [], []
+        for run in mine:
+            rid = run["id"]
+            assert isinstance(rid, int)
+            try:
+                _, jobs_got = _gh(f"repos/{g.slug}/actions/runs/{rid}/jobs?per_page=50")
+            except SourceError as e:
+                error = str(e)
+                tries = int(fails.get(str(rid), 0)) + 1 if isinstance(fails.get(str(rid), 0), int) else 1
+                if tries >= CI_TRIES:
+                    fails.pop(str(rid), None)
+                    done.append(rid)          # it keeps failing: let go of it
+                else:
+                    fails[str(rid)] = tries
+                continue
+            failed = [j for j in (jobs_got.get("jobs") if isinstance(jobs_got, dict) else None) or []
+                      if isinstance(j, dict) and j.get("conclusion") in ("failure", "timed_out")]
+            names = ", ".join(agent_inbox.printable(str(j.get("name") or "?"))[:60] for j in failed[:10]) or "(none named)"
+            report += [f"Workflow: {agent_inbox.printable(str(run.get('name') or ''))[:80]}",
+                       f"Commit title: {agent_inbox.printable(str(run.get('display_title') or ''))[:120]}",
+                       f"Failing jobs: {names}"]
+            for j in failed[:2]:
+                tail = _log_tail(g.slug, j.get("id"), CI_PROMPT_LINES)
+                if tail:
+                    report += ["", f"--- the end of the log of {agent_inbox.printable(str(j.get('name') or '?'))[:60]}:", tail]
+            report.append("")
+            read_ok.append(run)
+        if read_ok:
+            for run in read_ok:
+                done.append(run["id"])        # type: ignore[arg-type]
+                fails.pop(str(run["id"]), None)
+            first = read_ok[0]
+            actor = first.get("actor") if isinstance(first.get("actor"), dict) else {}
+            assert isinstance(actor, dict)
+            text = "\n".join(report).strip()
+            url = str(first.get("html_url") or "")
+            found.append(agent_inbox.Candidate(
+                cid=f"gh:{g.slug}:ci{tip[:12]}", source="github", repo=core.tilde(entry.path), explicit=False,
+                author=str(actor.get("login") or ""), title=f"{g.slug}: CI failed on {branch} at {tip[:12]}"[:160],
+                text=text, base={"commit": tip, "branch": branch},
+                prompt=CI_RUN.format(branch=branch, sha=tip[:12], url=url, report=agent_inbox.defuse(text)), url=url))
+    save.update({"ci_runs": done[-SEEN_KEPT:], "ci_failures": fails})
+    return found, save, error
 
 
 def poll_github(entry: agent_registry.Repo, now: float
@@ -836,7 +893,10 @@ def poll_github(entry: agent_registry.Repo, now: float
         jid = threads.get(f"#{number}")
         live = isinstance(jid, str) and _open_job(jid)
         row = rows_by_key.get(rk, {})
-        new_issue = instruction is None and not live and "issues" in g.infer and issue is not None
+        # an issue, never a pull request, and never something ws-agent itself wrote (a draft PR's body)
+        new_issue = instruction is None and not live and "issues" in g.infer and issue is not None \
+            and not issue.get("pull_request") and not AGENT_LINE.match(body.lstrip()) \
+            and not body.lstrip().startswith("Draft, made by an agent")
         if not login or login.casefold() not in logins or _automated(row) \
                 or (instruction is None and not (live and g.follow) and not new_issue):
             handled.append(rk)
@@ -854,13 +914,13 @@ def poll_github(entry: agent_registry.Repo, now: float
             if instruction:
                 follow.append((jid, instruction, login, "tell"))
             elif instruction is None and text and rk.startswith("c") and _plain_follow_up(row, first, jid, posted):
-                follow.append((jid, text, login, "tell"))
+                follow.append((jid, text, login, "tell"))   # (_plain_follow_up: never on an unasked job's thread)
             handled.append(rk)
             continue
         try:
             if instruction is None:   # an issue nobody addressed to the agent: for triage, never a request
                 assert issue is not None
-                found.append(_inferred_issue(entry, g.slug, rk, login, body, number, url, issue))
+                found.append(_inferred_issue(entry, g.slug, login, body, number, url, issue, logins))
             else:
                 found.append(_request(entry, g.slug, rk, login, body, instruction, number, url, issue))
             handled.append(rk)
@@ -887,11 +947,11 @@ def poll_github(entry: agent_registry.Repo, now: float
         follow += more
     ci_state: dict[str, object] = {}
     if "ci" in g.infer:
-        try:
-            runs, ci_state = _failed_runs(entry, g, st, now)
-            found += runs
-        except SourceError as e:
-            pr_error = str(e)
+        runs, ci_state, ci_error = _failed_runs(entry, g, st, now)
+        found += runs
+        pr_error = ci_error or pr_error
+    elif st.get("ci_since"):
+        ci_state = {"ci_since": "", "ci_runs": [], "ci_failures": {}}   # switched off: on again starts from then
     if errors:
         newest = min(newest, *(u for u, _ in errors))
     last_error = errors[-1][1] if errors else pr_error

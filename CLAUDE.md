@@ -332,8 +332,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       remembered per pull request (`reviews_seen`, `comments_seen`), never in `handled`.
     - Inferred GitHub candidates (part C): `github.infer` (`issues`, `ci`) with `github.rules`; `explicit=False`,
       so they go through `agent_admit` and `agent_triage` like SVN revisions (`_settings_for` passes the
-      source's rules). CI runs are read every `PR_READ_EVERY` s from `ci_since` (no backlog), once each
-      (`ci_runs`), never a bot's push. serve appends each candidate's fate and each write to
+      source's rules; the rule kept is `_same_rule`'s, never triage's wording). Their ids say so: `u<number>`
+      for an issue, `ci<sha12>` for a commit (`agent_sources.unasked`): no ack, no question in the thread, no
+      plain follow-up, and only listed logins' comments in the prompt (`_thread_text(only=)`). Never a pull
+      request row, never a body ws-agent wrote. CI: read every `PR_READ_EVERY` s from `ci_since` (reset by a
+      fresh start or by switching `ci` off), one candidate per commit and only for the branch's tip pushed by
+      a listed login (checked before anything is downloaded); a run that can't be read is retried `CI_TRIES`
+      times and never stops the read. serve appends each candidate's fate and each write to
       `agent-serve/decisions.jsonl` (`record_decision`, bounded; `ws-agent history`). An event whose job is
       closed, cancelled or no longer asking isn't shown to a session (`agent_events._over`).
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run

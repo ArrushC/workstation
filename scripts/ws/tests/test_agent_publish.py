@@ -1041,3 +1041,19 @@ class PullRequestUpdatesReview(PullRequestUpdates):
         agent_sources.remember_pr(SLUG, j.id, 12, self.head)   # "#12" sorts before "#7"
         self.assertEqual(pub.target(j).number, 7)
 
+
+class UnaskedWork(Conversation):
+    """Part C's review: a job nobody asked for by name is never acknowledged or questioned in public."""
+
+    def test_no_acknowledgement_or_question_on_an_issue_nobody_addressed_to_the_agent(self) -> None:
+        self.settings(mode="auto", comment=True, ack=True, questions=True)
+        working = self.working()
+        working.origin = f"gh:{SLUG}:u7"
+        jobs.save(working)
+        asking = self.asking()
+        asking.origin = f"gh:{SLUG}:u7"
+        jobs.save(asking)
+        for j, kind in ((working, "ack"), (asking, "question")):
+            self.assertIn("nobody asked", pub.note_due(j, kind) or "", kind)
+        self.assertEqual((serve.tick(time.time()), self.posts()), ([], []))
+
