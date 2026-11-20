@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import os
+import stat
 import shlex
 import shutil
 import subprocess
@@ -139,6 +140,29 @@ def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:
     if mode is not None and not IS_WINDOWS:
         os.chmod(tmp, mode)  # noqa
     os.replace(tmp, path)
+
+
+def read_in(directory: Path, *names: str, limit: int = 4_000_000) -> bytes:
+    """The regular file `directory/names...`, where someone untrusted can write below `directory` (a
+    job, in its own directory): no component below it may be a link, so a link left there never
+    makes a reader outside the sandbox hand over a file from elsewhere. At most the last `limit`
+    bytes. Raises OSError otherwise."""
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for name in names[:-1]:
+            nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        f = os.open(names[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+    finally:
+        os.close(fd)
+    with os.fdopen(f, "rb") as fh:
+        st = os.fstat(fh.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError(f"{names[-1]} isn't a regular file")
+        if st.st_size > limit:
+            fh.seek(st.st_size - limit)
+        return fh.read(limit)
 
 
 def private_dir(path: Path) -> Path:

@@ -18,6 +18,7 @@ engine's own sandbox runs nested inside this one and confines its shell commands
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -120,7 +121,10 @@ def _base(bw: str, home: Path, blank: Sequence[str] = BLANK) -> list[str]:
     # left behind (a daemon a check's code forked can't live on to rewrite the job's result files).
     args = [bw, "--die-with-parent", "--unshare-pid", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
             "--tmpfs", "/tmp"]
-    for d in blank:   # before the home layer: /home goes blank, then the person's own home is made on it
+    # The user's runtime directory too: it holds the session bus (systemd --user starts whatever it is
+    # asked to, outside this sandbox) and the control sockets of editors and multiplexers. It stays
+    # a directory, empty and the sandbox's own, for whatever wants to put a socket there.
+    for d in (*blank, f"/run/user/{os.getuid()}"):   # before the home layer: /home goes blank, then the person's own home is made on it
         if Path(d).is_dir() and not Path(d).is_symlink():
             args += ["--tmpfs", d]
     # Name resolution must survive that: on WSL /etc/resolv.conf links into /mnt/wsl, and an engine

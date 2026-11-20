@@ -128,8 +128,37 @@ def save(job: Job) -> None:
 
 
 def _read(path: Path) -> Job:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return Job(**{k: v for k, v in data.items() if k in Job.__dataclass_fields__})
+    """The record in a job's directory. That directory is writable from inside the job's sandbox:
+    the record is never read through a link, and it must be the record of that very directory."""
+    data = json.loads(core.read_in(path.parent, path.name).decode("utf-8"))
+    job = Job(**{k: v for k, v in data.items() if k in Job.__dataclass_fields__})
+    if job.id != path.parent.name:
+        raise ValueError(f"ws-agent: {path} says it is job {job.id!r}")
+    return job
+
+
+def result_bytes(job_id: str, *names: str, limit: int = 4_000_000) -> bytes:
+    """A file of the job's directory as something outside the sandbox may read it and pass on (post
+    in a comment, show to the person): b"" if it is missing or reached through a link the job left."""
+    try:
+        return core.read_in(job_dir(job_id), *names, limit=limit)
+    except OSError:
+        return b""
+
+
+def result_json(job_id: str, name: str) -> dict[str, object]:
+    try:
+        data = json.loads(result_bytes(job_id, "result", name).decode("utf-8", "replace") or "null")
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def private_dir(job_id: str) -> Path:
+    """Where ws-agent keeps what a job must not be able to change or redirect: its publish record
+    and lock, temporary indexes and checkouts. The job's own directory is writable from inside its
+    sandbox (a check runs the repository's code there); this one is outside it."""
+    return core.private_dir(core.state_dir() / "agent-private" / job_id)
 
 
 def load(prefix: str) -> Job:
@@ -156,8 +185,8 @@ def all_jobs() -> list[Job]:
 
 
 def exit_info(job: Job) -> dict[str, object] | None:
-    try:
-        data = json.loads((job_dir(job.id) / "result" / "exit.json").read_text(encoding="utf-8"))
+    try:   # as every result file is read: never through a link the job left in its directory
+        data = json.loads(core.read_in(job_dir(job.id), "result", "exit.json").decode("utf-8", "replace"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -170,7 +199,7 @@ def exit_info(job: Job) -> dict[str, object] | None:
 @contextlib.contextmanager
 def _thread_lock(job: Job) -> Iterator[None]:
     core.private_dir(job_dir(job.id))
-    fh = open(job_dir(job.id) / "thread.lock", "a+")  # noqa: SIM115 - held for the with-block
+    fh = os.fdopen(os.open(job_dir(job.id) / "thread.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600), "a+")
     try:
         fcntl.flock(fh, fcntl.LOCK_EX)
         yield
@@ -184,7 +213,7 @@ def _thread_path(job: Job) -> Path:
 
 def thread(job: Job) -> list[dict[str, object]]:
     try:
-        lines = _thread_path(job).read_text(encoding="utf-8").splitlines()
+        lines = core.read_in(job_dir(job.id), "thread.jsonl").decode("utf-8", "replace").splitlines()
     except OSError:
         return []
     found = []
@@ -200,7 +229,9 @@ def thread(job: Job) -> list[dict[str, object]]:
 
 def post(job: Job, sender: str, text: str, *, attempt: int | None = None) -> None:
     msg = {"id": secrets.token_hex(4), "ts": core.now_iso(), "from": sender, "text": text, "attempt": attempt}
-    with _thread_lock(job), open(_thread_path(job), "a", encoding="utf-8") as fh:
+    # never through a link the job planted in its own directory
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+    with _thread_lock(job), os.fdopen(os.open(_thread_path(job), flags, 0o600), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(msg) + "\n")
 
 
