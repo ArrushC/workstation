@@ -786,6 +786,7 @@ class ConversationReview(Conversation):
         rc, out, err = self.cli("github", str(self.repo), "--login", "ArrushC", "--infer", "issues", "--infer", "ci",
                                 "--rule", "parser bugs")
         self.assertEqual(rc, 0, err)
+        self.assertIn("inferring from issues and ci", out)   # the confirmation says so, as `repos` does
         found = reg.find(self.repo)
         assert found is not None and found.github is not None
         self.assertEqual((found.github.infer, found.github.rules), (("issues", "ci"), ("parser bugs",)))

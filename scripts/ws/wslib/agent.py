@@ -284,7 +284,8 @@ def _github(args: argparse.Namespace) -> int:
     if repo is not None:
         print(f"{'taking /agent requests' if src else 'no longer taking requests'}: {core.tilde(root)}"
               + (f" ({src.slug}, {src.mode}, logins: {', '.join(src.logins)}"
-                 f"{', following live threads' if src.follow else ''})" if src else ""))
+                 f"{', following live threads' if src.follow else ''}"
+                 f"{', inferring from ' + ' and '.join(src.infer) if src.infer else ''})" if src else ""))
         if src is not None:
             if src.mode != "off":   # from now: new, or back from off, brings nothing from meanwhile
                 agent_sources.start_github(repo, fresh=prev is None or prev.github is None or prev.github.mode == "off")
@@ -609,7 +610,17 @@ def _accept(args: argparse.Namespace) -> int:
         agent_inbox.resolve(it, "accepted", q.job.id)
         if c.thread:   # a later /agent on that issue goes to this job
             agent_sources.remember_thread(c.thread, q.job.id)
+        _decided(it, "accepted", q.job.id)
     return _report_queued(q)
+
+
+def _decided(it: agent_inbox.Item, outcome: str, job: str = "") -> None:
+    """The person's own decision about an inbox item, beside serve's in the record (`history`)."""
+    from . import agent_serve
+    c = it.candidate
+    agent_serve.record_decision({"cid": it.cid, "source": c.get("source"), "repo": c.get("repo"), "thread": c.get("thread"),
+                                 "author": c.get("author"), "title": c.get("title"), "outcome": outcome,
+                                 "reason": "by you", "item": it.id, **({"job": job} if job else {})})
 
 
 def _dismiss(args: argparse.Namespace) -> int:
@@ -620,6 +631,7 @@ def _dismiss(args: argparse.Namespace) -> int:
         _err(f"ws-agent: {it.id} was accepted as job {it.job}; cancel or close that job instead")
         return 3
     agent_inbox.resolve(it, "dismissed")
+    _decided(it, "dismissed")
     print(f"dismissed {it.id}: {agent_inbox.printable(str(it.candidate.get('title') or ''))}")
     return 0
 

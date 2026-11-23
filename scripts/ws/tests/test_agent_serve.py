@@ -508,6 +508,17 @@ class Decisions(ServeScratch):
             agent.main(["history", "-n", "0"])
         self.assertEqual(len(out.getvalue().splitlines()), 1)
 
+    def test_what_the_person_decided_about_an_inbox_item_is_on_record_too(self) -> None:
+        # Seen in the real trial: an item accepted from the panel left no trace in the history.
+        reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",)))
+        self.pueue_status({})
+        taken, dropped = agent_inbox.add(self.gh_cand(), None), agent_inbox.add(self.gh_cand("gh:ArrushC/proj:c10"), None)
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(agent.main(["accept", taken.id]), 0)
+            self.assertEqual(agent.main(["dismiss", dropped.id]), 0)
+        rows = [(r["outcome"], r.get("item"), bool(r.get("job"))) for r in serve.decisions()]
+        self.assertEqual(rows, [("accepted", taken.id, True), ("dismissed", dropped.id, False)])
+
     def test_the_rule_on_record_is_the_persons_never_the_models_wording(self) -> None:
         reg.set_github(self.repo, reg.GitHubSource(slug="ArrushC/proj", mode="observe", logins=("ArrushC",),
                                                    infer=("issues",), rules=("parser bugs",)))
