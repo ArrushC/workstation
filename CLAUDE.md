@@ -301,13 +301,50 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
       paused, and never re-posts a comment whose earlier attempt may have reached GitHub (`attempting`).
     - The SVN branch is one revision: checkout `url@rev`, `svn patch --strip <depth>` (dry run first), then
       `svn copy <wc> <branch URL>`. `svn_branch_problem` (set time and publish time) refuses trunk and watched trees.
+    - Notes (phase 4: `ack`, `question:<finished>`, `stopped`; `note_due`/`post_note`, serve's `converse` step)
+      are auto-only, for a GitHub request's job newer than `publish.since`; `note: true` keeps them out of the
+      daily cap; they start at `publish.notes_since` (set when ack/questions is switched on), and an ack only
+      for a job with no exit.json yet. An unconfirmed comment (`held_back`) blocks the job's later comments
+      until `publish <id> --seen` (`mark_seen`); serve notifies once. `stopped` needs the job's `stop-requested`
+      mark and is posted by the converse step (never while paused).
+    - With `github.follow` the person's own login posts ws-agent's comments: each posted id is kept
+      (`remember_posted`, the source's `posted`), and `AGENT_LINE` (anchored to the fixed openings, so a quote
+      reply still counts) covers one whose reply was lost. A plain follow-up must be unedited, newer than the
+      job, and not from an app or bot (`_plain_follow_up`, `_automated`). `/agent stop` is matched before the
+      live check: on a thread with no job it is dropped, never a request. `poll_github` returns
+      `(job, text, login, "tell" | "stop")`, each handled on its own by serve.
+    - Following a pull request (part B): publishing a draft PR calls `agent_sources.remember_pr` (the source's
+      `prs` and the PR's number in `threads`). With `github.follow`, `poll_github` also returns `"ended"` (merged
+      or closed: serve closes the job) and `"ci"` (failed check runs on the pushed commit, once per commit,
+      `CI_ROUNDS` per job, log tails in the job's `input/`; told as `gh:checks`), and reviews / review comments
+      as `"tell"`. `push_update` adds one commit whose parent is the last pushed one, with
+      `--force-with-lease=<ref>:<last>`; a different tip marks the record `theirs` for good. `MAX_UPDATES` 5.
+      `ls` shows `delivered` for a succeeded job with a PR (display only: `jobs.state` is unchanged).
     - A job's own directory is writable from inside its sandbox (checks run the repository's code there), so
       nothing that decides a write, and nothing ws-agent writes blind, lives in it: the publish record, its
-      lock, the temporary index and the SVN publish checkout are in `jobs.private_dir(<id>)`
-      (`<state>/agent-private/<id>`, 0700). What is read from it to be passed on (the patch, manifest, report,
-      exit record, thread) goes through `core.read_in` (`jobs.result_bytes` / `result_json`): a link the job
-      left reads as nothing. `jobs._read` refuses a record that isn't its directory's; `jobs.post` opens with
-      `O_NOFOLLOW`.
+      lock, the temporary index, the SVN publish checkout and the stop / follow-limit marks are in
+      `jobs.private_dir(<id>)` (`<state>/agent-private/<id>`, 0700). What must be written into the job
+      directory goes through `core.write_in` (no link followed: CI log tails) or `O_NOFOLLOW` (`jobs.post`).
+      What is read from it to be passed on (posted in a comment, shown in the panel: the patch, manifest,
+      report, exit record, thread, log) goes through `core.read_in` (`jobs.result_bytes` / `result_json`): a
+      link the job left there reads as nothing, never as the file it points to.
+    - `push_update` asks GitHub first (`_own_pull_request`: open, head is `ws-agent/<id>` of this repository),
+      records `pushing` before the push (a tip equal to it is its own, finished on the next run, never
+      "theirs"), counts serve's failures (`update_tries`, `MAX_TRIES`, one notice), and under auto keeps
+      `publish.updates_since` and the reviewer's verdict. A quiet pull request is read every `PR_READ_EVERY`
+      seconds, at once when its issue row or a comment shows in the poll; reviews and review comments are
+      remembered per pull request (`reviews_seen`, `comments_seen`), never in `handled`.
+    - Inferred GitHub candidates (part C): `github.infer` (`issues`, `ci`) with `github.rules`; `explicit=False`,
+      so they go through `agent_admit` and `agent_triage` like SVN revisions (`_settings_for` passes the
+      source's rules; the rule kept is `_same_rule`'s, never triage's wording). Their ids say so: `u<number>`
+      for an issue, `ci<sha12>` for a commit (`agent_sources.unasked`): no ack, no question in the thread, no
+      plain follow-up, and only listed logins' comments in the prompt (`_thread_text(only=)`). Never a pull
+      request row, never a body ws-agent wrote. CI: read every `PR_READ_EVERY` s from `ci_since` (reset by a
+      fresh start or by switching `ci` off), one candidate per commit and only for the branch's tip pushed by
+      a listed login (checked before anything is downloaded); a run that can't be read is retried `CI_TRIES`
+      times and never stops the read. serve appends each candidate's fate and each write to
+      `agent-serve/decisions.jsonl` (`record_decision`, bounded; `ws-agent history`). An event whose job is
+      closed, cancelled or no longer asking isn't shown to a session (`agent_events._over`).
     - Posted text is fixed wording; model text and file names sit in a code fence longer than any backtick run
       in them (`fenced()`), where GitHub renders nothing; a source job's title never appears. The engine never publishes: this runs after the job, outside the sandbox.
   - Someone else's words (log messages, comments, triage output):
@@ -315,6 +352,18 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     - printed through `printable`;
     - never in an event line, since those reach live sessions.
   - `ui` (`agent_ui.py`) is fzf with `--with-shell 'bash -c'`, and no `)` inside an `execute(...)`.
+  - `panel` (`agent_panel.py`, static files in `wslib/panel/`; refused in a session): a Unix socket in
+    `$XDG_RUNTIME_DIR/ws-agent` (0700), never TCP; `panel open` relays `127.0.0.1:<port>` to it, or runs
+    `panel serve` on a fleet host through `ssh -L <local socket>:<remote socket>` (key and port on stdin, ends
+    with stdin). The relay lets in this uid only (`peer_uid` from /proc/net/tcp; under WSL a peer the table
+    doesn't list is the Windows browser, measured). The key travels in the address's fragment, lives in the
+    page's `sessionStorage` and is sent as `X-WS-Key`: never a cookie (cookies go to every local port). Every
+    API request needs it and the printed `Host`; a POST also the `Origin`, `X-WS-Panel` and JSON. A refusal
+    closes its connection (an unread body would be parsed as the next request). `socket_path` uses only a
+    directory that is this user's alone and no link. Routes are a
+    fixed list: reads, and `tell|interrupt|cancel|retry|close` / `accept|dismiss` run as `ws-agent` subprocesses
+    (`run_cli`); never `run`, `allow`, a source or publish setting, or `publish`. The page inserts text with
+    `textContent` only and loads nothing from elsewhere (CSP `default-src 'none'`; `test_agent_panel` greps for it).
   - `fleet` (`agent_fleet.py`; `[fleet] hosts`, set only by `fleet add/remove`, refused in a session): pull-only
     over the person's SSH (`ssh -o BatchMode=yes -- <host> 'bash -lc "ws-agent ..."'`, arguments `shlex`-quoted,
     hosts matched against `agent_registry.HOST` so none reads as an option). Remote text goes through `printable`.

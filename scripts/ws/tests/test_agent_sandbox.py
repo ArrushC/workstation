@@ -279,7 +279,7 @@ class ReadScope(Sandbox):
 @unittest.skipUnless(HAVE_BWRAP, "bwrap not installed")
 class WhatTheJobCannotChange(Sandbox):
     def test_the_private_directory_is_out_of_the_jobs_reach(self) -> None:
-        # The publish record decides what serve writes and where; the job's own directory is writable
+        # The publish record decides what serve pushes and where; the job's own directory is writable
         # from in here, so the record lives in a directory that isn't.
         record = self.write(jobs.private_dir("aaa111") / "published.json", "{}")
         code = (f"import os\np = {str(record)!r}\n"

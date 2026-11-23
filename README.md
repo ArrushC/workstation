@@ -615,6 +615,7 @@ ws-agent close <id>          # after review: delete the working copy, keep the r
 ws-agent close --empty       # the same for every succeeded job whose patch is empty
 ws-agent inbox | accept <id> | dismiss <id>   # what a watched source found (below)
 ws-agent ui                  # jobs and the inbox in one fzf list: enter pages a result, alt-t/r/c/x/a/d act
+ws-agent panel open [host]   # the same in a browser, while the command runs (below)
 ws-agent fleet               # the same lists from this host and your other hosts (ws-agent ui --fleet: the picker)
 ws-agent fleet add <host>    # an SSH alias from your ~/.ssh/config; your own terminal only
 ws-agent serve [--once]      # the always-on loop the ws-agent-serve service runs (below)
@@ -641,6 +642,20 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     `git ls-remote origin` and fetched into the object store only: your branches, remote-tracking refs and
     `FETCH_HEAD` stay as they are. Nothing is fetched while `origin` isn't that GitHub repository. A later `/agent` on
     the same issue goes to its open job. Polls use your gh login, read only: nothing is posted back.
+  - `--follow` (GitHub): while a thread's job is open, a comment there by a listed login needs no `/agent`. It
+    answers the job's question if it asked one, otherwise it adds to the request. Nobody else's comment ever
+    reaches a job, nor one posted through an app or a bot account, nor one that was edited or written before
+    the job began. At most 10 a day reach one job. A comment whose first line is `/agent stop` stops the
+    thread's job, with or without `--follow`; on a thread with no open job it does nothing.
+  - `--infer issues` and `--infer ci` (GitHub, with at least one `--rule "…"`): work nobody asked the agent for
+    by name. A new issue by a listed login (never a pull request), and a commit at the tip of the default
+    branch whose push runs failed, pushed by one, become candidates: one per issue, one per commit. They take
+    the path SVN revisions take: your rules, a triage check, then the inbox in `observe` mode or a job in `act`.
+    From when you switch it on: no backlog. Only listed logins' words go into such a job's task. Nothing is
+    acknowledged or asked on an issue nobody addressed to the agent, and talk there isn't a follow-up: a
+    comment starting with `/agent` is. Its result is still published if you switched that on.
+  - `ws-agent history [job | inbox id | #number]` shows what serve decided about each request (queued, in the
+    inbox, ignored by triage, not admitted, and why) and what it wrote for each job.
   - A job made from a source runs on someone else's code (a pull request, any committer's revision). It doesn't
     load that copy's own `.claude` settings (their hooks) or its `.mcp.json`. Jobs you start yourself still do.
   - `unwatch` and `ungithub` stop them.
@@ -681,7 +696,37 @@ ws-agent doctor              # each engine's login and cooldown, the sandbox, pu
     source go out automatically. A job whose reviewer (`--review`) had concerns is left for you. If serve
     gives up on a job (three failures, or a comment that may already have been posted), it tells you once;
     `ws-agent publish <id>` is then yours to run.
+  - `--ack` and `--questions` (GitHub, `auto` only) let serve speak in the thread while a job lives: one
+    comment when a request becomes a job (and one if it is stopped from the thread), and the job's question
+    when it needs an answer, at most 3 per job. Fixed wording that names the job; a question's own text sits in
+    a code fence. Switching either on says nothing about jobs that were already there. A comment that may or
+    may not have been posted is never sent again and holds back the job's later ones: you get a notice, and
+    `ws-agent publish <id> --seen` settles it once you've looked at the thread.
+  - `--pr-updates` (with `--draft-pr`): a job whose draft pull request is open is *delivered* (`ws-agent ls` says
+    so) and, with `github --follow`, followed there:
+    - a comment, a review with words or a review comment by a listed login reaches the job as a follow-up;
+    - failed checks on the commit ws-agent pushed are told to it once per commit, with the end of each failing
+      log beside its copy, at most twice per job;
+    - when it has reworked the change and your checks pass, one more commit goes onto its own `ws-agent/<id>`
+      branch with a short note on the pull request, at most 5 times. Only while that branch's tip at origin is
+      still the commit ws-agent pushed: once anyone else commits to it, nothing more is pushed. Before each push
+      GitHub is asked whether the pull request is still open and still that branch; a push that fails three
+      times is left to you, with one notice (`ws-agent publish <id>` tries again).
+    - when the pull request is merged or closed, the job is closed (its copy removed, its result kept).
+    It never marks a pull request ready, merges it, or resolves a review thread.
   - `ws-agent publish-to <path> --mode off` stops it.
+- **The panel** (`ws-agent panel open`, in your own terminal): prints an address for your browser and serves
+  this host's jobs and inbox there until you press ctrl-c.
+  - It shows, in this order: what waits and for whom (your answer, your review, CI, the engine), what is
+    wrong (nothing when all is well), and one piece of work with its report, changed files, patch, log and
+    what happened to it. A row's `#id` in the address returns to it.
+  - It can do what `ws-agent ui` does: tell or answer, interrupt, cancel, retry, close, accept, dismiss. There is
+    no way in it to start work, to change what agents may touch or where they publish, or to publish.
+  - It listens on a Unix socket in your runtime directory. What your browser opens is a `127.0.0.1` port on
+    the machine you sit at, relayed to that socket: it lets in your own user only, and the address carries a
+    key for that run (kept by the page, never in a cookie). `ws-agent panel open <host>` shows one of your
+    fleet hosts' panels through `ssh -L` between two sockets: nothing is installed or left running there, and
+    it ends when the command does.
 - **serve** (`ws-agent serve`, run by the `dev.mise.ws-agent-serve` user service): every 30 s it
   - resumes interrupted jobs (a reboot, a killed pueued), at most twice per job;
   - requeues jobs waiting for an engine once one is out of its cooldown;
