@@ -4,6 +4,7 @@
     "command": "~/.claude/ccline/ccline"
   },
   "theme": "custom:catppuccin-mocha",
+  "idleCompaction": false,
   "skipAutoPermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "remoteControlAtStartup": true,
