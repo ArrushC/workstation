@@ -22,7 +22,7 @@ Coverage on this host:
 
 | Language | Server |
 |---|---|
-| C / C++ | clangd |
+| C / C++ | clice (`clice serve`) |
 | Rust | rust-analyzer |
 | Python | basedpyright (`basedpyright-langserver`) |
 | JavaScript / TypeScript | typescript-language-server |
@@ -109,6 +109,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `aqua:neovim/neovim` 0.12.5
 - `tree-sitter` 0.27.0
 - `llvm-mingw` 20261006
+- `clice` 1.0.0
 - `cmake` 4.4.4
 - `ninja` 1.13.2
 - `jq` 1.8.2

@@ -1054,9 +1054,10 @@ check_claude_mods() {
 # on every refresh) with no timer and no subagentStatusLine, and dotfiles/claude/ccline/config.toml parses, is the powerline
 # skin on catppuccin-mocha in truecolor with Mocha's own hex colours, never checks for
 # updates (no network from a status line) and has no `cmd` segment (2.0.1 shares its cached
-# output across sessions). clangd
-# is registered once, by workstation-lsp: the official clangd-lsp plugin would start a
-# second clangd for the same files, so the enforced file turns it off.
+# output across sessions). C/C++
+# has one server, workstation-lsp's clice: the official clangd-lsp plugin would start a
+# second one for the same files, so the enforced file turns it off, and config.toml pins
+# the clice that .lsp.json starts.
 check_claude_config() {
   hdr "Claude Code theme, status line, keybindings and plugins (dotfiles/claude)"
   if [ -z "$PY" ]; then
@@ -1167,12 +1168,19 @@ for s in segs:
         if k in s and str(s[k]).lstrip("#").lower() not in mocha:
             bad.append(f"{ccl_path}: {s.get('metric')} {k} = {s[k]!r} is not a Catppuccin Mocha colour")
 lsp = load(f"{d}/skills/workstation-lsp/.lsp.json") or {}
-if any(s.get("command") == "clangd" for s in lsp.values()) and enforced.get("enabledPlugins", {}).get("clangd-lsp@claude-plugins-official") is not False:
-    bad.append("workstation-lsp registers clangd, so settings.enforced.json must set clangd-lsp@claude-plugins-official to false")
+cxx = [s.get("command") for s in lsp.values() if isinstance(s, dict) and ".cpp" in (s.get("extensionToLanguage") or {})]
+if cxx and enforced.get("enabledPlugins", {}).get("clangd-lsp@claude-plugins-official") is not False:
+    bad.append("workstation-lsp registers a C/C++ server, so settings.enforced.json must set clangd-lsp@claude-plugins-official to false")
+if len(cxx) > 1:
+    bad.append(f"workstation-lsp registers {len(cxx)} servers for .cpp ({', '.join(map(str, cxx))}): one only")
+if "clice" in cxx:
+    with open("config.toml", "rb") as f:
+        if "github:clice-io/clice" not in tomllib.load(f).get("tools", {}):
+            bad.append("workstation-lsp starts clice, but config.toml no longer pins github:clice-io/clice (both OSes run that server)")
 for b in bad:
     print("BAD " + b)
 if not bad:
-    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, ccline as the status line with {len(segs)} segments in Mocha, {binds} keybindings in known contexts, clangd registered once")
+    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, ccline as the status line with {len(segs)} segments in Mocha, {binds} keybindings in known contexts, one C/C++ server ({cxx[0] if cxx else 'none'})")
 PY
   )
   while IFS= read -r line; do
