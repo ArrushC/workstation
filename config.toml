@@ -47,6 +47,10 @@ tree-sitter = { version = "0.27.0", os = ["windows"] }
 # C/C++ toolchain on Windows, no admin: clang/clang++ (also as cc, gcc, g++), clangd,
 # clang-format, clang-tidy, lldb-dap, lld, mingw32-make; UCRT, LLVM 23. ~180 MB zip, ~715 MB.
 "github:mstorsjo/llvm-mingw" = { version = "20261006", os = ["windows"], asset_pattern = "llvm-mingw-{{version}}-ucrt-x86_64.zip" }
+# clice: the C/C++ language server workstation-lsp registers (`clice serve`), and Zed's on
+# Linux. The archive keeps its own clang headers in lib/ beside bin/. The gnu build needs
+# glibc 2.16 (EL8 has 2.28); the patterns skip each release's .vsix and .symbols assets.
+"github:clice-io/clice" = { version = "1.0.0", platforms = { linux-x64 = { asset_pattern = "clice-{{version}}.x86_64-unknown-linux-gnu.tar.gz" }, windows-x64 = { asset_pattern = "clice-{{version}}.x86_64-w64-mingw32.zip" } } }
 cmake = { version = "4.4.4", os = ["windows"] }   # Neovim's :Make/:CMakeConfigure (Linux: dnf cmake)
 ninja = { version = "1.13.2", os = ["windows"] }  # CMake's generator (Linux: dnf ninja-build)
 jq = "1.8.2"

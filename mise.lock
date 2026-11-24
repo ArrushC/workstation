@@ -281,6 +281,32 @@ checksum = "sha256:ee5ba25180a8929e34c5b7f4aa20f898369c31c5e5939f68819cda0da1959
 url = "https://github.com/carapace-sh/carapace-bin/releases/download/v1.8.0/carapace-bin_1.8.0_windows_amd64.zip"
 url_api = "https://api.github.com/repos/carapace-sh/carapace-bin/releases/assets/589311077"
 
+[[tools."github:clice-io/clice"]]
+version = "1.0.0"
+backend = "github:clice-io/clice"
+specifiers = ["1.0.0"]
+
+[tools."github:clice-io/clice".options]
+asset_pattern = "clice-{{ version }}.x86_64-unknown-linux-gnu.tar.gz"
+
+[tools."github:clice-io/clice"."platforms.linux-x64"]
+checksum = "sha256:9dd181aac9c81cae76b255e953da21c9e603fc5b406447eb26c95eaf67ed969a"
+url = "https://github.com/clice-io/clice/releases/download/v1.0.0/clice-1.0.0.x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/clice-io/clice/releases/assets/751338015"
+
+[[tools."github:clice-io/clice"]]
+version = "1.0.0"
+backend = "github:clice-io/clice"
+specifiers = ["1.0.0"]
+
+[tools."github:clice-io/clice".options]
+asset_pattern = "clice-{{ version }}.x86_64-w64-mingw32.zip"
+
+[tools."github:clice-io/clice"."platforms.windows-x64"]
+checksum = "sha256:4c236c9aa107f52ecfe958a141690364bb225feb23c9b9d967cfa1911b47dedb"
+url = "https://github.com/clice-io/clice/releases/download/v1.0.0/clice-1.0.0.x86_64-w64-mingw32.zip"
+url_api = "https://api.github.com/repos/clice-io/clice/releases/assets/751338043"
+
 [[tools."github:dandavison/delta"]]
 version = "0.20.1"
 backend = "github:dandavison/delta"

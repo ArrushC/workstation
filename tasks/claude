@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin, the archify skill and ccline links (config.linux.toml's final hook runs it)"
+#MISE description="Linux hosts: Claude Code, its plugins and settings merge, the herdr plugin, the archify skill, ccline and clice links (config.linux.toml's final hook runs it)"
 set -euo pipefail
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation"
@@ -133,4 +133,20 @@ if ccline_dir="$(mise where github:Haleclipse/CCometixLine 2>/dev/null)"; then
   fi
 else
   echo "  ccline not installed (mise install) — status line link skipped (retries next run)" >&2
+fi
+# 8. clice at a fixed path. Zed's settings (dotfiles/config/zed/settings.json) start
+# ~/.local/bin/clice: an editor's server process doesn't have mise's shims on PATH. A link
+# to mise's `latest` clice (github:clice-io/clice in config.toml), which finds its clang
+# headers beside the real binary. A real file there is left alone.
+if clice_dir="$(mise where github:clice-io/clice 2>/dev/null)"; then
+  clice_link="$HOME/.local/bin/clice"
+  clice_target="$(dirname "$clice_dir")/latest/bin/clice"
+  if [ -e "$clice_link" ] && [ ! -L "$clice_link" ]; then
+    echo "  ! $clice_link is not mise's link — left alone (remove it to use the pinned clice)" >&2
+  elif [ "$(readlink "$clice_link" 2>/dev/null)" != "$clice_target" ]; then
+    mkdir -p "$HOME/.local/bin" && ln -sfn "$clice_target" "$clice_link" &&
+      echo "  linked $clice_link -> $clice_target"
+  fi
+else
+  echo "  clice not installed (mise install) — ~/.local/bin/clice link skipped (retries next run)" >&2
 fi
