@@ -80,7 +80,12 @@ go = "1.27.4"
 "go:golang.org/x/tools/gopls" = "0.24.0"
 lua-language-server = "3.19.2"
 "pypi:basedpyright" = "1.40.2"
-"npm:ccstatusline" = "2.2.34"                 # Claude Code statusline; enforced statusLine command becomes plain `ccstatusline`
+# CCometixLine (`ccline`): the Claude Code status line, one static Rust binary (Linux: the musl
+# build) that every refresh starts. settings.enforced.json runs it as ~/.claude/ccline/ccline,
+# which tasks/claude links to this install (Windows: scripts/claude-skills.nu copies it), so
+# no session reaches it through mise's shim (that starts mise per refresh: 1.5 s of CPU
+# against 10 ms). Its config is the ~/.claude/ccline/config.toml entry below.
+"github:Haleclipse/CCometixLine" = { version = "2.0.1", platforms = { linux-x64 = { asset_pattern = "ccline-linux-x64-static.tar.gz" }, windows-x64 = { asset_pattern = "ccline-windows-x64.zip" } } }
 # oh-my-mermaid (`omm`): architecture docs as Mermaid diagrams in a repo's .omm/, written by
 # its Claude Code plugin's /omm-scan (tasks/claude installs the plugin on Linux; Windows:
 # `omm setup claude`). aube refuses it on weekly downloads (<1000): 0.2.0's npm provenance
@@ -149,12 +154,6 @@ JCODE_NO_TELEMETRY = "1"
 "~/.config/atuin/themes/catppuccin-mocha-mauve.toml" = { source = "dotfiles/config/atuin/themes/catppuccin-mocha-mauve.toml", mode = "copy" }
 "~/.config/atuin/config.toml/theme" = { source = "dotfiles/config/atuin/theme.toml", template = "tera" }
 
-# Per-host opt-out: scripts/setup-ccstatusline.sh writes a CCSTATUSLINE-OPTOUT block
-# into config.local.toml's own [dotfiles] table. `enabled = false` alone is silently
-# ignored, so the written entry repeats `mode`. A live edit through ccstatusline's
-# setup menu is recorded back with `wsr` (`mise dot add --changed`).
-"~/.config/ccstatusline/settings.json" = { source = "dotfiles/config/ccstatusline/settings.json", mode = "copy" }
-
 # ~/.claude tree. Directory mode 700 is restored by the post-dotfiles hook
 # (config.linux.toml), since copy can't express a directory's mode. settings.json is
 # merged by scripts/lib/claude-settings-merge.sh and settings.local.json is seeded if
@@ -173,6 +172,10 @@ JCODE_NO_TELEMETRY = "1"
 # the directory so a theme made in /theme survives; a live keybindings edit goes back with wsr.
 "~/.claude/themes" = { source = "dotfiles/claude/themes", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 "~/.claude/keybindings.json" = { source = "dotfiles/claude/keybindings.json", mode = "copy" }
+# The status line's config (ccline reads ~/.claude/ccline on both OSes and keeps its runtime
+# state in state/ beside it, which stays unmanaged, as does the ccline link or copy there). Edit the source (`wse`), not through
+# `ccline -c`: that screen can also rewrite ~/.claude/settings.json's statusLine.
+"~/.claude/ccline/config.toml" = { source = "dotfiles/claude/ccline/config.toml", mode = "copy" }
 # jcode's file opt-out from telemetry ([env]'s JCODE_NO_TELEMETRY covers what mise launches):
 # jcode only checks that ~/.jcode/no_telemetry exists. `jcode telemetry enable` deletes it,
 # which `wss` then reports and the next `wsa` restores.

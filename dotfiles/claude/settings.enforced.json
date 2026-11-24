@@ -1,8 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "ccstatusline",
-    "refreshInterval": 10
+    "command": "~/.claude/ccline/ccline"
   },
   "theme": "custom:catppuccin-mocha",
   "skipAutoPermissionPrompt": true,
