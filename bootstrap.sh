@@ -26,9 +26,7 @@ RESET=$'\033[0m'
 # Some environments (containers, cron) leave USER unset; set -u would then abort the
 # login-shell step and the closing tips after everything had installed.
 USER="${USER:-$(id -un)}"
-# Set by apply (this host's first dotfiles apply) and set_login_shell (the shell was
-# switched this run); they decide the one-time status-line menu and closing tip.
-FIRST_APPLY=false
+# Set by set_login_shell (the shell was switched this run); it decides the closing tip.
 SHELL_CHANGED=false
 
 log() { echo -e "${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
@@ -349,7 +347,6 @@ apply() {
   local marker="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/dotfiles-first-apply-done"
   local dotfiles_flags=()
   if [[ ! -f "$marker" ]]; then
-    FIRST_APPLY=true
     dotfiles_flags=(--force-dotfiles)
     log "First dotfiles apply on this host — passing --force-dotfiles (marker absent: $marker)"
   fi
@@ -476,8 +473,6 @@ print_next_steps() {
     echo -e "Enable passwordless SSH from your client:"
     echo -e "  ${YELLOW}ssh-copy-id $(whoami)@$(hostname -s)${RESET}  (Linux/WSL, and Windows via the PowerShell profile's ssh-copy-id)"
   fi
-  echo -e "Re-configure the Claude Code statusline any time:"
-  echo -e "  ${YELLOW}mise run statusline${RESET}"
   echo -e "Health check any time: ${YELLOW}mise run health${RESET}"
 }
 
@@ -599,14 +594,6 @@ main() {
   apply
   if [[ "$SYSTEM" == yes ]]; then
     set_login_shell
-  fi
-
-  # The Claude Code status line menu, once per host (its first dotfiles apply);
-  # `mise run statusline` re-runs it any time. It reads /dev/tty, so it works
-  # under `curl | bash` too; without a terminal it is skipped.
-  if [[ "$FIRST_APPLY" == true ]] && open_prompt_fd; then
-    { exec 3<&-; } 2>/dev/null || true
-    mise run statusline </dev/tty || true
   fi
 
   print_next_steps

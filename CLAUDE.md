@@ -38,7 +38,7 @@
 | File | Loads on | Holds |
 |---|---|---|
 | `config.toml` | every host | both-OS tools (Windows-only ones carry `os = ["windows"]`), `~/.claude` and atuin dotfiles, `[vars]` |
-| `config.linux.toml` | Linux | Linux toolbelt and dotfiles, dnf batch, `/etc/wsl.conf`, the `pre-packages` (EPEL/CRB) to `final` hooks, `statusline`/`enable-el-repos` tasks, the pueued service |
+| `config.linux.toml` | Linux | Linux toolbelt and dotfiles, dnf batch, `/etc/wsl.conf`, the `pre-packages` (EPEL/CRB) to `final` hooks, the `enable-el-repos` task, the pueued service |
 | `config.windows.toml` | Windows | Windows-only dotfiles; winget GUI apps (`[bootstrap.packages]`) |
 | `config.local.toml` | every host, git-ignored | per-host `[vars] name/email/sudo` and overrides |
 
@@ -155,6 +155,14 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   (always wins). Change cross-host keys in the enforced file. The merge replaces arrays wholesale, so the enforced file
   never adds a hook event (it would erase the live one, e.g. herdr's `SessionStart`): a global command
   hook ships as the `workstation-orchestration` plugin.
+- The status line is ccline (`github:Haleclipse/CCometixLine`, the static build on Linux): the enforced
+  command is `~/.claude/ccline/ccline` with no `refreshInterval`, its config the `copy` entry
+  `~/.claude/ccline/config.toml` (`check_claude_config`). Never plain `ccline`: a session whose PATH
+  lacks the install directory runs mise's shim, 1.5 s of CPU a refresh against 10 ms. `tasks/claude`
+  links the binary to mise's `latest`; Windows copies it (`scripts/claude-skills.nu`). `state/` beside
+  it is ccline's own: never managed. No setup task and no `ccline -c` in a script: its Claude Code page rewrites `settings.json`.
+  No `cmd` segment before a release carries upstream `1749ff8` (2.0.1 shares its cache across
+  sessions), no `ccline mod install`, no `subagentStatusLine`.
 - `/etc` files come from `configs/` via `[bootstrap.files]`. Today that is only `/etc/wsl.conf`, which
   keeps `appendWindowsPath=false` and stays LF-only (CRLF corrupts it). `[dotfiles]` owns `$HOME` only.
 - `dotfiles/ssh/config.tera` gates SSH multiplexing out on Windows (its OpenSSH lacks it).
@@ -401,7 +409,6 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
     with the pin. Linux only: `config.toml`'s `~/.claude/skills` entry excludes it.
 - **Generated blocks (never edit inside):**
   - `<!-- TOOLS:START/END -->` in `dotfiles/claude/CLAUDE.md`, from `scripts/gen-tool-memory.sh`
-  - `# CCSTATUSLINE-OPTOUT:START/END` in `config.local.toml`, from `scripts/setup-ccstatusline.sh`
   - `disk-budget.toml`, from `.github/workflows/disk-budget.yml`
 - **Parity pairs (change them together):**
   - `zshrc.tera` ↔ `bashrc.tera` (their `ws()` bodies differ only in `WS_SHELL` and the prompt

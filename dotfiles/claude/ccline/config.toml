@@ -1,0 +1,26 @@
+version = 2
+palette = "catppuccin-mocha"
+skin = "powerline"
+fill = "solid"
+glyphs = "nerd"
+color_depth = "truecolor"
+
+[powerline]
+join = "arrow"
+end = "flat"
+
+[layout]
+reserve = 40
+
+[update]
+check = false
+
+[[line]]
+left = [
+  { metric = "dir", icon = "", format = "cwd: {path}", compact = "cwd: {path}", minimal = "cwd: {path}", color = "#cba6f7", fg = "#1e1e2e", options = { style = "full" } },
+  { metric = "model", icon = "", format = "Model: {name}", compact = "Model: {name}", minimal = "Model: {name}", color = "#45475a", fg = "#cdd6f4", options = { effort = false } },
+  { metric = "model", icon = "", format = "Thinking: {effort}", compact = "Thinking: {effort}", minimal = "Thinking: {effort}", color = "#a6e3a1", fg = "#1e1e2e" },
+  { metric = "context", widget = "text", icon = "", format = "Context Used: {pct}%[ ({tokens}/{window})]", compact = "Context Used: {pct}%", minimal = "Context Used: {pct}%", color = "#f38ba8", fg = "#1e1e2e", levels = [] },
+  { metric = "quota.5h", widget = "text", format = "{pct}% used[ · resets {reset}]", compact = "{pct}% used", minimal = "{pct}% used", icon = "5h:", color = "#fab387", fg = "#1e1e2e", levels = [] },
+  { metric = "quota.7d", widget = "text", format = "{pct}% used[ · resets {reset}]", compact = "{pct}% used", minimal = "{pct}% used", icon = "7d:", color = "#f9e2af", fg = "#1e1e2e", levels = [] },
+]

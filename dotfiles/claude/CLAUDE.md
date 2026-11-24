@@ -134,7 +134,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gopls` 0.24.0
 - `lua-language-server` 3.19.2
 - `basedpyright` 1.40.2
-- `ccstatusline` 2.2.34
+- `CCometixLine` 2.0.1
 - `oh-my-mermaid` 0.2.0
 - `archify` 3.2.0
 - `nerd-fonts` 3.5.1

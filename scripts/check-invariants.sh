@@ -432,7 +432,6 @@ check_sentinels() {
   hdr "sentinel blocks matched"
   local s e
   # Anchor to a whole marker line: prose that merely mentions the token must not count.
-  # The per-host CCSTATUSLINE-OPTOUT block lives in git-ignored config.local.toml: nothing tracked to assert.
   s=$(grep -cE '<!-- TOOLS:START' dotfiles/claude/CLAUDE.md)
   e=$(grep -cE '<!-- TOOLS:END -->' dotfiles/claude/CLAUDE.md)
   if [ "$s" = "1" ] && [ "$e" = "1" ]; then
@@ -1049,12 +1048,17 @@ check_claude_mods() {
 # action names and keys it can rebind. A token left out keeps the base theme's colour, so
 # a theme that sets a colour sets its shimmer too (or the animation flashes the base's
 # colour), and one that sets the accent sets the logo's (or the logo stays orange). The
-# status line matches: ccstatusline's built-in catppuccin powerline theme, at colorLevel 3,
-# whose row is Mocha's own hex colours (levels 1 and 2 are ANSI approximations). clangd
+# status line is ccline (CCometixLine), which draws its default preset plus `! config` when
+# it can't use its config: the enforced command is ~/.claude/ccline/ccline (tasks/claude's
+# link, claude-skills.nu's copy; plain `ccline` can resolve to mise's shim, which starts mise
+# on every refresh) with no timer and no subagentStatusLine, and dotfiles/claude/ccline/config.toml parses, is the powerline
+# skin on catppuccin-mocha in truecolor with Mocha's own hex colours, never checks for
+# updates (no network from a status line) and has no `cmd` segment (2.0.1 shares its cached
+# output across sessions). clangd
 # is registered once, by workstation-lsp: the official clangd-lsp plugin would start a
 # second clangd for the same files, so the enforced file turns it off.
 check_claude_config() {
-  hdr "Claude Code theme, status line, keybindings and plugins (dotfiles/claude, ccstatusline)"
+  hdr "Claude Code theme, status line, keybindings and plugins (dotfiles/claude)"
   if [ -z "$PY" ]; then
     note "no python with tomllib on PATH — skipped"
     return 0
@@ -1062,7 +1066,7 @@ check_claude_config() {
   local out line
   out=$(
     "$PY" - <<'PY' 2>&1
-import glob, json, os, re
+import glob, json, os, re, tomllib
 d = "dotfiles/claude"
 bad = []
 def load(p):
@@ -1131,17 +1135,44 @@ if kb is not None:
                 *m, key = s.split("+")
                 if not key or set(m) - mods:
                     bad.append(f"{kb_path}: {keys!r} is not a keystroke Claude Code reads")
-ccs_path = "dotfiles/config/ccstatusline/settings.json"
-ccs = load(ccs_path) or {}
-if (ccs.get("powerline") or {}).get("theme") != "catppuccin" or ccs.get("colorLevel") != 3:
-    bad.append(f"{ccs_path}: the status line wants powerline.theme \"catppuccin\" at colorLevel 3 (Mocha's hex colours)")
+sl = enforced.get("statusLine") or {}
+if sl != {"type": "command", "command": "~/.claude/ccline/ccline"}:
+    bad.append(f'settings.enforced.json: statusLine is {sl!r}, not the ~/.claude/ccline/ccline command (never plain `ccline`: mise\'s shim; no refreshInterval: nothing on the line is a clock)')
+for f, what in (("tasks/claude", ".claude/ccline/ccline"), ("scripts/claude-skills.nu", "ccline.exe")):
+    if what not in open(f, encoding="utf-8").read():
+        bad.append(f"{f} no longer puts ccline at ~/.claude/ccline, where the enforced status line command runs it")
+if "subagentStatusLine" in enforced:
+    bad.append("settings.enforced.json: subagentStatusLine isn't part of this setup")
+ccl_path = f"{d}/ccline/config.toml"
+try:
+    ccl = tomllib.load(open(ccl_path, "rb"))
+except (OSError, ValueError) as e:
+    ccl = {}
+    bad.append(f"{ccl_path}: {e}")
+want = {"palette": "catppuccin-mocha", "skin": "powerline", "color_depth": "truecolor"}
+for k, v in want.items():
+    if ccl and ccl.get(k) != v:
+        bad.append(f"{ccl_path}: {k} = {ccl.get(k)!r}, the status line wants {v!r}")
+if ccl and (ccl.get("update") or {}).get("check") is not False:
+    bad.append(f"{ccl_path}: [update] check must be false (a status line makes no network calls)")
+mocha = set("""f5e0dc f2cdcd f5c2e7 cba6f7 f38ba8 eba0ac fab387 f9e2af a6e3a1 94e2d5 89dceb 74c7ec 89b4fa b4befe
+cdd6f4 bac2de a6adc8 9399b2 7f849c 6c7086 585b70 45475a 313244 1e1e2e 181825 11111b""".split())
+segs = [s for l in ccl.get("line") or [] for side in ("left", "right") for s in l.get(side) or []]
+if ccl and not segs:
+    bad.append(f"{ccl_path}: no [[line]] segments")
+for s in segs:
+    if str(s.get("metric", "")).split(".")[0] == "cmd":
+        bad.append(f"{ccl_path}: a cmd segment (ccline 2.0.1 shares its cached output across sessions)")
+    for k in ("color", "fg"):
+        if k in s and str(s[k]).lstrip("#").lower() not in mocha:
+            bad.append(f"{ccl_path}: {s.get('metric')} {k} = {s[k]!r} is not a Catppuccin Mocha colour")
 lsp = load(f"{d}/skills/workstation-lsp/.lsp.json") or {}
 if any(s.get("command") == "clangd" for s in lsp.values()) and enforced.get("enabledPlugins", {}).get("clangd-lsp@claude-plugins-official") is not False:
     bad.append("workstation-lsp registers clangd, so settings.enforced.json must set clangd-lsp@claude-plugins-official to false")
 for b in bad:
     print("BAD " + b)
 if not bad:
-    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, the status line in catppuccin, {binds} keybindings in known contexts, clangd registered once")
+    print(f"OK {len(themes)} theme(s) with known tokens, valid colours, every shimmer and the logo, the enforced {theme or 'default'} theme present, ccline as the status line with {len(segs)} segments in Mocha, {binds} keybindings in known contexts, clangd registered once")
 PY
   )
   while IFS= read -r line; do
