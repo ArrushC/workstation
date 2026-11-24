@@ -158,11 +158,13 @@
   },
   "languages": {
     "C++": {
+      "language_servers": ["clice", "!clangd", "..."],
       "ensure_final_newline_on_save": false,
       "remove_trailing_whitespace_on_save": false,
       "format_on_save": "off",
     },
     "C": {
+      "language_servers": ["clice", "!clangd", "..."],
       "ensure_final_newline_on_save": false,
       "remove_trailing_whitespace_on_save": false,
       "format_on_save": "off",
@@ -234,16 +236,9 @@
     "dark": "Catppuccin Mocha",
   },
   "lsp": {
-    "clangd": {
+    "clice": {
       "binary": {
-        "arguments": [
-          "--background-index-priority=low",
-          "--background-index",
-          "--header-insertion=never",
-          "--completion-style=detailed",
-          "--pch-storage=disk",
-          "--malloc-trim",
-        ],
+        "arguments": ["serve"],
       },
     },
   },
