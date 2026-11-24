@@ -8,17 +8,15 @@
 // changes back into the tracked source, or edit the source directly with
 // `mise dot edit ~/.config/zed/settings.json` (wse) and re-apply with `wsa`.
 {
+  "languages": {
+    "C": { "language_servers": ["clice", "!clangd", "..."] },
+    "C++": { "language_servers": ["clice", "!clangd", "..."] }
+  },
   "lsp": {
-    "clangd": {
+    "clice": {
       "binary": {
-        "arguments": [
-          "--background-index-priority=low",
-          "--background-index",
-          "--header-insertion=never",
-          "--completion-style=detailed",
-          "--pch-storage=disk",
-          "--malloc-trim"
-        ]
+        "path": "/home/arrush.chaturvedi/.local/bin/clice",
+        "arguments": ["serve"]
       }
     },
     "jdtls": {
