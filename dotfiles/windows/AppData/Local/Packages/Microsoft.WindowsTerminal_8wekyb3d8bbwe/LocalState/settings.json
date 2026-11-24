@@ -1,10 +1,10 @@
 {
     "$help": "https://aka.ms/terminal-documentation",
     "$schema": "https://aka.ms/terminal-profiles-schema",
-    "actions": 
+    "actions":
     [
         {
-            "command": 
+            "command":
             {
                 "action": "copy",
                 "singleLine": false
@@ -12,7 +12,11 @@
             "id": "User.copy.644BA8F2"
         },
         {
-            "command": 
+            "command": "paste",
+            "id": "User.paste"
+        },
+        {
+            "command":
             {
                 "action": "moveFocus",
                 "direction": "right"
@@ -20,15 +24,7 @@
             "id": "User.moveFocus.right"
         },
         {
-            "command": "paste",
-            "id": "User.paste"
-        },
-        {
-            "command": "find",
-            "id": "User.find"
-        },
-        {
-            "command": 
+            "command":
             {
                 "action": "splitPane",
                 "split": "down",
@@ -37,7 +33,11 @@
             "id": "User.splitPane.A6751878"
         },
         {
-            "command": 
+            "command": "find",
+            "id": "User.find"
+        },
+        {
+            "command":
             {
                 "action": "splitPane",
                 "split": "right",
@@ -46,7 +46,7 @@
             "id": "User.splitPane.right"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "moveFocus",
                 "direction": "up"
@@ -54,7 +54,7 @@
             "id": "User.moveFocus.up"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "moveFocus",
                 "direction": "left"
@@ -62,7 +62,7 @@
             "id": "User.moveFocus.left"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "moveFocus",
                 "direction": "down"
@@ -74,7 +74,7 @@
             "id": "User.togglePaneZoom"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "adjustFontSize",
                 "delta": 1
@@ -82,7 +82,7 @@
             "id": "User.adjustFontSize.inc"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "adjustFontSize",
                 "delta": -1
@@ -94,7 +94,7 @@
             "id": "User.resetFontSize"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "scrollToMark",
                 "direction": "previous"
@@ -102,7 +102,7 @@
             "id": "User.scrollToMark.prev"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "scrollToMark",
                 "direction": "next"
@@ -110,21 +110,40 @@
             "id": "User.scrollToMark.next"
         },
         {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "wsd"
+            },
+            "id": "User.snippet.wsd",
+            "name": "Snippet: mise dotfiles diff"
+        },
+        {
             "command": "toggleBroadcastInput",
             "id": "User.toggleBroadcastInput"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "showSuggestions",
-                "source": 
+                "source":
                 [
+                    "tasks",
                     "tasks",
                     "commandHistory"
                 ],
                 "useCommandline": true
             },
             "id": "User.showSuggestions"
+        },
+        {
+            "command":
+            {
+                "action": "sendInput",
+                "input": "cd ~/.config/mise && ./bootstrap.sh"
+            },
+            "id": "User.snippet.makedev",
+            "name": "Snippet: full bootstrap (WSL)"
         },
         {
             "command":
@@ -148,28 +167,10 @@
             "command":
             {
                 "action": "sendInput",
-                "input": "wsd"
-            },
-            "id": "User.snippet.wsd",
-            "name": "Snippet: mise dotfiles diff"
-        },
-        {
-            "command":
-            {
-                "action": "sendInput",
                 "input": "wss"
             },
             "id": "User.snippet.wss",
             "name": "Snippet: mise dotfiles status"
-        },
-        {
-            "command":
-            {
-                "action": "sendInput",
-                "input": "cd ~/.config/mise && ./bootstrap.sh"
-            },
-            "id": "User.snippet.makedev",
-            "name": "Snippet: full bootstrap (WSL)"
         },
         {
             "command":
@@ -181,7 +182,7 @@
             "name": "Snippet: lint + invariants (WSL)"
         },
         {
-            "command": 
+            "command":
             {
                 "action": "sendInput",
                 "input": "zellij attach --create main"
@@ -194,24 +195,16 @@
     "copyFormatting": "none",
     "copyOnSelect": true,
     "defaultProfile": "{a1337c9f-08c3-5ee9-ad61-dcc130796eb6}",
-    "disabledProfileSources": 
+    "disabledProfileSources":
     [
         "Windows.Terminal.SSH"
     ],
-    "firstWindowPreference": "persistedWindowLayout",
-    "keybindings": 
+    "firstWindowPreference": "persistedLayoutAndContent",
+    "keybindings":
     [
         {
             "id": "User.copy.644BA8F2",
             "keys": "ctrl+c"
-        },
-        {
-            "id": "User.moveFocus.up",
-            "keys": "alt+shift+up"
-        },
-        {
-            "id": "User.splitPane.right",
-            "keys": "alt+shift+r"
         },
         {
             "id": "User.togglePaneZoom",
@@ -226,6 +219,18 @@
             "keys": "ctrl+shift+f"
         },
         {
+            "id": "User.splitPane.right",
+            "keys": "alt+shift+r"
+        },
+        {
+            "id": "User.moveFocus.up",
+            "keys": "alt+shift+up"
+        },
+        {
+            "id": "User.splitPane.A6751878",
+            "keys": "alt+shift+d"
+        },
+        {
             "id": "User.adjustFontSize.dec",
             "keys": "ctrl+minus"
         },
@@ -234,8 +239,8 @@
             "keys": "ctrl+plus"
         },
         {
-            "id": "User.splitPane.A6751878",
-            "keys": "alt+shift+d"
+            "id": "User.scrollToMark.prev",
+            "keys": "ctrl+up"
         },
         {
             "id": "User.moveFocus.left",
@@ -254,10 +259,6 @@
             "keys": "ctrl+0"
         },
         {
-            "id": "User.scrollToMark.prev",
-            "keys": "ctrl+up"
-        },
-        {
             "id": "User.scrollToMark.next",
             "keys": "ctrl+down"
         },
@@ -270,27 +271,27 @@
             "keys": "alt+shift+s"
         }
     ],
-    "newTabMenu": 
+    "newTabMenu":
     [
         {
             "type": "remainingProfiles"
         }
     ],
-    "profiles": 
+    "profiles":
     {
-        "defaults": 
+        "defaults":
         {
             "adjustIndistinguishableColors": "indexed",
             "antialiasingMode": "grayscale",
             "autoMarkPrompts": true,
-            "bellStyle": 
+            "bellStyle":
             [
                 "audible",
                 "taskbar"
             ],
             "colorScheme": "Catppuccin Mocha",
             "cursorShape": "bar",
-            "font": 
+            "font":
             {
                 "face": "JetBrainsMono NFM",
                 "size": 10.5
@@ -300,7 +301,7 @@
             "showMarksOnScrollbar": true,
             "useAcrylic": false
         },
-        "list": 
+        "list":
         [
             {
                 "altGrAliasing": true,
@@ -343,7 +344,7 @@
                 "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nologo",
                 "cursorShape": "bar",
                 "elevate": true,
-                "font": 
+                "font":
                 {
                     "face": "Cascadia Mono",
                     "size": 12
@@ -372,7 +373,7 @@
             }
         ]
     },
-    "schemes": 
+    "schemes":
     [
         {
             "background": "#1E1E2E",
@@ -399,23 +400,23 @@
         }
     ],
     "theme": "Catppuccin Mocha",
-    "themes": 
+    "themes":
     [
         {
             "name": "Catppuccin Mocha",
-            "tab": 
+            "tab":
             {
                 "background": "#1E1E2EFF",
                 "iconStyle": "monochrome",
                 "showCloseButton": "always",
                 "unfocusedBackground": null
             },
-            "tabRow": 
+            "tabRow":
             {
                 "background": "#181825FF",
                 "unfocusedBackground": "#11111BFF"
             },
-            "window": 
+            "window":
             {
                 "applicationTheme": "dark",
                 "experimental.rainbowFrame": false,

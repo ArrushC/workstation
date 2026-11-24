@@ -13,6 +13,9 @@
 // `mise dot edit ~/AppData/Roaming/Zed/settings.json` (wse) and re-apply
 // with `wsa`.
 {
+  "markdown_preview": {
+    "limit_content_width": false
+  },
   "git": {
     "inline_blame": {
       "location": "status_bar"
