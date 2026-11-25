@@ -866,6 +866,15 @@ specifiers = ["0"]
 checksum = "blake3:53f18c19b18a81e8327cf8a9eee5553e1d535c6b66430cd73b0f479c44ef1d10"
 url = "https://cht.sh/:cht.sh"
 
+[[tools."http:herdr-core"]]
+version = "0.1.22"
+backend = "http:herdr-core"
+specifiers = ["0.1.22"]
+
+[tools."http:herdr-core"."platforms.linux-x64"]
+checksum = "blake3:0300782f833b539a0d42af9d60209e30f2199f3356c173423e25c62bb55781f8"
+url = "https://releases.herdr.dev/core/0.1.22/herdr-core-linux-x86_64.tar.gz"
+
 [[tools."http:nb"]]
 version = "7.25.5"
 backend = "http:nb"

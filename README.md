@@ -14,7 +14,7 @@ One entry script per OS (`bootstrap.sh`, `bootstrap.ps1`) installs a pinned mise
 | `mise bootstrap` | Host state from `[bootstrap.*]` tables: dnf packages, `/etc` files, services, repos, dotfiles, then the tools and the `bootstrap` task. |
 | `mise dot` (`[dotfiles]`) | Personal config under `$HOME`, templated per machine. Every deployed file is an independent copy, never a symlink into the checkout. |
 | starship, zsh plugins, fzf, zoxide | Prompt, completion, fuzzy find and directory jumping. |
-| zellij | Persistent sessions; runs on the remote host so a dropped SSH tab loses nothing. |
+| herdr-core (`hc`) | Shells that keep running on the remote host, so a dropped SSH tab loses nothing; the Herdr app on Windows lists and opens the same ones. |
 | helix | Modal editor and `$EDITOR`, unless the shell inherits one, as a `ws open` workspace's panes do (`dotfiles/config/helix`). It uses Catppuccin Mocha with the mauve accent and the same clangd flags as Neovim. clang-format runs on save only where the project has a `.clang-format`. Files auto-save 3 s after an edit, and yanks copy over OSC 52 on Linux (the Windows clipboard on Windows). |
 | Warp, Windows Terminal, WezTerm | The Windows terminals (see [Terminals](#terminals-warp-windows-terminal-and-wezterm)). |
 
@@ -99,7 +99,7 @@ curl -fsSL https://raw.githubusercontent.com/ArrushC/workstation/main/bootstrap.
 
 `mise run check-updates` runs `mise outdated --bump` for every pinned tool, `dnf check-update` on Linux hosts, and `git ls-remote` for the `[vars]` pins. Tools tracking `latest` (the `pypi:` tools) are reported as rolling. It only reports; the weekly bump workflow (see [Adding things](#adding-things)) does the bumping.
 
-**Extras.** On native (non-WSL) Linux hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins, settings merge and herdr plugin run from `tasks/claude`, a `final` hook in `config.linux.toml`, so they run on Linux hosts only and only on a full `mise bootstrap` (not `ws apply`). Re-run with `mise run fonts` or `mise run claude`.
+**Extras.** On native (non-WSL) Linux hosts the `fonts` task installs JetBrainsMono Nerd Font Mono to `~/.local/share/fonts/JetBrainsMonoNerdFontMono/` (needed for glyphs in starship, eza, lazygit, yazi, helix); WSL hosts skip it because Windows Terminal reads Windows-registered fonts. The Claude Code installer, plugins and settings merge run from `tasks/claude`, a `final` hook in `config.linux.toml`, so they run on Linux hosts only and only on a full `mise bootstrap` (not `ws apply`). Re-run with `mise run fonts` or `mise run claude`.
 
 ### Windows
 
@@ -158,7 +158,7 @@ A mise version bump reaches Windows through `ws update`'s pull, but the installe
 
 Windows Terminal's `settings.json` (Catppuccin Mocha, Nushell default profile) is a tracked `copy` dotfile deployed straight to the Store package's `LocalState`. Warp's `settings.toml` and `keybindings.yaml` (`%LOCALAPPDATA%\warp\Warp\config\`) and theme (`%APPDATA%\warp\Warp\data\themes\`) are tracked too. Both apps rewrite their own files, so record changes made in their UIs with `ws record`. The generated parts are separate: Warp `workstation-*.toml` Tab Configs in `%APPDATA%\warp\Warp\data\tab_configs\`, and the Windows Terminal fragment under `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\workstation\`. Your own Tab Configs and profiles are never touched.
 
-**SSH host launchers.** Every concrete `Host` alias in the git-ignored `~/.ssh/config.local` becomes an `SSH: <alias>` Warp Tab Config and Windows Terminal profile that runs `ssh -t <alias> zellij attach --create main`. Patterns and `!` negations are skipped. WezTerm lists the same hosts in its launcher, and CTRL+ALT+S there adds, edits or deletes one without opening the file (see [Terminals](#terminals-warp-windows-terminal-and-wezterm)). Re-run `.\bootstrap.ps1` after a change, by hand or from WezTerm, then restart Warp or Windows Terminal.
+**SSH host launchers.** Every concrete `Host` alias in the git-ignored `~/.ssh/config.local` becomes an `SSH: <alias>` Warp Tab Config and Windows Terminal profile that runs `ssh -t <alias> hcs main` (the host's kept herdr-core shell; see [herdr-core](#herdr-core) below; the host needs this repo's `ws update` first, which installs `hc` and `hcs`). Patterns and `!` negations are skipped. WezTerm lists the same hosts in its launcher, and CTRL+ALT+S there adds, edits or deletes one without opening the file (see [Terminals](#terminals-warp-windows-terminal-and-wezterm)). Re-run `.\bootstrap.ps1` after a change, by hand or from WezTerm, then restart Warp or Windows Terminal.
 
 Example: `Host build1` with `HostName build1.example.com` in `%USERPROFILE%\.ssh\config.local`.
 
@@ -304,7 +304,19 @@ mise run python-env --rebuild   # Linux: repair from the committed lock
 
 Superseded generations stay for rollback: reverting a lock change (same runtime and `tool-env.py`) republishes its kept generation without a download. Updates also leave the previous mise runtimes installed, because a kept generation may still run on them. Reclaim both once the new environments work: `mise run tool-env --clean` (Windows: `mise run tool-env-win --clean`) syncs, deletes every generation but the published one, then runs `mise prune`. If a generation can't be deleted (usually something still runs from it on Windows), it names it, exits 1 and skips `mise prune`, so the generations left on disk keep their runtimes; run it again later. `mise -C ~ x -- python3 ~/.config/mise/scripts/tool-env.py status` (the health report's "dependency envs" row) says what is published and what `--clean` would remove.
 
-**Zellij.** Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `ws open` does this per project, in the project's directory, with a session of its own for each worktree (below). `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
+<a id="herdr-core"></a>**herdr-core (`hc`).** Each Linux host keeps its shells in [herdr-core](https://github.com/herdrdev/herdr-core), a small per-user service: a shell there outlives the terminal, the SSH connection and the app that showed it. It replaced zellij and the herdr TUI.
+
+- **Connect:** `ssh -t <user>@<host> hcs main` (what the SSH launchers run). `hcs [name]` attaches to the kept shell of that name, starting it first when there is none; `main` is the default. CTRL+\ detaches and leaves it running. Typing `exit` ends it.
+- **More than one:** herdr-core draws nothing, so the terminal's own tabs and splits are the panes. In WezTerm, a new tab or split from an SSH tab is a shell of its own on that host (`hcs --new`). Bare `hc` lists every live terminal and attaches to the one you pick; `hc ls` only lists.
+- **Projects:** `ws open` gives each project a kept shell of its own, in its directory (below).
+- **Scrollback and clipboard:** `hcs` prints the shell's last 1000 lines when it attaches (`HCS_HISTORY` changes that), so the terminal can scroll back over them; `hc read main --lines 5000 | hx` opens more in helix. OSC 52 copies, the working directory (OSC 7), titles and notifications pass through to the terminal.
+- **Something that should keep going:** `hc run --bg --name build mise run build`, then `hc attach build` or `hc read build --lines 200`.
+- **After a reboot** (or a stopped core) a kept shell comes back as a fresh shell under the same name; the programs that ran in it don't. herdr-core turns on lingering so it outlives your last logout; where it can't, `hc server status` says so and names the `loginctl enable-linger` command.
+- **Install:** mise pins the release (`http:herdr-core`, checksum in `mise.linux.lock`) and `mise run herdr-core` (the `final` hook) copies it to `~/.local/bin/herdr-core` with `hc` beside it, swapping a running one without ending its shells. `mise run health` has a row for it.
+
+**Herdr app (Windows).** [Herdr](https://herdr.dev) is the desktop app over the same terminals. The post-tools hook (`bootstrap.ps1`, `ws update`) installs it and herdr-core for Windows per-user, with no UAC prompt, only when they are missing (`scripts/herdr-app.ps1`: it checks each download against the SHA-256 in Herdr's release manifest and runs nothing it downloads); from then on the app updates itself and keeps herdr-core current. Open it from the Start menu. Add a Linux host in the app's add-machine dialog (it lists the hosts in your SSH config), or with `hc machine add <ssh host>`; for the WSL distro, in pwsh 7: `hc machine add --via 'wsl.exe -d AlmaLinux-9 -e sh -c' --name wsl`. The host's `main` shell is then the one the SSH launchers attach. Machines and the app's settings are its own state; the repo leaves them alone. If it can't install, it prints `herdr: ... was not installed: <reason>` and the bootstrap carries on.
+
+**Zellij (not installed).** zellij, its zjstatus bar and the herdr TUI are commented out in `config.linux.toml`; their configs stay tracked and deployed (`~/.config/zellij`, `~/.config/herdr/config.toml`), and the `zs` / `zr` functions, layouts and `ws open`'s zellij mode still work wherever zellij is installed. To bring it back: uncomment the `zellij` and `github:dj95/zjstatus` pins (both; `herdr` for the TUI), run `mise lock` and `ws update`, and set `mux = "zellij"` in `ws open --prefs` if `ws open` should use it. The rest of this paragraph and the zellij entries under Troubleshooting describe that setup. Connect with `ssh -t <user>@<host> zellij attach --create main`. `zs` attaches to (or creates) the `main` session, `zs <session>` a named one, `zs <session> dev` (or `zellij -l dev`) opens an editor pane left with terminal and run panes stacked right, and `zs <session> ops` puts btop on top with lazyjournal and a shell below. The layout applies only when the session is created. `ws open` does this per project, in the project's directory, with a session of its own for each worktree (below). `zr <cmd>` runs a command in a floating pane (`zr lazygit`; bare `zr` gives a floating shell). The top bar is the zjstatus plugin (mode badge, numbered tabs, session name); the first session on a host asks once for its permission (press Y). Sessions, including 10 000 lines of scrollback, survive a reboot under `~/.cache/zellij/`; the config warns that this cache may hold secrets and is protected only by being user-owned and mode 700 (drop `serialize_pane_viewport` if you do not want that). Config changes need a new session: `zellij kill-session main`, then reattach.
 
 | Bind | Action |
 |---|---|
@@ -391,7 +403,7 @@ Plugins install only from the `nvim-plugins` task (the `final` hook, so `ws upda
 | `ws reconcile --record`/`--apply`/`--merge <path>...` | Act on files from the command line (it shows the diff and asks; `--yes` doesn't ask) |
 | `ws reconcile --backups` | Every backup ws made, with the command that restores each file |
 | `ws apply` | What `ws apply` runs: apply the repo's dotfiles, asking first when that would overwrite a local edit (options go to `mise bootstrap`) |
-| `ws open [project]` | Attach to a project's zellij session, resurrect it, or create it (Windows: change to the project) |
+| `ws open [project]` | Attach to a project's kept shell (herdr-core), or start it (Windows: change to the project) |
 | `ws open --list` / `--prefs` | Known workspaces and their session state / edit the per-host preferences |
 | `ws health` | The health report, then the repair for a failing row |
 | `ws actions [words]` | Every action and the exact command it runs, without a picker |
@@ -445,11 +457,10 @@ Limits:
 `ws open <name>` takes a name as listed, a session name or a path, and picks when more than one matches. Running sessions sort first, then the ones you opened most recently.
 
 Each worktree is its own workspace. The session is named for the project plus six hex digits of a hash of its resolved path (`app-feature-2fddff`), so it is stable and two checkouts with the same name never share one. What `ws open` does depends on the session:
-- **running:** it attaches, and panes and processes are as you left them.
-- **exited** (after a reboot, or `zellij kill-session`): zellij resurrects it, rebuilding its tabs and panes from its last save in the project directory. Command panes wait for Enter, and no other process comes back.
-- **none:** it creates one in the project directory with the `dev` layout (editor, terminal and run panes).
+- **running:** it attaches, and the shell and its processes are as you left them.
+- **none:** it starts a kept herdr-core shell in the project directory and attaches (CTRL+\ detaches).
 
-Inside zellij it switches sessions instead of nesting. `ws open --run <task>` starts a mise task in the run pane of a new session.
+The herdr-core name is the session name in lower case (`hc ls` shows it). From inside a herdr-core terminal `ws open` asks you to detach first instead of nesting (`ws open --cd` changes directory there). `ws open --run <task>` types `mise run <task>` into a new shell, and a project's `editor` preference is typed in as an export. With zellij instead (`mux = "zellij"` in `ws open --prefs`, on a host that has it): a session with the `dev` layout (editor, terminal and run panes), resurrected after a reboot, startup commands per pane, and a session switch from inside zellij.
 
 Preferences are per host, in `~/.config/workstation/projects.toml` (`ws open --prefs` creates it from a commented template):
 
@@ -467,7 +478,7 @@ suspended = true                                        # startup commands wait 
 
 Startup commands come only from this file or `--run`, never from the project, and run only when a session is created. Nothing a project carries is executed by `ws open`. The picker previews each project's branch, worktree, session state, preferences and mise tasks.
 
-On Windows there is no zellij: `ws open` changes the current Nushell or PowerShell to the project and lists its tasks, and `ws open --tab` opens it in a new WezTerm or Windows Terminal tab. Warp has no tab command, so there it changes directory. Renaming or moving a project changes its session name; `ws open --list` shows the sessions known for each path.
+On Windows there are no kept shells: `ws open` changes the current Nushell or PowerShell to the project and lists its tasks, and `ws open --tab` opens it in a new WezTerm or Windows Terminal tab. Warp has no tab command, so there it changes directory. Renaming or moving a project changes its session name; `ws open --list` shows the sessions known for each path.
 
 ## Run history, services, debugging, benchmarks, resume and backups
 
@@ -959,7 +970,7 @@ Green is zellij's built-in catppuccin-mocha. The repo's `catppuccin-mocha-mauve`
 
 ### SSH tab dies with "client_loop: send disconnect: Broken pipe" and floods the pane with garbage
 
-The tracked `~/.ssh/config` sets `ServerAliveInterval 30`, `ServerAliveCountMax 3` and `TCPKeepAlive yes`, so dead connections are detected in about 90 seconds (confirm with `ssh -G <hostname> | grep -i serveralive`). When a pipe does break, reconnect from a new tab with `ssh -t <user>@<host> zellij attach --create main`, which reattaches the same session; then close the dead tab. Per-host overrides go in `~/.ssh/config.local`, which the tracked config includes at the top so it wins over the `Host *` defaults.
+The tracked `~/.ssh/config` sets `ServerAliveInterval 30`, `ServerAliveCountMax 3` and `TCPKeepAlive yes`, so dead connections are detected in about 90 seconds (confirm with `ssh -G <hostname> | grep -i serveralive`). When a pipe does break, reconnect from a new tab with `ssh -t <user>@<host> hcs main`, which is back on the same shell (herdr-core kept it running); then close the dead tab. Per-host overrides go in `~/.ssh/config.local`, which the tracked config includes at the top so it wins over the `Host *` defaults.
 
 ### Warp: missing Tab Configs, wrong theme, or it opened PowerShell instead of AlmaLinux-9
 

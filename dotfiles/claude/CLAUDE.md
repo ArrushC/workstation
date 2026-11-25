@@ -150,7 +150,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `LogExpert` 1.41.0
 
 ### Linux toolbelt (config.linux.toml)
-- `zellij` 0.46.0
 - `glow` 3.0.0
 - `btop` 1.4.8
 - `yq` 4.54.3
@@ -186,7 +185,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `rust-analyzer` 2026-11-09
 - `marksman` 2026-02-08
 - `taplo` 0.10.0
-- `herdr` 0.9.5
 - `zig` 0.17.1
 - `pwndbg` 2026.10.28
 - `usql` 0.21.6
@@ -217,7 +215,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `gob` 3.9.0
 - `watchexec` 2.8.0
 - `qsv` 29.0.0
-- `zjstatus` 0.25.0
 - `neovim-releases` 0.12.5
 - `conda:helix` 25.07.1
 - `conda:ast-grep` 0.51.3
@@ -229,6 +226,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `conda:entr` 5.5
 - `conda:pueue` 4.0.4
 - `conda:tree-sitter-cli` 0.27.2
+- `herdr-core` 0.1.22
 - `ncdu` 2.9.1
 - `nb` 7.25.5
 - `sysz` 1.4.3

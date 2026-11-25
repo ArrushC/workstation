@@ -17,11 +17,10 @@ M.launcher = act.ShowLauncherArgs({ flags = 'FUZZY|LAUNCH_MENU_ITEMS|DOMAINS' })
 
 -- Where a new tab or split from this pane starts. An SSH tab's runs its ssh again
 -- (domains.ssh_again: checking the host knows TERM=wezterm), so it opens on the same host
--- (the launcher's attaches the same zellij session, as another client); with `no_ssh` it is the default shell here instead, in the directory its ssh
+-- in a herdr-core shell of its own (`hcs --new`, where its ssh ran the launcher's `hcs main`); with `no_ssh` it is the default shell here instead, in the directory its ssh
 -- started from (home once ssh has exited). Otherwise WezTerm's default (the pane's domain
 -- and directory), except that a WSL pane whose directory isn't one in the distro starts
--- in its home. Before the shell's first OSC 7, and inside zellij (which keeps OSC 7 to
--- itself), WezTerm knows only wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux);
+-- in its home. Before the shell's first OSC 7, WezTerm knows only wsl.exe's Windows directory (/mnt/c/Users/<you> in Linux);
 -- after an ssh the OSC 7 path is on the other host, which wsl.exe can't enter (it prints
 -- an error and starts in /).
 local function spawn_from(pane, no_ssh)
@@ -31,7 +30,7 @@ local function spawn_from(pane, no_ssh)
     local cwd = info and info.cwd
     return { domain = here, cwd = (cwd and cwd ~= '') and cwd or wezterm.home_dir }
   elseif s then
-    return { args = domains.ssh_again(s.argv), domain = here }
+    return { args = domains.ssh_again(s.argv, true), domain = here }
   end
   local domain = pane:get_domain_name() or ''
   if domain:find('^WSL:') then
@@ -109,8 +108,9 @@ M.rename_tab = wezterm.action_callback(function(window, pane)
   )
 end)
 
--- Ctrl+Shift+F5: rerun a dead (or hung) SSH tab's ssh in a new tab; zellij reattaches
--- its session. The old tab stays for its scrollback.
+-- Ctrl+Shift+F5: rerun a dead (or hung) SSH tab's ssh in a new tab; the launcher's is back
+-- on the same herdr-core shell (`hcs main`), which kept running. The old tab stays for its
+-- scrollback.
 M.reconnect = wezterm.action_callback(function(window, pane)
   local s = domains.ssh_of(pane)
   if not s then
@@ -314,11 +314,12 @@ M.ssh_hosts = wezterm.action_callback(function(window, pane)
 end)
 
 -- Ctrl+Shift+O: the pane's scrollback in helix, in a new tab on the same machine (a temp
--- file, one per pane). An SSH tab's history is in zellij, which WezTerm only sees a screen
--- of; zellij's own edit-scrollback key opens it there.
+-- file, one per pane). Not for an SSH tab: helix would have to open on the far host, where
+-- herdr-core holds the shell's history (`hc read main --lines 5000 | hx` there). What the
+-- tab itself has scrolled (hcs prints the last 1000 lines on attach) is in copy mode.
 M.scrollback_in_helix = wezterm.action_callback(function(window, pane)
   if domains.ssh_of(pane) then
-    flash(window, pane, "zellij holds this tab's scrollback: use its edit-scrollback key", 'warn')
+    flash(window, pane, 'SSH tab: copy mode (Ctrl+Shift+X) here, or on the host: hc read main --lines 5000 | hx', 'warn')
     return
   end
   local dims = pane:get_dimensions()
@@ -387,8 +388,8 @@ M.resize_mode = act.ActivateKeyTable({ name = 'resize_pane', one_shot = false })
 
 -- Quick selects that act on the pick. Both type into the pane as a paste, so the pane's
 -- own shell does the work wherever it runs (Nushell, WSL zsh, a host through ssh and
--- zellij) and relative paths resolve against its directory. A pane showing a full-screen
--- app (zellij, an editor) gets the text without Enter, for you to check first.
+-- herdr-core) and relative paths resolve against its directory. A pane showing a full-screen
+-- app (an editor) gets the text without Enter, for you to check first.
 M.open_in_helix = act.QuickSelectArgs({
   label = 'open in helix',
   patterns = { [[[\w./~-]+:\d+(?::\d+)?]] },
@@ -417,7 +418,7 @@ function M.apply(config)
   -- Links: WezTerm's defaults, plus #123 to this repository's issues and pull requests
   -- (GitHub redirects an issue URL to the PR). \B# skips word#12; the trailing \b skips hex
   -- colours such as #1e1e2e. Ctrl+click opens a link (a plain click ends a selection, which
-  -- is copied); Shift+click also works inside zellij, helix and other apps that take the mouse.
+  -- is copied); Shift+click also works inside helix and other apps that take the mouse.
   config.hyperlink_rules = wezterm.default_hyperlink_rules()
   table.insert(config.hyperlink_rules, {
     regex = [[\B#(\d+)\b]],

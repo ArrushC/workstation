@@ -157,6 +157,7 @@ class Pickers(Scratch):
         self.fake("zellij", f'[ "$1" = list-sessions ] || printf "%s|%s\\n" "$PWD" "$*" >>"{zlog}"')
         self.fake_mise(log=self.log)
         os.environ["WS_NO_EXEC"] = "1"
+        os.environ["WS_MUX"] = "zellij"  # the fake above; a host's own hc must not take over
         t = Tty([sys.executable, WS_PY, "open"])
         t.expect(r"my app")
         t.expect(r"session: my-app-[0-9a-f]{6} \(none yet: create\)")

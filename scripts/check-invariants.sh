@@ -38,7 +38,7 @@ shell_targets() {
   printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
     .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
     dotfiles/claude/notify.sh dotfiles/local/bin/winterop dotfiles/local/bin/zcc dotfiles/local/bin/zc++ \
-    dotfiles/local/bin/ws-agent dotfiles/claude/skills/workstation-orchestration/hooks/*.sh \
+    dotfiles/local/bin/ws-agent dotfiles/local/bin/hcs dotfiles/claude/skills/workstation-orchestration/hooks/*.sh \
     dotfiles/config/bash/completions.bash
 }
 
@@ -227,14 +227,24 @@ check_pins() {
   # zjstatus states the zellij it needs in prose release notes; the floor sits next to the pin.
   # A mismatch fails silently at runtime (the bar pane doesn't render) and
   # `zellij setup --check` still reports "Well defined".
-  if [ -n "$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"' 2>/dev/null)" ]; then
-    ok "zjstatus pin readable"
+  # Both pins are commented out while herdr-core holds the terminals (config.linux.toml):
+  # then there is nothing to couple. They come back together or not at all.
+  local zj_pin zjs_pin
+  zj_pin="$(tomlval config.linux.toml tools.zellij 2>/dev/null)"
+  zjs_pin="$(tomlval config.linux.toml 'tools."github:dj95/zjstatus"' 2>/dev/null)"
+  if [ -z "$zj_pin" ] && [ -z "$zjs_pin" ] && grep -qE '^# zellij = "[0-9.]+"' config.linux.toml &&
+    grep -qE '^# "github:dj95/zjstatus" = ' config.linux.toml; then
+    ok "zellij and zjstatus are both unpinned (commented out, kept for a return)"
   else
-    bad "zjstatus pin unreadable in config.linux.toml (tools.\"github:dj95/zjstatus\")"
+    if [ -n "$zjs_pin" ]; then
+      ok "zjstatus pin readable"
+    else
+      bad "zjstatus pin unreadable in config.linux.toml (tools.\"github:dj95/zjstatus\"): zellij's bar; pin both or comment out both"
+    fi
+    pin_at_least "zellij for zjstatus" "$zj_pin" \
+      "$(tomlval config.toml vars.zjstatus_zellij_floor 2>/dev/null)" \
+      "bump zellij, or pin the zjstatus release built for it (and its floor)"
   fi
-  pin_at_least "zellij for zjstatus" "$(tomlval config.linux.toml tools.zellij 2>/dev/null)" \
-    "$(tomlval config.toml vars.zjstatus_zellij_floor 2>/dev/null)" \
-    "bump zellij, or pin the zjstatus release built for it (and its floor)"
   pin_vars_reachable
   # zig assumes glibc 2.31 on EL8 (2.28), so its users pin the floor explicitly.
   local floor
@@ -286,6 +296,7 @@ DOTFILES_MODE_ALLOWLIST=(
   "dotfiles/local/bin/zcc"                           # ~/.local/bin copy entry — zig as a C compiler, invoked directly
   "dotfiles/local/bin/zc++"                          # ~/.local/bin copy entry — the same script as C++
   "dotfiles/local/bin/ws-agent"                      # ~/.local/bin copy entry — `ws agent` for Claude Code, hooks and pueue
+  "dotfiles/local/bin/hcs"                           # ~/.local/bin copy entry — attach or start a herdr-core shell (the SSH launchers, ws open)
 )
 check_dotfiles_mode() {
   hdr "dotfiles/ sources: git mode 100644 except the allowlist"
@@ -1490,8 +1501,11 @@ check_zellij_config() {
     bad "$cfg: zjstatus pill glyphs missing or unbalanced (U+E0B6 x$lc, U+E0B4 x$rc) — the bar renders square blocks"
   fi
 
-  # 7. Real parse when zellij is installed; soft-skipped in CI.
-  if command -v zellij >/dev/null 2>&1; then
+  # 7. Real parse when zellij is pinned and installed; soft-skipped in CI. Unpinned (commented
+  # out in config.linux.toml), a leftover mise shim still answers to the name and fails.
+  if ! grep -qE '^zellij = ' config.linux.toml; then
+    note "zellij is not pinned (herdr-core holds the terminals): skipped the live 'setup --check' parse"
+  elif command -v zellij >/dev/null 2>&1; then
     tmp=$(mktemp -d)
     # Stage layouts/ and themes/ alongside: both resolve relative to the config dir.
     cp "$cfg" "$tmp/" && cp -r "$dir/layouts" "$dir/themes" "$tmp/"
@@ -1874,7 +1888,7 @@ else
 end
 local ssh = c.launch_menu[#c.launch_menu].args
 check(ssh[1] == 'ssh' and ssh[2] == '-t' and ssh[3] == 'gamma' and #ssh == 4, 'SSH entries do not run ssh -t <host> <command>')
-check(has(ssh[4], 'infocmp wezterm') and has(ssh[4], 'TERM=xterm-256color') and has(ssh[4], 'exec zellij attach --create main'), 'SSH entries do not fall back to xterm-256color before zellij: ' .. ssh[4])
+check(has(ssh[4], 'infocmp wezterm') and has(ssh[4], 'TERM=xterm-256color') and has(ssh[4], 'exec hcs main'), 'SSH entries do not fall back to xterm-256color before hcs main: ' .. ssh[4])
 
 for _, e in ipairs({ 'update-status', 'format-tab-title', 'bell', 'window-config-reloaded', 'augment-command-palette', 'copied-scrollback', 'open-uri', 'new-tab-button-click' }) do
   check(type(handlers[e]) == 'function', 'no ' .. e .. ' handler')
@@ -1954,9 +1968,9 @@ local function title(tab, tabs)
   end
   return table.concat(out)
 end
-local ssh_argv = { 'C:\\Windows\\System32\\OpenSSH\\ssh.exe', '-p', '2222', '-t', 'me@dev10', 'exec zellij attach --create main' }
+local ssh_argv = { 'C:\\Windows\\System32\\OpenSSH\\ssh.exe', '-p', '2222', '-t', 'me@dev10', 'exec hcs main' }
 local sp = pane(wide, true, 0, { id = 7, proc = { name = 'ssh.exe', argv = ssh_argv } })
-local ssh_pane = { pane_id = 7, title = 'Zellij (main)', domain_name = 'local', progress = 'None' }
+local ssh_pane = { pane_id = 7, title = 'hc main', domain_name = 'local', progress = 'None' }
 local first = { tab_id = 1, tab_index = 0, is_active = true, tab_title = '', active_pane = { pane_id = 1, title = 'x', progress = 'None' }, panes = {} }
 local bg = { tab_id = 2, tab_index = 5, is_active = false, tab_title = '', active_pane = ssh_pane, panes = { { pane_id = 7, has_unseen_output = true } } }
 handlers['bell'](w, sp)
@@ -1971,11 +1985,11 @@ local host_colour = tab_bg(bg)
 check(not wezterm.GLOBAL.bell_panes['7'], 'viewing the tab does not clear its bell mark')
 check(host_colour ~= '#cba6f7' and host_colour:match('^#%x+$'), 'an active SSH tab is not filled with its host colour: ' .. tostring(host_colour))
 handlers['update-status'](window(nil, 2), sp)
-check(has(status, 'dev10 · zellij:main'), 'the footer does not name the SSH host and its zellij session: ' .. status)
+check(has(status, 'dev10 · hc:main'), 'the footer does not name the SSH host and its herdr-core shell: ' .. status)
 local sp_dims = sp.get_dimensions
 sp.get_dimensions = function() return { cols = 120, viewport_rows = 38, scrollback_rows = 10, scrollback_top = 0 } end
 handlers['update-status'](window(nil, 2), sp)
-check(has(status, 'dev10') and not has(status, 'zellij'), 'a narrower footer keeps the zellij session: ' .. status)
+check(has(status, 'dev10') and not has(status, 'hc:main'), 'a narrower footer keeps the session: ' .. status)
 sp.get_dimensions = sp_dims
 bg.is_active = false
 check(title(bg) == ' ● > 1: dev10 ', 'unseen output: [' .. title(bg) .. ']')
@@ -2089,23 +2103,28 @@ local ssh_tab = { id = 47, proc = { name = 'ssh.exe', argv = ssh_argv } }
 -- (zsh on one that doesn't draws Backspace as a space): a command gets the check in front,
 -- none becomes -t, the check and a login shell, and one that checks already is kept.
 local check_cmd = 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color;'
-local again = { ssh_argv[1], '-p', '2222', '-t', 'me@dev10', check_cmd .. ' exec zellij attach --create main' }
+local again = { ssh_argv[1], '-p', '2222', '-t', 'me@dev10', check_cmd .. ' exec hcs main' }
+-- A new tab or split is a shell of its own there (hcs --new), not a second view of main.
+local fresh = { ssh_argv[1], '-p', '2222', '-t', 'me@dev10', check_cmd .. ' exec hcs --new' }
 local function same(a, b)
   if #a ~= #b then return false end
   for i = 1, #a do if a[i] ~= b[i] then return false end end
   return true
 end
 t = spawned('CTRL|SHIFT+t', ssh_tab)
-check(t.action == 'SpawnCommandInNewTab' and same(t.args.args, again) and t.args.domain.DomainName == 'local',
-  'Ctrl+Shift+T in an SSH tab does not open another ssh to its host, checking its TERM first: ' .. table.concat(t.args.args or {}, ' | '))
+check(t.action == 'SpawnCommandInNewTab' and same(t.args.args, fresh) and t.args.domain.DomainName == 'local',
+  'Ctrl+Shift+T in an SSH tab does not open another ssh to its host (hcs --new), checking its TERM first: ' .. table.concat(t.args.args or {}, ' | '))
 t = spawned('ALT|SHIFT+D', ssh_tab)
-check(t.action == 'SplitVertical' and same(t.args.args, again) and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
+check(t.action == 'SplitVertical' and same(t.args.args, fresh) and t.args.domain.DomainName == 'local', 'Alt+Shift+D in an SSH tab does not split onto its host')
 t = spawned('CTRL|SHIFT+t', { id = 49, proc = { name = 'ssh', argv = { 'ssh', '-p', '22', 'dev10' } } })
 check(same(t.args.args, { 'ssh', '-t', '-p', '22', 'dev10', check_cmd .. ' exec $SHELL -l' }),
   'Ctrl+Shift+T after a typed ssh does not run a login shell behind the TERM check: ' .. table.concat(t.args.args or {}, ' | '))
-for _, argv in ipairs({ ssh, again }) do -- the launcher's, and one run again
+for _, argv in ipairs({ ssh, again, fresh }) do -- the launcher's, one run again, and a new tab's own
   t = spawned('CTRL|SHIFT+t', { id = 50, proc = { name = 'ssh', argv = argv } })
-  check(same(t.args.args, argv), 'Ctrl+Shift+T adds a second TERM check to an ssh that has one: ' .. table.concat(t.args.args or {}, ' | '))
+  local want = {}
+  for i, a in ipairs(argv) do want[i] = a end
+  want[#want] = check_cmd .. ' exec hcs --new'
+  check(same(t.args.args, want), 'Ctrl+Shift+T adds a second TERM check to an ssh that has one, or keeps hcs main: ' .. table.concat(t.args.args or {}, ' | '))
 end
 -- Ctrl+Alt+T: never another ssh. An SSH tab's is the default shell here, in the directory
 -- its ssh started from (home once ssh has exited); any other tab's is Ctrl+Shift+T's.
@@ -2126,7 +2145,7 @@ end
 -- Reconnect: reruns the ssh seen in the pane after it has exited; elsewhere it says why not.
 sp.proc = false
 keys['CTRL|SHIFT+F5'].callback(w, sp)
-check(performed.action == 'SpawnCommandInNewTab' and same(performed.args.args, again) and performed.args.domain.DomainName == 'local', 'Ctrl+Shift+F5 does not rerun the exited ssh, checking its TERM first')
+check(performed.action == 'SpawnCommandInNewTab' and same(performed.args.args, again) and performed.args.domain.DomainName == 'local', 'Ctrl+Shift+F5 does not rerun the exited ssh as it was (hcs main, behind its TERM check)')
 keys['CTRL|SHIFT+F5'].callback(w, pane(wide, false, 0, { id = 20 }))
 check(has(status, 'nothing to reconnect'), 'Ctrl+Shift+F5 in a local shell says nothing: ' .. tostring(status))
 
@@ -2154,7 +2173,7 @@ check(performed.args.domain.DomainName == 'local' and has(performed.args.args[1]
 keys['CTRL|SHIFT+o'].callback(w, pane(wide, false, 0, { id = 24, domain = 'WSL:AlmaLinux-9', proc = { name = 'wsl.exe', argv = { 'wsl.exe' } } }))
 check(performed.args.domain.DomainName == 'WSL:AlmaLinux-9' and performed.args.args[1] == 'sh' and not performed.args.args[5]:find('\\', 1, true), 'Ctrl+Shift+O does not open helix in the WSL distro on a Linux path')
 keys['CTRL|SHIFT+o'].callback(w, pane(wide, true, 0, { id = 25, proc = { name = 'ssh', argv = { 'ssh', 'dev10' } } }))
-check(has(status, 'zellij'), 'Ctrl+Shift+O in an SSH tab does not point at zellij: ' .. tostring(status))
+check(has(status, 'hc read'), 'Ctrl+Shift+O in an SSH tab does not point at hc read: ' .. tostring(status))
 
 -- Mouse release: says Copied only when something was selected.
 mouse['NONE+Up1'].args[2].callback(w, p)

@@ -6,7 +6,11 @@
 # Install the full toolbelt by default on every supported host.
 # Only cht.sh remains lazy.
 # --- aqua registry (short names) ---
-zellij = "0.46.0"
+# zellij (with zjstatus, below) and the herdr TUI are not installed: herdr-core (`hc`, the
+# http: section) keeps terminals alive instead. Their configs stay tracked and deployed
+# (~/.config/zellij, ~/.config/herdr/config.toml), so uncommenting the pins (zellij and
+# zjstatus together) and `mise lock` brings them back.
+# zellij = "0.46.0"
 glow = "3.0.0"
 btop = "1.4.8"
 yq = "4.54.3"
@@ -42,7 +46,7 @@ gum = "2.0.2"
 rust-analyzer = "2026-11-09"
 marksman = "2026-02-08"
 taplo = "0.10.0"
-herdr = "0.9.5"
+# herdr = "0.9.5"   # the TUI; see zellij above
 # --- core: ---
 # zig: the C/C++ compiler of last resort, for a host without the dnf gcc (no sudo). Static,
 # and it exposes only `zig`, so the host's cc/gcc/g++/ld are never shadowed (tasks/verify-tools
@@ -79,7 +83,7 @@ zig = "0.17.1"
 "github:juanibiapina/gob" = { version = "3.9.0", asset_pattern = "gob_{{version}}_linux_amd64.tar.gz" }   # background jobs an agent (or you) starts and checks later; the CLI starts its own daemon
 "github:watchexec/watchexec" = { version = "2.8.0", asset_pattern = "watchexec-{{version}}-x86_64-unknown-linux-musl.tar.xz" }   # aqua's gnu build needs glibc 2.29
 "github:dathere/qsv" = { version = "29.0.0", asset_pattern = "qsv-{{version}}-x86_64-unknown-linux-musl.zip", bin = "qsv" }   # aqua defaults to gnu (GLIBCXX_3.4.30 > EL9's floor); pin musl; bin= picks the full-feature binary of 6
-"github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
+# "github:dj95/zjstatus" = { version = "0.25.0", asset_pattern = "zjstatus.wasm" }   # zellij loads it from mise's install dir (config.kdl)
 "github:neovim/neovim-releases" = { version = "0.12.5", asset_pattern = "nvim-linux-x86_64.tar.gz" }   # neovim's own glibc-2.17 build (LuaJIT); the main repo's tarball and appimage (aqua) need glibc 2.34; releases trail upstream by days to weeks
 # --- conda: (the project ships only glibc builds newer than EL8's 2.28, or only static musl ones; conda-forge builds against glibc 2.17/2.28) ---
 "conda:helix" = "25.07.1"   # glibc 2.17, runtime bundled (no HELIX_RUNTIME); Windows keeps aqua's helix (config.toml)
@@ -98,6 +102,10 @@ zig = "0.17.1"
 "conda:pueue" = "4.0.4"
 "conda:tree-sitter-cli" = "0.27.2"   # nvim-treesitter (main) builds parsers with it; upstream's asset needs glibc 2.39 and there is no musl build
 # --- http: (no GitHub release, bare assets, or scripts) ---
+# herdr-core (`hc`): terminals that outlive the SSH session, the app and the phone app attach
+# to. Static build. tasks/herdr-core copies it to ~/.local/bin/herdr-core (and `hc`): the
+# core runs as a systemd user service from that path, and swaps itself there on update.
+"http:herdr-core" = { version = "0.1.22", url = "https://releases.herdr.dev/core/{{version}}/herdr-core-linux-x86_64.tar.gz", version_list_url = "https://releases.herdr.dev/core/latest.json", version_json_path = ".version" }
 "http:ncdu" = { version = "2.9.1", url = "https://dev.yorhel.nl/download/ncdu-{{version}}-linux-x86_64.tar.gz" }
 "http:nb" = { version = "7.25.5", url = "https://raw.githubusercontent.com/xwmx/nb/{{version}}/nb", bin = "nb" }
 "http:sysz" = { version = "1.4.3", url = "https://raw.githubusercontent.com/joehillen/sysz/{{version}}/sysz", bin = "sysz" }
@@ -188,7 +196,8 @@ GRAFT_NO_STATUSLINE = "1"
 # survive because copy on a directory leaves them alone.
 "~/.config/zsh" = { source = "dotfiles/config/zsh", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 
-# batpipe + winterop, both executable (git mode 755); .vendor sidecar excluded.
+# batpipe, winterop, hcs (herdr-core's attach-or-start) and the rest, all executable (git mode 755);
+# .vendor sidecar excluded. herdr-core and its hc link there are tasks/herdr-core's, unmanaged.
 "~/.local/bin" = { source = "dotfiles/local/bin", mode = "copy", exclude = [".vendor", ".gitkeep"] }
 
 # gdb, herdr and zed (Linux-only).
@@ -248,10 +257,10 @@ GRAFT_NO_STATUSLINE = "1"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
 # installed with dnf's strict=0 so a missing one is skipped, not fatal.
 "post-packages" = "mise run --skip-tools optional-packages"
-# `final` runs vcpkg, claude, fonts, broot-skin, nvim-plugins and wezterm-terminfo, and only on a
-# full `mise bootstrap`, never on `--only dotfiles` (wsa).
+# `final` runs vcpkg, claude, fonts, broot-skin, nvim-plugins, wezterm-terminfo and herdr-core,
+# and only on a full `mise bootstrap`, never on `--only dotfiles` (wsa).
 # fonts skips itself under WSL (the Windows terminal resolves fonts there).
-"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin ::: nvim-plugins ::: wezterm-terminfo"
+"final" = "mise run vcpkg ::: claude ::: fonts ::: broot-skin ::: nvim-plugins ::: wezterm-terminfo ::: herdr-core"
 
 # pueued: mise writes ~/.config/systemd/user/dev.mise.pueued.service and enables
 # it. systemd expands %h in ExecStart; the shim picks its config set from

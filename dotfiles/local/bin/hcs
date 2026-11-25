@@ -1,0 +1,38 @@
+#!/bin/sh
+# hcs [name] [dir]: this terminal on herdr-core's kept shell <name> (default: main),
+# started in <dir> (default: here) when there is none yet. The shell lives in the core,
+# not in this terminal: ctrl+\ detaches, a closed window or a dropped ssh leaves it
+# running, and `hcs` again (or the Herdr app) is back on it. The SSH launchers run
+# `hcs main`; `ws open` runs `hcs <workspace> <project>`.
+# hcs --new [dir]: a new kept shell with no name (WezTerm's new tab or split from an SSH
+# tab); bare `hc` lists every shell to get back to one.
+# --keep: if the shell is lost (the core stopped, a reboot), a fresh shell takes its
+# place under the same name. Typing `exit` in it ends it for good.
+# HCS_HISTORY: lines of its scrollback to print first (default 1000), so the terminal
+# you attach from can scroll back over them.
+name=${1:-main}
+dir=${2:-}
+if ! command -v hc >/dev/null 2>&1; then
+  echo "hcs: no hc on PATH (herdr-core): run 'mise run herdr-core', or 'ws update'" >&2
+  exit 127
+fi
+if [ -n "${HC_TERMINAL_ID:-}" ]; then
+  echo "hcs: already inside herdr-core terminal $HC_TERMINAL_ID; detach first (ctrl+\\), then hcs $name" >&2
+  exit 1
+fi
+# Starting it is the check: a name already live is refused (name_taken), and then the
+# attach below lands on the one that holds it. Any other failure shows in the attach.
+if [ "$name" = --new ]; then
+  # Piped, hc run prints the new terminal as JSON: its address (t7) is what to attach.
+  made=$(hc run --bg --keep --no-parent ${dir:+--cwd "$dir"}) || exit
+  name=$(printf '%s' "$made" | sed -n 's/.*"address":"\([^"]*\)".*/\1/p')
+  if [ -z "$name" ]; then
+    echo "hcs: hc run gave no address: $made" >&2
+    exit 1
+  fi
+elif [ -n "$dir" ]; then
+  hc run --bg --keep --no-parent --name "$name" --cwd "$dir" >/dev/null 2>&1
+else
+  hc run --bg --keep --no-parent --name "$name" >/dev/null 2>&1
+fi
+exec hc attach --history "${HCS_HISTORY:-1000}" "$name"

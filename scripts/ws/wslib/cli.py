@@ -28,12 +28,13 @@ def _reconcile_parser() -> argparse.ArgumentParser:
 
 def _open_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ws open", description=(
-        "Open a project workspace: attach to its zellij session if it is running, resurrect it if "
-        "it exited, or create it in the project with the dev layout. Windows: change to the project."))
+        "Open a project workspace: attach to its herdr-core shell (hc) if it is running, or start one "
+        "in the project; it keeps running when you detach (ctrl+\\) or the connection drops. With zellij "
+        "instead (projects.toml: mux), a session with the dev layout. Windows: change to the project."))
     p.add_argument("project", nargs="?", help="a name (as listed), a session name or a path; picks when ambiguous")
-    p.add_argument("--layout", help="layout for a new session (default: projects.toml, else dev)")
+    p.add_argument("--layout", help="zellij: layout for a new session (default: projects.toml, else dev)")
     p.add_argument("--editor", help="EDITOR/VISUAL inside a new session (default: projects.toml)")
-    p.add_argument("--run", metavar="TASK", help="start this mise task in the layout's run pane (new sessions only)")
+    p.add_argument("--run", metavar="TASK", help="start this mise task in a new session (hc: typed into its shell; zellij: the run pane)")
     p.add_argument("--cd", action="store_true", help="just change this shell to the project")
     p.add_argument("--tab", action="store_true", help="open it in a new WezTerm or Windows Terminal tab")
     p.add_argument("--list", action="store_true", help="list known workspaces and their session state")

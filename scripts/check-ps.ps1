@@ -23,6 +23,8 @@ $targets = @(
     'scripts/test-wezterm-nightly.ps1',
     'scripts/deepseek-harness.ps1',
     'scripts/test-deepseek-harness.ps1',
+    'scripts/herdr-app.ps1',
+    'scripts/test-herdr-app.ps1',
     'scripts/test-wezterm-config.ps1',
     'scripts/test-ws-agent-forward.ps1',
     'dotfiles/windows/local/bin/ws-agent.ps1',

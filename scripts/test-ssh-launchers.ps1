@@ -63,7 +63,7 @@ try {
         $p = @((ConvertFrom-Json $text).profiles)
         Assert ($p.Count -eq 1) "profiles: $($p.Count)"
         Assert ($p[0].name -ceq 'SSH: alpha') "name: $($p[0].name)"
-        Assert ($p[0].commandline -ceq 'ssh -t alpha zellij attach --create main') "commandline: $($p[0].commandline)"
+        Assert ($p[0].commandline -ceq 'ssh -t alpha hcs main') "commandline: $($p[0].commandline)"
         Assert ($p[0].guid -match '^\{[0-9a-f-]{36}\}$') "guid: $($p[0].guid)"
     }
 
@@ -103,7 +103,7 @@ try {
         Assert ('workstation-ssh-old.toml' -notin $names) 'stale host entry left behind'
         Assert (('workstation-ssh-alpha.toml' -in $names) -and ('workstation-ssh-alpha-.toml' -in $names)) "case-colliding aliases: $($names -join ', ')"
         $body = [System.IO.File]::ReadAllText((Join-Path $dir 'workstation-ssh-alpha.toml'))
-        Assert ($body.Contains("commands = ['ssh -t alpha zellij attach --create main']")) "body: $body"
+        Assert ($body.Contains("commands = ['ssh -t alpha hcs main']")) "body: $body"
         Assert (@($names | Where-Object { $_ -like 'workstation-*' }).Count -eq 5) "expected 3 local + 2 host entries: $($names -join ', ')"
     }
 } finally {

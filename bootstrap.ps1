@@ -897,7 +897,7 @@ function Invoke-WindowsTerminalFragments {
             [ordered]@{
                 guid        = (New-Uuid5 -Namespace $appNs -Name "SSH: $h").ToString("B")
                 name        = "SSH: $h"
-                commandline = "ssh -t $h zellij attach --create main"
+                commandline = "ssh -t $h hcs main"
                 tabTitle    = $h
                 tabColor    = "#94e2d5"
                 icon        = [string][char]0xE839
@@ -985,7 +985,7 @@ color = "cyan"
 id = "main"
 type = "terminal"
 shell = "pwsh"
-commands = ['ssh -t $h zellij attach --create main']
+commands = ['ssh -t $h hcs main']
 is_focused = true
 "@
             Write-Utf8NoBom (Join-Path $dir "workstation-ssh-$slug.toml") ($body.Trim() + "`n")
