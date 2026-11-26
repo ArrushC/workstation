@@ -26,16 +26,6 @@ HOST = f"127.0.0.1:{PORT}"
 EVIL = '<img src=x onerror="alert(1)"> </script><script>alert(2)</script>'
 
 
-class _Conn(http.client.HTTPConnection):
-    def __init__(self, path: Path) -> None:
-        super().__init__("localhost")
-        self._path = path
-
-    def connect(self) -> None:
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect(str(self._path))
-
-
 class PanelScratch(AgentScratch):
     def setUp(self) -> None:
         super().setUp()
@@ -50,14 +40,20 @@ class PanelScratch(AgentScratch):
 
     def ask(self, method: str, url: str, *, cookie: str | None = TOKEN, host: str = HOST, body: object = None,
             headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
-        c = _Conn(self.path)
         h = {"Host": host, **({"X-WS-Key": cookie} if cookie else {}), **(headers or {})}
-        data = None if body is None else json.dumps(body).encode()
-        c.request(method, url, body=data, headers=h)
-        r = c.getresponse()
-        out = (r.status, {k.lower(): v for k, v in r.getheaders()}, r.read())
-        c.close()
-        return out
+        data = b"" if body is None else json.dumps(body).encode()
+        if body is not None:
+            h["Content-Length"] = str(len(data))
+        head = f"{method} {url} HTTP/1.1\r\n" + "".join(f"{k}: {v}\r\n" for k, v in h.items()) + "\r\n"
+        # One write for the whole request. A refusal ends the connection without reading the body,
+        # so http.client's two writes (headers, then body) could meet a closed socket: EPIPE.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(10)
+            s.connect(str(self.path))
+            s.sendall(head.encode() + data)
+            with http.client.HTTPResponse(s, method=method) as r:
+                r.begin()
+                return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read()
 
     def post(self, url: str, body: object = None, **kw: object) -> tuple[int, dict[str, str], bytes]:
         headers = {"Origin": f"http://{HOST}", "X-WS-Panel": "1", "Content-Type": "application/json"}
