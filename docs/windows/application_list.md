@@ -3,14 +3,10 @@ Git is a hard prerequisite of bootstrap.ps1 — checked at preflight, never inst
 ## Manual installs
 
 - Everything
-- Move Mouse
 - WizTree
-- Edge
 - ShareX
 - C, C++, Bun
 - WSL - AlmaLinux
-- Devolutions RDM
 - Bruno
 - Fork (Git Client)
-- Flow Launcher
 - HTTP Toolkit

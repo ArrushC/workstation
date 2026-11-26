@@ -797,9 +797,11 @@ function Get-MiseToolExe {
 
 # mise's GUI zips ship no Start Menu shortcut: a fixed per-user <Name>.lnk (.Save()
 # overwrites, so no duplicates), re-pointed when a version bump moves the exe.
+# dnGrep and LogExpert aren't installed (their pins are commented out in config.toml):
+# uncomment an entry here with its pin (a comma between two entries).
 $MiseShortcuts = @(
-    @{ Name = "dnGrep"; Tool = "github:dnGrep/dnGrep"; Exe = "dnGREP.exe"; Description = "dnGrep — search and replace in files (grep GUI)" },
-    @{ Name = "LogExpert"; Tool = "github:LogExperts/LogExpert"; Exe = "LogExpert.exe"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
+    # @{ Name = "dnGrep"; Tool = "github:dnGrep/dnGrep"; Exe = "dnGREP.exe"; Description = "dnGrep — search and replace in files (grep GUI)" }
+    # @{ Name = "LogExpert"; Tool = "github:LogExperts/LogExpert"; Exe = "LogExpert.exe"; Description = "LogExpert — tabbed log-file viewer with tail-follow" }
 )
 function Invoke-StartMenuShortcuts {
     foreach ($tool in $MiseShortcuts) {
@@ -1228,10 +1230,11 @@ if (-not $MaintenanceOnly) {
     Invoke-InstallBurntToast
     Invoke-InstallClaudeCode
 }
-Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (dnGrep/LogExpert)
+Invoke-StartMenuShortcuts # per-user Start Menu .lnks for the mise-installed GUI tools (none today)
 Invoke-WarpTabConfigs     # regenerate Warp Tab Configs (local shells + ~\.ssh\config.local hosts) — self-heals
 Invoke-WindowsTerminalFragments # Windows Terminal "SSH: <host>" profiles from ~\.ssh\config.local — self-heals
-Invoke-DnGrepConfig       # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; re-seeded per mise install dir)
+# dnGrep is not installed (config.toml): uncomment with its pin.
+# Invoke-DnGrepConfig     # seed dnGrep.config.xml (settings dir -> %APPDATA%\dnGREP; re-seeded per mise install dir)
 Invoke-ProfileShim        # bridge Documents redirection (OneDrive) so $PROFILE loads the managed profile
 Invoke-ClaudeSettingsMerge     # ~/.claude/settings.json seed+live+enforced jq merge
 Invoke-ClaudeSettingsLocalSeed # ~/.claude/settings.local.json seed-if-absent

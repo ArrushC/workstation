@@ -146,8 +146,6 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1
 - `carapace-bin` 1.8.0
-- `dnGrep` 5.0.30.0
-- `LogExpert` 1.41.0
 
 ### Linux toolbelt (config.linux.toml)
 - `glow` 3.0.0
