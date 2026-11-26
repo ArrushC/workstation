@@ -1,0 +1,11 @@
+mod:            agents-compact, the Herdr app's agents list with one short line per row: the name alone, the rest on hover
+upstream:       https://github.com/herdrdev/herdr-app (defaults/mods/agents)
+version:        0.1.18 (mod.json's cloned_from)
+license:        Apache-2.0
+cloned:         2026-11-26, in the app: herdr-app do mod.clone --name agents --as agents-compact
+deployed as:    ~/.config/herdr-app/mods/agents-compact/ (directory copy; the app adds its own
+                gpui-kit.d.ts and jsconfig.json there, which stay unmanaged)
+note:           Ours: row() draws the name alone at 28 px; `under` (machine and detail) is its tooltip. status() draws our marks (SPINNER, spinner(), BREATHE, idle.svg: Lucide moon, ISC; kept the same in tabs-timer and pane-marks).
+                Herdr never updates a clone. To pick up a newer list: clone it again under
+                another name, re-apply that, `herdr-app check` it, replace these files.
+                Used by layouts/workstation.json.

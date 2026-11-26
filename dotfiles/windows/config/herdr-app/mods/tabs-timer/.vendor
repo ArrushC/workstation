@@ -1,0 +1,12 @@
+mod:            tabs-timer, the Herdr app's tab bar plus a timer on each tab whose agent is working
+upstream:       https://github.com/herdrdev/herdr-app (defaults/mods/tabs)
+version:        0.1.18 (mod.json's cloned_from)
+license:        Apache-2.0
+cloned:         2026-11-26, in the app: herdr-app do mod.clone --name tabs --as tabs-timer
+deployed as:    ~/.config/herdr-app/mods/tabs-timer/ (directory copy; the app adds its own
+                gpui-kit.d.ts and jsconfig.json there, which stay unmanaged)
+note:           Ours: elapsed(), timers(), the init() timer, the timer element in render(), the tab title drawn whole (no 170 px cap), and the status marks (SPINNER, spinner(), BREATHE; kept the same in agents-compact).
+                Herdr never updates a clone. To pick up a newer tab bar: clone it again under
+                another name, re-apply those four pieces, `herdr-app check` it, replace these files.
+                Used by layouts/workstation.json (a clone of the main layout whose tab block
+                names this mod).

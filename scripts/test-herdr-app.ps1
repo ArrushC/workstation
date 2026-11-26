@@ -12,7 +12,11 @@
 #   nothing, a machine named wsl or one whose --via reaches the distro is left alone, a
 #   missing one is added with the exact --via argument, and a failing ls or add throws.
 #   Get-WslDistro reads a throwaway registry key. The whole-script runs pass -NoWsl
-#   so they never reach a real herdr-core's machines.
+#   so they never reach a real herdr-core's machines. Set-Look: a missing or empty
+#   settings.json gets the three keys, an existing one keeps every key it has (its own
+#   theme and font too) and gains only the absent ones, a complete one isn't rewritten,
+#   and one that isn't a JSON object throws and is left as it was. The whole-script runs
+#   pass a throwaway -ConfigDir: never the real ~\.config\herdr-app.
 # Every run uses throwaway install, Start menu and work folders and never touches the
 # user PATH (-NoPath, -SetPath $false): never %LOCALAPPDATA%\Programs or the real menu.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
@@ -22,7 +26,7 @@ $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'herdr-app.ps1'
 $shell = (Get-Process -Id $PID).Path
 $ast = Read-ScriptAst $script
-. (Import-AstFunction $ast 'Read-Manifest', 'Test-Sha256', 'Write-Step', 'Get-Url', 'Expand-Release', 'Add-UserPath', 'Install-Release', 'Install-App', 'Install-Core', 'Get-WslDistro', 'Invoke-Hc', 'Add-WslMachine')
+. (Import-AstFunction $ast 'Read-Manifest', 'Test-Sha256', 'Write-Step', 'Get-Url', 'Expand-Release', 'Add-UserPath', 'Install-Release', 'Install-App', 'Install-Core', 'Get-WslDistro', 'Invoke-Hc', 'Add-WslMachine', 'Set-Look')
 $script:steps = New-Object System.Collections.Generic.List[string]
 function Write-Step([string]$Message) { $script:steps.Add($Message) }   # record; the whole-script runs keep the real one
 function Add-UserPath([string]$Dir) { throw "the test reached the real user PATH with $Dir" }
@@ -32,6 +36,7 @@ $work = Join-Path $tmp 'work dir'            # a space, as under a OneDrive prof
 $appDir = Join-Path $tmp 'Programs\herdr-app'
 $coreDir = Join-Path $tmp 'Programs\herdr-core'
 $menu = Join-Path $tmp 'Start Menu'
+$config = Join-Path $tmp 'config dir\herdr-app'
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 $appPrefix = 'https://releases.herdr.dev/app/'
 $corePrefix = 'https://releases.herdr.dev/core/'
@@ -117,7 +122,7 @@ function Reset-Flow {
 }
 function Get-WorkLeft { @(Get-ChildItem -LiteralPath $work -Force).Count }
 function Invoke-Script([string]$Releases, [string]$Exe = $shell) {
-    $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $script -ReleasesUrl $Releases -AppDir $appDir -CoreDir $coreDir -MenuDir $menu -WorkDir $work -NoPath -NoWsl 2>&1 | Out-String
+    $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $script -ReleasesUrl $Releases -AppDir $appDir -CoreDir $coreDir -MenuDir $menu -WorkDir $work -ConfigDir $config -NoPath -NoWsl 2>&1 | Out-String
     [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 
@@ -263,12 +268,45 @@ try {
         Assert-Throws { Add-WslMachine -Hc $hc -Distro 'bad name' -Distros @('bad name') } "*can't carry*"
         } finally { Pop-Location }
     }
+    Test-Case 'Set-Look: adds only the absent keys' {
+        $dir = Join-Path $tmp 'look one\herdr-app'; $file = Join-Path $dir 'settings.json'
+        $r = Set-Look -ConfigDir $dir
+        Assert ($r.State -eq 'set' -and ($r.Keys -join ',') -ceq 'theme,font,ui_font') "no file: $($r.State) $($r.Keys -join ',')"
+        $s = Read-Text $file | ConvertFrom-Json
+        Assert ($s.theme -ceq 'catppuccin-mocha' -and $s.font -ceq 'JetBrainsMono NFM' -and $s.ui_font -ceq 'JetBrains Mono') (Read-Text $file)
+        $bytes = [IO.File]::ReadAllBytes($file)
+        Assert ($bytes[0] -eq 0x7B) 'settings.json starts with a BOM'
+        $before = Read-Text $file
+        $r = Set-Look -ConfigDir $dir
+        Assert ($r.State -eq 'kept' -and (Read-Text $file) -ceq $before) "complete file: $($r.State)"
+
+        New-TestFile $file '{ "zoom": 1.25, "sounds": { "enabled": true, "done": "a b.mp3" }, "theme": { "light": "paper", "dark": "ink" }, "ui_font": "Inter", "telemetry": false }'
+        $r = Set-Look -ConfigDir $dir
+        Assert ($r.State -eq 'set' -and ($r.Keys -join ',') -ceq 'font') "partial: $($r.State) $($r.Keys -join ',')"
+        $s = Read-Text $file | ConvertFrom-Json
+        Assert ($s.theme.dark -ceq 'ink' -and $s.ui_font -ceq 'Inter' -and $s.font -ceq 'JetBrainsMono NFM') (Read-Text $file)
+        Assert ($s.zoom -eq 1.25 -and $s.sounds.enabled -eq $true -and $s.sounds.done -ceq 'a b.mp3' -and $s.telemetry -eq $false) (Read-Text $file)
+        Assert (@(Get-ChildItem -LiteralPath $dir -Force).Count -eq 1) 'a temporary file was left'
+
+        New-TestFile $file "  `n"
+        Assert ((Set-Look -ConfigDir $dir).State -eq 'set') 'an empty file was not filled'
+    }
+    Test-Case 'Set-Look: a file that is not a JSON object is left alone' {
+        $dir = Join-Path $tmp 'look two'; $file = Join-Path $dir 'settings.json'
+        foreach ($bad in '{ "zoom": 1,', '[1, 2]', '"text"') {
+            New-TestFile $file $bad
+            Assert-Throws { Set-Look -ConfigDir $dir } '*is not *JSON*'
+            Assert ((Read-Text $file) -ceq $bad) "rewritten: $bad"
+        }
+    }
     Test-Case 'whole script: an unreachable release server warns and exits 0' {
         Reset-Flow
         $r = Invoke-Script (ConvertTo-FileUrl (Join-Path $tmp 'nowhere'))
         Assert ($r.Code -eq 0) "exit $($r.Code): $($r.Out)"
         Assert ($r.Out -like '*the Herdr app was not installed*') $r.Out
         Assert (-not (Test-Path -LiteralPath $appDir)) 'something was installed'
+        Assert ($r.Out -like "*set the app's look in settings.json (theme, font, ui_font)*") $r.Out
+        Assert ((Read-Text (Join-Path $config 'settings.json') | ConvertFrom-Json).theme -ceq 'catppuccin-mocha') 'no look in the throwaway config'
     }
     Test-Case 'whole script: installs both, then fetches nothing' {
         Reset-Flow; $rel = New-Releases 'ok4'
@@ -279,6 +317,7 @@ try {
         $r = Invoke-Script (ConvertTo-FileUrl (Join-Path $tmp 'nowhere'))
         Assert ($r.Code -eq 0 -and $r.Out -like '*the Herdr app is installed; it updates itself*') "exit $($r.Code): $($r.Out)"
         Assert ($r.Out -like '*herdr-core is installed*') $r.Out
+        Assert ($r.Out -notlike "*the app's look*") "the look was set twice: $($r.Out)"
     }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

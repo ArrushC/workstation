@@ -1,0 +1,13 @@
+mod:            pane-marks, the Herdr app's pane header with our status marks
+upstream:       https://github.com/herdrdev/herdr-app (defaults/mods/pane)
+version:        0.1.18 (mod.json's cloned_from)
+license:        Apache-2.0 (idle.svg is Lucide's moon, ISC)
+cloned:         2026-11-26, in the app: herdr-app do mod.clone --name pane --as pane-marks
+deployed as:    ~/.config/herdr-app/mods/pane-marks/ (directory copy; the app adds its own
+                gpui-kit.d.ts and jsconfig.json there, which stay unmanaged)
+note:           Ours: SPINNER, spinner(), BREATHE, idle.svg and the four status lines in
+                render() (working, blocked, done, idle), kept the same as in tabs-timer and
+                agents-compact.
+                Herdr never updates a clone. To pick up a newer header: clone it again under
+                another name, re-apply those, `herdr-app check` it, replace these files.
+                Used by layouts/workstation.json (the tab block's pane header).

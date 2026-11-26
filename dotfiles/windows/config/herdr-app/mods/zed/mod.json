@@ -1,0 +1,9 @@
+{
+  "place": "none",
+  "title": "Open in Zed",
+  "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 360, "height": 44 },
+  "link_handlers": [{ "kind": "file", "pattern": "." }],
+  "palette": [
+    { "title": "Open this folder in Zed", "command": "mod.open", "args": { "name": "zed" }, "words": "editor ssh remote wsl code" }
+  ]
+}

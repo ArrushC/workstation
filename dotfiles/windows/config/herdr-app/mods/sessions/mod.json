@@ -1,0 +1,8 @@
+{
+  "place": "none",
+  "title": "Sessions",
+  "overlay": { "kind": "dialog", "width": 760, "height": 560 },
+  "palette": [
+    { "title": "Resume a Claude Code session", "command": "mod.open", "args": { "name": "sessions" }, "words": "history past previous continue claude agent" }
+  ]
+}
