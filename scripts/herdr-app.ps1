@@ -22,6 +22,14 @@
 #      PATH (the app keeps it current). Else the same from core/latest.json: the zip's
 #      herdr-core.exe and conpty\ into <CoreDir>, hc.exe linked to it unless something
 #      else answers to hc, <CoreDir> on the user PATH.
+#   3. the WSL distro as a machine: when the distro (-WslDistro, AlmaLinux-9) is
+#      registered and herdr-core lists no machine that reaches it or is named `wsl`,
+#      `herdr-core machine add --via "wsl.exe -d <distro> -e sh -c" --name wsl`: no SSH
+#      server needed, and the app then shows that distro's kept shells (hcs main). Never
+#      --install: the distro's hc is mise's (tasks/herdr-core), so before its first
+#      `ws update` this step fails with a warning and the next run tries again. Asking
+#      herdr-core for its machines starts the core if it isn't running, as any hc does.
+#      -NoWsl skips the step.
 # Nothing downloaded is run here. The check is the manifest's SHA-256 over HTTPS, as in
 # Herdr's installers: releases are not always Authenticode-signed (herdr-core's
 # docs/security.md), so a signature is not required.
@@ -38,6 +46,8 @@ param(
     [string]$CoreDir = (Join-Path $env:LOCALAPPDATA 'Programs\herdr-core'),
     [string]$MenuDir = [Environment]::GetFolderPath('Programs'),
     [string]$WorkDir = [IO.Path]::GetTempPath(),
+    [string]$WslDistro = 'AlmaLinux-9',
+    [switch]$NoWsl,
     [switch]$NoPath
 )
 Set-StrictMode -Version Latest
@@ -201,6 +211,46 @@ function Install-Core([string]$ReleasesUrl, [string]$CoreDir, [string]$WorkDir, 
     return [pscustomobject]@{ State = 'installed'; Version = $version; Where = $exe }
 }
 
+# The WSL distros registered for this user (HKCU Lxss; `wsl.exe -l` prints UTF-16).
+function Get-WslDistro([string]$Key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss') {
+    if (-not (Test-Path -LiteralPath $Key)) { return @() }
+    $names = foreach ($sub in @(Get-ChildItem -LiteralPath $Key)) {
+        $n = $sub.GetValue('DistributionName')
+        if ($null -ne $n -and "$n") { "$n" }
+    }
+    return @($names)
+}
+
+# Runs herdr-core with $Arguments; the text it wrote and its exit code.
+function Invoke-Hc([string]$Hc, [string[]]$Arguments) {
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    $out = & $Hc @Arguments 2>&1
+    return [pscustomobject]@{ Code = $LASTEXITCODE; Text = ((@($out) | ForEach-Object { "$_" }) -join "`n").Trim() }
+}
+
+# Adds the distro as herdr-core's machine `wsl` unless one already reaches it. State is
+# 'no-distro', 'present' (Name: the machine's) or 'added'. Throws a reason. The --via value
+# holds no quotes, so Windows PowerShell 5.1 passes it whole (it mangles embedded ones).
+function Add-WslMachine([string]$Hc, [string]$Distro, [string[]]$Distros) {
+    if (-not $Distro -or -not (@($Distros) -contains $Distro)) { return [pscustomobject]@{ State = 'no-distro'; Name = '' } }
+    if ($Distro -cnotmatch '^[A-Za-z0-9._-]+$') { throw "distro name '$Distro' has characters a --via command can't carry" }
+    $ls = Invoke-Hc $Hc @('machine', 'ls', '--json')
+    if ($ls.Code -ne 0) { throw "herdr-core machine ls exited $($ls.Code): $($ls.Text)" }
+    try { $machines = @(($ls.Text | ConvertFrom-Json).machines) } catch { throw "herdr-core machine ls printed no JSON: $($ls.Text)" }
+    foreach ($m in $machines) {
+        if ($null -eq $m) { continue }
+        $name = "$($m.name)"
+        $target = "$($m.target)"
+        if ($name -ceq 'wsl' -or $target -match ('(?i)^wsl(\.exe)?\s.*(-d|--distribution)\s+' + [regex]::Escape($Distro) + '(\s|$)')) {
+            return [pscustomobject]@{ State = 'present'; Name = $name }
+        }
+    }
+    $add = Invoke-Hc $Hc @('machine', 'add', '--json', '--via', "wsl.exe -d $Distro -e sh -c", '--name', 'wsl')
+    if ($add.Code -ne 0) { throw "herdr-core machine add exited $($add.Code): $($add.Text)" }
+    return [pscustomobject]@{ State = 'added'; Name = 'wsl' }
+}
+
 $base = $ReleasesUrl.TrimEnd('/')
 try {
     $r = Install-App -ReleasesUrl $base -AppDir $AppDir -MenuDir $MenuDir -WorkDir $WorkDir -SetPath (-not $NoPath)
@@ -215,5 +265,15 @@ try {
     else { Write-Step "installed herdr-core $($r.Version) (hc in new terminals); the app keeps it current" }
 } catch {
     Write-Step "herdr-core was not installed: $($_.Exception.Message)"
+    $r = $null
+}
+try {
+    if ($r -and $r.Where -and -not $NoWsl) {
+        $w = Add-WslMachine -Hc $r.Where -Distro $WslDistro -Distros (Get-WslDistro)
+        if ($w.State -eq 'added') { Write-Step "added the WSL distro $WslDistro to herdr-core as machine wsl (its shells show in the app)" }
+        elseif ($w.State -eq 'present') { Write-Step "herdr-core reaches the WSL distro $WslDistro (machine $($w.Name))" }
+    }
+} catch {
+    Write-Step "the WSL distro $WslDistro was not added as a machine (after its first ws update, the next run retries): $($_.Exception.Message)"
 }
 exit 0

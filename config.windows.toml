@@ -150,9 +150,10 @@ run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deepseek-harn
 # shells over ssh: the SSH launchers' `hcs main` attaches the same ones), and herdr-core (hc)
 # beside it. Installed only when missing, per-user without UAC; the app then updates itself and
 # keeps herdr-core current. scripts/herdr-app.ps1 does what Herdr's own installers do, checking
-# each download against the SHA-256 in the release manifest, and runs nothing it downloads.
+# each download against the SHA-256 in the release manifest, and runs nothing it downloads. It also
+# adds the WSL distro to herdr-core as the machine `wsl` (no SSH server) when no machine reaches it.
 [tasks.herdr-app-win]
-description = "Install the Herdr app and herdr-core (hc) when they're missing (the post-tools hook); they update themselves"
+description = "Install the Herdr app and herdr-core (hc) when they're missing, and the WSL distro as its machine `wsl` (the post-tools hook); they update themselves"
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/herdr-app.ps1 || exit /b 0"
 

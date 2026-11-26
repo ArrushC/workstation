@@ -211,8 +211,10 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `XDG_CONFIG_HOME` in a short path (the socket path limit is 107 bytes).
 - Windows: `scripts/herdr-app.ps1` (post-tools) installs the Herdr app and herdr-core only when missing, from
   `releases.herdr.dev/{app,core}/latest.json` (URL under `<prefix><version>/`, SHA-256; releases aren't always
-  Authenticode-signed, so no signer check), and runs nothing it downloads; both then update themselves. Machines
-  (`hc machine add`) are the app's own state.
+  Authenticode-signed, so no signer check), and runs nothing it downloads; both then update themselves. It also adds
+  the WSL distro as the machine `wsl` (`--via "wsl.exe -d <distro> -e sh -c"`, never `--install`: the distro's hc
+  is mise's) unless a machine named `wsl` or with that `--via` exists; its tests use a stand-in `.cmd` and the
+  whole-script runs pass `-NoWsl`, so a real core's machines are never touched. Other machines are the app's own state.
 
 **zellij** (not installed: see herdr-core; these hold wherever it is)
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays

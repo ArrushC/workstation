@@ -7,7 +7,12 @@
 #   Start menu shortcut or its conpty folder and hc link, a SHA-256 mismatch or an
 #   incomplete archive installs nothing and cleans up, a broken leftover folder is
 #   replaced), and whole-script runs (an unreachable release server, both parts installed,
-#   a second run fetches nothing; exit 0 each time).
+#   a second run fetches nothing; exit 0 each time), and Add-WslMachine against a
+#   stand-in herdr-core (a .cmd that logs its arguments): no distro registered asks
+#   nothing, a machine named wsl or one whose --via reaches the distro is left alone, a
+#   missing one is added with the exact --via argument, and a failing ls or add throws.
+#   Get-WslDistro reads a throwaway registry key. The whole-script runs pass -NoWsl
+#   so they never reach a real herdr-core's machines.
 # Every run uses throwaway install, Start menu and work folders and never touches the
 # user PATH (-NoPath, -SetPath $false): never %LOCALAPPDATA%\Programs or the real menu.
 # Windows PowerShell 5.1 and pwsh; ASCII only.
@@ -17,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'herdr-app.ps1'
 $shell = (Get-Process -Id $PID).Path
 $ast = Read-ScriptAst $script
-. (Import-AstFunction $ast 'Read-Manifest', 'Test-Sha256', 'Write-Step', 'Get-Url', 'Expand-Release', 'Add-UserPath', 'Install-Release', 'Install-App', 'Install-Core')
+. (Import-AstFunction $ast 'Read-Manifest', 'Test-Sha256', 'Write-Step', 'Get-Url', 'Expand-Release', 'Add-UserPath', 'Install-Release', 'Install-App', 'Install-Core', 'Get-WslDistro', 'Invoke-Hc', 'Add-WslMachine')
 $script:steps = New-Object System.Collections.Generic.List[string]
 function Write-Step([string]$Message) { $script:steps.Add($Message) }   # record; the whole-script runs keep the real one
 function Add-UserPath([string]$Dir) { throw "the test reached the real user PATH with $Dir" }
@@ -112,7 +117,7 @@ function Reset-Flow {
 }
 function Get-WorkLeft { @(Get-ChildItem -LiteralPath $work -Force).Count }
 function Invoke-Script([string]$Releases, [string]$Exe = $shell) {
-    $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $script -ReleasesUrl $Releases -AppDir $appDir -CoreDir $coreDir -MenuDir $menu -WorkDir $work -NoPath 2>&1 | Out-String
+    $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $script -ReleasesUrl $Releases -AppDir $appDir -CoreDir $coreDir -MenuDir $menu -WorkDir $work -NoPath -NoWsl 2>&1 | Out-String
     [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 
@@ -200,6 +205,63 @@ try {
         Assert-Throws { Install-Core -ReleasesUrl (New-Releases 'bad5' -Core 'incomplete') -CoreDir $coreDir -WorkDir $work -SetPath $false } '*holds no complete hc*'
         Assert (-not (Test-Path -LiteralPath (Join-Path $coreDir 'herdr-core.exe'))) 'an unverified or incomplete core was installed'
         Assert ((Get-WorkLeft) -eq 0) 'WorkDir not cleaned'
+    }
+    Test-Case 'Get-WslDistro: the registered names' {
+        $reg = "HKCU:\Software\workstation-test-$([guid]::NewGuid())"
+        try {
+            Assert (@(Get-WslDistro "$reg\Lxss").Count -eq 0) 'a missing key lists distros'
+            New-Item -Path "$reg\Lxss\{a}" -Force | Out-Null
+            Set-ItemProperty -Path "$reg\Lxss\{a}" -Name DistributionName -Value 'AlmaLinux-9'
+            New-Item -Path "$reg\Lxss\{b}" -Force | Out-Null   # no DistributionName
+            $got = @(Get-WslDistro "$reg\Lxss")
+            Assert ($got.Count -eq 1 -and $got[0] -ceq 'AlmaLinux-9') "got: $($got -join ',')"
+        } finally { Remove-Item $reg -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    Test-Case 'Add-WslMachine: adds only a missing machine, with the exact --via' {
+        $fake = Join-Path $tmp 'fakehc'
+        New-Item -ItemType Directory -Force -Path $fake | Out-Null
+        $log = Join-Path $fake 'log.txt'; $json = Join-Path $fake 'ls.json'; $hc = Join-Path $fake 'hc.cmd'
+        # ls prints ls.json; anything else exits with rc.txt's number. Every call is logged.
+        New-TestFile $hc "@echo off`r`necho %*>>`"$log`"`r`nif `"%2`"==`"ls`" ( type `"$json`" & exit /b 0 )`r`nset /p rc=<`"$fake\rc.txt`"`r`nexit /b %rc%`r`n"
+        function Reset-Fake([string]$Machines, [string]$Rc = '0') { Remove-Item $log -Force -ErrorAction SilentlyContinue; New-TestFile $json ('{"machines":[' + $Machines + ']}'); New-TestFile (Join-Path $fake 'rc.txt') $Rc }
+        function Get-Calls { if (Test-Path $log) { @(Get-Content $log | ForEach-Object { $_.Trim() }) } else { @() } }
+        $ssh = '{"name":"dev10","target":"me@dev10","via":false}'
+        Push-Location $tmp   # cmd.exe (the stand-in) prints a warning when its directory is a UNC path
+        try {
+
+        Reset-Fake $ssh
+        $r = Add-WslMachine -Hc $hc -Distro 'AlmaLinux-9' -Distros @('Ubuntu')
+        Assert ($r.State -eq 'no-distro' -and @(Get-Calls).Count -eq 0) "unregistered distro: $($r.State); calls: $(Get-Calls)"
+        $r = Add-WslMachine -Hc $hc -Distro '' -Distros @('AlmaLinux-9')
+        Assert ($r.State -eq 'no-distro' -and @(Get-Calls).Count -eq 0) "empty distro: $($r.State)"
+
+        $r = Add-WslMachine -Hc $hc -Distro 'AlmaLinux-9' -Distros @('AlmaLinux-9')
+        $calls = @(Get-Calls)
+        Assert ($r.State -eq 'added' -and $calls.Count -eq 2) "$($r.State); calls: $($calls -join ' || ')"
+        Assert ($calls[0] -ceq 'machine ls --json') $calls[0]
+        Assert ($calls[1] -ceq 'machine add --json --via "wsl.exe -d AlmaLinux-9 -e sh -c" --name wsl') $calls[1]
+
+        foreach ($have in '{"name":"wsl","target":"wsl.exe -d Other -e sh -c","via":true}',
+                          '{"name":"alma","target":"wsl.exe -d AlmaLinux-9 -e sh -c","via":true}',
+                          '{"name":"alma","target":"C:\\Windows\\System32\\wsl.exe --distribution AlmaLinux-9 -e sh -c","via":true}') {
+            Reset-Fake "$ssh,$have"
+            $r = Add-WslMachine -Hc $hc -Distro 'AlmaLinux-9' -Distros @('AlmaLinux-9')
+            if ($have -like '*System32*') {
+                # A full path isn't recognised as the same distro: it is added under the name wsl.
+                Assert ($r.State -eq 'added') "full-path via: $($r.State)"
+            } else {
+                Assert ($r.State -eq 'present' -and @(Get-Calls).Count -eq 1) "$have -> $($r.State); calls: $(Get-Calls)"
+            }
+        }
+        Reset-Fake '{"name":"alma9","target":"wsl.exe -d AlmaLinux-90 -e sh -c","via":true}'
+        Assert ((Add-WslMachine -Hc $hc -Distro 'AlmaLinux-9' -Distros @('AlmaLinux-9')).State -eq 'added') 'a longer distro name counted as this one'
+
+        Reset-Fake $ssh '5'
+        Assert-Throws { Add-WslMachine -Hc $hc -Distro 'AlmaLinux-9' -Distros @('AlmaLinux-9') } '*machine add exited 5*'
+        New-TestFile $json 'not json'
+        Assert-Throws { Add-WslMachine -Hc $hc -Distro 'AlmaLinux-9' -Distros @('AlmaLinux-9') } '*printed no JSON*'
+        Assert-Throws { Add-WslMachine -Hc $hc -Distro 'bad name' -Distros @('bad name') } "*can't carry*"
+        } finally { Pop-Location }
     }
     Test-Case 'whole script: an unreachable release server warns and exits 0' {
         Reset-Flow
