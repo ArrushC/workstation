@@ -291,14 +291,6 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-wezterm-nightly.ps1
-      - name: Test DeepSeek Harness installer (Windows PowerShell 5.1)
-        if: always()
-        shell: powershell
-        run: ./scripts/test-deepseek-harness.ps1
-      - name: Test DeepSeek Harness installer (pwsh)
-        if: always()
-        shell: pwsh
-        run: ./scripts/test-deepseek-harness.ps1
       - name: Test Herdr app installer (Windows PowerShell 5.1)
         if: always()
         shell: powershell

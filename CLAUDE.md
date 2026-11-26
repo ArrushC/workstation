@@ -186,8 +186,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   the login shell and PowerShell 5.1 drops quotes for native programs, so arguments cross only as that one word
   (`agent.decode_argv`); the Git Bash script sets `MSYS_NO_PATHCONV`. Keep the bash and PowerShell copies in step
   (`test_agent_winforward.py`, `scripts/test-ws-agent-forward.ps1`).
-- DeepSeek Harness: `scripts/deepseek-harness.ps1` (post-tools) installs the official desktop app only when Windows doesn't list it, from `dsh-desk/feeds/win-x64/nightly.yml` (its SHA-512, then the Hangzhou DeepSeek Authenticode signer); the app self-updates. Never winget: those ids are third-party repackages.
-- Windows PowerShell 5.1 whose parent isn't PowerShell (pwsh → mise → `powershell`: every post-tools task under a `wsu` typed in pwsh 7; anything started from WSL) inherits pwsh's `PSModulePath` and can't load `Get-FileHash` or `Get-AuthenticodeSignature`. A script that calls either resets it to the Machine value (`check_ps_module_path`): `bootstrap.ps1`, `wezterm-nightly.ps1`, `install-nerd-fonts.ps1`, `deepseek-harness.ps1`.
+- Windows PowerShell 5.1 whose parent isn't PowerShell (pwsh → mise → `powershell`: every post-tools task under a `wsu` typed in pwsh 7; anything started from WSL) inherits pwsh's `PSModulePath` and can't load `Get-FileHash` or `Get-AuthenticodeSignature`. A script that calls either resets it to the Machine value (`check_ps_module_path`): `bootstrap.ps1`, `wezterm-nightly.ps1`, `install-nerd-fonts.ps1`.
 
 **herdr-core (`hc`)**
 - Kept shells on Linux hosts are herdr-core's (`http:herdr-core` in `config.linux.toml`, static, checksum in

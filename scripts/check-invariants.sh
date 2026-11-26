@@ -415,7 +415,7 @@ check_ps_module_path() {
     n=$((n + 1))
     if ! grep -Fq "\$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')" "$f"; then
       allgood=0
-      bad "$f calls Get-FileHash or Get-AuthenticodeSignature without resetting PSModulePath (see scripts/deepseek-harness.ps1)"
+      bad "$f calls Get-FileHash or Get-AuthenticodeSignature without resetting PSModulePath (see scripts/wezterm-nightly.ps1)"
     fi
   done
   [ "$allgood" -eq 1 ] && ok "$n script(s) that hash or check a signature reset PSModulePath under Windows PowerShell 5.1"
@@ -745,8 +745,6 @@ for f, d in loaded.items():
             n_winget += 1
             if key.lower() == "winget:sshfs-win.sshfs-win":
                 win_hits.append(f"{f}:{key} (SSHFS-Win must raise UAC; it stays in bootstrap.ps1's Install-SshfsWin)")
-            if "deepseek" in key.lower():
-                win_hits.append(f"{f}:{key} (DeepSeek Harness is never a winget package: those are third-party repackages; scripts/deepseek-harness.ps1 installs DeepSeek's own)")
             if val != "latest":
                 win_hits.append(f"{f}:{key} = {val!r} (want \"latest\": the apps self-update)")
         elif key.startswith("winget:"):
