@@ -69,9 +69,17 @@ pins
 case_ "bashrc VCPKG_ROOT drift fails" 1 "VCPKG_ROOT drift"
 
 fresh
-sed -i -E 's/^zellij = "[0-9.]+"/zellij = "0.1.0"/' "$T/config.linux.toml"
+# zellij and zjstatus are commented out while herdr-core holds the terminals; the coupling
+# applies again as soon as either pin is back (these cases work on both forms).
+sed -i -E 's/^(# )?zellij = "[0-9.]+"/zellij = "0.1.0"/; s/^# ("github:dj95\/zjstatus" = )/\1/' "$T/config.linux.toml"
 pins
 case_ "zellij below the zjstatus floor fails" 1 "is below"
+
+fresh
+sed -i -E 's/^# (zellij = "[0-9.]+")/\1/' "$T/config.linux.toml"
+sed -i -E 's/^("github:dj95\/zjstatus" = )/# \1/' "$T/config.linux.toml"
+pins
+case_ "zellij pinned without zjstatus fails" 1 "zjstatus pin unreadable"
 
 fresh
 sed -i -E 's/("typescript": "?)[0-9.]+/\17.0.0/' "$T/environments/lsp/package.json"
@@ -84,7 +92,7 @@ pins
 case_ "no [vars] *_version key found fails" 1 "<none found>"
 
 fresh
-sed -i -E 's/^("github:dj95\/zjstatus" = \{ )version = "[0-9.]+"/\1version = ""/' "$T/config.linux.toml"
+sed -i -E 's/^(# )?("github:dj95\/zjstatus" = \{ )version = "[0-9.]+"/\2version = ""/; s/^# (zellij = "[0-9.]+")/\1/' "$T/config.linux.toml"
 pins
 case_ "unreadable zjstatus pin fails" 1 "zjstatus pin unreadable"
 

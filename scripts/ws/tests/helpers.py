@@ -36,7 +36,7 @@ class Scratch(unittest.TestCase):
         self._env.start()
         # INVOCATION_ID: systemd sets it for a unit's processes (a CI runner is one), and ws-agent serve
         # reads it; a test that means it sets it.
-        for k in ("WS_OUT", "ZELLIJ", "ZELLIJ_SESSION_NAME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "EDITOR", "VISUAL",
+        for k in ("WS_OUT", "WS_MUX", "HC_TERMINAL_ID", "ZELLIJ", "ZELLIJ_SESSION_NAME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "EDITOR", "VISUAL",
                   "INVOCATION_ID"):
             os.environ.pop(k, None)
         self.config = self.repo / "config.toml"

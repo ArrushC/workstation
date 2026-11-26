@@ -1,5 +1,5 @@
 -- domains.lua: SSH. The launcher's SSH entries (one per ~/.ssh/config.local host, attaching
--- zellij), no built-in SSH domains, and how a tab's host is found and named. Exports
+-- herdr-core), no built-in SSH domains, and how a tab's host is found and named. Exports
 -- M.ssh_launch, M.ssh_of, M.ssh_dest, M.wsl_remote, M.local_host and M.shq.
 
 local wezterm = require 'wezterm'
@@ -74,18 +74,21 @@ function M.ssh_dest(argv)
   end
 end
 
--- The zellij session a remote command attaches (the launcher's `zellij attach --create
--- main`), or nil.
-local function zellij_session(cmd)
-  local rest = cmd:match('zellij%s+attach%s+(.*)$') or cmd:match('zellij%s+a%s+(.*)$')
-  for word in (rest or ''):gmatch('[^%s;&|]+') do
-    if word:sub(1, 1) ~= '-' then
-      return word
+-- The session a remote command attaches, as `hc:main` (the launcher's `hcs main`: a
+-- herdr-core shell) or `zellij:main` (`zellij attach --create main`, on a host that has
+-- zellij back), or nil.
+local function remote_session(cmd)
+  for _, try in ipairs({ { 'hc', 'hcs%s+(.*)$' }, { 'zellij', 'zellij%s+attach%s+(.*)$' }, { 'zellij', 'zellij%s+a%s+(.*)$' } }) do
+    local rest = cmd:match(try[2])
+    for word in (rest or ''):gmatch('[^%s;&|]+') do
+      if word:sub(1, 1) ~= '-' then
+        return try[1] .. ':' .. word
+      end
     end
   end
 end
 
--- { host, argv, dest, zellij } for a pane whose foreground program is ssh, or the last one
+-- { host, argv, dest, session } for a pane whose foreground program is ssh, or the last one
 -- seen in it once ssh has exited; nil for a live local shell. `pane` is a Pane object.
 function M.ssh_of(pane)
   local id = tostring(pane:pane_id())
@@ -102,8 +105,8 @@ function M.ssh_of(pane)
   if dest then
     local host = canonical((dest:gsub('^ssh://', ''):gsub('^.*@', ''):gsub(':%d+$', '')))
     if not seen[id] or seen[id].host ~= host then
-      local session = zellij_session(table.concat(info.argv, ' ', at + 1))
-      seen[id] = { host = host, argv = info.argv, dest = dest, zellij = session }
+      local session = remote_session(table.concat(info.argv, ' ', at + 1))
+      seen[id] = { host = host, argv = info.argv, dest = dest, session = session }
       wezterm.GLOBAL.ssh_panes = seen
     end
     return seen[id]
@@ -142,28 +145,34 @@ end
 -- Backspace as a space, moving the cursor right.
 local term_check = 'infocmp wezterm >/dev/null 2>&1 || export TERM=xterm-256color;'
 
--- The launcher's command for a host (Ctrl+Alt+S's Connect too): ssh -t, attaching zellij's
--- main session.
+-- The launcher's command for a host (Ctrl+Alt+S's Connect too): ssh -t, on herdr-core's
+-- kept shell `main` there (~/.local/bin/hcs starts it when there is none). The shell
+-- outlives the tab and the connection; the same command is back on it.
 function M.ssh_launch(host)
-  return { 'ssh', '-t', host, term_check .. ' exec zellij attach --create main' }
+  return { 'ssh', '-t', host, term_check .. ' exec hcs main' }
 end
 
 -- An SSH tab's ssh, run again from WezTerm (a new tab or split on its host, Ctrl+Shift+F5).
 -- One typed in Nushell or PowerShell had TERM=xterm-256color (both switch to it), but run
 -- from WezTerm it sends TERM=wezterm, so it checks first too: a remote command gets the
 -- check in front, and none becomes -t, the check and a login shell. One that already
--- checks (the launcher's, or one run again before) stays as it is.
-function M.ssh_again(argv)
+-- checks (the launcher's, or one run again before) stays as it is. With `fresh` (a new tab
+-- or split, not a reconnect) the launcher's `hcs <name>` becomes `hcs --new`: a shell of
+-- its own on that host, not a second view of the same one.
+function M.ssh_again(argv, fresh)
   local _, at = M.ssh_dest(argv)
-  if table.concat(argv, ' ', at + 1):find(term_check, 1, true) then
-    return argv
-  end
   local out = {}
   for i, a in ipairs(argv) do
     out[i] = a
   end
+  if fresh and at < #out then
+    out[#out] = (out[#out]:gsub('exec hcs%s+[%w_-]+%s*$', 'exec hcs --new'))
+  end
+  if table.concat(out, ' ', at + 1):find(term_check, 1, true) then
+    return out
+  end
   if at < #argv then
-    out[at + 1] = term_check .. ' ' .. argv[at + 1]
+    out[at + 1] = term_check .. ' ' .. out[at + 1]
     return out
   end
   table.insert(out, 2, '-t')

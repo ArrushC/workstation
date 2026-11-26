@@ -119,7 +119,29 @@
     `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user from its
     machine-scope-only installer despite winget's user-scope preference, and a font bump replacing a loaded TTF.
 
+## herdr-core
+
+- Never the real core for a test: a scratch session in a short path (the socket path limit is 107 bytes):
+  `T=/tmp/hct; mkdir -p $T/{run,state,config,bin}; chmod 700 $T/run; cp "$(mise where http:herdr-core)/herdr-core" $T/bin/;
+  ln -s herdr-core $T/bin/hc`, then every command under
+  `XDG_RUNTIME_DIR=$T/run XDG_STATE_HOME=$T/state XDG_CONFIG_HOME=$T/config HC_SESSION=t PATH=$T/bin:$PATH`
+  (a custom runtime dir keeps it off systemd). Stop it with `hc server stop` when done.
+- `hcs`: `hcs ws1 /usr` under a pty (Python's `pty.fork`), type `pwd`, send `\x1c` (ctrl+\): exit 0 and
+  `[detached from ws1]`; again: the earlier output is replayed (`--history`). `hc ls` then lists `ws1`. A missing
+  name is `hc get nope` exit 3; a taken one `hc run --name` exit 1 (`name_taken`), which `hcs` relies on.
+- Passthrough: `printf '\033]52;c;aGVsbG8=\a'` in an attached shell must reach the pty's reader byte for byte
+  (OSC 7, 2 and 777 too).
+- `tasks/herdr-core`: run it with a scratch `HOME` and a stub `mise` whose `where` prints the real install dir
+  (fresh copy and `hc` link; a second run says up to date; a link at the destination is left alone).
+- Windows: `powershell -File scripts/test-herdr-app.ps1` (file:// fixtures, throwaway folders, `-NoPath`).
+- On a host after `ws update`: `mise run health` shows the herdr-core row; `ssh -t <host> hcs main`, detach,
+  reconnect lands in the same shell; in WezTerm the footer reads `<host> · hc:main` and Ctrl+Shift+T opens a
+  shell of its own there.
+
 ## zellij
+
+Not installed while its pins are commented out in `config.linux.toml`; these apply where it is.
+
 
 - `copy_command` must stay unset (OSC 52 is the only clipboard path over SSH). Verify by yanking in a
   remote pane and pasting locally; zellij reads config at session creation, so `zellij kill-session main`
@@ -230,7 +252,7 @@ After `bootstrap.ps1` and the dotfiles apply, restart WT, then:
 - GUI-only (no headless check): the footer, tab colours/marks, notices, toasts, Ctrl+click and
   file links, Ctrl+triple-click, the + button's three clicks, the close prompt (Ctrl+Shift+W
   on an idle Nushell tab asks). In a launcher SSH tab: the host's
-  colour and name, `zellij:main` in a wide footer, Ctrl+Shift+F5 after `exit`, and `ll` then
+  colour and name, `hc:main` in a wide footer, Ctrl+Shift+F5 after `exit`, and `ll` then
   Ctrl+click on a file (helix opens over ssh), and Ctrl+Shift+T / Alt+Shift+D open another
   ssh to the host, while Ctrl+Alt+T opens Nushell locally in ssh's directory. In a WSL tab: `ssh` to a host (also one without this setup), and the tab
   and footer name it, then Ctrl+Shift+T opens WSL in `~`; after `exit` the tab is the

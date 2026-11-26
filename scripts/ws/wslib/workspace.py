@@ -1,5 +1,7 @@
 """`ws open`: project workspaces. A project is a git worktree (or a directory you name);
-its workspace is a zellij session named for it, started in it with the dev layout.
+its workspace is a herdr-core shell named for it (`hc`: it keeps running when you detach
+or the connection drops), started in it. Where zellij is installed instead (or
+`mux = "zellij"` in projects.toml), it is a zellij session with the dev layout.
 
 Discovery is cheap: zoxide's history, two levels under the configured roots, the
 workspaces opened before, and each repo's linked worktrees read from .git/worktrees (no
@@ -34,13 +36,18 @@ PREFS_TEMPLATE = """\
 # roots: where `ws open` looks for projects besides zoxide's history (two levels deep).
 # roots = ["~/projects", "~/src"]
 #
+# What holds a workspace: "hc" (herdr-core, a shell that keeps running) or "zellij" (a
+# session with a layout). Default: hc where it is installed, else zellij, else just cd.
+# mux = "hc"
+#
 # Defaults for every workspace:
 # editor = "hx"      # EDITOR/VISUAL inside the workspace's session
-# layout = "dev"     # a layout in ~/.config/zellij/layouts (dev, ops) or a .kdl path
+# layout = "dev"     # zellij only: a layout in ~/.config/zellij/layouts (dev, ops) or a .kdl path
 #
-# Per project, keyed by its path. `startup` is opt-in: each key is a pane name in the
-# layout (dev has editor, terminal and run), each value the command that pane starts with
-# when the session is CREATED. Nothing runs on attach, and nothing is read from the project.
+# Per project, keyed by its path. `startup` is opt-in and zellij only: each key is a pane
+# name in the layout (dev has editor, terminal and run), each value the command that pane
+# starts with when the session is CREATED. Nothing runs on attach, and nothing is read from
+# the project. (With hc, `ws open --run <task>` types `mise run <task>` into the new shell.)
 # [project."~/projects/example"]
 # editor = "nvim"
 # layout = "dev"
@@ -271,9 +278,43 @@ def _children(d: Path) -> list[Path]:
         return []
 
 
+def hc_name(session: str) -> str:
+    """A session name as herdr-core takes one: 1-32 of a-z 0-9 - _."""
+    return re.sub(r"[^a-z0-9_-]+", "-", session.lower()).strip("-")[:32] or "project"
+
+
+def mux(prefs: dict[str, object] | None = None) -> str:
+    """What holds workspaces here: "hc", "zellij" or "" (none: `ws open` changes directory).
+    WS_MUX, then projects.toml's `mux`, name one; one that isn't installed is "". Otherwise
+    herdr-core where it is installed, else zellij."""
+    if core.IS_WINDOWS:
+        return ""
+    have = {"hc": bool(core.which("hc")), "zellij": bool(core.which("zellij"))}
+    want = os.environ.get("WS_MUX") or str((load_prefs() if prefs is None else prefs).get("mux") or "")
+    if want in have:
+        return want if have[want] else ""
+    return "hc" if have["hc"] else "zellij" if have["zellij"] else ""
+
+
+def state_of(live: dict[str, str], session: str) -> str:
+    """A workspace's state in sessions()' result: herdr-core lists it under hc_name()."""
+    return live.get(session) or live.get(hc_name(session), "")
+
+
 def sessions() -> dict[str, str]:
-    """zellij's sessions: name -> running | exited | current."""
-    if not core.which("zellij"):
+    """The live workspaces: name -> running | exited | current. zellij's sessions, or
+    herdr-core's named terminals (never exited: a finished one is gone)."""
+    kind = mux()
+    if kind == "hc":
+        proc = core.run(["hc", "ls", "--json"], timeout=5)
+        try:
+            terms = json.loads(proc.stdout).get("terminals", []) if proc.returncode == 0 else []
+        except (ValueError, AttributeError):
+            terms = []
+        here = os.environ.get("HC_TERMINAL_ID", "")
+        return {str(t["name"]): ("current" if here and t.get("address") == here else "running")
+                for t in terms if isinstance(t, dict) and t.get("name")}
+    if kind != "zellij":
         return {}
     proc = core.run(["zellij", "list-sessions", "--no-formatting"], timeout=5)
     out = {}
@@ -289,7 +330,7 @@ def ordered(projects: list[Project], live: dict[str, str]) -> list[Project]:
     reg = load_registry()
 
     def rank(p: Project) -> tuple[int, str, float, str]:
-        st = live.get(p.session, "")
+        st = state_of(live, p.session)
         return (0 if st in ("running", "current") else 1 if st == "exited" else 2,
                 "~" if p.session not in reg else _neg(reg[p.session].get("opened", "")), -p.score, p.label)
 
@@ -411,13 +452,16 @@ def project_tasks(path: Path) -> tuple[list[tuple[str, str]], str]:
 def preview(path: Path) -> str:
     proj = describe(toplevel(path) or path)
     pp = project_prefs(load_prefs(), proj.path)
-    st = sessions().get(proj.session, "")
+    kind = mux()
+    st = state_of(sessions(), proj.session)
+    shown = hc_name(proj.session) if kind == "hc" else proj.session
     lines = [core.paint(str(proj.path), "bold"),
-             f"session: {proj.session} ({_state_words(st)})"]
+             f"session: {shown} ({_state_words(st)})"]
     if proj.branch:
         lines.append(f"branch:  {proj.branch}" + (f"  (worktree of {core.tilde(proj.main)})" if proj.linked and proj.main else ""))
-    lines.append(f"layout:  {pp.get('layout', DEFAULT_LAYOUT)}   editor: {pp.get('editor') or os.environ.get('EDITOR') or 'default'}")
-    cmds = startup_commands(pp)
+    held = {"hc": "a herdr-core shell", "zellij": f"layout {pp.get('layout', DEFAULT_LAYOUT)}"}.get(kind, "none (cd only)")
+    lines.append(f"held by: {held}   editor: {pp.get('editor') or os.environ.get('EDITOR') or 'default'}")
+    cmds = startup_commands(pp) if kind == "zellij" else {}
     if cmds:
         lines.append("startup (from your projects.toml, on create only):")
         lines += [f"  {pane}: {core.shell_join(argv)}" for pane, argv in cmds.items()]
@@ -446,9 +490,11 @@ def open_project(proj: Project, *, layout: str = "", editor: str = "", run_task:
         pp["editor"] = editor
     remember(proj)
     name = proj.session
-    use_zellij = not core.IS_WINDOWS and core.which("zellij") and not cd_only and not tab
-    if not use_zellij:
-        return _fallback(proj, pp, tab)
+    kind = "" if cd_only or tab else mux(prefs)
+    if kind == "hc":
+        return _open_hc(proj, pp, run_task)
+    if kind != "zellij":
+        return _fallback(proj, pp, tab, cd_only)
     st = sessions().get(name, "")
     lay = str(pp.get("layout") or DEFAULT_LAYOUT)
     cmds = startup_commands(pp, run_task)
@@ -505,8 +551,45 @@ def _exec(argv: list[str], cwd: Path, env: dict[str, str], replace: bool) -> int
     return core.run(argv, cwd=cwd, env={k: v for k, v in env.items() if os.environ.get(k) != v}, capture=False).returncode
 
 
-def _fallback(proj: Project, pp: dict[str, object], tab: bool) -> int:
-    """No zellij (Windows, or --cd/--tab): change to the project, or open it in a new tab."""
+def _open_hc(proj: Project, pp: dict[str, object], run_task: str) -> int:
+    """The workspace as a herdr-core shell: one kept terminal named for the project, in it.
+    Created with `hc run --bg --keep`, then this terminal attaches (ctrl+\\ detaches). The
+    core gives the shell its own environment, so an editor preference is typed into the
+    new shell as an export, and --run as `mise run <task>`; zellij's layouts and startup
+    panes have no counterpart."""
+    name = hc_name(proj.session)
+    st = sessions().get(name, "")
+    inside = os.environ.get("HC_TERMINAL_ID", "")
+    if st == "current":
+        print(f"already in {name} ({proj.path})")
+        return 0
+    if inside:
+        print(f"ws: this is herdr-core terminal {inside}: detach (ctrl+\\), then run ws open again "
+              f"(or ws open --cd to change directory here)")
+        return 1
+    if pp.get("startup"):
+        print("  (startup panes are zellij's: not started in a herdr-core shell)")
+    if st == "running":
+        print(f"attaching to {name}: the running shell, as you left it")
+        if run_task:
+            print("  (--run types its task only when a workspace is created)")
+    else:
+        print(f"creating {name} in {proj.path}: a herdr-core shell (ctrl+\\ detaches; it keeps running)")
+        made = core.run(["hc", "run", "--bg", "--keep", "--no-parent", "--name", name, "--cwd", str(proj.path)], timeout=30)
+        if made.returncode != 0:
+            return core.die(f"hc run failed: {(made.stderr or made.stdout).strip()}")
+        ed = str(pp.get("editor") or "")
+        typed = ([core.shell_join(["export", f"EDITOR={ed}", f"VISUAL={ed}"])] if ed else []) + \
+                ([core.shell_join(["mise", "run", run_task])] if run_task else [])
+        for line in typed:
+            print(f"  types: {line}")
+            core.run(["hc", "send", name, line], timeout=30)
+    return _exec(["hc", "attach", "--history", "1000", name], proj.path, dict(os.environ), replace=True)
+
+
+def _fallback(proj: Project, pp: dict[str, object], tab: bool, cd_only: bool = True) -> int:
+    """Nothing to hold a session (Windows, no hc or zellij, or --cd/--tab): change to the
+    project, or open it in a new tab."""
     path = str(proj.path)
     if tab and os.environ.get("WEZTERM_PANE") and core.which("wezterm"):
         return core.run(["wezterm", "cli", "spawn", "--cwd", path], capture=False).returncode
@@ -516,7 +599,7 @@ def _fallback(proj: Project, pp: dict[str, object], tab: bool) -> int:
         print("ws: no WezTerm or Windows Terminal session to open a tab in; changing directory instead")
     if not core.emit("cd", path):
         print(f"cd {core.shell_join([path])}")
-    why = "zellij isn't available on Windows" if core.IS_WINDOWS else "--cd"
+    why = "no kept sessions on Windows" if core.IS_WINDOWS else "--cd" if cd_only or tab else "no hc or zellij here"
     print(f"{proj.label}: {path}  ({why}; this shell is now in the project)")
     ed = pp.get("editor")
     if ed:
@@ -543,7 +626,7 @@ def _pick(projects: list[Project], query: str = "") -> Project | None:
         return None
     lines = []
     for p in projs:
-        st = live.get(p.session, "")
+        st = state_of(live, p.session)
         tag = {"running": ("running", "green"), "current": ("here", "green"), "exited": ("exited", "yellow")}.get(st, ("", "dim"))
         extra = (f"worktree {p.branch}" if p.linked else p.branch) or ""
         lines.append(f"{p.path}\t{core.paint(f'{tag[0]:<8}', tag[1])} {p.label:<28} "
@@ -574,7 +657,7 @@ def main(args) -> int:
             if args.names:
                 print(p.label)
             else:
-                print(f"{_state_words(live.get(p.session, '')):<30} {p.session:<32} {core.tilde(p.path)}")
+                print(f"{_state_words(state_of(live, p.session)):<30} {p.session:<32} {core.tilde(p.path)}")
         return 0
     if args.project:
         proj, cands = resolve(args.project, projects)

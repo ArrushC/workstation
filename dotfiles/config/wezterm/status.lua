@@ -32,7 +32,7 @@ end
 
 -- Status footer ---------------------------------------------------------------------------
 -- Right of the tab bar, refreshed every second: COPY / SEARCH / RESIZE while those modes
--- run, an SSH tab's host in its colour (and the zellij session it attached) or the host a
+-- run, an SSH tab's host in its colour (and the session it attached: hc:main, a herdr-core shell) or the host a
 -- WSL tab has ssh'd to, the pane's line count, battery, time. Parts drop out as the pane
 -- narrows.
 
@@ -107,8 +107,8 @@ render_status = function(window, pane)
   end
   if host then
     table.insert(parts, { text = host, fg = appearance.accent(host) })
-    if s and s.zellij and cols >= 130 then
-      table.insert(parts, { text = 'zellij:' .. s.zellij })
+    if s and s.session and cols >= 130 then
+      table.insert(parts, { text = s.session })
     end
   end
   local lines = line_count(pane, dims)

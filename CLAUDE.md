@@ -189,7 +189,32 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - DeepSeek Harness: `scripts/deepseek-harness.ps1` (post-tools) installs the official desktop app only when Windows doesn't list it, from `dsh-desk/feeds/win-x64/nightly.yml` (its SHA-512, then the Hangzhou DeepSeek Authenticode signer); the app self-updates. Never winget: those ids are third-party repackages.
 - Windows PowerShell 5.1 whose parent isn't PowerShell (pwsh → mise → `powershell`: every post-tools task under a `wsu` typed in pwsh 7; anything started from WSL) inherits pwsh's `PSModulePath` and can't load `Get-FileHash` or `Get-AuthenticodeSignature`. A script that calls either resets it to the Machine value (`check_ps_module_path`): `bootstrap.ps1`, `wezterm-nightly.ps1`, `install-nerd-fonts.ps1`, `deepseek-harness.ps1`.
 
-**zellij**
+**herdr-core (`hc`)**
+- Kept shells on Linux hosts are herdr-core's (`http:herdr-core` in `config.linux.toml`, static, checksum in
+  `mise.linux.lock`; `version_list_url` lets the bumper see releases). zellij, zjstatus and the herdr TUI are
+  commented-out pins: their configs, `zs`/`zr`, and `ws open`'s zellij mode stay, and `check_pins` wants zellij and
+  zjstatus back together or not at all.
+- `tasks/herdr-core` (the `final` hook) copies mise's binary to `~/.local/bin/herdr-core` (+ an `hc` link): the core is
+  a systemd user service started from that path, and `hc update` / the app's `hc machine update` rewrite it in place,
+  which must never touch a mise install. An existing copy is swapped with `herdr-core update --from` (terminals keep
+  running); a newer one is left alone; never a link to mise's `latest`.
+- `~/.local/bin/hcs [name|--new] [dir]` is the one attach-or-start: `hc run --bg --keep --no-parent` (a taken name is
+  the "already there" answer), then `hc attach --history`. The three SSH launchers run `hcs main` (WezTerm
+  `domains.ssh_launch`, the WT fragment and Warp configs in `bootstrap.ps1`); WezTerm's new tab/split from an SSH tab
+  runs `hcs --new` (`ssh_again(argv, true)`), a reconnect keeps `hcs main`. Change them together
+  (`test-ssh-launchers.ps1`, `check_wezterm_config`).
+- herdr-core draws nothing and passes OSC 52/7/2/777 through (measured); a terminal's environment is the core's, not
+  the caller's, so `ws open` types an editor export and `--run` into a new shell (`workspace._open_hc`). `HC_TERMINAL_ID`
+  marks "inside": no nested attach. `ws open` picks hc, then zellij (`workspace.mux`: `WS_MUX`, projects.toml `mux`);
+  ws tests that fake zellij set `WS_MUX=zellij`.
+- Tests and experiments never use the real core: `HC_SESSION` plus scratch `XDG_RUNTIME_DIR`/`XDG_STATE_HOME`/
+  `XDG_CONFIG_HOME` in a short path (the socket path limit is 107 bytes).
+- Windows: `scripts/herdr-app.ps1` (post-tools) installs the Herdr app and herdr-core only when missing, from
+  `releases.herdr.dev/{app,core}/latest.json` (URL under `<prefix><version>/`, SHA-256; releases aren't always
+  Authenticode-signed, so no signer check), and runs nothing it downloads; both then update themselves. Machines
+  (`hc machine add`) are the app's own state.
+
+**zellij** (not installed: see herdr-core; these hold wherever it is)
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays
   off. zjstatus loads from mise's install dir (`check_zellij_config`); no copy step.
 - Never add `zellij-autolock` or an unmaintained plugin untested against the pinned zellij. Judge
@@ -387,7 +412,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `scripts/*.sh`, `scripts/lib/*.sh`, every `tasks/*` file (mise silently skips a non-executable
     task), `.claude/hooks/*.sh`
   - executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
-    `dotfiles/local/bin/{batpipe,winterop,zcc,zc++}`
+    `dotfiles/local/bin/{batpipe,winterop,zcc,zc++,ws-agent,hcs}`
   - Repair: `sed -i 's/\r$//' <f>`; `git update-index --chmod=+x <f>`.
   - First-party shell must be `shfmt -i 2`-clean (`mise run fmt`) and gitleaks-clean.
   - Quote bash associative-array keys: shfmt rewrites an unquoted `[a-b]` as arithmetic.

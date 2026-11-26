@@ -26,15 +26,15 @@ local reference = {
   { 'Ctrl+Shift+L', 'Debug overlay (Lua console, logs)' },
   { 'Alt+Enter', 'Full screen' },
   { 'Ctrl+click', 'Open a link (a file:// one in helix, on the machine it came from)' },
-  { 'Shift+click', 'Open a link, also inside zellij and helix' },
+  { 'Shift+click', 'Open a link, also inside helix' },
   { 'Ctrl+triple-click', "Select one command's whole output and copy it" },
   { 'Ctrl+Shift+drag', 'Move the window (Win+drag too)' },
   { '+ on the tab bar', 'Click: new tab; middle-click: tab list; right-click: launcher' },
   { 'select', 'Selecting with the mouse copies (Copied in the footer)' },
   { 'drop a file', 'Pastes its path, quoted' },
-  { 'images', 'Show inline (yazi, wezterm imgcat), except inside zellij' },
+  { 'images', 'Show inline (yazi, wezterm imgcat)' },
   { '#123', "Links to this repository's issue or pull request 123" },
-  { 'footer', 'SSH host (zellij session), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
+  { 'footer', 'SSH host (its herdr-core shell, hc:main), lines in the pane, battery, time; COPY / SEARCH / RESIZE in those modes' },
   { 'tab colours', "An SSH tab, or a WSL tab that ran ssh, takes its host's colour and name (its ~/.ssh/config.local alias); a WSL tab otherwise its distro's colour" },
   { 'tab marks', "Bell rang, % progress, dot: output you haven't seen" },
 }
@@ -94,7 +94,7 @@ function M.apply(config)
   -- its cheatsheet line (Ctrl+Shift+H), so the two can't drift; `chord` names a group.
   -- The pane keys are Warp's and Windows Terminal's (README's tables).
   bindings = {
-    { 'CTRL|ALT', 'l', actions.launcher, 'Launcher: shells, WSL, SSH hosts (zellij)' },
+    { 'CTRL|ALT', 'l', actions.launcher, 'Launcher: shells, WSL, SSH hosts (a herdr-core shell)' },
     { 'CTRL|ALT', 's', actions.ssh_hosts, 'SSH hosts: connect, add, edit or delete one (~/.ssh/config.local)' },
     { 'CTRL|SHIFT', 't', actions.new_tab, "New tab: this tab's domain and directory, or its SSH host again" },
     { 'CTRL|ALT', 't', actions.new_local_tab, 'New tab, never over ssh: from an SSH tab, a local shell' },
@@ -123,7 +123,7 @@ function M.apply(config)
     { 'ALT', '0', act.ActivateLastTab, 'Back to the previous tab (underlined in the tab bar)' },
     { 'CTRL|SHIFT', 'q', act.PaneSelect({}), 'Pick a pane by letter' },
     { 'ALT|SHIFT', 'S', actions.resize_mode, 'Resize mode: arrows, Esc or Enter ends it' },
-    { 'CTRL|SHIFT', 'F5', actions.reconnect, 'Reconnect an SSH tab (new tab; zellij reattaches)' },
+    { 'CTRL|SHIFT', 'F5', actions.reconnect, 'Reconnect an SSH tab (new tab, same herdr-core shell)' },
     { 'CTRL|SHIFT', 'o', actions.scrollback_in_helix, 'The scrollback in helix' },
     { 'CTRL|SHIFT', 'h', cheatsheet, 'This cheatsheet' },
   }

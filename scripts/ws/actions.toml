@@ -29,12 +29,13 @@
 #   text      the lines to show (kind = "info")
 
 [groups]
-order = ["workstation", "projects", "health", "shell", "zellij", "ssh", "clipboard", "python", "config", "docs"]
+order = ["workstation", "projects", "health", "shell", "hc", "zellij", "ssh", "clipboard", "python", "config", "docs"]
 workstation = "Workstation (dotfiles; every ws* command pins mise -C to your home)"
 projects = "Project workspaces"
 health = "Health, updates and repairs"
 shell = "Shell shortcuts"
-zellij = "zellij"
+hc = "herdr-core (hc): shells that keep running"
+zellij = "zellij (where it is installed)"
 ssh = "SSH"
 clipboard = "Clipboard"
 python = "Python"
@@ -52,6 +53,7 @@ reconcile = ["merge", "conflict", "record", "sync", "drift", "review"]
 health = ["doctor", "check", "diagnose", "broken", "problem"]
 project = ["workspace", "repo", "worktree", "session", "code"]
 zellij = ["multiplexer", "tmux", "session", "pane", "layout"]
+hc = ["herdr", "herdr-core", "multiplexer", "tmux", "session", "persistent", "detach", "attach"]
 docs = ["help", "manual", "readme", "documentation", "howto"]
 edit = ["change", "modify", "open"]
 tasks = ["build", "test", "run", "make", "script"]
@@ -188,17 +190,17 @@ wsh = false
 [[action]]
 id = "open"
 title = "Open a project workspace"
-desc = "pick a project (zoxide history, project roots, running sessions) and attach to or create its zellij session"
+desc = "pick a project (zoxide history, project roots, running sessions) and attach to or create its herdr-core shell (hc)"
 group = "projects"
 kind = "open"
-keywords = ["project", "workspace", "zellij", "worktree", "session", "repo"]
+keywords = ["project", "workspace", "hc", "herdr", "zellij", "worktree", "session", "repo"]
 alias = "ws open [project]"
 ws = ["open"]
 
 [[action]]
 id = "open-prefs"
 title = "Edit project workspace preferences"
-desc = "projects.toml: project roots, and per project the editor, layout and opt-in startup commands"
+desc = "projects.toml: project roots, hc or zellij (mux), and per project the editor (zellij: layout, startup commands)"
 group = "projects"
 kind = "open"
 keywords = ["project", "workspace", "editor", "layout", "startup", "settings"]
@@ -208,10 +210,10 @@ ws = ["open", "--prefs"]
 [[action]]
 id = "sessions"
 title = "List project workspaces"
-desc = "known workspaces and whether their session is running, exited (resurrectable) or gone"
+desc = "known workspaces and whether their session is running or gone (zellij: exited, resurrectable)"
 group = "projects"
 kind = "read"
-keywords = ["project", "workspace", "zellij", "session", "list"]
+keywords = ["project", "workspace", "hc", "zellij", "session", "list"]
 alias = "ws open --list"
 ws = ["open", "--list"]
 
@@ -472,6 +474,7 @@ group = "health"
 kind = "change"
 keywords = ["zellij", "zjstatus", "bar", "plugin"]
 os = ["linux"]
+requires = ["zellij"]
 run = ["mise", "-C", "{home}", "install", "github:dj95/zjstatus"]
 fixes = ["zjstatus"]
 wsh = false
@@ -639,6 +642,58 @@ shells = ["nu"]
 alias = "Ctrl-O"
 text = ["Ctrl-O: edit the command line in hx"]
 
+# --- herdr-core -------------------------------------------------------------------
+
+[[action]]
+id = "hcs"
+title = "Kept shell (herdr-core)"
+desc = "hcs [name]: attach to the shell of that name, starting it if there is none (main by default); ctrl+\\ detaches"
+group = "hc"
+kind = "open"
+keywords = ["hc", "herdr", "session", "attach", "tmux", "zellij", "persistent"]
+os = ["linux"]
+requires = ["hc"]
+alias = "hcs [name] [dir]"
+insert = "hcs"
+
+[[action]]
+id = "hc-ls"
+title = "List herdr-core terminals"
+desc = "hc ls: every live terminal on this host (bare hc picks one and attaches)"
+group = "hc"
+kind = "read"
+keywords = ["hc", "herdr", "sessions", "terminals", "list"]
+os = ["linux"]
+requires = ["hc"]
+alias = "hc ls"
+run = ["hc", "ls"]
+
+[[action]]
+id = "hc-help"
+title = "herdr-core: the commands"
+desc = "attach, detach, read a shell's history, run something that keeps going, reach it from the Herdr app"
+group = "hc"
+kind = "info"
+keywords = ["hc", "herdr", "help", "detach", "scrollback", "history", "app"]
+os = ["linux"]
+requires = ["hc"]
+text = ["hcs [name]             attach to a kept shell (starts it; main by default). ctrl+\\ detaches, it keeps running.",
+        "hc                     pick any live terminal and attach",
+        "hc run --bg --name web <cmd>   start a program that keeps going; hc attach web, hc read web --lines 200",
+        "hc read main --lines 5000 | hx   a shell's history in helix",
+        "exit in a shell ends it. The Herdr app (Windows) lists the same terminals: add this host there over ssh."]
+
+[[action]]
+id = "herdr-core"
+title = "Install or update herdr-core"
+desc = "mise run herdr-core: copy mise's pinned herdr-core to ~/.local/bin (running terminals keep running)"
+group = "health"
+kind = "change"
+keywords = ["hc", "herdr", "herdr-core", "install", "update"]
+os = ["linux"]
+run = ["mise", "-C", "{home}", "run", "herdr-core"]
+fixes = ["herdr-core"]
+
 # --- zellij -----------------------------------------------------------------------
 
 [[action]]
@@ -726,12 +781,12 @@ run = ["winterop", "clip", "get"]
 [[action]]
 id = "osc52"
 title = "Copy over SSH"
-desc = "zellij, helix and nvim copy with OSC 52, so a copy in a remote pane reaches your local clipboard"
+desc = "helix and nvim copy with OSC 52, so a copy on a remote host reaches your local clipboard"
 group = "clipboard"
 kind = "info"
 keywords = ["clipboard", "copy", "remote", "osc52", "yank"]
-text = ["Copy inside zellij, helix (y) or nvim (<leader>y): OSC 52 sends it to the local terminal's clipboard, over SSH too.",
-        "Paste with the terminal's paste key. zellij's copy_command stays unset on purpose (README: Troubleshooting)."]
+text = ["Copy inside helix (y) or nvim (<leader>y): OSC 52 sends it to the local terminal's clipboard, over SSH too.",
+        "herdr-core passes OSC 52 through. Paste with the terminal's paste key."]
 wsh = false
 
 # --- python -----------------------------------------------------------------------
@@ -837,7 +892,7 @@ text = ["ws open --prefs"]
 [[action]]
 id = "doc-daily"
 title = "README: daily use"
-desc = "the ws* commands, editing dotfiles, health and updates, zellij, nvim, Claude Code"
+desc = "the ws* commands, editing dotfiles, health and updates, herdr-core, nvim, Claude Code"
 group = "docs"
 kind = "open"
 keywords = ["docs", "readme", "daily", "usage"]

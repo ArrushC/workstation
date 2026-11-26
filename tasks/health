@@ -216,14 +216,29 @@ case $env_rc in
 esac
 echo ""
 
-# 5. zjstatus — config.linux.toml's zjstatus tool loads on every Linux host, and
-# zellij loads it from mise's install dir (see config.kdl).
-hdr "zjstatus"
-zjs="$HOME/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm"
-if [ -f "$zjs" ]; then
-  row_ok "zjstatus" "plugin at $zjs"
+# 5. herdr-core — the kept shells the SSH launchers and `ws open` attach to (hcs). mise pins
+# it; tasks/herdr-core copies it to ~/.local/bin, where the core runs from. --version
+# starts nothing.
+hdr "herdr-core"
+hcbin="$HOME/.local/bin/herdr-core"
+if hcver=$("$hcbin" --version 2>/dev/null) && [ -n "$hcver" ]; then
+  if command -v hc >/dev/null 2>&1 && [ -x "$HOME/.local/bin/hcs" ]; then
+    row_ok "herdr-core" "$hcver at $hcbin (hc, hcs on PATH)"
+  else
+    row_bad "herdr-core" "$hcver at $hcbin, but hc or ~/.local/bin/hcs is missing — mise run herdr-core; ws apply"
+  fi
 else
-  row_bad "zjstatus" "zjstatus.wasm missing at $zjs — mise install github:dj95/zjstatus"
+  row_bad "herdr-core" "no working $hcbin — mise run herdr-core"
+fi
+# zjstatus — only where zellij is installed (its pin is commented out in config.linux.toml):
+# zellij loads the bar from mise's install dir (see config.kdl).
+if command -v zellij >/dev/null 2>&1 && grep -qE '^zellij = ' "$root/config.linux.toml"; then
+  zjs="$HOME/.local/share/mise/installs/github-dj95-zjstatus/latest/zjstatus.wasm"
+  if [ -f "$zjs" ]; then
+    row_ok "zjstatus" "plugin at $zjs"
+  else
+    row_bad "zjstatus" "zjstatus.wasm missing at $zjs — mise install github:dj95/zjstatus"
+  fi
 fi
 echo ""
 

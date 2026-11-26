@@ -5,6 +5,7 @@ injection for opt-in startup commands, and what `ws open` runs in each session s
 from __future__ import annotations
 
 import io
+from unittest import mock
 import os
 import re
 import shutil
@@ -64,6 +65,7 @@ class Workspaces(Scratch):
      bash --norc --noprofile -c '. "$1"; echo "bash|$EDITOR $VISUAL"' _ "{self.root}/env.bash" >>"{self.panes}" ;;
 esac""")
         os.environ["WS_NO_EXEC"] = "1"
+        os.environ["WS_MUX"] = "zellij"  # these are zellij's tests; a host's own hc must not take over
         os.environ["ZELLIJ_CONFIG_DIR"] = str(REPO / "dotfiles/config/zellij")  # the deployed layouts
 
     def test_worktrees_are_distinct_workspaces(self) -> None:
@@ -195,6 +197,76 @@ startup = {{ editor = "nvim .", run = "mise run dev" }}
         self.open(self.app)
         self.assertFalse((self.app / "pwned").exists())
         self.assertTrue(self.zellij_calls()[-1][2].endswith("--new-session-with-layout dev"))
+
+    # --- herdr-core (hc) ------------------------------------------------------------
+
+    def fake_hc(self, live: str = "") -> Path:
+        """An hc that lists `live` (terminals as JSON objects) and logs every other call."""
+        log = self.root / "hc.log"
+        self.write(self.root / "hc-ls.json", '{"hidden_finished":0,"terminals":[' + live + ']}')
+        self.fake("hc", f"""case "$1" in
+  ls) cat "{self.root}/hc-ls.json" ;;
+  *) printf '%s|%s\\n' "$PWD" "$*" >>"{log}" ;;
+esac""")
+        os.environ["WS_MUX"] = "hc"
+        return log
+
+    def test_mux_prefers_hc_and_obeys_the_preference(self) -> None:
+        os.environ.pop("WS_MUX")
+        self.fake_hc()
+        os.environ.pop("WS_MUX")
+        self.assertEqual(workspace.mux({}), "hc")              # both installed: herdr-core
+        self.assertEqual(workspace.mux({"mux": "zellij"}), "zellij")
+        os.environ["WS_MUX"] = "hc"
+        self.assertEqual(workspace.mux({"mux": "zellij"}), "hc")  # the environment wins
+        self.assertEqual(workspace.hc_name("App.Repo v2-1a2b3c"), "app-repo-v2-1a2b3c")
+        self.assertLessEqual(len(workspace.hc_name("x" * 24 + "-1a2b3c")), 32)
+
+    def test_hc_creates_then_attaches(self) -> None:
+        log = self.fake_hc()
+        proj = workspace.describe(self.app.resolve())
+        name = workspace.hc_name(proj.session)
+        self.assertRegex(name, r"^app-repo-[0-9a-f]{6}$")
+        self.write(self.root / "cfg/projects.toml", f'roots = ["{self.projects}"]\neditor = "nvim"\n')
+        out = self.open(self.app, run_task="build")
+        self.assertIn("creating", out)
+        calls = [line.split("|", 1)[1] for line in log.read_text().splitlines()]
+        self.assertEqual(calls, [f"run --bg --keep --no-parent --name {name} --cwd {self.app.resolve()}",
+                                 f"send {name} export EDITOR=nvim VISUAL=nvim",
+                                 f"send {name} mise run build",
+                                 f"attach --history 1000 {name}"])
+        self.assertFalse(self.log.exists())  # zellij was never asked
+        self.assertIn(proj.session, workspace.load_registry())
+        # Running: attach only; nothing is typed into a shell that is already there.
+        log.unlink()
+        self.fake_hc('{"address":"t4","name":"' + name + '","state":"live"}')
+        out = self.open(self.app, run_task="build")
+        self.assertIn("attaching", out)
+        self.assertIn("only when a workspace is created", out)
+        self.assertEqual([line.split("|", 1)[1] for line in log.read_text().splitlines()], [f"attach --history 1000 {name}"])
+        self.assertEqual(workspace.state_of(workspace.sessions(), proj.session), "running")
+
+    def test_hc_from_inside_a_terminal(self) -> None:
+        proj = workspace.describe(self.app.resolve())
+        name = workspace.hc_name(proj.session)
+        log = self.fake_hc('{"address":"t4","name":"' + name + '","state":"live"}')
+        os.environ["HC_TERMINAL_ID"] = "t4"
+        self.assertIn("already in", self.open(self.app))
+        os.environ["HC_TERMINAL_ID"] = "t9"  # another terminal: no nested attach
+        with redirect_stdout(io.StringIO()) as buf:
+            self.assertEqual(workspace.open_project(proj), 1)
+        self.assertIn("detach", buf.getvalue())
+        self.assertFalse(log.exists())
+
+    def test_no_mux_changes_directory(self) -> None:
+        ws_out = self.root / "ws-out"
+        os.environ["WS_OUT"] = str(ws_out)
+        os.environ["WS_MUX"] = "hc"  # asked for, not installed
+        self.fake("mise", "echo '[]'")
+        with mock.patch.object(workspace.core, "which", lambda name: None):
+            out = self.open(self.wt)
+        self.assertEqual(ws_out.read_text(), f"cd\t{self.wt.resolve()}\n")
+        self.assertIn("no hc or zellij here", out)
 
     def test_cd_fallback(self) -> None:
         ws_out = self.root / "ws-out"

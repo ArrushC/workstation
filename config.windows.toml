@@ -146,6 +146,16 @@ description = "Install DeepSeek Harness's desktop app when it's missing (the pos
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deepseek-harness.ps1 || exit /b 0"
 
+# Herdr: the desktop app over herdr-core's terminals (this PC's, and each Linux host's kept
+# shells over ssh: the SSH launchers' `hcs main` attaches the same ones), and herdr-core (hc)
+# beside it. Installed only when missing, per-user without UAC; the app then updates itself and
+# keeps herdr-core current. scripts/herdr-app.ps1 does what Herdr's own installers do, checking
+# each download against the SHA-256 in the release manifest, and runs nothing it downloads.
+[tasks.herdr-app-win]
+description = "Install the Herdr app and herdr-core (hc) when they're missing (the post-tools hook); they update themselves"
+dir = "{{ xdg_config_home }}/mise"
+run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/herdr-app.ps1 || exit /b 0"
+
 # ws update (wsu): tasks/update is bash and ends in an unscoped bootstrap, so Windows pulls
 # and bootstraps dotfiles and tools only, as bootstrap.ps1 does (scripts/update.ps1).
 [tasks.update-windows]
@@ -175,7 +185,7 @@ run_windows = 'python "{{ xdg_config_home }}/mise/scripts/ws/ws.py" baseline sna
 run = "true"
 
 [bootstrap.hooks]
-post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win ::: deepseek-harness-win"
+post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win ::: deepseek-harness-win ::: herdr-app-win"
 pre-dotfiles = "mise run --skip-tools dotfiles-snapshot-win"
 post-dotfiles = "mise run --skip-tools dotfiles-baseline-win"
 

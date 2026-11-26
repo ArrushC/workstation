@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#MISE description="Put mise's pinned herdr-core at ~/.local/bin/herdr-core, with hc beside it (the final hook)"
+set -euo pipefail
+# herdr-core (`hc`) keeps terminals alive on this host: the SSH launchers and `ws open`
+# attach to them through ~/.local/bin/hcs, the Herdr app over ssh. mise pins and checks the
+# release (config.linux.toml's http:herdr-core, mise.linux.lock); this task copies it to
+# ~/.local/bin/herdr-core, as herdr-core's own installer does, because:
+#   - the core runs as a systemd user service from the path it was started at, and mise's
+#     install directory changes name with every version;
+#   - `hc update` and the app's `hc machine update` swap that file in place, which must
+#     never rewrite a mise install.
+# A copy already there is swapped the planned way (`herdr-core update --from`): running
+# terminals keep running. One that is newer than the pin (updated by hc itself, or by the
+# app) is left alone. `hc` is a link beside it unless something else already answers to hc.
+# Every failure warns and exits 0: a failing hook would stop `mise bootstrap`.
+bin="$HOME/.local/bin"
+dest="$bin/herdr-core"
+
+if ! dir="$(mise where http:herdr-core 2>/dev/null)" || [ ! -x "$dir/herdr-core" ]; then
+  echo "  herdr-core not installed (mise install): nothing copied (retries next run)" >&2
+  exit 0
+fi
+src="$dir/herdr-core"
+
+# "hc 0.1.22" -> 0.1.22; empty when the binary doesn't run.
+version_of() { "$1" --version 2>/dev/null | sed -nE 's/^hc ([0-9][0-9A-Za-z.+-]*).*/\1/p' | head -1; }
+# True when $1 is a strictly older version than $2.
+older() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
+
+want="$(version_of "$src")"
+if [ -z "$want" ]; then
+  echo "  ! $src does not run here: herdr-core not copied" >&2
+  exit 0
+fi
+
+if [ -L "$dest" ]; then
+  echo "  ! $dest is a link, not herdr-core's own file: left alone (remove it to use the pinned one)" >&2
+elif [ ! -e "$dest" ]; then
+  if mkdir -p "$bin" && cp "$src" "$dest.new" && chmod 755 "$dest.new" && mv -f "$dest.new" "$dest"; then
+    echo "  herdr-core $want installed at $dest"
+  else
+    rm -f "$dest.new"
+    echo "  ! could not copy herdr-core to $dest" >&2
+    exit 0
+  fi
+else
+  have="$(version_of "$dest")"
+  if [ "$have" = "$want" ]; then
+    echo "  herdr-core $want up to date"
+  elif [ -n "$have" ] && older "$want" "$have"; then
+    echo "  herdr-core $have at $dest is newer than the pin ($want): left alone"
+  elif "$dest" update --from "$src" >/dev/null; then
+    echo "  herdr-core ${have:-?} -> $want (running terminals kept)"
+  else
+    echo "  ! $dest update --from $src failed: still ${have:-unknown}" >&2
+  fi
+fi
+
+if [ -x "$dest" ] && [ ! -e "$bin/hc" ] && [ ! -L "$bin/hc" ]; then
+  if other="$(command -v hc 2>/dev/null)" && [ -n "$other" ]; then
+    echo "  ! another hc is on PATH ($other): no $bin/hc link made; hcs needs hc to be herdr-core" >&2
+  elif ln -s herdr-core "$bin/hc"; then
+    echo "  linked $bin/hc -> herdr-core"
+  fi
+fi

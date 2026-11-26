@@ -83,8 +83,10 @@ if [ -f "$claude_local_src" ] && [ ! -e "$claude_local_dest" ]; then
     echo "  ! failed to seed $claude_local_dest — inspect by hand" >&2
   fi
 fi
-# 5. herdr plugin at its pinned ref, once. PIN lives in the marker filename
-# itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
+# 5. The herdr TUI's file-viewer plugin at its pinned ref, once, and only where the TUI is
+# installed: its pin is commented out in config.linux.toml (herdr-core replaced it), so
+# this is silent on today's hosts and works again if the pin comes back. PIN lives in the
+# marker filename itself: bumping herdr_plugin_ref changes the marker path, so a ref bump
 # re-fires the install.
 herdr_plugin_ref="v1.7.0"
 herdr_plugins_marker="$state/herdr-plugins-$herdr_plugin_ref"
@@ -96,8 +98,6 @@ if [ ! -f "$herdr_plugins_marker" ]; then
     else
       echo "  ! herdr plugin install failed — retries next run" >&2
     fi
-  else
-    echo "  herdr not found on PATH — skipping herdr plugin install (retries next run)" >&2
   fi
 fi
 # 6. The archify skill, a mise tool whose release zip is the skill directory
