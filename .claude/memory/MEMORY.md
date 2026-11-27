@@ -36,3 +36,4 @@
 - [dev10: polars CPU warning](project-dev10-polars-cpu-masked.md) — the VM hides AVX2-era features; polars warns but works; the user kept the default runtime (rtcompat only if it ever crashes).
 - [Windows: Check Point blocks renames](project-windows-checkpoint-rename-race.md) — its scan-on-close makes os.replace onto a just-closed file fail with WinError 5 (~1 in 20k writes); Restart Manager cannot see it; tool-env retries for 1 s.
 - [Global orchestration, git + SVN](project-global-orchestration.md) — sessions route work themselves (ws agent, pueue, claude -p); company SVN on remote dev servers; Pro authorized, DeepSeek not; phases 1+2a merged, 2b (serve, sources, inbox) in validation.
+- [trail and Claude Code](project-trail-claude-wiring.md) — trail 0.30.5 (ex-graft): `trail` bin only, MCP server `trail`, what `trail init` writes, and the settings merge dropping its user-level PreToolUse hooks.

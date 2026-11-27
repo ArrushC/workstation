@@ -46,8 +46,8 @@ jobs:
           h="$RUNNER_TEMP/home"
           mkdir -p "$h"
           export HOME="$h" XDG_DATA_HOME="$h/.local/share" XDG_CACHE_HOME="$h/.cache" XDG_STATE_HOME="$h/.local/state" GOPATH="$h/go"
-          # The default install includes specialist tools. Only cht.sh and
-          # graft remain excluded for their download/compiler requirements.
+          # The default install includes specialist tools. Only cht.sh is
+          # left out (lazy: its site's outages).
           mise install
           mise exec python -- python scripts/tool-env.py all
           # Every Linux asset must run on EL8 (glibc 2.28): a bump to a build that
