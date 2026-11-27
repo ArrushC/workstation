@@ -233,7 +233,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `glances` latest
 - `asciinema` latest
 - `harlequin` latest
-- `@nanonets/graft` 0.29.0
+- `@trailhq/trail-code` 0.30.5
 
 ### Host pins (config.toml [vars])
 - `vcpkg` 2026.10.16

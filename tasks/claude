@@ -64,6 +64,9 @@ fi
 # soft-failing; the `||` here is belt-and-braces.
 "$root/scripts/lib/claude-settings-merge.sh" ||
   echo "  ! claude-settings-merge.sh failed — ~/.claude/settings.json left as-is" >&2
+# 3b. trail's hooks, once `trail init` has wired this account: keep their install record on
+# the pinned trail (scripts/lib/trail-install-record.sh says why). Soft-failing too.
+"$root/scripts/lib/trail-install-record.sh" || true
 # 4. ~/.claude/settings.local.json — seed-if-absent.
 # This file stays out of [dotfiles], like settings.json (Claude Code
 # rewrites the live file), but unlike
