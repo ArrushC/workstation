@@ -18,8 +18,8 @@ Measured on `npm:@trailhq/trail-code` 0.30.5 (scratch repo + scratch `HOME`, 202
 - Unless `--no-global`, it also writes user files: hooks in `~/.claude/settings.json` (commands run
   `~/.claude/helpers/graft-hooks.cjs`, trail's own file name) and `~/.claude/skills/trail/SKILL.md`.
 - The settings merge dropped trail's two user-level `PreToolUse` hooks (`pre-edit`, `pre-bash`): the
-  enforced `PreToolUse` replaced the live array. Fixed by branch `settings-merge-keep-live-hooks`
-  (2026-11-27, its own PR): the merge keeps another tool's live hooks after the enforced ones.
+  enforced `PreToolUse` replaced the live array. Fixed by #156
+  (2026-11-27): the merge keeps another tool's live hooks after the enforced ones.
 - `trail telemetry disable` stops the usage ping only; `DO_NOT_TRACK=1` (now in `config.linux.toml`'s
   `[env]`) also stops the daily npm version check.
 
