@@ -119,6 +119,16 @@
     `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user from its
     machine-scope-only installer despite winget's user-scope preference, and a font bump replacing a loaded TTF.
 
+## Kiri
+
+- `scripts/test-kiri.sh` (in lint): the wrapper and `tasks/kiri` against a stand-in CLI in a scratch `HOME`.
+- Windows: `powershell -File scripts/test-kiri.ps1` and the same under `pwsh` (from WSL: the script's
+  `\\wsl.localhost\<distro>\...` path works). It never runs msiexec or reaches `%LOCALAPPDATA%\Kiri`.
+- The wrapper against the real engine, without touching the real state file:
+  `XDG_STATE_HOME=$(mktemp -d) dotfiles/local/bin/kiri-docker version` (Server: Kiri).
+- Not covered by a test: the real MSI's silent install and Kiri's first-run window. Check on a host without Kiri.
+- Engine experiments use throwaway names (`kirimig-*`) and remove them by name; never `docker system prune`.
+
 ## herdr-core
 
 - Never the real core for a test: a scratch session in a short path (the socket path limit is 107 bytes):

@@ -174,6 +174,16 @@ description = "Install the Herdr app and herdr-core (hc) when they're missing, t
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/herdr-app.ps1 || exit /b 0"
 
+# Kiri: the container engine (its window, and an engine in a WSL distro of its own) on a host
+# that has WSL. Installed only when missing, per-user without UAC, from Kiri's release feed
+# with the feed's SHA-256 checked; Kiri then updates itself. Its first-run setup is a window
+# (choose "Kiri Linux"), so the script says when that is still to do. Not winget: Kiri has no
+# package there. The WSL side is ~/.local/bin/kiri-docker and tasks/kiri (config.linux.toml).
+[tasks.kiri-win]
+description = "Install Kiri (containers; the docker CLI's engine) when it's missing and WSL is there (the post-tools hook); it updates itself"
+dir = "{{ xdg_config_home }}/mise"
+run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kiri.ps1 || exit /b 0"
+
 # ws update (wsu): tasks/update is bash and ends in an unscoped bootstrap, so Windows pulls
 # and bootstraps dotfiles and tools only, as bootstrap.ps1 does (scripts/update.ps1).
 [tasks.update-windows]
@@ -203,7 +213,7 @@ run_windows = 'python "{{ xdg_config_home }}/mise/scripts/ws/ws.py" baseline sna
 run = "true"
 
 [bootstrap.hooks]
-post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win ::: herdr-app-win"
+post-tools = "mise run tool-env-win ::: nu-init ::: nvim-plugins-win ::: claude-skills-win ::: claude-settings-win ::: wezterm-nightly-win ::: herdr-app-win ::: kiri-win"
 pre-dotfiles = "mise run --skip-tools dotfiles-snapshot-win"
 post-dotfiles = "mise run --skip-tools dotfiles-baseline-win"
 

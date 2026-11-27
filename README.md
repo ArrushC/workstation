@@ -181,6 +181,28 @@ Run it where you have sudo (the usual case); without it the system steps, `/etc/
 
 Both need `wsl --shutdown` from a Windows terminal to take effect. `bootstrap.ps1` prints that reminder when `.wslconfig` changes; on Linux, remember it yourself after a `/etc/wsl.conf` change. WSL tabs open in `~` because the WSL Terminal fragment launches `wsl.exe -d AlmaLinux-9 --cd ~`. Every tracked shell exports `COLORTERM=truecolor`, so 24-bit color works in Windows Terminal. Keep long-lived work in a zellij session.
 
+### Containers (Kiri)
+
+[Kiri](https://runkiri.com) is the container engine on a Windows host: a window (containers, images, volumes, Compose projects) over an engine that runs in a WSL distro of its own, `kiri`. It serves the Docker API, so `docker`, `docker compose` and `docker buildx` are the commands, on Windows and in the WSL distro. No Docker Desktop and no Docker Engine in the distro.
+
+**Windows.** On a host with a WSL distro, the post-tools hook (`bootstrap.ps1`, `ws update`) installs Kiri per-user, with no UAC prompt, only when it is missing (`scripts/kiri.ps1`: it reads Kiri's release feed, checks the MSI against the feed's SHA-256 and runs it silently; Kiri's installers aren't code-signed yet, so that checksum is the check). From then on Kiri updates itself. Its first-run setup is a window and can't be scripted: open Kiri once from the Start menu and choose **Kiri Linux** as its distro (its own small one, never your development distro). Until that is done the hook prints `kiri: open Kiri once to finish its setup`. The hook never switches on Kiri's Kubernetes or sharing. If it can't install, it prints `kiri: Kiri was not installed: <reason>` and the bootstrap carries on.
+
+**WSL.** Kiri 0.2.2 gives other distros no socket, and a Linux docker client can't open its named pipe (`\\.\pipe\kiri`). So in the distro `docker` is `~/.local/bin/kiri-docker`, which runs Kiri's own Windows CLI through WSL interop on the `kiri` context. `ws update` in the distro makes the link (`tasks/kiri`, the `final` hook) once Kiri is installed on Windows; on a Linux host that isn't WSL it does nothing. What differs from a Linux client:
+
+- **Bind mounts and Compose projects sit on a Windows drive** (`/mnt/c/...`). Kiri can't see the distro's own filesystem: it mounts an empty directory for a Linux path, with no error.
+- **Compose reads Windows' environment.** Only variables named in `WSLENV` cross; the wrapper adds `DOCKER_CONTEXT`, `COMPOSE_PROJECT_NAME`, `COMPOSE_PROFILES` and `COMPOSE_FILE`. For a `${MY_VAR}` in a compose file: `export WSLENV=MY_VAR:$WSLENV`.
+- **Nothing listens on `/var/run/docker.sock`.** A program that opens the socket itself (lazydocker, dive, Testcontainers) doesn't reach Kiri from the distro.
+- **A process with a bare PATH** (a systemd unit, cron) doesn't find `~/.local/bin/docker`: name it in full.
+
+**A distro that already runs Docker Engine.** `tasks/kiri` then leaves `docker` alone and says so: moving containers, images and volumes is yours to decide, and `kiri-docker` reaches Kiri meanwhile. The two engines can't share a WSL session, though: every distro uses one network stack, and dockerd's iptables rules (FORWARD policy `DROP`) drop the traffic of Kiri's bridges, so Kiri's containers reach neither each other nor the internet while published ports still answer. To move over:
+
+1. Save what the old engine holds: `docker save` the images you built, and for each volume `docker run --rm -v <volume>:/v:ro <image> tar --numeric-owner -C /v -cpf - .` into a file outside both engines, with the containers that write to it stopped.
+2. Load them into Kiri: `kiri-docker load < image.tar`; `kiri-docker volume create <the same name>`, with Compose's `com.docker.compose.project` and `com.docker.compose.volume` labels for a Compose volume, then pipe the archive into `kiri-docker run --rm -i -v <volume>:/v <image> tar --numeric-owner -C /v -xpf -`.
+3. `kiri-docker compose up -d` in each project (on `/mnt/c`). Published ports work at once; to test container networking before the old engine is gone, `sudo iptables -I DOCKER-USER -i kiri+ -j ACCEPT` and the same with `-o kiri+` (both vanish with the WSL session).
+4. `sudo systemctl disable --now docker.service docker.socket containerd.service`, `wsl --shutdown` from Windows, and remove the packages (`sudo dnf remove docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras`). The next `ws update` links `docker`.
+
+A file a container keeps outside its volumes (a key in its writable layer, say) doesn't travel with the volume: `docker diff <container>` on the old engine lists them.
+
 ### Terminals (Warp, Windows Terminal and WezTerm)
 
 Warp is the day-to-day Windows terminal and opens into AlmaLinux-9 (WSL zsh). Its "+" menu (CTRL+ALT+L) lists the generated Tab Configs. Windows Terminal stays fully configured because Warp cannot run Nushell (its supported shells are PowerShell, WSL2 and Git Bash) and cannot take Windows' default-terminal role. Warp skips the shell-side fzf, atuin, starship, shift-select and fzf-tab wiring (`TERM_PROGRAM=WarpTerminal`), since its own editor handles those. The pane mnemonics follow zellij's pane mode (d = down, r = right) so muscle memory transfers between local panes and SSH plus zellij.
