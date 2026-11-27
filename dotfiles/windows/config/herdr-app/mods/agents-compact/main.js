@@ -85,6 +85,267 @@ function icon(p, size, color) {
   return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
 }
 
+// An agent's icon moves with its state, each agent to its own rhythm (set by its address, so
+// two agents never march in step and one agent always moves the same way). Claude Code's is
+// its mascot, the pixel creature of its icon, drawn from our own pieces (clawd-*.svg).
+// Working: it wanders left and right across its slot (two sideways swings of unrelated
+// lengths, so the path doesn't visibly repeat), stepping (two pairs of legs cross-fading under
+// a solid body) and bobbing. Blocked: it hops on the spot. Idle: it passes the time, one of
+// five ways picked like a celebration: asleep under rising z's, watching a flickering
+// television, meditating (hovering over its shadow), nodding along in headphones, or having
+// a steaming coffee. Done (finished while you weren't looking): it celebrates, one of four
+// ways picked by that finish (the agent's address and when it finished), so the next one
+// differs: a party hat and a happy hop, fireworks overhead, confetti twinkling around it, or
+// cheering with its arms up. Any other agent's own icon wanders, hops, dims and celebrates
+// the same way (it cheers by hopping). All native loops: render never runs for them.
+// The icon rests 1 px into an 18 px slot, exactly where spaces-compact draws a space's sprite,
+// so the two lists' pictures and names line up. A walking icon strays ROAM px around that.
+const SLOT = 18, REST = 1, ROAM = 6;
+function rhythm(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
+  // The nth number in 0..1, the same every time for this text.
+  return (n) => ((Math.imul(h ^ (n * 2654435761), 2246822519) >>> 0) % 1000) / 1000;
+}
+// Small parts every act is built from, placed in the icon's slot (and the gap around it).
+const spot = (left, top) => div().absolute().left(left).top(top);
+const letters = (left, top, color, list, ms, px = 9) => spot(left, top).font_family("JetBrains Mono").text_size(px).font_bold().text_color(color).frames(list, ms);
+const thing = (name, left, top, w, h) => image(`mods/agents-compact/${name}.svg`).absolute().left(left).top(top).w(w).h(h);
+
+// What a working agent looks busy with, besides wandering (kind 0): 1 at a laptop, 2 thinking
+// (pacing under a row of dots), 3 juggling, 4 having an idea (a bulb glowing overhead),
+// 5 searching (a magnifying glass sweeping), 6 running flat out (speed lines behind),
+// 7 turning two cogs. `walking` is the icon stepping on the spot.
+function labour(kind, pic, walking, size, t, r) {
+  const beat = 380 + Math.round(r(16) * 180);
+  if (kind === 1) {
+    return [spot(REST, 0).size(size).loop("top", { from: 0, to: -0.6, period: 240 + Math.round(r(17) * 80) }).child(pic),
+      thing("laptop", SLOT, 8, 7, 6),
+      spot(SLOT + 2, 9).w(3).h(2).bg(t.ansi2).loop("opacity", { from: 0.3, to: 1, period: 230 + Math.round(r(18) * 90) })];
+  }
+  if (kind === 2) {
+    return [spot(REST, 0).size(size).loop("left", { from: REST - 1.5, to: REST + 1.5, period: 2200 + Math.round(r(19) * 900) }).child(walking),
+      letters(SLOT - 7, -9, t.muted, [".", "..", "...", "...", " "], 360)];
+  }
+  if (kind === 4) {
+    return [spot(REST, 1).size(size).loop("top", { from: 1, to: 0, period: 1100 }).child(pic),
+      thing("bulb", SLOT - 6, -9, 6, 8).loop("opacity", { from: 0.2, to: 1, period: 800 + Math.round(r(25) * 500) })];
+  }
+  if (kind === 5) {
+    return [spot(REST, 0).size(size).loop("left", { from: REST - 1, to: REST + 1, period: 1900 }).child(walking),
+      thing("magnifier", SLOT - 2, 6, 8, 8).loop("left", { from: SLOT - 4, to: SLOT + 1, period: 1200 + Math.round(r(26) * 600) })];
+  }
+  if (kind === 6) {
+    const dash = (top, period) => spot(-6, top).w(5).h(1).bg(t.muted).loop("opacity", { from: 0, to: 0.9, period }).loop("left", { from: -3, to: -7, period });
+    return [spot(REST + 1, 0).size(size).loop("top", { from: 0, to: -1, period: 150 + Math.round(r(27) * 50) }).child(walking),
+      dash(4, 260), dash(8, 340), dash(12, 430)];
+  }
+  if (kind === 7) {
+    const cog = (left, top, px, color, ms) => svg("mods/agents-compact/gear.svg").absolute().left(left).top(top).size(px).text_color(color).spin(ms);
+    return [spot(REST, 0).size(size).loop("top", { from: 0, to: -0.6, period: 520 }).child(pic),
+      cog(SLOT - 1, 6, 8, t.muted, 2400 + Math.round(r(28) * 1200)), cog(SLOT - 6, -6, 6, t.dim, 1700)];
+  }
+  const ball = (left, color, period) => spot(left, 0).size(2).rounded(1).bg(color).loop("top", { from: -1, to: -9, period });
+  return [spot(REST, 0).size(size).loop("top", { from: 0, to: -1, period: beat }).child(pic),
+    ball(2, t.ansi3, beat), ball(8, t.ansi4, Math.round(beat * 1.31)), ball(14, t.ansi5, Math.round(beat * 1.67))];
+}
+
+// How a blocked agent asks for you, besides hopping (kind 0): 1 waving under a "!", 2 a "?"
+// popping up, 3 shaking with two warning lights, 4 ringing a bell, 5 waiting by an hourglass,
+// 6 fretting (pacing, a bead of sweat falling), 7 waving a red flag. `waving` is the mascot
+// with its arms going.
+function plea(kind, pic, waving, size, t, r) {
+  if (kind === 1) {
+    return [spot(REST, 0).size(size).loop("top", { from: 0, to: -1.5, period: 460 + Math.round(r(20) * 160) }).child(waving ?? pic),
+      letters(SLOT - 5, -10, t.blocked, ["!", "!", " "], 300, 11)];
+  }
+  if (kind === 2) {
+    return [spot(REST, 0).size(size).loop("top", { from: 0, to: -1, period: 900 + Math.round(r(21) * 400) }).child(pic),
+      letters(SLOT - 5, -10, t.blocked, [" ", "?", "?", "?"], 420, 11)];
+  }
+  if (kind === 4) {
+    return [spot(REST, 0).size(size).loop("top", { from: 0, to: -1, period: 380 }).child(pic),
+      thing("bell", SLOT, 5, 7, 8).loop("left", { from: SLOT - 1.5, to: SLOT + 1.5, period: 150 + Math.round(r(29) * 60) })];
+  }
+  if (kind === 5) {
+    const sand = (top, from, to) => spot(SLOT + 2, top).w(2).h(2).bg(t.ansi3).loop("opacity", { from, to, period: 1500 + Math.round(r(30) * 600) });
+    return [spot(REST, 0).size(size).child(pic), thing("hourglass", SLOT, 5, 6, 9), sand(7, 1, 0), sand(11, 0, 1)];
+  }
+  if (kind === 6) {
+    const fall = 640 + Math.round(r(31) * 240);
+    return [spot(REST, 0).size(size).loop("left", { from: REST - 2, to: REST + 2, period: 520 }).child(pic),
+      spot(SLOT - 3, -3).w(2).h(3).rounded(1).bg(t.ansi4).loop("top", { from: -4, to: 3, period: fall }).loop("opacity", { from: 1, to: 0, period: fall })];
+  }
+  if (kind === 7) {
+    return [spot(REST, 0).size(size).loop("top", { from: 0, to: -2, period: 440 }).child(pic),
+      thing("flag", SLOT - 5, -8, 8, 9).loop("left", { from: SLOT - 7, to: SLOT - 4, period: 260 + Math.round(r(32) * 100) })];
+  }
+  const light = (left, from, to) => spot(left, -4).size(3).rounded(2).bg(t.blocked).loop("opacity", { from, to, period: 520 });
+  return [spot(REST, 0).size(size).loop("left", { from: REST - 1, to: REST + 1, period: 170 + Math.round(r(22) * 60) }).child(pic),
+    light(-1, 1, 0.1), light(SLOT - 2, 0.1, 1)];
+}
+
+const SPARKS = ["\u00b7", "\u2726", "\u2738", "\u273a", "\u2738", "\u00b7", " ", " "];
+// The party around a finished agent's icon: `kind` 0 hat, 1 fireworks, 2 confetti, 3 cheer,
+// 4 a trophy, 5 a balloon, 6 a crown, 7 dancing (swaying, arms going, a note in the air).
+function celebration(kind, pic, cheer, size, t, r) {
+  const hop = (lift, period, child) => div().absolute().left(REST).size(size).loop("top", { from: 0, to: -lift, period }).child(child);
+  const colors = [t.ansi3, t.ansi5, t.ansi4, t.ansi2, t.ansi1, t.ansi6];
+  if (kind === 0) {
+    return [hop(2, 480 + Math.round(r(8) * 200), div().size(size).relative().child(pic)
+      .child(image("mods/agents-compact/party-hat.svg").absolute().left(size / 2 - 4).top(-3).w(8).h(6)))];
+  }
+  if (kind === 1) {
+    const burst = (left, top, color, ms) => div().absolute().left(left).top(top).w(8).flex().justify_center()
+      .font_family("JetBrains Mono").text_size(9).font_bold().text_color(color).frames(SPARKS, ms);
+    return [div().absolute().top(1).left(REST).size(size).child(pic),
+      burst(-4, -8, colors[0], 140), burst(11, -9, colors[1], 190), burst(4, -11, colors[2], 240)];
+  }
+  if (kind === 2) {
+    const bit = (n, left, top) => div().absolute().left(left).size(2).bg(colors[n % colors.length])
+      .loop("top", { from: top, to: top + 3, period: 900 + n * 170 }).loop("opacity", { from: 0.15, to: 1, period: 520 + n * 130 });
+    return [hop(1, 600, pic), bit(0, -2, -4), bit(1, 4, -6), bit(2, 10, -5), bit(3, 16, -3), bit(4, 18, 5), bit(5, -3, 6)];
+  }
+  if (kind === 4) {
+    // A trophy beside it, glinting.
+    return [hop(1.5, 560, pic), thing("trophy", SLOT, 6, 7, 8),
+      letters(SLOT + 1, -6, t.ansi3, ["\u2726", " ", "\u00b7", " "], 330, 7)];
+  }
+  if (kind === 5) {
+    // A balloon bobbing on its string above.
+    return [spot(REST, 1).size(size).child(pic),
+      thing("balloon", SLOT - 5, -7, 5, 8).loop("top", { from: -7, to: -9, period: 1500 + Math.round(r(24) * 700) })];
+  }
+  if (kind === 6) {
+    // Crowned, with two glints.
+    const glint = (left, top, period) => spot(left, top).size(2).rounded(1).bg("#ffffff").loop("opacity", { from: 0, to: 0.9, period });
+    return [spot(REST, 1).size(size).child(div().size(size).relative().child(pic).child(thing("crown", size / 2 - 5, -4, 10, 6))),
+      glint(1, -5, 700), glint(SLOT - 2, -3, 1100)];
+  }
+  if (kind === 7) {
+    const sway = 480 + Math.round(r(33) * 200);
+    const dancer = cheer
+      ? div().size(size).relative()
+        .child(div().absolute().inset_0().child(cheer("torso")))
+        .child(div().absolute().inset_0().loop("opacity", { from: 1, to: 0, period: sway / 2 }).child(cheer("arms-down")))
+        .child(div().absolute().inset_0().loop("opacity", { from: 0, to: 1, period: sway / 2 }).child(cheer("arms-up")))
+      : pic;
+    return [spot(REST, 0).size(size).loop("left", { from: REST - 2, to: REST + 2, period: sway })
+        .child(div().absolute().left(0).size(size).loop("top", { from: 0, to: -1, period: sway / 2 }).child(dancer)),
+      letters(SLOT - 5, -9, t.ansi5, ["\u266a", " ", " \u266a", " "], 400)];
+  }
+  // Arms up and down under a solid body (only the arms trade places), with a hop.
+  const wave = 520 + Math.round(r(9) * 240);
+  return [hop(2, wave, cheer
+    ? div().size(size).relative()
+      .child(div().absolute().inset_0().child(cheer("torso")))
+      .child(div().absolute().inset_0().loop("opacity", { from: 1, to: 0, period: wave }).child(cheer("arms-down")))
+      .child(div().absolute().inset_0().loop("opacity", { from: 0, to: 1, period: wave }).child(cheer("arms-up")))
+    : pic)];
+}
+
+// What an idle agent does meanwhile: `kind` 0 sleeps, 1 watches television, 2 meditates,
+// 3 listens to music, 4 has a coffee, 5 reads, 6 stargazes, 7 sunbathes in shades. `pose(name)` draws a mascot piece; without one (another
+// agent's icon) the icon itself sits there with the same props around it.
+function pastime(kind, pic, pose, size, t, r) {
+  const at = (left, top) => div().absolute().left(left).top(top);
+  const me = (child) => at(REST, 0).size(size).child(child);
+  const body = (name) => (pose ? pose(name) : pic);
+  const glyphs = (left, top, color, list, ms, px = 8) => at(left, top).font_family("JetBrains Mono").text_size(px).font_bold().text_color(color).frames(list, ms);
+  const prop = (name, left, top, w, h) => image(`mods/agents-compact/${name}.svg`).absolute().left(left).top(top).w(w).h(h);
+  if (kind === 1) {
+    // Eyes on the set beside it; the screen flickers in two unrelated beats.
+    return [me(body("look-right")), prop("tv", SLOT, 6, 7, 7),
+      at(SLOT + 1, 9).w(5).h(3).bg(t.ansi4).loop("opacity", { from: 0.35, to: 1, period: 310 + Math.round(r(10) * 120) }),
+      at(SLOT + 1, 9).w(5).h(3).bg("#ffffff").loop("opacity", { from: 0, to: 0.45, period: 730 + Math.round(r(11) * 300) })];
+  }
+  if (kind === 2) {
+    const breath = 2600 + Math.round(r(12) * 1400);
+    return [at(REST, 0).size(size).loop("top", { from: -1, to: -3, period: breath }).child(body("lotus")),
+      at(REST + 3, size - 1).h(1).bg(t.dim).loop("width", { from: 10, to: 6, period: breath }),
+      at(-2, 2).size(2).rounded(1).bg(t.ansi5).loop("opacity", { from: 0, to: 0.9, period: breath / 2 }),
+      at(SLOT, 5).size(2).rounded(1).bg(t.ansi6).loop("opacity", { from: 0.9, to: 0, period: breath / 2 })];
+  }
+  if (kind === 3) {
+    return [at(REST, 0).size(size).loop("top", { from: 0, to: -1, period: 430 + Math.round(r(13) * 160) })
+        .child(div().size(size).relative().child(body("body-legs")).child(prop("headphones", 0, 0, size, size))),
+      glyphs(SLOT - 4, -9, t.ansi5, ["\u266a", " ", " \u266a", " "], 470, 9)];
+  }
+  if (kind === 4) {
+    const steam = (left, period) => at(left, 0).w(1).h(3).bg(t.muted).loop("top", { from: 4, to: 1, period }).loop("opacity", { from: 0.8, to: 0, period });
+    return [me(body("body-legs")), prop("mug", SLOT, 8, 7, 6), steam(SLOT + 2, 1300), steam(SLOT + 4, 1700)];
+  }
+  if (kind === 5) {
+    // Reading: eyes on the book, a page catching the light now and then.
+    return [me(body("look-right")), prop("book", SLOT, 8, 7, 6),
+      at(SLOT + 4, 9).w(2).h(3).bg("#ffffff").loop("opacity", { from: 0, to: 0.7, period: 1700 + Math.round(r(23) * 900) })];
+  }
+  if (kind === 6) {
+    // Stargazing: eyes up, three stars twinkling out of step.
+    const star = (left, top, period) => at(left, top).size(2).rounded(1).bg(t.ansi3).loop("opacity", { from: 0.1, to: 1, period });
+    return [me(body("look-up")), star(1, -6, 900), star(9, -9, 1400), star(SLOT - 1, -5, 1150),
+      glyphs(SLOT - 9, -11, t.ansi3, [" ", " ", "\u2726", " "], 800, 7)];
+  }
+  if (kind === 7) {
+    // Sunbathing: shades on, a sun glowing overhead.
+    return [me(div().size(size).relative().child(body("body-legs")).child(prop("sunglasses", 0, 0, size, size))),
+      at(SLOT - 5, -8).size(6).rounded(3).bg(t.ansi3).loop("opacity", { from: 0.55, to: 1, period: 1900 })];
+  }
+  // Asleep: breathing slowly, z's rising.
+  return [me(div().size(size).loop("opacity", { from: 0.5, to: 0.9, period: 2800 + Math.round(r(6) * 2200) }).child(body("asleep"))),
+    glyphs(SLOT - 5, -8, t.muted, [" ", "z", "zz", "zzz", "zzz", " "], 520, 8)];
+}
+
+function agentIcon(a, size, t, since = 0, kind = null) {
+  const pic = icon(a.program, size, t.foreground);
+  if (!pic) return null;
+  const r = rhythm(a.address);
+  const slot = (child) => div().w(SLOT).h(size).flex_none().relative().child(child);
+  const still = (child) => slot(div().absolute().top(0).left(REST).size(size).child(child));
+  const claude = /claude/.test(a.program.key ?? "");
+  const pose = (name) => image(`mods/agents-compact/clawd-${name}.svg`).w(size).h(size);
+  if (a.status === "working") {
+    const step = 340 + Math.round(r(1) * 200);
+    const body = claude
+      ? div().size(size).relative()
+        .child(div().absolute().inset_0().child(pose("body")))
+        .child(div().absolute().inset_0().loop("opacity", { from: 1, to: 0, period: step * 2 }).child(pose("legs-a")))
+        .child(div().absolute().inset_0().loop("opacity", { from: 0, to: 1, period: step * 2 }).child(pose("legs-b")))
+      : pic;
+    if (kind) {
+      const walking = claude ? body : pic;
+      return div().w(SLOT).h(size).flex_none().relative().children(labour(kind, pic, walking, size, t, r));
+    }
+    const far = r(2) < 0.5 ? [REST - ROAM / 2, REST + ROAM / 2] : [REST + ROAM / 2, REST - ROAM / 2]; // which way it sets off
+    return slot(div().absolute().top(0).size(size).loop("left", { from: far[0], to: far[1], period: 2600 + Math.round(r(3) * 2400) })
+      .child(div().absolute().top(0).size(size).loop("left", { from: -1, to: 1, period: 900 + Math.round(r(4) * 800) })
+        .child(div().absolute().left(0).size(size).loop("top", { from: 0, to: -1, period: step }).child(body))));
+  }
+  if (a.status === "blocked" && kind) {
+    const waving = claude ? div().size(size).relative()
+      .child(div().absolute().inset_0().child(pose("torso")))
+      .child(div().absolute().inset_0().loop("opacity", { from: 1, to: 0, period: 400 }).child(pose("arms-down")))
+      .child(div().absolute().inset_0().loop("opacity", { from: 0, to: 1, period: 400 }).child(pose("arms-up"))) : null;
+    return div().w(SLOT).h(size).flex_none().relative().children(plea(kind, pic, waving, size, t, r));
+  }
+  if (a.status === "blocked") {
+    return slot(div().absolute().left(REST).size(size).loop("top", { from: 0, to: -3, period: 420 + Math.round(r(5) * 240) }).child(pic));
+  }
+  if (a.status === "idle") {
+    const pick = rhythm(`${a.address}:${since}`);
+    // "body-legs" is the mascot as it stands: its own icon.
+    const piece = claude ? (name) => (name === "body-legs" ? pic : pose(name)) : null;
+    return div().w(SLOT).h(size).flex_none().relative().opacity(0.85)
+      .children(pastime(kind ?? Math.floor(pick(14) * 8) % 8, pic, piece, size, t, pick));
+  }
+  if (a.status === "done") {
+    const pick = rhythm(`${a.address}:${since}`);
+    return div().w(SLOT).h(size).flex_none().relative()
+      .children(celebration(kind ?? Math.floor(pick(7) * 8) % 8, pic, claude ? pose : null, size, t, pick));
+  }
+  return still(pic);
+}
+
 // Status marks. Working: the braille "dots" spinner (cli-spinners), drawn natively frame by
 // frame. Blocked: breathes, so the one waiting on you catches the eye. Done: a still check.
 // Idle: a crescent moon.
@@ -98,6 +359,8 @@ export default class Agents extends View {
     this.folded = new Set();
     // Each agent's last state and when it changed (ms), kept across restarts.
     try { this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}"); } catch { this.changed = {}; }
+    try { this.acts = JSON.parse(localStorage.getItem("acts") ?? "{}"); } catch { this.acts = {}; }
+    if (!this.acts || typeof this.acts !== "object" || Array.isArray(this.acts)) this.acts = {};
     if (!this.changed || typeof this.changed !== "object" || Array.isArray(this.changed)) this.changed = {};
     try { this.pendingPins = JSON.parse(localStorage.getItem("pins") ?? "[]"); } catch { this.pendingPins = []; }
     if (!Array.isArray(this.pendingPins)) this.pendingPins = [];
@@ -141,6 +404,31 @@ export default class Agents extends View {
     this.pendingPins = pending;
     if (pending.length) localStorage.setItem("pins", JSON.stringify(pending));
     else localStorage.removeItem("pins");
+  }
+
+  // Which act each agent plays for its state (eight for each state). Chance alone
+  // repeats itself (three of five asleep), so an agent entering the state takes the one
+  // fewest others are playing now, chance only breaking ties; it keeps it until its state
+  // changes. Kept across restarts.
+  cast(list) {
+    const COUNT = { working: 8, blocked: 8, idle: 8, done: 8 };
+    const live = new Map(list.map((a) => [a.address, a]));
+    let dirty = false;
+    for (const address of Object.keys(this.acts)) {
+      const a = live.get(address);
+      if (!a || !(a.status in COUNT) || this.acts[address].key !== `${a.status}:${this.since(a)}`) { delete this.acts[address]; dirty = true; }
+    }
+    for (const a of list) {
+      if (!(a.status in COUNT) || this.acts[a.address]) continue;
+      const uses = (k) => Object.values(this.acts).filter((act) => act.status === a.status && act.kind === k).length;
+      const kinds = Array.from({ length: COUNT[a.status] }, (_, k) => k);
+      const least = Math.min(...kinds.map(uses));
+      const free = kinds.filter((k) => uses(k) === least);
+      const pick = rhythm(`${a.address}:${this.since(a)}`);
+      this.acts[a.address] = { key: `${a.status}:${this.since(a)}`, status: a.status, kind: free[Math.floor(pick(15) * free.length) % free.length] };
+      dirty = true;
+    }
+    if (dirty) localStorage.setItem("acts", JSON.stringify(this.acts));
   }
 
   since(a) {
@@ -243,6 +531,7 @@ export default class Agents extends View {
     const shown = focused()?.agent;
     const now = Date.now();
     this.track(list, now);
+    this.cast(list);
     // A kept sub-agent (one with a pane) is in agents() too: where a tree shows
     // it, it gets no row of its own, unless it's pinned.
     const nested = new Set(collapsed ? [] : list.flatMap((a) => this.tree(all, a.address).map((s) => s.t.address)));
@@ -313,7 +602,7 @@ export default class Agents extends View {
     }
 
     const row = (a, i, subs = []) => {
-      const pic = icon(a.program, 16, t.foreground);
+      const pic = agentIcon(a, 16, t, this.since(a), this.acts[a.address]?.kind ?? null);
       const more = detail.get(a.address);
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;

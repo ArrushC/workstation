@@ -6,6 +6,8 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, settings } from "herdr";
+import { sprite, assign, NAMES } from "./sprites.js";
+import { act } from "./acts.js";
 
 // Text sizes were chosen for Geist. A monospaced panel font (settings.json's `ui_font`, e.g.
 // JetBrains Mono) is about a sixth wider, so it is drawn a step smaller to fit the same rows.
@@ -510,7 +512,23 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(sz(10.5)).font_bold().text_color("#ffffff").child(spaceAvatar(w.name))))
+          // The avatar is an 8x8 pixel sprite in the space's color (sprites.js; alt-click: the
+          // next one). Each sprite moves in its own way for each state of its space (acts.js),
+          // each space to its own beat.
+          .when(!tree, el => {
+            const beat = [...w.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 240;
+            const name = (shared("space.sprites") ?? {})[w.id];
+            const art = sprite(name, fill, { div, v_flex, h_flex });
+            return el.child(div().id(`space-sprite-${w.id}`).size(18).flex_none().relative()
+              .on_mouse_down("left", (e, cx) => {
+                if (!e.modifiers.alt) return;
+                cx.stop_propagation();
+                const all = shared("space.sprites") ?? {};
+                setShared("space.sprites", { ...all, [w.id]: NAMES[(NAMES.indexOf(all[w.id]) + 1) % NAMES.length] });
+                cx.notify();
+              })
+              .children(act(name, w.status, art, fill, t, beat, { div })));
+          })
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(w.name)),
       );
   }
@@ -546,6 +564,13 @@ export default class Spaces extends View {
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
+    // A sprite per space, kept once given. No spaces means nothing to go by (`herdr-app
+    // check` runs with none, against the real shared state): leave the sprites as they are.
+    if (sp.length) {
+      const shown = Object.fromEntries(Object.entries(shared("space.sprites") ?? {}).filter(([id]) => ids.has(id)));
+      const sprites = assign(sp, shown);
+      if (sprites.changed || Object.keys(shown).length !== Object.keys(shared("space.sprites") ?? {}).length) setShared("space.sprites", sprites.out);
+    }
     const list = this.grouped(t, collapsed);
     // Bring the active space into view when it, or its place in the list, changes; a row already in view stays put.
     const active = sp.find(p => p.active)?.id;

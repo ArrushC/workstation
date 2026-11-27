@@ -1,7 +1,7 @@
 mod:            spaces-compact, the Herdr app's spaces list with one short line per row: the name alone, the rest on hover
 upstream:       https://github.com/herdrdev/herdr-app (defaults/mods/spaces)
 version:        0.1.18 (mod.json's cloned_from)
-license:        Apache-2.0
+license:        Apache-2.0 (Herdr's mod, and sprites.js)
 cloned:         2026-11-26, in the app: herdr-app do mod.clone --name spaces --as spaces-compact
 deployed as:    ~/.config/herdr-app/mods/spaces-compact/ (directory copy; the app adds its own
                 gpui-kit.d.ts and jsconfig.json there, which stay unmanaged)
@@ -9,3 +9,9 @@ note:           Ours: gitTail() returns the row's tooltip text (repo, branch, ah
                 Herdr never updates a clone. To pick up a newer list: clone it again under
                 another name, re-apply that, `herdr-app check` it, replace these files.
                 Used by layouts/workstation.json.
+sprites:        sprites.js is pilmokim's herdr-pixel-spaces (https://github.com/pilmokim/herdr-pixel-spaces,
+                mods/pixel-spaces/sprites.js at 72ae9e425586, Apache-2.0), its 15 8x8 pixel sprites and
+                assign(), plus 22 sprites of ours after them (invader to sword). Ours in main.js: the avatar is a
+                sprite in the space's color (shared "space.sprites"; alt-click steps to the next),
+                moving its own way for each state of the space: acts.js (ours) gives every sprite a way of
+                moving and an effect (SPEC) and every state a mood (MOOD).
