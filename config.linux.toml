@@ -256,7 +256,10 @@ GRAFT_NO_STATUSLINE = "1"
 "pre-packages" = "mise run --skip-tools enable-el-repos"
 # After the strict batch: packages only some EL releases carry (bear: EL9 yes, EL8 no),
 # installed with dnf's strict=0 so a missing one is skipped, not fatal.
-"post-packages" = "mise run --skip-tools optional-packages"
+# docker-engine: Docker Engine from Docker's own dnf repository, on a host that isn't WSL (a
+# WSL distro's containers are Kiri's: tasks/kiri). A task, not names in the batch below: the
+# batch loads on WSL too, and the names resolve only once Docker's repository is there.
+"post-packages" = "mise run --skip-tools optional-packages ::: docker-engine"
 # `final` runs vcpkg, claude, fonts, broot-skin, nvim-plugins, wezterm-terminfo, herdr-core and kiri,
 # and only on a full `mise bootstrap`, never on `--only dotfiles` (wsa).
 # fonts skips itself under WSL (the Windows terminal resolves fonts there).

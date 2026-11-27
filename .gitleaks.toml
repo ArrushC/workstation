@@ -32,6 +32,9 @@ paths = [
 # generic-api-key heuristic. Allowlist the chord SHAPE (matched against the
 # detected secret), never the settings.json path — the config/dotfiles
 # surface must stay scanned.
+# Docker's release key FINGERPRINT (tasks/docker-engine pins it; check_docker_engine holds
+# the pin): public by nature, and only this exact value is exempt.
 regexes = [
   '''^(ctrl|alt|shift|win)(\+[a-zA-Z0-9=+-]+)+$''',
+  '''^060A61C51B558A7F742B77AAC52FEB6B621E9F35$''',
 ]

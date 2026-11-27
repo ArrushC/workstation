@@ -1321,9 +1321,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-lint-root.sh, scripts/test-bump-lock-retry.sh, scripts/test-ci-scope.sh, scripts/test-kiri.sh, scripts/test-ws.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-lint-root.sh, scripts/test-bump-lock-retry.sh, scripts/test-ci-scope.sh, scripts/test-kiri.sh, scripts/test-docker-engine.sh, scripts/test-ws.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-lint-root.sh scripts/test-bump-lock-retry.sh scripts/test-ci-scope.sh scripts/test-kiri.sh scripts/test-ws.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-lint-root.sh scripts/test-bump-lock-retry.sh scripts/test-ci-scope.sh scripts/test-kiri.sh scripts/test-docker-engine.sh scripts/test-ws.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -2328,6 +2328,27 @@ LUA
   fi
 }
 
+# Docker Engine on plain Linux hosts (tasks/docker-engine): never on WSL (a dockerd there
+# breaks Kiri's networking), never in the dnf batch (it loads on WSL too, and the names
+# resolve only with Docker's repository), its key pinned by fingerprint and named as a
+# local file in the repo file, and the daemon's configuration left alone.
+check_docker_engine() {
+  hdr "Docker Engine (plain Linux only, pinned key, no dnf batch entry, no TCP)"
+  local t=tasks/docker-engine r=configs/docker/docker-ce.repo missing=()
+  grep -qE '^"post-packages" = ".*::: docker-engine"' config.linux.toml || missing+=("config.linux.toml's post-packages hook doesn't run docker-engine")
+  grep -qxF '"$fn" is_wsl && exit 0' "$t" || missing+=("$t doesn't stop first on WSL")
+  grep -qxF 'key_fpr=060A61C51B558A7F742B77AAC52FEB6B621E9F35 # Docker Release (CE rpm) <docker@docker.com>' "$t" || missing+=("$t no longer pins Docker's release key fingerprint")
+  grep -qxF 'gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-docker-ce' "$r" || missing+=("$r doesn't name the local, checked key (dnf would fetch one itself)")
+  grep -qxF 'gpgcheck=1' "$r" || missing+=("$r doesn't check package signatures")
+  if grep -qE '^"dnf:(docker|containerd|moby)' config.linux.toml; then missing+=("a docker package is in config.linux.toml's dnf batch: it loads on WSL hosts too"); fi
+  if grep -vE '^\s*#' "$t" | grep -qE 'daemon\.json|tcp://|DOCKER_HOST|usermod'; then missing+=("$t writes daemon.json, names a TCP endpoint or uses usermod (gpasswd works for SSSD accounts)"); fi
+  if [ "${#missing[@]}" -eq 0 ]; then
+    ok "post-packages hook, WSL excluded, key pinned and local, signatures checked, nothing in the dnf batch"
+  else
+    for m in "${missing[@]}"; do bad "$m"; done
+  fi
+}
+
 # Kiri: the Windows host installs it (post-tools), the WSL distro links docker to its CLI
 # (final). The wrapper only ever runs Kiri's Windows CLI on the named pipe's context: a TCP
 # DOCKER_HOST would open the Docker API to every local user. Neither script moves another
@@ -2741,6 +2762,7 @@ check_ws
 check_wezterm_config
 check_wezterm_term
 check_kiri
+check_docker_engine
 check_claude_config
 check_disk_budget
 check_layout
