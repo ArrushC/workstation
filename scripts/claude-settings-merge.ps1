@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 # =============================================================================
 # claude-settings-merge.ps1 -- Windows' three-layer ~/.claude/settings.json merge, with
-# scripts/lib/claude-settings-merge.sh's jq filter (that file explains the layers):
+# scripts/lib/claude-settings-merge.jq, the filter scripts/lib/claude-settings-merge.sh runs:
 # settings.seed.json (only where a key is absent) -> the live file -> settings.enforced.json
-# (always wins).
+# (always wins; for a hook event it defines, the live hooks that aren't ours follow its own).
 #
 # Run by config.windows.toml's `claude-settings-win` task (the post-tools hook), so wsu
 # applies a settings.enforced.json change as Linux's full bootstrap does, and by
@@ -26,6 +26,8 @@ $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $seed = Join-Path $repo 'dotfiles\claude\settings.seed.json'
 $enforced = Join-Path $repo 'dotfiles\claude\settings.enforced.json'
+# The filter is a file: Windows PowerShell 5.1 drops the double quotes of a native argument.
+$filter = Join-Path $repo 'scripts\lib\claude-settings-merge.jq'
 
 function Write-Step([string]$Message) { Write-Host "  claude settings: $Message" }
 
@@ -41,7 +43,7 @@ function Merge-Settings {
         Write-Step "! jq is not on PATH -- $Dest left as it is"
         return
     }
-    foreach ($f in $seed, $enforced) {
+    foreach ($f in $seed, $enforced, $filter) {
         if (-not (Test-Path -LiteralPath $f)) {
             Write-Step "! missing $f -- $Dest left as it is"
             return
@@ -74,7 +76,7 @@ function Merge-Settings {
             [IO.File]::WriteAllText($empty, '{}')
             $live = $empty
         }
-        $merged = @(Invoke-Jq -a -s '.[0] * .[1] * .[2]' $seed $live $enforced)
+        $merged = @(Invoke-Jq -a -s -f $filter $seed $live $enforced)
         if ($LASTEXITCODE -ne 0 -or $merged.Count -eq 0) {
             Write-Step "! the jq merge failed -- $Dest left as it is"
             return

@@ -73,6 +73,7 @@ expect "tool_env" "environments/python/uv.lock scripts/test-tool-env-real.py"
 expect "templates" "scripts/check-templates.sh"
 expect "templates" "scripts/nu-init.nu scripts/test-nu-init.sh"
 expect "templates windows" "scripts/lib/claude-settings-merge.sh"
+expect "templates windows" "scripts/lib/claude-settings-merge.jq"
 expect "windows" "disk-budget.toml"
 
 # Scopes add up across a change.

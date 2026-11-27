@@ -16,18 +16,11 @@
 #      agentPushNotifEnabled, inputNeededNotifEnabled, and
 #      env.ARCHIFY_UPDATE_CHECK_DISABLED: mise pins the archify skill).
 #
-# The merge is a recursive object merge (jq `.[0] * .[1] * .[2]`), matching
-# a recursive overwrite: a later operand overwrites a matching LEAF, but
-# siblings the later operand doesn't mention survive untouched. A plain
-# top-level union (`+`) would be wrong here — it replaces a whole key's value
-# wholesale, so a live
-# `hooks.Stop` (a real Claude Code hook type the user added by hand, not one
-# of the enforced sub-keys) was silently wiped every run because
-# `enforced.hooks` replaced `live.hooks` in full. `*` merges objects
-# key-by-key recursively and, for two non-object values (including arrays),
-# lets the later operand win wholesale — so `enforced.hooks.PreToolUse`
-# still fully REPLACES (never concatenates with) a live PreToolUse array,
-# while a live-only `hooks.Stop` is preserved as a sibling.
+# The merge is scripts/lib/claude-settings-merge.jq (it explains itself): a recursive
+# object merge, so a live-only key or hook event stays, and for a hook event the enforced
+# file defines, the enforced hooks first and then the live hooks that aren't ours, so a
+# hook another tool added to ~/.claude/settings.json (trail's PreToolUse ones) survives.
+# scripts/test-claude-settings-merge.sh tests it.
 #
 # Invoked from tasks/claude, Linux hosts only (Windows: scripts/claude-settings-merge.ps1,
 # the same filter). Soft-failing by design: every
@@ -46,6 +39,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SEED="$REPO_ROOT/dotfiles/claude/settings.seed.json"
 ENFORCED="$REPO_ROOT/dotfiles/claude/settings.enforced.json"
+FILTER="$REPO_ROOT/scripts/lib/claude-settings-merge.jq"
 DEST="${CLAUDE_SETTINGS_MERGE_DEST:-$HOME/.claude/settings.json}"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -53,7 +47,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-for f in "$SEED" "$ENFORCED"; do
+for f in "$SEED" "$ENFORCED" "$FILTER"; do
   if [ ! -f "$f" ]; then
     printf 'claude-settings-merge.sh: missing %s — skipping settings merge\n' "$f" >&2
     exit 0
@@ -80,7 +74,7 @@ tmp="$(mktemp "$dest_dir/.settings.json.XXXXXX" 2>/dev/null)" || {
 }
 trap 'rm -f "$tmp"' EXIT
 
-if ! jq -s '.[0] * .[1] * .[2]' "$SEED" <(printf '%s' "$current") "$ENFORCED" >"$tmp" 2>/dev/null; then
+if ! jq -s -f "$FILTER" "$SEED" <(printf '%s' "$current") "$ENFORCED" >"$tmp" 2>/dev/null; then
   printf 'claude-settings-merge.sh: jq merge failed — leaving %s untouched\n' "$DEST" >&2
   exit 0
 fi

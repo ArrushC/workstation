@@ -89,7 +89,7 @@
   | `test-mise-env.ps1` | `miserc.toml`; `Install-Mise` (rename-aside, keep-old, sha mismatch); the `config.windows.toml` guard; `-C` pinning; locked-environment delegation |
   | `test-winget-apps.ps1` | `Install-WingetApps` (`mise bootstrap --only packages`, pinned `-C`) and `Install-SshfsWin` (presence by `winget list`, no `--silent`, the UAC warning, `-SkipElevated`, exit codes) |
   | `test-python-fonts.ps1` | `Invoke-InstallNerdFonts` and `install-nerd-fonts.ps1` on fake TTFs (the Python env is `scripts/test-tool-env*.py`) |
-  | `test-claude-settings-merge.ps1` | `claude-settings-merge.ps1` against the real seed and enforced files (non-ASCII, bad JSON, no jq), `Invoke-ClaudeSettingsMerge`, the post-tools wiring |
+  | `test-claude-settings-merge.ps1` | `claude-settings-merge.ps1` against the real seed and enforced files (an enforced hook event keeping another tool's live hooks, non-ASCII, bad JSON, no jq), `Invoke-ClaudeSettingsMerge`, the post-tools wiring |
 - From WSL interop: copy `bootstrap.ps1`, `scripts/*.ps1` and `environments/` under
   `%TEMP%` (keep the `scripts\` layout: tests find the repo as their parent dir), `cd` to
   `%USERPROFILE%` and run each with `-NoProfile -ExecutionPolicy Bypass -File` under `powershell.exe`
@@ -118,6 +118,15 @@
   - Only a live host shows: a `$MiseVersion` bump with a Nushell tab open (`mise.exe` renamed to
     `*.old`), SSHFS-Win's UAC prompt(s) on a fresh host, Zed installing per-user from its
     machine-scope-only installer despite winget's user-scope preference, and a font bump replacing a loaded TTF.
+
+## Claude settings merge
+
+- `scripts/test-claude-settings-merge.sh` (in lint): the merge and its jq filter against the real seed and
+  enforced files, writing a throwaway `CLAUDE_SETTINGS_MERGE_DEST`.
+- To see what a merge would do to a real file: copy `~/.claude/settings.json` to a scratch path, run
+  `CLAUDE_SETTINGS_MERGE_DEST=<copy> bash scripts/lib/claude-settings-merge.sh`, and diff the two with `jq -S`.
+- Windows: `powershell -File scripts/test-claude-settings-merge.ps1` (from WSL, by the script's
+  `\\wsl.localhost\<distro>\...` path, run from a `/mnt/c` directory).
 
 ## Kiri
 

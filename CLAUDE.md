@@ -152,9 +152,14 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - `~/.claude/settings.json` isn't a dotfile. `scripts/lib/claude-settings-merge.sh` (Windows:
   `scripts/claude-settings-merge.ps1`, same jq filter, from the post-tools hook) merges three layers:
   `settings.seed.json` (only where a key is absent) → the live file → `settings.enforced.json`
-  (always wins). Change cross-host keys in the enforced file. The merge replaces arrays wholesale, so the enforced file
-  never adds a hook event (it would erase the live one, e.g. herdr's `SessionStart`): a global command
-  hook ships as the `workstation-orchestration` plugin.
+  (always wins). Change cross-host keys in the enforced file. The filter is one file both run,
+  `scripts/lib/claude-settings-merge.jq` (PowerShell 5.1 can't pass its quotes as an argument). Arrays are
+  replaced wholesale, except a hook event the enforced file defines: its groups first, then the live groups
+  that aren't a copy of one and whose commands don't run `~/.claude/hooks/*` or `~/.claude/notify.sh`
+  (ours: an older enforced entry must not outlive its removal), so another tool's hooks stay (trail's
+  `PreToolUse`). Keep our hook commands under those two paths. The enforced file still adds no hook
+  event: a global command hook ships as the `workstation-orchestration` plugin.
+  Tests: `scripts/test-claude-settings-merge.sh` (lint), `scripts/test-claude-settings-merge.ps1`.
 - The status line is ccline (`github:Haleclipse/CCometixLine`, the static build on Linux): the enforced
   command is `~/.claude/ccline/ccline` with no `refreshInterval`, its config the `copy` entry
   `~/.claude/ccline/config.toml` (`check_claude_config`). Never plain `ccline`: a session whose PATH
