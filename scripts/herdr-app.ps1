@@ -30,6 +30,16 @@
 #      `ws update` this step fails with a warning and the next run tries again. Asking
 #      herdr-core for its machines starts the core if it isn't running, as any hc does.
 #      -NoWsl skips the step.
+#   4. the look: the app's settings.json (<ConfigDir>, ~\.config\herdr-app) gets `theme`
+#      catppuccin-mocha (the theme file is a [dotfiles] copy entry in
+#      config.windows.toml), the terminals' `font` JetBrainsMono NFM (the Nerd Font
+#      build, for prompt glyphs; the app falls back to its own JetBrains Mono without
+#      it) and the panels' `ui_font` JetBrains Mono (ships with the app; the workstation
+#      layout's mods draw a monospaced panel font a step smaller, their `sz`), each only
+#      where the key is absent: a choice made in the app's Settings stays. The app writes
+#      that file itself, so it is merged here, never a `copy`. One that isn't a JSON
+#      object is left alone with a warning. A theme picked in the app's theme menu is
+#      the app's own state and wins over settings.json.
 # Nothing downloaded is run here. The check is the manifest's SHA-256 over HTTPS, as in
 # Herdr's installers: releases are not always Authenticode-signed (herdr-core's
 # docs/security.md), so a signature is not required.
@@ -47,6 +57,7 @@ param(
     [string]$MenuDir = [Environment]::GetFolderPath('Programs'),
     [string]$WorkDir = [IO.Path]::GetTempPath(),
     [string]$WslDistro = 'AlmaLinux-9',
+    [string]$ConfigDir = (Join-Path $env:USERPROFILE '.config\herdr-app'),
     [switch]$NoWsl,
     [switch]$NoPath
 )
@@ -251,6 +262,38 @@ function Add-WslMachine([string]$Hc, [string]$Distro, [string[]]$Distros) {
     return [pscustomobject]@{ State = 'added'; Name = 'wsl' }
 }
 
+# Adds theme, font and ui_font to <ConfigDir>\settings.json where each is absent; every
+# other key is kept. State is 'set' (Keys: the ones added) or 'kept'. Throws when the
+# file isn't a JSON object. The new text replaces the file in one rename.
+function Set-Look([string]$ConfigDir) {
+    $look = [ordered]@{ theme = 'catppuccin-mocha'; font = 'JetBrainsMono NFM'; ui_font = 'JetBrains Mono' }
+    $path = Join-Path $ConfigDir 'settings.json'
+    $text = if (Test-Path -LiteralPath $path) { [IO.File]::ReadAllText($path) } else { '' }
+    if ($text.Trim()) {
+        try { $settings = $text | ConvertFrom-Json } catch { throw "$path is not JSON" }
+        if ($null -eq $settings -or $settings.GetType().Name -cne 'PSCustomObject') { throw "$path is not a JSON object" }
+    } else {
+        $settings = New-Object pscustomobject
+    }
+    $have = @($settings.PSObject.Properties | ForEach-Object { $_.Name })
+    $added = @(foreach ($key in $look.Keys) {
+            if (-not ($have -ccontains $key)) {
+                $settings | Add-Member -NotePropertyName $key -NotePropertyValue $look[$key]
+                $key
+            }
+        })
+    if ($added.Count -eq 0) { return [pscustomobject]@{ State = 'kept'; Keys = @() } }
+    New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+    $new = "$path.new-$PID"
+    try {
+        [IO.File]::WriteAllText($new, (($settings | ConvertTo-Json -Depth 32) + "`n"), (New-Object Text.UTF8Encoding $false))
+        Move-Item -LiteralPath $new -Destination $path -Force
+    } finally {
+        Remove-Item -LiteralPath $new -Force -ErrorAction SilentlyContinue
+    }
+    return [pscustomobject]@{ State = 'set'; Keys = $added }
+}
+
 $base = $ReleasesUrl.TrimEnd('/')
 try {
     $r = Install-App -ReleasesUrl $base -AppDir $AppDir -MenuDir $MenuDir -WorkDir $WorkDir -SetPath (-not $NoPath)
@@ -275,5 +318,11 @@ try {
     }
 } catch {
     Write-Step "the WSL distro $WslDistro was not added as a machine (after its first ws update, the next run retries): $($_.Exception.Message)"
+}
+try {
+    $l = Set-Look -ConfigDir $ConfigDir
+    if ($l.State -eq 'set') { Write-Step "set the app's look in settings.json ($($l.Keys -join ', ')): Catppuccin Mocha, JetBrains Mono" }
+} catch {
+    Write-Step "the app's look was not set: $($_.Exception.Message)"
 }
 exit 0

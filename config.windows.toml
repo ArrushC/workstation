@@ -84,6 +84,33 @@
 "~/.local/bin/ws-agent.ps1" = { source = "dotfiles/windows/local/bin/ws-agent.ps1", mode = "copy" }
 "~/.local/bin/ws-agent.cmd" = { source = "dotfiles/windows/local/bin/ws-agent.cmd", mode = "copy" }
 
+# The Herdr app's Catppuccin Mocha theme (palette from catppuccin/catppuccin; the panel
+# colours under `colors` are ours). scripts/herdr-app.ps1 names it in the app's
+# settings.json, which the app writes itself, so that file is never a dotfile.
+"~/.config/herdr-app/themes/catppuccin-mocha.json" = { source = "dotfiles/windows/config/herdr-app/themes/catppuccin-mocha.json", mode = "copy" }
+# The `workstation` layout: Herdr's main layout with three clones of Herdr's mods (each
+# one's .vendor says what is ours): the tab bar `tabs-timer` shows how long each tab's
+# agent has been working; `spaces-compact` and `agents-compact` show one short line per
+# sidebar row, the name alone; its secondary text (repo and branch, machine and detail) is the
+# row's tooltip. `pane-marks` (a clone of `pane`, the pane header) and those lists share one
+# set of status marks: a braille spinner (working), a breathing mark (blocked), a check (done)
+# and a crescent moon (idle).
+# Herdr's own layouts and mods are replaced on every start, so a change to one is a clone.
+# Three mods are ours outright: `markdown` (a rendered-Markdown pane; ctrl-click
+# a .md path in a terminal), `zed` (ctrl-click a path on an SSH or WSL machine: Zed opens
+# it here) and `sessions` (the palette's "Resume a Claude Code session"). The layout's
+# `link_handlers` orders the two click handlers.
+# The app shows a layout only once it is chosen: ctrl-shift-l, or
+# `herdr-app do layout.switch --name workstation`.
+"~/.config/herdr-app/layouts/workstation.json" = { source = "dotfiles/windows/config/herdr-app/layouts/workstation.json", mode = "copy" }
+"~/.config/herdr-app/mods/tabs-timer" = { source = "dotfiles/windows/config/herdr-app/mods/tabs-timer", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/herdr-app/mods/spaces-compact" = { source = "dotfiles/windows/config/herdr-app/mods/spaces-compact", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/herdr-app/mods/agents-compact" = { source = "dotfiles/windows/config/herdr-app/mods/agents-compact", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/herdr-app/mods/pane-marks" = { source = "dotfiles/windows/config/herdr-app/mods/pane-marks", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/herdr-app/mods/markdown" = { source = "dotfiles/windows/config/herdr-app/mods/markdown", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/herdr-app/mods/zed" = { source = "dotfiles/windows/config/herdr-app/mods/zed", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+"~/.config/herdr-app/mods/sessions" = { source = "dotfiles/windows/config/herdr-app/mods/sessions", mode = "copy", exclude = [".vendor", ".gitkeep"] }
+
 # Edited only in-repo; the `wsl --shutdown` reminder after a change is a
 # bootstrap.ps1 sha256-marker step, not a dotfiles concern.
 "~/.wslconfig" = { source = "dotfiles/wslconfig", mode = "copy" }
@@ -143,7 +170,7 @@ run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wezterm-night
 # each download against the SHA-256 in the release manifest, and runs nothing it downloads. It also
 # adds the WSL distro to herdr-core as the machine `wsl` (no SSH server) when no machine reaches it.
 [tasks.herdr-app-win]
-description = "Install the Herdr app and herdr-core (hc) when they're missing, and the WSL distro as its machine `wsl` (the post-tools hook); they update themselves"
+description = "Install the Herdr app and herdr-core (hc) when they're missing, the WSL distro as its machine `wsl` and its look where unset (the post-tools hook); they update themselves"
 dir = "{{ xdg_config_home }}/mise"
 run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/herdr-app.ps1 || exit /b 0"
 
