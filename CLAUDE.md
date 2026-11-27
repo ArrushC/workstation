@@ -160,6 +160,13 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   `PreToolUse`). Keep our hook commands under those two paths. The enforced file still adds no hook
   event: a global command hook ships as the `workstation-orchestration` plugin.
   Tests: `scripts/test-claude-settings-merge.sh` (lint), `scripts/test-claude-settings-merge.ps1`.
+- trail (`npm:@trailhq/trail-code`, the renamed graft) is opt-in per account: nothing of ours runs `trail init`.
+  Once it has (`~/.claude/helpers/graft-hooks.cjs` exists, trail's own name), `tasks/claude` runs
+  `scripts/lib/trail-install-record.sh`, which points `~/.trail/install.json`'s `claudeDist` at the pinned
+  install: the hooks find trail by that absolute path, and mise's `trail` shim doesn't lead into the package.
+  trail gives Claude Code no MCP server, so the enforced allow list has only `Bash(trail:*)`. The postinstall
+  is `env -u DO_NOT_TRACK trail telemetry disable`: with the variable set that command saves nothing.
+  `GRAFT_NO_STATUSLINE` and `~/.graft/` are trail's names, not leftovers. Test: `scripts/test-trail-install-record.sh` (lint).
 - The status line is ccline (`github:Haleclipse/CCometixLine`, the static build on Linux): the enforced
   command is `~/.claude/ccline/ccline` with no `refreshInterval`, its config the `copy` entry
   `~/.claude/ccline/config.toml` (`check_claude_config`). Never plain `ccline`: a session whose PATH

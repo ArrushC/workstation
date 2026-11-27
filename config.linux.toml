@@ -127,16 +127,18 @@ zig = "0.17.1"
 # those built native tree-sitter addons, which fail against Node 26's V8 headers (C++20) with
 # EL8's g++ 8, and with a newer g++ unless CXXFLAGS=-std=gnu++20 is set.
 # Installs by default like the rest: it runs on EL8 (checked 2026-11-17, on 0.29).
-# The postinstall saves trail's telemetry opt-out; DO_NOT_TRACK keeps that run itself quiet.
-"npm:@trailhq/trail-code" = { version = "0.30.5", postinstall = "DO_NOT_TRACK=1 trail telemetry disable" }
+# The postinstall saves trail's telemetry opt-out (~/.graft/telemetry.json, trail's own path).
+# It unsets DO_NOT_TRACK for that one run: with it set, `telemetry disable` writes nothing
+# (checked on 0.30.5), and a process outside mise's [env] would then have no opt-out at all.
+"npm:@trailhq/trail-code" = { version = "0.30.5", postinstall = "env -u DO_NOT_TRACK trail telemetry disable" }
 
 # `trail init` otherwise writes a statusLine (and subagentStatusLine) into the repo's
 # .claude/settings.local.json, which hides the enforced ccline there (checked on 0.30.5).
 # This is the only name trail reads for it: there is no TRAIL_ spelling.
 [env]
 GRAFT_NO_STATUSLINE = "1"
-# `trail telemetry disable` (the postinstall) stops only trail's usage ping; its daily npm
-# version check stops only with this. It is the cross-tool opt-out, so every tool that
+# trail's saved opt-out (the postinstall) stops only its usage ping; its daily npm version
+# check stops only with this. It is the cross-tool opt-out, so every tool that
 # honours it stays quiet on Linux hosts.
 DO_NOT_TRACK = "1"
 
