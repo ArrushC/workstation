@@ -5,7 +5,7 @@ license:        Apache-2.0
 cloned:         2026-11-26, in the app: herdr-app do mod.clone --name agents --as agents-compact
 deployed as:    ~/.config/herdr-app/mods/agents-compact/ (directory copy; the app adds its own
                 gpui-kit.d.ts and jsconfig.json there, which stay unmanaged)
-note:           Ours: row() draws the name alone at 28 px; `under` (machine and detail) is its tooltip. status() draws our marks (SPINNER, spinner(), BREATHE, idle.svg: Lucide moon, ISC; kept the same in tabs-timer and pane-marks).
+note:           Ours: row() draws the name alone at 28 px; `under` (machine and detail) is its tooltip. agentIcon() and rhythm() move the icon with its state, each agent to its own rhythm (from its address): Claude Code is its mascot built from our clawd-*.svg pieces (wanders left and right while working, hops when blocked, passes the time when idle: pastime() picks sleeping, television, meditating, music or coffee, with our tv/mug/headphones svgs; and celebrates when done: cast() gives each agent the act fewest others in its state are showing (eight each: working labour(), blocked plea(), idle pastime(), done celebration()), all drawn from our svg pieces in this folder; celebration() draws a party hat, fireworks, confetti or a cheer per finish; party-hat.svg is ours); other agents' icons do the same. status() draws our marks (SPINNER, spinner(), BREATHE, idle.svg: Lucide moon, ISC; kept the same in tabs-timer and pane-marks).
                 Herdr never updates a clone. To pick up a newer list: clone it again under
                 another name, re-apply that, `herdr-app check` it, replace these files.
                 Used by layouts/workstation.json.
