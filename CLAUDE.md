@@ -216,9 +216,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   whole-script runs pass `-NoWsl`, so a real core's machines are never touched. Other machines are the app's own state. Its look is seeded, never enforced: the theme file is a `copy` dotfile, and `Set-Look` adds `theme`/`font`/`ui_font` to the app's `settings.json` (the app writes that file) only where absent; tests pass a throwaway `-ConfigDir`. The `workstation` layout and its mods are `copy` dotfiles: `tabs-timer`, `spaces-compact`, `agents-compact` and `pane-marks` are clones made in the app (the status marks are the same code in three of them: change them together); `markdown`, `zed` and `sessions` are ours (`sessions/list.py` stays Python 3.6-parseable: it runs on EL8 hosts) (`layout.clone`, `mod.clone`): never edit Herdr's shipped layouts or mods (replaced on every start), and re-clone per each mod's `.vendor` to follow a newer Herdr.
 
 **Kiri (containers)**
-- Kiri is the one container engine: its window and engine on Windows (the engine in Kiri's own WSL distro `kiri`),
-  reached from the WSL distro through Kiri's Windows CLI. No dnf docker packages, no Docker Desktop, no winget entry
-  (Kiri has none).
+- Kiri is the container engine on Windows and WSL: its window and engine on Windows (the engine in Kiri's own WSL
+  distro `kiri`), reached from the WSL distro through Kiri's Windows CLI. No Docker Engine in a WSL distro, no Docker
+  Desktop, no winget entry (Kiri has none). A Linux host that isn't WSL gets Docker Engine (below).
 - Windows: `scripts/kiri.ps1` (post-tools `kiri-win`) installs it only when `%LOCALAPPDATA%\Kiri\kiri-win.exe` is
   missing and a WSL distro is registered: the feed `download.runkiri.com/latest-windows-<arch>.json` (`version`, `url`,
   `sha256`; the URL must be exactly `<base>/Kiri-<version>-<arch>.msi`), SHA-256 checked, then `msiexec /i ... /qn
@@ -239,6 +239,21 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
 - Tests: `scripts/test-kiri.sh` (lint; a stand-in `KIRI_DOCKER`, a scratch `HOME`, a tools-only PATH so a runner's
   dockerd isn't seen) and `scripts/test-kiri.ps1` (CI `windows-http`; file:// feed, a `.cmd` stand-in for msiexec):
   never the real install, state file or engine.
+
+**Docker Engine (Linux hosts that aren't WSL)**
+- `tasks/docker-engine` (`post-packages`, so only where the host has sudo): Docker's repository
+  (`configs/docker/docker-ce.repo` -> `/etc/yum.repos.d`), the five `docker-ce` packages, `systemctl enable --now
+  docker.service`, and `gpasswd -a <user> docker` (not `usermod`: SSSD accounts). Never on WSL (`is_wsl` first: a
+  dockerd there breaks Kiri), never names in the dnf batch (it loads on WSL, and they don't resolve without the
+  repository), never `daemon.json` or a TCP listener (`check_docker_engine`).
+- Docker's release key is downloaded, its fingerprint compared with the pin in the task (exactly one key in the file),
+  then written to `/etc/pki/rpm-gpg/RPM-GPG-KEY-docker-ce`; the repo file's `gpgkey` is that `file://`, so dnf imports
+  nothing it fetched itself. This repo file is the one `/etc` file a task installs instead of `[bootstrap.files]`,
+  because that table applies on WSL hosts too.
+- sudo runs only when a step has work; everything else is one line. Skipped: `sudo = "no"`, a release that isn't
+  RHEL-family, `podman-docker` present. Every outcome exits 0.
+- Tests: `scripts/test-docker-engine.sh` (lint): fakes for sudo/rpm/systemctl/getent/id/curl/gpg, a stub
+  `WORKSTATION_BOOTSTRAP_FN`, `WORKSTATION_ETC` and `WORKSTATION_OS_RELEASE` fixtures. Never a real install.
 
 **zellij** (not installed: see herdr-core; these hold wherever it is)
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays

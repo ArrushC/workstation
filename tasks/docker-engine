@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#MISE description="Docker Engine on a Linux host that isn't WSL: Docker's dnf repository, the packages, the service, and you in the docker group (the post-packages hook)"
+# Containers on a plain Linux host are Docker Engine's (dockerd, with the compose and
+# buildx plugins). On a WSL distro they are Kiri's, on the Windows side (tasks/kiri), and
+# a dockerd there would cut Kiri's containers off the network: this task never runs on WSL.
+#
+# Not in config.linux.toml's dnf batch: the packages come from Docker's repository, not
+# the distribution's, and the batch loads on WSL hosts too. So, where something is missing:
+#   1. Docker's release key is downloaded and its fingerprint compared with the one pinned
+#      below; only then is it written to /etc/pki/rpm-gpg and configs/docker/docker-ce.repo
+#      to /etc/yum.repos.d. The repo file names that local key, so dnf imports nothing else.
+#   2. sudo dnf install -y the five packages.
+#   3. sudo systemctl enable --now docker.service.
+#   4. sudo gpasswd -a <you> docker: docker without sudo from the next login (lazydocker
+#      and dive too). Membership is root on this host. gpasswd, not usermod: it works for
+#      a directory (SSSD) account as well.
+# sudo runs only when a step has something to do, so a routine update doesn't prompt.
+# It leaves the daemon's configuration alone (no /etc/docker/daemon.json, never a TCP
+# listener), skips a host whose saved sudo decision is no, a release that isn't
+# RHEL-family, and one where podman-docker already answers to docker.
+# Always exits 0: mise runs hooks under `sh -o errexit`, and a host without Docker must
+# not stop the bootstrap.
+set -uo pipefail
+root="$(dirname "$(dirname "$(readlink -f "$0")")")"
+fn="${WORKSTATION_BOOTSTRAP_FN:-$root/scripts/lib/bootstrap-fn.sh}" # tests point it at a stub
+etc="${WORKSTATION_ETC:-/etc}"                                      # and this at a fixture
+osr="${WORKSTATION_OS_RELEASE:-/etc/os-release}"
+key_url=https://download.docker.com/linux/rhel/gpg
+key_fpr=060A61C51B558A7F742B77AAC52FEB6B621E9F35 # Docker Release (CE rpm) <docker@docker.com>
+pkgs=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
+say() { printf '  docker-engine: %s\n' "$*"; }
+warn() { printf '  ! docker-engine: %s\n' "$*" >&2; }
+
+"$fn" is_wsl && exit 0
+if [ "$("$fn" config_get "$root/config.local.toml" sudo 2>/dev/null)" = no ]; then
+  say 'sudo = "no" on this host: Docker Engine not installed'
+  exit 0
+fi
+ID='' ID_LIKE=''
+# shellcheck source=/dev/null
+[ -r "$osr" ] && . "$osr"
+case " $ID $ID_LIKE " in
+*" rhel "* | *" centos "* | *" almalinux "* | *" rocky "*) ;;
+*)
+  say "not a RHEL-family release (${ID:-unknown}): Docker Engine not installed"
+  exit 0
+  ;;
+esac
+if rpm -q podman-docker >/dev/null 2>&1; then
+  say 'podman-docker answers to docker here: left alone (remove it to get Docker Engine)'
+  exit 0
+fi
+
+user="$(id -un)"
+missing=()
+for p in "${pkgs[@]}"; do rpm -q "$p" >/dev/null 2>&1 || missing+=("$p"); done
+in_group() { getent group docker 2>/dev/null | cut -d: -f4 | tr ',' '\n' | grep -qx "$user"; }
+running() { systemctl is-enabled --quiet docker.service 2>/dev/null && systemctl is-active --quiet docker.service 2>/dev/null; }
+
+if [ "${#missing[@]}" -eq 0 ] && running && in_group; then
+  say "Docker Engine $(rpm -q --qf '%{VERSION}' docker-ce 2>/dev/null) is installed and running; $user is in the docker group"
+  exit 0
+fi
+
+if [ "${#missing[@]}" -gt 0 ]; then
+  printf '==> Docker Engine (%s)\n' "${missing[*]}"
+  repo="$etc/yum.repos.d/docker-ce.repo" key="$etc/pki/rpm-gpg/RPM-GPG-KEY-docker-ce"
+  if ! cmp -s "$root/configs/docker/docker-ce.repo" "$repo" || [ ! -s "$key" ]; then
+    tmp="$(mktemp -d)" || exit 0
+    trap 'rm -rf "$tmp"' EXIT
+    mkdir -m 700 "$tmp/gnupg"
+    if ! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --max-time 60 -o "$tmp/key" "$key_url"; then
+      warn "could not download Docker's release key ($key_url): nothing installed; the next run retries"
+      exit 0
+    fi
+    # Exactly one key in the file, and it is the pinned one.
+    got="$(GNUPGHOME="$tmp/gnupg" gpg --batch --show-keys --with-colons "$tmp/key" 2>/dev/null | awk -F: '$1 == "pub" { n++; want = 1 } $1 == "fpr" && want { print $10; want = 0 } END { print "keys=" n + 0 }' | tr '\n' ' ')"
+    if [ "$got" != "$key_fpr keys=1 " ]; then
+      warn "the key at $key_url isn't Docker's pinned release key (${got% }): nothing installed"
+      exit 0
+    fi
+    if ! sudo install -D -m 644 "$tmp/key" "$key" || ! sudo install -D -m 644 "$root/configs/docker/docker-ce.repo" "$repo"; then
+      warn "could not write $repo and its key: nothing installed"
+      exit 0
+    fi
+  fi
+  if ! sudo dnf install -y "${missing[@]}"; then
+    warn 'dnf install exited non-zero (on EL8 containerd.io conflicts with the runc that podman and buildah pull in); the bootstrap continues'
+    exit 0
+  fi
+fi
+if ! running; then
+  sudo systemctl enable --now docker.service || warn 'could not enable and start docker.service'
+fi
+if ! in_group; then
+  if sudo gpasswd -a "$user" docker >/dev/null; then
+    say "added $user to the docker group: log out and in (or newgrp docker) for docker without sudo"
+  else
+    warn "could not add $user to the docker group: sudo docker until then"
+  fi
+fi
+say 'Docker Engine installed and running'
+exit 0

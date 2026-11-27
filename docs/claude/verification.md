@@ -129,6 +129,14 @@
 - Not covered by a test: the real MSI's silent install and Kiri's first-run window. Check on a host without Kiri.
 - Engine experiments use throwaway names (`kirimig-*`) and remove them by name; never `docker system prune`.
 
+## Docker Engine
+
+- `scripts/test-docker-engine.sh` (in lint): every branch of `tasks/docker-engine` against fakes; sudo only logs.
+- The key parser against the real key, no root: download `https://download.docker.com/linux/rhel/gpg` and run the
+  task's `gpg --show-keys --with-colons | awk` line on it: `060A61C51B558A7F742B77AAC52FEB6B621E9F35 keys=1`.
+- Not covered by a test: a real install. Check on a non-WSL EL8 and EL9 host with sudo (`mise run docker-engine`,
+  then `docker run --rm hello-world` after a new login); never on a WSL distro.
+
 ## herdr-core
 
 - Never the real core for a test: a scratch session in a short path (the socket path limit is 107 bytes):

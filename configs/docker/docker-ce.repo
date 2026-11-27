@@ -1,0 +1,10 @@
+# Docker Engine's packages, from Docker's own repository (EL8, EL9 and EL10 are served).
+# Installed by tasks/docker-engine on a Linux host that isn't WSL; never hand-edit the
+# /etc copy. The key file is Docker's release key, written by that task only after its
+# fingerprint matched the one pinned there, so dnf never fetches a key itself.
+[docker-ce-stable]
+name=Docker CE Stable - $basearch
+baseurl=https://download.docker.com/linux/rhel/$releasever/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-docker-ce
