@@ -84,6 +84,12 @@
 "~/.local/bin/ws-agent.ps1" = { source = "dotfiles/windows/local/bin/ws-agent.ps1", mode = "copy" }
 "~/.local/bin/ws-agent.cmd" = { source = "dotfiles/windows/local/bin/ws-agent.cmd", mode = "copy" }
 
+# herdr-core's own settings: `shell` makes Nushell (mise's shim) what a new terminal on this
+# PC runs, so a space opened under "This Computer" in the Herdr app starts Nushell, not
+# PowerShell. A template for the shim's absolute path (%LOCALAPPDATA%): the core then
+# doesn't depend on its PATH. herdr-core only reads this file.
+"~/AppData/Roaming/herdr-core/config.toml" = { source = "dotfiles/windows/AppData/Roaming/herdr-core/config.toml.tera", mode = "template" }
+
 # The Herdr app's Catppuccin Mocha theme (palette from catppuccin/catppuccin; the panel
 # colours under `colors` are ours). scripts/herdr-app.ps1 names it in the app's
 # settings.json, which the app writes itself, so that file is never a dotfile.

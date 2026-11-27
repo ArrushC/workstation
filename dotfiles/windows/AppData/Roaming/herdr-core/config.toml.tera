@@ -1,0 +1,14 @@
+# herdr-core's settings on Windows (%APPDATA%\herdr-core\config.toml; `hc --help` lists them).
+# Rendered from the workstation repo: edit the source (`ws edit`), not this file.
+#
+# shell: what a terminal on this computer runs when nothing names a program: the Herdr
+# app's new space, tab or split under "This Computer", `hc run` alone, and the shell a
+# kept terminal comes back as. Without it herdr-core picks PowerShell. Nushell through
+# mise's shim, the path Windows Terminal uses; read at the next launch, so terminals
+# that are already open keep their shell. Remote machines (SSH hosts, wsl) use their own.
+{% set local = env.LOCALAPPDATA | default(value="") -%}
+{% if local != "" -%}
+shell = ['{{ local }}\mise\shims\nu.exe']
+{% else -%}
+shell = ["nu"]
+{% endif -%}
