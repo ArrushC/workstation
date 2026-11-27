@@ -299,6 +299,14 @@ jobs:
         if: always()
         shell: pwsh
         run: ./scripts/test-herdr-app.ps1
+      - name: Test Kiri installer (Windows PowerShell 5.1)
+        if: always()
+        shell: powershell
+        run: ./scripts/test-kiri.ps1
+      - name: Test Kiri installer (pwsh)
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-kiri.ps1
       # Downloads today's nightly: a red step with no change here means WezTerm renamed or
       # dropped something wezterm.lua uses, which the next wsu would install.
       - name: Load wezterm.lua in the real WezTerm nightly

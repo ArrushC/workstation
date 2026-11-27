@@ -1,0 +1,75 @@
+#!/bin/sh
+# kiri-docker: docker, docker compose and docker buildx on Kiri, from a WSL distro.
+#
+# Kiri (https://runkiri.com) is the container engine on a Windows host: its window, and an
+# engine in a WSL distro of its own (`kiri`). It serves the Docker API on the named pipe
+# \\.\pipe\kiri, which a Linux docker client can't open, and Kiri 0.2.2 gives other
+# distros no socket. So this runs Kiri's own Windows CLI (%LOCALAPPDATA%\Kiri\bin\
+# docker.exe, with its compose and buildx plugins) through WSL interop, on the `kiri`
+# context. tasks/kiri links ~/.local/bin/docker to this file on a WSL host where Kiri is
+# installed and no Docker Engine is.
+#
+#   kiri-docker ps              the same as `docker ps` once the link is made
+#   kiri-docker --where         print the Windows CLI's path, or exit 1 (tasks/kiri, health)
+#
+# What differs from a Linux docker client:
+#   - Bind mounts and Compose projects must sit on a Windows drive (/mnt/c/...). Kiri
+#     can't see this distro's own filesystem: it mounts an empty directory for a Linux
+#     path, with no error.
+#   - Compose runs as a Windows program, so it reads Windows' environment. Only the
+#     variables named in WSLENV cross: the Docker and Compose ones below, plus whatever
+#     WSLENV already names (`export WSLENV=MY_VAR:$WSLENV` for a ${MY_VAR} in a compose file).
+#   - Nothing listens on /var/run/docker.sock: a program that opens the socket itself
+#     (lazydocker, dive, Testcontainers) doesn't reach Kiri.
+#   - A Docker Engine in this distro breaks Kiri's container networking: WSL distros share
+#     one network stack, and dockerd's iptables rules (FORWARD policy DROP) drop the
+#     traffic of Kiri's bridges. Disable it and restart WSL (README: Kiri).
+#
+# The CLI's path is looked up once (cmd.exe's %LOCALAPPDATA%, 100 ms) and kept in
+# ~/.local/state/workstation/kiri-docker; a path that stopped existing is looked up again.
+# KIRI_DOCKER names another CLI (tests). Never a TCP DOCKER_HOST: the pipe only lets this
+# Windows account in.
+# Deployed by mise dotfiles to ~/.local/bin/kiri-docker. LF + 0755; POSIX sh.
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/workstation/kiri-docker"
+
+# Prints the Windows docker.exe's path; 1 when there is none (no WSL, no Kiri).
+find_cli() {
+  if [ -n "${KIRI_DOCKER:-}" ]; then
+    [ -x "$KIRI_DOCKER" ] || return 1
+    printf '%s\n' "$KIRI_DOCKER"
+    return 0
+  fi
+  if [ -r "$state" ] && IFS= read -r cli <"$state" && [ -x "$cli" ]; then
+    printf '%s\n' "$cli"
+    return 0
+  fi
+  command -v wslpath >/dev/null 2>&1 || return 1
+  cmd=$(wslpath -u 'C:\Windows\System32\cmd.exe' 2>/dev/null) || return 1
+  [ -x "$cmd" ] || return 1
+  # From its own folder: cmd.exe started in a \\wsl.localhost path prints a warning first.
+  appdata=$(cd "${cmd%/*}" && "$cmd" /d /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
+  case "$appdata" in
+  ?:\\*) ;;
+  *) return 1 ;;
+  esac
+  cli=$(wslpath -u "$appdata\\Kiri\\bin\\docker.exe" 2>/dev/null) || return 1
+  [ -x "$cli" ] || return 1
+  if mkdir -p "${state%/*}" 2>/dev/null && printf '%s\n' "$cli" >"$state.$$" 2>/dev/null; then
+    mv -f "$state.$$" "$state" 2>/dev/null || rm -f "$state.$$"
+  fi
+  printf '%s\n' "$cli"
+}
+
+if [ "${0##*/}" = kiri-docker ] && [ "${1:-}" = --where ]; then
+  find_cli
+  exit
+fi
+
+if ! cli=$(find_cli); then
+  printf '%s\n' "docker: Kiri's CLI (%LOCALAPPDATA%/Kiri/bin/docker.exe on Windows) was not found: install Kiri there (ws update), open it once, then run this again" >&2
+  exit 127
+fi
+export DOCKER_CONTEXT="${DOCKER_CONTEXT:-kiri}"
+export WSLENV="DOCKER_CONTEXT:COMPOSE_PROJECT_NAME:COMPOSE_PROFILES:COMPOSE_FILE/l${WSLENV:+:$WSLENV}"
+exec "$cli" "$@"

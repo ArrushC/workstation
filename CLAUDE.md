@@ -215,6 +215,31 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   is mise's) unless a machine named `wsl` or with that `--via` exists; its tests use a stand-in `.cmd` and the
   whole-script runs pass `-NoWsl`, so a real core's machines are never touched. Other machines are the app's own state. Its look is seeded, never enforced: the theme file is a `copy` dotfile, and `Set-Look` adds `theme`/`font`/`ui_font` to the app's `settings.json` (the app writes that file) only where absent; tests pass a throwaway `-ConfigDir`. The `workstation` layout and its mods are `copy` dotfiles: `tabs-timer`, `spaces-compact`, `agents-compact` and `pane-marks` are clones made in the app (the status marks are the same code in three of them: change them together); `markdown`, `zed` and `sessions` are ours (`sessions/list.py` stays Python 3.6-parseable: it runs on EL8 hosts) (`layout.clone`, `mod.clone`): never edit Herdr's shipped layouts or mods (replaced on every start), and re-clone per each mod's `.vendor` to follow a newer Herdr.
 
+**Kiri (containers)**
+- Kiri is the one container engine: its window and engine on Windows (the engine in Kiri's own WSL distro `kiri`),
+  reached from the WSL distro through Kiri's Windows CLI. No dnf docker packages, no Docker Desktop, no winget entry
+  (Kiri has none).
+- Windows: `scripts/kiri.ps1` (post-tools `kiri-win`) installs it only when `%LOCALAPPDATA%\Kiri\kiri-win.exe` is
+  missing and a WSL distro is registered: the feed `download.runkiri.com/latest-windows-<arch>.json` (`version`, `url`,
+  `sha256`; the URL must be exactly `<base>/Kiri-<version>-<arch>.msi`), SHA-256 checked, then `msiexec /i ... /qn
+  /norestart`. The MSI is unsigned and per-user (no UAC); it is the one hook that runs a download. Kiri updates itself.
+  First-run setup is a window with no CLI: the script only reports `setup.json`'s `done`. Never enable `kiri k8s` or
+  `kiri share`, never pick a development distro for the engine.
+- WSL: `dotfiles/local/bin/kiri-docker` (POSIX sh) execs `%LOCALAPPDATA%\Kiri\bin\docker.exe` with `DOCKER_CONTEXT`
+  defaulting to `kiri` and the Compose variables added to `WSLENV`; the path comes from cmd.exe once and is cached in
+  `~/.local/state/workstation/kiri-docker`. `tasks/kiri` (`final`) links `~/.local/bin/docker -> kiri-docker` only on
+  WSL, with Kiri's CLI found, no `dockerd` on PATH and nothing else at that path. Never a TCP `DOCKER_HOST`, never a
+  second engine in the distro, never a socket relay of our own (`check_kiri`).
+- Measured on 0.2.2: the Linux docker CLI can't use the `npipe://` context (the contexts directory may be shared with
+  Windows; that changes nothing); `/mnt/c` bind mounts work, a path in another distro mounts an empty directory;
+  all WSL distros share one network namespace, so a dockerd anywhere sets FORWARD policy DROP and Kiri's bridge and
+  outbound traffic stops while published ports (a userspace proxy) keep working. The fix is dockerd disabled and
+  `wsl --shutdown`, never a firewall rule of ours.
+- Neither script migrates or removes anything: moving a Docker Engine's workloads is the person's (README: Containers).
+- Tests: `scripts/test-kiri.sh` (lint; a stand-in `KIRI_DOCKER`, a scratch `HOME`, a tools-only PATH so a runner's
+  dockerd isn't seen) and `scripts/test-kiri.ps1` (CI `windows-http`; file:// feed, a `.cmd` stand-in for msiexec):
+  never the real install, state file or engine.
+
 **zellij** (not installed: see herdr-core; these hold wherever it is)
 - `copy_command` stays unset, because OSC 52 is the only clipboard path over SSH. `web_server` stays
   off. zjstatus loads from mise's install dir (`check_zellij_config`); no copy step.
@@ -413,7 +438,7 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - `scripts/*.sh`, `scripts/lib/*.sh`, every `tasks/*` file (mise silently skips a non-executable
     task), `.claude/hooks/*.sh`
   - executable dotfiles: `dotfiles/claude/hooks/*.sh`, `dotfiles/claude/notify.sh`,
-    `dotfiles/local/bin/{batpipe,winterop,zcc,zc++,ws-agent,hcs}`
+    `dotfiles/local/bin/{batpipe,winterop,zcc,zc++,ws-agent,hcs,kiri-docker}`
   - Repair: `sed -i 's/\r$//' <f>`; `git update-index --chmod=+x <f>`.
   - First-party shell must be `shfmt -i 2`-clean (`mise run fmt`) and gitleaks-clean.
   - Quote bash associative-array keys: shfmt rewrites an unquoted `[a-b]` as arithmetic.

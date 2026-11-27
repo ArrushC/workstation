@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#MISE description="On WSL with Kiri installed on Windows: make docker Kiri's CLI (~/.local/bin/docker -> kiri-docker; the final hook)"
+set -euo pipefail
+# Kiri is the container engine on a Windows host (scripts/kiri.ps1 installs it there). In
+# the WSL distro, `docker` is ~/.local/bin/kiri-docker (a [dotfiles] file: it runs Kiri's
+# Windows CLI through interop, and says why). This task makes the link, and only when it
+# is safe to:
+#   - not WSL: nothing, silently (a Linux host's docker is its own business);
+#   - Kiri's CLI isn't on the Windows side yet: nothing, and it says what to do;
+#   - a Docker Engine (dockerd) is installed in this distro: nothing. Moving its
+#     containers, images and volumes to Kiri is the person's decision, never this task's,
+#     and while dockerd runs its firewall rules break Kiri's container networking. It says
+#     so and points at the README;
+#   - ~/.local/bin/docker is something else (a file, a link elsewhere): left alone.
+# Every outcome exits 0: a failing hook would stop `mise bootstrap`.
+root="$(dirname "$(dirname "$(readlink -f "$0")")")"
+bin="$HOME/.local/bin"
+wrapper="$bin/kiri-docker"
+link="$bin/docker"
+
+"$root/scripts/lib/bootstrap-fn.sh" is_wsl || exit 0
+
+if [ ! -x "$wrapper" ]; then
+  echo "  kiri: $wrapper is missing (ws apply deploys it): docker not linked" >&2
+  exit 0
+fi
+if ! cli="$("$wrapper" --where)"; then
+  echo "  kiri: not installed on Windows yet (ws update there, then open Kiri once): docker not linked; the next run retries"
+  exit 0
+fi
+
+if engine="$(command -v dockerd 2>/dev/null)" && [ -n "$engine" ]; then
+  echo "  ! kiri: a Docker Engine is installed in this distro ($engine): docker left as it is." >&2
+  echo "    While dockerd runs, its firewall rules cut Kiri's containers off the network. To move to" >&2
+  echo "    Kiri: README, 'Kiri' (kiri-docker reaches Kiri meanwhile)." >&2
+  exit 0
+fi
+
+if [ -L "$link" ] && [ "$(readlink "$link")" = kiri-docker ]; then
+  echo "  kiri: docker is Kiri's CLI ($cli)"
+elif [ -e "$link" ] || [ -L "$link" ]; then
+  echo "  ! kiri: $link exists and isn't the link to kiri-docker: left alone (remove it, then mise run kiri)" >&2
+elif ln -s kiri-docker "$link"; then
+  echo "  kiri: linked $link -> kiri-docker ($cli)"
+else
+  echo "  ! kiri: could not link $link" >&2
+fi
+exit 0

@@ -38,7 +38,7 @@ shell_targets() {
   printf '%s\n' bootstrap.sh scripts/*.sh scripts/lib/*.sh tasks/* \
     .claude/hooks/*.sh dotfiles/claude/hooks/*.sh \
     dotfiles/claude/notify.sh dotfiles/local/bin/winterop dotfiles/local/bin/zcc dotfiles/local/bin/zc++ \
-    dotfiles/local/bin/ws-agent dotfiles/local/bin/hcs dotfiles/claude/skills/workstation-orchestration/hooks/*.sh \
+    dotfiles/local/bin/ws-agent dotfiles/local/bin/hcs dotfiles/local/bin/kiri-docker dotfiles/claude/skills/workstation-orchestration/hooks/*.sh \
     dotfiles/config/bash/completions.bash
 }
 
@@ -297,6 +297,7 @@ DOTFILES_MODE_ALLOWLIST=(
   "dotfiles/local/bin/zc++"                          # ~/.local/bin copy entry — the same script as C++
   "dotfiles/local/bin/ws-agent"                      # ~/.local/bin copy entry — `ws agent` for Claude Code, hooks and pueue
   "dotfiles/local/bin/hcs"                           # ~/.local/bin copy entry — attach or start a herdr-core shell (the SSH launchers, ws open)
+  "dotfiles/local/bin/kiri-docker"                   # ~/.local/bin copy entry — docker on Kiri from WSL; tasks/kiri links docker to it
 )
 check_dotfiles_mode() {
   hdr "dotfiles/ sources: git mode 100644 except the allowlist"
@@ -1320,9 +1321,9 @@ check_bootstrap() {
 # The hook and pin-table self-tests run on every lint. git exports GIT_INDEX_FILE /
 # GIT_DIR / GIT_WORK_TREE to its hooks; the tests make temp repos, so unset them.
 check_self_tests() {
-  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-lint-root.sh, scripts/test-bump-lock-retry.sh, scripts/test-ci-scope.sh, scripts/test-ws.sh)"
+  hdr "self-tests (.claude/hooks/test-hooks.sh, scripts/test-check-pins.sh, scripts/lib/test-verify-binary.sh, scripts/test-term-fallback.sh, scripts/test-shell-marks.sh, scripts/test-editing-keys.sh, scripts/test-wezterm-sshconfig.sh, scripts/test-lint-root.sh, scripts/test-bump-lock-retry.sh, scripts/test-ci-scope.sh, scripts/test-kiri.sh, scripts/test-ws.sh)"
   local out t
-  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-lint-root.sh scripts/test-bump-lock-retry.sh scripts/test-ci-scope.sh scripts/test-ws.sh; do
+  for t in .claude/hooks/test-hooks.sh "scripts/test-check-pins.sh --no-self" scripts/lib/test-verify-binary.sh scripts/test-term-fallback.sh scripts/test-shell-marks.sh scripts/test-editing-keys.sh scripts/test-wezterm-sshconfig.sh scripts/test-lint-root.sh scripts/test-bump-lock-retry.sh scripts/test-ci-scope.sh scripts/test-kiri.sh scripts/test-ws.sh; do
     if [ "${t%% *}" = .claude/hooks/test-hooks.sh ] && ! command -v jq >/dev/null 2>&1; then
       note "jq missing — test-hooks.sh skipped (it builds its inputs with jq)"
       continue
@@ -2327,6 +2328,31 @@ LUA
   fi
 }
 
+# Kiri: the Windows host installs it (post-tools), the WSL distro links docker to its CLI
+# (final). The wrapper only ever runs Kiri's Windows CLI on the named pipe's context: a TCP
+# DOCKER_HOST would open the Docker API to every local user. Neither script moves another
+# engine's containers or removes one.
+check_kiri() {
+  hdr "Kiri (Windows installer hook, WSL docker link, no TCP endpoint)"
+  local w=dotfiles/local/bin/kiri-docker missing=()
+  grep -qE '^post-tools = ".*::: kiri-win' config.windows.toml || missing+=("config.windows.toml's post-tools hook doesn't run kiri-win")
+  grep -qF 'scripts/kiri.ps1 || exit /b 0' config.windows.toml || missing+=("kiri-win doesn't end '|| exit /b 0': a failed install would stop mise bootstrap")
+  grep -qE '^"final" = ".*::: kiri"' config.linux.toml || missing+=("config.linux.toml's final hook doesn't run kiri")
+  grep -qF 'bootstrap-fn.sh" is_wsl || exit 0' tasks/kiri || missing+=("tasks/kiri doesn't stop first on a host that isn't WSL (a Linux host's docker is its own)")
+  grep -qF 'command -v dockerd' tasks/kiri || missing+=("tasks/kiri no longer leaves docker alone where a Docker Engine is installed")
+  # shellcheck disable=SC2016  # the literal text of the wrapper's line
+  grep -qF 'export DOCKER_CONTEXT="${DOCKER_CONTEXT:-kiri}"' "$w" || missing+=("$w doesn't default to the kiri context")
+  if cat "$w" tasks/kiri | grep -vE '^\s*#' | grep -qE 'DOCKER_HOST|tcp://'; then missing+=("$w or tasks/kiri sets a DOCKER_HOST or names a tcp:// endpoint"); fi
+  if cat "$w" tasks/kiri scripts/kiri.ps1 | grep -vE '^\s*#' | grep -qE 'docker.*(prune|rm |rmi )|dnf|unregister|k8s|share'; then
+    missing+=("a Kiri script removes containers, images or packages, unregisters a distro, or touches Kiri's Kubernetes or sharing")
+  fi
+  if [ "${#missing[@]}" -eq 0 ]; then
+    ok "kiri-win on post-tools (never fatal); kiri on final, WSL only, never over a Docker Engine; the wrapper uses the kiri context, no TCP"
+  else
+    for m in "${missing[@]}"; do bad "$m"; done
+  fi
+}
+
 # TERM=wezterm needs its whole chain, or a host shows "unknown terminal" / loses colour:
 # the vendored entry must compile with its extended capabilities, the final hook must
 # compile it, dircolors must match the name, and the Windows shells must drop it (Windows
@@ -2714,6 +2740,7 @@ check_helix_config
 check_ws
 check_wezterm_config
 check_wezterm_term
+check_kiri
 check_claude_config
 check_disk_budget
 check_layout
