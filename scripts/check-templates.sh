@@ -181,6 +181,15 @@ helix_win_check() {
   }
 }
 
+# herdr-core on Windows: valid TOML whose `shell` is a list naming Nushell (the Herdr app's
+# "This Computer" shell). Linux mise has no LOCALAPPDATA, so this render is the bare `nu`.
+herdr_core_check() {
+  "$PY" -c 'import tomllib,sys
+s = tomllib.load(open(sys.argv[1], "rb")).get("shell")
+ok = isinstance(s, list) and s and all(isinstance(a, str) for a in s) and s[0].replace("\\", "/").rsplit("/", 1)[-1] in ("nu", "nu.exe")
+sys.exit(0 if ok else "shell is not a list starting with nu: %r" % (s,))' "$1"
+}
+
 # select_checker <target> — sets $CHECK_CMD (checker function name, or empty)
 # and $CHECK_NOTE (why it's empty: soft-skip vs "no checker by design").
 select_checker() {
@@ -205,6 +214,9 @@ select_checker() {
   "~/AppData/Roaming/helix/config.toml")
     CHECK_CMD="helix_win_check"
     ;; # $PY already verified present above
+  "~/AppData/Roaming/herdr-core/config.toml")
+    CHECK_CMD="herdr_core_check"
+    ;;
   "~/AppData/Roaming/nushell/config.nu")
     if command -v nu >/dev/null 2>&1; then CHECK_CMD="nu_check"; else CHECK_NOTE="nu not installed"; fi
     ;;
