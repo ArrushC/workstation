@@ -28,7 +28,7 @@ check() { if "${@:2}"; then ok "$1"; else bad "$1"; fi; }
 
 tools="$tmp/tools"
 mkdir -p "$tools"
-for t in bash sh env readlink dirname grep ln cat tr mkdir mv rm printf; do
+for t in bash sh env id readlink dirname grep ln cat tr mkdir mv rm printf; do
   p="$(command -v "$t")" && [ -x "$p" ] && ln -s "$p" "$tools/$t"
 done
 
