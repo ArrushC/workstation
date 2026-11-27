@@ -1,7 +1,8 @@
 # Tests scripts/claude-settings-merge.ps1, Windows' ~/.claude/settings.json merge, against
 # this checkout's settings.seed.json and settings.enforced.json, writing a throwaway -Dest:
 # a first run (the seed and the enforced keys), a live file (the enforced keys win; its own
-# keys, hook types and plugins stay), non-ASCII text kept, a live file with a UTF-8 BOM
+# keys, hook types and plugins stay), an enforced hook event (its hooks, then another
+# tool's live ones; an old one of ours dropped), non-ASCII text kept, a live file with a UTF-8 BOM
 # (merged, and rewritten without it even when up to date), an up-to-date file left alone,
 # a live file that isn't JSON and a PATH without jq (each a warning, the file as it was,
 # exit 0), bootstrap.ps1's Invoke-ClaudeSettingsMerge running the script, and
@@ -53,6 +54,28 @@ try {
         }
         Assert ($s.enabledPlugins.'mine@market' -eq $true) 'a live plugin was dropped'
         Assert ($s.enabledPlugins.'clangd-lsp@claude-plugins-official' -eq $false) 'clangd-lsp is not off'
+    }
+
+    Test-Case 'an enforced hook event: its hooks first, another tool''s live hook kept, an old one of ours dropped' {
+        $live = [ordered]@{ hooks = [ordered]@{ PreToolUse = @(
+                    [ordered]@{ matcher = 'Write|Edit'; hooks = @([ordered]@{ type = 'command'; command = 'node tool.cjs pre-edit' }) },
+                    [ordered]@{ matcher = 'Bash'; hooks = @([ordered]@{ type = 'command'; command = '"$HOME/.claude/hooks/old-guard.sh"' }) },
+                    [ordered]@{ matcher = 'Bash'; hooks = @([ordered]@{ type = 'command'; command = 'C:\Users\x\.claude\hooks\gone.cmd' }) }
+                )
+            }
+        }
+        New-TestFile $dest ($live | ConvertTo-Json -Depth 8)
+        $r = Invoke-Merge
+        Assert ($r.Code -eq 0) "exit $($r.Code): $($r.Out)"
+        $pre = @((Read-Settings).hooks.PreToolUse)
+        $want = @($enforced.hooks.PreToolUse)
+        Assert ($pre.Count -eq $want.Count + 1) "PreToolUse has $($pre.Count) groups, not the enforced $($want.Count) and one more"
+        for ($i = 0; $i -lt $want.Count; $i++) {
+            Assert ($pre[$i].hooks[0].command -ceq $want[$i].hooks[0].command) "group $i is not the enforced one: $($pre[$i].hooks[0].command)"
+        }
+        Assert ($pre[$want.Count].hooks[0].command -ceq 'node tool.cjs pre-edit') "the other tool's hook is not last: $($pre[$want.Count].hooks[0].command)"
+        $r = Invoke-Merge
+        Assert ($r.Out.Trim() -eq '') "a second run said: $($r.Out)"
     }
 
     Test-Case 'non-ASCII text in the live file comes through' {

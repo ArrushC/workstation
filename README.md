@@ -59,7 +59,7 @@ docs/claude/, .claude/        notes, hooks and settings for Claude Code
 docs/windows/application_list.md   apps to hand-install on a fresh Windows machine
 ```
 
-Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, on every platform. A directory source carries `exclude = [".vendor", ".gitkeep"]`. `~/.claude/settings.json` is not a dotfile entry: a jq merge (`scripts/lib/claude-settings-merge.sh`; on Windows `scripts/claude-settings-merge.ps1`, with the same filter) combines `dotfiles/claude/settings.seed.json`, the live file and `settings.enforced.json`, the last winning. `ws update` runs it on both OSes.
+Dotfile modes: `template` for the `.tera` sources, `copy` for everything else, on every platform. A directory source carries `exclude = [".vendor", ".gitkeep"]`. `~/.claude/settings.json` is not a dotfile entry: a jq merge (`scripts/lib/claude-settings-merge.sh`; on Windows `scripts/claude-settings-merge.ps1`, with the same filter) combines `dotfiles/claude/settings.seed.json`, the live file and `settings.enforced.json`, the last winning. Hooks are the exception: where the enforced file sets a hook event, its hooks run first and the hooks another tool added to the live file (trail's, for one) are kept after them. `ws update` runs it on both OSes.
 
 ## Setup
 
