@@ -108,20 +108,20 @@ url = "https://github.com/junegunn/fzf/releases/download/v0.75.0/fzf-0.75.0-wind
 url_api = "https://api.github.com/repos/junegunn/fzf/releases/assets/720590885"
 
 [[tools.gh]]
-version = "2.104.0"
+version = "2.106.0"
 backend = "aqua:cli/cli"
-specifiers = ["2.104.0"]
+specifiers = ["2.106.0"]
 
 [tools.gh."platforms.linux-x64"]
-checksum = "sha256:98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e"
-url = "https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/740718892"
+checksum = "sha256:a476449fa9625413c54a3734eded62e9e480e49f421ff08e7f3b3879c059a033"
+url = "https://github.com/cli/cli/releases/download/v2.106.0/gh_2.106.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/793444853"
 provenance = "github-attestations"
 
 [tools.gh."platforms.windows-x64"]
-checksum = "sha256:08c06d10482f12c478018cd259f64acbd5f625712cadf331aad19ba973c879e5"
-url = "https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_windows_amd64.zip"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/740719168"
+checksum = "sha256:d406f442ca0baa3d3e9c695e9cded1aa48e67dad3294b8947e5ab84f980b4844"
+url = "https://github.com/cli/cli/releases/download/v2.106.0/gh_2.106.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/793445150"
 provenance = "github-attestations"
 
 [[tools."github:1jehuang/jcode"]]
@@ -202,66 +202,48 @@ checksum = "sha256:9e95185980a0268015e78d09c443ac848ef9753bb070c2ff43332b4340ad3
 url = "https://github.com/Haleclipse/CCometixLine/releases/download/v2.0.1/ccline-windows-x64.zip"
 url_api = "https://api.github.com/repos/Haleclipse/CCometixLine/releases/assets/673249903"
 
-[[tools."github:LogExperts/LogExpert"]]
-version = "1.41.0"
-backend = "github:LogExperts/LogExpert"
-specifiers = ["1.41.0"]
-
-[tools."github:LogExperts/LogExpert".options]
-asset_pattern = "LogExpert.{version}.zip"
-
-[tools."github:LogExperts/LogExpert"."platforms.linux-x64"]
-checksum = "sha256:74524db34332aed480c5c631ca9023118140bc120075c1365ae6713620673c89"
-url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpert.1.41.0.zip"
-url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
-
-[tools."github:LogExperts/LogExpert"."platforms.windows-x64"]
-checksum = "sha256:74524db34332aed480c5c631ca9023118140bc120075c1365ae6713620673c89"
-url = "https://github.com/LogExperts/LogExpert/releases/download/v1.41.0/LogExpert.1.41.0.zip"
-url_api = "https://api.github.com/repos/LogExperts/LogExpert/releases/assets/475521489"
-
 [[tools."github:atuinsh/atuin"]]
-version = "18.24.8"
+version = "18.25.1"
 backend = "github:atuinsh/atuin"
-specifiers = ["18.24.8"]
+specifiers = ["18.25.1"]
 
 [tools."github:atuinsh/atuin".options]
 asset_pattern = "atuin-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:atuinsh/atuin"."platforms.linux-x64"]
-checksum = "sha256:f8dfc3f9d27cadc2e2c9d489394ef7c568291e2382a4d184865701bf1a4ac30a"
-url = "https://github.com/atuinsh/atuin/releases/download/v18.24.8/atuin-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/741927292"
+checksum = "sha256:f2bc97588d5aa91f49b992298544e13776df044cb4baf606875c7cc8444e9e00"
+url = "https://github.com/atuinsh/atuin/releases/download/v18.25.1/atuin-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/773455551"
 provenance = "github-attestations"
 
 [[tools."github:atuinsh/atuin"]]
-version = "18.24.8"
+version = "18.25.1"
 backend = "github:atuinsh/atuin"
-specifiers = ["18.24.8"]
+specifiers = ["18.25.1"]
 
 [tools."github:atuinsh/atuin".options]
 asset_pattern = "atuin-x86_64-pc-windows-msvc.zip"
 
 [tools."github:atuinsh/atuin"."platforms.windows-x64"]
-checksum = "sha256:f6ff4e13feed0e49853618ab5f1ec849ccbb34dcab2df711c85d5f0333d8e717"
-url = "https://github.com/atuinsh/atuin/releases/download/v18.24.8/atuin-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/741927272"
+checksum = "sha256:8c1a4c51251fd79f93551dcb66d23e8e34b3d49df56e47dbf853418cfadc167a"
+url = "https://github.com/atuinsh/atuin/releases/download/v18.25.1/atuin-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/773455517"
 provenance = "github-attestations"
 
 [[tools."github:can1357/oh-my-pi"]]
-version = "18.20.2"
+version = "19.2.1"
 backend = "github:can1357/oh-my-pi"
-specifiers = ["18.20.2"]
+specifiers = ["19.2.1"]
 
 [tools."github:can1357/oh-my-pi"."platforms.linux-x64"]
-checksum = "sha256:f34cfa57311ed67a45f01bb1a21519cad4d74875d181316f00fa0cd6a4abcaaa"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.20.2/omp-linux-x64"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/748638308"
+checksum = "sha256:e8b937f9bf023baa147bdd300ad5421af0a6ef8b1f350c47a9a93d5fca94feca"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-linux-x64"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/792397292"
 
 [tools."github:can1357/oh-my-pi"."platforms.windows-x64"]
-checksum = "sha256:6dbb8ac30106f163fcb61d818e6756799a816cb58d63fc3e11a0d7af56abfb90"
-url = "https://github.com/can1357/oh-my-pi/releases/download/v18.20.2/omp-windows-x64.exe"
-url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/748638314"
+checksum = "sha256:2d039b068497333c2e23c06531ed50314edb9ec96123fa1a5d24a78316a1e5db"
+url = "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-windows-x64.exe"
+url_api = "https://api.github.com/repos/can1357/oh-my-pi/releases/assets/792397294"
 
 [[tools."github:carapace-sh/carapace-bin"]]
 version = "1.8.0"
@@ -308,48 +290,30 @@ url = "https://github.com/clice-io/clice/releases/download/v1.0.0/clice-1.0.0.x8
 url_api = "https://api.github.com/repos/clice-io/clice/releases/assets/751338043"
 
 [[tools."github:dandavison/delta"]]
-version = "0.20.1"
+version = "0.22.0"
 backend = "github:dandavison/delta"
-specifiers = ["0.20.1"]
+specifiers = ["0.22.0"]
 
 [tools."github:dandavison/delta".options]
 asset_pattern = "delta-{{ version }}-x86_64-unknown-linux-musl.tar.gz"
 
 [tools."github:dandavison/delta"."platforms.linux-x64"]
-checksum = "sha256:69dcb4043f55c29118f408c6efd30115e0a4e0a6709253343b8c8fa814ab4a31"
-url = "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/610498263"
+checksum = "sha256:04bc8cde7e73e8603ce75fe6054453f316ca47263aa7d5832748ab442f5ad051"
+url = "https://github.com/dandavison/delta/releases/download/0.22.0/delta-0.22.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/781461863"
 
 [[tools."github:dandavison/delta"]]
-version = "0.20.1"
+version = "0.22.0"
 backend = "github:dandavison/delta"
-specifiers = ["0.20.1"]
+specifiers = ["0.22.0"]
 
 [tools."github:dandavison/delta".options]
 asset_pattern = "delta-{{ version }}-x86_64-pc-windows-msvc.zip"
 
 [tools."github:dandavison/delta"."platforms.windows-x64"]
-checksum = "sha256:c9af7484b33f1dbc1312a892fc7d5753a6d3365140a4000d49e575a2de742c25"
-url = "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/610501426"
-
-[[tools."github:dnGrep/dnGrep"]]
-version = "5.0.30.0"
-backend = "github:dnGrep/dnGrep"
-specifiers = ["5.0.30.0"]
-
-[tools."github:dnGrep/dnGrep".options]
-asset_pattern = "dnGrep.{version}.x64.zip"
-
-[tools."github:dnGrep/dnGrep"."platforms.linux-x64"]
-checksum = "sha256:27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45bd32"
-url = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
-url_api = "https://api.github.com/repos/dnGrep/dnGrep/releases/assets/477232224"
-
-[tools."github:dnGrep/dnGrep"."platforms.windows-x64"]
-checksum = "sha256:27e79603d8a743e16ab97aa4b83b50a56061faa9c79b68bfe13b64ba9c45bd32"
-url = "https://github.com/dnGrep/dnGrep/releases/download/v5.0.30.0/dnGrep.5.0.30.0.x64.zip"
-url_api = "https://api.github.com/repos/dnGrep/dnGrep/releases/assets/477232224"
+checksum = "sha256:c9e1eb86cceaa4713c47bdeb4ce2476b78ac7f1082dac8b9cb66cad508cbdd5c"
+url = "https://github.com/dandavison/delta/releases/download/0.22.0/delta-0.22.0-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/781464813"
 
 [[tools."github:mstorsjo/llvm-mingw"]]
 version = "20261006"
@@ -414,23 +378,23 @@ url = "https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-x86_64-pc-w
 url_api = "https://api.github.com/repos/sxyazi/yazi/releases/assets/539261401"
 
 [[tools."github:tt-a1i/archify"]]
-version = "3.2.0"
+version = "3.3.2"
 backend = "github:tt-a1i/archify"
-specifiers = ["3.2.0"]
+specifiers = ["3.3.2"]
 
 [tools."github:tt-a1i/archify".options]
 asset_pattern = "archify.zip"
 
 [tools."github:tt-a1i/archify"."platforms.linux-x64"]
-checksum = "sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
-url = "https://github.com/tt-a1i/archify/releases/download/v3.2.0/archify.zip"
-url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/654856277"
+checksum = "sha256:932d915f83fdbf44796cc6b20b085455a763491306e1b8dee92047e11dddc0ea"
+url = "https://github.com/tt-a1i/archify/releases/download/v3.3.2/archify.zip"
+url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/792347707"
 provenance = "github-attestations"
 
 [tools."github:tt-a1i/archify"."platforms.windows-x64"]
-checksum = "sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
-url = "https://github.com/tt-a1i/archify/releases/download/v3.2.0/archify.zip"
-url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/654856277"
+checksum = "sha256:932d915f83fdbf44796cc6b20b085455a763491306e1b8dee92047e11dddc0ea"
+url = "https://github.com/tt-a1i/archify/releases/download/v3.3.2/archify.zip"
+url_api = "https://api.github.com/repos/tt-a1i/archify/releases/assets/792347707"
 provenance = "github-attestations"
 
 [[tools.go]]
@@ -566,19 +530,19 @@ url = "https://github.com/nushell/nushell/releases/download/0.113.1/nu-0.113.1-x
 url_api = "https://api.github.com/repos/nushell/nushell/releases/assets/433389998"
 
 [[tools.opencode]]
-version = "2.3.0"
+version = "2.4.2"
 backend = "aqua:anomalyco/opencode"
-specifiers = ["2.3.0"]
+specifiers = ["2.4.2"]
 
 [tools.opencode."platforms.linux-x64"]
-checksum = "sha256:fc0f81522aceeabac47693d88389efa2bc517ce74c2c38fd6967819fcc6e4d3b"
-url = "https://github.com/anomalyco/opencode/releases/download/v2.3.0/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/742965383"
+checksum = "sha256:452912288f934d1771bd5bd0d8611ba3a6adc3db3ac3333c37facf373770ba66"
+url = "https://github.com/anomalyco/opencode/releases/download/v2.4.2/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/793781428"
 
 [tools.opencode."platforms.windows-x64"]
-checksum = "sha256:2e14eee53f4abad803d55fdc472c1b12dc3802d687ae204f81e7908bd2ab1895"
-url = "https://github.com/anomalyco/opencode/releases/download/v2.3.0/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/742965429"
+checksum = "sha256:a8ab3034ca5b3ec8476e9ee73b1dc334b6d8e93edaaf224b3d2a5205e2cbfb99"
+url = "https://github.com/anomalyco/opencode/releases/download/v2.4.2/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/793781518"
 
 [[tools.process-compose]]
 version = "1.124.0"
@@ -617,34 +581,34 @@ url = "https://github.com/astral-sh/python-build-standalone/releases/download/20
 provenance = "github-attestations"
 
 [[tools.restic]]
-version = "0.19.1"
+version = "0.20.0"
 backend = "aqua:restic/restic"
-specifiers = ["0.19.1"]
+specifiers = ["0.20.0"]
 
 [tools.restic."platforms.linux-x64"]
-checksum = "sha256:f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"
-url = "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2"
-url_api = "https://api.github.com/repos/restic/restic/releases/assets/466999719"
+checksum = "sha256:0ccd9fa7885074a24603b051e01bf9bd8b5e45d6a1791e9d9887e9e9372107f7"
+url = "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_linux_amd64.bz2"
+url_api = "https://api.github.com/repos/restic/restic/releases/assets/767546139"
 
 [tools.restic."platforms.windows-x64"]
-checksum = "sha256:da948ad707ed690426473aaba2046cd61f8f90f6f0e7dab6be0d5796531de67d"
-url = "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_windows_amd64.zip"
-url_api = "https://api.github.com/repos/restic/restic/releases/assets/466998668"
+checksum = "sha256:bba9061c3dce081701ab353ec8cb73a78be73b71a538aad560f2d1067602b7fe"
+url = "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/restic/restic/releases/assets/767539617"
 
 [[tools.ripgrep]]
-version = "15.2.0"
+version = "16.0.0"
 backend = "aqua:BurntSushi/ripgrep"
-specifiers = ["15.2.0"]
+specifiers = ["16.0.0"]
 
 [tools.ripgrep."platforms.linux-x64"]
-checksum = "sha256:33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c"
-url = "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/BurntSushi/ripgrep/releases/assets/478120097"
+checksum = "sha256:165451eaf35f977c0bd6cff1fb93e4fcce0ebd87e90a4b5e976507baf50f4a03"
+url = "https://github.com/BurntSushi/ripgrep/releases/download/16.0.0/ripgrep-16.0.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/BurntSushi/ripgrep/releases/assets/780739448"
 
 [tools.ripgrep."platforms.windows-x64"]
-checksum = "sha256:71b2fef860abe467217a538ff31de02f5258807c0129f771846f87bd029aafc5"
-url = "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/BurntSushi/ripgrep/releases/assets/478119643"
+checksum = "sha256:f418ae83e63046a94a7b5f3a44bf3a169f66e689164856ecee02547131c73931"
+url = "https://github.com/BurntSushi/ripgrep/releases/download/16.0.0/ripgrep-16.0.0-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/BurntSushi/ripgrep/releases/assets/780739355"
 
 [[tools.starship]]
 version = "1.27.0"
@@ -679,20 +643,20 @@ url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/
 provenance = "github-attestations"
 
 [[tools.uv]]
-version = "0.13.8"
+version = "0.13.10"
 backend = "aqua:astral-sh/uv"
-specifiers = ["0.13.8"]
+specifiers = ["0.13.10"]
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/740313966"
+checksum = "sha256:bf65ac1a0af10f92c522d91ac096c7c0a39657647b155577e7836c2cbbb4526c"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.10/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/788885027"
 provenance = "github-attestations"
 
 [tools.uv."platforms.windows-x64"]
-checksum = "sha256:529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/740313927"
+checksum = "sha256:297b3881fe1adfb922becc2c1613202abb41dc83ea5ff43d472aa087ca1f8683"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.10/uv-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/788885003"
 provenance = "github-attestations"
 
 [[tools.zoxide]]
