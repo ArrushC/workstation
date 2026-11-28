@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test-bump-lock-retry.sh — bump-versions.sh's lock_platform waits out a server error
-# before it gives up on a pin. Runs the real function with a stand-in `mise lock`.
+# before it gives up on a pin, and drop_incomplete_bumps puts back a pin whose new release
+# lacks a platform the lock had. Runs the real functions with a stand-in `mise lock`.
 # run() sets variables that only the sourced lock_platform reads:
 # shellcheck disable=SC2034
 set -u
@@ -98,6 +99,87 @@ case "$REFUSED_OUT" in
 *)
   fail=$((fail + 1))
   echo "FAIL: a real refusal keeps mise's reason: '$REFUSED_OUT'"
+  ;;
+esac
+
+# A release without one platform's build: note_locked and drop_incomplete_bumps, as written,
+# against lock files in a scratch directory.
+sed -n '/^lock_has() {$/,/^}$/p; /^note_locked() {$/,/^}$/p; /^drop_incomplete_bumps() {$/,/^}$/p' \
+  "$ROOT/scripts/bump-versions.sh" >"$T/drop.sh"
+grep -q '^drop_incomplete_bumps() {$' "$T/drop.sh" || {
+  echo "FAIL: drop_incomplete_bumps not found in scripts/bump-versions.sh"
+  exit 1
+}
+# entry <tool> <platform>...: a lock block as mise writes it (the name quoted).
+entry() {
+  local tool="$1" plat
+  shift
+  printf '[[tools."%s"]]\nversion = "x"\n' "$tool"
+  for plat in "$@"; do printf '[tools."%s"."platforms.%s"]\nurl = "u"\n' "$tool" "$plat"; done
+}
+# drop <after: platforms the new lock has for github:o/tool>: before the lock it had both;
+# bat (a bare key) keeps both; linuxonly never had Windows. Sets RC, REVERTED, REFUSED_OUT, LEFT.
+drop() {
+  mkdir -p "$T/d" && : >"$T/reverted"
+  (
+    cd "$T/d" || exit 1
+    bumped='- `github:o/tool` (config.toml): 1.0.0 → 2.0.0\n- `bat` (config.toml): 1 → 2\n'
+    refused=""
+    failed=""
+    declare -A had relock
+    declare -A bump_file=(["github:o/tool"]=config.toml ["bat"]=config.toml ["linuxonly"]=config.linux.toml)
+    declare -A bump_cur=(["github:o/tool"]=1.0.0 ["bat"]=1 ["linuxonly"]=1)
+    declare -A bump_new=(["github:o/tool"]=2.0.0 ["bat"]=2 ["linuxonly"]=2)
+    set_pin() { echo "$2 $3 $4" >>"$T/reverted"; }
+    # shellcheck disable=SC1091
+    . "$T/drop.sh"
+    {
+      entry github:o/tool linux-x64 windows-x64
+      printf '[[tools.bat]]\n[tools.bat."platforms.linux-x64"]\n[tools.bat."platforms.windows-x64"]\n'
+    } >mise.lock
+    entry linuxonly linux-x64 >mise.linux.lock
+    note_locked
+    {
+      # shellcheck disable=SC2086  # the platforms, as words
+      entry github:o/tool "$@"
+      printf '[[tools.bat]]\n[tools.bat."platforms.linux-x64"]\n[tools.bat."platforms.windows-x64"]\n'
+    } >mise.lock
+    drop_incomplete_bumps 2>"$T/stderr"
+    echo "$?" >"$T/rc"
+    printf '%s' "$refused" >"$T/refused"
+    printf '%s|%s|%s' "$bumped" "${!bump_cur[*]}" "${!relock[*]}" >"$T/left"
+  )
+  RC="$(cat "$T/rc")"
+  CALLS=0
+  REVERTED="$(cat "$T/reverted")"
+  REFUSED_OUT="$(cat "$T/refused")"
+  LEFT="$(cat "$T/left")"
+}
+
+drop linux-x64 windows-x64
+check "a release with every platform: nothing reverted" \
+  test "$RC/$REVERTED/$REFUSED_OUT" = "1//"
+
+drop linux-x64
+check "a release without the Windows build: its pin goes back, and the caller locks again" \
+  test "$RC/$REVERTED" = "0/github:o/tool 2.0.0 1.0.0"
+case "$REFUSED_OUT" in
+*'`github:o/tool`: 1.0.0 → 2.0.0'*"no windows-x64 build"*) pass=$((pass + 1)) ;;
+*)
+  fail=$((fail + 1))
+  echo "FAIL: the summary names the missing platform: '$REFUSED_OUT'"
+  ;;
+esac
+case "$LEFT" in
+'- `bat` (config.toml): 1 → 2\n|'*'|github:o/tool')
+  case "${LEFT#*|}" in
+  *github:o/tool*'|'*) fail=$((fail + 1)) && echo "FAIL: the reverted tool is still counted as bumped: '$LEFT'" ;;
+  *) pass=$((pass + 1)) ;;
+  esac
+  ;;
+*)
+  fail=$((fail + 1))
+  echo "FAIL: only the incomplete bump leaves the summary, and it is marked to lock alone: '$LEFT'"
   ;;
 esac
 
