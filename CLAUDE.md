@@ -505,6 +505,9 @@ mise always discovers them from the real home; `MISE_CONFIG_DIR` doesn't redirec
   - Its `NO_SLSA` lists tools that publish no provenance but carry a file mise misreads as SLSA
     (jcode's `release-provenance.json`); they are locked alone with `MISE_GITHUB_SLSA=false`. A
     real provenance refusal (ouch's) is never bypassed this way.
+  - A bumped release that lacks a platform the lock had (jcode 1.1.x: no Windows build) is put back and
+    listed under "refused" (`drop_incomplete_bumps`), then both platforms are locked again; one such
+    release must not fail the week's run. `scripts/test-bump-lock-retry.sh` covers it.
 - **Never hand-edit:**
   - deployed `$HOME` targets: edit the source, e.g. via `wse`
   - `/etc` copies

@@ -208,7 +208,7 @@ npm_latest() {
 
 # Per-tool record of every pin this run bumped, so lock_platform can put one
 # back. Keys are mise tool names (may contain `:`/`/`), always quoted.
-declare -A bump_file bump_cur bump_new
+declare -A bump_file bump_cur bump_new had relock
 refused="" # bumps reverted because `mise lock` refused the new version
 
 # `mise lock` one platform. `mise lock` is all-or-nothing: if it refuses ONE
@@ -233,7 +233,7 @@ lock_platform() {
   local mise_env="$1" platform="$2" err tool reason tries=0 waits=0 server_error
   err="$(mktemp)"
   for tool in $NO_SLSA; do
-    [ -n "${bump_cur["$tool"]+x}" ] || continue
+    [ -n "${bump_cur["$tool"]+x}" ] || [ -n "${relock["$tool"]+x}" ] || continue
     # A tool that doesn't install on this platform makes mise say so; the full lock decides.
     mise_global "$mise_env" env MISE_LOCKED=0 MISE_GITHUB_SLSA=false \
       mise lock --global --platform "$platform" "$tool" || true
@@ -282,6 +282,54 @@ lock_platform() {
     unset 'bump_cur["$tool"]'
     tries=$((tries + 1))
   done
+}
+
+# lock_has <tool> <platform>: a lock file holds that platform's entry for the tool
+# (`[tools.bat."platforms.linux-x64"]`, the name quoted when it isn't a bare key).
+lock_has() {
+  grep -qF -e "[tools.\"$1\".\"platforms.$2\"]" -e "[tools.$1.\"platforms.$2\"]" \
+    mise.lock mise.linux.lock 2>/dev/null
+}
+
+# A release can ship without one platform's build: jcode v1.1.1 and v1.1.2 (2026-11-23)
+# had only the Linux asset. mise locks what exists and says nothing, so the bump went
+# through, the lock lost its windows-x64 entry, check-invariants.sh failed and the week's
+# other bumps never reached a PR. note_locked records which platforms each bumped tool
+# has before the lock; drop_incomplete_bumps, after it, reverts a pin whose lock lost
+# one and reports it under "refused". Returns 0 when it reverted something: the caller
+# locks again, which brings the old version's entries back (relock: a NO_SLSA tool is
+# still locked alone then).
+note_locked() {
+  local tool plat
+  for tool in "${!bump_cur[@]}"; do
+    for plat in linux-x64 windows-x64; do
+      if lock_has "$tool" "$plat"; then had["$tool $plat"]=1; fi
+    done
+  done
+}
+
+drop_incomplete_bumps() {
+  local tool plat lost reverted=1
+  for tool in "${!bump_cur[@]}"; do
+    lost=""
+    for plat in linux-x64 windows-x64; do
+      [ -n "${had["$tool $plat"]+x}" ] || continue
+      lock_has "$tool" "$plat" || lost="${lost:+$lost, }$plat"
+    done
+    [ -n "$lost" ] || continue
+    if ! set_pin "${bump_file["$tool"]}" "$tool" "${bump_new["$tool"]}" "${bump_cur["$tool"]}"; then
+      failed="${failed}- \`$tool\`: ${bump_new["$tool"]} has no $lost build and its pin could not be put back (manual)\n"
+      continue
+    fi
+    printf '  ! %s@%s has no %s build: reverted to %s\n' \
+      "$tool" "${bump_new["$tool"]}" "$lost" "${bump_cur["$tool"]}" >&2
+    bumped="${bumped/"- \`$tool\` (${bump_file["$tool"]}): ${bump_cur["$tool"]} → ${bump_new["$tool"]}\n"/}"
+    refused="${refused}- \`$tool\`: ${bump_cur["$tool"]} → ${bump_new["$tool"]}: the release has no $lost build (the pinned one does)\n"
+    relock["$tool"]=1
+    unset 'bump_cur["$tool"]'
+    reverted=0
+  done
+  return "$reverted"
 }
 
 mise_err_file="$(mktemp)"
@@ -404,16 +452,21 @@ if [ -z "$outdated_fail" ]; then
       failed="${failed}- \`mise install uv\` failed — pypi: dependency locks not regenerated (manual)\n"
       exit_code=1
     fi
-    if ! lock_platform linux linux-x64; then
-      printf 'bump-versions.sh: mise lock --platform linux-x64 failed\n' >&2
-      failed="${failed}- \`mise lock --platform linux-x64\` failed (manual)\n"
-      exit_code=1
-    fi
-    if ! lock_platform windows windows-x64; then
-      printf 'bump-versions.sh: mise lock --platform windows-x64 failed\n' >&2
-      failed="${failed}- \`mise lock --platform windows-x64\` failed (manual)\n"
-      exit_code=1
-    fi
+    note_locked
+    # A second pass only when the first reverted a release that lacks a platform.
+    for pass in 1 2; do
+      if ! lock_platform linux linux-x64; then
+        printf 'bump-versions.sh: mise lock --platform linux-x64 failed\n' >&2
+        failed="${failed}- \`mise lock --platform linux-x64\` failed (manual)\n"
+        exit_code=1
+      fi
+      if ! lock_platform windows windows-x64; then
+        printf 'bump-versions.sh: mise lock --platform windows-x64 failed\n' >&2
+        failed="${failed}- \`mise lock --platform windows-x64\` failed (manual)\n"
+        exit_code=1
+      fi
+      [ "$pass" = 1 ] && drop_incomplete_bumps || break
+    done
     # Both `mise lock` calls above just reset the pypi:/npm: sidecar path
     # refs back to the stale .mise/locks/** layout (see
     # normalize_lock_sidecars above) — normalize them back to locks/** in
@@ -549,7 +602,7 @@ fi
   if [ -n "$refused" ]; then
     echo "### Refused by \`mise lock\` (reverted, manual)"
     echo
-    echo "_mise would not lock these new versions, so they were left at the current pin. Check the reason, verify the release by hand, then bump it deliberately._"
+    echo "_mise would not lock these new versions, or the release lacks a platform the pin has, so they were left at the current pin. Check the reason, verify the release by hand, then bump it deliberately._"
     echo
     printf '%b' "$refused"
     echo
