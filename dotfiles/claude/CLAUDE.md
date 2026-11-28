@@ -130,7 +130,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `typescript` 5.9.3
 - `typescript-language-server` 6.1.0
 - `vscode-langservers-extracted` 4.10.0
-- `yaml-language-server` 1.25.0
+- `yaml-language-server` 2.0.0
 - `go` 1.27.4
 - `gopls` 0.24.0
 - `lua-language-server` 3.19.2
@@ -141,7 +141,7 @@ The full, always-current inventory of what's installed (with versions) is below.
 - `nerd-fonts` 3.5.1
 - `opencode` 2.3.0
 - `oh-my-pi` 18.20.2
-- `codex` 0.169.1
+- `codex` 0.172.0
 - `jcode` 0.99.1
 - `DevToys` 2.0.9.0
 - `nushell` 0.113.1

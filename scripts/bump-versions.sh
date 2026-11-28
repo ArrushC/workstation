@@ -229,6 +229,11 @@ refused="" # bumps reverted because `mise lock` refused the new version
 # MISE_LOCKED=0: a pypi: tool's dependency lock runs uv through its shim, and in
 # locked mode (config.toml) that shim refuses a just-bumped uv the lock doesn't list
 # yet ("No version is set for shim: uv"; both platforms failed on 2026-10-05).
+# What a failed download looks like in mise's stderr, as opposed to a refusal: a 5xx, a
+# request mise itself marks transient, or a body cut short. On 2026-11-28 codex's release
+# list (100 releases of 194 assets each) came back truncated ("error decoding response
+# body") and a good 0.172.0 was reported as refused without one retry.
+TRANSIENT='HTTP status server error|\(transient\)|error decoding response body'
 lock_platform() {
   local mise_env="$1" platform="$2" err tool reason tries=0 waits=0 server_error
   err="$(mktemp)"
@@ -249,7 +254,7 @@ lock_platform() {
     # openai/codex returned 504 through mise's own three quick retries, and a
     # good codex bump was dropped for the week. Wait and lock again, twice,
     # before treating the failure as the tool's.
-    if [ "$waits" -lt 2 ] && grep -Eq 'HTTP status server error|\(transient\)' "$err"; then
+    if [ "$waits" -lt 2 ] && grep -Eq "$TRANSIENT" "$err"; then
       waits=$((waits + 1))
       printf '  ! mise lock hit a server error on %s — waiting %ss, then retrying (%s of 2)\n' \
         "$platform" "${BUMP_LOCK_RETRY_WAIT:-60}" "$waits" >&2
@@ -257,7 +262,7 @@ lock_platform() {
       continue
     fi
     server_error=""
-    grep -Eq 'HTTP status server error|\(transient\)' "$err" && server_error=1
+    grep -Eq "$TRANSIENT" "$err" && server_error=1
     tool="$(sed -n 's/.*failed to resolve \([^ ]*\)@[^ ]* for .*/\1/p' "$err" | head -n1)"
     if [ -z "$tool" ] || [ -z "${bump_cur["$tool"]+x}" ] || [ "$tries" -ge 20 ]; then
       rm -f "$err"

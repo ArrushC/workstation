@@ -13,13 +13,15 @@ pass=0
 fail=0
 
 # The function, as written in the script.
-sed -n '/^lock_platform() {$/,/^}$/p' "$ROOT/scripts/bump-versions.sh" >"$T/fn.sh"
+sed -n '/^TRANSIENT=/p; /^lock_platform() {$/,/^}$/p' "$ROOT/scripts/bump-versions.sh" >"$T/fn.sh"
 [ -s "$T/fn.sh" ] || {
   echo "FAIL: lock_platform not found in scripts/bump-versions.sh"
   exit 1
 }
 
 SERVER='mise WARN  HTTP GET https://api.github.com/repos/o/r/releases attempt 3 failed after 11.05s (transient): HTTP status server error (504 Gateway Timeout) for url
+mise ERROR failed to resolve codex@2.0.0 for linux-x64; refusing to replace locked version(s) 1.0.0 that support this platform'
+TRUNCATED='mise WARN  [o/r] failed to fetch version tags for lockfile, URL may be incorrect: error decoding response body for url (https://api.github.com/repos/o/r/releases?per_page=100)
 mise ERROR failed to resolve codex@2.0.0 for linux-x64; refusing to replace locked version(s) 1.0.0 that support this platform'
 REFUSED='mise ERROR failed to resolve codex@2.0.0 for linux-x64; refusing to replace locked version(s) 1.0.0 that support this platform'
 
@@ -44,6 +46,7 @@ run() {
       case "$outcome" in
       ok) return 0 ;;
       server) printf '%s\n' "$SERVER" >&2 ;;
+      truncated) printf '%s\n' "$TRUNCATED" >&2 ;;
       refused) printf '%s\n' "$REFUSED" >&2 ;;
       esac
       return 1
@@ -90,6 +93,10 @@ case "$REFUSED_OUT" in
   echo "FAIL: the summary names the server error: '$REFUSED_OUT'"
   ;;
 esac
+
+run truncated ok
+check "a release list cut short is waited out like a server error" \
+  test "$RC/$CALLS/$REVERTED" = "0/2/"
 
 run refused ok
 check "a real refusal reverts at once, without waiting" \
